@@ -7,3 +7,10 @@ EV-003 — 远端推送与 refs 回读
   b93a20f4dfa52dd93ca282da39b31f00f825a0d2  HEAD
   b93a20f4dfa52dd93ca282da39b31f00f825a0d2  refs/heads/main
 说明: 首次推送即分析层提交；设计层/需求层完成后再次推送并回读（追加于本文件）。
+
+--- 推送 2（设计层 + 需求层 + 状态层）---
+commit: c00379afb75a0433ea508c3fd36180418ef3c2ff
+命令: git push -q origin main && git ls-remote origin
+结果（写本记录时回读）:
+  c00379afb75a0433ea508c3fd36180418ef3c2ff	HEAD
+  c00379afb75a0433ea508c3fd36180418ef3c2ff	refs/heads/main

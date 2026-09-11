@@ -8,15 +8,21 @@
   "last_verified_command": "tools/verify.sh docs",
   "last_verified_result": "PASS (AC-DESIGN-001/002/003)",
   "last_verified_evidence": "docs/work/evidence/EV-001-doc-gate.txt",
-  "last_verified_commit": "b93a20f",
+  "last_verified_commit": "c00379afb75a0433ea508c3fd36180418ef3c2ff",
   "blockers": [],
-  "known_defects": ["D-001", "D-002"],
-  "open_questions": ["V-001..V-012 全部待现场验证（见 docs/work/functional-requirements.md §1）"],
+  "known_defects": [
+    "D-001",
+    "D-002"
+  ],
+  "open_questions": [
+    "V-001..V-012 全部待现场验证（见 docs/work/functional-requirements.md §1）"
+  ],
   "recovery_order": [
     "docs/work/handover.md",
     ".agents/state.json",
     "docs/work/progress-checklist.md"
   ],
   "rules_file": "AGENTS.md",
-  "no_code_yet": true
+  "no_code_yet": true,
+  "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态"
 }
