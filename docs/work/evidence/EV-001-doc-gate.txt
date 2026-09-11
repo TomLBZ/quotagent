@@ -1,0 +1,21 @@
+EV-001 — 文档门运行记录（AC-DESIGN-001/002/003）
+
+工具: tools/verify.sh docs → tools/check-docs.py（纯标准库）
+说明: 本文件记录首次运行（发现缺陷）与修复后的最终运行（全绿）。
+
+--- 运行 1（修复前：预算表未解析 + EV-001 尚未存在）---
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描 31 个 markdown 文件，仓库根 /workspace/projects/quotagent
+[FAIL] 未解析的 ID 引用 1 个（共 703 处引用）
+       - EV-001  ← docs/work/acceptance-criteria.md, docs/work/handover.md, docs/work/progress-checklist.md
+[ok]   占位符: 无
+[ok]   预算: 33 个文件受检，最高占用 96%（docs/work/handover.md 985/1024 B）
+[ok]   FR↔AC 覆盖: 85 条 FR 均关联 AC，58 条 AC 无孤儿
+RESULT: FAIL (1 项)
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描 31 个 markdown 文件，仓库根 /workspace/projects/quotagent
+[ok]   ID 完整性: 249 个定义，703 处引用，0 未解析
+[ok]   占位符: 无
+[ok]   预算: 33 个文件受检，最高占用 96%（docs/work/handover.md 985/1024 B）
+[ok]   FR↔AC 覆盖: 85 条 FR 均关联 AC，58 条 AC 无孤儿
+RESULT: PASS

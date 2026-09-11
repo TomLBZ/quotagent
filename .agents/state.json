@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "updated_at": "2026-09-11",
+  "phase": "design-complete",
+  "phase_source": "docs/work/roadmap.md",
+  "next_task": "T-101",
+  "next_action": "P0 S0.1：建立仓库内自包含运行时与 CLI 骨架；同一轮启动 T-117 的 V-002 盲测（供应商是否接受结构化报价），它决定 P1 是否成立",
+  "last_verified_command": "tools/verify.sh docs",
+  "last_verified_result": "PASS (AC-DESIGN-001/002/003)",
+  "last_verified_evidence": "docs/work/evidence/EV-001-doc-gate.txt",
+  "last_verified_commit": "b93a20f",
+  "blockers": [],
+  "known_defects": ["D-001", "D-002"],
+  "open_questions": ["V-001..V-012 全部待现场验证（见 docs/work/functional-requirements.md §1）"],
+  "recovery_order": [
+    "docs/work/handover.md",
+    ".agents/state.json",
+    "docs/work/progress-checklist.md"
+  ],
+  "rules_file": "AGENTS.md",
+  "no_code_yet": true
+}

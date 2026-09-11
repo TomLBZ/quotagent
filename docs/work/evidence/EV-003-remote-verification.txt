@@ -1,0 +1,9 @@
+EV-003 — 远端推送与 refs 回读
+
+时间: 2026-09-11 (UTC)
+命令: git push -u origin main && git ls-remote origin
+远端: git@github.com:TomLBZ/quotagent.git
+结果:
+  b93a20f4dfa52dd93ca282da39b31f00f825a0d2  HEAD
+  b93a20f4dfa52dd93ca282da39b31f00f825a0d2  refs/heads/main
+说明: 首次推送即分析层提交；设计层/需求层完成后再次推送并回读（追加于本文件）。

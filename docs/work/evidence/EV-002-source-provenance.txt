@@ -1,0 +1,58 @@
+EV-002 — 设计期事实来源取证记录
+
+时间: 2026-09-11 (UTC)
+取证者: agent (session)
+用途: docs/analysis/*.md 与 docs/design/*.md 中标注 `代码` / `论文` 的断言来源
+
+## Cordis（主证据）
+
+命令: git clone --depth 1 git@github.com:cordiverse/cordis.git
+commit: f8ea3cd50f1a5724e8e715995bcde131c9c12b2c  (Tue Sep 8 23:39:20 2026 +0800, "chore: bump versions")
+包: core, create, group, hmr, include, loader, logger-console, timer, utils
+
+core 源码行数（find packages/core/src -name '*.ts' | xargs wc -l）:
+  registry.ts 214 · context.ts 78 · utils.ts 282 · reflect.ts 283
+  fiber.ts 496 · events.ts 188 · service.ts 80 · logger.ts 246 · index.ts 7
+
+被引用的关键落点:
+  packages/core/src/fiber.ts:78-85       FiberState 六状态
+  packages/core/src/fiber.ts:277-340     ctx.effect() 与 disposer 逆序回收
+  packages/core/src/fiber.ts:385-415     _refresh/_setEpoch（epoch 依赖比较）
+  packages/core/src/fiber.ts:417-460     _reload/_unload 镜像
+  packages/core/src/fiber.ts:478-495     update() 经 internal/update waterfall
+  packages/core/src/reflect.ts:62-100    Proxy get：无 inject 即报错
+  packages/core/src/reflect.ts:177-229   provide() 即 effect + notify 反向扫描
+  packages/core/src/registry.ts:17-40    @Inject 装饰器
+  packages/core/src/registry.ts:193-213  plugin() 与 runtime/fibers
+  packages/core/src/events.ts:14         五种分发模式
+  packages/core/src/events.ts:89-132     parallel/emit/serial/bail/waterfall
+  packages/core/src/events.ts:134-167    on/once 经 fiber.effect 注册
+  packages/core/src/context.ts:36-49     根 Context 构造（Proxy + 五件套）
+  packages/core/src/context.ts:55-77     extend/isolate/intercept
+  packages/loader/src/config/group.ts    EntryGroup.update 按 id diff
+  packages/loader/src/config/isolate.ts  Realm/LocalRealm/GlobalRealm
+  packages/include/src/patch.ts          applyPatches / PatchIndex / routeJournal
+  packages/include/src/journal.ts:195-242 reconcile 三方协调（文件赢）
+  packages/loader/README.md              仅一行（文档建设中）
+  README.md                              "API is not yet stable"
+
+## 论文
+
+arXiv:2608.25512, "A Programming Paradigm for Spatiotemporal Composability",
+submitted 2026-08-26, 92 pages, 1 figure, 2 tables; cs.PL / cs.SE;
+作者 Yifan Shi (PKU, DeepSeek-AI), Wei Zhang (PKU), Tianyi Cui (DeepSeek-AI)。
+摘要原文已逐句核对（revertible effects / reactive coeffects / context paradigm / 动态组合演算）。
+注: 仓库 cordiverse/paper 当前仅有 README 占位（已核实）。
+
+## DeepSeek Harness（工程约定来源）
+
+命令: git clone --depth 1 --filter=blob:none --sparse git@github.com:deepseek-ai/deepseek-harness.git
+commit: c291e7961a515f6d7af9304e7fd1d257929aef26  (Sep 10 2026)
+sparse 路径: docs/ .agents/
+被引用的文件: AGENTS.md(155 行) · .agents/notes/README.md(125 行) · docs/architecture.md(160 行)
+             docs/cordis-api/fiber.md · .agents/skills/（13 个技能目录）
+
+## 未核实项（明确标注，不作为设计依据）
+
+- 第三方博客/分析页提到的 Koishi "4000+ 插件"、harness star 数、以及 N-Coord / SynTagma /
+  neXus FIH 黑板等概念，均未在论文摘要或源码中核实。

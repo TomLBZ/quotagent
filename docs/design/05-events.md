@@ -1,0 +1,84 @@
+# 05 事件表
+
+<!-- budget: 20 KB. 命名 `域/事件`；@mode 取自 Cordis 的五种分发语义 -->
+
+## 0. 规则
+
+1. **每个事件只有一个 @mode**，且只能用对应方法分发（照搬 Cordis `events.ts:14` 的约束）。
+2. **durable 事件必须进账本**；live 事件只存在于进程内，不进账本（照搬 harness 的
+   session event / live event 分野，见 `../analysis/harness-agent-repo-conventions.md` §2.6）。
+3. **waterfall 监听者必须调 `next()` 委托**；不调用即短路，且该短路必须是文档化设计意图。
+4. **模型可见 ⟺ 账本可重建**（P4）：任何影响模型输入的 live 事件，其输入必须已由
+   durable 事件或只读引用（附件哈希）覆盖。
+5. 新增事件类型 = 修改 `02-domain-model.md` §4 的命名表 + 本文件；若是协议事件，另加 ADR。
+
+## 1. 分发模式的选用判据
+
+| 想要的行为 | 模式 | 说明 |
+|---|---|---|
+| 通知、观察、留痕 | `emit` | 不阻塞，不看返回值 |
+| 并发扇出（多方同时校验） | `parallel` | 全部跑完，有错则聚合抛错 |
+| 有先后的链式决策 | `serial` | 遇 bail 值即停 |
+| 首个有效决策胜出 | `bail` | 资格判定、快速否决 |
+| 包装/改写/可拦截的流水线 | `waterfall` | 中间件；不调 `next()` 即短路 |
+
+## 2. 内核事件（人类所有）
+
+| 事件 | @mode | durable | 生产者 | 消费者 |
+|---|---|---|---|---|
+| `kernel/ledger-appended` | emit | – | `ctx.ledger` | 遥测、投影 |
+| `kernel/plugin-mounted` / `kernel/plugin-unmounted` | emit | live | `ctx.plugin` | 诊断、`ctx.plugins` |
+| `kernel/config-updated` | waterfall | live | 自进化或人工配置更新 | 否决者（合规/安全） |
+| `kernel/qep-rejected` | emit | durable | `ctx.qep` | 运维告警、审计 |
+
+## 3. 业务事件
+
+| 事件 | @mode | durable | 生产者 → 消费者 | 备注 |
+|---|---|---|---|---|
+| `rfq/published` | emit | ✔ | `ctx.rfq` → intake, ledger | 版本发布的唯一入口 |
+| `rfq/amended` | emit | ✔ | `ctx.rfq` → pricing, compare | 触发下游"基于过期版本"标记 |
+| `rfq/version-mismatch` | bail | durable | `ctx.norm` → guard, approval | 首个失配即短路并挂起 |
+| `clarification/asked` | emit | ✔ | `ctx.clarify` → 对方 | 工单建立 |
+| `clarification/answer-drafted` | waterfall | live | agent → guard, 人工门 | guard 可拦截（如答案含对方私域信息） |
+| `clarification/answered` | emit | ✔ | 人工定稿 → 广播 | 必须含完整广播名单 |
+| `clarification/broadcast-incomplete` | bail | durable | `ctx.clarify` → approval | 缺名单即拒收（INV-006） |
+| `quote/intake-completed` | emit | ✔ | `ctx.intake` → pricing | 抽条目结果入账 |
+| `quote/normalize` | waterfall | live | `ctx.norm` | 归一化链：单位→币种→税→计量规则→条目对齐；任一环拒绝即短路 |
+| `quote/normalized` | emit | ✔ | `ctx.norm` → compare | 归一化结果 + 拒绝理由 |
+| `quote/price-proposed` | emit | ✔ | `ctx.pricing` → approval | 定价建议（Intent） |
+| `quote/guard-check` | bail | durable | `ctx.guard` → approval | 异常低价/漏项/产能/条款/注入检测 |
+| `quote/human-approved` | emit | ✔ | 人工 → qep | 批准记录（不可由 agent 产生） |
+| `quote/submitted` | emit | ✔ | `ctx.qep` → compare | 报价事实（含 `rfq_rev`） |
+| `compare/rank-computed` | emit | ✔ | `ctx.compare` → 人/AwardAdvisor | 排序 + 引用链 |
+| `compare/flag-raised` | emit | ✔ | `ctx.guard` | Flag 从不由模型自行消解 |
+| `negotiate/round` | serial | ✔ | `ctx.negotiate` → approval | 轮次与让步上限来自策略 patch |
+| `award/intent-proposed` | emit | ✔ | `ctx.award` → 对方 | Intent，可撤回 |
+| `award/confirm-requested` | serial | live | `ctx.award` → 人工门 | 需 `approval/granted` 才能推进 |
+| `award/committed` | emit | ✔ | 人工签署 → po | 承诺，缺批准即抛错（INV-005） |
+| `po/issued` | emit | ✔ | `ctx.award` → 履约 | 只能由 `AwardCommitment` 派生 |
+| `change/proposed` / `change/priced` / `change/approved` | serial | ✔ | 双侧 → 结算 | 定价必须引用原报价单价 |
+| `acceptance/recorded` / `invoice/matched` | emit | ✔ | 履约 → 结算 | 三方核对留痕 |
+| `sync/merged` / `sync/conflict` | emit | ✔ | `ctx.qep` | 三方协调结果；承诺字段冲突转人工 |
+| `evidence/pack-exported` | emit | ✔ | `ctx.evidence` | 审计包（含 Merkle 根） |
+| `evolve/*` | serial | ✔ | `ctx.evolve` | 见 `07` |
+
+## 4. Agent 侧事件（live）
+
+| 事件 | @mode | 说明 |
+|---|---|---|
+| `agent/step-start` / `agent/step-end` | emit | 观测用；与账本步骤对应 |
+| `agent/tool-call-requested` | waterfall | 工具调用前置拦截：权限、私域泄露、承诺类动作一律在此拦 |
+| `agent/output-drafted` | waterfall | 输出后置拦截：引用完整性（无引用数值即拒绝）、口径一致性 |
+| `agent/escalate` | serial | 升级到人工（低置信、越界、冲突） |
+| `agent/assumption-raised` | emit | 模型产出被标记为 `[假设]`，等待人工确认后升级为 Fact |
+
+## 5. 拦截点总表（"在哪拦什么"）
+
+| 拦截目标 | 事件 | 模式 | 拦截后动作 |
+|---|---|---|---|
+| 工具越权（读对方私域） | `agent/tool-call-requested` | waterfall | 拒绝 + 留痕 |
+| 模型自行承诺 | `agent/tool-call-requested` | waterfall | 强制改走 `ctx.approval` |
+| 无引用数值进入决策 | `agent/output-drafted` | waterfall | 拒绝输出，要求补引用 |
+| 不可归一的口径 | `quote/normalize` | waterfall | 中断并产出拒绝理由 |
+| 未广播的澄清答案 | `clarification/broadcast-incomplete` | bail | 拒收 |
+| 内核配置被自改 | `kernel/config-updated` | waterfall | 无条件否决（INV-010） |
