@@ -16,3 +16,6 @@ config.local.*
 # 证据目录保留结构；只排除大体积原始产物
 docs/work/evidence/**/*.jsonl.gz
 docs/work/evidence/**/tmp/
+
+# 本机用户手册：逐批 goal 指令表（每台机器自备，不入库）
+USER-GOALS.md
