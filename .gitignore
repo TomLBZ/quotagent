@@ -1,0 +1,18 @@
+# 运行时产物（实现期起生效）
+.venv/
+__pycache__/
+*.py[cod]
+node_modules/
+dist/
+lib/
+coverage/
+
+# 本地状态与密钥：绝不入库
+.env
+*.local.yaml
+config.local.*
+.agents/sessions/*.log
+
+# 证据目录保留结构；只排除大体积原始产物
+docs/work/evidence/**/*.jsonl.gz
+docs/work/evidence/**/tmp/
