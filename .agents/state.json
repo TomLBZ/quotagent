@@ -8,7 +8,7 @@
   "last_verified_command": "tools/verify.sh docs && tools/verify.sh ac AC-AUDIT-001",
   "last_verified_result": "PASS (AC-DESIGN-001..003, AC-AUDIT-001/002, AC-RUNTIME-001/002)",
   "last_verified_evidence": "docs/work/evidence/EV-004-AC-DESIGN-001.txt",
-  "last_verified_commit": "11ab0671342671c04d94004405ac3a10debd9c4c",
+  "last_verified_commit": "4cb5e60146ca3e9b14517f40f22d5f2d0753059f",
   "blockers": [],
   "human_required": [
     "T-117 的 V-002 盲测（供应商是否接受结构化报价）——需真实供应商参与，agent 只能备料与登记结论"

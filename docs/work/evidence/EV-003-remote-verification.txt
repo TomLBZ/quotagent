@@ -28,3 +28,17 @@ push 退出码: 0，ls-remote 退出码: 0，回读与本地 HEAD 一致: True
       `git fetch origin && git log --oneline -3 origin/main` 比对确认；
       .agents/state.json 的 last_verified_commit 指向上面这次已回读的提交。
 
+
+--- 推送 5（回退文档门改动：AC 自行清理临时副本）---
+时间: 2026-09-12T00:38:50Z
+commit: 4cb5e60146ca3e9b14517f40f22d5f2d0753059f
+命令: git push -q origin main && git ls-remote origin
+push 退出码: 0，ls-remote 退出码: 0，回读与本地 HEAD 一致: True
+结果（写本记录时回读）:
+  4cb5e60146ca3e9b14517f40f22d5f2d0753059f	HEAD
+  4cb5e60146ca3e9b14517f40f22d5f2d0753059f	refs/heads/main
+本地 HEAD: 4cb5e60146ca3e9b14517f40f22d5f2d0753059f
+说明: 本文件随后的证据/状态同步提交（推送 6）的回读结果，由下一次接手的第一步
+      `git fetch origin && git log --oneline -3 origin/main` 比对确认；
+      .agents/state.json 的 last_verified_commit 指向上面这次已回读的提交。
+
