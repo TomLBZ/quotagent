@@ -21,6 +21,13 @@
 | EV-013 | QEP 信封：字段齐全、可验签、逐字段篡改导致验签失败、body_hash/版本/承诺批准校验 | AC-QEP-001 |
 | EV-014 | 幂等：同报文投递 3 次只 1 条事实 + 2 条 duplicate-dropped；重发 msg_id/body_hash 不变且不产生第二条事实 | AC-QEP-002 |
 | EV-015 | 文件投递：临时文件 + rename 原子落盘、命名约定、半写/坏文件不被读取且坏文件被隔离并留原因 | AC-INTEG-001 |
+| EV-016 | 混合口径归一：USD 含税 + cm 与 EUR 不含税 + kg 两条报价，金额与手算值在声明容差内；汇率时点不同则金额不同；结果携带口径因子 | AC-NORM-001 |
+| EV-017 | 四条拒绝路径（缺计量规则/单位不在规则内/汇率时点不可得/缺税制）各自给出 code+reason+next_action，且不产生结果、不落账 normalized | AC-NORM-002 |
+| EV-018 | 条目对齐三态（matched/additional/missing）：additional 显式标记并按报价单位归一（来源可查）；未对齐条目被拒绝并列出 | AC-NORM-003 |
+| EV-019 | 包定义校验：清单单位不在计量规则表、接口无唯一责任方（缺/不唯一）→ 校验失败且逐条指明；服务可装可卸 | AC-RFQ-001 |
+| EV-020 | 版本化：发布产生 rev=1 与内容哈希；原地修改与 modify_published 均被拒且哈希不变；amend 产生 rev=2 与字段级 delta；缺 quote_by 不得发布 | AC-RFQ-002 |
+| EV-021 | 读包：逐条 item_id + 来源引用；无来源抽取标 [假设] 且 agent 不得自升级（人工确认后才成事实）；落账 quote/intake-completed | AC-INTAKE-001 |
+| EV-022 | 缺项与疑问：人为删减的条目被检出（含 next_action）；条目齐全时无缺项；疑问未获人工确认不得外发，确认后逐条落账 clarification/asked | AC-INTAKE-002 |
 
 规则：**没有证据的 AC 不得标 passed**（`AGENTS.md` 规则 6）。
 `progress-checklist.md` 的 evidence 列必须指向本目录的真实文件。

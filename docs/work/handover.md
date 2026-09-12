@@ -4,18 +4,18 @@
 
 ## 现在在哪
 
-P0 mock：S0.1–S0.5 完成。运行时/CLI/账本见 ADR-0007；本批新增 `kernel/events.py`（五模式）、
-`kernel/plugin.py`（装载与依赖协调）、`kernel/qep.py` + `kernel/delivery.py`
-（信封/验签/幂等/原子投递），细节见 ADR-0008。
+P0 mock：S0.1–S0.8 完成。内核见 ADR-0007/0008；本批新增 `services/norm.py`（五段归一化链）、
+`services/rfq.py`（版本化）、`services/intake.py`（读包），口径数据在 `services/measures.py`；
+语义见 ADR-0009。
 
 ## 最后验证
 
-`tools/verify.sh docs` PASS（AC-DESIGN-001..003，EV-004）；14 条 AC 全绿
-（EV-005..EV-008 + EV-009..EV-015）；远端 refs 已回读（EV-003）。
+`tools/verify.sh docs` PASS（AC-DESIGN-001..003，EV-004）；21 条 AC 全绿
+（EV-005..EV-008、EV-009..EV-015、EV-016..EV-022）；远端 refs 已回读（EV-003）。
 
 ## 下一步唯一动作
 
-执行 T-106（S0.6：归一化与拒绝语义，AC-NORM-001..003），再按 `roadmap.md` §2 推进；新 AC 先有定义行。
+执行 T-109（S0.9：成本构成私域，AC-COST-001 + AC-TRUST-001），再按 `roadmap.md` §2 推进。
 
 ## 不变量
 

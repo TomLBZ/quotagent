@@ -46,6 +46,7 @@
 - 职责：口径归一化——单位、币种与汇率时点、含税/不含税、计量规则、条目对齐。
 - Definition：`normalize(quote, package, ctx) -> Normalized|Rejection` · `diff(items_a, items_b) -> Alignment`。
 - Provider：`norm.default`（内置换算表 + 显式规则）· `norm.industry-*`（行业模板）。
+- P0 实现：`src/quotagent/services/norm.py`（`quote/normalize` 五段 waterfall）+ 口径数据 `src/quotagent/services/measures.py`；语义见 ADR-0009（容差来自 `MeasureRule.tolerance_bps`，随结果与账本事件留存）。
 - Consumer：`ctx.compare`、`ctx.intake`。
 - 数据边界：读取双方交换范围字段；**不得读取对方私域**。
 - 不变量：**不可归一即拒绝**（拒绝理由进账本），不得猜测兜底（P6）。
@@ -86,6 +87,7 @@
 ### `ctx.rfq` [P0]
 - 职责：采购包与清单的版本管理、发布与修订、分发。
 - Definition：`create_package(spec) -> id` · `add_items(items)` · `publish() -> rev` · `amend(changes) -> rev` · `distribute(participants) -> envelopes`。
+- P0 实现：`src/quotagent/services/rfq.py`（rev 只增；`revision(rev)` 只读视图；`amend` 给字段级 delta）；语义见 ADR-0009。
 - 不变量：已发布版本的字段不可原地修改；`amend` 必须给出字段级 delta；已发布包必须有 `quote_by` 截止时间。
 - 关联：FR-RFQ-001..006，AC-RFQ-001..003。
 
@@ -112,6 +114,7 @@
 ### `ctx.intake` [P0]
 - 职责：读包——清单条目与规格引用抽取、缺项检测、疑问清单生成。
 - Definition：`ingest(package) -> items[]` · `missing(items, quote_draft) -> Missing[]` · `questions(package) -> Question[]`。
+- P0 实现：`src/quotagent/services/intake.py`（逐条来源引用；无来源 → `[假设]`；疑问需人工确认后才外发）；语义见 ADR-0009。
 - 不变量：抽取结果必须逐条引用 `item_id`；无引用的抽取项进入 `[假设]` 状态等待人工确认。
 - 关联：FR-INTAKE-001..004，AC-INTAKE-001/002。
 

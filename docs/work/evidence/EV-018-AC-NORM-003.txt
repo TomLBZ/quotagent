@@ -1,0 +1,77 @@
+EV-018-AC-NORM-003（实现前：红）
+
+时间: 2026-09-12T00:56:50Z
+命令: tools/run.sh -m quotagent.qa ac AC-NORM-003
+实现前 commit: 8dab774
+退出码: 非零（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/src/quotagent/qa/checks_intake.py", line 9, in <module>
+    from ..services.intake import IntakeService, TemplateExtractor, UnconfirmedDraftError
+ModuleNotFoundError: No module named 'quotagent.services'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T00:56:50Z ---
+EV-018 — AC-NORM-003: 报价条目对齐到清单条目或被标 additional；未对齐条目不被静默丢弃
+
+时间: 2026-09-12T00:56:50Z
+命令: qa ac AC-NORM-003
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-NORM-003
+commit: 8dab774
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-NORM-003",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "清单条目全部分类到 matched/additional/missing 三态，无静默丢弃",
+      "ok": true,
+      "detail": "alignment={'matched': ['L-001', 'L-003'], 'additional': ['L-900'], 'missing': ['L-002'], 'unaligned': []}"
+    },
+    {
+      "name": "additional 条目被显式标记（含原因），不下沉为普通条目",
+      "ok": true,
+      "detail": "additional=['L-900'] line=额外提供的临时封堵"
+    },
+    {
+      "name": "未被报价的清单条目进入 missing（漏项可见，不是消失）",
+      "ok": true,
+      "detail": "missing=['L-002']"
+    },
+    {
+      "name": "additional 条目的归一来源被显式记录（按报价单位本身归一，不是猜测换算）",
+      "ok": true,
+      "detail": "additional={'item_id': 'L-900', 'base_unit': 'm', 'rounding': 2, 'note': 'additional 条目：无包内计量规则，按报价单位本身归一', 'source': 'derived_from_unit_for_additional'} matched={'item_id': 'L-001', 'base_unit': 'm', 'rounding': 2, 'note': '按延长米计量', 'source': 'package_measure_rule'}"
+    },
+    {
+      "name": "既不在清单也未标 additional 的条目 → 拒绝（不静默丢弃）",
+      "ok": true,
+      "detail": "code=unaligned_line details={'unaligned': ['L-777'], 'package_items': ['L-001', 'L-002', 'L-003']}"
+    },
+    {
+      "name": "两轮对齐结论都进账本（成功 normalized / 失败 normalize-rejected）",
+      "ok": true,
+      "detail": "normalized=1 rejected=1"
+    }
+  ],
+  "evidence_refs": [
+    "EV-018"
+  ],
+  "command": "qa ac AC-NORM-003",
+  "phase": "P0",
+  "title": "报价条目对齐到清单条目或被标 additional；未对齐条目不被静默丢弃",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-NORM-003 — 报价条目对齐到清单条目或被标 additional；未对齐条目不被静默丢弃
+  ok   清单条目全部分类到 matched/additional/missing 三态，无静默丢弃
+  ok   additional 条目被显式标记（含原因），不下沉为普通条目
+  ok   未被报价的清单条目进入 missing（漏项可见，不是消失）
+  ok   additional 条目的归一来源被显式记录（按报价单位本身归一，不是猜测换算）
+  ok   既不在清单也未标 additional 的条目 → 拒绝（不静默丢弃）
+  ok   两轮对齐结论都进账本（成功 normalized / 失败 normalize-rejected）

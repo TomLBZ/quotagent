@@ -78,6 +78,7 @@ class EventBus:
         "quote/intake-completed": ("emit", True, ""),
         "quote/normalize": ("waterfall", False, "归一化任一环不可行即中断并产出拒绝理由（05 §5 / P6）"),
         "quote/normalized": ("emit", True, ""),
+        "quote/normalize-rejected": ("emit", True, ""),
         "quote/price-proposed": ("emit", True, ""),
         "quote/guard-check": ("bail", True, ""),
         "quote/human-approved": ("emit", True, ""),

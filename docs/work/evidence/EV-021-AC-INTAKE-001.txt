@@ -1,0 +1,95 @@
+EV-021-AC-INTAKE-001（实现前：红）
+
+时间: 2026-09-12T00:56:50Z
+命令: tools/run.sh -m quotagent.qa ac AC-INTAKE-001
+实现前 commit: 8dab774
+退出码: 非零（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/src/quotagent/qa/checks_intake.py", line 9, in <module>
+    from ..services.intake import IntakeService, TemplateExtractor, UnconfirmedDraftError
+ModuleNotFoundError: No module named 'quotagent.services'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T00:56:50Z ---
+EV-021 — AC-INTAKE-001: 抽取结果逐条带 item_id；无引用者进入 [假设] 等待人工确认
+
+时间: 2026-09-12T00:56:50Z
+命令: qa ac AC-INTAKE-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-INTAKE-001
+commit: 8dab774
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-INTAKE-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "读包插件在依赖 rfq 未就绪时不激活（FR-PLUGIN-001 复用）",
+      "ok": true,
+      "detail": "status=pending"
+    },
+    {
+      "name": "依赖就绪后读包插件自动激活，并能取到包服务",
+      "ok": true,
+      "detail": "status=active rfq_ok=True"
+    },
+    {
+      "name": "抽取逐条带 item_id，且每条有可核对的来源引用（包 + 条目 + 字段）",
+      "ok": true,
+      "detail": "facts=[('L-001', 'extracted'), ('L-002', 'extracted'), ('L-003', 'extracted')] lines=[('L-001', 'extracted'), ('L-002', 'extracted'), ('L-003', 'extracted'), ('NEW-001', 'assumption')]"
+    },
+    {
+      "name": "抽取结果带包版本（rfq_rev），条目与版本绑定",
+      "ok": true,
+      "detail": "rfq_rev=1"
+    },
+    {
+      "name": "无来源的抽取结果被标为 [假设] 并进入待人工确认清单（不混入事实）",
+      "ok": true,
+      "detail": "assumptions=[{'item_id': 'NEW-001', 'description': '现场踏勘提到的临时封堵（无图纸/规范引用）', 'unit': 'm', 'qty': 10, 'spec_refs': [], 'source': '', 'status': 'assumption', 'marker': '[假设]', 'assumption_reason': '抽取结果无来源引用（无 spec_refs、无图纸版本），只能作为待确认假设', 'package_id': 'pkg-014', 'rfq_rev': 1}]"
+    },
+    {
+      "name": "假设项也带 item_id（可被引用/追踪），但不在事实列表里",
+      "ok": true,
+      "detail": "assumption_ids=['NEW-001']"
+    },
+    {
+      "name": "假设项不得由 agent 自行升级为事实（只能人工确认）",
+      "ok": true,
+      "detail": "error=假设项只能由人确认，收到 'agent:intake'（agent 不得自行升级为事实）"
+    },
+    {
+      "name": "人工确认后假设项才进入事实集合",
+      "ok": true,
+      "detail": "lines=[('L-001', 'extracted'), ('L-002', 'extracted'), ('L-003', 'extracted'), ('NEW-001', 'confirmed')]"
+    },
+    {
+      "name": "读包完成落账 quote/intake-completed（durable，含条目与假设计数）",
+      "ok": true,
+      "detail": "count=1 body={'package_id': 'pkg-014', 'rfq_rev': 1, 'items': 3, 'assumptions': 1, 'extractor': 'extractor.template@0.1.0', 'item_ids': ['L-001', 'L-002', 'L-003']}"
+    }
+  ],
+  "evidence_refs": [
+    "EV-021"
+  ],
+  "command": "qa ac AC-INTAKE-001",
+  "phase": "P0",
+  "title": "抽取结果逐条带 item_id；无引用者进入 [假设] 等待人工确认",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-INTAKE-001 — 抽取结果逐条带 item_id；无引用者进入 [假设] 等待人工确认
+  ok   读包插件在依赖 rfq 未就绪时不激活（FR-PLUGIN-001 复用）
+  ok   依赖就绪后读包插件自动激活，并能取到包服务
+  ok   抽取逐条带 item_id，且每条有可核对的来源引用（包 + 条目 + 字段）
+  ok   抽取结果带包版本（rfq_rev），条目与版本绑定
+  ok   无来源的抽取结果被标为 [假设] 并进入待人工确认清单（不混入事实）
+  ok   假设项也带 item_id（可被引用/追踪），但不在事实列表里
+  ok   假设项不得由 agent 自行升级为事实（只能人工确认）
+  ok   人工确认后假设项才进入事实集合
+  ok   读包完成落账 quote/intake-completed（durable，含条目与假设计数）

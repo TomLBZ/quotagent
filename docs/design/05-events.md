@@ -49,6 +49,7 @@
 | `quote/intake-completed` | emit | ✔ | `ctx.intake` → pricing | 抽条目结果入账 |
 | `quote/normalize` | waterfall | live | `ctx.norm` | 归一化链：单位→币种→税→计量规则→条目对齐；任一环拒绝即短路 |
 | `quote/normalized` | emit | ✔ | `ctx.norm` → compare | 归一化结果 + 拒绝理由 |
+| `quote/normalize-rejected` | emit | ✔ | `ctx.norm` → approval, 审计 | 口径不可归一：拒绝理由 + 下一步动作（P6） |
 | `quote/price-proposed` | emit | ✔ | `ctx.pricing` → approval | 定价建议（Intent） |
 | `quote/guard-check` | bail | durable | `ctx.guard` → approval | 异常低价/漏项/产能/条款/注入检测 |
 | `quote/human-approved` | emit | ✔ | 人工 → qep | 批准记录（不可由 agent 产生） |

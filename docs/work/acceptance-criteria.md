@@ -60,7 +60,7 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 
 | ID | 阶段 | 断言 | 命令 |
 |---|---|---|---|
-| AC-NORM-001 | P0 | 含税/不含税、不同单位、不同币种的混合报价归一后金额误差在声明容差内 | `qa ac AC-NORM-001` |
+| AC-NORM-001 | P0 | 含税/不含税、不同单位、不同币种的混合报价归一后金额误差在声明容差内（容差取自 `MeasureRule.tolerance_bps`，随结果与账本事件留存） | `qa ac AC-NORM-001` |
 | AC-NORM-002 | P0 | 缺计量规则或汇率时点不可得 → 拒绝并给出理由；**不产生**结果 | `qa ac AC-NORM-002` |
 | AC-NORM-003 | P0 | 报价条目全部对齐到清单条目或被标为 `additional`；未对齐条目不被静默丢弃 | `qa ac AC-NORM-003` |
 | AC-COMPARE-001 | P0 | 报价 `rfq_rev` 与包版本不一致时该报价不进入排序，并产生 `rfq/version-mismatch` | `qa ac AC-COMPARE-001` |
