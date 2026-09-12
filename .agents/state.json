@@ -8,7 +8,7 @@
   "last_verified_command": "tools/verify.sh docs && tools/verify.sh v && tools/run.sh -m quotagent.qa suite s1..s4",
   "last_verified_result": "PASS (34 条 AC + 场景集 s1..s4；V 登记表校验 PASS：12 条 V 全部 open、prepared=true、无越权结论)",
   "last_verified_evidence": "docs/work/evidence/EV-036-V-002-kit-selfcheck.txt",
-  "last_verified_commit": "09aa39e9e765f9952d0390959518235bded5a23a",
+  "last_verified_commit": "22f8e8f34838b22739d8b01f2bc69c33903a67ca",
   "blockers": [],
   "human_required": [
     "T-117 现场验证 V-001..V-012：备料已完成（docs/work/validation/ 的 12 份执行包 + register.json + tools/v-kit.sh + tools/verify.sh v）；需要人执行并签字，agent 不得代填结论",
