@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from ..kernel.events import EventBus
 from ..kernel.ledger import Ledger
 from ..kernel.modelgate import DeterministicModelProvider, ModelGateway
-from ..paths import new_scratch
+from ..paths import new_scratch, scratch_root
 from ..services.costmodel import (ELEMENTS, CostLibrary, CostModelService, PrivateAccessDenied)
 from ..services.realm import (DEFAULT_FIELD_CLASSES, PrivateLeak, RealmProjector, RealmView,
                               classify_status)
@@ -197,4 +198,12 @@ def ac_trust_001() -> list[Assertion]:
     out.append(Assertion("未分类字段被显式记录（新增字段不会静默按公开处理）",
                          "brand_new_field" in projector.unclassified_paths(),
                          f"unclassified={projector.unclassified_paths()} keys={sorted(unclassified)}"))
+
+    # 默认私域根：不传 store_root 时也必须落在仓库内 tmp/（ADR-0007 的运行约束：不写仓库外文件）
+    default_service = CostModelService(realm=SUPPLIER_REALM, library=_library())
+    default_root = Path(default_service.private_store.root).resolve()
+    tmp_root = Path(scratch_root()).resolve()
+    out.append(Assertion("私域存储默认根落在仓库内 tmp/（不写仓库外文件、不落在跟踪路径）",
+                         default_root.is_relative_to(tmp_root) and "tmp" in default_root.parts,
+                         f"root={default_root} tmp={tmp_root}"))
     return out

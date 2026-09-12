@@ -18,6 +18,7 @@ from typing import Any
 from ..kernel.canon import digest
 from ..kernel.events import EventBus
 from ..kernel.ledger import Ledger, utc_now
+from ..paths import scratch_root
 
 COST_BUILT_EVENT = "quote/cost-built"
 ELEMENTS = ("material", "labour", "plant", "overhead", "risk", "tax", "finance")
@@ -104,7 +105,9 @@ class CostModelService:
     _current: str | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
-        root = self.store_root or Path(f"private-{self.realm.replace(':', '_')}")
+        # 默认根落在仓库内 tmp/（gitignored），不写仓库外文件（ADR-0007 的运行约束）
+        root = Path(self.store_root) if self.store_root is not None else (
+            scratch_root() / "private-store" / self.realm.replace(":", "_"))
         object.__setattr__(self, "private_store", PrivateStore(root))
 
     # --- 构建 -------------------------------------------------------------

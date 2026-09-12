@@ -99,3 +99,91 @@ commit: 2c430d2
   ok   成本构成落账只带引用与哈希（明细留在本 realm 私域存储），账本链完整
   ok   私域工件按哈希引用，但跨 realm 取件同样被拒绝
   ok   私域字段分类已声明（成本构成/利润率属 Private-supplier）
+--- 追加运行 2026-09-12T01:07:23Z ---
+EV-023 — AC-COST-001: 成本构成可按要素分解且可解释；私域在对方 realm 取不到值
+
+时间: 2026-09-12T01:07:23Z
+命令: qa ac AC-COST-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-COST-001
+commit: f423e9d
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-COST-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "成本构成按条目与成本要素分解（材料/人工/机具/管理/风险/税/财务）",
+      "ok": true,
+      "detail": "elements=['finance', 'labour', 'material', 'overhead', 'plant', 'risk', 'tax']"
+    },
+    {
+      "name": "各要素金额与手算一致（单位费率 × 工程量）",
+      "ok": true,
+      "detail": "material=5040.0 labour=2160.0 plant=720.0（手算 5040/2160/720）"
+    },
+    {
+      "name": "间接要素按声明基数与费率计算（管理 8% × 直接费 7920 = 633.6）",
+      "ok": true,
+      "detail": "overhead=633.6"
+    },
+    {
+      "name": "可解释：每个要素可追溯到费率与基数（可查因子）",
+      "ok": true,
+      "detail": "explain=[{\"element\": \"material\", \"label\": \"材料\", \"amount\": 5040.0, \"factors\": {\"unit_rate\": 42.0, \"qty\": 120.0, \"element\": \"material\", \"label\": \"材料\"}}, {\"element\": \"labour\", \"label\": \"人工\", \"amount\": 2160.0, \"factors\": {\"unit_rate\": 18.0, \"qty\": 120.0, \"element\": \"labour\", \"label\": \"人工\"}}]"
+    },
+    {
+      "name": "unit_cost 与手算一致（不含税 74.4876 / 含税 84.170988 每 m）",
+      "ok": true,
+      "detail": "unit_cost={'item_id': 'L-001', 'excl_tax': 74.4876, 'incl_tax': 84.17098800000001, 'total_excl_tax': 8938.512, 'total_incl_tax': 10100.51856, 'currency': 'CNY'}（手算 excl=74.4876 incl=84.170988）"
+    },
+    {
+      "name": "本 realm 可读完整私域成本构成（不是把数据删掉了）",
+      "ok": true,
+      "detail": "own_keys=['artifact_hash', 'built_at', 'items', 'quote_id', 'realm', 'total_excl_tax', 'total_incl_tax']"
+    },
+    {
+      "name": "对方 realm 读取成本构成被拒绝（私域不出 realm，P5）",
+      "ok": true,
+      "detail": "error=成本构成属于 'supplier:sup-A'，'contractor:con-B' 不得读取（FR-COST-002 / P5：永不出 realm）"
+    },
+    {
+      "name": "成本构成落账只带引用与哈希（明细留在本 realm 私域存储），账本链完整",
+      "ok": true,
+      "detail": "body={\"realm\": \"supplier:sup-A\", \"quote_id\": \"q-0007\", \"items\": [\"L-001\", \"L-002\"], \"elements\": [\"finance\", \"labour\", \"material\", \"overhead\", \"plant\", \"risk\", \"tax\"], \"total_excl_tax\": 13489.0272, \"total_incl_tax\": 15242.600736, \"artifact_hash\":"
+    },
+    {
+      "name": "私域工件按哈希引用，但跨 realm 取件同样被拒绝",
+      "ok": true,
+      "detail": "error=私域工件 sha256:da8a7f7a703ba801d92d95dcd2ec39813c9ac505c48bfe8cd395abf7ca8cbffd 属于 'supplier:sup-A'，'contractor:con-B' 无权读取（P5：私域永不出 realm）"
+    },
+    {
+      "name": "私域字段分类已声明（成本构成/利润率属 Private-supplier）",
+      "ok": true,
+      "detail": "cost_model=private-supplier reserve_price=private-contractor"
+    }
+  ],
+  "evidence_refs": [
+    "EV-023"
+  ],
+  "command": "qa ac AC-COST-001",
+  "phase": "P0",
+  "title": "成本构成可按要素分解且可解释；私域在对方 realm 取不到值",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-COST-001 — 成本构成可按要素分解且可解释；私域在对方 realm 取不到值
+  ok   成本构成按条目与成本要素分解（材料/人工/机具/管理/风险/税/财务）
+  ok   各要素金额与手算一致（单位费率 × 工程量）
+  ok   间接要素按声明基数与费率计算（管理 8% × 直接费 7920 = 633.6）
+  ok   可解释：每个要素可追溯到费率与基数（可查因子）
+  ok   unit_cost 与手算一致（不含税 74.4876 / 含税 84.170988 每 m）
+  ok   本 realm 可读完整私域成本构成（不是把数据删掉了）
+  ok   对方 realm 读取成本构成被拒绝（私域不出 realm，P5）
+  ok   成本构成落账只带引用与哈希（明细留在本 realm 私域存储），账本链完整
+  ok   私域工件按哈希引用，但跨 realm 取件同样被拒绝
+  ok   私域字段分类已声明（成本构成/利润率属 Private-supplier）
