@@ -7,9 +7,14 @@
 ```sh
 python -m quotagent.qa ac AC-NORM-001        # 单条 AC，打印 JSON {ac, status, assertions[], evidence_refs[]}
 python -m quotagent.qa suite s1              # 一个场景集
+tools/verify.sh ac AC-NORM-001               # 同上（仓库内运行时入口，自带 sys.path）
+tools/verify.sh smoke                        # 运行时自检（解释器解析 / 标准库依赖 / 临时目录）
 tools/verify.sh g0                           # 阶段门：跑该门要求的全部 AC，返回非零表示未通过
 tools/verify.sh docs                         # 文档门（当前阶段即可运行）
 ```
+
+运行器实现在 `src/quotagent/qa/`（每条 AC 一个断言函数，注册进注册表），
+解释器解析与 `.venv` 创建见 `../design/adr/0007-p0-runtime-and-ledger-format.md`。
 
 - 退出码 0 = 通过；非零 = 失败，且必须给出**首个失败断言的具体差异**。
 - 每次执行把原始输出写入 `docs/work/evidence/EV-<NNN>-<AC-ID>.txt`（或 `.json`），
@@ -25,6 +30,13 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-DESIGN-003 | 每条 FR 至少引用一条已定义的 AC，且 AC 至少被一条 FR 引用（双向无孤儿） | `tools/verify.sh docs` | 见 `evidence/EV-001` |
 
 **AC-DESIGN-001..003 在代码实现前即可运行**，是本仓库"文档也是可验证制品"的最低保障。
+
+## 1.1 运行时与运行器（P0 S0.1）
+
+| ID | 阶段 | 断言 | 命令 |
+|---|---|---|---|
+| AC-RUNTIME-001 | P0 | `src/` 只导入标准库；干净副本（不含 `.venv`/`tmp`）用裸解释器可跑 `tools/verify.sh docs` 与 CLI；`tools/bootstrap.sh` 幂等且运行产物只落 `.venv/`、`tmp/` | `qa ac AC-RUNTIME-001` |
+| AC-RUNTIME-002 | P0 | CLI 契约：`qa ac` 输出 `{ac, status, assertions[], evidence_refs[]}`；退出码 0/1/2；未知 AC 与未实现场景集返回 2（不伪装通过）；`qa list` 覆盖本批 AC | `qa ac AC-RUNTIME-002` |
 
 ## 2. 内核
 

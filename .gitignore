@@ -6,6 +6,7 @@ node_modules/
 dist/
 lib/
 coverage/
+tmp/
 
 # 本地状态与密钥：绝不入库
 .env

@@ -1,15 +1,18 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-11",
-  "phase": "design-complete",
+  "updated_at": "2026-09-12",
+  "phase": "P0-mock",
   "phase_source": "docs/work/roadmap.md",
-  "next_task": "T-101",
-  "next_action": "P0 S0.1：建立仓库内自包含运行时与 CLI 骨架；同一轮启动 T-117 的 V-002 盲测（供应商是否接受结构化报价），它决定 P1 是否成立",
-  "last_verified_command": "tools/verify.sh docs",
-  "last_verified_result": "PASS (AC-DESIGN-001/002/003)",
-  "last_verified_evidence": "docs/work/evidence/EV-001-doc-gate.txt",
-  "last_verified_commit": "c00379afb75a0433ea508c3fd36180418ef3c2ff",
+  "next_task": "T-103",
+  "next_action": "P0 S0.3：事件五模式（emit/parallel/serial/bail/waterfall）+ 注册即 effect/disposer；先在 acceptance-criteria.md 定义 AC-EVT-001/002 的可执行断言，再实现",
+  "last_verified_command": "tools/verify.sh docs && tools/verify.sh ac AC-AUDIT-001",
+  "last_verified_result": "PASS (AC-DESIGN-001..003, AC-AUDIT-001/002, AC-RUNTIME-001/002)",
+  "last_verified_evidence": "docs/work/evidence/EV-004-AC-DESIGN-001.txt",
+  "last_verified_commit": "9375e483eb6c47112560c3f488f80cc559079dc7",
   "blockers": [],
+  "human_required": [
+    "T-117 的 V-002 盲测（供应商是否接受结构化报价）——需真实供应商参与，agent 只能备料与登记结论"
+  ],
   "known_defects": [
     "D-001",
     "D-002"
@@ -23,6 +26,11 @@
     "docs/work/progress-checklist.md"
   ],
   "rules_file": "AGENTS.md",
-  "no_code_yet": true,
+  "no_code_yet": false,
+  "runtime": {
+    "entry": "tools/run.sh（解释器解析 tools/runtime.sh；仓库 .venv 由 tools/bootstrap.sh 创建，gitignored）",
+    "ac_runner": "src/quotagent/qa/（checks_*.py + registry.py）",
+    "ledger_format": "docs/design/adr/0007-p0-runtime-and-ledger-format.md"
+  },
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态"
 }

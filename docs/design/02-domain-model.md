@@ -89,7 +89,8 @@ ChangeOrder:  proposed ──priced──▶ priced ──human_approve──▶
 命名规则 `域/事件`，全部小写连字符；`Fact` 事件后缀为过去式，`Intent` 用现在式意图名。
 
 ```
-kernel/*            内核：ledger/appended, plugin/loaded, plugin/unloaded, qep/rejected
+kernel/*            内核：ledger-appended, plugin-mounted, plugin-unmounted,
+                    config-updated, qep-rejected, model-call, model-replied
 rfq/*               published, amended, closed, version-mismatch
 clarification/*     asked, answered, broadcast, reopened
 quote/*             drafted, priced, submitted, revised, withdrawn, rejected-by-guard
@@ -105,7 +106,7 @@ evolve/*            observed, proposed, shadowed, gated, promoted, rolled-back
 ```
 
 **P4 校验方式**（可机检）：任意一次模型调用，其输入集合必须能由上述事件 + 只读引用（附件哈希）
-重建。P1 实现为一条断言：`rebuild(inputs) == observed_inputs`（AC-AUDIT-001）。
+重建。实现为一条断言：`rebuild(inputs) == observed_inputs`（AC-AUDIT-002）。
 
 ## 5. 与外部系统的边界
 

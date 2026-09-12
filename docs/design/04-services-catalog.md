@@ -13,6 +13,7 @@
 - 职责：追加式事件序列 + 可重建投影；哈希链。
 - Definition：`append(event) -> ref`（唯一写入口）· `read(filter) -> events` · `project(view, from?) -> state` · `verify_chain(from) -> bool`。
 - Provider：`ledger.jsonl`（文件，默认）· `ledger.sqlite`（P2）。
+- 文件格式、哈希公式与去重键：ADR-0007（字节级真源；改格式必须新写 ADR）。
 - Consumer：几乎全部服务；投影供 agent 读取。
 - 数据边界：**本 realm 事件全量**；跨 realm 只能读对方发来的报文。
 - 不变量：`append` 后事件不可修改；`verify_chain()` 为真；同一 `(correlation_id,type,body_hash)` 不产生第二条事实。

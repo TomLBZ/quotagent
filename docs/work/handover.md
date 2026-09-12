@@ -4,24 +4,23 @@
 
 ## 现在在哪
 
-设计期完成：`docs/analysis/`（4 篇）、`docs/design/`（13 篇 + ADR-0001..0006）、
-`docs/work/`（FR + AC + roadmap + checklist）。**无实现代码**（设计期约定）。
+P0 mock：S0.1 完成（自包含运行时 `tools/*.sh`、CLI `python -m quotagent.qa`、文档门 T-116）；
+S0.2 完成（`kernel/ledger.py`：追加/哈希链/投影重建/去重/停发）。格式见 ADR-0007。
 
 ## 最后验证
 
-`tools/verify.sh docs`（AC-DESIGN-001/002/003）→ 证据 `docs/work/evidence/EV-001`；
-远端已推送并回读 refs → `EV-003`。
+`tools/verify.sh docs` PASS（AC-DESIGN-001..003，EV-004）；`ac AC-AUDIT-001/002`、
+`ac AC-RUNTIME-001/002` 全绿（EV-005..EV-008）；远端 refs 已回读（EV-003）。
 
 ## 下一步唯一动作
 
-执行 **T-101**（P0 S0.1：自包含运行时 + CLI 骨架），再按 `roadmap.md` §2 顺序推进。
-开工前先做 **T-117** 的 V-002 盲测（供应商是否接受结构化报价）——它决定 P1 是否成立。
+执行 T-103（S0.3：事件五模式 + disposer，AC-EVT-001/002），再按 `roadmap.md` §2 推进；新 AC 先有定义行。
 
 ## 不变量
 
-内核不可自改 · 承诺必须人工批准 · 模型可见即可重建 · 私域不出 realm ·
-归一化不可行即拒绝 · 每条 AC 有可执行证据 · 一轮一批 commit+push 并回读远端。
+内核不可自改 · 承诺需人批 · 模型可见即账本可重建 · 私域不出 realm · 不可归一即拒绝 ·
+AC 需可执行证据 · 一轮一批 commit+push 并回读。
 
 ## 阻塞
 
-无。缺陷见 `progress-checklist.md` 的 D-001/D-002。
+无。需人工：T-117 的 V-002 盲测决定 P1 是否成立，agent 只备料。缺陷见 D-001/D-002。

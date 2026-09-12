@@ -27,6 +27,8 @@
 | 事件 | @mode | durable | 生产者 | 消费者 |
 |---|---|---|---|---|
 | `kernel/ledger-appended` | emit | – | `ctx.ledger` | 遥测、投影 |
+| `kernel/model-call` | emit | ✔ | `ctx.model`（网关） | 审计、`ctx.evidence.rebuild` |
+| `kernel/model-replied` | emit | ✔ | `ctx.model`（网关） | 审计、`ctx.eval` |
 | `kernel/plugin-mounted` / `kernel/plugin-unmounted` | emit | live | `ctx.plugin` | 诊断、`ctx.plugins` |
 | `kernel/config-updated` | waterfall | live | 自进化或人工配置更新 | 否决者（合规/安全） |
 | `kernel/qep-rejected` | emit | durable | `ctx.qep` | 运维告警、审计 |

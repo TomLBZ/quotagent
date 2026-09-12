@@ -16,7 +16,8 @@ description: Use when taking over quotagent after a crash, context compaction, o
 3. **读清单**：`docs/work/progress-checklist.md`，找 `status=doing` 或 `todo` 的第一个任务；
    `status=doing` 的任务若无人认领且无证据，视为未完成，重新执行。
 4. **不信任记忆**：本会话之外的一切结论以仓库文件为准；不要凭印象续写文档或代码。
-5. **先验证再动手**：运行 `tools/verify.sh docs`，确认仓库当前是绿的；红则先修文档门。
+5. **先验证再动手**：运行 `tools/verify.sh docs` 与 `tools/verify.sh smoke`，确认仓库当前是绿的；
+   红则先修文档门或运行时（必要时 `tools/bootstrap.sh` 重建仓库内 `.venv`，它幂等）。
 6. **确认远端一致**：`git fetch origin && git log --oneline -3 origin/main`，
    与本地 HEAD 比对；不一致先 `git pull --rebase`，绝不强推。
 7. **接手认领**：把该任务的 `status` 改为 `doing` 并写入 `.agents/sessions/` 一行记录。

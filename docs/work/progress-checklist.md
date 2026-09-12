@@ -2,7 +2,7 @@
 
 <!-- budget: 32 KB. status ∈ todo|doing|blocked|done；done 必须有 evidence（AGENTS.md 规则 6） -->
 
-**当前阶段：设计期（P0 前）**。P0 及之后的全部任务为 `todo`。
+**当前阶段：P0 mock（S0.1–S0.2 已完成）**。设计期任务全部 `done`；P0 其余任务按 `roadmap.md` §2 顺序推进。
 任务定义（描述与顺序）在 `roadmap.md`；本文件只维护**状态与证据**。
 
 ## 设计期
@@ -18,8 +18,8 @@
 
 | T | 阶段 | 内容 | FR | AC | status | evidence |
 |---|---|---|---|---|---|---|
-| T-101 | P0 | 仓库内自包含运行时 + CLI 骨架 | – | AC-DESIGN-001 | todo | – |
-| T-102 | P0 | 账本：追加、哈希链、投影重建、去重 | FR-LEDGER-001..004 | AC-AUDIT-001, AC-AUDIT-002 | todo | – |
+| T-101 | P0 | 仓库内自包含运行时 + CLI 骨架 | FR-RUNTIME-001, FR-RUNTIME-002 | AC-RUNTIME-001, AC-RUNTIME-002 | done | EV-007, EV-008 |
+| T-102 | P0 | 账本：追加、哈希链、投影重建、去重 | FR-LEDGER-001..004 | AC-AUDIT-001, AC-AUDIT-002 | done | EV-005, EV-006 |
 | T-103 | P0 | 事件五模式 + effect/disposer 语义 | FR-EVT-001..003 | AC-EVT-001, AC-EVT-002 | todo | – |
 | T-104 | P0 | 插件装载与依赖协调 | FR-PLUGIN-001..003 | AC-PLUGIN-001, AC-PLUGIN-002 | todo | – |
 | T-105 | P0 | QEP 信封 + 文件投递 + 幂等 | FR-QEP-001, FR-QEP-002, FR-QEP-004, FR-INTEG-001 | AC-QEP-001, AC-QEP-002, AC-INTEG-001 | todo | – |
@@ -33,7 +33,7 @@
 | T-113 | P0 | 护栏：漏项 + 注入/私域检测 | FR-GUARD-002, FR-GUARD-005 | AC-GUARD-001, AC-GUARD-003 | todo | – |
 | T-114 | P0 | 端到端脚本（S1 合成场景） | FR-EVAL-001 | AC-EVAL-001 | todo | – |
 | T-115 | P0 | 指标基线采集与报告 | FR-EVAL-003 | AC-EVAL-002 | todo | – |
-| T-116 | P0 | 文档门工具（`tools/verify.sh docs`） | – | AC-DESIGN-001..003 | todo | – |
+| T-116 | P0 | 文档门工具（`tools/verify.sh docs`） | – | AC-DESIGN-001..003 | done | EV-004 |
 | T-117 | P0 | 现场验证 V-001..V-012 | – | manual（结论写入 functional-requirements §1） | todo | – |
 
 ## P1 mvp demo（见 `roadmap.md` §3）
@@ -74,5 +74,5 @@
 
 | 编号 | 类型 | 内容 | 影响 | 状态 |
 |---|---|---|---|---|
-| D-001 | 已知缺陷 | 本仓库尚无实现代码，全部 AC 除 AC-DESIGN-* 外均未执行 | 门 G0 未开始 | open（设计期预期内） |
+| D-001 | 已知缺陷 | 实现自 P0 起：AC-AUDIT-001/002、AC-RUNTIME-001/002 已执行；其余 P0 AC 尚无实现 | 门 G0 未开始 | open（P0 进行中） |
 | D-002 | 未验证 | V-001..V-012 全部待现场验证 | 影响 P1 目标值设定 | open |

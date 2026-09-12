@@ -1,0 +1,93 @@
+EV-006-AC-AUDIT-002 — AC-AUDIT-002（实现前：红）
+
+时间: 2026-09-12T00:34:28Z
+命令: python3 -m quotagent.qa ac AC-AUDIT-002
+实现前 commit: 9375e48
+退出码: 1
+
+--- 原始输出 ---
+/workspace/projects/quotagent/.venv/bin/python: Error while finding module specification for 'quotagent.qa' (ModuleNotFoundError: No module named 'quotagent')
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T00:34:29Z ---
+EV-006 — AC-AUDIT-002: 随机抽样 20 次模型调用的重建输入与观测输入全等
+
+时间: 2026-09-12T00:34:29Z
+命令: qa ac AC-AUDIT-002
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-AUDIT-002
+commit: 9375e48
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-AUDIT-002",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "每次模型调用都已落账（模型可见 ⟺ 账本可见）",
+      "ok": true,
+      "detail": "kernel/model-call=30"
+    },
+    {
+      "name": "时点快照已采集（seq=24）",
+      "ok": true,
+      "detail": "snapshot_seq=24 views=['index', 'types']"
+    },
+    {
+      "name": "抽样 20 次：rebuild(inputs) == observed_inputs 全部相等",
+      "ok": true,
+      "detail": "不一致 0 条: []"
+    },
+    {
+      "name": "负控：未落账却进入模型的输入被检出（比对非空转）",
+      "ok": true,
+      "detail": "{\"call_id\": \"model-call:1\", \"equal\": false, \"rebuilt_hash\": \"sha256:c5d950c2994e385c274bb1d35cd4e78eb65f171d540e0b6eeb3817a281a46084\", \"observed_hash\": \"sha256:d5bb24620da7c1e609846323df7ff49c893ff95cb9994ccbc9e4434eb67cd623\"}"
+    },
+    {
+      "name": "投影 index: 全量重建 == 增量维护（FR-LEDGER-002）",
+      "ok": true,
+      "detail": "full={'count': 60, 'last_seq': 60, 'head_hash': 'sha256:253a0c7e786d736e2e3d610b11c76734d3a0b029d78330b42008878bc86fcbca'} incremental={'count': 60, 'last_seq': 60, 'head_hash': 'sha256:253a0c7e786d736e2e3d610b11c76734d3a0b029d78330b42008878bc86fcbca'}"
+    },
+    {
+      "name": "投影 index: 时点重建（seq<=24）== 该时点快照",
+      "ok": true,
+      "detail": "point={'count': 24, 'last_seq': 24, 'head_hash': 'sha256:55294cf3eb16d7bfd106bfb674aea4daa09659df01ed24c91db88802fa67f6fd'} snapshot={'count': 24, 'last_seq': 24, 'head_hash': 'sha256:55294cf3eb16d7bfd106bfb674aea4daa09659df01ed24c91db88802fa67f6fd'}"
+    },
+    {
+      "name": "投影 types: 全量重建 == 增量维护（FR-LEDGER-002）",
+      "ok": true,
+      "detail": "full={'count': 60, 'by_type': {'kernel/model-call': 30, 'kernel/model-replied': 30}} incremental={'count': 60, 'by_type': {'kernel/model-call': 30, 'kernel/model-replied': 30}}"
+    },
+    {
+      "name": "投影 types: 时点重建（seq<=24）== 该时点快照",
+      "ok": true,
+      "detail": "point={'count': 24, 'by_type': {'kernel/model-call': 12, 'kernel/model-replied': 12}} snapshot={'count': 24, 'by_type': {'kernel/model-call': 12, 'kernel/model-replied': 12}}"
+    },
+    {
+      "name": "投影全量重建可重复（同输入两次结果一致）",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "evidence_refs": [
+    "EV-006"
+  ],
+  "command": "qa ac AC-AUDIT-002",
+  "phase": "P0",
+  "title": "随机抽样 20 次模型调用的重建输入与观测输入全等",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-AUDIT-002 — 随机抽样 20 次模型调用的重建输入与观测输入全等
+  ok   每次模型调用都已落账（模型可见 ⟺ 账本可见）
+  ok   时点快照已采集（seq=24）
+  ok   抽样 20 次：rebuild(inputs) == observed_inputs 全部相等
+  ok   负控：未落账却进入模型的输入被检出（比对非空转）
+  ok   投影 index: 全量重建 == 增量维护（FR-LEDGER-002）
+  ok   投影 index: 时点重建（seq<=24）== 该时点快照
+  ok   投影 types: 全量重建 == 增量维护（FR-LEDGER-002）
+  ok   投影 types: 时点重建（seq<=24）== 该时点快照
+  ok   投影全量重建可重复（同输入两次结果一致）

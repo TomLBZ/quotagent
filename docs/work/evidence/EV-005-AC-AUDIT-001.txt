@@ -1,0 +1,99 @@
+EV-005-AC-AUDIT-001 — AC-AUDIT-001（实现前：红）
+
+时间: 2026-09-12T00:34:28Z
+命令: python3 -m quotagent.qa ac AC-AUDIT-001
+实现前 commit: 9375e48
+退出码: 1
+
+--- 原始输出 ---
+/workspace/projects/quotagent/.venv/bin/python: Error while finding module specification for 'quotagent.qa' (ModuleNotFoundError: No module named 'quotagent')
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T00:34:28Z ---
+EV-005 — AC-AUDIT-001: 篡改历史事件后 verify_chain() 为假；审计包独立验证失败
+
+时间: 2026-09-12T00:34:28Z
+命令: qa ac AC-AUDIT-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-AUDIT-001
+commit: 9375e48
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-AUDIT-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "append-only：事件已追加",
+      "ok": true,
+      "detail": "count=12"
+    },
+    {
+      "name": "追加后哈希链完整（FR-LEDGER-001/003）",
+      "ok": true,
+      "detail": "head=sha256:8f9391286440be31df5642dac3588ab98066ffe1b7a5643e4a9e95d8e824a13f"
+    },
+    {
+      "name": "同 (correlation_id,type,body_hash) 不产生第二条事实（FR-LEDGER-004）",
+      "ok": true,
+      "detail": "duplicate=True count=12"
+    },
+    {
+      "name": "重开后账本健康且 head_hash 一致（持久化 + 启动校验）",
+      "ok": true,
+      "detail": "head=sha256:8f9391286440be31df5642dac3588ab98066ffe1b7a5643e4a9e95d8e824a13f"
+    },
+    {
+      "name": "审计包独立验证通过（未篡改）",
+      "ok": true,
+      "detail": "[{\"name\": \"哈希链（包内自洽）\", \"ok\": true, \"detail\": \"逐条重算 entry_hash 与链连接\"}, {\"name\": \"Merkle 根与事件切片一致\", \"ok\": true, \"detail\": \"recomputed=sha256:d27c0fb47f150f9d0a2d0b568552819ae7c16f90103e80ed2538bbbf48e14e94\"}]"
+    },
+    {
+      "name": "包内任一事件被篡改 → 独立验证失败",
+      "ok": true,
+      "detail": "哈希链（包内自洽）: seq 4 的记录内容与 entry_hash/body_hash 不一致"
+    },
+    {
+      "name": "篡改历史事件后 verify_chain() 返回假",
+      "ok": true,
+      "detail": "ok=False reason=body_hash 与 body 不一致（内容被篡改）"
+    },
+    {
+      "name": "校验报告定位到被篡改的 seq（第 7 条）",
+      "ok": true,
+      "detail": "first_bad_seq=7 reason=body_hash 与 body 不一致（内容被篡改）"
+    },
+    {
+      "name": "启动校验失败即标记不健康（停发前置条件）",
+      "ok": true,
+      "detail": "frozen=True"
+    },
+    {
+      "name": "冻结后拒绝继续追加（FR-LEDGER-003 停发）",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "evidence_refs": [
+    "EV-005"
+  ],
+  "command": "qa ac AC-AUDIT-001",
+  "phase": "P0",
+  "title": "篡改历史事件后 verify_chain() 为假；审计包独立验证失败",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-AUDIT-001 — 篡改历史事件后 verify_chain() 为假；审计包独立验证失败
+  ok   append-only：事件已追加
+  ok   追加后哈希链完整（FR-LEDGER-001/003）
+  ok   同 (correlation_id,type,body_hash) 不产生第二条事实（FR-LEDGER-004）
+  ok   重开后账本健康且 head_hash 一致（持久化 + 启动校验）
+  ok   审计包独立验证通过（未篡改）
+  ok   包内任一事件被篡改 → 独立验证失败
+  ok   篡改历史事件后 verify_chain() 返回假
+  ok   校验报告定位到被篡改的 seq（第 7 条）
+  ok   启动校验失败即标记不健康（停发前置条件）
+  ok   冻结后拒绝继续追加（FR-LEDGER-003 停发）

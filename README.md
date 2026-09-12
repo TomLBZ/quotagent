@@ -5,8 +5,8 @@
 reactive coeffects，[arXiv:2608.25512](https://arxiv.org/abs/2608.25512)），
 工程约定参考 DeepSeek Harness 的「全插件 agent harness」形态。
 
-**当前状态：仅设计，无代码。** 仓库产出为设计文档 + 可执行路线图；实现按
-`docs/work/roadmap.md` 的 P0 → P1 → P2 推进，由 agent 自实现并在线自进化。
+**当前状态：P0 mock 进行中（S0.1–S0.2 已完成：仓库内自包含运行时 + CLI 骨架 + 账本）。** 设计与需求在
+`docs/`，实现按 `docs/work/roadmap.md` 的 P0 → P1 → P2 推进，由 agent 自实现并在线自进化。
 
 ## 它解决什么
 
@@ -34,9 +34,12 @@ docs/work/handover.md                      接手文档（每轮次更新，≤ 
 ```bash
 cat docs/work/handover.md          # 1. 我在哪、下一步唯一动作
 cat .agents/state.json             # 2. 机器可读状态
-# 3. 在 progress-checklist 里挑一个 status=todo 的任务，按其 FR/AC 实现
-# 4. 跑 AC 命令，输出摘要写进 docs/work/evidence/
-# 5. 更新 progress-checklist + handover + state.json，commit & push
+tools/bootstrap.sh                 # 3. 首次：建仓库内 .venv（幂等；仅标准库，不装任何包）
+tools/verify.sh smoke              # 4. 运行时自检（解释器 / 标准库依赖 / 临时目录）
+tools/verify.sh ac AC-AUDIT-001    # 5. 跑一条 AC（AC 实现在 src/quotagent/qa/）
+# 6. 在 progress-checklist 里挑一个 status=todo 的任务，按其 FR/AC 实现
+# 7. 取证：tools/run.sh -m quotagent.qa ac <AC-ID> --evidence EV-NNN
+# 8. 更新 progress-checklist + handover + state.json，commit & push 并回读远端
 ```
 
 规则见 [AGENTS.md](AGENTS.md)——本仓库规则的唯一真源。
