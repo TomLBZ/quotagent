@@ -8,7 +8,7 @@
   "last_verified_command": "tools/verify.sh docs && tools/run.sh -m quotagent.qa ac AC-COMPARE-001 && tools/run.sh -m quotagent.qa suite s1..s4",
   "last_verified_result": "PASS (34 条 AC：AC-DESIGN-001..003、AC-RUNTIME-001/002、AC-AUDIT-001/002、AC-EVT-001/002、AC-PLUGIN-001/002、AC-QEP-001/002、AC-INTEG-001、AC-NORM-001..003、AC-RFQ-001/002、AC-INTAKE-001/002、AC-COST-001、AC-TRUST-001、AC-PRICE-001、AC-APPROVE-001/002、AC-DEV-001、AC-COMPARE-001..003、AC-GUARD-001/003、AC-EVAL-001/002；场景集 s1..s4 全绿)",
   "last_verified_evidence": "docs/work/evidence/EV-029-AC-COMPARE-001.txt",
-  "last_verified_commit": "520c4ed22bfed2809e56922ea332e9fac71003cd",
+  "last_verified_commit": "c2653ff27cf46a3c97c0b2fc1cf22536c194a714",
   "blockers": [],
   "human_required": [
     "T-117 的 V-002 盲测（供应商是否接受结构化报价）——需真实供应商参与，agent 只能备料与登记结论"
