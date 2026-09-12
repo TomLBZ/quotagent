@@ -47,6 +47,16 @@ def _rel_files(root: Path) -> set[str]:
     return {str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()}
 
 
+def _gate_scope_files() -> set[str]:
+    """门（`tools/check-docs.py`）扫描的集合：仓库内所有 .md，仅排除 .git。
+
+    本 AC 会复制整棵树，必须保证跑完之后这个集合与跑之前一致——否则"跑过 AC"就会改变门的结果，
+    门就不再是确定性的（本仓库不改门来迁就工具，只清理自己的临时产物）。
+    """
+    root = repo_root()
+    return {str(p.relative_to(root)) for p in root.rglob("*.md") if ".git" not in p.parts}
+
+
 def _clean_copy(dest: Path) -> int:
     """把工作树复制成干净副本：排除 .git/.venv/tmp 与本机未入库文件。"""
     root = repo_root()
@@ -93,6 +103,7 @@ def ac_runtime_001() -> list[Assertion]:
     out: list[Assertion] = []
     root = repo_root()
     runtime_sh = root / "tools" / "runtime.sh"
+    scope_before = _gate_scope_files()
 
     proc = _run([runtime_sh, "--print"], cwd=root)
     interpreter = (proc.stdout or "").strip().splitlines()[-1] if proc.stdout.strip() else ""
@@ -149,6 +160,13 @@ def ac_runtime_001() -> list[Assertion]:
     extra = _extra_files(copy, baseline)
     out.append(Assertion("运行产物只落在 .venv/ tmp/ __pycache__/（不污染仓库）", not extra,
                          "; ".join(extra[:5])))
+
+    shutil.rmtree(scratch, ignore_errors=True)
+    scope_after = _gate_scope_files()
+    out.append(Assertion("跑完后门扫描范围不变（临时副本已清理，门保持确定性）",
+                         scope_before == scope_after,
+                         f"before={len(scope_before)} after={len(scope_after)} "
+                         f"diff={sorted(scope_before ^ scope_after)[:3]}"))
     return out
 
 

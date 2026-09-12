@@ -21,8 +21,9 @@ description: Use when implementing any task from progress-checklist in quotagent
      **先加 `acceptance-criteria.md` 的定义行，再加断言函数**。
    - 取证：`tools/run.sh -m quotagent.qa ac <AC-ID> --evidence EV-NNN`
      （自动写时间、命令、commit、退出码与原始输出）。
-   - 门是确定性的：`tools/check-docs.py` 跳过 `.git/.venv/tmp/__pycache__`，所以跑 AC 不改变门结果；
-     临时产物只能落 `tmp/`（gitignored），不许写仓库外。
+   - 临时产物只能落 `tmp/`（gitignored），不许写仓库外；**用完自己清理**——门会扫描仓库内所有
+     `.md`（仅排除 `.git`），留下副本就会改变门的扫描范围（AC-RUNTIME-001 断言跑完后范围不变）。
+     不要为了迁就工具去改门或改 AC。
 1. **先跑 AC 看它失败**（红）。记录原始输出——这是之后"真的实现了"的唯一证据来源。
    若该 AC 一开始就是绿的，说明它没有在测你要做的事，先修 AC。
 2. **最小实现**，遵守这些硬约束：

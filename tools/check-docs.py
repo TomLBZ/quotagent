@@ -15,9 +15,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SCAN_SUFFIX = ".md"
-# 扫描范围：跳过版本控制、运行时产物与临时目录。它们不是文档（`ADR-0007`），
-# 且包含它们的副本会让"跑过 AC"改变门的结果——门必须是确定性的。
-SKIP_DIRS = {".git", ".venv", "tmp", "__pycache__", "node_modules"}
 
 # --- ID 定义源（一处一事实：每个 ID 前缀只有一个定义文件） --------------------
 DEF_SOURCES = {
@@ -57,8 +54,7 @@ class Report:
 
 
 def md_files() -> list[Path]:
-    files = [p for p in ROOT.rglob(f"*{SCAN_SUFFIX}")
-             if not (SKIP_DIRS & set(p.relative_to(ROOT).parts))]
+    files = [p for p in ROOT.rglob(f"*{SCAN_SUFFIX}") if ".git" not in p.parts]
     for extra in (ROOT / "AGENTS.md", ROOT / "README.md"):
         if extra.exists() and extra not in files:
             files.append(extra)

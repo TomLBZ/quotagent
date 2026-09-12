@@ -24,7 +24,7 @@ Status: accepted
    `python3`/`python`；每个候选都**实际执行一段代码**来验证（因此 `python3.x-config` 这类同名包装器
    不会被选中）。`tools/bootstrap.sh` 幂等：在仓库内创建 `.venv`（`--without-pip`，`.gitignore` 已忽略）
    并写 `quotagent-runtime.json` 清单；`tools/run.sh` 负责 `PYTHONPATH=src` 并 `exec`。
-   **仓库不写仓库外的文件**：临时产物落 `tmp/`（gitignored），不可写时才退回系统临时目录。
+   **仓库不写仓库外的文件**：临时产物落 `tmp/`（gitignored，用后清理）。
 3. **CLI 骨架**（T-101）：`python -m quotagent.qa ac <AC-ID> | suite <name> | list | selftest`。
    AC 是 `src/quotagent/qa/checks_*.py` 中的断言函数，注册进注册表（新增 AC = 加一个函数 + 一条
    `acceptance-criteria.md` 行）。`qa ac` 在 stdout 打印 `{ac, status, assertions[], evidence_refs[]}`，

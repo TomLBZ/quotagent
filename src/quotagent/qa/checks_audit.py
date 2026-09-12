@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import random
+import shutil
 
 from ..kernel import evidence
 from ..kernel.ledger import Ledger, LedgerFrozenError
@@ -84,6 +85,7 @@ def ac_audit_001() -> list[Assertion]:
     except LedgerFrozenError as exc:
         refused = "拒绝追加" in str(exc)
     out.append(Assertion("冻结后拒绝继续追加（FR-LEDGER-003 停发）", refused))
+    shutil.rmtree(tmp, ignore_errors=True)
     return out
 
 
@@ -146,4 +148,5 @@ def ac_audit_002() -> list[Assertion]:
 
     out.append(Assertion("投影全量重建可重复（同输入两次结果一致）",
                          ledger.project("index") == ledger.project("index")))
+    shutil.rmtree(tmp, ignore_errors=True)
     return out
