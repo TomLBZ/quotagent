@@ -37,3 +37,43 @@ commit: 9375e48
 [PASS] AC-DESIGN-003 — FR↔AC 双向无孤儿
   ok   文档门退出码为 0
   ok   FR 均关联 AC 且无孤儿 AC
+--- 追加运行 2026-09-12T00:35:46Z ---
+EV-004 — AC-DESIGN-003: FR↔AC 双向无孤儿
+
+时间: 2026-09-12T00:35:46Z
+命令: tools/verify.sh docs
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-DESIGN-003
+commit: 11ab067
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-DESIGN-003",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "文档门退出码为 0",
+      "ok": true,
+      "detail": "exit=0"
+    },
+    {
+      "name": "FR 均关联 AC 且无孤儿 AC",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "evidence_refs": [
+    "EV-004"
+  ],
+  "command": "tools/verify.sh docs",
+  "phase": "设计期",
+  "title": "FR↔AC 双向无孤儿",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-DESIGN-003 — FR↔AC 双向无孤儿
+  ok   文档门退出码为 0
+  ok   FR 均关联 AC 且无孤儿 AC

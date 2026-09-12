@@ -14,3 +14,17 @@ commit: c00379afb75a0433ea508c3fd36180418ef3c2ff
 结果（写本记录时回读）:
   c00379afb75a0433ea508c3fd36180418ef3c2ff	HEAD
   c00379afb75a0433ea508c3fd36180418ef3c2ff	refs/heads/main
+
+--- 推送 3（P0 S0.1-S0.2 实现：自包含运行时 + CLI 骨架 + 账本）---
+时间: 2026-09-12T00:36:19Z
+commit: 11ab0671342671c04d94004405ac3a10debd9c4c
+命令: git push -q origin main && git ls-remote origin
+push 退出码: 0，ls-remote 退出码: 0，回读与本地 HEAD 一致: True
+结果（写本记录时回读）:
+  11ab0671342671c04d94004405ac3a10debd9c4c	HEAD
+  11ab0671342671c04d94004405ac3a10debd9c4c	refs/heads/main
+本地 HEAD: 11ab0671342671c04d94004405ac3a10debd9c4c
+说明: 本文件随后的证据/状态同步提交（推送 4）的回读结果，由下一次接手的第一步
+      `git fetch origin && git log --oneline -3 origin/main` 比对确认；
+      .agents/state.json 的 last_verified_commit 指向上面这次已回读的提交。
+
