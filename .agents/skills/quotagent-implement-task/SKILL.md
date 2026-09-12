@@ -23,6 +23,8 @@ description: Use when implementing any task from progress-checklist in quotagent
      （自动写时间、命令、commit、退出码与原始输出）。
    - 临时产物只能落 `tmp/`（gitignored），不许写仓库外；**用完自己清理**——门会扫描仓库内所有
      `.md`（仅排除 `.git`），留下副本就会改变门的扫描范围（AC-RUNTIME-001 断言跑完后范围不变）。
+     `paths.new_scratch` 创建的目录由 `qa.registry.run_check` 在 AC 结束时**自动清理**（含异常路径），
+     所以不要手工再建"长期保留"的临时目录；确需保留的产物要落到 `docs/` 里并纳入预算。
      不要为了迁就工具去改门或改 AC。
 1. **先跑 AC 看它失败**（红）。记录原始输出——这是之后"真的实现了"的唯一证据来源。
    若该 AC 一开始就是绿的，说明它没有在测你要做的事，先修 AC。
