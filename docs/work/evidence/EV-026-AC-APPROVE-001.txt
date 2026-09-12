@@ -1,0 +1,83 @@
+EV-026-AC-APPROVE-001（实现前：红）
+
+时间: 2026-09-12T01:05:04Z
+命令: tools/run.sh -m quotagent.qa ac AC-APPROVE-001
+实现前 commit: 2c430d2
+退出码: 非零（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/src/quotagent/qa/checks_cost.py", line 11, in <module>
+    from ..services.costmodel import (ELEMENTS, CostLibrary, CostModelService, PrivateAccessDenied)
+ModuleNotFoundError: No module named 'quotagent.services.costmodel'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T01:05:04Z ---
+EV-026 — AC-APPROVE-001: 批准记录只能由人产生；以 agent 身份签署被拒绝
+
+时间: 2026-09-12T01:05:04Z
+命令: qa ac AC-APPROVE-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-APPROVE-001
+commit: 2c430d2
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-APPROVE-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "批准请求可创建、可查、带 scope 与业务引用",
+      "ok": true,
+      "detail": "request={\"approval_id\": \"ap-0001\", \"scope\": \"quote.submit\", \"ref\": \"q-0007\", \"payload\": {\"quote_id\": \"q-0007\", \"amount\": 10100.4}, \"payload_hash\": \"sha256:afffaa6c4fa495869c11b9ca46622f20586168a33887353fefa40"
+    },
+    {
+      "name": "agent 身份签署被拒绝，且记录仍为待批（不留半条批准）",
+      "ok": true,
+      "detail": "error=批准记录只能由人产生（by 必须以 'human:' 开头），收到 'agent:price'；agent 不得代签，也不得自动批准（P8） status=pending"
+    },
+    {
+      "name": "人可以拒绝，拒绝也留痕（approval/denied）",
+      "ok": true,
+      "detail": "status=denied"
+    },
+    {
+      "name": "人批准后记录带批准人与时间，并落账 approval/granted",
+      "ok": true,
+      "detail": "granted={\"approval_id\": \"ap-0002\", \"scope\": \"quote.submit\", \"ref\": \"q-0007-1\", \"payload\": {\"quote_id\": \"q-0007-1\"}, \"payload_hash\": \"sha256:735d514719d9dfbaa59476405de142f85fcee3a09ce0786a8cd6f04b37289d3d\", \"reason\": \"重新提交\", \"ap"
+    },
+    {
+      "name": "批准链按业务引用逐条查回（谁在何时批了什么），两个引用互不串台",
+      "ok": true,
+      "detail": "chain(q-0007)=[('ap-0001', 'denied')] chain(q-0007-1)=[('ap-0002', 'granted')]"
+    },
+    {
+      "name": "不存在的批准记录不可被签署（防伪造引用）",
+      "ok": true,
+      "detail": "error=不存在的批准记录: ap-9999"
+    },
+    {
+      "name": "不存在任何绕过途径：批准必须经 request→decide（human），账本链完整",
+      "ok": true,
+      "detail": "requested=2 chain=True"
+    }
+  ],
+  "evidence_refs": [
+    "EV-026"
+  ],
+  "command": "qa ac AC-APPROVE-001",
+  "phase": "P0",
+  "title": "批准记录只能由人产生；以 agent 身份签署被拒绝",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-APPROVE-001 — 批准记录只能由人产生；以 agent 身份签署被拒绝
+  ok   批准请求可创建、可查、带 scope 与业务引用
+  ok   agent 身份签署被拒绝，且记录仍为待批（不留半条批准）
+  ok   人可以拒绝，拒绝也留痕（approval/denied）
+  ok   人批准后记录带批准人与时间，并落账 approval/granted
+  ok   批准链按业务引用逐条查回（谁在何时批了什么），两个引用互不串台
+  ok   不存在的批准记录不可被签署（防伪造引用）
+  ok   不存在任何绕过途径：批准必须经 request→decide（human），账本链完整

@@ -61,6 +61,7 @@
 ### `ctx.approval` [P0]
 - 职责：人工门——请求、批准、拒绝、代签禁止、批准链存证。
 - Definition：`request(scope, payload, approvers) -> id` · `decide(id, by, decision, comment)` · `chain(ref) -> approvals[]`。
+- P0 实现：`src/quotagent/services/approval.py`（批准绑 scope+ref、只能由人产生、一次性）+ 承诺唯一出口 `src/quotagent/services/commitments.py`；语义见 ADR-0010。
 - 不变量：承诺类动作在无批准记录时**不可执行**；批准记录不可由 agent 产生。
 - 关联：FR-APPROVE-001..004，AC-APPROVE-001/002。
 
@@ -122,11 +123,13 @@
 - 职责：成本构成（材料/人工/机具/管理/风险/税/财务），按条目。
 - Definition：`build(items, library) -> CostModel` · `unit_cost(item, factors) -> amount` · `explain(ref) -> factors[]`。
 - 数据边界：**私域，永不出 realm**；只可导出区间或系数（供应商自愿时由人工批准）。
+- P0 实现：`src/quotagent/services/costmodel.py`（要素分解 + `explain`；明细在私域存储、账本只带哈希）+ realm 过滤 `src/quotagent/services/realm.py`；语义见 ADR-0010。
 - 关联：FR-COST-001..003。
 
 ### `ctx.pricing` [P0]
 - 职责：定价流水线（waterfall：成本基线 → 市场参考 → 策略加价 → 风险准备金 → 授权区间检查）。
 - Definition：`price(quote_draft, policy) -> PriceProposal` · `deviate(policy)`（越界即请求批准）。
+- P0 实现：`src/quotagent/services/pricing.py`（`quote/price-drafted` 五段 waterfall + 越界请求批准 + 人确认落定）；语义见 ADR-0010。
 - 不变量：产出为 `PriceProposal`（Intent）；最终数字必须人来定；越界定价无条件请求批准。
 - 关联：FR-PRICE-001..004，AC-PRICE-001。
 
@@ -136,9 +139,10 @@
 - 不变量：`binding=firm` 的交期在报价有效期内不得由模型变更；冲突只能提请人工（P2）。
 - 关联：FR-CAP-001..002。
 
-### `ctx.deviation` [P1]
+### `ctx.deviation` [P0 捕捉与量化 / P1 建议采纳]
 - 职责：偏差与替代方案（技术/商务/进度/范围），影响量化。
 - Definition：`capture(items, package) -> Deviation[]` · `impact(dev) -> {price,time,risk}` · `alternative(dev)`。
+- P0 实现：`src/quotagent/services/deviation.py`（四类捕捉 + 三维量化 + `tco_contribution` 排除未量化项）；语义见 ADR-0010。
 - 不变量：每条偏差必须标注 `impact` 与 `kind`；未标 `impact` 的偏差不参与 TCO。
 - 关联：FR-DEV-001..002。
 

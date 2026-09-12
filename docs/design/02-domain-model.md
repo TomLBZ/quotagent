@@ -95,7 +95,8 @@ kernel/*            内核：ledger-appended, plugin-mounted, plugin-unmounted,
 rfq/*               published, amended, closed, version-mismatch
 clarification/*     asked, answered, broadcast, reopened
 quote/*             drafted, priced, submitted, revised, withdrawn, rejected-by-guard
-                    normalize(waterfall), normalized, normalize-rejected
+                    normalize(waterfall), normalized, normalize-rejected,
+                    cost-built, price-drafted(waterfall), deviation-captured, deviation-quantified
 compare/*           ranked, flag-raised, conflict-with-terms
 award/*             intent, withdrawn, confirmed, declined, committed
 po/*                issued, amended

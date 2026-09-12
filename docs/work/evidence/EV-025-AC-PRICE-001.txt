@@ -1,0 +1,83 @@
+EV-025-AC-PRICE-001（实现前：红）
+
+时间: 2026-09-12T01:05:04Z
+命令: tools/run.sh -m quotagent.qa ac AC-PRICE-001
+实现前 commit: 2c430d2
+退出码: 非零（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/src/quotagent/qa/checks_cost.py", line 11, in <module>
+    from ..services.costmodel import (ELEMENTS, CostLibrary, CostModelService, PrivateAccessDenied)
+ModuleNotFoundError: No module named 'quotagent.services.costmodel'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T01:05:04Z ---
+EV-025 — AC-PRICE-001: 定价产出为 Intent；越界无条件请求批准；最终数字需人确认
+
+时间: 2026-09-12T01:05:04Z
+命令: qa ac AC-PRICE-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-PRICE-001
+commit: 2c430d2
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-PRICE-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "定价产出为 Intent（账本事件 class=intent，不是承诺）",
+      "ok": true,
+      "detail": "class=intent status=proposed"
+    },
+    {
+      "name": "定价按流水线给出（成本基线 → 市场参考 → 策略加价 → 风险准备金），各阶段可查",
+      "ok": true,
+      "detail": "baseline=74.4876 markup=8.938512000000001 price=85.92889536 stages=['cost_baseline', 'market_reference', 'strategy_markup', 'risk_reserve', 'band_check']"
+    },
+    {
+      "name": "越界（超授权区间）无条件请求批准，且状态为待批（不得直接产出可提交价格）",
+      "ok": true,
+      "detail": "in_band=False status=awaiting_approval price=107.4111192 approval=ap-0001"
+    },
+    {
+      "name": "最终数字不能由 agent 确认（代签被拒绝）",
+      "ok": true,
+      "detail": "error=最终报价数字必须由人确定（by 必须以 'human:' 开头），收到 'agent:price'（FR-PRICE-002）"
+    },
+    {
+      "name": "未经人确认的定价结果不得进入提交路径（人工门前置）",
+      "ok": true,
+      "detail": "error=定价建议 pp-0002 尚未获得人确认，不得提交（FR-PRICE-002 / 规则 3）"
+    },
+    {
+      "name": "人确认后最终数字落定，且落账 quote/human-approved",
+      "ok": true,
+      "detail": "status=human_confirmed final=107.4111192 approved_events=1"
+    },
+    {
+      "name": "区间内的定价不需要人工门（门只在越界时强制触发）",
+      "ok": true,
+      "detail": "in_band=True approval=None"
+    }
+  ],
+  "evidence_refs": [
+    "EV-025"
+  ],
+  "command": "qa ac AC-PRICE-001",
+  "phase": "P0",
+  "title": "定价产出为 Intent；越界无条件请求批准；最终数字需人确认",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-PRICE-001 — 定价产出为 Intent；越界无条件请求批准；最终数字需人确认
+  ok   定价产出为 Intent（账本事件 class=intent，不是承诺）
+  ok   定价按流水线给出（成本基线 → 市场参考 → 策略加价 → 风险准备金），各阶段可查
+  ok   越界（超授权区间）无条件请求批准，且状态为待批（不得直接产出可提交价格）
+  ok   最终数字不能由 agent 确认（代签被拒绝）
+  ok   未经人确认的定价结果不得进入提交路径（人工门前置）
+  ok   人确认后最终数字落定，且落账 quote/human-approved
+  ok   区间内的定价不需要人工门（门只在越界时强制触发）

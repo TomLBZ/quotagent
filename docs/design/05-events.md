@@ -51,6 +51,10 @@
 | `quote/normalized` | emit | ✔ | `ctx.norm` → compare | 归一化结果 + 拒绝理由 |
 | `quote/normalize-rejected` | emit | ✔ | `ctx.norm` → approval, 审计 | 口径不可归一：拒绝理由 + 下一步动作（P6） |
 | `quote/price-proposed` | emit | ✔ | `ctx.pricing` → approval | 定价建议（Intent） |
+| `quote/price-drafted` | waterfall | live | `ctx.pricing` | 定价流水线：成本基线→市场参考→策略加价→风险准备金→授权区间检查 |
+| `quote/cost-built` | emit | ✔ | `ctx.costmodel` | 成本构成建立（账本只带私域工件哈希，明细不出 realm） |
+| `quote/deviation-captured` / `quote/deviation-quantified` | emit | ✔ | `ctx.deviation` | 偏差捕捉与影响量化（未标 impact 不进 TCO） |
+| `approval/requested` / `approval/granted` / `approval/denied` | emit | ✔ | `ctx.approval` | 人工门：请求、批准、拒绝（批准只能由人产生） |
 | `quote/guard-check` | bail | durable | `ctx.guard` → approval | 异常低价/漏项/产能/条款/注入检测 |
 | `quote/human-approved` | emit | ✔ | 人工 → qep | 批准记录（不可由 agent 产生） |
 | `quote/submitted` | emit | ✔ | `ctx.qep` → compare | 报价事实（含 `rfq_rev`） |
@@ -87,4 +91,5 @@
 | 不可归一的口径 | `quote/normalize` | waterfall | 中断并产出拒绝理由 |
 | 未广播的澄清答案 | `clarification/broadcast-incomplete` | bail | 拒收 |
 | 澄清答案含对方私域信息 | `clarification/answer-drafted` | waterfall | 拦截该答案外发，保留原文供人审 |
+| 越界定价（超授权区间） | `quote/price-drafted` | waterfall | 转人工门（不得直接产出可提交价格） |
 | 内核配置被自改 | `kernel/config-updated` | waterfall | 无条件否决（INV-010） |

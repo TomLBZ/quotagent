@@ -1,0 +1,89 @@
+EV-024-AC-TRUST-001（实现前：红）
+
+时间: 2026-09-12T01:05:04Z
+命令: tools/run.sh -m quotagent.qa ac AC-TRUST-001
+实现前 commit: 2c430d2
+退出码: 非零（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/src/quotagent/qa/checks_cost.py", line 11, in <module>
+    from ..services.costmodel import (ELEMENTS, CostLibrary, CostModelService, PrivateAccessDenied)
+ModuleNotFoundError: No module named 'quotagent.services.costmodel'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T01:05:04Z ---
+EV-024 — AC-TRUST-001: 对方私域字段在本侧投影、模型输入、视图中三处均不存在（INV-008）
+
+时间: 2026-09-12T01:05:04Z
+命令: qa ac AC-TRUST-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-TRUST-001
+commit: 2c430d2
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-TRUST-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "投影（对方视角）不含本侧私域字段，且被剥离字段可枚举（可审计）",
+      "ok": true,
+      "detail": "peer_keys=['lines', 'quote_id'] stripped=['cost_model', 'margin_pct', 'reserve_price', 'internal_score', 'approvals', 'signature']"
+    },
+    {
+      "name": "投影仍保留交换范围字段（不是把内容全删了）",
+      "ok": true,
+      "detail": "peer_view={\"quote_id\": \"q-0007\", \"lines\": [{\"item_id\": \"L-001\", \"unit_price\": 88.5, \"qty\": 120}]}"
+    },
+    {
+      "name": "本侧视角保留自己的私域（过滤有方向，不是无条件清空）",
+      "ok": true,
+      "detail": "own view keeps cost_model"
+    },
+    {
+      "name": "视图（对方 realm 的 RealmView）中私域字段不存在",
+      "ok": true,
+      "detail": "view_keys=['lines', 'quote_id']"
+    },
+    {
+      "name": "本侧模型输入含本侧私域（08 §3：Private 可进模型，仅本侧），不含对方私域与 Regulated 字段",
+      "ok": true,
+      "detail": "context_keys=['cost_model', 'lines', 'margin_pct', 'quote_id']"
+    },
+    {
+      "name": "模型输入可从账本重建，且重建结果里没有对方私域字段（模型可见 ⟺ 账本可见 + INV-008）",
+      "ok": true,
+      "detail": "equal=True has_forbidden=[]"
+    },
+    {
+      "name": "负控：出站载荷含私域字段即被拦（守卫非空转）",
+      "ok": true,
+      "detail": "error=出站载荷含不可外发字段 ['cost_model']（目标 realm contractor:con-B）：私域数据不出 realm、regulated 字段只存证（P5 / INV-008）"
+    },
+    {
+      "name": "未分类字段被显式记录（新增字段不会静默按公开处理）",
+      "ok": true,
+      "detail": "unclassified=['brand_new_field'] keys=['brand_new_field', 'quote_id']"
+    }
+  ],
+  "evidence_refs": [
+    "EV-024"
+  ],
+  "command": "qa ac AC-TRUST-001",
+  "phase": "P0",
+  "title": "对方私域字段在本侧投影、模型输入、视图中三处均不存在（INV-008）",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-TRUST-001 — 对方私域字段在本侧投影、模型输入、视图中三处均不存在（INV-008）
+  ok   投影（对方视角）不含本侧私域字段，且被剥离字段可枚举（可审计）
+  ok   投影仍保留交换范围字段（不是把内容全删了）
+  ok   本侧视角保留自己的私域（过滤有方向，不是无条件清空）
+  ok   视图（对方 realm 的 RealmView）中私域字段不存在
+  ok   本侧模型输入含本侧私域（08 §3：Private 可进模型，仅本侧），不含对方私域与 Regulated 字段
+  ok   模型输入可从账本重建，且重建结果里没有对方私域字段（模型可见 ⟺ 账本可见 + INV-008）
+  ok   负控：出站载荷含私域字段即被拦（守卫非空转）
+  ok   未分类字段被显式记录（新增字段不会静默按公开处理）

@@ -4,23 +4,23 @@
 
 ## 现在在哪
 
-P0 mock：S0.1–S0.8 完成。内核见 ADR-0007/0008；本批新增 `services/norm.py`（五段归一化链）、
-`services/rfq.py`（版本化）、`services/intake.py`（读包），口径数据在 `services/measures.py`；
-语义见 ADR-0009。
+P0 mock：S0.1–S0.10 完成。内核见 ADR-0007/0008；服务语义见 ADR-0009（归一化/版本化/读包）
+与 ADR-0010（人工门与 realm 过滤）。
 
 ## 最后验证
 
-`tools/verify.sh docs` PASS（AC-DESIGN-001..003，EV-004）；21 条 AC 全绿
-（EV-005..EV-008、EV-009..EV-015、EV-016..EV-022）；远端 refs 已回读（EV-003）。
+`tools/verify.sh docs` PASS（42 md、1009 引用 0 未解析）；27 条 AC 全绿
+（EV-005..EV-022、EV-023..EV-028）；远端 refs 已回读（EV-003）。
 
 ## 下一步唯一动作
 
-执行 T-109（S0.9：成本构成私域，AC-COST-001 + AC-TRUST-001），再按 `roadmap.md` §2 推进。
+T-112（S0.11 比价：TCO + 排序 + 引用链，AC-COMPARE-001..003）。
 
 ## 不变量
 
-内核不可自改 · 承诺需人批 · 模型可见即账本可重建 · 私域不出 realm · 不可归一即拒绝 ·
-AC 需可执行证据 · 一轮一批 commit+push 并回读。
+内核不可自改 · 承诺需人批（绑 scope+ref，只能由人产生）· 模型可见即账本可重建 ·
+私域不出 realm · 不可归一即拒绝 · 未标 impact 不进 TCO · AC 需可执行证据 ·
+一轮一批 commit+push 并回读。
 
 ## 阻塞
 

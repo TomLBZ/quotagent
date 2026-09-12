@@ -66,6 +66,15 @@ class EventBus:
         "kernel/qep-sent": ("emit", True, ""),
         "kernel/qep-received": ("emit", True, ""),
         "kernel/qep-duplicate-dropped": ("emit", True, ""),
+        # §3 人工门与私域/成本相关（P0 S0.9–S0.10）
+        "approval/requested": ("emit", True, ""),
+        "approval/granted": ("emit", True, ""),
+        "approval/denied": ("emit", True, ""),
+        "quote/cost-built": ("emit", True, ""),
+        "quote/price-drafted": ("waterfall", False,
+                                "越界定价必须在流水线内转人工门，不得直接产出可提交价格（05 §5）"),
+        "quote/deviation-captured": ("emit", True, ""),
+        "quote/deviation-quantified": ("emit", True, ""),
         # §3 业务事件（P0 用到/会落账的部分）
         "rfq/published": ("emit", True, ""),
         "rfq/amended": ("emit", True, ""),
