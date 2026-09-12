@@ -69,7 +69,7 @@
 | `acceptance/recorded` / `invoice/matched` | emit | ✔ | 履约 → 结算 | 三方核对留痕 |
 | `sync/merged` / `sync/conflict` | emit | ✔ | `ctx.qep` | 三方协调结果；承诺字段冲突转人工 |
 | `evidence/pack-exported` | emit | ✔ | `ctx.evidence` | 审计包（含 Merkle 根） |
-| `evolve/*` | serial | ✔ | `ctx.evolve` | 见 `07` |
+| `evolve/*` | serial | ✔ | `ctx.evolve` | 见 `07`；P0 用到 `evolve/proposed`（新增反例，ADR-0011） |
 
 ## 4. Agent 侧事件（live）
 

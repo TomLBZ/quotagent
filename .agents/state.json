@@ -3,12 +3,12 @@
   "updated_at": "2026-09-12",
   "phase": "P0-mock",
   "phase_source": "docs/work/roadmap.md",
-  "next_task": "T-112",
-  "next_action": "P0 S0.11：比价（TCO + 排序 + 引用链）；先在 acceptance-criteria.md 确认 AC-COMPARE-001..003 的可执行断言，再实现（未标 impact 的偏差不进 TCO）",
-  "last_verified_command": "tools/verify.sh docs && tools/run.sh -m quotagent.qa ac AC-COST-001",
-  "last_verified_result": "PASS (27 条 AC：AC-DESIGN-001..003、AC-RUNTIME-001/002、AC-AUDIT-001/002、AC-EVT-001/002、AC-PLUGIN-001/002、AC-QEP-001/002、AC-INTEG-001、AC-NORM-001..003、AC-RFQ-001/002、AC-INTAKE-001/002、AC-COST-001、AC-TRUST-001、AC-PRICE-001、AC-APPROVE-001/002、AC-DEV-001)",
-  "last_verified_evidence": "docs/work/evidence/EV-023-AC-COST-001.txt",
-  "last_verified_commit": "afa45aa17468b75cb7db99fb005fcc3cbd83d99e",
+  "next_task": "T-117",
+  "next_action": "P0 S0.15：现场验证 V-001..V-012（人工）；agent 侧先核对 roadmap §2 的 P1 准入项与非目标清单，把 V-002 盲测所需材料备齐",
+  "last_verified_command": "tools/verify.sh docs && tools/run.sh -m quotagent.qa ac AC-COMPARE-001 && tools/run.sh -m quotagent.qa suite s1..s4",
+  "last_verified_result": "PASS (34 条 AC：AC-DESIGN-001..003、AC-RUNTIME-001/002、AC-AUDIT-001/002、AC-EVT-001/002、AC-PLUGIN-001/002、AC-QEP-001/002、AC-INTEG-001、AC-NORM-001..003、AC-RFQ-001/002、AC-INTAKE-001/002、AC-COST-001、AC-TRUST-001、AC-PRICE-001、AC-APPROVE-001/002、AC-DEV-001、AC-COMPARE-001..003、AC-GUARD-001/003、AC-EVAL-001/002；场景集 s1..s4 全绿)",
+  "last_verified_evidence": "docs/work/evidence/EV-029-AC-COMPARE-001.txt",
+  "last_verified_commit": "057e4702042d4fe1d4a8128ae8094ec5bc5a1461",
   "blockers": [],
   "human_required": [
     "T-117 的 V-002 盲测（供应商是否接受结构化报价）——需真实供应商参与，agent 只能备料与登记结论"
@@ -31,11 +31,14 @@
     "entry": "tools/run.sh（解释器解析 tools/runtime.sh；仓库 .venv 由 tools/bootstrap.sh 创建，gitignored）",
     "ac_runner": "src/quotagent/qa/（checks_*.py + registry.py）",
     "kernel_modules": "ledger/canon/evidence/modelgate/events/plugin/qep/delivery",
-    "services": "norm/rfq/intake + measures（口径数据层）；realm/approval/costmodel/pricing/commitments/deviation（P0 S0.9–S0.10）",
+    "services": "norm/rfq/intake + measures（口径数据层）；realm/approval/costmodel/pricing/commitments/deviation（S0.9–S0.10）；compare/guard/evaldata/evalmetrics/scenarios（S0.11–S0.14）",
     "ledger_format": "docs/design/adr/0007-p0-runtime-and-ledger-format.md",
     "qep_binding": "docs/design/adr/0008-p0-qep-signature-and-file-binding.md",
     "service_semantics": "docs/design/adr/0009-p0-norm-versioning-intake-semantics.md",
-    "trust_semantics": "docs/design/adr/0010-p0-approval-and-realm-filtering.md"
+    "trust_semantics": "docs/design/adr/0010-p0-approval-and-realm-filtering.md",
+    "compare_guard_eval": "docs/design/adr/0011-p0-compare-guard-eval-semantics.md",
+    "baseline_report": "docs/work/metrics-baseline.md（生成：tools/run.sh -m quotagent.qa metrics --out docs/work/metrics-baseline.md）",
+    "counterexamples": "docs/work/scenarios/s4-counterexamples.json（只增不减）"
   },
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态"
 }

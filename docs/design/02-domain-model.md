@@ -46,8 +46,8 @@
 
 | 实体 | 关键字段 | 不变量 |
 |---|---|---|
-| `Evaluation` | `evaluation_id`, `package_id`, `weights`, `normalized_quotes[]`, `scores[]`, `ranking[]`, `flags[]`, `citations[]` | 所有数值必须可追溯到账本条目（`citations`）；无引用即无效 |
-| `Flag` | `kind∈{abnormal_low,missing_item,capacity_risk,term_conflict,external_term}`, `severity`, `evidence_refs[]` | 护栏产出；`abnormal_low` 不得自动否决，只能提请人工 |
+| `Evaluation` | `evaluation_id`(内容寻址), `package_id`, `weights`, `normalized_quotes[]`, `scores[]`, `ranking[]`, `flags[]`, `citations[]` | 所有数值必须可追溯到账本条目（`citations`）；无引用即无效；派生数据不含墙钟时间与自增序号（同输入字节级可重放） |
+| `Flag` | `kind∈{abnormal_low,missing_item,capacity_risk,term_conflict,external_term,private_leak}`, `severity`, `evidence_refs[]` | 护栏产出；`abnormal_low` 不得自动否决，只能提请人工；`kind` 含 `private_leak` 见 ADR-0011 |
 | `AwardIntent` | `package_id`, `supplier_realm`, `quote_id`, `reason_refs[]` | Intent：可撤回，无商业义务 |
 | `AwardCommitment` | 同上 + `approved_by`, `approved_at`, `signature` | 需供应商确认 + 承包商人工批准，缺一不可 |
 | `PurchaseOrder` | `po_id`, `award_id`, `lines[]`, `terms`, `issued_at` | 由 `AwardCommitment` 唯一派生，不得手工另建 |

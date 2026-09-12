@@ -31,6 +31,9 @@
 
 **基线规则**：P0 只采集与记录基线，**不设目标值**；目标值由人在 P1 开始前设定并写入
 项目 patch（`docs/work/roadmap.md` 的 G1 门）。
+P0 实现：`src/quotagent/services/evalmetrics.py`（九项指标全部由账本事件推导，缺失记 `None` 不补零）；
+基线报告入库 `docs/work/metrics-baseline.md`，重生成命令
+`tools/run.sh -m quotagent.qa metrics --out docs/work/metrics-baseline.md`（ADR-0011）。
 
 ## 3. 评测套件
 
@@ -45,6 +48,9 @@
 
 场景数据全部为**合成数据**，随仓库入库（`[假设]` 真实数据涉及商业机密，不入库）。
 
+P0 实现：`src/quotagent/services/scenarios.py`（`s1..s4` 各自返回 `steps/facts/assertions/digest`），
+入口 `tools/run.sh -m quotagent.qa suite s1..s4`；`digest` 只覆盖确定性内容，见 ADR-0011。
+
 ### 3.2 断言层次
 
 1. **不变量**：INV-001..010（`04` §6），任何场景都必须通过。
@@ -56,6 +62,9 @@
 
 每个历史事故/被拦截的恶意样本都追加为反例，且**用例只增不减**（防止通过改测试提高通过率，
 `07` §4）。新增反例 = 一次 `evolve/proposed` 事件。
+
+P0 实现：反例数据 `docs/work/scenarios/s4-counterexamples.json`（随仓库入库）+
+`src/quotagent/services/evaldata.py` 的注册表（`remove`/`replace` 一律抛 `CounterexampleImmutable`）。
 
 ## 4. 审计流程（对外可交付）
 

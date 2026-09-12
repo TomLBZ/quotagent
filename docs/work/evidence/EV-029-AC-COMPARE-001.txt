@@ -1,0 +1,72 @@
+EV-029-AC-COMPARE-001（实现前：红）
+
+时间: 2026-09-12T01:17:20Z
+命令: tools/run.sh -m quotagent.qa ac AC-COMPARE-001
+实现前 commit: 057e470
+说明: 红取自批前 commit 057e470 的干净副本（git archive）+ 本批 AC 文件：实现尚未存在，7 条 AC 全部因导入失败而红
+退出码: 1（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/tmp/red-base/src/quotagent/qa/checks_compare.py", line 12, in <module>
+    from ..services.compare import CompareService, MissingCitation
+ModuleNotFoundError: No module named 'quotagent.services.compare'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T01:17:20Z ---
+EV-029 — AC-COMPARE-001: 报价 rfq_rev 与包版本不一致 → 不进入排序 + rfq/version-mismatch
+
+时间: 2026-09-12T01:17:20Z
+命令: qa ac AC-COMPARE-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-COMPARE-001
+commit: 057e470
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-COMPARE-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "版本失配的报价被排除在排序之外",
+      "ok": true,
+      "detail": "ranking=['q-b', 'q-a'] excluded=['q-stale']"
+    },
+    {
+      "name": "排名里没有基于 rev1 的报价",
+      "ok": true,
+      "detail": "excluded={\"quote_id\": \"q-stale\", \"code\": \"rfq_version_mismatch\", \"quote_rev\": 1, \"package_rev\": 2, \"reason\": \"报价基于 rev1，包当前 rev2\", \"next_action\": \"请对方基于 rev2 重报，或把包回退到 rev1（不得静默比较）\"}"
+    },
+    {
+      "name": "产生 rfq/version-mismatch 事件（挂起该报价，含双方版本）",
+      "ok": true,
+      "detail": "events=[{\"quote_id\": \"q-stale\", \"quote_rev\": 1, \"package_rev\": 2, \"package_id\": \"pkg-0007\", \"action\": \"suspend_quote\"}]"
+    },
+    {
+      "name": "失配报价的金额没有进入任何 TCO 分量（不进排序也不进合计）",
+      "ok": true,
+      "detail": "prices=[392000.0, 400000.0]"
+    },
+    {
+      "name": "失配报价被挂起（可读、可审计），不是被静默丢弃",
+      "ok": true,
+      "detail": "next_action=请对方基于 rev2 重报，或把包回退到 rev1（不得静默比较）"
+    }
+  ],
+  "evidence_refs": [
+    "EV-029"
+  ],
+  "command": "qa ac AC-COMPARE-001",
+  "phase": "P0",
+  "title": "报价 rfq_rev 与包版本不一致 → 不进入排序 + rfq/version-mismatch",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-COMPARE-001 — 报价 rfq_rev 与包版本不一致 → 不进入排序 + rfq/version-mismatch
+  ok   版本失配的报价被排除在排序之外
+  ok   排名里没有基于 rev1 的报价
+  ok   产生 rfq/version-mismatch 事件（挂起该报价，含双方版本）
+  ok   失配报价的金额没有进入任何 TCO 分量（不进排序也不进合计）
+  ok   失配报价被挂起（可读、可审计），不是被静默丢弃

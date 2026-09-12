@@ -1,0 +1,72 @@
+EV-031-AC-COMPARE-003（实现前：红）
+
+时间: 2026-09-12T01:17:20Z
+命令: tools/run.sh -m quotagent.qa ac AC-COMPARE-003
+实现前 commit: 057e470
+说明: 红取自批前 commit 057e470 的干净副本（git archive）+ 本批 AC 文件：实现尚未存在，7 条 AC 全部因导入失败而红
+退出码: 1（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/tmp/red-base/src/quotagent/qa/checks_compare.py", line 12, in <module>
+    from ..services.compare import CompareService, MissingCitation
+ModuleNotFoundError: No module named 'quotagent.services.compare'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T01:17:20Z ---
+EV-031 — AC-COMPARE-003: Evaluation 中每个数值都有引用链；人为删掉一条引用后校验失败
+
+时间: 2026-09-12T01:17:20Z
+命令: qa ac AC-COMPARE-003
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-COMPARE-003
+commit: 057e470
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-COMPARE-003",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "每个数值都有一个引用（数量对得上）",
+      "ok": true,
+      "detail": "numbers=14 citations=25"
+    },
+    {
+      "name": "引用指向真实来源（账本条目 / 清单条目 / 报价字段 / 策略）",
+      "ok": true,
+      "detail": "prefixes=['ledger', 'package', 'policy', 'quote']"
+    },
+    {
+      "name": "正常 Evaluation 通过引用校验（含排序建议与分量）",
+      "ok": true,
+      "detail": "verify_citations 返回 None（通过）"
+    },
+    {
+      "name": "人为删掉一条引用 → 校验失败并指出位置（无引用即无效）",
+      "ok": true,
+      "detail": "original_citations=['ledger:0', 'package:pkg-0007#rev2:items', 'quote:q-b:total_amount'] error=ranking[0].components.price (quote_id=q-b) 缺少引用链：无引用即无效（FR-COMPARE-003）"
+    },
+    {
+      "name": "排序建议本身也必须带引用链（删掉即失败）",
+      "ok": true,
+      "detail": "error=ranking[q-b] 缺少引用链：排序建议本身必须可追溯（FR-COMPARE-003）"
+    }
+  ],
+  "evidence_refs": [
+    "EV-031"
+  ],
+  "command": "qa ac AC-COMPARE-003",
+  "phase": "P0",
+  "title": "Evaluation 中每个数值都有引用链；人为删掉一条引用后校验失败",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-COMPARE-003 — Evaluation 中每个数值都有引用链；人为删掉一条引用后校验失败
+  ok   每个数值都有一个引用（数量对得上）
+  ok   引用指向真实来源（账本条目 / 清单条目 / 报价字段 / 策略）
+  ok   正常 Evaluation 通过引用校验（含排序建议与分量）
+  ok   人为删掉一条引用 → 校验失败并指出位置（无引用即无效）
+  ok   排序建议本身也必须带引用链（删掉即失败）

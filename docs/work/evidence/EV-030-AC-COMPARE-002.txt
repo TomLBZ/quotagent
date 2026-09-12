@@ -1,0 +1,78 @@
+EV-030-AC-COMPARE-002（实现前：红）
+
+时间: 2026-09-12T01:17:20Z
+命令: tools/run.sh -m quotagent.qa ac AC-COMPARE-002
+实现前 commit: 057e470
+说明: 红取自批前 commit 057e470 的干净副本（git archive）+ 本批 AC 文件：实现尚未存在，7 条 AC 全部因导入失败而红
+退出码: 1（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/tmp/red-base/src/quotagent/qa/checks_compare.py", line 12, in <module>
+    from ..services.compare import CompareService, MissingCitation
+ModuleNotFoundError: No module named 'quotagent.services.compare'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T01:17:20Z ---
+EV-030 — AC-COMPARE-002: 同输入两次排序完全一致；TCO 各分量可按策略 patch 复算
+
+时间: 2026-09-12T01:17:20Z
+命令: qa ac AC-COMPARE-002
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-COMPARE-002
+commit: 057e470
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-COMPARE-002",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "同输入两次排序结果完全一致（字节级）",
+      "ok": true,
+      "detail": "first=['q-b', 'q-a'] second=['q-b', 'q-a']"
+    },
+    {
+      "name": "排序不是恒等顺序（判据真的在起作用）",
+      "ok": true,
+      "detail": "ranking=['q-b', 'q-a']"
+    },
+    {
+      "name": "TCO 分量与手算一致（交期 8000 / 质保 12000 / 融资 3478.356164）",
+      "ok": true,
+      "detail": "delivery=8000.0 warranty=12000.0 payment=3479.6712328767126"
+    },
+    {
+      "name": "TCO 合计 = 价格 + 各调整分量（手算 415479.671233）",
+      "ok": true,
+      "detail": "tco_total=415479.6712328767"
+    },
+    {
+      "name": "换权重只改分数，不改分量（策略 patch 可复算）",
+      "ok": true,
+      "detail": "alt_ranking=['q-a', 'q-b']"
+    },
+    {
+      "name": "复算：用旧分量的数值 + 新权重能重现新排序的分数",
+      "ok": true,
+      "detail": "recomputed={'q-b': 60.0, 'q-a': 20.0} alt=[('q-a', 20.0), ('q-b', 60.0)]"
+    }
+  ],
+  "evidence_refs": [
+    "EV-030"
+  ],
+  "command": "qa ac AC-COMPARE-002",
+  "phase": "P0",
+  "title": "同输入两次排序完全一致；TCO 各分量可按策略 patch 复算",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-COMPARE-002 — 同输入两次排序完全一致；TCO 各分量可按策略 patch 复算
+  ok   同输入两次排序结果完全一致（字节级）
+  ok   排序不是恒等顺序（判据真的在起作用）
+  ok   TCO 分量与手算一致（交期 8000 / 质保 12000 / 融资 3478.356164）
+  ok   TCO 合计 = 价格 + 各调整分量（手算 415479.671233）
+  ok   换权重只改分数，不改分量（策略 patch 可复算）
+  ok   复算：用旧分量的数值 + 新权重能重现新排序的分数

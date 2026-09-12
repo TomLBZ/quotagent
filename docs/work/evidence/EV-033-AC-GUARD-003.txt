@@ -1,0 +1,78 @@
+EV-033-AC-GUARD-003（实现前：红）
+
+时间: 2026-09-12T01:17:20Z
+命令: tools/run.sh -m quotagent.qa ac AC-GUARD-003
+实现前 commit: 057e470
+说明: 红取自批前 commit 057e470 的干净副本（git archive）+ 本批 AC 文件：实现尚未存在，7 条 AC 全部因导入失败而红
+退出码: 1（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/tmp/red-base/src/quotagent/qa/checks_compare.py", line 12, in <module>
+    from ..services.compare import CompareService, MissingCitation
+ModuleNotFoundError: No module named 'quotagent.services.compare'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T01:17:20Z ---
+EV-033 — AC-GUARD-003: S4 反例（注入/漏项/虚假产能/伪造批准）全部被拦且有账本留痕
+
+时间: 2026-09-12T01:17:20Z
+命令: qa ac AC-GUARD-003
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-GUARD-003
+commit: 057e470
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-GUARD-003",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "反例集随仓库入库（合成数据，非人工检查）",
+      "ok": true,
+      "detail": "cases=['CX-INJECT-001', 'CX-MISSING-001', 'CX-CAPACITY-001', 'CX-APPROVAL-001']"
+    },
+    {
+      "name": "S4 全部反例被拦（每个 case 都有拦截动作）",
+      "ok": true,
+      "detail": "status=pass blocked={'CX-INJECT-001': True, 'CX-MISSING-001': True, 'CX-CAPACITY-001': True, 'CX-APPROVAL-001': True}"
+    },
+    {
+      "name": "注入文本不被当作指令执行（原文保留、只标注）",
+      "ok": true,
+      "detail": "effect=annotated_external_term"
+    },
+    {
+      "name": "漏项 / 虚假产能 / 伪造批准各自被拦（不是同一条通用拒绝）",
+      "ok": true,
+      "detail": "effects={'CX-INJECT-001': 'annotated_external_term', 'CX-MISSING-001': 'annotated_missing_item', 'CX-CAPACITY-001': 'annotated_capacity_risk', 'CX-APPROVAL-001': 'rejected_forged_approval'}"
+    },
+    {
+      "name": "每个反例都有账本留痕（事件类型 + 序号）",
+      "ok": true,
+      "detail": "traces={\"CX-INJECT-001\": [\"compare/flag-raised#5\", \"compare/flag-raised#6\", \"compare/flag-raised#7\", \"compare/flag-raised#8\", \"compare/flag-raised#9\"], \"CX-MISSING-001\": [\"compare/flag-raised#10\"], \"CX-CAPACITY-001\": [\"compare/flag-raised#11\"], \"CX-APPROVAL-001\": [\"a"
+    },
+    {
+      "name": "反例集只增不减：重复加入被接受、删除被拒绝",
+      "ok": true,
+      "detail": "registry={'count': 4, 'attempted_remove_rejected': True}"
+    }
+  ],
+  "evidence_refs": [
+    "EV-033"
+  ],
+  "command": "qa ac AC-GUARD-003",
+  "phase": "P0",
+  "title": "S4 反例（注入/漏项/虚假产能/伪造批准）全部被拦且有账本留痕",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-GUARD-003 — S4 反例（注入/漏项/虚假产能/伪造批准）全部被拦且有账本留痕
+  ok   反例集随仓库入库（合成数据，非人工检查）
+  ok   S4 全部反例被拦（每个 case 都有拦截动作）
+  ok   注入文本不被当作指令执行（原文保留、只标注）
+  ok   漏项 / 虚假产能 / 伪造批准各自被拦（不是同一条通用拒绝）
+  ok   每个反例都有账本留痕（事件类型 + 序号）
+  ok   反例集只增不减：重复加入被接受、删除被拒绝

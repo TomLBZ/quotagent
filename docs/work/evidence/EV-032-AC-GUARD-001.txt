@@ -1,0 +1,84 @@
+EV-032-AC-GUARD-001（实现前：红）
+
+时间: 2026-09-12T01:17:20Z
+命令: tools/run.sh -m quotagent.qa ac AC-GUARD-001
+实现前 commit: 057e470
+说明: 红取自批前 commit 057e470 的干净副本（git archive）+ 本批 AC 文件：实现尚未存在，7 条 AC 全部因导入失败而红
+退出码: 1（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/tmp/red-base/src/quotagent/qa/checks_compare.py", line 12, in <module>
+    from ..services.compare import CompareService, MissingCitation
+ModuleNotFoundError: No module named 'quotagent.services.compare'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T01:17:20Z ---
+EV-032 — AC-GUARD-001: 异常低价与漏项被标 Flag，且 Flag 不改变排序或状态（只标注）
+
+时间: 2026-09-12T01:17:20Z
+命令: qa ac AC-GUARD-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-GUARD-001
+commit: 057e470
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-GUARD-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "异常低价被标 Flag（低于同包中位价的 60%）",
+      "ok": true,
+      "detail": "kinds=['abnormal_low', 'missing_item'] flags=[('abnormal_low', 'q-low'), ('missing_item', 'q-missing')]"
+    },
+    {
+      "name": "漏项被标 Flag（清单条目在报价中缺失）",
+      "ok": true,
+      "detail": "missing=[\"清单条目在报价中缺失: ['L-002']\"]"
+    },
+    {
+      "name": "Flag 带 severity 与证据引用（可审计、可复核）",
+      "ok": true,
+      "detail": "flags=[{\"kind\": \"abnormal_low\", \"severity\": \"high\"}, {\"kind\": \"missing_item\", \"severity\": \"high\"}]"
+    },
+    {
+      "name": "Flag 不改变排序顺序（护栏不得否决）",
+      "ok": true,
+      "detail": "without=['q-low', 'q-missing', 'q-mid'] with=['q-low', 'q-missing', 'q-mid']"
+    },
+    {
+      "name": "Flag 不改变任何报价的状态（异常低价只是提请人看）",
+      "ok": true,
+      "detail": "statuses=['ranked', 'ranked', 'ranked']"
+    },
+    {
+      "name": "护栏没有否决接口（check 只返回 Flag；Flag 与排序并存落账）",
+      "ok": true,
+      "detail": "guard_api=['actor', 'capacities', 'check', 'events', 'ledger', 'register_rule', 'rule_names', 'rules', 'screen_text']"
+    },
+    {
+      "name": "Flag 逐条落账（compare/flag-raised），且落账内容与返回值一致",
+      "ok": true,
+      "detail": "events=2 kinds=['abnormal_low', 'missing_item']"
+    }
+  ],
+  "evidence_refs": [
+    "EV-032"
+  ],
+  "command": "qa ac AC-GUARD-001",
+  "phase": "P0/P1",
+  "title": "异常低价与漏项被标 Flag，且 Flag 不改变排序或状态（只标注）",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-GUARD-001 — 异常低价与漏项被标 Flag，且 Flag 不改变排序或状态（只标注）
+  ok   异常低价被标 Flag（低于同包中位价的 60%）
+  ok   漏项被标 Flag（清单条目在报价中缺失）
+  ok   Flag 带 severity 与证据引用（可审计、可复核）
+  ok   Flag 不改变排序顺序（护栏不得否决）
+  ok   Flag 不改变任何报价的状态（异常低价只是提请人看）
+  ok   护栏没有否决接口（check 只返回 Flag；Flag 与排序并存落账）
+  ok   Flag 逐条落账（compare/flag-raised），且落账内容与返回值一致

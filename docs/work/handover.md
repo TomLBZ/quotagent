@@ -4,24 +4,25 @@
 
 ## 现在在哪
 
-P0 mock：S0.1–S0.10 完成。内核见 ADR-0007/0008；服务语义见 ADR-0009（归一化/版本化/读包）
-与 ADR-0010（人工门与 realm 过滤）。
+P0 mock：S0.1–S0.14 完成（仅 T-117 待人工）。语义见 ADR-0009/0010/0011；
+本批新增 `services/{compare,guard,eval*,scenarios}.py`。
 
 ## 最后验证
 
-`tools/verify.sh docs` PASS（42 md、1009 引用 0 未解析）；27 条 AC 全绿
-（EV-005..EV-022、EV-023..EV-028）；远端 refs 已回读（EV-003）。
+`tools/verify.sh docs` PASS（43 md、0 未解析）；34 条 AC 全绿（EV-005..EV-035）；
+`suite s1..s4` 一条命令 PASS；基线报告已入库；远端 refs 已回读（EV-003）。
 
 ## 下一步唯一动作
 
-T-112（S0.11 比价：TCO + 排序 + 引用链，AC-COMPARE-001..003）。
+T-117 现场验证 V-001..V-012（结论写入 functional-requirements §1）——**需人工**；
+V-002 盲测决定 P1 是否成立，agent 只备料。
 
 ## 不变量
 
-内核不可自改 · 承诺需人批（绑 scope+ref，只能由人产生）· 模型可见即账本可重建 ·
-私域不出 realm · 不可归一即拒绝 · 未标 impact 不进 TCO · AC 需可执行证据 ·
-一轮一批 commit+push 并回读。
+内核不可自改 · 承诺需人批（绑 scope+ref）· 模型可见即账本可重建 · 私域不出 realm ·
+不可归一即拒绝 · 未标 impact 不进 TCO · 护栏只标注不否决 · 无引用即无效 ·
+反例只增不减 · AC 需可执行证据 · 一轮一批 commit+push 回读。
 
 ## 阻塞
 
-无。需人工：T-117 的 V-002 盲测决定 P1 是否成立，agent 只备料。缺陷见 D-001/D-002。
+无技术阻塞。缺陷见 D-001/D-002。

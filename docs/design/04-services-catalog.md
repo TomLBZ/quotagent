@@ -69,6 +69,7 @@
 - 职责：护栏——异常低价、漏项、产能冲突、条款冲突、外部诱导文本（prompt injection）。
 - Definition：`check(target, ruleset) -> Flag[]` · `register_rule(rule) -> disposer`。
 - 不变量：`guard` 只能产出 Flag，**不得直接否决授标**（否决权在人）。
+- P0 实现：`src/quotagent/services/guard.py`（六类规则 + `register_rule -> disposer` + 每条 Flag 落账；无否决接口）；语义见 ADR-0011。
 - 关联：FR-GUARD-001..005，AC-GUARD-001..003。
 
 ### `ctx.negotiate` [P1]
@@ -102,6 +103,7 @@
 - 职责：归一化报价 → TCO 折算 → 排序建议 → 引用链。
 - Definition：`rank(package, quotes, weights) -> Evaluation` · `tco(quote) -> breakdown` · `cite(evaluation) -> ledger_refs[]`。
 - 不变量：`Evaluation` 中每个数值必须有 `citations`；同输入同输出（可重放）；版本不一致的报价不得参与排序。
+- P0 实现：`src/quotagent/services/compare.py`（五项金额化分量 + 极差归一评分 + `verify_citations` + `recompute`）；语义见 ADR-0011。
 - 关联：FR-COMPARE-001..006，AC-COMPARE-001..004。
 
 ### `ctx.award` [P0]

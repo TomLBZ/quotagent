@@ -75,6 +75,7 @@ class EventBus:
                                 "越界定价必须在流水线内转人工门，不得直接产出可提交价格（05 §5）"),
         "quote/deviation-captured": ("emit", True, ""),
         "quote/deviation-quantified": ("emit", True, ""),
+        "evolve/proposed": ("serial", True, ""),
         # §3 业务事件（P0 用到/会落账的部分）
         "rfq/published": ("emit", True, ""),
         "rfq/amended": ("emit", True, ""),

@@ -210,9 +210,10 @@ def ac_runtime_002() -> list[Assertion]:
     proc = _run(run + ["--version"], cwd=root)
     out.append(Assertion("qa --version 退出码 0", proc.returncode == 0, f"exit={proc.returncode}"))
 
-    proc = _run(run + ["suite", "s1"], cwd=root)
-    out.append(Assertion("未实现的场景集返回 2 且指明 roadmap 任务（T-114）",
-                         proc.returncode == 2 and "T-114" in (proc.stdout + proc.stderr),
+    proc = _run(run + ["suite", "s9"], cwd=root)
+    out.append(Assertion("未实现/未知的入口返回 2，并给出机器可读 JSON 与已知场景集（契约不变）",
+                         proc.returncode == 2 and '"status": "unknown"' in proc.stdout
+                         and "s1" in (proc.stdout + proc.stderr),
                          f"exit={proc.returncode} {_tail(proc.stdout + proc.stderr)}"))
 
     pass_proc = _run([root / "tools" / "verify.sh", "ac", "AC-DESIGN-002"], cwd=root)

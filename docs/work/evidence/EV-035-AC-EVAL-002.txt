@@ -1,0 +1,84 @@
+EV-035-AC-EVAL-002（实现前：红）
+
+时间: 2026-09-12T01:17:20Z
+命令: tools/run.sh -m quotagent.qa ac AC-EVAL-002
+实现前 commit: 057e470
+说明: 红取自批前 commit 057e470 的干净副本（git archive）+ 本批 AC 文件：实现尚未存在，7 条 AC 全部因导入失败而红
+退出码: 1（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/tmp/red-base/src/quotagent/qa/checks_compare.py", line 12, in <module>
+    from ..services.compare import CompareService, MissingCitation
+ModuleNotFoundError: No module named 'quotagent.services.compare'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T01:17:21Z ---
+EV-035 — AC-EVAL-002: 指标基线报告可生成且人可读；反例集只增不减（删除被拒绝）
+
+时间: 2026-09-12T01:17:21Z
+命令: qa ac AC-EVAL-002
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-EVAL-002
+commit: 057e470
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-EVAL-002",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "九项指标全部可采集（缺失记 None，不得静默补零）",
+      "ok": true,
+      "detail": "metrics={'报价可比率': 1.0, '口径一致率': 1.0, '澄清轮次': 1.0, '比价耗时': 0.0, '人工改写率': None, '异常检出率/误报率': {'detection': 0.5, 'false_positive': None}, '重建一致率': None, '重放确定性': None, '端到端时延/失败率': 0.0}"
+    },
+    {
+      "name": "指标带依据（事件类型与计数），不是凭空数字",
+      "ok": true,
+      "detail": "clarification_basis={'types': ['clarification/asked', 'clarification/answered', 'clarification/broadcast-incomplete'], 'events': 2, 'per_type': {'clarification/asked': 1, 'clarification/answered': 1, 'clarification/broadcast-incomplete': 0}, 'note': '同包往返次数；广播不完整不计入轮次'} ratio_basis={'types': ['quote/normalized', 'quote/normalize-rejected'], 'events': 4, 'per_type': {'quote/normalized': 4, 'quote/normalize-rejected': 0}, 'note': '分母 = 归一化成功 + 被拒绝的报价数（每份报价只计一次）'}"
+    },
+    {
+      "name": "基线报告可生成且人可读（Markdown 标题 + 逐指标一行：定义/值/依据）",
+      "ok": true,
+      "detail": "path=/workspace/projects/quotagent/tmp/ac/ac-eval-002-dzxn_yle/baseline-report.md bytes=1606"
+    },
+    {
+      "name": "报告声明 P0 不设目标值（基线规则：目标值由人设定）",
+      "ok": true,
+      "detail": "head=# 指标基线报告（P0）"
+    },
+    {
+      "name": "反例集随仓库入库且可加载",
+      "ok": true,
+      "detail": "count=4 cases=['CX-INJECT-001', 'CX-MISSING-001', 'CX-CAPACITY-001', 'CX-APPROVAL-001']"
+    },
+    {
+      "name": "删除反例被拒绝（只增不减，防止改测试提高通过率）",
+      "ok": true,
+      "detail": "error=反例 CX-INJECT-001 不可删除：反例集只增不减（FR-EVAL-004 / 09 §3.3） count_after=4"
+    },
+    {
+      "name": "改写既有反例同样被拒绝（同 case_id 视为改写）",
+      "ok": true,
+      "detail": "error=反例 CX-INJECT-001 已存在：反例集只增不减（改写测试等价于提高通过率，被拒绝；allow_rewrite=True 也不放行）"
+    }
+  ],
+  "evidence_refs": [
+    "EV-035"
+  ],
+  "command": "qa ac AC-EVAL-002",
+  "phase": "P0",
+  "title": "指标基线报告可生成且人可读；反例集只增不减（删除被拒绝）",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-EVAL-002 — 指标基线报告可生成且人可读；反例集只增不减（删除被拒绝）
+  ok   九项指标全部可采集（缺失记 None，不得静默补零）
+  ok   指标带依据（事件类型与计数），不是凭空数字
+  ok   基线报告可生成且人可读（Markdown 标题 + 逐指标一行：定义/值/依据）
+  ok   报告声明 P0 不设目标值（基线规则：目标值由人设定）
+  ok   反例集随仓库入库且可加载
+  ok   删除反例被拒绝（只增不减，防止改测试提高通过率）
+  ok   改写既有反例同样被拒绝（同 case_id 视为改写）

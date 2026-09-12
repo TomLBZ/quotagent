@@ -32,3 +32,10 @@
 | EV-026 | 人工门：批准请求→待批；agent 代签被拒且不落 granted；人签署后才有效；批准链按业务引用查回、两引用不串台；伪造 approval_id 被拒 | AC-APPROVE-001 |
 | EV-027 | 无批准记录时三条承诺路径（提交报价/授标承诺/发 PO）全部抛错且不落账；跨动作复用被拒；有批准+供应商确认+已成立承诺时才成功；PO 不能手工另建 | AC-APPROVE-002 |
 | EV-028 | 偏差：四类捕捉（技术/商务/进度/范围）；未标 impact 的偏差不进 TCO 但可查（excluded）；三维量化与手算合计（价格 1200 / 时间 20 天）；类别与影响可查；替代方案仅为 Intent | AC-DEV-001 |
+| EV-029 | 版本失配报价不进排序：进 `excluded`（code=rfq_version_mismatch + 双方版本 + next_action）、落账 `rfq/version-mismatch`、金额不进任何 TCO 分量 | AC-COMPARE-001 |
+| EV-030 | 确定性：两次排序字节级一致；手算 q-b 分量（交期 8000 / 质保 12000 / 融资 3478.356164）；换权重只改分数不改分量；`recompute` 用旧分量+新权重重现新排序分数 | AC-COMPARE-002 |
+| EV-031 | 引用链：每个数值都有引用（前缀限定 ledger/package/quote/policy/deviation）；排序建议本身也带引用；人为删掉一条引用 → `MissingCitation` 并指出路径与 quote_id | AC-COMPARE-003 |
+| EV-032 | 护栏只标注：异常低价 + 漏项各被标 Flag（带 severity 与证据）；Flag 不改变排序与状态；无 `reject`/`veto` 接口；Flag 逐条落账 `compare/flag-raised` | AC-GUARD-001 |
+| EV-033 | S4 反例：注入（只标注、原文与金额不被改写）/ 漏项 / 虚假产能 / 伪造批准（agent 代签 + 伪造 approval_id）全部被拦，每个 case 有账本留痕；反例集删除被拒 | AC-GUARD-003 |
+| EV-034 | 场景集 S1..S4 全绿；同输入重放两次 digest 一致、非易变字段字节一致；S1 步骤齐全（询价→澄清→2 报价→比价）且规模符合定义；`suite s1..s4` 一条命令退出码 0 | AC-EVAL-001 |
+| EV-035 | 指标基线：九项指标可采集且带依据事件（不补零）；报告可生成且人可读、声明不设目标值；反例集只增不减（删除与改写均被拒） | AC-EVAL-002 |

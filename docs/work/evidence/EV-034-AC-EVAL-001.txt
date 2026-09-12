@@ -1,0 +1,78 @@
+EV-034-AC-EVAL-001（实现前：红）
+
+时间: 2026-09-12T01:17:20Z
+命令: tools/run.sh -m quotagent.qa ac AC-EVAL-001
+实现前 commit: 057e470
+说明: 红取自批前 commit 057e470 的干净副本（git archive）+ 本批 AC 文件：实现尚未存在，7 条 AC 全部因导入失败而红
+退出码: 1（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/tmp/red-base/src/quotagent/qa/checks_compare.py", line 12, in <module>
+    from ..services.compare import CompareService, MissingCitation
+ModuleNotFoundError: No module named 'quotagent.services.compare'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T01:17:21Z ---
+EV-034 — AC-EVAL-001: 同输入重放两次结果完全一致（确定性）；S1..S4 全绿
+
+时间: 2026-09-12T01:17:21Z
+命令: qa suite s1..s4
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-EVAL-001
+commit: 057e470
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-EVAL-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "S1..S4 全部通过（各自断言全绿）",
+      "ok": true,
+      "detail": "status={'s1': 'pass', 's2': 'pass', 's3': 'pass', 's4': 'pass'} failures={}"
+    },
+    {
+      "name": "同输入重放两次的摘要完全一致（确定性）",
+      "ok": true,
+      "detail": "digests={'s1': ('sha256:865b5', 'sha256:865b5'), 's2': ('sha256:508b9', 'sha256:508b9'), 's3': ('sha256:dbb4c', 'sha256:dbb4c'), 's4': ('sha256:e07d8', 'sha256:e07d8')}"
+    },
+    {
+      "name": "两次运行的完整结果只差声明的易变字段（其余字节一致）",
+      "ok": true,
+      "detail": "volatile=('duration_ms',)"
+    },
+    {
+      "name": "S1 一条命令跑完 询价→澄清→2 报价→比价（步骤齐全且有序）",
+      "ok": true,
+      "detail": "steps=['rfq_published', 'clarification_asked', 'clarification_answered', 'quotes_received', 'normalized', 'guarded', 'ranked'] ranking=['q-s1-3', 'q-s1-1', 'q-s1-2', 'q-s1-4']"
+    },
+    {
+      "name": "S1 规模符合场景定义（单币种含税、条目 50~200、3~5 家投标）",
+      "ok": true,
+      "detail": "items=60 bidders=4"
+    },
+    {
+      "name": "CLI 入口 `qa suite s1..s4` 可执行且退出码 0（roadmap S0.13 的一条命令）",
+      "ok": true,
+      "detail": "exit=0 status=pass suites=['s1', 's2', 's3', 's4'] stderr=[ok  ] s1: S1 归一化：全部报价在声明容差内归一化成功\n[ok  ] s1: S1 排序稳定：分数升序且每条报价都有引用链\n[ok  ] s1: S1 异常低价被标（护栏只标注、不改变排序）\n[ok  ] s1: S1 规模与场"
+    }
+  ],
+  "evidence_refs": [
+    "EV-034"
+  ],
+  "command": "qa suite s1..s4",
+  "phase": "P0/P1",
+  "title": "同输入重放两次结果完全一致（确定性）；S1..S4 全绿",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-EVAL-001 — 同输入重放两次结果完全一致（确定性）；S1..S4 全绿
+  ok   S1..S4 全部通过（各自断言全绿）
+  ok   同输入重放两次的摘要完全一致（确定性）
+  ok   两次运行的完整结果只差声明的易变字段（其余字节一致）
+  ok   S1 一条命令跑完 询价→澄清→2 报价→比价（步骤齐全且有序）
+  ok   S1 规模符合场景定义（单币种含税、条目 50~200、3~5 家投标）
+  ok   CLI 入口 `qa suite s1..s4` 可执行且退出码 0（roadmap S0.13 的一条命令）

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import subprocess
 import sys
 import time
@@ -24,7 +26,8 @@ from ..paths import evidence_dir, repo_root
 from .registry import EXIT_CONFIG, EXIT_FAIL, EXIT_PASS, ACReport, list_acs, run_ac
 
 PROG = "python -m quotagent.qa"
-SUITES = {"s1": "T-114", "s2": "T-209", "s3": "T-209", "s4": "T-209"}
+SUITES = {"s1": "T-114", "s2": "T-114", "s3": "T-114", "s4": "T-114"}
+SUITE_ALIASES = {"all": ["s1", "s2", "s3", "s4"], "s1..s4": ["s1", "s2", "s3", "s4"]}
 
 
 def _git_commit() -> str:
@@ -93,20 +96,131 @@ def _cmd_ac(args: argparse.Namespace) -> int:
     return report.exit_code()
 
 
+def _suite_names(name: str) -> list[str]:
+    if name in SUITE_ALIASES:
+        return list(SUITE_ALIASES[name])
+    if ".." in name:
+        start, end = name.split("..", 1)
+        names = [f"s{index}" for index in range(int(start.lstrip("s")), int(end.lstrip("s")) + 1)]
+        return names
+    return [name]
+
+
 def _cmd_suite(args: argparse.Namespace) -> int:
-    name = args.name
-    task = SUITES.get(name)
-    if task is None:
-        print(f"未知场景集: {name}（已知: {', '.join(sorted(SUITES))}）", file=sys.stderr)
-        _print_json({"suite": name, "status": "unknown", "assertions": [], "evidence_refs": [],
-                     "message": f"未知场景集 {name}"})
+    from ..paths import scratch_root
+    from ..services.scenarios import SCENARIOS, run as run_scenario
+
+    names = _suite_names(args.name)
+    unknown = [name for name in names if name not in SCENARIOS]
+    if unknown:
+        print(f"未知场景集: {', '.join(unknown)}（已知: {', '.join(sorted(SCENARIOS))}）", file=sys.stderr)
+        _print_json({"suite": args.name, "status": "unknown", "assertions": [], "evidence_refs": [],
+                     "message": f"未知场景集 {unknown}"})
         return EXIT_CONFIG
-    message = (f"场景集 {name} 尚未实现：对应 roadmap 任务 {task}；"
-               f"P0 先以 AC 级断言取证（docs/work/roadmap.md §2 S0.13）")
-    print(message, file=sys.stderr)
-    _print_json({"suite": name, "status": "not-implemented", "assertions": [], "evidence_refs": [],
-                 "message": message, "roadmap_task": task})
-    return EXIT_CONFIG
+
+    root = scratch_root() / "scenarios"
+    results = {}
+    for name in names:
+        # 每次运行用干净目录：账本对同 (correlation_id, type, body) 去重（幂等），
+        # 复用旧账本会让"重放"变成"重复投递"（零新增事件）——所以场景必须在新账本上跑
+        run_dir = scratch_root() / "scenarios" / f"{name}-{os.getpid()}-{time.time_ns()}"
+        try:
+            results[name] = run_scenario(name, run_dir)
+        finally:
+            shutil.rmtree(run_dir, ignore_errors=True)
+    for name, result in results.items():
+        for item in result["assertions"]:
+            print(f"[{'ok  ' if item['ok'] else 'FAIL'}] {name}: {item['name']}", file=sys.stderr)
+    if len(names) == 1:
+        payload = dict(results[names[0]])
+        payload["evidence_refs"] = []
+        _print_json(payload)
+        return EXIT_PASS if payload["status"] == "pass" else EXIT_FAIL
+    status = "pass" if all(result["status"] == "pass" for result in results.values()) else "fail"
+    payload = {"suite": args.name, "status": status,
+               "suites": {name: {"status": result["status"], "digest": result["digest"],
+                                 "assertions": result["assertions"],
+                                 "facts": result["facts"]} for name, result in results.items()},
+               "assertions": [item for result in results.values() for item in result["assertions"]],
+               "evidence_refs": []}
+    _print_json(payload)
+    return EXIT_PASS if status == "pass" else EXIT_FAIL
+
+
+def _cmd_metrics(args: argparse.Namespace) -> int:
+    """采集 S1..S4 的指标并生成一份人可读的基线报告（FR-EVAL-003，roadmap S0.14）。"""
+    from ..kernel.ledger import Ledger
+    from ..paths import scratch_root
+    from ..services.evaldata import load_counterexamples
+    from ..services.evalmetrics import baseline_report, collect_metrics
+    from ..services.scenarios import run as run_scenario
+
+    names = ["s1", "s2", "s3", "s4"]
+    sections, summary, digests = [], {}, {}
+    for name in names:
+        run_dir = scratch_root() / "metrics" / f"{name}-{os.getpid()}-{time.time_ns()}"
+        try:
+            result = run_scenario(name, run_dir)
+            ledger = Ledger(run_dir / "ledger.jsonl", realm="contractor:con-B")
+            data = collect_metrics(ledger)
+            report_path = baseline_report(ledger, out_path=run_dir / "report.md")
+            sections.append((name, result, report_path.read_text(encoding="utf-8")))
+            summary[name] = {key: row["value"] for key, row in data["metrics"].items()}
+            digests[name] = result["digest"]
+        finally:
+            shutil.rmtree(run_dir, ignore_errors=True)
+
+    from ..services.evalmetrics import METRIC_KEYS
+    lines = [
+        "# 指标基线报告（P0，S1..S4 合成场景）",
+        "",
+        "<!-- 生成方式：tools/run.sh -m quotagent.qa metrics --out docs/work/metrics-baseline.md -->",
+        "",
+        "**P0 只采集与记录基线，不设目标值**；目标值由人在 P1 开始前设定并写入项目 patch（roadmap G1 门）。",
+        "全部数值来自各场景账本（`ctx.eval.collect`），场景数据为合成数据。",
+        "",
+        "## 场景摘要",
+        "",
+        "| 场景 | 状态 | 内容摘要（digest） |",
+        "|---|---|---|",
+    ]
+    from ..services.scenarios import SCENARIOS
+    titles = {"s1": "材料采购：单币种含税、60 条目、4 家投标",
+              "s2": "分包工程：多包 + 接口责任交叉 + 偏差入 TCO",
+              "s3": "设备采购：长交期 + 复杂付款 + 外币",
+              "s4": "恶意输入：注入 / 漏项 / 虚假产能 / 伪造批准"}
+    for name in names:
+        lines.append(f"| {name} | {summary[name] and 'pass'} | {titles[name]} · digest `{digests[name]}` |")
+    lines += ["", "## 指标汇总", "", "| 指标 | " + " | ".join(names) + " |", "|---|" + "---|" * len(names)]
+    for key in METRIC_KEYS:
+        cells = []
+        for name in names:
+            value = summary[name][key]
+            if isinstance(value, dict):
+                cells.append("/".join(f"{k}={v if v is None else round(v, 4) if isinstance(v, float) else v}"
+                                      for k, v in value.items()))
+            elif isinstance(value, float):
+                cells.append(f"{value:.4f}")
+            else:
+                cells.append("None" if value is None else str(value))
+        lines.append(f"| {key} | " + " | ".join(cells) + " |")
+    lines += ["", "## 反例集（red-team，只增不减）", ""]
+    for case in load_counterexamples():
+        lines.append(f"- `{case['case_id']}`（{case['scenario']}）：{case['note']}")
+    for name, result, text in sections:
+        lines += ["", "---", "", f"## {name} · " + titles[name], "",
+                  f"- 状态: {result['status']} · digest: `{result['digest']}`", ""]
+        body = text.split("## 指标", 1)[1] if "## 指标" in text else text
+        lines += ["## 指标" + body.rstrip(), ""]
+    report = "\n".join(lines) + "\n"
+    if args.out:
+        Path(args.out).write_text(report, encoding="utf-8")
+    _print_json({"suites": {name: {"status": "pass" if summary[name] else "fail", "digest": digests[name]}
+                            for name in names},
+                 "out": args.out, "bytes": len(report.encode("utf-8")),
+                 "metrics": {name: {k: (v if not isinstance(v, float) else round(v, 6))
+                                    for k, v in summary[name].items()} for name in names}})
+    return EXIT_PASS
 
 
 def _cmd_list(args: argparse.Namespace) -> int:
@@ -150,6 +264,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_suite.set_defaults(func=_cmd_suite)
     p_list = sub.add_parser("list", help="列出已注册的 AC")
     p_list.set_defaults(func=_cmd_list)
+    p_metrics = sub.add_parser("metrics", help="采集 S1..S4 指标并生成基线报告")
+    p_metrics.add_argument("--out", default=None, help="基线报告输出路径（Markdown）")
+    p_metrics.set_defaults(func=_cmd_metrics)
     p_self = sub.add_parser("selftest", help="运行时自检")
     p_self.set_defaults(func=_cmd_selftest)
     return parser
