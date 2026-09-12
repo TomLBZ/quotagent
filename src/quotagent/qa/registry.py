@@ -94,6 +94,8 @@ def register(ac: str, phase: str, title: str, command: str,
 
 
 def run_check(check: ACCheck) -> ACReport:
+    from ..paths import cleanup_scratch
+
     report = ACReport(ac=check.ac, status="fail", evidence_refs=list(check.evidence_refs),
                       command=check.command, phase=check.phase, title=check.title)
     try:
@@ -103,6 +105,9 @@ def run_check(check: ACCheck) -> ACReport:
         report.assertions = [Assertion(name="执行异常", ok=False,
                                        detail=f"{type(exc).__name__}: {exc}")]
         return report
+    finally:
+        # AC 自清理：一次性目录用完即删（否则会改变文档门的扫描范围）
+        cleanup_scratch()
     if not assertions:
         report.assertions = [Assertion(name="至少一条断言", ok=False, detail="该 AC 未产出任何断言")]
         return report

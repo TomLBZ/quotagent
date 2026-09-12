@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -58,7 +59,27 @@ def scratch_root(root: Path | None = None) -> Path:
 
 
 def new_scratch(prefix: str, root: Path | None = None) -> Path:
-    """新建一个一次性目录（AC 执行用，绝对路径，调用方负责清理）。"""
+    """新建一个一次性目录（AC 执行用，绝对路径）。
+
+    创建出来的目录会被登记，AC 运行结束由 `qa.registry` 统一清理（AGENTS.md：临时产物
+    只能落 `tmp/` 且**用完自己清理**——留下副本会改变文档门的扫描范围）。
+    """
     base = scratch_root(root) / "ac"
     base.mkdir(parents=True, exist_ok=True)
-    return Path(tempfile.mkdtemp(prefix=f"{prefix}-", dir=str(base)))
+    path = Path(tempfile.mkdtemp(prefix=f"{prefix}-", dir=str(base)))
+    _SCRATCH_DIRS.add(path)
+    return path
+
+
+_SCRATCH_DIRS: set[Path] = set()
+
+
+def cleanup_scratch() -> list[Path]:
+    """删除本次进程创建的所有一次性目录（幂等；返回实际删掉的路径）。"""
+    removed: list[Path] = []
+    for path in sorted(_SCRATCH_DIRS, key=lambda item: len(str(item)), reverse=True):
+        if path.exists():
+            shutil.rmtree(path, ignore_errors=True)
+            removed.append(path)
+        _SCRATCH_DIRS.discard(path)
+    return removed
