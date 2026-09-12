@@ -70,3 +70,17 @@ push 退出码: 0，ls-remote 退出码: 0，回读与本地 HEAD 一致: True
       `git fetch origin && git log --oneline -3 origin/main` 比对确认；
       .agents/state.json 的 last_verified_commit 指向上面这次已回读的提交。
 
+
+--- 推送（B4：成本构成私域 / 定价与人工门 / 偏差量化）---
+时间: 2026-09-12T01:05:51Z
+commit: dd6d37fd85811628ccd2ee0633b9668b124f9aa4
+命令: git push -q origin main && git ls-remote origin
+push 退出码: 0，ls-remote 退出码: 0，回读与本地 HEAD 一致: True
+结果（写本记录时回读）:
+  dd6d37fd85811628ccd2ee0633b9668b124f9aa4	HEAD
+  dd6d37fd85811628ccd2ee0633b9668b124f9aa4	refs/heads/main
+本地 HEAD: dd6d37fd85811628ccd2ee0633b9668b124f9aa4
+说明: 本文件随后的证据/状态同步提交（推送 4）的回读结果，由下一次接手的第一步
+      `git fetch origin && git log --oneline -3 origin/main` 比对确认；
+      .agents/state.json 的 last_verified_commit 指向上面这次已回读的提交。
+
