@@ -18,6 +18,7 @@
 | `docs/work/validation/templates/*.md` | 8 KB |
 | `docs/work/evidence/*.md` | 8 KB |
 | `.agents/skills/*/SKILL.md` | 8 KB |
+| `.agents/skills/*/references/*.md` | 8 KB |
 
 超预算时的处理顺序：**删重复 → 删叙述 → 拆文件 → 才考虑提高预算**（提高预算需在提交信息里说明）。
 
