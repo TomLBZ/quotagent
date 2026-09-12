@@ -81,3 +81,73 @@ commit: 8dab774
   ok   未经人工确认的疑问清单不得外发（P8 人工门前置）
   ok   疑问确认只能由人完成（agent 代签被拒绝）
   ok   人工确认后可外发，且逐条落账 clarification/asked（含确认人）
+--- 追加运行 2026-09-12T00:57:22Z ---
+EV-022 — AC-INTAKE-002: 缺项检测覆盖人为删减；疑问清单需人工确认后才外发
+
+时间: 2026-09-12T00:57:22Z
+命令: qa ac AC-INTAKE-002
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-INTAKE-002
+commit: 1dce423
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-INTAKE-002",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "缺项检测覆盖人为删减的条目（L-002 被检出，不因草稿未提及而消失）",
+      "ok": true,
+      "detail": "missing=[{'item_id': 'L-002', 'description': '管支架', 'reason': 'in_draft_but_omitted', 'refs': ['pkg-014#rev1:L-002'], 'next_action': '把该条目补进报价草稿，或向承包商发澄清说明为何不报（缺项不得静默）'}]"
+    },
+    {
+      "name": "缺项带可执行下一步（要求澄清或补齐），不是只报错",
+      "ok": true,
+      "detail": "next_action=把该条目补进报价草稿，或向承包商发澄清说明为何不报（缺项不得静默）"
+    },
+    {
+      "name": "条目齐全时无缺项（检测不是恒真）",
+      "ok": true,
+      "detail": "missing=[]"
+    },
+    {
+      "name": "疑问草案逐条引用包版本与条目（无引用的疑问不可外发）",
+      "ok": true,
+      "detail": "questions=[{'question_id': 'Q-004', 'rfq_rev': 1, 'refs': ['pkg-014#rev1:NEW-001'], 'item_id': 'NEW-001', 'text': '条目 NEW-001（现场踏勘提到的临时封堵（无图纸/规范引用））的规格/计量口径请确认', 'status': 'draft', 'confirmed_by': None}]"
+    },
+    {
+      "name": "未经人工确认的疑问清单不得外发（P8 人工门前置）",
+      "ok": true,
+      "detail": "error=1 条疑问尚未获得人工确认（Q-004 等），禁止外发 asked=0"
+    },
+    {
+      "name": "疑问确认只能由人完成（agent 代签被拒绝）",
+      "ok": true,
+      "detail": "error=疑问清单只能由人确认后外发，收到 'agent:intake'（agent 代签被拒绝）"
+    },
+    {
+      "name": "人工确认后可外发，且逐条落账 clarification/asked（含确认人）",
+      "ok": true,
+      "detail": "confirmed=1 sent=1 asked=1"
+    }
+  ],
+  "evidence_refs": [
+    "EV-022"
+  ],
+  "command": "qa ac AC-INTAKE-002",
+  "phase": "P0",
+  "title": "缺项检测覆盖人为删减；疑问清单需人工确认后才外发",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-INTAKE-002 — 缺项检测覆盖人为删减；疑问清单需人工确认后才外发
+  ok   缺项检测覆盖人为删减的条目（L-002 被检出，不因草稿未提及而消失）
+  ok   缺项带可执行下一步（要求澄清或补齐），不是只报错
+  ok   条目齐全时无缺项（检测不是恒真）
+  ok   疑问草案逐条引用包版本与条目（无引用的疑问不可外发）
+  ok   未经人工确认的疑问清单不得外发（P8 人工门前置）
+  ok   疑问确认只能由人完成（agent 代签被拒绝）
+  ok   人工确认后可外发，且逐条落账 clarification/asked（含确认人）

@@ -127,3 +127,61 @@ commit: 056e572
   ok   该短路点在 05-events.md §5 拦截点总表中登记为 waterfall
   ok   默认事件表中每个 waterfall 事件都在 §5 有登记（FR-EVT-003：短路必须是文档化设计意图）
   ok   声明 waterfall 必须给出短路理由（空理由被拒绝）
+--- 追加运行 2026-09-12T00:57:20Z ---
+EV-010 — AC-EVT-002: waterfall 不调 next() 即短路（下游不执行），且短路点已在 05-events.md §5 登记
+
+时间: 2026-09-12T00:57:20Z
+命令: qa ac AC-EVT-002
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-EVT-002
+commit: 1dce423
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-EVT-002",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "waterfall 监听器不调 next() → 下游监听器不执行，其返回值即最终值",
+      "ok": true,
+      "detail": "called=['unit', 'tax'] result={'rejected': '缺少计量规则', 'at': 'tax'}"
+    },
+    {
+      "name": "短路被显式记录（事件名 + 监听器位置 + 返回值摘要），不是静默丢弃",
+      "ok": true,
+      "detail": "short_circuits={'event': 'quote/normalize', 'index': 1, 'label': 'quote/normalize#2', 'returned': \"{'rejected': '缺少计量规则', 'at': 'tax'}\"}"
+    },
+    {
+      "name": "该短路点在 05-events.md §5 拦截点总表中登记为 waterfall",
+      "ok": true,
+      "detail": "§5 中 waterfall 行=['agent/output-drafted', 'agent/tool-call-requested', 'clarification/answer-drafted', 'kernel/config-updated', 'quote/normalize']"
+    },
+    {
+      "name": "默认事件表中每个 waterfall 事件都在 §5 有登记（FR-EVT-003：短路必须是文档化设计意图）",
+      "ok": true,
+      "detail": "未登记=[] 已声明=['kernel/config-updated', 'clarification/answer-drafted', 'quote/normalize', 'agent/tool-call-requested', 'agent/output-drafted']"
+    },
+    {
+      "name": "声明 waterfall 必须给出短路理由（空理由被拒绝）",
+      "ok": true,
+      "detail": "error=EventModeError(\"waterfall 事件 't/bad-waterfall' 必须给出短路理由（FR-EVT-003：短路须是文档化设计意图）\")"
+    }
+  ],
+  "evidence_refs": [
+    "EV-010"
+  ],
+  "command": "qa ac AC-EVT-002",
+  "phase": "P0",
+  "title": "waterfall 不调 next() 即短路（下游不执行），且短路点已在 05-events.md §5 登记",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-EVT-002 — waterfall 不调 next() 即短路（下游不执行），且短路点已在 05-events.md §5 登记
+  ok   waterfall 监听器不调 next() → 下游监听器不执行，其返回值即最终值
+  ok   短路被显式记录（事件名 + 监听器位置 + 返回值摘要），不是静默丢弃
+  ok   该短路点在 05-events.md §5 拦截点总表中登记为 waterfall
+  ok   默认事件表中每个 waterfall 事件都在 §5 有登记（FR-EVT-003：短路必须是文档化设计意图）
+  ok   声明 waterfall 必须给出短路理由（空理由被拒绝）

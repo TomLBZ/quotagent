@@ -81,3 +81,73 @@ commit: 8dab774
   ok   含税报价被折算到不含税口径（396 → 350.44 CNY/m，差异 = 税）
   ok   声明不同汇率时点得到不同金额（时点不可被忽略）
   ok   成功归一路径落账 quote/normalized（durable，可审计）
+--- 追加运行 2026-09-12T00:57:21Z ---
+EV-016 — AC-NORM-001: 含税/不含税 + 不同单位 + 不同币种的混合报价归一后金额在声明容差内
+
+时间: 2026-09-12T00:57:21Z
+命令: qa ac AC-NORM-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-NORM-001
+commit: 1dce423
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-NORM-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "两条混合口径报价均成功归一（无拒绝）",
+      "ok": true,
+      "detail": "A=None B=None"
+    },
+    {
+      "name": "报价 A（USD 含税 + cm）归一金额在手算值容差内",
+      "ok": true,
+      "detail": "归一=42053.1 手算=42053.097345 差=0.002655 容差=21.026549"
+    },
+    {
+      "name": "报价 B（EUR 不含税 + kg/t 换算）归一金额在手算值容差内",
+      "ok": true,
+      "detail": "归一=3.37 手算=3.369600 差=0.000400 容差=0.001685"
+    },
+    {
+      "name": "结果随行携带所用口径因子（单位/汇率/税），可事后解释",
+      "ok": true,
+      "detail": "factors={'unit': {'from': 'cm', 'to': 'm', 'price_factor': 100.0, 'qty_factor': 0.01}, 'fx': {'from': 'USD', 'to': 'CNY', 'rate': 7.2, 'at': '2026-09-10T00:00:00Z', 'source': 'pboc'}, 'tax': {'code': 'cn-vat-13', 'rate': 0.13, 'mode': 'inclusive'}, 'measure_rule': {'item_id': 'L-001', 'base_unit': 'm', 'rounding': 2, 'note': '按延长米计量', 'source': 'package_measure_rule'}}"
+    },
+    {
+      "name": "含税报价被折算到不含税口径（396 → 350.44 CNY/m，差异 = 税）",
+      "ok": true,
+      "detail": "exclusive=350.44 inclusive=396.0"
+    },
+    {
+      "name": "声明不同汇率时点得到不同金额（时点不可被忽略）",
+      "ok": true,
+      "detail": "7.5 时点归一=43805.31 手算=43805.309735"
+    },
+    {
+      "name": "成功归一路径落账 quote/normalized（durable，可审计）",
+      "ok": true,
+      "detail": "count=3 chain_ok=True"
+    }
+  ],
+  "evidence_refs": [
+    "EV-016"
+  ],
+  "command": "qa ac AC-NORM-001",
+  "phase": "P0",
+  "title": "含税/不含税 + 不同单位 + 不同币种的混合报价归一后金额在声明容差内",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-NORM-001 — 含税/不含税 + 不同单位 + 不同币种的混合报价归一后金额在声明容差内
+  ok   两条混合口径报价均成功归一（无拒绝）
+  ok   报价 A（USD 含税 + cm）归一金额在手算值容差内
+  ok   报价 B（EUR 不含税 + kg/t 换算）归一金额在手算值容差内
+  ok   结果随行携带所用口径因子（单位/汇率/税），可事后解释
+  ok   含税报价被折算到不含税口径（396 → 350.44 CNY/m，差异 = 税）
+  ok   声明不同汇率时点得到不同金额（时点不可被忽略）
+  ok   成功归一路径落账 quote/normalized（durable，可审计）

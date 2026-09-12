@@ -195,3 +195,62 @@ commit: 056e572
   ok   文档门退出码为 0
   ok   所有 ID 引用均可解析
   ok   无占位符 ID
+
+--- 提交后复跑 2026-09-12T00:57:18Z ---
+commit: 1dce423
+命令: tools/verify.sh docs
+退出码: 0
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描 40 个 markdown 文件，仓库根 /workspace/projects/quotagent
+[ok]   ID 完整性: 275 个定义，970 处引用，0 未解析
+[ok]   占位符: 无
+[ok]   预算: 39 个文件受检，最高占用 97%（docs/work/handover.md 994/1024 B）
+[ok]   FR↔AC 覆盖: 87 条 FR 均关联 AC，60 条 AC 无孤儿
+RESULT: PASS
+
+--- 追加运行 2026-09-12T00:57:18Z ---
+EV-004 — AC-DESIGN-001: ID 引用完整、无占位符
+
+时间: 2026-09-12T00:57:18Z
+命令: tools/verify.sh docs
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-DESIGN-001
+commit: 1dce423
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-DESIGN-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "文档门退出码为 0",
+      "ok": true,
+      "detail": "exit=0"
+    },
+    {
+      "name": "所有 ID 引用均可解析",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "无占位符 ID",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "evidence_refs": [
+    "EV-004"
+  ],
+  "command": "tools/verify.sh docs",
+  "phase": "设计期",
+  "title": "ID 引用完整、无占位符",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-DESIGN-001 — ID 引用完整、无占位符
+  ok   文档门退出码为 0
+  ok   所有 ID 引用均可解析
+  ok   无占位符 ID

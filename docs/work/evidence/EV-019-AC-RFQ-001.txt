@@ -75,3 +75,67 @@ commit: 8dab774
   ok   同一服务可作为插件装载并对外提供（接缝三角：Definition/Provider/Consumer）
   ok   卸载后服务摘除（不留全局引用）
   ok   校验不通过的包不允许发布（发布前必须校验）
+--- 追加运行 2026-09-12T00:57:21Z ---
+EV-019 — AC-RFQ-001: 清单条目缺计量规则或接口无唯一责任方 → 校验失败
+
+时间: 2026-09-12T00:57:21Z
+命令: qa ac AC-RFQ-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-RFQ-001
+commit: 1dce423
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-RFQ-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "合法包定义通过校验（含清单单位与接口责任方）",
+      "ok": true,
+      "detail": "errors=[]"
+    },
+    {
+      "name": "清单条目的单位不属于计量规则表 → 校验失败且指明条目",
+      "ok": true,
+      "detail": "errors=['清单条目 L-777 缺计量规则（measurement_rule 未在计量规则表中定义）']"
+    },
+    {
+      "name": "接口无唯一责任方 → 校验失败且逐条指明（IF-001 缺、IF-002 不唯一）",
+      "ok": true,
+      "detail": "errors=['接口 IF-001 无唯一责任方（responsibility_party 为空）', \"接口 IF-002 的责任方不唯一: ['con-B', 'con-C']（每个接口必须有唯一责任方）\"]"
+    },
+    {
+      "name": "同一服务可作为插件装载并对外提供（接缝三角：Definition/Provider/Consumer）",
+      "ok": true,
+      "detail": "status=active service_ok=True"
+    },
+    {
+      "name": "卸载后服务摘除（不留全局引用）",
+      "ok": true,
+      "detail": "service=None"
+    },
+    {
+      "name": "校验不通过的包不允许发布（发布前必须校验）",
+      "ok": true,
+      "detail": "error=包定义校验失败，拒绝发布: 清单条目 L-777 缺计量规则（measurement_rule 未在计量规则表中定义）"
+    }
+  ],
+  "evidence_refs": [
+    "EV-019"
+  ],
+  "command": "qa ac AC-RFQ-001",
+  "phase": "P0",
+  "title": "清单条目缺计量规则或接口无唯一责任方 → 校验失败",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-RFQ-001 — 清单条目缺计量规则或接口无唯一责任方 → 校验失败
+  ok   合法包定义通过校验（含清单单位与接口责任方）
+  ok   清单条目的单位不属于计量规则表 → 校验失败且指明条目
+  ok   接口无唯一责任方 → 校验失败且逐条指明（IF-001 缺、IF-002 不唯一）
+  ok   同一服务可作为插件装载并对外提供（接缝三角：Definition/Provider/Consumer）
+  ok   卸载后服务摘除（不留全局引用）
+  ok   校验不通过的包不允许发布（发布前必须校验）

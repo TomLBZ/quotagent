@@ -151,3 +151,73 @@ commit: 056e572
   ok   重发内容不变（msg_id 与 body_hash 相同，字节可复现）
   ok   重发的报文仍不产生第二条事实
   ok   落账事实可由账本重建（含 msg_id 引用与 body_hash）
+--- 追加运行 2026-09-12T00:57:21Z ---
+EV-014 — AC-QEP-002: 同一报文投递 3 次只产生 1 条事实；重发不改变 msg_id/body_hash
+
+时间: 2026-09-12T00:57:21Z
+命令: qa ac AC-QEP-002
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-QEP-002
+commit: 1dce423
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-QEP-002",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "发送写出投递文件并落账 kernel/qep-sent",
+      "ok": true,
+      "detail": "path=000001-01M29HWWQEKNPWCE1ETH4AZJSA.qep.json ledger=1"
+    },
+    {
+      "name": "收件箱只看到 1 个完整报文",
+      "ok": true,
+      "detail": "pending=['000001-01M29HWWQEKNPWCE1ETH4AZJSA.qep.json']"
+    },
+    {
+      "name": "同一报文投递 3 次只产生 1 条事实（FR-QEP-004 幂等去重）",
+      "ok": true,
+      "detail": "facts=1 duplicates=[False, True, True]"
+    },
+    {
+      "name": "重复投递被记录（不是静默丢弃）",
+      "ok": true,
+      "detail": "duplicate-dropped=2"
+    },
+    {
+      "name": "重发内容不变（msg_id 与 body_hash 相同，字节可复现）",
+      "ok": true,
+      "detail": "msg_id=01M29HWWQEKNPWCE1ETH4AZJSA==01M29HWWQEKNPWCE1ETH4AZJSA body_hash_equal=True"
+    },
+    {
+      "name": "重发的报文仍不产生第二条事实",
+      "ok": true,
+      "detail": "facts=1"
+    },
+    {
+      "name": "落账事实可由账本重建（含 msg_id 引用与 body_hash）",
+      "ok": true,
+      "detail": "quote_id=q-0007 verified=True"
+    }
+  ],
+  "evidence_refs": [
+    "EV-014"
+  ],
+  "command": "qa ac AC-QEP-002",
+  "phase": "P0",
+  "title": "同一报文投递 3 次只产生 1 条事实；重发不改变 msg_id/body_hash",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-QEP-002 — 同一报文投递 3 次只产生 1 条事实；重发不改变 msg_id/body_hash
+  ok   发送写出投递文件并落账 kernel/qep-sent
+  ok   收件箱只看到 1 个完整报文
+  ok   同一报文投递 3 次只产生 1 条事实（FR-QEP-004 幂等去重）
+  ok   重复投递被记录（不是静默丢弃）
+  ok   重发内容不变（msg_id 与 body_hash 相同，字节可复现）
+  ok   重发的报文仍不产生第二条事实
+  ok   落账事实可由账本重建（含 msg_id 引用与 body_hash）

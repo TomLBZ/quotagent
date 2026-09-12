@@ -255,3 +255,85 @@ commit: 056e572
   ok   tools/bootstrap.sh 幂等：首次 created、再次 reused，清单落在仓库内
   ok   运行产物只落在 .venv/ tmp/ __pycache__/（不污染仓库）
   ok   跑完后门扫描范围不变（临时副本已清理，门保持确定性）
+--- 追加运行 2026-09-12T00:57:19Z ---
+EV-007 — AC-RUNTIME-001: 仓库内自包含运行时：仅标准库，干净副本可用裸解释器运行
+
+时间: 2026-09-12T00:57:19Z
+命令: tools/verify.sh smoke
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-RUNTIME-001
+commit: 1dce423
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-RUNTIME-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "tools/runtime.sh 解析出可执行的 Python 3",
+      "ok": true,
+      "detail": "exit=0 interpreter=/workspace/projects/quotagent/.venv/bin/python"
+    },
+    {
+      "name": "src/ 只导入标准库（无第三方运行时依赖）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "最小环境（仅 PATH/QUOTAGENT_PY）下文档门可运行",
+      "ok": true,
+      "detail": "exit=0 [ok]   预算: 39 个文件受检，最高占用 97%（docs/work/handover.md 994/1024 B） / [ok]   FR↔AC 覆盖: 87 条 FR 均关联 AC，60 条 AC 无孤儿 / RESULT: PASS"
+    },
+    {
+      "name": "干净副本不含 .venv/ tmp/ 等宿主产物",
+      "ok": true,
+      "detail": "copied=98 files"
+    },
+    {
+      "name": "干净副本：tools/verify.sh docs 全绿",
+      "ok": true,
+      "detail": "exit=0 [ok]   预算: 39 个文件受检，最高占用 97%（docs/work/handover.md 994/1024 B） / [ok]   FR↔AC 覆盖: 87 条 FR 均关联 AC，60 条 AC 无孤儿 / RESULT: PASS"
+    },
+    {
+      "name": "干净副本：tools/run.sh 可驱动 CLI（未设置 PYTHONPATH）",
+      "ok": true,
+      "detail": "exit=0 acs=21 "
+    },
+    {
+      "name": "tools/bootstrap.sh 幂等：首次 created、再次 reused，清单落在仓库内",
+      "ok": true,
+      "detail": "first=0/manifest: /workspace/projects/quotagent/tmp/ac/runtime-001-1v04tly6/clean/.venv/quotagent-runtime.json / quotagent 0.1.0 on Python 3.13.13 / runtime ready: /workspace/projects/quotagent/tmp/ac/runtime-001-1v04tly6/clean/.venv (created) second=0/manifest: /workspace/projects/quotagent/tmp/ac/runtime-001-1v04tly6/clean/.venv/quotagent-runtime.json / quotagent 0.1.0 on Python 3.13.13 / runtime ready: /workspace/projects/quotagent/tmp/ac/runtime-001-1v04tly6/clean/.venv (reused)"
+    },
+    {
+      "name": "运行产物只落在 .venv/ tmp/ __pycache__/（不污染仓库）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "跑完后门扫描范围不变（临时副本已清理，门保持确定性）",
+      "ok": true,
+      "detail": "before=40 after=40 diff=[]"
+    }
+  ],
+  "evidence_refs": [
+    "EV-007"
+  ],
+  "command": "tools/verify.sh smoke",
+  "phase": "P0",
+  "title": "仓库内自包含运行时：仅标准库，干净副本可用裸解释器运行",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-RUNTIME-001 — 仓库内自包含运行时：仅标准库，干净副本可用裸解释器运行
+  ok   tools/runtime.sh 解析出可执行的 Python 3
+  ok   src/ 只导入标准库（无第三方运行时依赖）
+  ok   最小环境（仅 PATH/QUOTAGENT_PY）下文档门可运行
+  ok   干净副本不含 .venv/ tmp/ 等宿主产物
+  ok   干净副本：tools/verify.sh docs 全绿
+  ok   干净副本：tools/run.sh 可驱动 CLI（未设置 PYTHONPATH）
+  ok   tools/bootstrap.sh 幂等：首次 created、再次 reused，清单落在仓库内
+  ok   运行产物只落在 .venv/ tmp/ __pycache__/（不污染仓库）
+  ok   跑完后门扫描范围不变（临时副本已清理，门保持确定性）

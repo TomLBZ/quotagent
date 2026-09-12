@@ -87,3 +87,79 @@ commit: 8dab774
   ok   delta 的 before/after 与版本内容一致（可复核）
   ok   缺 quote_by 截止时间的包不允许发布（已发布包必须有报价截止）
   ok   发布与修订分别落账（rfq/published, rfq/amended），且哈希链完整
+--- 追加运行 2026-09-12T00:57:22Z ---
+EV-020 — AC-RFQ-002: 已发布版本字段不可原地修改；amend 产生新版本与字段级 delta
+
+时间: 2026-09-12T00:57:22Z
+命令: qa ac AC-RFQ-002
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-RFQ-002
+commit: 1dce423
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-RFQ-002",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "发布产生不可变版本 rev=1 且带内容哈希",
+      "ok": true,
+      "detail": "rev=1 hash=sha256:e573d49b4…"
+    },
+    {
+      "name": "已发布版本对消费者只读（原地写入抛错）",
+      "ok": true,
+      "detail": "error='mappingproxy' object does not support item assignment"
+    },
+    {
+      "name": "通过 API 修改已发布版本被拒绝（改即 rev+1）",
+      "ok": true,
+      "detail": "error=已发布版本 (rev=1) 的条目 L-001 的字段 'qty' 不可原地修改：必须 amend 产生新版本（rev=2），旧版本永久保留 hash_unchanged=True"
+    },
+    {
+      "name": "amend 产生新版本 rev=2（旧版本永久保留）",
+      "ok": true,
+      "detail": "rev=2 rev1_qty=120 rev2_qty=150"
+    },
+    {
+      "name": "delta 是字段级的（逐字段 before/after），不是整包快照",
+      "ok": true,
+      "detail": "deltas=[{\"item_id\": \"package\", \"field\": \"deadlines.clarify_by\", \"before\": \"2026-09-20T00:00:00Z\", \"after\": \"2026-09-22T00:00:00Z\"}, {\"item_id\": \"package\", \"field\": \"deadlines.quote_by\", \"before\": \"2026-09-25T00:00:00Z\", \"after\": \"2026-09-28T00:00:00Z\"}, {\"item_id\": \"L-001\", \"field\": \"qty\", \"before\": 120, \"after\": 150}, {\"item"
+    },
+    {
+      "name": "delta 的 before/after 与版本内容一致（可复核）",
+      "ok": true,
+      "detail": "qty delta={'item_id': 'L-001', 'field': 'qty', 'before': 120, 'after': 150}"
+    },
+    {
+      "name": "缺 quote_by 截止时间的包不允许发布（已发布包必须有报价截止）",
+      "ok": true,
+      "detail": "error=包定义校验失败，拒绝发布: 缺少 deadlines.quote_by（已发布包必须有报价截止时间）"
+    },
+    {
+      "name": "发布与修订分别落账（rfq/published, rfq/amended），且哈希链完整",
+      "ok": true,
+      "detail": "published=1 amended=1 chain_ok=True"
+    }
+  ],
+  "evidence_refs": [
+    "EV-020"
+  ],
+  "command": "qa ac AC-RFQ-002",
+  "phase": "P0",
+  "title": "已发布版本字段不可原地修改；amend 产生新版本与字段级 delta",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-RFQ-002 — 已发布版本字段不可原地修改；amend 产生新版本与字段级 delta
+  ok   发布产生不可变版本 rev=1 且带内容哈希
+  ok   已发布版本对消费者只读（原地写入抛错）
+  ok   通过 API 修改已发布版本被拒绝（改即 rev+1）
+  ok   amend 产生新版本 rev=2（旧版本永久保留）
+  ok   delta 是字段级的（逐字段 before/after），不是整包快照
+  ok   delta 的 before/after 与版本内容一致（可复核）
+  ok   缺 quote_by 截止时间的包不允许发布（已发布包必须有报价截止）
+  ok   发布与修订分别落账（rfq/published, rfq/amended），且哈希链完整

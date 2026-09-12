@@ -111,3 +111,103 @@ commit: 8dab774
   ok   拒绝路径不落账 quote/normalized（不产生结果）
   ok   拒绝路径落账 quote/normalize-rejected（留痕，可审计）
   ok   拒绝事件带可机检字段（code/reason/next_action/item_id）
+--- 追加运行 2026-09-12T00:57:21Z ---
+EV-017 — AC-NORM-002: 缺计量规则或汇率时点不可得 → 拒绝并给出理由，且不产生结果
+
+时间: 2026-09-12T00:57:21Z
+命令: qa ac AC-NORM-002
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-NORM-002
+commit: 1dce423
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-NORM-002",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "unit_not_in_measure_rule → 拒绝且不产生结果",
+      "ok": true,
+      "detail": "result=None code=unit_not_in_measure_rule"
+    },
+    {
+      "name": "unit_not_in_measure_rule 的拒绝给出理由与下一步动作（P6：fail loud 且可行动）",
+      "ok": true,
+      "detail": "reason=条目 L-001 的报量单位 'bag' 不在计量规则允许集合 ['m', 'cm', 'km'] 内（该单位也不在单位换算表中） next=改用允许单位重新报量，或由承包商升版计量规则；系统不做单位猜测"
+    },
+    {
+      "name": "measure_rule_missing → 拒绝且不产生结果",
+      "ok": true,
+      "detail": "result=None code=measure_rule_missing"
+    },
+    {
+      "name": "measure_rule_missing 的拒绝给出理由与下一步动作（P6：fail loud 且可行动）",
+      "ok": true,
+      "detail": "reason=清单条目 'L-004' 没有计量规则（无法确定基准单位/容差） next=为该条目补充计量规则（基准单位、允许单位、容差）后重新归一"
+    },
+    {
+      "name": "fx_timepoint_unavailable → 拒绝且不产生结果",
+      "ok": true,
+      "detail": "result=None code=fx_timepoint_unavailable"
+    },
+    {
+      "name": "fx_timepoint_unavailable 的拒绝给出理由与下一步动作（P6：fail loud 且可行动）",
+      "ok": true,
+      "detail": "reason=USD→CNY 在时点 '2026-01-01T00:00:00Z' 没有可用汇率 next=提供该时点的汇率（或在报价中声明 fx_at）后重新提交；不得用其它时点或缓存汇率兜底"
+    },
+    {
+      "name": "tax_rule_missing → 拒绝且不产生结果",
+      "ok": true,
+      "detail": "result=None code=tax_rule_missing"
+    },
+    {
+      "name": "tax_rule_missing 的拒绝给出理由与下一步动作（P6：fail loud 且可行动）",
+      "ok": true,
+      "detail": "reason=税制代码 'xx-vat-99' 不在税制表中（无法判定含税/不含税口径） next=补充该税率或改用已登记税制代码后重新提交"
+    },
+    {
+      "name": "四条拒绝理由互不相同（不是笼统的'归一失败'）",
+      "ok": true,
+      "detail": "codes=['unit_not_in_measure_rule', 'measure_rule_missing', 'fx_timepoint_unavailable', 'tax_rule_missing']"
+    },
+    {
+      "name": "拒绝路径不落账 quote/normalized（不产生结果）",
+      "ok": true,
+      "detail": "quote/normalized=0"
+    },
+    {
+      "name": "拒绝路径落账 quote/normalize-rejected（留痕，可审计）",
+      "ok": true,
+      "detail": "count=4"
+    },
+    {
+      "name": "拒绝事件带可机检字段（code/reason/next_action/item_id）",
+      "ok": true,
+      "detail": "keys=['code', 'details', 'item_id', 'next_action', 'package_id', 'quote_id', 'reason', 'rfq_rev']"
+    }
+  ],
+  "evidence_refs": [
+    "EV-017"
+  ],
+  "command": "qa ac AC-NORM-002",
+  "phase": "P0",
+  "title": "缺计量规则或汇率时点不可得 → 拒绝并给出理由，且不产生结果",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-NORM-002 — 缺计量规则或汇率时点不可得 → 拒绝并给出理由，且不产生结果
+  ok   unit_not_in_measure_rule → 拒绝且不产生结果
+  ok   unit_not_in_measure_rule 的拒绝给出理由与下一步动作（P6：fail loud 且可行动）
+  ok   measure_rule_missing → 拒绝且不产生结果
+  ok   measure_rule_missing 的拒绝给出理由与下一步动作（P6：fail loud 且可行动）
+  ok   fx_timepoint_unavailable → 拒绝且不产生结果
+  ok   fx_timepoint_unavailable 的拒绝给出理由与下一步动作（P6：fail loud 且可行动）
+  ok   tax_rule_missing → 拒绝且不产生结果
+  ok   tax_rule_missing 的拒绝给出理由与下一步动作（P6：fail loud 且可行动）
+  ok   四条拒绝理由互不相同（不是笼统的'归一失败'）
+  ok   拒绝路径不落账 quote/normalized（不产生结果）
+  ok   拒绝路径落账 quote/normalize-rejected（留痕，可审计）
+  ok   拒绝事件带可机检字段（code/reason/next_action/item_id）

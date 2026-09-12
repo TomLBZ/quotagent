@@ -255,3 +255,85 @@ commit: 056e572
   ok   tools/verify.sh ac <ID> 透传退出码（通过 0 / 未知 2）
   ok   阶段门未到达返回 2（不伪装成失败）
   ok   失败 AC 映射退出码 1 且给出首个失败断言的差异
+--- 追加运行 2026-09-12T00:57:20Z ---
+EV-008 — AC-RUNTIME-002: CLI 骨架契约：JSON 报告、退出码、未知入口非零
+
+时间: 2026-09-12T00:57:20Z
+命令: qa ac AC-RUNTIME-002
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-RUNTIME-002
+commit: 1dce423
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-RUNTIME-002",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "qa ac 输出 JSON 且含契约键 ac/status/assertions/evidence_refs",
+      "ok": true,
+      "detail": "exit=0 keys=['ac', 'assertions', 'command', 'evidence_refs', 'exit_code', 'first_failure', 'phase', 'status', 'title']"
+    },
+    {
+      "name": "断言逐条带 name/ok/detail",
+      "ok": true,
+      "detail": "assertions=2"
+    },
+    {
+      "name": "未注册 AC：退出码 2 且给出可读原因",
+      "ok": true,
+      "detail": "exit=2 } / [UNKNOWN] AC-NOT-A-REAL-AC —  /   首个失败: 未注册的 AC: AC-NOT-A-REAL-AC（已注册: AC-AUDIT-001, AC-AUDIT-002, AC-DESIGN-001, AC-DESIGN-002, AC-DESIGN-003, AC-EVT-001, AC-EVT-002, AC-INTAKE-001...）"
+    },
+    {
+      "name": "qa list 覆盖本批全部 AC",
+      "ok": true,
+      "detail": "missing=[]"
+    },
+    {
+      "name": "qa --version 退出码 0",
+      "ok": true,
+      "detail": "exit=0"
+    },
+    {
+      "name": "未实现的场景集返回 2 且指明 roadmap 任务（T-114）",
+      "ok": true,
+      "detail": "exit=2   \"roadmap_task\": \"T-114\" / } / 场景集 s1 尚未实现：对应 roadmap 任务 T-114；P0 先以 AC 级断言取证（docs/work/roadmap.md §2 S0.13）"
+    },
+    {
+      "name": "tools/verify.sh ac <ID> 透传退出码（通过 0 / 未知 2）",
+      "ok": true,
+      "detail": "pass=0 unknown=2"
+    },
+    {
+      "name": "阶段门未到达返回 2（不伪装成失败）",
+      "ok": true,
+      "detail": "exit=2"
+    },
+    {
+      "name": "失败 AC 映射退出码 1 且给出首个失败断言的差异",
+      "ok": true,
+      "detail": "exit=1 first=必失败（负控）: 差异：期望 1 得到 2"
+    }
+  ],
+  "evidence_refs": [
+    "EV-008"
+  ],
+  "command": "qa ac AC-RUNTIME-002",
+  "phase": "P0",
+  "title": "CLI 骨架契约：JSON 报告、退出码、未知入口非零",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-RUNTIME-002 — CLI 骨架契约：JSON 报告、退出码、未知入口非零
+  ok   qa ac 输出 JSON 且含契约键 ac/status/assertions/evidence_refs
+  ok   断言逐条带 name/ok/detail
+  ok   未注册 AC：退出码 2 且给出可读原因
+  ok   qa list 覆盖本批全部 AC
+  ok   qa --version 退出码 0
+  ok   未实现的场景集返回 2 且指明 roadmap 任务（T-114）
+  ok   tools/verify.sh ac <ID> 透传退出码（通过 0 / 未知 2）
+  ok   阶段门未到达返回 2（不伪装成失败）
+  ok   失败 AC 映射退出码 1 且给出首个失败断言的差异
