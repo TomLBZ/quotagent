@@ -108,6 +108,8 @@ class Ledger:
         self._records: list[dict] = []
         self._malformed: list[dict] = []
         self._dedup: dict[tuple, int] = {}
+        self._append_hooks: list[Callable[[dict], None]] = []
+        self._events = None
         self._inc: dict[str, dict] = {view: _new_state(view) for view in REDUCERS}
         self._load()
         if verify_on_open:
@@ -115,6 +117,25 @@ class Ledger:
             if not report["ok"]:
                 self._frozen = True
                 self.open_failure = report
+
+    # --- 观测挂接（`kernel/ledger-appended` 是 live 事件，不进账本） --------
+    def attach_events(self, bus) -> None:
+        self._events = bus
+
+    def on_append(self, callback: Callable[[dict], None]) -> Callable[[], None]:
+        """订阅追加通知；返回 disposer（订阅也是 effect，卸载后不得残留）。"""
+        self._append_hooks.append(callback)
+
+        def dispose() -> None:
+            try:
+                self._append_hooks.remove(callback)
+            except ValueError:
+                pass
+
+        return dispose
+
+    def append_hook_count(self) -> int:
+        return len(self._append_hooks)
 
     # --- 只读属性 ---------------------------------------------------------
     @property
@@ -182,6 +203,12 @@ class Ledger:
         if not report["ok"]:
             self._frozen = True
             raise LedgerIntegrityError(f"追加后哈希链校验失败: {report}")
+        for hook in list(self._append_hooks):
+            hook({"seq": record["seq"], "type": record["type"], "entry_hash": record["entry_hash"]})
+        if self._events is not None:
+            self._events.emit("kernel/ledger-appended",
+                              {"seq": record["seq"], "type": record["type"],
+                               "entry_hash": record["entry_hash"], "realm": record["realm"]})
         return LedgerRef(record["seq"], record["entry_hash"])
 
     def assert_healthy(self) -> None:

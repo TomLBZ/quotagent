@@ -32,6 +32,8 @@
 | `kernel/plugin-mounted` / `kernel/plugin-unmounted` | emit | live | `ctx.plugin` | 诊断、`ctx.plugins` |
 | `kernel/config-updated` | waterfall | live | 自进化或人工配置更新 | 否决者（合规/安全） |
 | `kernel/qep-rejected` | emit | durable | `ctx.qep` | 运维告警、审计 |
+| `kernel/qep-sent` / `kernel/qep-received` | emit | ✔ | `ctx.qep` | 重发与出站链恢复（`03` §7）、审计 |
+| `kernel/qep-duplicate-dropped` | emit | ✔ | `ctx.qep` | 幂等命中的可审计留痕（`03` §5） |
 
 ## 3. 业务事件
 
@@ -83,4 +85,5 @@
 | 无引用数值进入决策 | `agent/output-drafted` | waterfall | 拒绝输出，要求补引用 |
 | 不可归一的口径 | `quote/normalize` | waterfall | 中断并产出拒绝理由 |
 | 未广播的澄清答案 | `clarification/broadcast-incomplete` | bail | 拒收 |
+| 澄清答案含对方私域信息 | `clarification/answer-drafted` | waterfall | 拦截该答案外发，保留原文供人审 |
 | 内核配置被自改 | `kernel/config-updated` | waterfall | 无条件否决（INV-010） |

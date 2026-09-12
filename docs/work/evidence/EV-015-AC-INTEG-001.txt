@@ -1,0 +1,83 @@
+EV-015-AC-INTEG-001（实现前：红）
+
+时间: 2026-09-12T00:48:14Z
+命令: tools/run.sh -m quotagent.qa ac AC-INTEG-001
+实现前 commit: 4cd3b77
+退出码: 非零（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/src/quotagent/qa/checks_events.py", line 8, in <module>
+    from ..kernel.events import EventBus, EventModeError, UnknownEventError
+ModuleNotFoundError: No module named 'quotagent.kernel.events'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T00:48:15Z ---
+EV-015 — AC-INTEG-001: 文件投递为原子写（临时文件 + rename）；半写文件不被读取
+
+时间: 2026-09-12T00:48:15Z
+命令: qa ac AC-INTEG-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-INTEG-001
+commit: 4cd3b77
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-INTEG-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "写入先落临时文件（*.tmp），最终名在 commit 前不可见",
+      "ok": true,
+      "detail": "staged=000001-01M29HC7NQHD5S81C38SP032BS.qep.json.tmp"
+    },
+    {
+      "name": "半写文件不被读取（pending 为空）",
+      "ok": true,
+      "detail": "pending=[]"
+    },
+    {
+      "name": "commit 使用 rename 原子落盘，命名约定为 <seq:06d>-<msg_id>.qep.json",
+      "ok": true,
+      "detail": "final=000001-01M29HC7NQHD5S81C38SP032BS.qep.json staged_gone=True"
+    },
+    {
+      "name": "完整报文可被读取，且重复扫描幂等（不重复产出）",
+      "ok": true,
+      "detail": "pending=['000001-01M29HC7NQHD5S81C38SP032BS.qep.json']"
+    },
+    {
+      "name": "损坏的最终文件不被当作报文读取，且被隔离并记录原因（不静默丢弃）",
+      "ok": true,
+      "detail": "pending=1 rejected=[('000999-01JZZZZZZZZZZZZZZZZZZZZZZZ.qep.json', 'JSON 解析失败: JSONDecodeError: Expecting va')]"
+    },
+    {
+      "name": "未完成的 *.tmp 被忽略（既不入账也不误判为损坏）",
+      "ok": true,
+      "detail": "rejected=['000999-01JZZZZZZZZZZZZZZZZZZZZZZZ.qep.json']"
+    },
+    {
+      "name": "投递文件可被接收方验证并入账（端到端投递闭环）",
+      "ok": true,
+      "detail": "msg_id=01M29HC7NQHD5S81C38SP032BS facts=1"
+    }
+  ],
+  "evidence_refs": [
+    "EV-015"
+  ],
+  "command": "qa ac AC-INTEG-001",
+  "phase": "P0",
+  "title": "文件投递为原子写（临时文件 + rename）；半写文件不被读取",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-INTEG-001 — 文件投递为原子写（临时文件 + rename）；半写文件不被读取
+  ok   写入先落临时文件（*.tmp），最终名在 commit 前不可见
+  ok   半写文件不被读取（pending 为空）
+  ok   commit 使用 rename 原子落盘，命名约定为 <seq:06d>-<msg_id>.qep.json
+  ok   完整报文可被读取，且重复扫描幂等（不重复产出）
+  ok   损坏的最终文件不被当作报文读取，且被隔离并记录原因（不静默丢弃）
+  ok   未完成的 *.tmp 被忽略（既不入账也不误判为损坏）
+  ok   投递文件可被接收方验证并入账（端到端投递闭环）

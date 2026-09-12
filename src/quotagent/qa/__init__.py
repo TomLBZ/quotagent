@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 # 导入即注册（顺序无关，注册表按键排序输出）
-from . import checks_audit, checks_design, checks_runtime  # noqa: F401
+from . import (checks_audit, checks_design, checks_events, checks_plugin,  # noqa: F401
+               checks_qep, checks_runtime)
 from .registry import (ACReport, Assertion, ACCheck, REGISTRY, list_acs, run_ac,  # noqa: F401
                        run_check, EXIT_CONFIG, EXIT_FAIL, EXIT_PASS)
 

@@ -1,0 +1,89 @@
+EV-012-AC-PLUGIN-002（实现前：红）
+
+时间: 2026-09-12T00:48:14Z
+命令: tools/run.sh -m quotagent.qa ac AC-PLUGIN-002
+实现前 commit: 4cd3b77
+退出码: 非零（red），原始输出如下
+
+--- 原始输出（实现前） ---
+  File "/workspace/projects/quotagent/src/quotagent/qa/checks_events.py", line 8, in <module>
+    from ..kernel.events import EventBus, EventModeError, UnknownEventError
+ModuleNotFoundError: No module named 'quotagent.kernel.events'
+
+--- 实现后（绿）---
+--- 追加运行 2026-09-12T00:48:15Z ---
+EV-012 — AC-PLUGIN-002: 依赖失活 → 消费者非激活；恢复 → 自动重载且不迁移草稿
+
+时间: 2026-09-12T00:48:15Z
+命令: qa ac AC-PLUGIN-002
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-PLUGIN-002
+commit: 4cd3b77
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-PLUGIN-002",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "依赖未就绪不得激活（FR-PLUGIN-001）",
+      "ok": true,
+      "detail": "status=pending effects=[] log=[]"
+    },
+    {
+      "name": "依赖就绪后自动激活，且注入的服务可取值",
+      "ok": true,
+      "detail": "status=active effects=1 norm={'table': 'units@v1'}"
+    },
+    {
+      "name": "激活期间草稿存在（用于验证不会跨重载迁移）",
+      "ok": true,
+      "detail": "drafts={'quote': {'amount': 1000, 'epoch': 1}}"
+    },
+    {
+      "name": "依赖失活 → 消费者转为非激活且 effects 全部回收",
+      "ok": true,
+      "detail": "status=inactive effects=[]"
+    },
+    {
+      "name": "依赖失活时草稿不迁移（按 01-architecture.md §4：口径可能已变，必须重新确认）",
+      "ok": true,
+      "detail": "drafts={}（失活前={'quote': {'amount': 1000, 'epoch': 1}}）"
+    },
+    {
+      "name": "依赖恢复 → 自动重载（epoch 递增），无需人工重新装载",
+      "ok": true,
+      "detail": "status=active epoch=1->2 effects=1"
+    },
+    {
+      "name": "重载后草稿是重新生成的（epoch=2），不是上一轮迁移过来的（epoch=1）",
+      "ok": true,
+      "detail": "drafts={'quote': {'amount': 1000, 'epoch': 2}} norm={'table': 'units@v2'}"
+    },
+    {
+      "name": "每次激活/失活都有记录（可观测，不是静默状态变化）",
+      "ok": true,
+      "detail": "activation_log=['epoch-1', 'epoch-2']"
+    }
+  ],
+  "evidence_refs": [
+    "EV-012"
+  ],
+  "command": "qa ac AC-PLUGIN-002",
+  "phase": "P0",
+  "title": "依赖失活 → 消费者非激活；恢复 → 自动重载且不迁移草稿",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-PLUGIN-002 — 依赖失活 → 消费者非激活；恢复 → 自动重载且不迁移草稿
+  ok   依赖未就绪不得激活（FR-PLUGIN-001）
+  ok   依赖就绪后自动激活，且注入的服务可取值
+  ok   激活期间草稿存在（用于验证不会跨重载迁移）
+  ok   依赖失活 → 消费者转为非激活且 effects 全部回收
+  ok   依赖失活时草稿不迁移（按 01-architecture.md §4：口径可能已变，必须重新确认）
+  ok   依赖恢复 → 自动重载（epoch 递增），无需人工重新装载
+  ok   重载后草稿是重新生成的（epoch=2），不是上一轮迁移过来的（epoch=1）
+  ok   每次激活/失活都有记录（可观测，不是静默状态变化）

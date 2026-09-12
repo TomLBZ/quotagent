@@ -13,6 +13,7 @@
 | ADR-0005 | 自进化必须经影子重放 + 评测门 + canary | accepted |
 | ADR-0006 | QEP 传输无关，且协议版本不兼容即拒绝 | accepted |
 | ADR-0007 | P0 实现栈（Python 3.9+ 仅标准库）+ 仓库内自包含运行时 + 账本文件格式 | accepted |
+| ADR-0008 | P0 的 QEP 落地细节：HMAC-SHA256 签名占位 + 文件投递命名/原子写 + QEP 落账事件 | accepted |
 
 ## 格式
 

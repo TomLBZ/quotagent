@@ -90,7 +90,8 @@ ChangeOrder:  proposed ──priced──▶ priced ──human_approve──▶
 
 ```
 kernel/*            内核：ledger-appended, plugin-mounted, plugin-unmounted,
-                    config-updated, qep-rejected, model-call, model-replied
+                    config-updated, qep-rejected, qep-sent, qep-received,
+                    qep-duplicate-dropped, model-call, model-replied
 rfq/*               published, amended, closed, version-mismatch
 clarification/*     asked, answered, broadcast, reopened
 quote/*             drafted, priced, submitted, revised, withdrawn, rejected-by-guard

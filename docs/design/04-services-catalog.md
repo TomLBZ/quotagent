@@ -22,18 +22,21 @@
 ### `ctx.events` [P0]
 - 职责：五模式事件分发（`emit/parallel/serial/bail/waterfall`），注册即 effect。
 - Definition：`on(name, listener, options) -> disposer` · `emit/parallel/serial/bail/waterfall(name, ...args)`。
+- P0 实现：`src/quotagent/kernel/events.py`（声明表 + 五模式；waterfall 声明必须给出短路理由）。
 - 不变量：监听器随卸载自动注销；waterfall 监听者不调 `next()` 即短路且必须显式记录为设计意图。
 - 关联：FR-EVT-001。
 
 ### `ctx.plugin` [P0]
 - 职责：插件装载、依赖（coeffect）协调、卸载回收；对应 Cordis 的 `registry+fiber+reflect` 语义。
 - Definition：`mount(plugin, config) -> fiber` · `unmount(fiber)` · `update(fiber, config)` · `effects(fiber) -> EffectMeta[]`。
+- P0 实现：`src/quotagent/kernel/plugin.py`（fiber 状态机 pending/active/inactive/disposed；ctx 内的注册自动登记为 effect）。
 - 不变量：依赖未就绪不得激活；`unmount` 后 `effects()` 为空且无残留定时器/订阅/外部通知。
 - 关联：FR-PLUGIN-001..003，AC-PLUGIN-001。
 
 ### `ctx.qep` [P0]
 - 职责：信封构造/校验/签名/验签、版本协商、幂等去重、重发。
 - Definition：`envelope(type, class, body, refs) -> Envelope` · `validate(env) -> Result` · `send(env)` · `receive(raw) -> Event`。
+- P0 实现：`src/quotagent/kernel/qep.py` + 文件投递 `src/quotagent/kernel/delivery.py`；签名与命名规则见 ADR-0008。
 - 不变量：`class=commitment` 无 `approvals` 即拒收；`qep_version` 不兼容即拒绝（不静默降级）。
 - 关联：FR-QEP-001..008，AC-QEP-001..004。
 

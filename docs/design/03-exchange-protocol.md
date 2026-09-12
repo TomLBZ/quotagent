@@ -44,6 +44,8 @@
 - `body_hash` 覆盖规范化后的 `body`（键排序、无空白、UTF-8 NFC）。
 - `prev_hash` 指向本方账本中上一条已发送报文的 `body_hash`，形成链，用于检测篡改与丢失。
 - `signature` 覆盖除 `signature` 外的整个信封。
+- P0 的签名机制与文件投递命名/原子写规则见 ADR-0008；落账事件 `kernel/qep-sent` /
+  `kernel/qep-received` / `kernel/qep-duplicate-dropped` 见 `05-events.md` §2。
 
 ## 3. 报文体类型
 
