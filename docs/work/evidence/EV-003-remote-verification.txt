@@ -42,3 +42,17 @@ push 退出码: 0，ls-remote 退出码: 0，回读与本地 HEAD 一致: True
       `git fetch origin && git log --oneline -3 origin/main` 比对确认；
       .agents/state.json 的 last_verified_commit 指向上面这次已回读的提交。
 
+
+--- 推送 7（B2：事件五模式 / 插件装载 / QEP 与文件投递）---
+时间: 2026-09-12T00:49:01Z
+commit: 056e5723417fa377042d416bfbb7b29f1f2ca00d
+命令: git push -q origin main && git ls-remote origin
+push 退出码: 0，ls-remote 退出码: 0，回读与本地 HEAD 一致: True
+结果（写本记录时回读）:
+  056e5723417fa377042d416bfbb7b29f1f2ca00d	HEAD
+  056e5723417fa377042d416bfbb7b29f1f2ca00d	refs/heads/main
+本地 HEAD: 056e5723417fa377042d416bfbb7b29f1f2ca00d
+说明: 本文件随后的证据/状态同步提交（推送 8）的回读结果，由下一次接手的第一步
+      `git fetch origin && git log --oneline -3 origin/main` 比对确认；
+      .agents/state.json 的 last_verified_commit 指向上面这次已回读的提交。
+

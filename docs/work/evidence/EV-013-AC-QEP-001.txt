@@ -81,3 +81,73 @@ commit: 4cd3b77
   ok   qep_version 不兼容 → 拒绝（不静默降级，03 §6）
   ok   class=commitment 缺 approvals → 拒收（FR-QEP-002 / INV-005）
   ok   批准来自 agent 而非人 → 拒收（代签禁止，FR-APPROVE-001）
+--- 追加运行 2026-09-12T00:48:56Z ---
+EV-013 — AC-QEP-001: 信封构造后可验签；任一字段被改动即验签失败
+
+时间: 2026-09-12T00:48:56Z
+命令: qa ac AC-QEP-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-QEP-001
+commit: 056e572
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-QEP-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "信封含 03-exchange-protocol.md §2 的全部字段",
+      "ok": true,
+      "detail": "missing=[]"
+    },
+    {
+      "name": "构造后可验签（含摘要与签名）",
+      "ok": true,
+      "detail": "body_hash=sha256:442bdad155b… signature=hmac-sha256:con-B-k1:22f3f…"
+    },
+    {
+      "name": "任一字段被改动 → 验签失败（逐字段实测）",
+      "ok": true,
+      "detail": "仍可验签的字段=[]（共测 14 个字段）"
+    },
+    {
+      "name": "body_hash 与 body 不一致 → validate 不通过",
+      "ok": true,
+      "detail": "errors=['body_hash 与 body 不一致（内容被改动）']"
+    },
+    {
+      "name": "qep_version 不兼容 → 拒绝（不静默降级，03 §6）",
+      "ok": true,
+      "detail": "errors=[\"qep_version 不兼容: '9.9'（本端支持 ['1.0']）\"]"
+    },
+    {
+      "name": "class=commitment 缺 approvals → 拒收（FR-QEP-002 / INV-005）",
+      "ok": true,
+      "detail": "errors=['commitment 缺 approvals：拒收（FR-QEP-002 / INV-005）']"
+    },
+    {
+      "name": "批准来自 agent 而非人 → 拒收（代签禁止，FR-APPROVE-001）",
+      "ok": true,
+      "detail": "errors=[\"批准必须由人产生，收到 'agent:price-agent'（代签禁止，FR-APPROVE-001）\"]"
+    }
+  ],
+  "evidence_refs": [
+    "EV-013"
+  ],
+  "command": "qa ac AC-QEP-001",
+  "phase": "P0",
+  "title": "信封构造后可验签；任一字段被改动即验签失败",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-QEP-001 — 信封构造后可验签；任一字段被改动即验签失败
+  ok   信封含 03-exchange-protocol.md §2 的全部字段
+  ok   构造后可验签（含摘要与签名）
+  ok   任一字段被改动 → 验签失败（逐字段实测）
+  ok   body_hash 与 body 不一致 → validate 不通过
+  ok   qep_version 不兼容 → 拒绝（不静默降级，03 §6）
+  ok   class=commitment 缺 approvals → 拒收（FR-QEP-002 / INV-005）
+  ok   批准来自 agent 而非人 → 拒收（代签禁止，FR-APPROVE-001）

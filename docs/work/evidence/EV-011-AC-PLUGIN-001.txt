@@ -75,3 +75,67 @@ commit: 4cd3b77
   ok   卸载后无残留监听/订阅/定时器（INV-002）
   ok   卸载后定时器不再触发、订阅不再回调
   ok   每个 effect 都有一次性 disposer，且卸载时全部被调用
+--- 追加运行 2026-09-12T00:48:55Z ---
+EV-011 — AC-PLUGIN-001: 装载后 effects() 非空；卸载后为空且无残留定时器/订阅/监听
+
+时间: 2026-09-12T00:48:55Z
+命令: qa ac AC-PLUGIN-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-PLUGIN-001
+commit: 056e572
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-PLUGIN-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "装载后 effects() 非空，且三类注册（监听/订阅/定时器）都真实生效",
+      "ok": true,
+      "detail": "status=active effects=['listener', 'subscription', 'timer'] listeners=1/0 hooks=1/0 timers=1"
+    },
+    {
+      "name": "定时器与订阅在装载期间真的在工作（不是只登记不生效）",
+      "ok": true,
+      "detail": "ticks=4 hook_calls=[1]"
+    },
+    {
+      "name": "卸载后 effects() 为空且状态为 disposed",
+      "ok": true,
+      "detail": "effects=[] status=disposed"
+    },
+    {
+      "name": "卸载后无残留监听/订阅/定时器（INV-002）",
+      "ok": true,
+      "detail": "after={'listeners': 0, 'hooks': 0, 'timers': 0} base={'listeners': 0, 'hooks': 0, 'timers': 0}"
+    },
+    {
+      "name": "卸载后定时器不再触发、订阅不再回调",
+      "ok": true,
+      "detail": "ticks=4->4 hook_calls=1"
+    },
+    {
+      "name": "每个 effect 都有一次性 disposer，且卸载时全部被调用",
+      "ok": true,
+      "detail": "disposals=[{'id': 'demo-plugin#1', 'kind': 'listener', 'label': 'ledger-tap', 'owner': 'demo-plugin', 'disposed': True}, {'id': 'demo-plugin#2', 'kind': 'subscription', 'label': 'demo-plugin:ledger-append', 'owner': 'demo-plugin', 'disposed': True}, {'id': 'demo-plugin#3', 'kind': 'timer', 'label': 'demo-plugin:interval', 'owner': 'demo-plugin', 'disposed': True}]"
+    }
+  ],
+  "evidence_refs": [
+    "EV-011"
+  ],
+  "command": "qa ac AC-PLUGIN-001",
+  "phase": "P0",
+  "title": "装载后 effects() 非空；卸载后为空且无残留定时器/订阅/监听",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-PLUGIN-001 — 装载后 effects() 非空；卸载后为空且无残留定时器/订阅/监听
+  ok   装载后 effects() 非空，且三类注册（监听/订阅/定时器）都真实生效
+  ok   定时器与订阅在装载期间真的在工作（不是只登记不生效）
+  ok   卸载后 effects() 为空且状态为 disposed
+  ok   卸载后无残留监听/订阅/定时器（INV-002）
+  ok   卸载后定时器不再触发、订阅不再回调
+  ok   每个 effect 都有一次性 disposer，且卸载时全部被调用

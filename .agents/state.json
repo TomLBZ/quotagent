@@ -8,7 +8,7 @@
   "last_verified_command": "tools/verify.sh docs && tools/run.sh -m quotagent.qa ac AC-EVT-001",
   "last_verified_result": "PASS (14 条 AC：AC-DESIGN-001..003、AC-RUNTIME-001/002、AC-AUDIT-001/002、AC-EVT-001/002、AC-PLUGIN-001/002、AC-QEP-001/002、AC-INTEG-001)",
   "last_verified_evidence": "docs/work/evidence/EV-004-AC-DESIGN-001.txt",
-  "last_verified_commit": "4cd3b77ce56046d0bdea5ed04c13f8da8715bb7b",
+  "last_verified_commit": "056e5723417fa377042d416bfbb7b29f1f2ca00d",
   "blockers": [],
   "human_required": [
     "T-117 的 V-002 盲测（供应商是否接受结构化报价）——需真实供应商参与，agent 只能备料与登记结论"

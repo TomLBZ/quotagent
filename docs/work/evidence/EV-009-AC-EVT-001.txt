@@ -87,3 +87,79 @@ commit: 4cd3b77
   ok   waterfall —— 中间件：不调 next() 即短路（委托链正常时顺序执行）
   ok   每个事件只有一个 @mode：用错分发方法/未声明事件即报错（05-events.md §0 规则 1）
   ok   on() 返回 disposer，撤销后监听器不再被调用（FR-EVT-002）
+--- 追加运行 2026-09-12T00:48:55Z ---
+EV-009 — AC-EVT-001: 五模式的分发顺序与返回值符合 05-events.md §1 判据
+
+时间: 2026-09-12T00:48:55Z
+命令: qa ac AC-EVT-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-EVT-001
+commit: 056e572
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-EVT-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "emit —— 通知/留痕：全部调用、不看返回值",
+      "ok": true,
+      "detail": "order=['A', 'B'] return=None"
+    },
+    {
+      "name": "parallel —— 并发扇出：全部跑完，有错则聚合抛错",
+      "ok": true,
+      "detail": "ran=['A', 'B', 'C'] error=AggregateEventError(\"parallel 事件 't/parallel' 有 1 个监听器抛错: t/parallel#4: ValueError(listener B failed)\")"
+    },
+    {
+      "name": "parallel —— 无错时按注册顺序返回结果列表",
+      "ok": true,
+      "detail": "results=[1, 2]"
+    },
+    {
+      "name": "serial —— 链式决策：遇非 None 即停",
+      "ok": true,
+      "detail": "result='stop' called=['A', 'B']"
+    },
+    {
+      "name": "bail —— 首个有效决策胜出：遇真值即停",
+      "ok": true,
+      "detail": "result='winner' called=['A', 'B', 'C']"
+    },
+    {
+      "name": "waterfall —— 中间件：不调 next() 即短路（委托链正常时顺序执行）",
+      "ok": true,
+      "detail": "result='12' called=['1', '2']"
+    },
+    {
+      "name": "每个事件只有一个 @mode：用错分发方法/未声明事件即报错（05-events.md §0 规则 1）",
+      "ok": true,
+      "detail": "emit->EventModeError(\"事件 't/waterfall' 的 @mode 是 waterfall，只能用 waterfall() 分发（05-events.md §0 规则 1）\") waterfall->EventModeError(\"事件 't/emit' 的 @mode 是 emit，只能用 emit() 分发（05-events.md §0 规则 1）\") undeclared->UnknownEventError(\"未声明的事件 't/never-declared'；先 declare(name, mode)（05-events.md §0 规则 1）\")"
+    },
+    {
+      "name": "on() 返回 disposer，撤销后监听器不再被调用（FR-EVT-002）",
+      "ok": true,
+      "detail": "before=['X'] after=['X']"
+    }
+  ],
+  "evidence_refs": [
+    "EV-009"
+  ],
+  "command": "qa ac AC-EVT-001",
+  "phase": "P0",
+  "title": "五模式的分发顺序与返回值符合 05-events.md §1 判据",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-EVT-001 — 五模式的分发顺序与返回值符合 05-events.md §1 判据
+  ok   emit —— 通知/留痕：全部调用、不看返回值
+  ok   parallel —— 并发扇出：全部跑完，有错则聚合抛错
+  ok   parallel —— 无错时按注册顺序返回结果列表
+  ok   serial —— 链式决策：遇非 None 即停
+  ok   bail —— 首个有效决策胜出：遇真值即停
+  ok   waterfall —— 中间件：不调 next() 即短路（委托链正常时顺序执行）
+  ok   每个事件只有一个 @mode：用错分发方法/未声明事件即报错（05-events.md §0 规则 1）
+  ok   on() 返回 disposer，撤销后监听器不再被调用（FR-EVT-002）
