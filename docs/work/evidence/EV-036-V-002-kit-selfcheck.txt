@@ -1,0 +1,23 @@
+EV-036 — V-002 备料自检（agent 可执行部分；不是现场结论）
+
+时间: 2026-09-12T01:44:42Z
+命令: tools/run.sh?v002 等价 → python3 tmp/v002_selfcheck.py --evidence
+commit: 8d3acd3
+退出码: 0
+
+--- 原始输出（stdout JSON） ---
+{
+  "selfcheck": "V-002 备料自检（表单 → 归一化 → 护栏 → 比价）",
+  "not_a_field_conclusion": true,
+  "form": "docs/work/validation/examples/V-002-example-filled.csv",
+  "lines_read": 20,
+  "lines_blank": [],
+  "normalized_total_exclusive": 174486.0,
+  "tolerance_bps": 5,
+  "flags": [],
+  "tco_total": 193803.84416438357,
+  "citation_count": 18,
+  "verdict": "表单字段自洽：缺字段会让本自检变红",
+  "duration_ms": 12
+}
+

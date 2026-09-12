@@ -4,25 +4,21 @@
 
 ## 现在在哪
 
-P0 mock：S0.1–S0.14 完成（仅 T-117 待人工）。语义见 ADR-0009/0010/0011；
-本批新增 `services/{compare,guard,eval*,scenarios}.py`。
+P0 mock：S0.1–S0.14 功能完成（34 条 AC 绿）；**S0.15（T-117）备料完成、结论待人工**。
+备料：`docs/work/validation/`（12 份执行包 + 模板 + `register.json`）。`verify.sh docs|v` 均 PASS；
+自检 EV-036/037；远端已回读（EV-003）。
 
-## 最后验证
+## 下一步唯一动作（人工）
 
-`tools/verify.sh docs` PASS（43 md、0 未解析）；34 条 AC 全绿（EV-005..EV-035）；
-`suite s1..s4` 一条命令 PASS；基线报告已入库；远端 refs 已回读（EV-003）。
-
-## 下一步唯一动作
-
-T-117 现场验证 V-001..V-012（结论写入 functional-requirements §1）——**需人工**；
-V-002 盲测决定 P1 是否成立，agent 只备料。
+`tools/v-kit.sh V-00X` 领材料 → 现场执行 → 证据存 `docs/work/evidence/EV-<编号>-V-00X-*.txt` →
+填 `register.json`（`decided_by=human:*`）→ `tools/verify.sh v` → commit+push。
+详见 `docs/work/validation/README.md`；12 条有结论后 T-117 标 `done`，G0 由人签。
 
 ## 不变量
 
-内核不可自改 · 承诺需人批（绑 scope+ref）· 模型可见即账本可重建 · 私域不出 realm ·
-不可归一即拒绝 · 未标 impact 不进 TCO · 护栏只标注不否决 · 无引用即无效 ·
-反例只增不减 · AC 需可执行证据 · 一轮一批 commit+push 回读。
+内核不可自改 · 承诺需人批 · 私域不出 realm · 不可归一即拒绝 · 未标 impact 不进 TCO ·
+护栏只标注 · 无引用即无效 · **V 结论不得由 agent 代填**。
 
 ## 阻塞
 
-无技术阻塞。缺陷见 D-001/D-002。
+T-117 待现场人工（D-002）；V-002 盲测决定 P1 是否成立。

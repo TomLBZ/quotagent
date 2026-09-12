@@ -1,0 +1,15 @@
+{
+  "id": "V-00X",
+  "status": "pass",
+  "results": {
+    "samples": 0,
+    "metric": "（指标名）",
+    "value": "（值）",
+    "criterion_met": true,
+    "notes": "（可选：口径、异常、局限）"
+  },
+  "conclusion": "（一句话结论：是否达到判定标准；部分成立时写明范围）",
+  "decided_by": "human:<签字人>",
+  "decided_at": "YYYY-MM-DD",
+  "evidence": ["docs/work/evidence/EV-<编号>-V-00X-<来源>-<YYYYMMDD>.txt"]
+}

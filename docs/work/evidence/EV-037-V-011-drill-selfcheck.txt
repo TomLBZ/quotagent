@@ -1,0 +1,26 @@
+EV-037 — V-011 备料自检（agent 可执行部分；不是现场结论）
+
+时间: 2026-09-12T01:44:24Z
+命令: python3 tmp/v011_selfcheck.py --evidence
+commit: 8d3acd3
+退出码: 0
+
+--- 原始输出（stdout JSON） ---
+{
+  "selfcheck": "V-011 备料自检（构造 → 落盘 → 读回 → 验签 → 篡改被拒）",
+  "not_a_field_conclusion": true,
+  "file": "000001-01M29MK244QS0KED16X5RX14J0.qep.json",
+  "msg_id": "01M29MK244QS0KED16X5RX14J0",
+  "sha256": "a5d438018885e1e118c9ea2f5429e4951b808c200377f9845fbc4c13aa5a5602",
+  "signature_verified_locally": true,
+  "validate_ok": true,
+  "tamper_rejected": true,
+  "counterparty_command": "python3 -c \"import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())\" 000001-01M29MK244QS0KED16X5RX14J0.qep.json",
+  "drill_next_steps": [
+    "把该文件通过真实渠道发给供应商",
+    "请对方回报 sha256（应等于上面的值）",
+    "请对方用上面的命令自行核对（无需安装任何东西）"
+  ],
+  "duration_ms": 5
+}
+

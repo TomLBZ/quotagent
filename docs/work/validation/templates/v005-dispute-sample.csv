@@ -1,0 +1,11 @@
+change_id,dispute_quote,mentions_pricing_gap,item_id_missing,note
+CH-001,"原报价没有这项,现在说不清单价",yes,yes,
+CH-002,"单价是按整包给的,拆分后对不上",yes,yes,
+CH-003,"交期延后,费用怎么算没说",no,no,
+CH-004,"现场条件变了,原报价里没有条目",yes,no,
+CH-005,"计量口径不同(米/延米)",yes,yes,
+CH-006,"税率变化,谁承担",no,no,
+CH-007,"材料涨价,原单价是否含调价条款",yes,yes,
+CH-008,"范围增加但原清单没有对应条目",yes,yes,
+CH-009,"付款条件变化,利息谁付",no,no,
+CH-010,"原报价漏了措施费",yes,yes,

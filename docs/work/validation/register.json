@@ -1,0 +1,259 @@
+{
+  "schema": 1,
+  "note": "V-001..V-012 现场验证登记表（S0.15 / T-117）。结论必须由人签（decided_by=human:*）；agent 只备料与登记，不得代填结论。",
+  "rules": {
+    "status": [
+      "open",
+      "pass",
+      "fail",
+      "partial"
+    ],
+    "conclusion_required_when": [
+      "pass",
+      "fail",
+      "partial"
+    ],
+    "conclusion_forbidden_when": [
+      "open"
+    ],
+    "decided_by_prefix": "human:",
+    "evidence_dir": "docs/work/evidence",
+    "validator": "tools/verify.sh v（实现 tools/check-v-register.py）"
+  },
+  "checks": [
+    {
+      "id": "V-001",
+      "hypothesis": "澄清往返是报价周期的主要耗时来源",
+      "verification": "现场访谈 2 家承包商 + 3 家供应商，抽样 5 个已结项包",
+      "criterion": "澄清耗时占比 ≥ 20% 则成立",
+      "impact": "决定 `ctx.clarify` 的优先级",
+      "owner_role": "承包商运营 2 人（各 30 分钟）+ 供应商商务 3 人（各 20 分钟）；受访者需能翻到已结项包的过程记录",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-001.md",
+        "`templates/interview-form.md`（通用访谈记录表，V-001 用其 A 段）",
+        "`templates/v004-rev-count.csv` 同款抽样表（本次用 5 行）"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    },
+    {
+      "id": "V-002",
+      "hypothesis": "供应商愿意提交结构化报价（对称性假设）",
+      "verification": "用 S1 场景模板做 3 次盲测，看供应商是否接受模板与字段",
+      "criterion": "≥ 2/3 接受则成立",
+      "impact": "决定 P1 是否有意义（**最关键的一条**）",
+      "owner_role": "3 家真实供应商的商务/预算人员；每家 30–45 分钟，可远程",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-002.md",
+        "`templates/v002-supplier-blind-test.md`（发给供应商的说明，含 6 个问题）",
+        "`templates/v002-quote-form.csv`（结构化报价表单；由我们按 S1 场景裁剪成 20 行）",
+        "`examples/V-002-example-filled.csv`（填好的样子，可给供应商看示例）"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    },
+    {
+      "id": "V-003",
+      "hypothesis": "采购方接受『AI 排序建议 + 人工签署』",
+      "verification": "与 2 名采购负责人评审 S1 比价结果",
+      "criterion": "≥ 1 名愿意在真实包上试用则成立",
+      "impact": "决定 `ctx.compare` 的推广路径",
+      "owner_role": "2 名采购负责人（各 45 分钟）；需要能看到 S1 的比价输出（可屏幕共享）",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-003.md",
+        "`templates/v003-review-form.md`（评审表）",
+        "S1 比价结果：`tools/run.sh -m quotagent.qa suite s1` 的 `facts.ranking` + `docs/work/metrics-baseline.md`"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    },
+    {
+      "id": "V-004",
+      "hypothesis": "包边界在澄清后会被修改（需版本化）",
+      "verification": "抽样 10 个历史包的 rev 次数",
+      "criterion": "平均 rev > 1 则成立",
+      "impact": "决定 RFQ 版本化的复杂度投入",
+      "owner_role": "承包商运营/资料员 1 人（20 分钟，需能导出包的版本记录或邮件往来）",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-004.md",
+        "`templates/v004-rev-count.csv`（10 行抽样表）"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    },
+    {
+      "id": "V-005",
+      "hypothesis": "变更争议主要源于『原报价未条目化』",
+      "verification": "抽取 10 份历史变更单的争议描述",
+      "criterion": "≥ 5 份提到单价/条目缺失则成立",
+      "impact": "决定 `change` 与报价条目化的强绑定",
+      "owner_role": "商务/合同 1 人（30 分钟）",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-005.md",
+        "`templates/v005-dispute-sample.csv`"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    },
+    {
+      "id": "V-006",
+      "hypothesis": "规模上界：条目 ≤2000、投标人 ≤50、事件 ≤10⁶",
+      "verification": "向现场索取真实项目统计",
+      "criterion": "超出则修订 `10-nonfunctional.md` §8",
+      "impact": "决定性能预算与存储选型",
+      "owner_role": "运营/IT 1 人（20 分钟，能导系统统计）",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-006.md",
+        "`templates/v006-scale.csv`"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    },
+    {
+      "id": "V-007",
+      "hypothesis": "协作确是跨法人（非同一集团内部）",
+      "verification": "确认参与方法律关系与结算主体",
+      "criterion": "跨法人则 ADR-0001/0003 前提成立",
+      "impact": "影响隔离模型与账本同步",
+      "owner_role": "商务/法务 1 人（15 分钟）",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-007.md",
+        "`templates/v007-legal-relation.md`"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    },
+    {
+      "id": "V-008",
+      "hypothesis": "电子证据在审计中的采信标准",
+      "verification": "咨询 1 名审计/法务",
+      "criterion": "明确采信要求则修订 `09` §4",
+      "impact": "决定证据包形态",
+      "owner_role": "外部审计或法务 1 人（30 分钟）",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-008.md",
+        "`templates/v008-audit-consult.md`（含 5 个必问问题，含『哈希链能否作为完整性证据』）"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    },
+    {
+      "id": "V-009",
+      "hypothesis": "异常低价判定的合理阈值",
+      "verification": "用历史中标数据做分布分析",
+      "criterion": "形成分布结论则写入策略 patch",
+      "impact": "决定 guard 默认值",
+      "owner_role": "数据/商务 1 人（30 分钟，能导出历史中标价）",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-009.md",
+        "`templates/v009-price-distribution.csv`",
+        "现有实现：`services/guard.py` 的默认阈值 = 同包中位价的 60%"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    },
+    {
+      "id": "V-010",
+      "hypothesis": "留存期与销毁策略要求",
+      "verification": "咨询合规",
+      "criterion": "得到明确期限则写入项目 patch",
+      "impact": "决定存储与留存实现",
+      "owner_role": "合规/法务 1 人（20 分钟）",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-010.md",
+        "`templates/v010-retention-consult.md`（含『招投标资料留存年限』『私域数据可否销毁』两问）"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    },
+    {
+      "id": "V-011",
+      "hypothesis": "邮件/文件投递在双方间实际可用",
+      "verification": "与一家供应商做一次真实投递演练",
+      "criterion": "成功送达并可校验签名则成立",
+      "impact": "决定 P1 绑定选择",
+      "owner_role": "1 家供应商的对接人（15 分钟，只需收一个文件并回一个文件）+ 承包商 IT 1 人",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-011.md",
+        "`templates/v011-delivery-drill.md`（演练步骤与校验清单）",
+        "演练用合成 QEP 报文：`tools/run.sh -m quotagent.qa suite s1` 后从 `services/scenarios.py` 的投递路径可复现，或用本文档『备料自检』里的命令生成"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    },
+    {
+      "id": "V-012",
+      "hypothesis": "供应商侧最痛的是『读包 + 澄清 + 重复录入』",
+      "verification": "访谈 3 家供应商",
+      "criterion": "≥ 2 家认同则成立",
+      "impact": "决定供应商侧功能排序",
+      "owner_role": "3 家供应商的商务/预算人员（各 20 分钟）",
+      "prepared": true,
+      "prepared_artifacts": [
+        "docs/work/validation/V-012.md",
+        "`templates/interview-form.md`（V-012 用其 B 段：痛点排序）"
+      ],
+      "status": "open",
+      "results": null,
+      "conclusion": null,
+      "decided_by": null,
+      "decided_at": null,
+      "evidence": []
+    }
+  ]
+}

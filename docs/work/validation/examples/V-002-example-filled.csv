@@ -1,0 +1,21 @@
+item_id,description,unit,qty,unit_price,currency,tax_mode,lead_time_days,spec_ref,remark
+L-001,DN100 管道,m,60,182.50,CNY,exclusive,50,spec://s1/001,
+L-002,管支架,kg,400,9.80,CNY,exclusive,50,spec://s1/002,
+L-003,阀门,pcs,12,2450.00,CNY,exclusive,55,spec://s1/003,交期比要求晚 10 天
+L-004,法兰,set,10,320.00,CNY,exclusive,50,spec://s1/004,
+L-005,螺栓套件,set,40,86.00,CNY,exclusive,45,spec://s1/005,
+L-006,密封件,pcs,80,12.40,CNY,exclusive,45,spec://s1/006,
+L-007,弯头,pcs,24,145.00,CNY,exclusive,50,spec://s1/007,
+L-008,三通,pcs,16,210.00,CNY,exclusive,50,spec://s1/008,
+L-009,异径管,pcs,12,180.00,CNY,exclusive,50,spec://s1/009,
+L-010,管卡子,pcs,120,7.20,CNY,exclusive,45,spec://s1/010,
+L-011,保温材料,m,90,44.00,CNY,exclusive,50,spec://s1/011,
+L-012,防腐涂料,kg,60,28.00,CNY,exclusive,50,spec://s1/012,
+L-013,压力表,pcs,6,410.00,CNY,exclusive,60,spec://s1/013,
+L-014,温度计,pcs,6,380.00,CNY,exclusive,60,spec://s1/014,
+L-015,电缆,m,200,16.50,CNY,exclusive,45,spec://s1/015,
+L-016,接线盒,pcs,20,58.00,CNY,exclusive,45,spec://s1/016,
+L-017,控制柜,set,2,18500.00,CNY,exclusive,75,spec://s1/017,长交期
+L-018,传感器,pcs,8,760.00,CNY,exclusive,60,spec://s1/018,
+L-019,过滤器,pcs,4,3200.00,CNY,exclusive,60,spec://s1/019,
+L-020,加药装置,set,1,42000.00,CNY,exclusive,90,spec://s1/020,长交期，需分批

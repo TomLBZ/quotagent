@@ -14,6 +14,8 @@
 | `docs/analysis/*.md` | 24 KB |
 | `docs/design/adr/*.md` | 8 KB |
 | `docs/work/*.md` | 32 KB |
+| `docs/work/validation/*.md` | 16 KB |
+| `docs/work/validation/templates/*.md` | 8 KB |
 | `docs/work/evidence/*.md` | 8 KB |
 | `.agents/skills/*/SKILL.md` | 8 KB |
 

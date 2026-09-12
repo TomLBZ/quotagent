@@ -34,7 +34,7 @@
 | T-114 | P0 | 端到端脚本（S1 合成场景） | FR-EVAL-001 | AC-EVAL-001 | done | EV-034 |
 | T-115 | P0 | 指标基线采集与报告 | FR-EVAL-003 | AC-EVAL-002 | done | EV-035, `docs/work/metrics-baseline.md` |
 | T-116 | P0 | 文档门工具（`tools/verify.sh docs`） | – | AC-DESIGN-001..003 | done | EV-004 |
-| T-117 | P0 | 现场验证 V-001..V-012 | – | manual（结论写入 functional-requirements §1） | todo | – |
+| T-117 | P0 | 现场验证 V-001..V-012 | – | manual（结论写入 functional-requirements §1） | doing | 备料+自检：EV-036, EV-037；12 份执行包与登记表：`docs/work/validation/`（结论状态全部 `open`，待人工签字） |
 
 ## P1 mvp demo（见 `roadmap.md` §3）
 
@@ -75,4 +75,4 @@
 | 编号 | 类型 | 内容 | 影响 | 状态 |
 |---|---|---|---|---|
 | D-001 | 已知缺陷 | 已执行 AC：AC-DESIGN-001..003、AC-RUNTIME-001/002、AC-AUDIT-001/002、AC-EVT-001/002、AC-PLUGIN-001/002、AC-QEP-001/002、AC-INTEG-001、AC-NORM-001..003、AC-RFQ-001/002、AC-INTAKE-001/002、AC-COST-001、AC-TRUST-001、AC-PRICE-001、AC-APPROVE-001/002、AC-DEV-001、AC-COMPARE-001..003、AC-GUARD-001/003、AC-EVAL-001/002；其余 P0 AC 尚无实现 | 门 G0 未开始 | open（P0 进行中） |
-| D-002 | 未验证 | V-001..V-012 全部待现场验证 | 影响 P1 目标值设定 | open |
+| D-002 | 未验证 | V-001..V-012 全部待现场验证（**备料已完成**：12 份执行包 + 模板 + 登记表 + 校验器在 `docs/work/validation/`；agent 自检 EV-036/EV-037 已过；结论需人工签字，`register.json` 12 条均为 `open`） | 影响 P1 目标值设定与 G0 门签署 | open（等人工） |
