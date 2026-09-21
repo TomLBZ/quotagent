@@ -293,3 +293,26 @@ ac-registry  approval-digest  audit-hook  breaker  breaker-route  bridge  bridge
 
 ### 门清单更新
 `tools/verify.sh help` 打印全部（从脚本自身解析，不再手写）。本轮新增 `admin-route`。
+
+## WebUI 自适应闭环的自动触发器（完成"自动重载"的那一半）
+
+页面的"请刷新"提示由 `ui-feedback` 插件渲染（服务端可判：每页 `data-ui-revision="rN"`；最新版本更高时出现
+`data-ui-stale="true"` 横幅）。**版本号只来自已落盘/已落账本的事实**，不允许凭空递增。
+
+闭环分两步，各有权责：
+
+1. **应用半步（纯脚本、可定时）** —— `tools/ui-feedback-tick.sh`
+   扫描 `tmp/ui-shared/ui-feedback/*.json`（宿主落的 0600 待办件），按视图调用
+   `python3 tools/ui-feedback-apply.py --view <view> --now <ISO8601>`（**Python 侧唯一落账本者**：
+   原子写版本状态 + 落 `ui/feedback-applied`，body 不含反馈正文；待办件移入 `applied/`）。
+   **watchdog 语义**：有变化才打印，无变化输出空、exit 0。
+
+2. **产出版半步（需要 agent）** —— `apply` 只在**确实存在新版本产物**时才消费待办件（否则按
+   `code` + `next_action` 如实拒绝）。因此自动闭环由平台 cron 触发 agent：
+   `quotagent-ui-feedback-loop`（每 15 分钟）读待办件 → 产出新版本 → 跑门与真回读 → 才 apply → 提交推送。
+
+**验证闭环**：`curl -s http://127.0.0.1:8093/quotagent/contractor/ | grep -oE 'data-ui-revision="r[0-9]+"|data-ui-stale="true"'`
+—— 版本递增且出现 stale 横幅，即为"已完成新版本、请刷新"。点横幅里的「我已刷新」（带 `?seen=rM`）后横幅消失。
+
+**边界（如实登记，不做假）**：cron 属平台侧调度，不在仓库内；仓库内提供的是**可被任何调度器调用的** tick 与 apply
+两步，以及服务端可判的版本事实与横幅。若调度器缺席，页面仍会如实显示版本事实，只不会有自动推进。
