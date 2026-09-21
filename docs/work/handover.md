@@ -4,15 +4,14 @@
 
 ## 现在在哪
 
-**P1 进行中**：T-201（宿主 profile/配置否决）与 T-216（**桥接最小闭环**）done。桥 = stdio NDJSON v1：
-内核首帧自述能力清单、版本不兼容→退出码 2 且账本零新增、只开 read/compute、**commit 面永不暴露**
-（调用即拒 + 留痕）、身份由内核注入、`fact` 面默认关闭。见 ADR-0013/0015 与 `13-cordis-bridge.md`。
-`verify.sh docs|v|cordis|bridge` PASS；**37 条 AC 与 s1..s4 全绿**。
+**P1 进行中**：T-201、T-216（桥最小闭环）、**T-217（桥的故障语义）done** —— SIGKILL 后链仍真且 durable
+零丢失、在途请求记 unknown、重启预算 3/30s 超限降只读（只关 fact/commit）、背压丢 live 必留痕且 durable
+可补齐、锚点异常→只读、无孤儿、启动失败不写账本（见 AC-INTEG-006 与 `13-cordis-bridge.md` §7）。
+`verify.sh bridge|p0-no-node` PASS；**38 条 AC 与 s1..s4 全绿**。
 
 ## 下一步唯一动作
 
-**B4 = T-217**：桥的故障语义（SIGKILL/洪水/断连 + 背压 + 在途请求记 unknown），按 ADR-0013 §8 补 AC；
-之后 **B5 = T-202**（QEP relay/重发/seq 空洞）。拆解见 state.json 的 `next_action`。
+**B5 = T-202**：QEP relay/receipt/重发/seq 空洞（AC-QEP-003/004、AC-INTEG-002）。见 state.json 的 `next_action`。
 
 ## 不变量
 

@@ -97,9 +97,23 @@
   留痕；宿主播报 `human:*` → 拒绝 + 留痕（`claimed_source` 与注入身份分别记录）；
   `fact` 面默认关闭；承诺面关闭不影响 `read`/`compute`。
 
-**未落地的部分（后续批次，按 ADR-0013 §8）**：故障注入（SIGKILL/洪水/断连的哈希链与
-"已 ack 的 durable 零丢失"）、背压实证、`deadline-exceeded` 的宿主侧判定、核心事件表两处比对的
-启动自检。这些挂在 T-217；不要把"协议跑通"当成"故障语义已证"。
+**故障语义（T-217 已落地，AC-INTEG-006，13 断言）**——宿主侧监督者 `host/lib/supervisor.mjs`
+把 ADR-0013 §6 的策略实现出来，内核侧提供锚点/fault/背压/只读：
+
+| 场景 | 断言要点 |
+|---|---|
+| SIGKILL → 重启 | 哈希链仍真（`verify_report.ok`）；重启前已落账的 durable 条目在重启后**一条不少**；落 `kernel/bridge-restarted`（含重启次数与锚点） |
+| 在途请求 | 崩溃时未回帧的请求一律记 **unknown**（`kernel-exited-before-reply`），**不得当成功** |
+| 重启预算 | 3 次/30s 内允许；第 4 次起降**只读**（`fact`/`commit` 皆拒且理由标 `read_only`，`read`/`compute` 保留） |
+| 背压 | 窗口耗尽时 live 通知丢弃但落 `kernel/bridge-backpressure`（含丢弃计数与**时间窗**）；durable 不丢**数据**，用 `ledger.read{from_seq}` 补齐 |
+| 锚点不一致 | 账本落后/历史被替换/锚点不在链中/链校验失败 → `kernel/bridge-fault` + 只读；**账本超前不算 fault**（宿主只是没看到尾巴） |
+| 关闭 / 启动 | shutdown → SIGTERM → SIGKILL 且断言**无孤儿**；启动失败退出码 3 且账本零新增 |
+
+**P0 的可复跑性**：`tools/verify.sh p0-no-node` 把 Node 藏起来跑非 P1 阶段的 **34 条 AC**（集合异常即报错，
+不给假绿灯）；`AC-RUNTIME-001` 另加静态断言——P0 内核与服务**不得引用** Node/cordis（宿主机能力属 P1 的桥接 AC）。
+
+**仍未落地（后续批次）**：`deadline-exceeded` 的宿主侧判定与超时后的请求处置、事件表"文档↔Python"启动自检、
+单帧分片（>8 MiB 包）。不要把"故障语义已证"当成"性能与分片已解决"。
 
 ## 8 与 QEP/投递的关系
 

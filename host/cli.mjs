@@ -20,6 +20,7 @@ import { makeConfigHostPlugin, requestUpdate, digestOf } from './lib/config.mjs'
 import { SCHEMA } from './lib/schema.mjs'
 import { PROFILES, profileDir } from './profiles.mjs'
 import { BridgeClient, BRIDGE_VERSION, ledgerExists } from './lib/bridge.mjs'
+import { KernelSupervisor } from './lib/supervisor.mjs'
 
 const require_ = createRequire(import.meta.url)
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -48,7 +49,7 @@ const args = parseArgs(process.argv.slice(2))
 const action = args._[0] ?? 'help'
 if (action === 'help') {
   emit({ ok: true, action: 'help', profiles: Object.keys(PROFILES),
-         actions: ['boot', 'status', 'config-update', 'bridge'], cordis_version: CORDIS_VERSION,
+         actions: ['boot', 'status', 'config-update', 'bridge', 'supervise'], cordis_version: CORDIS_VERSION,
          bridge_version: BRIDGE_VERSION })
 }
 const profileName = args.profile
@@ -157,6 +158,152 @@ const main = async () => {
            method: args.method ?? null, claim: args.claim ?? null,
            exit_code: code, stderr_log_lines: client.stderr.length,
            stdout_frames_only: client.frames.every((f) => f.n || f.parse_error === undefined) })
+  }
+
+  if (action === 'supervise') {
+    // 故障注入场景（供 AC-INTEG-006 驱动）：宿主侧监督者按 ADR-0013 §6 的语义把结果一次交清。
+    const scenario = String(args.scenario ?? 'crash-restart')
+    const sceneRoot = join(dir, `scene-${scenario}`)
+    mkdirSync(sceneRoot, { recursive: true })
+    const ledgerPath = join(sceneRoot, 'ledger.jsonl')
+    const common = { repoRoot: REPO_ROOT, realm: profile.realm, ledger: ledgerPath, profile: profileName,
+                     node: process.env.QUOTAGENT_NODE ?? null, session: `s-${scenario}` }
+    const report = { ok: true, action: 'supervise', scenario, profile: profileName, realm: profile.realm,
+                     ledger_path: ledgerPath }
+
+    if (scenario === 'crash-restart') {
+      const sup = new KernelSupervisor(common).start()
+      await sup.handshake()
+      await sup.call('approval.decide', { approval_id: 'pre-crash' })   // 制造一条 durable 条目
+      const before = await sup.call('ledger.read', { from_seq: 1 })
+      const durableBefore = before.p.result.entries.map((entry) => entry.type)
+      sup.kill('SIGKILL')
+      const killed = await sup.waitForExit()
+      const revived = await sup.restart()
+      const after = await sup.call('ledger.read', { from_seq: 1 })
+      const verify = await sup.call('ledger.verify', {})
+      const status = await sup.call('bridge.status', {})
+      const shutdown = await sup.shutdown()
+      Object.assign(report, {
+        killed_signal: killed.signal, restarts: revived.restarts, read_only_after: revived.read_only,
+        durable_before: durableBefore,
+        durable_after: after.p.result.entries.map((entry) => entry.type),
+        hash_chain_ok: verify.p.result.report.ok,
+        verify_first_bad_seq: verify.p.result.report.first_bad_seq ?? null,
+        kernel_status: status.p.result,
+        unknown_in_flight: sup.unknown,
+        shutdown,
+      })
+      report.ledger_entries = after.p.result.entries.map((entry) => ({ seq: entry.seq, type: entry.type }))
+      emit(report)
+    }
+
+    if (scenario === 'crash-in-flight') {
+      const sup = new KernelSupervisor(common).start()
+      await sup.handshake()
+      sup.kill('SIGSTOP')                           // 先冻结：该请求必然拿不到回帧（确定性的"在途"）
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      const pending = sup.call('ledger.count', {}, { id: 77, timeoutMs: 5000 })
+      pending.catch(() => null)                     // 在途请求：崩溃后不得当成功
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      sup.kill('SIGKILL')
+      await sup.waitForExit()
+      const revived = await sup.restart()
+      const count = await sup.call('ledger.count', {})
+      const shutdown = await sup.shutdown()
+      Object.assign(report, { restarts: revived.restarts, unknown_in_flight: sup.unknown,
+                              ambiguous_request_id: 77,
+                              in_flight_state: sup.inFlight.get(77)?.state ?? null,
+                              after_restart_count: count.p.result.count, shutdown })
+      emit(report)
+    }
+
+    if (scenario === 'restart-budget') {
+      const sup = new KernelSupervisor(common).start()
+      await sup.handshake()
+      const rounds = []
+      for (let i = 0; i < 4; i++) {
+        sup.kill('SIGKILL'); await sup.waitForExit()
+        const revived = await sup.restart()
+        const readCall = await sup.call('ledger.count', {})
+        const commitCall = await sup.call('approval.decide', { approval_id: `post-${i}` })
+        rounds.push({ round: i + 1, read_only: revived.read_only, window_used: revived.window_used,
+                      read_ok: readCall.n === 'result',
+                      commit_code: commitCall.n === 'error' ? commitCall.p.code : null,
+                      commit_read_only: commitCall.n === 'error' ? Boolean(commitCall.p.data?.read_only) : false })
+      }
+      const shutdown = await sup.shutdown()
+      Object.assign(report, { rounds, read_only: sup.readOnly, shutdown })
+      emit(report)
+    }
+
+    if (scenario === 'backpressure') {
+      const sup = new KernelSupervisor({ ...common, creditWindow: 1 }).start()
+      await sup.handshake()
+      for (let i = 1; i <= 6; i++) await sup.call('approval.decide', { approval_id: `bp-${i}` })
+      const midStatus = await sup.call('bridge.status', {})
+      await sup.credit(50)
+      const afterCredit = await sup.call('bridge.status', {})
+      const read = await sup.call('ledger.read', { from_seq: 1 })
+      const shutdown = await sup.shutdown()
+      Object.assign(report, {
+        kernel_status_under_backpressure: midStatus.p.result,
+        kernel_status_after_credit: afterCredit.p.result,
+        ledger_entries: read.p.result.entries.map((entry) => ({ seq: entry.seq, type: entry.type })),
+        backpressure_bodies: read.p.result.entries.filter((entry) => entry.type === 'kernel/bridge-backpressure')
+                                     .map((entry) => entry.body),
+        durable_recoverable: read.p.result.entries.filter((entry) => entry.type === 'kernel/bridge-rejected').length,
+        shutdown,
+      })
+      emit(report)
+    }
+
+    if (scenario === 'orphan') {
+      const sup = new KernelSupervisor(common).start()
+      await sup.handshake()
+      const pid = sup.child.pid
+      const aliveBefore = sup.pidAlive()
+      const shutdown = await sup.shutdown()
+      Object.assign(report, { pid, alive_during: aliveBefore, alive_after: sup.pidAlive(),
+                              exit_code: shutdown.exit?.code ?? null, shutdown })
+      emit(report)
+    }
+
+    if (scenario === 'anchor-mismatch') {
+      const sup = new KernelSupervisor(common).start()
+      await sup.handshake()
+      await sup.call('approval.decide', { approval_id: 'a-1' })
+      const shutdown1 = await sup.shutdown()
+      const stale = 'sha256:' + 'ab'.repeat(32)
+      // 第二次启动：宿主给一个**不在链中**的锚点（历史被替换的等价情形）
+      const sup3 = new KernelSupervisor({ ...common })
+      sup3.anchor = stale
+      sup3.start()
+      await sup3.handshake()
+      const status = await sup3.call('bridge.status', {})
+      const readCall = await sup3.call('ledger.count', {})
+      const commitCall = await sup3.call('approval.decide', { approval_id: 'a-2' })
+      const shutdown3 = await sup3.shutdown()
+      Object.assign(report, { stale_anchor: stale, first_shutdown: shutdown1, kernel_status: status.p.result,
+                              read_ok: readCall.n === 'result',
+                              commit_code: commitCall.n === 'error' ? commitCall.p.code : null,
+                              commit_read_only: Boolean(commitCall.p.data?.read_only), shutdown: shutdown3 })
+      emit(report)
+    }
+
+    if (scenario === 'startup-failure') {
+      const badLedger = join(sceneRoot, 'as-directory')
+      mkdirSync(badLedger, { recursive: true })          // 账本路径是目录 → 打开即失败
+      const sup = new KernelSupervisor({ ...common, ledger: badLedger }).start()
+      const exit = await sup.waitForExit(15000).catch((err) => ({ error: String(err) }))
+      Object.assign(report, { ok: false, bad_ledger: badLedger, exit_code: exit?.code ?? null,
+                              orphan: sup.pidAlive(), frames: sup.frames.length,
+                              ledger_written: ledgerExists(join(badLedger, 'ledger.jsonl')) })
+      emit(report)
+    }
+
+    emit({ ok: false, error: `未知 scenario: ${scenario}`, known: ['crash-restart', 'crash-in-flight',
+           'restart-budget', 'backpressure', 'orphan', 'anchor-mismatch', 'startup-failure'] }, 2)
   }
 
   if (action === 'config-update') {

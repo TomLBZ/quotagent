@@ -35,7 +35,27 @@ case "${1:-}" in
     ;;
   bridge)
     "$HERE/run.sh" -m quotagent.qa ac AC-INTEG-004 || exit 1
-    exec "$HERE/run.sh" -m quotagent.qa ac AC-INTEG-005
+    "$HERE/run.sh" -m quotagent.qa ac AC-INTEG-005 || exit 1
+    exec "$HERE/run.sh" -m quotagent.qa ac AC-INTEG-006
+    ;;
+  p0-no-node)
+    # P0 可复跑性（ADR-0013 §8）：把 Node 藏起来，P0 阶段的 AC 仍必须全绿。
+    # 注意：空集合必须判为失败（否则"没跑到"会被当成"全绿"）。
+    acs=$("$HERE/run.sh" -m quotagent.qa list 2>/dev/null | "$QUOTAGENT_PY" -c '
+import json, sys
+data = json.load(sys.stdin)
+acs = data.get("acs") if isinstance(data, dict) else data
+print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})))')
+    count=$(printf '%s' "$acs" | wc -w)
+    if [ "$count" -lt 34 ]; then
+      echo "P0 AC 集合异常（只取到 $count 条，ADR-0013 §8 说的是 34 条）：拒绝给出假的绿灯" >&2
+      exit 2
+    fi
+    for ac in $acs; do
+      QUOTAGENT_NODE=/nonexistent/node PATH=/usr/bin:/bin "$HERE/run.sh" -m quotagent.qa ac "$ac" >/dev/null 2>&1 \
+        || { echo "P0 AC 在无 Node 环境下失败: $ac" >&2; exit 1; }
+    done
+    echo "P0 阶段 $count 条 AC 在无 Node 环境下全绿（P0 不因引入宿主而失去可复跑性）"
     ;;
   v)
     shift

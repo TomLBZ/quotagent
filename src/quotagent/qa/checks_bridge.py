@@ -285,3 +285,113 @@ def ac_integ_004() -> list[Assertion]:
                          len(results) == 2 and results[1]["result"]["factor"] == 100.0,
                          f"results={[r['m'] for r in results]} factor={results[1]['result']['factor'] if len(results) > 1 else None}"))
     return out
+
+
+# --------------------------------------------------------------------------- 故障语义（T-217，ADR-0013 §6/§8）
+@register("AC-INTEG-006", "P1", "桥的故障语义：SIGKILL 后哈希链仍真且 durable 零丢失；在途请求记 unknown；"
+                                "重启预算 3/30s 超限降只读；背压丢 live 必留痕、durable 可补齐；无孤儿；启动失败不写账本",
+          "qa ac AC-INTEG-006", evidence_refs=("EV-041",))
+def ac_integ_006() -> list[Assertion]:
+    out: list[Assertion] = []
+    root = new_scratch("ac-integ-006")
+    node = _resolve_node()
+    out.append(Assertion("故障注入需要宿主进程（Node）", node is not None, f"node={node}"))
+    if node is None:
+        return out
+
+    def scenario(name: str, timeout: int = 120) -> dict:
+        code, payload, raw = _host("supervise", "--profile", "contractor-ops", "--root", str(root),
+                                   "--scenario", name, timeout=timeout)
+        return {"exit": code, "payload": payload or {}, "raw": raw}
+
+    # --- 1) SIGKILL → 重启：链仍真、durable 零丢失、重启留痕 ---
+    crash = scenario("crash-restart")
+    data = crash["payload"]
+    before = data.get("durable_before") or []
+    after = data.get("durable_after") or []
+    out.append(Assertion("SIGKILL 后重启：哈希链仍真（verify_report.ok）且无坏条目",
+                         data.get("hash_chain_ok") is True and data.get("verify_first_bad_seq") is None,
+                         f"hash_chain_ok={data.get('hash_chain_ok')} first_bad={data.get('verify_first_bad_seq')} "
+                         f"raw={crash['raw'][:120]}"))
+    out.append(Assertion("已落账的 durable 条目零丢失（重启前 ⊆ 重启后）",
+                         bool(before) and set(before) <= set(after),
+                         f"before={before} after={after}"))
+    out.append(Assertion("重启留痕：账本出现 kernel/bridge-restarted（含重启次数与锚点）",
+                         "kernel/bridge-restarted" in after and data.get("restarts") == 1
+                         and data.get("read_only_after") is False,
+                         f"entries={data.get('ledger_entries')} restarts={data.get('restarts')}"))
+
+    # --- 2) 在途请求记 unknown ---
+    flight = scenario("crash-in-flight")
+    fdata = flight["payload"]
+    unknown = fdata.get("unknown_in_flight") or []
+    out.append(Assertion("崩溃时在途请求记为 unknown（不得当成功），并记录原因",
+                         fdata.get("in_flight_state") == "unknown" and any(
+                             item.get("id") == 77 and item.get("reason") == "kernel-exited-before-reply"
+                             for item in unknown),
+                         f"in_flight_state={fdata.get('in_flight_state')} unknown={unknown}"))
+
+    # --- 3) 重启预算 3/30s，超限降只读 ---
+    budget = scenario("restart-budget", timeout=240)
+    rounds = (budget["payload"] or {}).get("rounds") or []
+    allowed = [r for r in rounds if not r["read_only"]]
+    downgraded = [r for r in rounds if r["read_only"]]
+    out.append(Assertion("重启预算 3 次/30s：第 1–3 次允许，第 4 次降只读",
+                         len(rounds) == 4 and len(allowed) == 3 and len(downgraded) == 1
+                         and downgraded[0]["round"] == 4,
+                         f"rounds={[(r['round'], r['read_only'], r['window_used']) for r in rounds]}"))
+    out.append(Assertion("只读降级只关承诺面：read 仍可用，commit 被拒且理由标 read_only",
+                         all(r["read_ok"] for r in rounds)
+                         and all(r["commit_code"] == "commit-refused" for r in rounds)
+                         and all(r["commit_read_only"] is False for r in allowed)
+                         and all(r["commit_read_only"] is True for r in downgraded),
+                         f"read_ok={[r['read_ok'] for r in rounds]} "
+                         f"ro_data={[r['commit_read_only'] for r in rounds]}"))
+
+    # --- 4) 背压：live 可丢必留痕，durable 可补齐 ---
+    bp = scenario("backpressure")
+    bdata = bp["payload"]
+    under = bdata.get("kernel_status_under_backpressure") or {}
+    bodies = bdata.get("backpressure_bodies") or []
+    out.append(Assertion("窗口耗尽时 live 通知被丢弃且计数（不静默丢弃）",
+                         (under.get("dropped") or {}).get("live", 0) > 0 and bool(bodies),
+                         f"dropped={under.get('dropped')} episodes={under.get('backpressure_episodes')}"))
+    out.append(Assertion("背压留痕含丢弃计数与时间窗（kernel/bridge-backpressure 入账）",
+                         bodies and bodies[0]["dropped"]["live"] > 0
+                         and bodies[0]["window"]["from"] and bodies[0]["window"]["to"]
+                         and bodies[0]["credit_window"] == 1,
+                         f"body={json.dumps(bodies[0], ensure_ascii=False)[:220] if bodies else None}"))
+    out.append(Assertion("durable 不可丢数据：被背压的 durable 条目可由 ledger.read 补齐（条数与写入数一致）",
+                         bdata.get("durable_recoverable") == 6
+                         and sum(1 for entry in bdata.get("ledger_entries", [])
+                                 if entry["type"] == "kernel/bridge-rejected") == 6,
+                         f"recoverable={bdata.get('durable_recoverable')} "
+                         f"ledger={[e['type'] for e in bdata.get('ledger_entries', [])]}"))
+
+    # --- 5) 锚点不一致 → fault + 降只读 ---
+    anchor = scenario("anchor-mismatch")
+    adata = anchor["payload"]
+    status = adata.get("kernel_status") or {}
+    out.append(Assertion("锚点不在链中 → 落 kernel/bridge-fault 且降只读（read 仍可用、commit 被拒）",
+                         status.get("read_only") is True and status.get("read_only_reason") == "anchor-not-in-chain"
+                         and adata.get("read_ok") is True and adata.get("commit_code") == "commit-refused"
+                         and adata.get("commit_read_only") is True,
+                         f"status={json.dumps(status, ensure_ascii=False)[:200]} read_ok={adata.get('read_ok')}"))
+
+    # --- 6) 关闭不留孤儿；启动失败不写账本 ---
+    orphan = scenario("orphan")
+    odata = orphan["payload"]
+    out.append(Assertion("关闭后进程确实消失（无孤儿），且是优雅退出（退出码 0）",
+                         odata.get("alive_during") is True and odata.get("alive_after") is False
+                         and (odata.get("shutdown") or {}).get("orphan") is False
+                         and odata.get("exit_code") == 0,
+                         f"alive_during={odata.get('alive_during')} alive_after={odata.get('alive_after')} "
+                         f"exit={odata.get('exit_code')}"))
+    startup = scenario("startup-failure")
+    sdata = startup["payload"]
+    out.append(Assertion("启动失败（账本不可打开）→ 退出码 3 且账本零新增、无协议帧",
+                         sdata.get("exit_code") == 3 and sdata.get("frames") == 0
+                         and sdata.get("ledger_written") is False and sdata.get("orphan") is False,
+                         f"exit={sdata.get('exit_code')} frames={sdata.get('frames')} "
+                         f"ledger_written={sdata.get('ledger_written')}"))
+    return out
