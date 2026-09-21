@@ -1,0 +1,408 @@
+# GUI 交互规格（WebUI 改造可实施规格）
+
+- 状态：**规格（未实现）**。本文件是草稿，按 D-058 用 `.md.txt` 后缀放在 `tmp/`，不进 `docs` 门扫描。
+- 目标：把 `/quotagent/{contractor,supplier,ops,admin}/` 四道从「一篇只读报告」改成「能做成事的控制台」。
+- 事实基线时间：2026-09-21，服务 `127.0.0.1:8093`（经网关 `:80` 与 dashboard 同源）。
+- 本规格**不写代码、不改任何 tracked 文件**；下面所有「改动文件」都是给实现者的估计清单。
+
+## 0. 纪律（写死，贯穿全篇）
+
+| 编号 | 规则 | 为什么 |
+|---|---|---|
+| G1 | **宿主零写面**：`host/modules/*.mjs` 不写文件、不落账本、不起子进程、不联网、不随机、不取墙钟 | H1 + 各围栅门的静态扫描（`t267` 第 9 条、`t271` 第 16 条、`t277` 第 7 条）。新增交互不得引入任何新的写 API |
+| G2 | **写顶点唯一**：一切「写」只走**已存在**的两处宿主落点 —— `tmp/ui-shared/admin-submissions/`（0600 原子写）与 `tmp/ui-shared/user-plugin-{requests,elevations}/`，由 Python 侧 `tools/admin-apply.py` / `tools/userplugin-record.py` / `tools/userplugin-elevate.py` 消费 | 「所有写的顶点只能调 Python 侧既有接口」。新落点在没有 Python 消费者之前一律不许开（否则就是「界面说成功、账本没动」的假成功） |
+| G3 | **零新模块文件**：不新增 `host/modules/*.mjs` | `tools/check-plugin-inventory.py` P1 是**双向**断言：新模块必须在 `docs/design/14-plugin-inventory.md` 有一行，而该文件本轮**禁改**。新代码落在 `host/modules/webui.mjs`（已登记）与 `host/lib/*.mjs`（不在该门扫描面内） |
+| G4 | **零新服务注入**：`webui` 的 `inject` 列表不变 | 加一个依赖要同步**五处**（模块 `inject`／`host/check-modules.mjs` STUBS／`host/webui.mjs` 门挂载／`host/canary-dispatch.mjs` e2e／`host/cli.mjs`），`tools/verify.sh wiring` 会红 |
+| G5 | **老路由字节不动**：现有 URL 的响应形状与字节不许变（要加参数就加**新路由**） | 门里有逐条形状断言（如 `/api/events` 的 `count` 与全量 `events`；admin 道的 202/400/401 体） |
+| G6 | **失败同形、无 oracle**：鉴权类失败复用 `adminGuard.unauthorized()` 的 401 固定体（逐字节）；写类失败在**带会话**路径上只区分「已受理／未受理」，不细分原因 | `AC-ADMIN-001/002/009`、`t271` 第 3/5 条 |
+| G7 | **写面只在前缀 `/quotagent/admin/**` 内**；`/<view>/**` 只有读 | 未授权时连「路由是否存在」都不可探测（`t271` 第 4 条已把未知子路径也判 401 同形）；命名空间边界可机检 |
+| G8 | **新文件必须 commit** | `tools/verify.sh clean-copy` 用 `git archive HEAD` 解干净副本再跑门；未提交 = 干净副本里缺失 |
+
+---
+
+## 1. 现状解剖
+
+### 1.1 页面由谁生成（文件 + 函数，逐层）
+
+| 层 | 位置 | 职责 |
+|---|---|---|
+| 服务入口 | `tools/webui-serve.py` | `--healthz PORT` 探活（顺带刷 3 个 Python 快照钩子）；否则先跑 `tools/g1-walkthrough.py --keep-shared` + `tools/ui-seed-pipeline.py` 生成演示账本，再 `os.execve` 起 node（**不留中间进程**），端口 8093、前缀 `/quotagent` |
+| 宿主装配 | `host/cli.mjs` 的 `if (action === 'webui')` 分支（约 100–250 行） | 依次挂 20 个插件（governor / projection / audit-hook / canary / observability / price-history / circuit-breaker / admin-view / user-plugin-manager / plugin-market / admin-guard / pipeline-view / retention-view / approval-digest / supplier-scorecard / evolve-journal / ops-view / evidence-summary + `ctx.provide('ledgerView', openLedger(...))`），最后挂 `webui` 模块；把 `--ledger-*` `--retention-plan` `--pipeline-snapshot` `--admin-snapshot` `--admin-inbox` `--market-*` 等透传进 `webui` 的 Config |
+| **页面生成（唯一）** | `host/modules/webui.mjs` | ① 外壳：`const html = (title, body, prefix) => ...`（第 45 行）—— 全文只有一个 HTML 模板：`<nav>` 6 个 `<a>` + `<h1>` + 拼进来的 `body`；② 路由：`apply(ctx, config)` 内的 `const handle = (req, res) => {...}`（第 174 行起，约 370 行单函数）；③ 各道内容：`handle` 里的**内联字符串拼接**（视角页是 `viewMatch = path.match(/^\/([a-z]+)\/?$/)` 一个分支、运维页是 `/ops/` 一个分支、系统管理道是 `adminHtml(data)` 一个函数） |
+| 数据面 | 同名注入的插件句柄 | `projection.projectWithAudit` / `evidence.summarize` / `scorecard.bySupplier` / `approvals.digest·byPolicy·oldest` / `history.bySupplier` / `pipeline.*` / `retention.*` / `journal.summarize` / `ops.snapshot` / `adminView.snapshot` / `pluginMarket.snapshot` / `userPlugins.list` —— 全是**只读聚合**；服务端不做任何业务判定 |
+| 快照读入 | `host/modules/webui.mjs` 的 `pipelinePayload()` / `retentionPlanOf()` / `evolveRows()` / `config.admin_snapshot` | 只 `readFileSync` 那 4 个文件；判定在 Python 侧（`services/retention.py`、`tools/refresh-ui-snapshots.py`、`tools/refresh-admin-snapshot.py`、`tools/refresh-retention-plan.py`） |
+| 暴露/接入 | `/workspace/services/services.json`（服务键 `quotagent`，与 `dashboard` 同级）+ `gateway.routes` 的一条 proxy | 由 `tools/ws-integrate.py` 幂等登记并**回读**：直连 `:8093` / 经网关 `:80` / `dashboard` 路由表三者都命中才算 PASS |
+| 门 | `tools/verify.sh webui` → `tools/check-webui.py` → `host/webui.mjs`（**实测 27 条，全绿**）；`tools/verify.sh admin-route` → `tools/check-admin-route.py`（14 组，含提交面 T-265b） | 门自己造夹具（`port: 0` + ledger stub + 临时快照），不依赖 `tmp/` 演示数据 |
+
+### 1.2 每道现在只能看到什么（实测）
+
+| 路由 | HTTP | 字节 | `<script>` | form/input/button | 表 | `<tr>` | `<a>` | 页面实际内容 |
+|---|---|---|---|---|---|---|---|---|
+| `/quotagent/` | 200 | 1158 | 0 | 0/0/0 | 0 | 0 | 9 | 两个视角的链接 + 行数 + 链自洽；一行说明「宿主不写账本」 |
+| `/quotagent/contractor/` | 200 | 7436 | **0** | **1/1/1** | 2 | 25 | 6 | 6 个 `<h3>`（账本证据面 / 供应商绩效记分卡（现显「暂无可聚合的供应商行」）/ 谈判轮次 / FAQ / 待批事项（只有计数与分桶）/ 价格序列）+ **一张管理员 token 提权表单** + 事件表（`rows.slice(-40).reverse()` 全量倒序，摘要列是把 body 拍平成 `key=value` 的长串） |
+| `/quotagent/supplier/` | 200 | 4072 | **0** | **1/1/1** | 2 | 10 | 6 | 同上，去掉承包商才有的类型；同一张提权表单 |
+| `/quotagent/ops/` | 200 | 2838 | **0** | **0/0/0** | 2 | 5 | 6 | 5 个 `<h3>`：运行期（governor/breaker 两格表）/ 三域流水（一句话 headline）/ 留存计划（一句话）/ 自进化流水（一句话）/ 各视角证据面（2 行表） |
+| `/quotagent/admin/` | **401** | 24 | 0 | 0/0/0 | 0 | 0 | 0 | 未提权=固定体 `{"error":"unauthorized"}`；提权后：阻塞表（每行一个 resolve 表单）+ 进度 + 切换视角链接 + 用户空间插件（装载按钮 + 提需求表单）+ 插件市场只读 |
+| `/quotagent/api/status` | 200 | 693 | 0 | 0/0/0 | 0 | 0 | 0 | JSON：`routes` 只列 **2 条**（contractor/supplier 的页面 URL），不含 `/ops/`、`/admin/`、各 JSON 接口 |
+
+导航（`html()` 里写死）6 个链接：`总览` / `承包商视角` / `供应商视角` / `系统管理` / `/api/status` / `/api/health`。**`/ops/` 不在任何一道的导航里**，只能从 `总览` 页面进入（可达性缺口）。
+
+### 1.3 为什么「没有任何交互」
+
+1. **模板里没有控件生成器**：`html(title, body, prefix)` 只拼 `<nav>`+`<h1>`+`body`；页面内容是 `handle()` 里一串 `${}` 拼接的 `<p>`/`<table>`。全文（服务器侧）只有在 admin 分支里手写的 4 个控件：提权表单、阻塞 resolve 表单、用户空间插件「装载」按钮、「提需求」表单 —— **都在 `/quotagent/admin/` 前缀下，未提权一律 401，所以三道业务/运维页面上一个按钮都没有**。
+2. **"无 `<script>`"**：四道页面实测 `<script>` 计数 = **0**（也搜不到 `onclick`/内联事件）。页面是纯静态 HTML，任何交互（筛选、排序、展开、刷新）在当前架构下都不存在。
+3. **"无表单以外控件"**：party 两道唯一的控件是那张**提权表单**（1 form/1 input/1 button），它属于 FR-ADMIN-002（"任意一道 UI 都提供提权入口"），不是业务交互；ops 道 **0 控件**。
+4. **服务器只有 4 个写类端点**，且全在 admin 前缀：`POST /admin/api/elevate`、`POST /admin/api/blocks/<id>/resolve`、`POST /admin/api/user-plugins/(load|unload|reload|request|elevate)`；没有它们，就算把按钮画上去也无处提交。
+5. **不解析查询参数**：`handle()` 只切 `url.pathname`；`url.searchParams` 全文只用过**一次**（`/admin/api/switch?to=`）。→ 筛选/排序/分页在协议层就没有入口。
+6. **每道只有一条路由**：`viewMatch = /^\/([a-z]+)\/?$/` 把「视角」和「页面」绑成一一对应 → 没有下钻、没有子页面、没有分栏。
+7. **一次性全量渲染**：事件表固定 `rows.slice(-40).reverse()`，无状态、无游标；想看得更细只能自己去敲 `/api/events`（页面只给了那三个 JSON 链接的文字）。
+
+> 用户原话「看起来像一篇纯文字」的根因就是上面 1+3+7：投影层把 body 拍平成 `summary` 的 `key=value` 长串，再整段塞进表格的单个 `<td>`，既没有列、也没有折叠、也没有可点的行。
+
+### 1.4 与需求的关系（为什么必须改）
+
+| 需求 | 现状 | 结论 |
+|---|---|---|
+| `FR-UX-001` 人工门队列视图（**动作、摘要、引用链、Flag**） | 页面上只有 `approval-digest` 的**计数**（总数/时长桶/最久等待 id）；账本的**公开投影行**里只有 `seq/type/summary/ts`，**没有** `action/refs/flags/waited_seconds`，而 `approval-digest` 对缺 `waited_seconds` 的行按「整行不计入」处理 → 即使有真待批项，页面也**只可能**出计数与时长桶，四要素一个都出不来（实测当前该视角显示「共 0 项待批」= 两个 `ap-*` 都已 granted 的**真实零值**，不是因为读不到） | **未满足**。这正是「控制台不像控制台」的核心：`services/approval.py` 的 `ApprovalService.queue_view()` 在真源里已经有这四要素，但**没有任何快照把它送到 UI** |
+| `FR-UX-002` / `AC-TRUST-001` 供应商看不到承包商私域 | 已满足（投影白名单 + 抑制语义），本轮**不许**动 | 回归面：新页面必须沿用 `rowsFor(view)`，不得直读原始行 |
+| `FR-UX-004/005` 运维只读快照 | 已满足（`/ops/` + `/api/ops` + `pipeline.json`） | 保留 |
+| `FR-ADMIN-001..010` 系统管理道 | 大体满足 | 两处**已知不一致**（见下） |
+| 任务表 `T-303 Web 视图（双侧）` | 仍 `todo` | 本规格是它的落地路径 |
+
+**已知不一致（读码判定，未实测 —— 需要真 token 才能跑）**：
+
+1. 切道白名单两处口径不同：`webui.mjs` 用 `rules`（只有 2 个键 `contractor`/`supplier`）判 `?to=`，而 `adminGuard` 的 `views` 默认是 `['contractor','supplier','ops','admin']` → `GET /admin/api/switch?to=ops` 会回 **400 `{"error":"unknown-view"}`**，而 `FR-ADMIN-003`（"提权后可切换到**任意一道** UI"）要求它是 302。
+2. `/api/status` 的 `routes` 只有 2 条，运维道/管理道/12 条 JSON 接口都不在表里 → 「路由表」这一机器可读事实与真实路由不一致。
+
+---
+
+## 2. 每个视图第一屏的设计（文字线框）
+
+统一约定：**第一屏 = 一屏内（约 40 行 HTML）必须回答「现在有什么要我处理 / 进行中的事到哪一步 / 哪里不正常」三问**；其余区块（证据面、记分卡、价格序列、原始事件表）**下沉到子路由或折叠区**（`<details>`，无 JS）。每道页面顶部一条子导航（本道子路由 + 另三道 + 运维道）。
+
+### 2.1 承包商视角 `/quotagent/contractor/`
+
+```
+[子导航] 第一屏 | 待批 | 报价与行项目 | 事件 | 运维 | 系统管理(提权)     ← 全是 <a>
+┌ ① 待我处理（人工门队列，FR-UX-001） ────────────────────────────────┐
+│ approval_id | 动作(action) | 摘要 | 引用链(refs) | Flag | 等待 | 策略 │
+│ ap-0002     | change.approve | —(缺快照) | chg-0001 | — | 2h | abort │
+│ 汇总：待批 N · 超 24h M · 最近一项 id（口径：approval-digest 声明）    │
+│ [查看全部 → /quotagent/contractor/approvals]                        │
+└──────────────────────────────────────────────────────────────────┘
+┌ ② 进行中的采购件（最新 RFQ 包 / 报价 / 比价） ──────────────────────┐
+│ RFQ 包 pkg-g1 rev=2 · 报价截止 2026-09-25 · 分发 2 次 · 撤回 0       │
+│ 收到报价 2 条 · 行项目 2 个 · 比价评估 eval:sha256:0d642 · Flag 1 条 │
+│ 价格带：L-001 中位 86 · L-002 中位 11.5（口径：price-history）        │
+│ [查看报价与行项目 → /quotagent/contractor/quotes]                    │
+└──────────────────────────────────────────────────────────────────┘
+┌ ③ 异常与健康 ────────────────────────────────────────────────────┐
+│ 账本 21 行 · 16 类型 · 链自洽=是 · 最后事件 2026-09-21T14:34Z        │
+│ 被抑制行 1（原因对外通用）· 偏差标记 0 · 快照新鲜度：pipeline ok / admin ok│
+└──────────────────────────────────────────────────────────────────┘
+<details> 其余只读块（证据面 / 记分卡 / 谈判 / FAQ / 原始事件最后 40 行） </details>
+```
+
+**第一屏必须看到的 3 件事**：① 待我处理的人工门队列（含超期）；② 进行中的采购件到哪一步（询价→报价→比价→授标/变更）；③ 异常与健康（链自洽、被抑制行、Flag、数据新鲜度）。
+
+**用户能做的动作**：道内跳转 4 条（第一屏/待批/报价/事件）；筛选事件（类型、是否被抑制、关键字、条数、排序）；翻页；展开折叠区；复制 JSON 链接；提出/查看管理员会话（保留 FR-ADMIN-002 的提权入口）。**承包商道本轮不提供写动作**（见 §3 的写面规则）。
+
+### 2.2 供应商视角 `/quotagent/supplier/`
+
+```
+[子导航] 第一屏 | 待批 | 我的报价 | 澄清与 FAQ | 事件 | 运维 | 系统管理(提权)
+┌ ① 待我回应的询价（RFQ 包） ──────────────────────────────────────┐
+│ 包 pkg-g1 rev=2 · 报价截止 2026-09-25 · 我已报价：是/否             │
+│ 未答澄清 0 条 · 已答 1 条（clarification/answered）                 │
+└──────────────────────────────────────────────────────────────────┘
+┌ ② 我的报价与结果 ───────────────────────────────────────────────┐
+│ 行项目 | 单价 | 交期 | 是否过人工门 | 结果(授标/未授标/待定)         │
+│ L-001 | 86 | 5d | 是(human:liangzi) | 授标 aw-0001 已承诺          │
+│ L-002 | 11.5 | — | — | 待定                                      │
+│ 记分卡：报价 1 次 · 中位 86 · 偏差标记 0（口径：supplier-scorecard） │
+└──────────────────────────────────────────────────────────────────┘
+┌ ③ 私域边界与健康（自证看不到不该看的） ──────────────────────────┐
+│ 账本 6 行 · 6 类型 · 链自洽=是 · 本视角拒收私域键 6 类（键名可列）   │
+│ 被抑制行 1（原因对外通用，不显示键名）                              │
+└──────────────────────────────────────────────────────────────────┘
+<details> 其余只读块（证据面 / 谈判 / FAQ / 原始事件） </details>
+```
+
+**第一屏必须看到的 3 件事**：① 待回应的询价与截止时间；② 我的报价线（行项目/单价/交期）与结果；③ 私域边界与账本健康（本视角看不到什么、为什么）。
+
+**用户能做的动作**：道内跳转；按行项目/时间筛选自己的报价；看澄清线程与 FAQ 条目；展开折叠区；复制 JSON 链接；提权入口。同样**无写动作**。
+
+### 2.3 运维视角 `/quotagent/ops/`
+
+```
+[子导航] 运行期 | 三域流水 | 留存 | 自进化 | 证据面 | 四道首页
+┌ ① 系统现在能不能用 ───────────────────────────────────────────┐
+│ governor: admitted/refused/timeouts/failed + 背压 Retry-After 次数 │
+│ breaker: allowed/refused/opened/closed（状态与最近一次开断）        │
+│ canary: phase=base/cand · audit: captured/deduped/skipped/dropped  │
+│ 服务：端口 8093 · 前缀 /quotagent · 视角 2 道 · 账本链自洽=是       │
+└──────────────────────────────────────────────────────────────┘
+┌ ② 三域积压（谈判 / FAQ / 邮件） ──────────────────────────────┐
+│ 域 | 线程/条目 | 轮次/版本 | 被拒 | 最近事件 id | 通道是否可用      │
+│ 邮件：通道**不可用**（mail-transport-unavailable，缺 SMTP/IMAP 凭据）│
+│ [按视角筛选 ?view=contractor|supplier]  [查看明细 → /ops/pipeline] │
+└──────────────────────────────────────────────────────────────┘
+┌ ③ 留存与自进化 ─────────────────────────────────────────────┐
+│ 待归档 0 / 待销毁副本 0 / 需人工门 0 / 已拒 0（口径：retention-view）│
+│ 提案 13 / 影子 17 / 门 13 过 1 拒 / 晋升 13 / 回滚 1 / canary 进出  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**第一屏必须看到的 3 件事**：① 中间件三条（governor/breaker/canary）当前状态与计数；② 三域积压与通道可用性（含"不可用"这条硬事实）；③ 留存与自进化的计数（都要带**口径来源**）。
+
+**用户能做的动作**：按视角/域筛选；跳子视图；看某个计数背后的明细表（明细只到 id 级，不出正文）；看到降级时点开「下一步怎么做」；链接到四道首页。
+
+### 2.4 系统管理 `/quotagent/admin/`（未提权仍是 401 固定体）
+
+```
+[子导航] 阻塞 | 进度 | 会话 | 插件 | 市场 | 用户空间      ← 提权后才出现
+┌ ① 阻塞清单（可操作） ────────────────────────────────────────┐
+│ block_id | kind | state | reason | required_action | 提交材料     │
+│ blk-mail-1 | credential | blocked | 缺 SMTP/IMAP | 提交凭据 | [提交]│
+└──────────────────────────────────────────────────────────┘
+┌ ② 进度 ──────────────────────────────────────────────────┐
+│ 阶段 P3 落地 · 下一步 T-272 · 已完 41 / 待做 7（口径：registry）    │
+└──────────────────────────────────────────────────────────┘
+┌ ③ 身份与会话（回答"我现在是谁、还有多久"） ────────────────────┐
+│ token 来源：env/file/none · 会话 1/8 · TTL 30m · 连续失败 0 · 冷却关 │
+│ 可切换：contractor supplier **ops**（修 §1.4 的 400）              │
+└──────────────────────────────────────────────────────────┘
+<details> 用户空间插件（装载/卸载/重载）、插件市场、提需求表单 </details>
+```
+
+**第一屏必须看到的 3 件事**：① 阻塞清单（含"提交材料"这一**真动作**）；② 进度与口径；③ 会话/身份状态与可切换道。
+
+**用户能做的动作**：提交材料解阻塞；装载/卸载/重载用户空间插件；提插件需求；切道（contractor/supplier/**ops**）；刷新（重新 GET 本页即可，无需 JS）。
+
+---
+
+## 3. 交互实现方案（关键章节）
+
+### 3.1 两个候选方案
+
+**方案 A —— 服务端渲染 + `<form>`（选中）**
+
+- 读交互：`<form method="get">`（筛选/排序/条数）+ `<a>`（跳转/翻页）+ `<details>/<summary>`（折叠）。全部零 JS。
+- 写交互：`<form method="post" action="/quotagent/admin/...">` → 服务端处理 → **303 See Other** 回到原视图（PRG 模式），结果用一个**同形结果码**放在 `Location` 的 query 里。
+- 页面模板继续用 `html(title, body, prefix)`，只扩展 `body` 的拼装（新增若干纯函数：`renderQueue()`、`renderEventsTable()`、`renderFilters()`…，放在 `host/modules/webui.mjs` 或新 `host/lib/ui-render.mjs`，均为纯函数、零 I/O）。
+
+**方案 B —— 少量内联 `<script>` + `fetch()` 调已有路由（否决）**
+
+- 内容：页面里给每个动作挂 `onclick`/`addEventListener`，`fetch()` 打 `/quotagent/.../api/...`，用返回的 JSON 局部改 DOM。
+
+**为什么选 A（取舍逐条）**
+
+| 维度 | A（SSR + form） | B（内联 script + fetch） |
+|---|---|---|
+| 现状可机检事实 | 保持「**0 `<script>`**」不变（可加一条门断言把它锁死） | 直接推翻该事实，且四道页面都出现脚本 |
+| 可测试性 | `curl` 一行就能断言状态码/字段/表单 action（就是现有门的做法） | 需要 headless 浏览器或放弃 UI 层断言 → 门只能测 JSON 接口，测不到交互 |
+| 失败同形 | 一个响应体、一套状态码即可满足「失败同形、无 oracle」 | 每个动作要两套形状（JSON + HTML 局部），两套都要维持同形 → 漂移面翻倍 |
+| 与围栅门的关系 | 现有门全部照旧；新增断言挂在同一门里，断言数递增 | `t271` 的静态扫描哲学（零副作用、可枚举面）与「页面里跑代码」相冲突；还要新写 CSP/注入类断言 |
+| 一致性 | admin 道**已经是** SSR+POST（提权/解阻塞/装载都是 `<form method=post>`） | 同一服务里出现两套交互范式 |
+| 代价 | 每次交互一次整页刷新（本场景页面 < 10 KB，无关紧要） | 省一次刷新，但引入竞态/超时/局部失败态 |
+
+**唯一允许的 B′（P2，可选）**：**只读**自动刷新（例如 ops 页每 30 秒重新 `fetch('/quotagent/api/obs')`）可以在**满足全部**下列条件时用一段内联脚本：① 只发 GET；② 只 `textContent` 赋值（禁止 `innerHTML`）；③ 不接触任何 token/凭据；④ 单独挂一条门断言（"内联脚本里不含 POST/innerHTML/token 字样"）。P0/P1 不做。
+
+### 3.2 写面规则（G2/G7 的落地）
+
+- 写类路由**只**存在于 `/quotagent/admin/**`；`/<view>/**` 只有 GET。
+- 浏览器表单提交时，服务端**不新增任何写 API 调用**：
+  - 解阻塞：仍写 `admin_inbox`（现有 `mkdirSync/writeFileSync/renameSync` + 0600），由 `tools/admin-apply.py` 消费；
+  - 用户空间插件：仍在 `webui.mjs` 里用同一个 `userReq()` 落 `user-plugin-requests` / `user-plugin-elevations`，由 `tools/userplugin-record.py` / `tools/userplugin-elevate.py` 消费；
+  - 提权：仍走 `adminGuard.elevate()`（内存会话，不落盘）。
+- **实现要点**：把现有 handler 的体**抽成一个内部函数**（例如 `resolveBlock(req, res, form)`），`/admin/api/blocks/:id/resolve`（JSON 变体）与新增的表单薄壳路由**共用同一个函数** → 写调用点仍是一处，围栅门对写入的断言不需要重写。
+- **P1 前不得新增落点**：承包人/供应商侧的"提交/上传"在拿到人工门决策（谁是 actor、落哪个目录、谁消费）之前一律**不做**（未决，见 §7）。
+
+### 3.3 动作 → 路由 / 方法 / 请求体 / 响应形状（总表）
+
+约定：
+- `P` = `/quotagent` 前缀（配置项 `route_prefix`，实现里用 `prefix` 变量拼，不要写死）。
+- "**同形失败**"= 未授权一律 401 + `{"error":"unauthorized"}`（逐字节，复用 `adminGuard.unauthorized()`）。
+- 表单薄壳的 303 结果码只用两个值：`accepted` / `not-accepted`；另回显**用户自己提交的** `block_id`（`ref=`），**绝不回显提交的材料值**。
+
+| # | 动作 | 路由 | 方法 | 请求体（form-urlencoded） | 成功 | 失败 |
+|---|---|---|---|---|---|---|
+| A1 | 看总览与全部路由 | `P/` | GET | — | 200 HTML（四道链接 + 账本健康 + 路由表摘要） | — |
+| A2 | 筛选/翻页事件 | `P/<view>/events?type=&s=all\|suppressed&q=&limit=&offset=&order=asc\|desc` | GET | — | 200 HTML；`<p data-applied="type=…,limit=…,offset=…,order=…,matched=N,total=M">` | 参数非法**不报错**：夹取到合法域（limit∈[1,200] 默认 20；offset≥0；order 白名单；type 必须 ∈ `rules[view].types`，不在则 200 + 空表 + `匹配 0 行`）→ 无可被探测的差异 |
+| A3 | 事件 JSON（新路由，老 `/api/events` 不动） | `P/<view>/api/events/query?...` | GET | — | 200 `{view, matched, total, applied:{type,limit,offset,order,s}, events:[…]}`（events 仍是**公开投影行**） | 同 A2（夹取，不 4xx） |
+| A4 | 看待批队列 | `P/<view>/approvals?policy=&stale=1` | GET | — | 200 HTML 队列表（列：id/action/summary/refs/flags/waited/策略）+ 口径标注 | 快照缺失 → 200 + 表格体「未提供（缺队列快照）+ 下一步」；**不得**显示成"零待批" |
+| A5 | 队列 JSON（新） | `P/<view>/api/approvals/queue?policy=&stale=0\|1` | GET | — | 200 `{view, degraded:false, counts:{total,stale,by_policy}, items:[{approval_id,action,refs,flags,waited_seconds,timeout_policy}]}`（**默认不出 `summary`**，见 §7 未决 1） | 快照缺失 → 200 同键集 `{degraded:true, reason:"queue-snapshot-missing", next_action:"…", counts:全零, items:[]}` |
+| A6 | 看报价/行项目 | `P/<view>/quotes?item=&order=` | GET | — | 200 HTML（行项目表 + 价格序列 + 状态） | 无可聚合行 → 200 + 空态说明（与"读不到"用不同文案，且带 `data-degraded` 标记） |
+| A7 | ops 子视图 | `P/ops/{runtime,pipeline,retention,evolve,evidence}?view=&domain=` | GET | — | 200 HTML 明细表 + 口径来源 | 快照缺 → 200 降级（带 `reason` 与 `next_action`） |
+| A8 | 机器可读路由表 | `P/api/routes` | GET | — | 200 `{routes:[{path,method,view,kind:"read"\|"write",gate}], count}`（含四道全部页面/JSON/写类路由） | — |
+| A9 | 状态（**扩展一个键**） | `P/api/status` | GET | — | 200，**保持现有键逐字节语义**，新增 `routes_all:[…]`（新键，不改 `routes`） | — |
+| A10 | 提权（现有，不变） | `P/admin/api/elevate` | POST | `token=<...>` | 200 `{"ok":true,"view":"admin"}` + `Set-Cookie: qa_admin=<opaque>; HttpOnly; SameSite=Strict; Path=/quotagent/admin` | **401 + 固定体**（缺 token/错 token/未启用/冷却/过期五类同形） |
+| A11 | 解阻塞（现有 JSON，不变） | `P/admin/api/blocks/<block_id>/resolve` | POST | `kind=<k>&<字段…>` | 202 `{"ok":true,"block_id":…,"payload_sha256":…,"bytes":N,"next_action":"等待 Python 侧消费：tools/admin-apply.py …"}` | 401 同形；无字段 400 `{"error":"no-fields","hint":"至少提交一个字段"}`；未配 inbox 503 `{"error":"inbox-unconfigured","hint":…}`；写失败 500 `{"error":"inbox-write-failed","detail":…}` |
+| A12 | 解阻塞（**表单薄壳，新**） | `P/admin/blocks/<block_id>/resolve` | POST | `kind=<k>&<字段…>&_form=1` | **303** + `Location: P/admin/?result=accepted&ref=<block_id>`；落盘与你现有 JSON 变体**完全相同**（同一函数） | 401 同形（未带会话）；带会话但落盘失败 → **303** + `Location: P/admin/?result=not-accepted&ref=<block_id>`（原因只进宿主日志与 `/admin/api/blocks`） |
+| A13 | 装载/卸载/重载用户空间插件（现有 JSON，不变） | `P/admin/api/user-plugins/(load\|unload\|reload)` | POST | `ns=&plugin=` | 200 `{ok:true,code:"",uid,effects}` | 409 `{ok:false,code:"plugin-not-found"\|"already-loaded"\|…,next_action}`；401 同形 |
+| A14 | 同上（表单薄壳，新） | `P/admin/user-plugins/<action>` | POST | `ns=&plugin=&_form=1` | 303 → `P/admin/?result=accepted&ref=<ns>/<plugin>` | 401 同形；否则 303 → `?result=not-accepted&ref=…` |
+| A15 | 提插件需求（现有，不变） | `P/admin/api/user-plugins/request` | POST | `ns=&description=` | 202 `{ok:true,request_id,next_action}` | 400 `{"error":"no-description","hint":…}`；401 同形；写失败 500 `{"error":"request-write-failed"}` |
+| A16 | 提权申请（现有，不变） | `P/admin/api/user-plugins/elevate` | POST | `ns=&plugin=&approval_ref=ap-NNNN` | 202 `{ok:true,elevation_id,payload}` | 409 `{ok:false,code:"elevate-needs-approval"\|"elevate-tampered"\|…,next_action}` |
+| A17 | 切道（现有 + 修复） | `P/admin/api/switch?to=<view>` | GET | — | 302 `Location: P/<view>/`（`to` ∈ {contractor,supplier,**ops**,admin} —— 与 `adminGuard.views` 对齐，修 §1.4 的 400） | 401 同形；非白名单 → 400 `{"error":"unknown-view","hint":"contractor / supplier / ops / admin"}`（**仅在已授权后**出现，不构成未授权面的 oracle） |
+| A18 | 退出会话（可选，P2） | `P/admin/api/logout` | POST | `_form=1` | 303 → `P/`（会话作废，只减权） | 401 同形 |
+| A19 | 只读自刷新（可选，P2/B′） | 无新路由（复用 `P/api/obs`、`P/api/ops`） | GET | — | 200 JSON | 与现有路由相同；失败只在页面显示"上次刷新失败"，**不得**伪装成功 |
+
+**统一实现约束**
+
+1. 请求体读取沿用现有 `readBody`（16 KB 上限）；P1 可加 `content-length > 16384` → 413 `{"error":"payload-too-large","limit":16384}`（同形，不细分）。
+2. 所有新增 HTML 一律经 `html(title, body, prefix)` 输出，`content-type: text/html; charset=utf-8`、`cache-control: no-store`（沿现约定）。
+3. 所有新增 JSON 一律 `JSON.stringify(payload, null, 2) + "\n"`，`application/json; charset=utf-8`（沿现约定，便于门按行断言）。
+4. 新增读路由必须复用 `rowsFor(view)`（投影后的公开行）与既有插件句柄；**不得**直读 `ledgerOf(view).rows()`（会绕开投影白名单）。
+5. 参数夹取一律**回显生效值**（`applied` / `data-applied`），让"夹取"这件事可被机器核对（沿用仓库既有风格：宁可夹取可核对，也不静默放行）。
+
+---
+
+## 4. 路由与视图拆分
+
+要求原文：「不同 routes 提供双方各自可见的 UI，而不是只有一条 dashboard route」。现状**已有** 4 道页面路由（`/`、`/contractor/`、`/supplier/`、`/ops/`、`/admin/`），但**每道只有 1 条路由** = 每道只有一屏。本规格把它拆成「道 + 子视图」，并保持既有前缀（网关与 dashboard 路由表都不用改）。
+
+### 4.1 路由表（现有 + 新增）
+
+| 路由 | 方法 | 谁看 | 现有/新增 | 数据源（只读） |
+|---|---|---|---|---|
+| `P/` | GET | 所有人 | 现有 | 各视角 `ledger.verify()` |
+| `P/contractor/` | GET | 承包商 | 现有（**第一屏重排**） | projection + evidence + approvals + pipeline + history |
+| `P/supplier/` | GET | 供应商 | 现有（**第一屏重排**） | 同上（自己账本） |
+| `P/contractor/{events,quotes,approvals,evidence}/` | GET | 承包商 | **新增** | 现有句柄（零新数据源） |
+| `P/supplier/{events,quotes,approvals,clarifications}/` | GET | 供应商 | **新增** | 现有句柄 |
+| `P/contractor/api/events/query` · `P/supplier/api/events/query` | GET | 各视角 | **新增** | 投影后公开行 |
+| `P/<view>/api/approvals/queue` | GET | 各视角 | **新增** | P0：账本行推导（降级）；P1：`tmp/ui-shared/queue.json` |
+| `P/ops/` | GET | 运维 | 现有（**第一屏精简**） | ops-view + pipeline + retention + journal |
+| `P/ops/{runtime,pipeline,retention,evolve,evidence}/` | GET | 运维 | **新增** | 同上（拆开） |
+| `P/admin/` | GET | 管理员 | 现有（子导航 + 修切道） | adminView + userPlugins + pluginMarket |
+| `P/api/routes` | GET | 所有人 | **新增** | 静态路由表（宿主自己声明） |
+| `P/api/status` | GET | 所有人 | 现有（**加一个 `routes_all` 新键**） | ledger.verify + 路由表 |
+| `P/api/{health,obs,ops,pipeline,retention}` | GET | 所有人 | 现有（不变） | 不变 |
+| `P/<view>/api/{events,history,evidence,scorecard,approvals,negotiation,faq}` | GET | 各视角 | 现有（**字节不动**） | 不变 |
+| `P/admin/api/*`（elevate/blocks/session/switch/market/user-plugins） | GET/POST | 管理员 | 现有（**字节不动**） | 不变 |
+| `P/admin/blocks/<id>/resolve` · `P/admin/user-plugins/<action>` | POST | 管理员 | **新增（表单薄壳，303）** | 复用现有写函数（唯一写顶点） |
+
+路由解析注意（实现细节，避免踩坑）：现有 `viewMatch = /^\/([a-z]+)\/?$/` 只匹配**无子路径**的形式（`/contractor/` 会命中，`/contractor/events/` 不命中）→ 新增子路由用显式正则（如 `/^\/([a-z]+)\/(events|quotes|approvals|evidence|clarifications)\/?$/`）并在 `viewMatch` **之前**判定；`/ops/` 的判定已在最前面，子路由不能撞。
+
+### 4.2 从现有 dashboard 可达（确认）
+
+- 服务已登记：`/workspace/services/services.json` 的顶层键 `quotagent`（与 `dashboard` 同级），脚本 `projects/quotagent/tools/webui-serve.py`、端口 8093、健康路径 `/api/health`；`gateway.routes` 有一条 `{"prefix":"/quotagent","type":"proxy","service":"quotagent"}`（**不剥前缀**）。
+- 新增子路由**不需要**改 dashboard/网关：它们都在同一前缀下，网关是前缀代理。
+- 实测可达性：`curl -s http://127.0.0.1:80/api/status` 含 `/quotagent`；`GET http://127.0.0.1:80/quotagent/<view>/` 经网关 200（`tools/ws-integrate.py` 的三条回读判据：直连 / 经网关 / dashboard 路由表）。
+- 实施后**必须重启并回读**（改宿主代码 `ws-gateway start quotagent` 不会热载；重启期间 `webui-serve.py` 会先跑一遍 `g1-walkthrough.py` 种子，**约 2–5 分钟**才监听 8093 —— 期间 `curl` 会是 connection refused，别误判成代码坏）。
+
+---
+
+## 5. 可验收（每交互一条可机检断言 + 建议门名）
+
+门名说明：`webui` = `tools/verify.sh webui`（`tools/check-webui.py` → `host/webui.mjs`，**实测当前 27/27**；文档里出现的 21/21、23/25、25/25 是历史数字，随断言增加而变）；`admin-route` = `tools/verify.sh admin-route`；`clean-copy` = `tools/verify.sh clean-copy`（须在 commit 后跑）。
+
+| # | 交互 | 可机检断言（形状） | 建议挂的门 | 备注 |
+|---|---|---|---|---|
+| E1 | 四道页面存在且互不相同 | 四路 GET 都 200，且 `sha256(body)` 两两不同 | `webui`（扩充现有断言 ③） | 已有类似断言，扩展到 4 道 |
+| E2 | 零 JS 事实被锁死 | 对四道页面：`re.findall(r'<script', body)` 长度 0 **且** `on\w+="` 匹配数 0 | `webui`（**新增**） | 这条是"方案 A"的守护断言；谁敢加脚本谁变红 |
+| E3 | 导航可达 | 四道页面正文里都含 `href="{prefix}/ops/"` 与 `href="{prefix}/"`；`/` 页含四道链接 | `webui`（新增） | 修「运维道不在导航里」 |
+| E4 | 第一屏三件事 | `/contractor/` 与 `/supplier/` 的 HTML 含三个稳定锚点 `data-block="pending-approvals"`、`"in-progress"`、`"health"`（各一次，且在 `<h2>` 里） | `webui`（新增） | 把"第一屏必须看到的 3 件事"变成机器可判 |
+| E5 | 事件筛选真的在筛 | 夹具（门内 RAW 是 6 行 + 2 行价格/记分卡行）：`GET /contractor/api/events/query?type=quote/submitted` → 200，`matched < total`，且 `events[*].type` 全等 `quote/submitted` | `webui`（新增） | 必须有**非空转对照**（不带 type 时 matched=total） |
+| E6 | 分页不重叠 | `?limit=2&offset=0` 与 `?limit=2&offset=2` 的 `seq` 集合交集为空，且并集 ⊂ 全量 | `webui`（新增） | |
+| E7 | 参数夹取回显 | `?limit=99999` → 200，`applied.limit == 200`；`?limit=-1` → `applied.limit == 20`（默认）；`?order=DROP` → `applied.order == "desc"` | `webui`（新增） | 不引入新错误码；"夹取可核对" |
+| E8 | 私域负控（回归） | `/supplier/events?...` 响应体里搜不到 `cost_floor`/`markup_pct`/`calendar:private`；`/supplier/api/events/query` 同；**非空转对照**：同数据在 `/contractor/` 可见 | `webui`（扩展现有 ⑤⑥⑦⑧） | 新页面必须沿用 `rowsFor()` |
+| E9 | 老路由字节不动（回归） | 老 `/api/events`、`/api/approvals`、`/api/status` 的键集与值不变（新键只允许出现在 `routes_all`） | `webui`（现有断言直接覆盖） | G5 |
+| E10 | 待批队列四要素 | P0：`/contractor/api/approvals/queue` 200 且键集恰好 `{view,degraded,reason,next_action,counts,items}`；`degraded:true` 时 `items==[]` 且带 `reason`（**不得**显示成"零待批"）。P1：喂队列快照夹具后 `items[0]` 含 `approval_id/action/refs/flags/waited_seconds/timeout_policy` 且 `summary` 键不存在 | `webui` + `admin-route`（夹具） | FR-UX-001 的正身 |
+| E11 | 快照降级不冒充健康 | `queue.json` 缺失/坏 JSON/形状不对三种 → 都 200、同键集、`degraded:true` + **有名 reason**，HTML 里不出现"0 项待批"字样 | `webui`（负控三条） | 沿用 admin-view 的降级纪律 |
+| E12 | 路由表完整 | `GET /api/routes` 200，`count == len(routes)`，包含 4 道页面 + 全部 `P/admin/**` 写类路由；`GET /api/status` 的 `routes_all` 与之一致 | `webui`（新增） | 修 §1.4 的"路由表只有 2 条" |
+| E13 | 提权契约（回归） | `POST /admin/api/elevate` 正确 token → 200 + `Set-Cookie` 四件；错/缺 token → 401 固定体逐字节；响应里搜不到 token | `admin-route`（现有 ②③④⑤） | G5：**不要**改这条路由 |
+| E14 | 解阻塞表单薄壳 | ① 无会话 `POST /admin/blocks/<id>/resolve` → 401 且 body 逐字节 == `{"error":"unauthorized"}`；② 带会话 + `_form=1` → **303** 且 `Location` 匹配 `^/quotagent/admin/\?result=accepted&ref=<block_id>$`；③ 同一次调用后**业务账本哈希零变化**、`admin-submissions/` 恰好 +1 个文件（0600） | `admin-route`（扩充 T-265b 那三条） | 失败同形：`not-accepted` 与成功**同路由同方法同状态码**，只差结果码 |
+| E15 | 未授权不泄露 + 无部分效果 | 未带会话的 6 条写类路径全 401 固定体，且 `admin-submissions/` 文件数与账本哈希**零变化** | `admin-route`（现有 ⑦⑫⑬） | |
+| E16 | 非 admin 前缀没有写面 | 对 `/contractor/`、`/supplier/`、`/ops/` 的已知路径逐个 `POST` → 响应可有可无，但**账本哈希零变化 + 8 个 inbox 目录文件数零变化** | `webui`（新增一条负控） | G7 的机检形态 |
+| E17 | 零写面（静态） | 扫描 `host/modules/webui.mjs` 与新增 `host/lib/ui-render.mjs`：写文件/子进程/网络/随机/定时器 **0 命中**；且扫描器**非空转**（合成坏源码命中 ≥5） | `webui`（新增，照 `t277` 第 7 条的写法） | 需要**显式豁免**现有那两处 inbox 写入（它们随 A11/A12 共用函数）——豁免必须写成白名单 + 说明，不能放宽整个扫描器。**未决 2** |
+| E18 | 切道四道全通 | 带会话 `?to=ops` → 302 到 `/quotagent/ops/`；`?to=admin` → 302 到 `/quotagent/admin/`；`?to=<乱码>` → 400 `unknown-view` | `admin-route`（扩充现有 ⑥） | 修 §1.4-1 |
+| E19 | 干净副本自足 | 新增文件 `git add` 后 `tools/verify.sh clean-copy` 全绿（`webui` 门在干净副本里也跑） | `clean-copy` | 门内用的是 `git archive HEAD` → 未提交 = 缺文件 |
+| E20 | 文档门不被草稿污染 | 本规格文件名以 `.md.txt` 结尾，`tools/verify.sh docs` 全绿 | `docs` | D-058 |
+
+**关于"该挂哪个门"的建议原则**：HTTP 形状类断言 → `webui`（既有 27 条的家）；鉴权/写面/账本零变化类 → `admin-route`；静态零写面 → `webui` 或与 `t271` 同形的静态段；新 Python 快照写入器 → 建议新增 `verify.sh ui-queue`（或并入现有 `ui-seed`），**本轮不改 `verify.sh`**（禁改），所以实施者要么并入既有门，要么另开一次人工门决策。
+
+---
+
+## 6. 分步实施顺序
+
+### P0 —— 「一屏就能做成事」（纯宿主侧，零新文件、零新服务、零新写面）
+
+| 步 | 内容 | 预估改动文件 |
+|---|---|---|
+| P0-1 | 路由表与导航：新增 `P/api/routes`；`/api/status` 加 `routes_all`（新键）；四道导航补齐（含 `运维视角`）；道内子导航 | `host/modules/webui.mjs`（1）；门 `host/webui.mjs`（1） |
+| P0-2 | 第一屏重排：contractor/supplier 三块（`pending-approvals` / `in-progress` / `health`）+ 其余下沉 `<details>`；**保留**提权入口（FR-ADMIN-002） | `host/modules/webui.mjs`（1）；门（1） |
+| P0-3 | 子视图 `/contractor/{events,quotes,approvals,evidence}/`、`/supplier/{events,quotes,approvals,clarifications}/`（GET 筛选/翻页/排序，`<form method=get>`） | `host/modules/webui.mjs`（1）；可选抽 `host/lib/ui-render.mjs`（+1）；门（1） |
+| P0-4 | 事件查询 JSON `P/<view>/api/events/query`（老 `/api/events` 不动） | `host/modules/webui.mjs`（1）；门（1） |
+| P0-5 | 待批队列页 + `P/<view>/api/approvals/queue`（**P0 版为降级态**：只有 id/action/ref/等待缺失，显式标"缺队列快照"） | `host/modules/webui.mjs`（1）；门（1） |
+| P0-6 | ops 子视图 `/ops/{runtime,pipeline,retention,evolve,evidence}/` | `host/modules/webui.mjs`（1）；门（1） |
+| P0-7 | 门扩充：E1–E12、E16、E17 共约 13 条新断言（27 → ~40）；`cli.mjs` 的路由回声补新路由 | `host/webui.mjs`、`host/cli.mjs`、`tools/check-admin-route.py`（3） |
+
+P0 总计改动：**2–4 个 tracked 文件**（核心只有 `host/modules/webui.mjs` 一个）。P0 做完，用户能在四道页面里筛选、翻页、下钻、看三件必看的事 —— 但"待批队列的四要素"仍是降级态（因为真源数据还没送到 UI）。
+
+### P1 —— 「把真源送进 UI」（SQL 侧只读快照 + 表单薄壳）
+
+| 步 | 内容 | 预估改动文件 |
+|---|---|---|
+| P1-1 | 新增只读快照写入器 `tools/refresh-approvals-queue.py`：读两侧账本 → 调 `services/approval.py` 的 `queue_view()`（真源，含 action/summary/refs/flags/waited_seconds/timeout_policy）→ 原子写 `tmp/ui-shared/queue.json`（同 `refresh-ui-snapshots.py` 的形状：`generated_at` + `views.<view>.items`，**按键白名单投影**） | `tools/refresh-approvals-queue.py`（+1，新增） |
+| P1-2 | 探活/seed 钩子调用它（与 retention/pipeline/admin 三个钩子同列） | `tools/webui-serve.py`（1） |
+| P1-3 | 宿主只读消费 `queue.json`：`Config` 增 `approval_queue: string().default('')`（默认回落 `tmp/ui-shared/queue.json`）→ 渲染队列四要素 + 降级优先 | `host/modules/webui.mjs`（1） |
+| P1-4 | CLI 透传新 flag `--approval-queue`（并加进路由回声） | `host/cli.mjs`（1） |
+| P1-5 | 表单薄壳 `POST P/admin/blocks/<id>/resolve`、`POST P/admin/user-plugins/<action>`（303 + 结果码），与现有 JSON 路由**共用同一个内部函数** | `host/modules/webui.mjs`（1）；门（1） |
+| P1-6 | 切道白名单对齐 `adminGuard.views`（ops/admin 也能切）+ 页面显示 token 来源/会话/TTL/连续失败 | `host/modules/webui.mjs`（1）；`tools/check-admin-route.py`（1） |
+| P1-7 | 门扩充：E10（P1 版）、E14、E15、E18；文档更新（`docs/work/deployment-manual.md` 的路由表 + `docs/design/14-plugin-inventory.md` **不动**，因为没新模块） | `host/webui.mjs`、`tools/check-admin-route.py`、`docs/work/deployment-manual.md`（3） |
+
+### P2 —— 「顺手把剩下的坑填掉」
+
+| 步 | 内容 | 预估改动文件 |
+|---|---|---|
+| P2-1 | ops 页只读自刷新（B′：仅 GET、仅 textContent、单独门断言） | `host/modules/webui.mjs`（1）；门（1） |
+| P2-2 | 导出与下载：事件/报价导出 `?format=csv`（**生成在宿主内存里，不落盘**，`content-disposition: attachment`） | `host/modules/webui.mjs`（1） |
+| P2-3 | 承包商/供应商侧的"提交待办"（需要**先有**人工门决策：actor、落点、消费者）→ 未决 3 | 未决（≥3：新落点 + new Python consumer + 门） |
+| P2-4 | 多租户/realm 维度筛选（FR-EVIDENCE-004 方向） | 未决 |
+| P2-5 | `413 payload-too-large`、`POST` 非 admin 前缀的 405 统一语义（若 E16 需要更强形状） | `host/modules/webui.mjs`（1）；门（1） |
+
+---
+
+## 7. 未决（不猜、不编）
+
+1. **队列项是否允许展示 `summary`**：`ApprovalService.queue_view()` 的 `summary` 由 `_summarize(payload)` 生成，是"人可读摘要"，但本仓纪律（D-033/D-053 与 `approval-digest` 的"不出正文"）把它归在"摘要=可能带正文"。**默认做法：不出 `summary`，只出 `id/action/refs/flags/waited/policy`**；要出必须有一次人工/设计决策（并同步到快照写入器的按键白名单 + 门的新断言）。
+2. **E17 静态零写面的豁免写法**：`webui.mjs` 现在**确有**两处 inbox 写入（`writeFileSync/mkdirSync/renameSync/chmodSync`）与 `new Date()`（落待处理项的时间戳）。"宿主零写面"在既有围栅门里是**逐模块**扫描（`admin-guard`/`admin-view`/`user-plugin-manager`/`plugin-market`/`storage-view`），`webui.mjs` 从未被这样扫过。要让 `webui.mjs` 也过零写面扫描，必须先决定：① 把两处写入抽到 `host/lib/`（例如 `host/lib/ui-inbox.mjs`）并给它**显式豁免**（白名单 + 注释说明"这是唯一写顶点，由 Python 侧消费"）；还是 ② 只对新增代码段做逐段扫描。**未决，需人工门**。
+3. **party 道是否允许写动作**：承包商/供应商自己提交（澄清答复、凭据、材料）需要新的落点与新的 Python 消费者（现有 `admin-apply.py` 只按 `block_id` 消费 admin 提交）。在有人工门决策之前，party 道只读（本规格按此写）。
+4. **`summary` 之外的 `refs` 是否需要展开成引用链**：FR-UX-001 说"引用链"，`queue_view()` 只给单元素 `refs`（`[record["ref"]]`），要真正的链条需要再回一次账本（`correlation_id`）；P1 是否做未决。
+5. **门数字与 AC 表的同步**：`docs/work/acceptance-criteria.md` 里写的是历史数字（"webui 21/21"）；断言数变化后该表的文字需要人工更新（不在本轮禁改清单里的，但属于"落表规则"范畴）。**建议**：实现者在同一提交里更新这些文字，或者另开一条 AC 变更（未决）。
+6. **服务重启成本**：`webui-serve.py` 启动时会先跑 `g1-walkthrough.py`（约 2–5 分钟）+ 两个 seed 脚本才监听端口；P0–P2 的每次"真机验收"都要预留这段时间（期间 `curl` 是 connection refused，**不是**代码坏了）。
+
+---
+
+## 附录 A：实测命令（复现本规格里的数字）
+
+```bash
+# 基线：每道的字节数与控件数
+for p in / /contractor/ /supplier/ /ops/ /admin/; do
+  curl -s -o /tmp/p.html -w "$p %{http_code} " "http://127.0.0.1:8093/quotagent$p"
+  printf "bytes=%s script=%s form=%s button=%s\n" "$(wc -c </tmp/p.html)" \
+    "$(grep -c '<script' /tmp/p.html)" "$(grep -c '<form' /tmp/p.html)" "$(grep -c '<button' /tmp/p.html)"
+done
+# 门（实测 27/27）
+cd /workspace/projects/quotagent && tools/verify.sh webui
+# 从 dashboard 可达
+curl -s http://127.0.0.1:80/api/status | grep -c quotagent
+```
+
+## 附录 B：一个最小可用示例（P0-2 的 contractor 第一屏骨架，仅示意结构，不是最终实现）
+
+```
+[子导航] 第一屏 | 待批 | 报价 | 事件 | 运维 | 系统管理(提权)
+<h2>待我处理</h2>            <section data-block="pending-approvals">
+  表：approval_id | action | refs | flags | waited | policy
+  <a href="P/contractor/approvals">全部待批 →</a>
+<h2>进行中</h2>              <section data-block="in-progress">
+  最新 RFQ 包 / 报价数 / 比价评估 id / Flag 数 / 价格中位
+  <a href="P/contractor/quotes">报价与行项目 →</a>
+<h2>异常与健康</h2>          <section data-block="health">
+  行数·类型数·链自洽·最后事件·被抑制行数·快照新鲜度
+<details> 证据面 / 记分卡 / 谈判 / FAQ / 原始事件 </details>
+```
+
+（完）

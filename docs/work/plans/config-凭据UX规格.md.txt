@@ -1,0 +1,330 @@
+# 配置与凭据 UX 规格（可实施）
+
+**文件性质**：规格，不是实现。**不含任何真实凭据值**（一律 `<占位符>` / `[REDACTED]`）。
+**适用仓库**：`/workspace/projects/quotagent`。
+**编号纪律**：本规格对应的 FR/AC **尚未登记**（`docs/work/plans/p3-spec.json` 现有 FR 域为 ADMIN / USERPLUG / MARKET / STORAGE / AGENTRT，**没有**配置或凭据域）。
+因此本文**不写任何 FR-/AC- 编号**，只引用**已存在**的设计文档与**已存在**的代码位置（文件:行）；待登记项集中在 §7 未决。
+**读到的真值说明**：`/workspace/config.yaml` 只读**顶层键名**（不读、不打印任何值）；仓库内无凭据文件被读取。
+
+---
+
+## 1. 现状与真相
+
+### 1.1 三层配置今天从哪里读
+
+| 层 | 今天的真源 | 读取者 | 写入者 | 文件路径 | 环境变量 | 优先级 |
+|---|---|---|---|---|---|---|
+| **项目配置**（进程组成 + 策略键） | **代码内数据**：`host/profiles.mjs`（每个 profile 的 `config` 块）+ 键白名单 `host/lib/schema.mjs` | cordis `config-host` 插件（`host/lib/config.mjs`），经 CLI `config-update` 注入 | **没有文件写入者**；运行期只走 `fiber.update`（内存） | **不存在**（仓库根无 `config/`、无 `config.example.yaml`） | 无（profile 名由 CLI `--profile` 给） | 默认值（profile 内联） → 运行期 patch（内存，进程退出即失） |
+| **插件配置**（用户空间插件自己的 `Config`） | `loadPlugin` 的 `options.pluginConfig`（`host/lib/user-space.mjs:621`） | 隔离内核装载器（校验插件导出的 `Config`，`host/lib/user-space.mjs:576-580`） | **今天没有任何写入者** | **不存在** | 无 | 今天恒为 `{}` —— 见 1.4 偏差 ① |
+| **凭据** | ① 环境变量 `QUOTAGENT_ADMIN_TOKEN`；② 0600 文件（默认路径由 Python 决定）；③ 用户空间插件凭据 `env['cred:<ns>/<plugin>:<key>']`（`host/lib/user-space.mjs:207-240`） | Python：`tools/webui-serve.py:69-90`（**唯一的文件读取点**）；Node：`host/modules/admin-guard.mjs:127-131`（**只读 env**） | **没有 UI，也没有写入者**；token 由运维在带外放好 | 默认 `/workspace/config/quotagent-admin-token`（= 仓库的**上一级父目录**，`ROOT.parent.parent/config`，`tools/webui-serve.py:79`） | `QUOTAGENT_ADMIN_TOKEN`（值）、`QUOTAGENT_ADMIN_TOKEN_FILE`（路径覆盖，`tools/webui-serve.py:79`） | **env 优先，其次 0600 文件，两者都没有 = 未启用（fail-closed）**；两侧顺序一致（Python `:76-85`、Node `:127-131`） |
+
+工作区层面另有一套**既有约定**（不是本仓的，但用户会混淆）：`/workspace/config.yaml` 的 `api_keys.<provider>` 采用 `{value, env, base_url, default_model}` 形状（`config.example.yaml:126` 起），`secrets: {}`，`dashboard.admin_token`；`/workspace/services/services.json` 的 `_map` 明说"API keys / 凭据放 `../config.yaml`，**没有任何东西配在两处**"。本条是设计约束（见 §2.1），不是可忽略的旁注。
+
+### 1.2 提权 token 到底从哪里来（精确到行）
+
+1. 运维在带外放值：`/workspace/config/quotagent-admin-token`（**权限必须恰为 0600**），或导出 `QUOTAGENT_ADMIN_TOKEN`。
+2. `tools/webui-serve.py:76-85`：先读 env（`.strip()`），再读文件；**文件模式 ≠ 0600 一律忽略并打一行 stderr**（`:81-84`），文件缺失按未启用。
+3. 该脚本把值**只**注入子进程**环境变量**（`:188-195`），不进 `argv`（`ps` 可见）。
+4. `host/modules/webui.mjs:140` 以 `{token_env: 'QUOTAGENT_ADMIN_TOKEN'}` 装配 `admin-guard`——**没有传 `token_file`**，`admin-guard` 的 `token_file` 默认 `''`，因此 `readTokenFile`（`host/modules/admin-guard.mjs:88-98`）在 Node 侧**永不执行**。
+5. `host/modules/admin-guard.mjs:126-133`：apply 时**一次性**把值归一成 `sha256` 摘要（`expected`），之后只用恒定时间比较；`enabled = expected !== null`。
+6. 校验只用 digest：`digestOf(submitted)` vs `expected`（`:184`）+ `timingSafeEqual`（`:77`）；`stats()` 只给 `token_source` 标签（`:254`）。
+
+**结论（用户问题的直接答案）**：token **不在项目目录里**。它在 `/workspace/config/`（项目目录的上一级）或环境变量里；项目内的 `config/` 目录根本不存在。
+
+### 1.3 为什么用户找不到（每条都有证据）
+
+1. **README 完全不提**：`README.md` 里 `config` / `token` / `QUOTAGENT` 出现次数 = **0**（grep 无命中）。README 只讲阅读顺序与 agent 操作序列。
+2. **提权表单只写了一句标签**：任意一道 UI 的页面底部（`host/modules/webui.mjs:286-288`）就一个 `<input type=password name=token>`，文案是"管理员 token（提权为系统管理）"——**没有来源、没有路径、没有 env 名、没有"怎么拿一个"**。
+3. **未提权时给的是纯 JSON，没有任何页面**：`/quotagent/admin/` 与全部 `/admin/*` 未提权一律 `401` 固定体 `{"error":"unauthorized"}`（`host/modules/webui.mjs:403`、`host/modules/admin-guard.mjs:63-65`）。这是契约要求的"无 oracle"（`docs/design/21-admin-console-contract.md` §2 第 4 条），**但它同时把入口也封死了**：系统里不存在任何"未提权也能看"的上手页/说明页，用户第一次打开只会撞到 401。
+4. **唯一有记载的地方在运维手册，而且路径不在项目里**：`docs/work/deployment-manual.md:253-259` 才写了"两条供给链"（`/workspace/config/quotagent-admin-token` + `QUOTAGENT_ADMIN_TOKEN`）。新用户按 README 的阅读顺序走，永远走不到这一节。
+5. **项目内文档讲的是"更新怎么流"，不是"人从哪配"**：`host/CONFIG.md` 全篇是 cordis `internal/update` 瀑布、三档可改性、实测坑；没有一句面向用户的"你去哪写文件"。
+6. **面板该提示的提示不存在**：`deployment-manual` 说"没配 token 时面板会把这件事当一条阻塞显示"，但实测快照 `tmp/ui-shared/admin.json` 有 **9 条阻塞，没有一条关于 admin token**（`tools/refresh-admin-snapshot.py` 不产这条）。**文档承诺 ≠ 现状**。
+7. **现有凭据类阻塞"看起来可行动，实际不可行动"**：mail 那条 `required_action` 写的是"提供 SMTP/IMAP 凭据（**服务端注入：环境变量或 0600 文件**…）"——**既没给变量名，也没给文件路径**。用户拿到的是一条无法照做的指令。
+8. **项目目录里没有可配置的东西**：仓库根只有 `host/ src/ tools/ docs/ .agents/ user-space/`，**没有 `config/`、没有 `config.example.yaml`、没有任何 YAML**；`.gitignore` 只列了 `.env` / `*.local.yaml` / `config.local.*` / `user-space/`（即"防泄露"，不是"放配置"）。
+9. **插件配置没有任何面**：`/quotagent/admin/` 面板里有 用户空间插件 / 插件市场 / 阻塞 / 进度，**没有配置页**；`user-plugin-manager` 的动作表（`host/modules/user-plugin-manager.mjs:50`）里也没有 setConfig。
+
+### 1.4 已发现的偏差与不一致（登记，不修）
+
+| # | 偏差 | 证据 | 影响 |
+|---|---|---|---|
+| ① | **插件配置恒为空**：管理面从不传 `pluginConfig`（`host/modules/user-plugin-manager.mjs:166` 只传 `{root, ns, plugin, onEvent}`），`reload` 的 overrides 也不带 `pluginConfig`（`host/lib/user-space.mjs:697-703`） | 对照 `host/lib/user-space.mjs:621` 的入口 | 插件的自定义配置**永远走默认值**；"UI 改插件配置 + 持久化"今天**零基础** |
+| ② | **插件凭据恒不可解析**：`loadPlugin` 的 `env` 默认 `{}`（`:440`），管理面同样不传 `env` | 同上 | `cred:<ns>/<plugin>:*` 只有门/夹具里能造出来，**生产路径没有任何下发者** |
+| ③ | **归档保留凭据明文**：待处理项写入时把 `fields` 的**值原样**落文件（`host/modules/webui.mjs:464-465`、`:473`），`tools/admin-apply.py` 应用成功后"不删源，移入 `applied/`" | `admin-apply.py` 模块 docstring | 提交过的凭据**明文长期留在** `tmp/ui-shared/admin-submissions/applied/`（0600，但仍在盘上） |
+| ④ | **Node 侧文件来源是死代码 + 两处归一不一致**：Node 只读 env；且 Python 用 `.strip()`（去全部空白），Node 用 `replace(/\r?\n$/,'')`（去一个换行） | `tools/webui-serve.py:85` vs `host/modules/admin-guard.mjs:93` | 今天不发作（值由 Python 注入）；**一旦按 1.1 的"两条链"真去接 `token_file`，尾随空白会造成"文件对、提权失败"的假象** |
+| ⑤ | **缺 token 的阻塞根本没生成** | `tmp/ui-shared/admin.json`（9 条阻塞，0 条 token 相关）vs `deployment-manual.md:257` | 文档与现状不符（本规格 §5 用"上手块"补这条，不改判定器口径） |
+
+---
+
+## 2. 配置分层设计
+
+### 2.1 三类配置的落点、权限、读写者
+
+| 类 | 落点（建议，**未决见 §7-1**） | 权限 | 谁读 | 谁写 | 进仓库？ |
+|---|---|---|---|---|---|
+| **项目配置**（进程/插件组成 + 策略键） | `/workspace/config/quotagent.yaml`（项目目录**外**，与 token 同目录；理由：仓库外才不会误提交，且与工作区既有 `config/` 习惯一致） | `0644`（无秘密） | Node 引导（CLI/`config-host`）；Python 门与写入者 | **只有** Python 写入者 `tools/config-apply.py`（新） | **否**（路径在仓库外） |
+| **插件配置**（`<ns>/<plugin>` 自己的 `config`） | 同文件 `plugins:` 段，或 `user-space/<ns>/<plugin>/config.local.yaml`（**未决**，二选一，不得两处都配——沿用 `services.json` 的"没有任何东西配在两处"） | `0644` | 隔离内核装载器（经管理面读入后 `pluginConfig`） | 同上 | **否**（`user-space/` 已在 `.gitignore`） |
+| **凭据** | ① 提权 token：`/workspace/config/quotagent-admin-token`（0600，**只存值，不存别的**）；② 其余外部凭据（SMTP/IMAP/LLM key）：`/workspace/config/quotagent-credentials.env`（0600，`KEY=<值>` 每行一条，**永不出现在 YAML 里**）或工作区既有 `/workspace/config.yaml` 的 `api_keys.*`（**未决**，见 §7-2） | **必须恰为 0600**（读取方一律严格判定，见 §4） | Python（服务/门）；需要时由 Python 注入子进程 env | **只有** Python 写入者 | **否**，且必须被 `.gitignore` 覆盖 |
+
+**红线（沿用既有纪律，不新开口子）**
+
+- **宿主零写面**：`host/` 侧只允许落"待处理项"到已配置的 inbox 目录（0700 目录 / 0600 文件 / 临时名 + `rename`），**不得**写 YAML、不得写凭据、不得写账本（H1）。今天的既有实现就是这个形状（`host/modules/webui.mjs:466-479`），规格沿用，只改"落什么内容"与"落哪"。
+- **判定在 Python 侧**：能不能生效、值是否合法、是否人工专属键，全部由 Python 写入者/门判；宿主只提交、只显示。
+- **同一事实只有一处真源**：某个键只能在 YAML 或 env 或 UI 中的一处被"定为真"，其余层只能是**覆盖并显式标出来源**（§2.2）。
+
+### 2.2 合入顺序与来源标签
+
+**顺序（低 → 高）**：`默认值` → `YAML 项目文件` → `环境变量` → `运行期 UI 修改`。
+
+三条硬规则：
+
+1. **UI 修改不"偷偷赢"**：UI 改的是**当次 fiber 的配置**（内存），并**立即落 YAML**；落完 YAML 后重新按上面顺序合入，结果必须**逐键等于** UI 提交值——否则该键被更高层（env）压住，**必须显式报"被 env 覆盖"**，不得静默。
+2. **来源标签必须可见**：每个键在 UI 上带 `source ∈ {default, yaml, env, ui, profile}`；`env` 压住 `yaml` 时该行标 `shadowed_by: env`。理由：`docs/design/21-admin-console-contract.md` §4 一贯否决"静默生效"，且今天已没有任何渠道能看出某个值为什么不生效。
+3. **受限键的门不变**：`host/lib/schema.mjs` 的三档照旧——`kernel.*` **frozen（永拒）**；`approval.*` / `commitments.*` / `pricing.authorized_band.*` / `prices.authorized_band.*` / `guard.abnormal_low_ratio` / `profiles.*` **humanOnly**（`source` 必须以 `human:` 开头）；未登记键 `unknown-key` 拒。UI 提交的 `source` 由**Python 侧**按已认证的人工会话写成 `human:<name>`，**宿主不得自称 `human`**（`host/CONFIG.md` 已写明这条边界）。
+
+### 2.3 持久化格式（字段名可写，**值一律占位符**）
+
+`/workspace/config/quotagent.yaml` 顶层结构（示例，**值全部是占位符，不是真值**）：
+
+```yaml
+apiVersion: quotagent/v1
+meta:
+  updated_at: "<ISO-8601 占位符>"
+  updated_by: "<human:<人名> 占位符>"
+  schema: 1
+
+# ── 层 1：项目配置（键名必须存在于 host/lib/schema.mjs 白名单） ──────────────
+project:
+  profiles:
+    contractor-ops:
+      approval:      { queue: { enabled: "<bool 占位符>" }, auto_approve: "<bool 占位符>" }
+      commitments:   { require_human: "<bool 占位符>" }
+      compare:       { weights: { price: "<数 占位符>", delivery: "<数 占位符>",
+                                  payment: "<数 占位符>", warranty: "<数 占位符>",
+                                  deviation: "<数 占位符>" } }
+      pricing:       { markup_pct: "<数 占位符>",
+                       authorized_band: { min_unit_price: "<数 占位符>",
+                                          max_unit_price: "<数 占位符>" } }
+      guard:         { abnormal_low_ratio: "<数 占位符>" }
+      transport:     { kind: "<枚举 占位符>", dir: "<相对路径 占位符>" }
+    supplier-bid:    { norm: { tolerance_bps: "<整数 占位符>" },
+                       pricing: { markup_pct: "<数 占位符>" } }
+
+# ── 层 2：插件配置（键 = "<ns>/<plugin>"，值 = 该插件自己的 Config 形状） ─────
+plugins:
+  "<ns>/<plugin>":
+    enabled: "<bool 占位符>"
+    config:  { "<插件 Config 的字段名>": "<占位符>" }      # 字段名由插件导出的 Config 决定
+    credential_key: "<凭据键名占位符>"                     # 与 manifest 的 credential_key 同义；**值不在这里**
+
+# ── 层 3：凭据（**只存指针与指纹，永不存值**） ────────────────────────────
+credentials:
+  admin_token:   { source: "<env|file 占位符>",
+                   env: "QUOTAGENT_ADMIN_TOKEN",
+                   file: "/workspace/config/quotagent-admin-token",
+                   required_mode: "0600",
+                   fingerprint_first8: "<8 hex 占位符，可缺省>" }
+  mail_smtp:     { source: "<env|file 占位符>", env: "QUOTAGENT_MAIL_SMTP",
+                   fingerprint_first8: "<8 hex 占位符>" }
+  mail_imap:     { source: "<env|file 占位符>", env: "QUOTAGENT_MAIL_IMAP",
+                   fingerprint_first8: "<8 hex 占位符>" }
+  advisor_llm:   { source: "workspace_config", workspace_path: "/workspace/config.yaml",
+                   section: "api_keys" }
+  plugin_scopes: ["cred:<ns>/<plugin>:<key>"]            # 只写"作用域形状"，不写值
+
+# ── 审计（只声明落点；真源是账本） ───────────────────────────────────────
+audit:
+  ledger: "/workspace/config/quotagent-audit.jsonl"
+  events: ["config/changed", "credential/rotated"]
+```
+
+**字段名约束**：`project.*` 的键必须与 `host/lib/schema.mjs` 一致（**新增键 = 先改 schema，再改本文件**，否则一律 `unknown-key` 拒）；`plugins.*` 的 `config` 字段名由插件导出的 `Config` 决定，**YAML 里不得出现插件没声明的键**（今天会以 `plugin-config-refused:` 前缀抛 `manifest-invalid`，见 `host/lib/user-space.mjs:579`）。
+
+**明确否决**：把秘密值直接写进 YAML 的 `credentials.<name>.value`。理由：一份文件同时承担"可读配置"与"秘密"两种敏感度，必然导致它被复制、被 diff、被贴进 issue。若将来确实要单文件，**必须**先走 ADR（§7-2）。
+
+---
+
+## 3. UI 化方案（系统管理道 `/quotagent/admin/`）
+
+道归属：新页面全部挂 `admin` 道（`host/profiles.mjs` 的 `webui` profile 已含 `admin-guard` / `admin-view`）；"每个功能由插件提供"这条纪律要求新能力**各是一个新模块**（`host/modules/<name>.mjs`，目录即清单，`host/modules/index.mjs`），**不改中心清单**。
+
+### 3.1 页面与动作清单
+
+| # | 页面 / 动作 | 作用 | 读什么 | 写什么 |
+|---|---|---|---|---|
+| U1 | `GET /quotagent/start/`（**未提权可访问**的上手页） | "三步上手" + 每个凭据项：放哪里 / 用什么命令 / 怎么验证 | 静态说明书（env 名、文件路径、chmod 模板、验证命令） | **不写**；**不含任何状态位**（见 §5 红线） |
+| U2 | `GET /quotagent/admin/config/`（配置总览） | 三层配置一屏：每键 `value`（凭据除外）、`layer`、`source`、`shadowed_by`、`editable`、`humanOnly/frozen` 标记 | 合入结果 + 来源标签 + 配置摘要 `digest` | 不写 |
+| U3 | `GET /quotagent/admin/api/config` | 同上，JSON（供门与页） | 同上 | 不写 |
+| U4 | `POST /quotagent/admin/api/config/preview` | **dry-run**：提交 patch → 返回 `{accepted, vetoed_by, reasons[], diff[]}`，**零落盘、零生效** | 白名单校验（宿主侧第一道） | 不写 |
+| U5 | `POST /quotagent/admin/api/config/project` | 保存项目配置（可只存一部分键） | — | 只落**待处理项**（§3.3） |
+| U6 | `GET /quotagent/admin/api/config/plugins` / `POST .../config/plugins/<ns>/<plugin>` | 列插件及其当前配置（含 `source`）/ 提交新配置 | 插件 `Config` 形状（来自 `pluginConfig` 与服务自述） | 只落待处理项 |
+| U7 | `GET /quotagent/admin/api/credentials` | **每个凭据项一行**：`name`、`configured`（bool）、`source`、`required_mode`、`fingerprint_first8`、`next_action` | Python 侧凭据状态快照（只读） | 不写；**响应体里凭据值出现次数必须 = 0** |
+| U8 | `POST /quotagent/admin/api/credentials/<name>` | 提交/更新某个凭据（**只写不回显**） | — | 只落待处理项（0600） |
+| U9 | `POST /quotagent/admin/api/credentials/<name>/rotate` | 轮换（生成新值由 **Python 侧**做；UI 只交"要轮换"这个意图 + 人工引用） | — | 只落待处理项 |
+| U10 | `POST /quotagent/admin/api/config/apply` | 触发 Python 侧消费待处理项（等价今天的 `tools/admin-apply.py` 入口） | Python 侧返回的 `{applied, duplicates, refused}` | 宿主不写；Python 写 |
+| U11 | `GET /quotagent/admin/api/config/audit` | 配置变更审计视图（只读；来自 Python 侧写的审计账本/快照） | 审计行的**已投影**字段 | 不写 |
+| U12 | 门与写入者（CLI，不是 UI）：`tools/config-apply.py`（**唯一**配置/凭据落盘者）、`tools/check-config-route.py`、`tools/verify.sh config-route` | 机检 §6 的全部断言 | — | 写 YAML / 写凭据文件 / 写审计 |
+
+### 3.2 可见 / 可改矩阵
+
+- 可看不可改：`kernel.*`（并标"永不接受"）；所有 `humanOnly` 键（**可提人工引用后才可改**，UI 上给 `needs_approval: true`）。
+- 可改：登记键（`compare.weights.*`、`norm.*`、`pricing.markup_pct`、`transport.*`）与 `plugins.*.config`。
+- 只读展示：三层来源与 `shadowed_by`、凭据"已配置/未配置 + 指纹前 8 位"、审计行。
+- **凭据永远不可读**：UI 里没有任何"显示当前值"的控件，也没有 `value` 字段进入 JSON。
+
+### 3.3 保存怎么落盘（宿主零写面 → Python 写入者 → 原子写 → 回滚）
+
+1. **宿主只落待处理项**（沿用既有形状，`host/modules/webui.mjs:466-479`）：目录 0700、文件 0600、`.tmp.<pid>` + `rename` 原子落位；文件名按 `sha256(规范化 payload)` 前 16 位（幂等）。记录形状（与今天的 `admin-submissions` 同族，**新增 `target` 与 `layer`**）：
+
+   ```
+   { "request_id": "<sha256 前 16 位>", "layer": "<project|plugin|credential>",
+     "target": "<键路径 或 <ns>/<plugin> 或 凭据名>", "fields": { "<字段名>": "<占位符>" },
+     "payload_sha256": "<占位符>", "bytes": 123, "schema": 1,
+     "submitted_at": "<ISO>", "submitted_by": "admin-session" }
+   ```
+   **凭据类的 `fields` 值必须即时写入后不可回读**：写盘后不再有任何"读回并渲染"的路径（见 §4）。**修正偏差 ③**：凭据类待处理项在消费成功后**不得**把明文移入 `applied/` —— 归档件里该值替换为 `sha256(值)` 与 `fingerprint_first8`（或直接不归档，只落审计行；**未决** §7-3）。
+
+2. **Python 写入者 `tools/config-apply.py`（新，唯一落盘者）** 依次做：
+   - **权限门**：待处理项权限**必须恰为 0600**（否则拒，不猜测、不自动改）；`payload_sha256`/`bytes` **一律重算比对**，不采信文件自述（与 `tools/admin-apply.py` 同口径）。
+   - **人工门**：`--approval-ref ap-NNNN` + `--actor human:<人名>` 必须给；缺一即整次拒绝（**不留部分效果**）。
+   - **白名单门**：`project.*` 键须在白名单内；`humanOnly` 键必须带人工引用；`unknown-key` / `frozen` 一律拒。
+   - **原子写**：同目录 `<file>.tmp.<pid>` 写入 → `os.replace()` → `chmod`（项目 YAML `0644`；**凭据文件 `0600`**）→ 写前先留 `<file>.bak.<ts>`（**只留上一版**）。
+   - **回滚**：写完**必须回读**（解析 + 逐字段值相等 + 权限检查）。任一步失败 → `os.replace(bak, file)` 还原并整次失败；**绝不留半份配置**。
+   - **审计**：文件落定后追加 `config/changed`（或 `credential/rotated`）行；**顺序固定**：先文件、后审计；审计失败 → **回滚文件**（守住"生效 ⟺ 可见"）。
+   - **宿主不参与判定**：UI 侧 `preview`（U4）给的结论只是**前置提示**，权威判定在 Python 侧（同一套白名单的**机器可读导出**，见 §7-4 的"防漂移"要求）。
+
+3. **凭据类的额外一条**：写入者只允许把值写进 0600 凭据文件（或 0600 单文件），**并且**把"指纹前 8 位"与 `sha256(值)` 写进审计行；**值不进任何账本、任何快照、任何 stdout/stderr**。
+
+### 3.4 改完如何生效（热加载 vs 重起，逐类写清"为什么"）
+
+| 类别 | 生效方式 | 为什么 | 代价（必须在 UI 上写出来） |
+|---|---|---|---|
+| **项目配置** | **热加载**：`fiber.update(next)` → cordis `internal/update` 瀑布 → 未被否决则链尾 `fiber.config = config; fiber.restart()` | 这是 cordis **原生**语义，仓库已把它当唯一入口（`host/lib/config.mjs:108-131`；`host/CONFIG.md` 第 2 节）。配置宿主与被改模块**同进程**，重启的是插件 fiber，不是进程 → **不需要重起进程** | **接受即重启该插件**：`apply` 重跑、**进程内状态全丢**（`host/CONFIG.md` 第 3 节"生效即重启"）。所以草稿/缓存必须外置或绑 `epoch` —— UI 必须提示"此操作会重置该模块的运行期状态" |
+| **插件配置** | **重载（不是热加载）**：`unload` → `load`，**新 instance（新 uid）**、**不迁移任何内存状态** | 隔离内核的既有语义（`host/lib/user-space.mjs:685-703`）；把配置热塞进运行中的实例等于让"配置 = 状态"，且会破坏"重载后草稿必然为空"的既有断言 | **该插件的内存草稿清空**（`plugin-config-refused` / `already-loaded` 等拒绝码不变）。UI 必须写"保存并重载 = 新实例，草稿丢失" |
+| **提权 token** | **必须先落文件、再触发 re-apply**；若值来自**进程 env**，**只能重起进程** | `admin-guard` 在 **apply 时一次性**解析 token（`:126-133`），之后不再读盘；而**运行中进程的环境变量无法被外部修改** → env 供给的 token 轮换必然需要进程重起。**因此规格把"文件"定为轮换主力路径**（重读只发生在 apply） | 生效瞬间**已有会话按其语义处理**（冷却/降权事件；过期只减权不增权，`admin-guard.mjs:159-172`）。UI 必须提示"轮换后所有人需重新提权" |
+| **插件凭据**（`cred:<ns>/<plugin>:*`） | **重载该插件实例**（今天：只有 re-mount 才会重新读 env，`host/lib/user-space.mjs:440`/`:549`） | 凭据是装载期从 env 表解析的（`:221-240`），运行期没有刷新点 | 同上：instance 重载 → 草稿丢失。**未决**：是否补"换凭据不重载实例"（§7-5） |
+| **外部服务凭据**（SMTP/IMAP/LLM key） | 由**服务自己**在下次连接时读（Python 侧）；今天 `NullTransport` 恒 `unavailable`（`src/quotagent/services/mail.py:313-321`） | 无传输实现，没有可刷新的连接 | 生效只体现为 `transport.available` 由 `false` → `true`；UI 显示"改完需服务重读（未决：热接 vs 重起服务）" |
+
+**一句话规则**：**能热加载的只有"同进程的 cordis 配置"；一切凭据与用户空间插件配置都伴随"实例/插件重启"**。UI 必须在保存按钮旁直接写出这句话，而不是等用户踩坑（这正是今天 `elevate` 表单的失败模式）。
+
+### 3.5 变更审计（每次配置变更可追溯；凭据只写不回显）
+
+- **事件（追加型账本，Python 唯一写者）**：
+  - `config/changed`：body = `{ layer, target, key_path, old_digest, new_digest, source, actor, approval_ref, schema, ts }`。**不含值**（值只有摘要：`old_digest`/`new_digest` = 规范化值的 `sha256`）。
+  - `credential/rotated`：body = `{ name, configured, fingerprint_first8, value_sha256, mode, source, actor, approval_ref, schema, ts }`。**不含值、不含字段名以外的任何明文**。
+- **可追溯的最低字段**：谁（`actor`）、凭什么（`approval_ref`）、改了哪一层哪一键（`layer` + `target` + `key_path`）、改前改后（两个 digest）、什么时候（`ts`，由 `--now` 传入，**不读墙钟**）。
+- **UI 侧只读**：U11 展示审计行的**已投影**字段（白名单投影 + 私域标记清洗），并显式标注"来源：Python 侧账本；宿主只读"。**不允许**宿主从待处理项反推审计（今天 admin 面板已经按这个模式做：`host/modules/admin-view.mjs` 读一个快照文件）。
+- **凭据的"只写不回显"是三层保证**：① UI 控件 `type=password` + 无 `value` 属性；② 响应体（HTML/JS/JSON/`Set-Cookie`）里值出现次数 = 0；③ 日志/快照/账本里值出现次数 = 0（复用既有 `host/modules/agent-harness.mjs:48-54` 的凭据形状扫描口径作为第三道）。
+
+---
+
+## 4. 凭据安全
+
+| 项 | 规则 | 今天的既有实现（沿用，不新开） |
+|---|---|---|
+| **写入权限** | 凭据文件**必须恰为 0600**；目录 0700。写入者用 `open(..., 0o600)` + 原子 `replace` + 显式 `chmod` | `tools/webui-serve.py:81-84`（非 600 忽略并告警）；`host/modules/admin-guard.mjs:92`（`file-insecure-mode`）；待处理项写入 0600（`webui.mjs:470-475`） |
+| **不得回显** | 任何响应（HTML/JS/JSON/`Set-Cookie`）里凭据值出现次数 = 0；登录/提交成功后只回 `{ok, name, configured, fingerprint_first8, next_action}` | `admin-guard` 的固定拒绝体与"token 四处不出现"（`docs/design/21-admin-console-contract.md` §2） |
+| **不得进日志** | stdout/stderr/服务日志里值出现次数 = 0；失败原因只给**原因码** | `DENY_REASONS` 只给日志与门（`admin-guard.mjs:68`）；`agent-harness` 命中凭据形状整步拒 |
+| **不得进响应/快照/账本** | 快照（`admin.json` 等）与账本行里值出现次数 = 0；账本只留 `sha256`/指纹 | `admin-view` 的键白名单 + 私域清洗（`host/modules/admin-view.mjs:68-81`）；`admin-apply.py` 只落哈希 |
+| **不得进仓库** | 凭据路径必须在仓库**之外**（或至少被 `.gitignore` 覆盖）；提交前门禁扫描 | 现状：token 在仓库外；`.gitignore` 已含 `*.local.yaml` / `config.local.*` / `.env` / `user-space/`。**待补**：把本规格引入的 `*credentials*.env` 与 `quotagent.yaml` 的仓库外属性写进部署手册 |
+| **UI 展示** | **只**显示 `已配置 / 未配置` + `source` 标签 + **指纹前 8 位**（`sha256(值)[:8]`）+ `required_mode`；不显示长度以外的任何信息 | **新增**：今天 `admin-guard.stats()` **连摘要都不给**（`:249-270`）。为避免破坏这条不变式：**指纹只在 Python 侧的凭据状态视图（U7）出现，不进 `admin-guard` 的任何 API**。安全论证：值是高熵随机串（≥128 bit），8 hex 前缀不可离线爆破，且只在**已提权会话**下可见；它的唯一用途是"让运维确认轮换真的落到了同一份值" |
+| **泄露时的应对（轮换路径）** | ① 判定泄露面（日志/快照/归档/截图/工单）；② **由 Python 侧生成新值**，原子写 0600 文件（旧值先备份为 0600 `.bak.<ts>`）；③ 触发 re-apply（文件来源）或重起进程（env 来源）；④ 断言旧值已失效（旧值提权必须 401）；⑤ 清理归档：删掉 `applied/` 里含明文的凭据件（**修偏差 ③**）；⑥ 落 `credential/rotated` 审计行，`reason` 里写明"疑似泄露"；⑦ 依赖它的外部系统同步换（SMTP/IMAP/LLM key 各自路径） | 轮换动作**没有**任何"自动/超时"路径：会话过期只减权不增权（`admin-guard.mjs:159-172`；`docs/design/21-admin-console-contract.md` §2"无暗门"） |
+| **检测** | 三个可机检的哨兵：`grep -c "<值>"` 在 HTML/JSON/快照/账本/日志五处 = 0；`stat -c %a` = `600`；审计行数 Δ = 恰好 1 | §6 的 A3/A4/A11 |
+
+---
+
+## 5. 初始化体验（新用户第一次打开看到什么）
+
+### 5.1 首屏（`/quotagent/` 总览页）
+
+现状：只给四道 UI 链接 + 账本行数。**改为**在最上方加一个"上手块"（四行，纯静态，**不含任何状态**）：
+
+```
+① 想改配置或放凭据 → 打开「三步上手」：/quotagent/start/
+② 管理员 token（提权）：文件 /workspace/config/quotagent-admin-token（须 0600）或环境变量 QUOTAGENT_ADMIN_TOKEN
+③ 凭据状态（已配置 / 未配置 + 指纹前 8 位）→ 提权后看 /quotagent/admin/config/
+④ 一切配置的落点与优先级：/quotagent/start/ 的「三层配置」表；改完要不要重起都在表里写清
+```
+
+**红线（与"无 oracle"共存的办法）**：`/quotagent/start/` 与首屏"上手块"**只讲机制**（env 名、文件路径、命令模板、验证方式），**不含** `configured` 布尔、不含指纹、不含任何"你配了吗"的信息。因此**未提权与已提权访问该页，响应体逐字节一致**——既不给出可探测差异，也不再把用户挡在门外。
+
+### 5.2 三步上手（`/quotagent/start/` 正文）
+
+- **第 1 步（看）**：读 `git` 外的两个落点：`/workspace/config/quotagent.yaml`（可读配置）与 `/workspace/config/`（凭据，0600）。仓库内**没有**任何配置/凭据文件——这是设计，不是缺失。
+- **第 2 步（配）**：给一次能照抄的命令（模板，**值自己生成**）：
+  - 生成并落 token：`printf '%s\n' "$(head -c 32 /dev/urandom | base64)" > /workspace/config/quotagent-admin-token && chmod 600 /workspace/config/quotagent-admin-token`
+  - 或编排注入：`export QUOTAGENT_ADMIN_TOKEN=<你自己生成的值>`（**优先级更高**，会压过文件）
+  - 改配置文件路径：`QUOTAGENT_ADMIN_TOKEN_FILE=<你的路径>`（注意：**当前 Node 侧不读文件**，文件只经 Python 侧注入 env，见 §1.4 偏差 ④）
+- **第 3 步（验）**：
+  - `stat -c '%a' /workspace/config/quotagent-admin-token` → 必须 `600`
+  - 打开 `/quotagent/admin/` 用 token 提权 → 成功即 200 + `qa_admin` 会话 cookie（**不透明 id，不是 token 派生**）
+  - 提权后打开 `/quotagent/admin/config/` → 每键都能看到 `source` 标签；凭据项显示"已配置/未配置 + 指纹前 8 位"
+  - 反面检查：把文件 `chmod 644` 后再提权 → 仍 401，且服务 stderr 出现"权限 … 不是 600"（**证明权限门是活的**）
+
+### 5.3 凭据项逐条（"放哪里 / 用什么命令 / 怎么验证"）
+
+> 下表**只有字段名与路径**，**没有值**。标 `未决` 的键名需先定（§7）。
+
+| # | 凭据项 | 放哪里 | 用什么命令（模板） | 怎么验证已生效 |
+|---|---|---|---|---|
+| 1 | **平台管理员 token** | 文件 `/workspace/config/quotagent-admin-token`（0600）**或** env `QUOTAGENT_ADMIN_TOKEN`（env 优先） | `printf '%s\n' "<自生成值>" > <文件> && chmod 600 <文件>`；或 `export QUOTAGENT_ADMIN_TOKEN="<自生成值>"` | 提权返回 200 + `qa_admin` cookie；`/quotagent/admin/api/config` 可读；旧值提权必须 401 |
+| 2 | **token 文件路径覆盖** | env `QUOTAGENT_ADMIN_TOKEN_FILE` | `export QUOTAGENT_ADMIN_TOKEN_FILE="<你的绝对路径>"` | 把默认路径的文件移走后提权仍成功（说明读的是新路径）；**Node 侧未接线**，见偏差 ④ |
+| 3 | **用户空间插件凭据** | 作用域键 `cred:<ns>/<plugin>:<key>`（值放 0600 env 文件，由服务装载进子进程 env） | `<ns>/<plugin>` 的清单里声明 `credential_key`；值写 0600 文件（**未决：文件路径与加载者**） | 插件的 `connection()` 返回 `available:true`；无凭据时必须 `available:false` + `reason` + `next_action`（`host/lib/user-space.mjs:551-558`）；借别人作用域必须 `credential-scope-refused` |
+| 4 | **邮件 SMTP 凭据** | 0600 凭据文件 / env（**键名未决**） | `printf '%s\n' "<值>" > <凭据文件> && chmod 600 <凭据文件>` | `/quotagent/api/pipeline` 的 `transport.available` 由 `false` → `true`；今天恒 `false`（`src/quotagent/services/mail.py:316`） |
+| 5 | **邮件 IMAP 凭据** | 同上 | 同上 | 同上 + 入站 `parse()` 能取到真实报文（`mail/parsed` 落账） |
+| 6 | **advisor/LLM key（Jev）** | 工作区 `/workspace/config.yaml` 的 `api_keys.<provider>`（字段名形状 `{value, env, base_url, default_model}`，见 `config.example.yaml:126` 起） | 由运维编辑该文件（**本仓不写它**，只登记引用） | `/quotagent/admin/` 里"Jev 建议层缺 key"那条阻塞消失（今天以 `plugin-request` 形式存在，见 `tmp/ui-shared/admin.json`） |
+| 7 | **本侧签名私钥（Ed25519）** | 本侧 0600 文件；`*.local.yaml` 已被 `.gitignore` 覆盖（`docs/design/08-trust-and-security.md` §6） | `chmod 600 <私钥路径>`；轮换按 `participant/key-rotated` 宣告 | 出站签名可验签；旧公钥在过渡期仍可验历史（`08` §6） |
+
+---
+
+## 6. 可验收（每条一条**可机器判定**的断言）
+
+判据写成"**断言式**"，格式：`<门> → 判据`。命令只给形态（占位符），实现留给 `tools/check-config-route.py` 与 `tools/verify.sh config-route`（**未决**：命名）。
+
+| # | 断言（machine-decidable） |
+|---|---|
+| A1 | **未配置时形状完整**：某个需凭据的能力在未配置时返回 `available:false` **且同时含** `reason` 与 `next_action`（两键均非空字符串）——三条缺一条即失败。检查：`/quotagent/admin/api/credentials` 与插件 `connection()` 的 JSON 里，对每个 `configured:false` 的项断言 `("reason" in o and "next_action" in o and o["available"] is False)` |
+| A2 | **保存后重读 YAML 值一致**：写入者返回的 `new_digest` 与**重新解析文件**得到的值摘要相等，且逐字段 `==` 提交值。检查：提交 `markup_pct=<值>` → 重新加载 YAML → 断言 `data["project"][...]["markup_pct"] == <提交值>` |
+| A3 | **响应体里凭据出现次数 = 0**：五处各断言一次，全部为 0 —— 提权响应、`/admin/config/` 的 HTML、`/admin/api/config` 的 JSON、任一快照文件、任一账本行、服务日志尾部 200 行。检查：`resp.count(<值>) == 0` 且 `snapshot.count(<值>) == 0` 且 `ledger.count(<值>) == 0` 且 `log_tail.count(<值>) == 0` |
+| A4 | **写入权限 = 0600**：`oct(os.stat(<凭据文件>).st_mode & 0o777) == "0o600"`；目录 = `0o700` |
+| A5 | **非 0600 被拒**（严格，不"自动修"）：把凭据文件 `chmod 644` → 提权仍 401（**逐字节等于** 未配置时的拒绝体），且 stderr 出现"不是 600"；断言文件权限**未被服务改动**（仍是 644） |
+| A6 | **统一拒绝体逐字节相等**：缺 token / 错 token / 会话过期 / 道未启用 / 冷却中 五类响应 `(status, body, headers)` **三元组逐字节相同**，且 body 里 `token` 出现次数 = 0 |
+| A7 | **白名单**：提交未登记键 → 返回含 `unknown-key` 的 `reasons`，且 `digest_before == digest_after`、`epoch_before == epoch_after`、`restarted == false`、配置文件**字节不变**（比对 `sha256`） |
+| A8 | **人工专属键**：`source` 不以 `human:` 开头时改 `pricing.authorized_band.*` / `guard.abnormal_low_ratio` / `profiles.*` → 一律拒（`vetoed_by=humanOnly`），且**宿主的自述身份不算数** |
+| A9 | **冻结键**：改 `kernel.*` → 永远拒（`vetoed_by=frozen`），且 `kernel.*` 不出现在任何 UI 可编辑项的 `editable:true` 里 |
+| A10 | **原子写 + 无部分效果**：在写入者 `os.replace` 之前注入异常 → 目标文件 `sha256` 与写入前**完全相等**，且临时文件不残留（目录里无 `.tmp.*`）。检查：`sha256(file_before) == sha256(file_after)` |
+| A11 | **变更审计可追溯**：每次成功变更后，审计账本**恰好新增 1 行**，含 `layer/target/key_path/old_digest/new_digest/actor/approval_ref/ts`；**被拒的变更新增 0 行**（或 1 行 `accepted:false`，二者**必须由实现择一并写死** —— 未决 §7-6） |
+| A12 | **凭据指纹**：`/admin/api/credentials` 里 `fingerprint_first8` 长度 = 8 且全为 hex；且 `fingerprint_first8 == sha256(<值>)[:8]`；且响应 JSON 里**不含** `<值>`（次数 = 0） |
+| A13 | **热加载不改进程**：接受一次项目配置更新 → `restarted == true`（`epoch_after > epoch_before`）**且**宿主进程 pid 前后相同（证明是插件重起而非进程重起） |
+| A14 | **插件配置生效与拒绝**：改 YAML 的 `plugins.<ns>/<plugin>.config.<字段>` → 重载后插件 `Config` 校验通过、`stats()`/配置视图反映新值；提交插件未声明的字段 → 装载被拒且 `code == "manifest-invalid"`、`reason` 以 `plugin-config-refused:` 开头、**目标未被装载**（`effects` 为 0） |
+| A15 | **未提权零内容**：`/admin/`、`/admin/config/`、`/admin/api/config`、`/admin/api/credentials`、`/admin/api/config/audit` 五路在无 token 且无会话时 **全部 401**，body 逐字节等于固定体；**且**这些响应里不出现任何配置键名或凭据名（连键名都不给） |
+| A16 | **上手页不泄状态**：`/quotagent/start/` 的响应体**同时**包含 `QUOTAGENT_ADMIN_TOKEN` 字样与 token 文件路径字样，**且**不含 `configured`/`fingerprint_first8`/任何凭据值；`已配置` 与 `未配置` 两种状态下该页响应**逐字节相同** |
+| A17 | **仓库零凭据**：`git grep` 在跟踪文件里找不到凭据文件内容与值；`git check-ignore` 覆盖本规格新增的凭据路径；`git status --porcelain` 干净（本规格只写 `tmp/` 下这一个文件） |
+| A18 | **变异自证（必需）**：对以下四处各偷改一处，**每一处必须让对应门真变红**并还原：① 凭据回显（把提交值塞进响应 JSON）→ A3 红；② 去掉 0600 门 → A5 红；③ 放开白名单（接受未登记键）→ A7 红；④ 审计不落行 → A11 红。变异脚本必须自带"锚点未命中或字节未变 = 假变异即失败"的防伪检测（沿用 `docs/design/21-admin-console-contract.md` §2 的变异纪律） |
+| A19 | **inbox 明文不残留**（修偏差 ③）：凭据类待处理项被消费后，`applied/` 目录里值出现次数 = 0；只允许留下 `sha256` 与 `fingerprint_first8` |
+| A20 | **降级不冒充健康**：配置/凭据快照读不到时，视图返回 `degraded:true` + 有名 `reason` + `next_action`，**且不得把这些项显示为"未配置"或"零"**（沿用 `host/modules/admin-view.mjs` 的降级纪律） |
+
+---
+
+## 7. 未决（需用户/后续决策，本规格不擅自定）
+
+1. **配置文件落点**：`/workspace/config/quotagent.yaml`（仓库外，与 token 同目录）vs 仓库内 `config.local.yaml`（`.gitignore` 已覆盖 `*.local.yaml`）。倾向仓库外（避免"可读配置"与"秘密"混在一棵树里），但会让"项目配置"离开项目目录——**需要用户拍**。
+2. **凭据是否允许内联在 YAML**（`credentials.<name>.value`）：本规格**倾向否决**；若要求单文件，须先走 ADR。
+3. **凭据待处理项的归档策略**：消费后"脱敏后归档"vs"直接删除只留审计行"。影响 A19 的判据形态。
+4. **白名单的单一真源怎么跨语言**：Python 写入者要判 `host/lib/schema.mjs` 的同一套白名单。候选：① Node 导出机器可读 JSON，门断言其 `sha256` 未漂移；② Python 读同一份导出并校验 mtime。**未决**：选哪种，以及漂移时是"拒写"还是"拒绝启动"。
+5. **插件凭据的刷新点**：是否新增"换凭据不重载实例"的通道（今天必然伴随 instance 重载 → 草稿丢失）。
+6. **被拒变更是否落审计行**（0 行 vs 1 行 `accepted:false`）：必须二选一写死，并与 `admin-view` 的计数口径（D-056：两个口径不得相互冒充）对齐。
+7. **凭据键名未定**：`QUOTAGENT_MAIL_SMTP` / `QUOTAGENT_MAIL_IMAP` 等只是**建议形状**；用户空间插件凭据的 0600 文件路径与加载者也未定。
+8. **`humanOnly` 键的 UI 提交流程**：UI 提交的人工引用（`ap-NNNN`）由谁发放、是否复用既有 `approval` 队列。
+9. **`/quotagent/start/` 的归属**：它是"平台公共页"还是"admin 道的未提权页"？本规格按"公共页"设计（否则又要被 401 挡住）。
+10. **本规格对应的 FR/AC 登记**：需先在 `docs/work/plans/p3-spec.json` 定义新域（建议 `FR-CONFIG`）并落 AC 条目，本文才能合法引用编号（现状：一条都没登记，故本文零编号）。
+11. **偏差 ②/④ 的修法**：是否在本次一并接好 `admin-guard` 的 `token_file`（并统一两侧的空白归一）。不接也能工作（走 Python 注入链），但会让"文档写的两条链"里的一条长期是死代码。
+12. **`ws-gateway` 是否原样透传 `Set-Cookie`**：`docs/design/21-admin-console-contract.md` §5-3 列为未实测；本规格的"提权后看凭据状态"依赖它。
+
+---
+
+## 8. 落地顺序（建议，不含实现）
+
+1. **先补"能找到"**：U1（上手页）+ 首屏上手块 + §5.3 的 7 条凭据项表（**零写面**，不碰任何写路径）→ 直接解掉用户的两句原话。
+2. **补齐"能看"**：U2/U3/U7（只读：三层来源标签 + 凭据状态 + 指纹），数据来自 Python 侧只读快照（沿用 `admin-view` 的"Python 写文件、宿主只读"模式）。
+3. **再补"能改"**：U4（dry-run）→ U5/U6/U8（只落待处理项）→ U12（Python 写入者 + 原子写 + 回滚 + 审计）→ 相关门与变异自证（§6）。
+4. **最后补"能生效"**：插件配置接线（修偏差 ①）、凭据作用域下发（修偏差 ②）、inbox 明文不残留（修偏差 ③），每条都对应一组新的 AC。

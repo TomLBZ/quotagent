@@ -1,0 +1,24 @@
+{
+  "phase": "P3-UX2",
+  "why": "用户要求：GUI 必须是有用的控制台（能做事），而不是一篇纯文字；并把双方在报价过程中的交互需求与痛点（尤其 human problem）逐步放入合同并实现。",
+  "sources": [
+    {
+      "file": "ux-双方痛点与交互需求.md.txt",
+      "what": "22 条痛点（9 条 human problem）→ 20 条 FR 草案 + 每条可机器判定 AC；按视图标注落点；明确不做 6 条；未决 3 条"
+    },
+    {
+      "file": "gui-交互规格.md.txt",
+      "what": "WebUI 改造规格：选定 SSR+<form>（否决内联 script）；路由表（新增 19 条）；每动作的请求/响应形状与失败同形；P0 七步顺序"
+    },
+    {
+      "file": "config-凭据UX规格.md.txt",
+      "what": "配置三层（项目/插件/凭据）+ 合并顺序；12 个 UI 动作（含 preview 干跑、凭据只写不回显+指纹、rotate、audit）；唯一落盘者 tools/config-apply.py"
+    }
+  ],
+  "landed": {
+    "P0a": "f3e76b8（/start/ 上手页 + /api/routes 路由表）",
+    "P0-2_P0-3": "进行中（subagent 实现中）"
+  },
+  "discipline": "按 D-059：只把已实现且可验证的 FR/AC 迁进正式表；其余留在本索引与三份规格里（landed=false），不假标 done。",
+  "naming": "落地时 FR 用 FR-UX2-00x、AC 用 AC-UX2-00x（规格里已如此编号）。"
+}
