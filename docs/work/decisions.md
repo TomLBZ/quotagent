@@ -306,3 +306,27 @@
    否则 `mod.inject` 是 `undefined`，静默退回 `[]`（**这个静默退化最危险：代码看着对，插件永远 pending**）。
 2. `inject` 里声明了依赖，**fixture 就必须能给 stub**（`host/check-modules.mjs` 的 STUBS 表）——
    否则 `verify.sh modules` 直接红。新增依赖 = 同步补两处（stub 表 + 装配点）。
+
+## D-032 T-237：自进化流程真实产出第一个进树插件（price-history）（2026-09-21T09:33:36Z）
+
+**这不是"机制演示"，是机制第一次被真正使用**：B24（`b4fec9a`）交付了"产出插件产物"的能力与负控，
+但此前**从没有**任何进树插件是由这条路径产出的——机制没被用过本身就是缺口。
+
+**流程（全部复用既有机制，不另起一套）**：
+提案（必填字段 + 可写面 + 效果口径固定 `fixture:module` + 必须带账本引用）→ 影子写入（真实目录零改动）
+→ **真跑 fixture A1..A6**（子进程 `check-modules.mjs --module-dir 影子`，13/13）→ 五项门
+（fixture / INV / s1..s4 场景集 / 预算 / 人工介入率不上升）→ 带 `approval_ref` + 影子哈希一致 → 晋升。
+四个 `evolve/*` 事件由 **Python 侧**写账本（H1）。
+
+**门真的拦下过一次**（这就是它有价值的地方）：首次干跑 `verdict=rejected`，唯一失败项是"反例集"，
+真因是 `verify.sh suite` **需要场景名**、空跑必然非 0 —— 修正为 **s1..s4 四个场景全绿**才算过。
+
+**产出物**：`host/modules/price-history.mjs`（只读领域插件：按供应商的价格序列描述统计 + 离散趋势，
+纯函数、无 I/O、无事件、无人工门、确定性）。已登记进插件清单并挂到 `webui` profile。
+
+**追溯链（新增门）**：`tools/check-evolved-module.py` + `verify.sh evolve-module`（6/6）——
+被追踪的 `docs/work/evolution-log.json` 里每条产出记录的 `artifact_hash` 必须与**当前进树文件**的
+sha256 一致；文件被偷改或产出被删 → 门红。**自进化能写入的目录，必须有一条可机检的追溯链。**
+
+**驱动器的位置纪律**：`tools/evolve-module.mjs`（独立脚本）而不是塞进 `cli.mjs` 的巨型 `main()`——
+T-235 的教训（同一处 6 次声明顺序/作用域错误）说明"新逻辑进 CLI 主函数"是这个项目的高风险动作。

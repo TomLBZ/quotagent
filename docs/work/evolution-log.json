@@ -1,0 +1,21 @@
+{
+  "note": "自进化产出的插件清单（机检：tools/check-evolved-module.py；哈希必须与进树文件一致）",
+  "entries": [
+    {
+      "name": "price-history",
+      "proposal_id": "sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40",
+      "artifact_hash": "edf4fc3cb4f124c4d57ea85be568521b728628f7c45c20172c3566f81c04804e",
+      "bytes": 3555,
+      "approval_ref": "ap-0100",
+      "gate": "passed",
+      "fixture": {
+        "passed": 13,
+        "total": 13
+      },
+      "evolved_at": "T-237",
+      "produced_by": "tools/evolve-module.mjs（提案→影子→真跑 fixture→五门→带引用晋升）",
+      "ledger": "tmp/evolve/ledger.jsonl（evolve/proposed|shadowed|gated|promoted）",
+      "evidence": "EV-072"
+    }
+  ]
+}

@@ -1,0 +1,167 @@
+EV-072 T-237 用自进化流程真实产出一个进树插件（price-history）
+生成时间 2026-09-21T09:33:36Z
+命令与原始输出（原样留档）
+
+[1] 干跑（不晋升）：先看门会不会放行
+$ tools/cordis.sh run ../tools/evolve-module.mjs --source-file tmp/t237-artifact.mjs --name price-history --dry-run
+  → fixture 13/13 全绿；门 verdict=rejected（唯一未过项=反例集，真因：`verify.sh suite` 需要场景名，空跑 exit≠0）
+  → 修正为 s1..s4 四个场景全绿后才算过（**门不是摆设：它真的拦下了一次**）
+
+[2] 正式晋升（带人工引用）
+$ tools/cordis.sh run ../tools/evolve-module.mjs --source-file tmp/t237-artifact.mjs --name price-history --approval-ref ap-0100
+exit=0
+{
+  "ok": true,
+  "module": "price-history",
+  "proposal_id": "sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40",
+  "artifact": {
+    "hash": "sha256:edf4fc3cb4f124c4d57ea85be568521b728628f7c45c20172c3566f81c04804e",
+    "bytes": 3555,
+    "target": "host/modules/price-history.mjs"
+  },
+  "shadow": {
+    "dir": "tmp/t237-shadow/modules",
+    "path": "tmp/t237-shadow/modules/price-history.mjs"
+  },
+  "fixture": {
+    "passed": 13,
+    "total": 13,
+    "failed": 0,
+    "exit": 0,
+    "names": [
+      "manifest 必填字段齐备（name/inject/provides/Config/apply/usedServices，且 inject/usedServices 是数组）",
+      "provides 非空且 Config 实现 standard-schema（cordis 用 `~standard.validate` 校验）",
+      "A1 声明即事实：`usedServices` 与 `inject` 完全相等",
+      "A1 负控：`inject` 不得写入 cordis 内建 mixin（写进去插件会永远 pending，实测）",
+      "A1 声明即事实（双向）：源码引用事件 ⟺ `builtin` 里声明 `events`",
+      "A1 正控：provided service 在插件内可取到（句柄非空）",
+      "A1 负控：取用未在 `inject` 声明的服务必须抛错（不得静默可用）",
+      "A2 正控：dispose 后 effect 数为 0 且资源计数差分全 0",
+      "A2 负控：泄漏定时器的条目被检出（计数差分非 0 → 检查器必须报红）",
+      "A3 config 负控：未知键被拒（本模块无 const 键，const 负控在模块集级断言里）",
+      "A4 事件声明：源码里 emit 的事件名必须都在事件表里（真源在 Python 侧，静态扫描）",
+      "A5 确定性：同输入两次输出字节一致（无墙钟/无自增序号）",
+      "A6 无跨模块 import：不得出现指向别的模块目录的相对 import（只允许 ../lib/ 与包名）"
+    ]
+  },
+  "gate": {
+    "verdict": "passed",
+    "checks": [
+      {
+        "name": "产物 fixture A1..A6 全绿",
+        "ok": true,
+        "detail": "fixture 13/13（每个模块 12 条以上，含负控）"
+      },
+      {
+        "name": "INV-001..010 全绿",
+        "ok": true,
+        "detail": "invariants=true"
+      },
+      {
+        "name": "反例集全绿",
+        "ok": true,
+        "detail": "counterexamples=true"
+      },
+      {
+        "name": "成本/延迟不超预算",
+        "ok": true,
+        "detail": "cost=n/a latency=n/a"
+      },
+      {
+        "name": "人工介入率不上升",
+        "ok": true,
+        "detail": "介入率 0 → 0（用\"多问人\"换指标即越界）"
+      }
+    ]
+  },
+  "scenarios": {
+    "s1": 0,
+    "s2": 0,
+    "s3": 0,
+    "s4": 0
+  },
+  "promote": {
+    "id": "sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40",
+    "status": "promoted",
+    "approval_ref": "ap-0100",
+    "written_to": "/workspace/projects/quotagent/host/modules/price-history.mjs",
+    "artifact_hash": "sha256:edf4fc3cb4f124c4d57ea85be568521b728628f7c45c20172c3566f81c04804e",
+    "note": "晋升 = 门通过 + 人工引用 + 哈希一致；写入面仅 host/modules/"
+  },
+  "in_tree": true,
+  "in_tree_fixture": {
+    "passed": 13,
+    "total": 13,
+    "failed": 0,
+    "exit": 0,
+    "names": [
+      "manifest 必填字段齐备（name/inject/provides/Config/apply/usedServices，且 inject/usedServices 是数组）",
+      "provides 非空且 Config 实现 standard-schema（cordis 用 `~standard.validate` 校验）",
+      "A1 声明即事实：`usedServices` 与 `inject` 完全相等",
+      "A1 负控：`inject` 不得写入 cordis 内建 mixin（写进去插件会永远 pending，实测）",
+      "A1 声明即事实（双向）：源码引用事件 ⟺ `builtin` 里声明 `events`",
+      "A1 正控：provided service 在插件内可取到（句柄非空）",
+      "A1 负控：取用未在 `inject` 声明的服务必须抛错（不得静默可用）",
+      "A2 正控：dispose 后 effect 数为 0 且资源计数差分全 0",
+      "A2 负控：泄漏定时器的条目被检出（计数差分非 0 → 检查器必须报红）",
+      "A3 config 负控：未知键被拒（本模块无 const 键，const 负控在模块集级断言里）",
+      "A4 事件声明：源码里 emit 的事件名必须都在事件表里（真源在 Python 侧，静态扫描）",
+      "A5 确定性：同输入两次输出字节一致（无墙钟/无自增序号）",
+      "A6 无跨模块 import：不得出现指向别的模块目录的相对 import（只允许 ../lib/ 与包名）"
+    ]
+  },
+  "modules_gate_before": 0,
+  "modules_gate_after": 0
+}
+
+[3] 账本（唯一写入者 Python 侧，H1）：四个 evolve/* 事件
+$ tail -4 tmp/evolve/ledger.jsonl
+{"actor":"agent:t237","body":{"actor":"agent:t237","hash":"sha256:edf4fc3cb4f124c4d57ea85be568521b728628f7c45c20172c3566f81c04804e","id":"sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40","shadow_path":"/workspace/projects/quotagent/tmp/t237-shadow/modules/price-history.mjs"},"body_hash":"sha256:ae9994c9b2b1f6f83408c71fc82553e98facdf0d18152efaebcfd47522e953ad","class":"intent","correlation_id":"sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40","entry_hash":"sha256:559a2868fb6d50474950ccdb89af63e57bfda59b296aa4a87bd38ee82d93cf5e","prev_hash":"sha256:298e22272315a9955b1cf0547c025eaf1fe6381632acc41aa4252925956c6d79","realm":"contractor:con-B","refs":{},"seq":11,"ts":"2026-09-21T09:32:32Z","type":"evolve/shadowed"}
+{"actor":"host:gate-runner","body":{"actor":"host:gate-runner","fixture":"13/13","id":"sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40","reasons":["反例集全绿: counterexamples=false"],"verdict":"rejected"},"body_hash":"sha256:64dff59ef7ca78ae98b39604095ad2b977376bd4997fe045b59f3a3f72be14e7","class":"intent","correlation_id":"sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40","entry_hash":"sha256:4131fc947c79aeba95598efd838e157bfca7fe3f88bd989147a9d8f73b5ccae7","prev_hash":"sha256:559a2868fb6d50474950ccdb89af63e57bfda59b296aa4a87bd38ee82d93cf5e","realm":"contractor:con-B","refs":{},"seq":12,"ts":"2026-09-21T09:32:32Z","type":"evolve/gated"}
+{"actor":"host:gate-runner","body":{"actor":"host:gate-runner","fixture":"13/13","id":"sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40","reasons":[],"verdict":"passed"},"body_hash":"sha256:81ec8781b7f1b40f612056ea9f24436239441c4cbe5226433f2936dbba1cc16d","class":"intent","correlation_id":"sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40","entry_hash":"sha256:f81ee4c1bc5f71f260c596999b067e5b014d6af98540f9a3c34d7d01551640cc","prev_hash":"sha256:4131fc947c79aeba95598efd838e157bfca7fe3f88bd989147a9d8f73b5ccae7","realm":"contractor:con-B","refs":{},"seq":13,"ts":"2026-09-21T09:32:45Z","type":"evolve/gated"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","approval_ref":"ap-0100","artifact_hash":"sha256:edf4fc3cb4f124c4d57ea85be568521b728628f7c45c20172c3566f81c04804e","id":"sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40","written_to":"host/modules/price-history.mjs"},"body_hash":"sha256:99f4bb5f76090576b49f387642b348027aa6af9a3c102e3caa000620efc2f007","class":"intent","correlation_id":"sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40","entry_hash":"sha256:6719b8ede5250fc2d092a9d1bd30ca503282265453b6b9e15c9c10163d460a40","prev_hash":"sha256:f81ee4c1bc5f71f260c596999b067e5b014d6af98540f9a3c34d7d01551640cc","realm":"contractor:con-B","refs":{},"seq":14,"ts":"2026-09-21T09:32:45Z","type":"evolve/promoted"}
+
+[4] 追溯门（可机检：产出记录里的哈希必须与进树文件一致）
+$ tools/verify.sh evolve-module
+exit=0
+{
+  "checks": [
+    {
+      "name": "产出日志可解析且非空",
+      "ok": true,
+      "detail": "记录 1 条"
+    },
+    {
+      "name": "price-history · 产物在树",
+      "ok": true,
+      "detail": "host/modules/price-history.mjs"
+    },
+    {
+      "name": "price-history · 哈希与产出记录一致（未被偷改）",
+      "ok": true,
+      "detail": "记录 edf4fc3cb4f1… vs 当前 edf4fc3cb4f1…"
+    },
+    {
+      "name": "price-history · 字节数与记录一致",
+      "ok": true,
+      "detail": "记录 3555 vs 当前 3555"
+    },
+    {
+      "name": "price-history · 晋升前有门通过记录 + 人工引用",
+      "ok": true,
+      "detail": "gate=passed approval_ref=ap-0100"
+    },
+    {
+      "name": "price-history · fixture 全绿且样本数达标（≥12）",
+      "ok": true,
+      "detail": "fixture={'passed': 13, 'total': 13}"
+    }
+  ],
+  "passed": 6,
+  "total": 6,
+  "failures": 0
+}
+
+结论：插件产物**由自进化流程产出并晋升**（提案 → 影子 → 真跑 fixture A1..A6 → 五项门 → 带人工引用 `ap-0100` + 影子哈希一致 → 写入 `host/modules/`），
+全过程四个 evolve/* 事件落在账本里，产出哈希受 `verify.sh evolve-module` 追溯。写入面仅 `host/modules/`（ADR-0016）。
+
