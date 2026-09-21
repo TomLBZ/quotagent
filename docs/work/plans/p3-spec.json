@@ -36,7 +36,7 @@
    "requirement": "阻塞可**在 UI 内解除**（提交凭据 / 上传件 / 设置）：提交落为宿主侧「待处理提交」，由 Python 侧消费并落账完成 `resolved`；**提交瞬间宿主侧账本零新增**，宿主永不写账本 | should",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-ADMIN-006",
@@ -335,7 +335,7 @@
    "command": "tools/verify.sh admin-route`（需父方新建）",
    "evidence_draft": "见 `evidence/EV-099`",
    "source_draft": "t264-fr-admin.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-ADMIN-006",

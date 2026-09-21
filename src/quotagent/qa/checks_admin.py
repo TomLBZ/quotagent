@@ -1,6 +1,6 @@
-"""AC-ADMIN-004 / AC-ADMIN-006：admin 道「agent 进度与阻塞」的 Python 侧判定与状态机（T-271）。
+"""AC-ADMIN-004 / AC-ADMIN-005 / AC-ADMIN-006：admin 道「agent 进度与阻塞」的 Python 侧判定、消费侧与状态机。
 
-两条验收条目在 `docs/work/plans/p3-spec.json` 里的逐字断言（本机检按它们写）：
+三条验收条目在 `docs/work/plans/p3-spec.json` 里的逐字断言（本机检按它们写）：
 
   AC-ADMIN-004 ——「面板是真数据：至少报出 2 条阻塞，`kind` 分别含 `plugin-request`（advisor／Jev 建议层）
     与 `credential`（邮件收发缺 SMTP/IMAP 凭据），每条含 `block_id/kind/reason/required_action/refs`；
@@ -8,6 +8,11 @@
     `available=false`），**不是手写常量表**；进度数字（按状态计数）只读、标注口径来源、不得由列表长度
     推计数（D-056）；快照写入幂等（同输入两次除 `generated_at` 外逐字节一致）；快照不含正文与私域键；
     快照缺失或损坏 → 面板降级（计数 0 + reason）不崩不猜」
+  AC-ADMIN-005 ——「UI 内解阻塞：带 token 的 `POST /quotagent/admin/api/blocks/<id>/resolve`（凭据字段 +
+    可选上传件）→ 200 且**宿主侧账本零新增**，宿主只在 `tmp/ui-shared/admin-submissions/` 落一条待处理项
+    （block_id、会话引用、件 sha256、字节数）；响应与快照里搜不到凭据值；随后由 Python 侧消费（带人工批准
+    引用 `ap-NNNN`）落一条 `admin/block-resolved`（body 含 block_id/kind/resolution_sha256/approval_ref，
+    **不含凭据正文**）且快照中该 block 转 `resolved`；重复消费幂等」
   AC-ADMIN-006 ——「状态机与唯一写者（Python 侧）：`services/admin_blocks.py` 只接受
     `blocked→pending→resolved / rejected / expired`；非法转移（`resolved→blocked`、`blocked→resolved`
     跳过 `pending`、`expired→pending`）全部拒绝且账本零新增；每次合法转移落一条账本事件且只由该服务产生；
@@ -17,26 +22,37 @@
 本机检覆盖：真源真值 · 逐条形状/可操作性 · **删条目即消失**（反手证"不是常量表"）· 计数独立复算（D-056）
 · 有界夹取 · 快照幂等/原子写/不建账本/无私域 · 缺源与全零可分（degraded + 逐源状态）· 状态机取值域 ·
 5 类非法转移全拒且零新增（入参不被改）· 缺引用/引用形状非法全拒 · 合法转移的事件**载荷**（不写账本）·
-时钟推 100 年状态不变 · 静态扫描无写账本/无墙钟/无环境变量。
+时钟推 100 年状态不变 · 静态扫描无写账本/无墙钟/无环境变量；
+AC-ADMIN-005 另覆盖：**宿主提交面零账本**（行为负控）· 消费侧 `tools/admin-apply.py` 是**唯一**写账本者 ·
+0600 权限门（0644 拒）· 自述 `payload_sha256`/`bytes` 重算比对（不符即拒）· 缺/非法人工批准引用与
+非 `human:` actor 一律拒且**连空账本文件都不创建** · 合法应用**恰增两条事件**且 body **既无凭据值也无
+字段键名**（哨兵 `SMTP-PASSWORD-SENTINEL` 与键名 `password` 各扫一次）· 重复消费幂等（零新增 + 标
+`duplicate`）· 已解决事实**回写判定器**（该 block 移出 `blocks`、`counts.resolved` 递增）·
+已解决事实源缺失/损坏**不猜**（按"无已解决事实"处理并在 reason/next_action 里明说）·
+**旧行为回归**（不传 `resolutions_path` 时输出逐字节不变）。
 
 【本批**不**机检的部分（写在注释里，不假装通过）】
-  · 「宿主侧无写账本路径」（H1 负控）与 `/quotagent/admin/api/blocks` 的 HTTP 行为属 T-272（宿主道）：
-    本文件只证 Python 侧**不写账本**（静态扫描 + `apply_transition` 只产出载荷）。
-  · 「`replay()` 可从账本重建当前状态」属落账那一批（T-265）：`apply_transition` 生成的 `admin/block-*`
-    事件名**尚未登记**进 `docs/design/05-events.md` 与 `kernel/events.py`（本任务只能改这 4 个文件），
-    所以本文件**只断言载荷形状**，不断言账本里有行。
-  · 四条事件名的登记状态：本机检会断言这四条名字在 `admin_blocks.py` 里是常量（`TRANSITION_EVENTS`），
-    登记与否由 `verify.sh events` 那道门在登记后负责 —— 未登记时**不得**拿它当"已落账"。
+  · 「带 token 的 `POST …/resolve` → 200 且宿主侧账本零新增」的**真 HTTP**行为属宿主道（父方的
+    `tools/check-admin-route.py`）：本文件用**同形的待处理项**（0600、原子落盘）模拟提交面，
+    证明的是"提交动作本身不产生账本行、只有 Python 消费侧会写"；HTTP 面由 `tools/verify.sh admin-route` 覆盖。
+  · 「响应与快照里搜不到凭据值」的响应侧属宿主道；本文件证明的是**账本侧**与**判定器输出侧**
+    搜不到凭据值与字段键名（两个不同的面，别相互冒充 —— D-056）。
+  · AC-ADMIN-005 的**变异自证**（偷改断言必须变红）属 T-273b（AC-ADMIN-011），本文件不假装做过。
+
 """
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
+import os
 import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
 
+from ..kernel.ledger import Ledger
 from ..paths import new_scratch, repo_root
 from ..services.admin_blocks import (ALLOWED_TRANSITIONS, CHECKLIST_STATUSES, KINDS, SOURCES, STATES,
                                      TRANSITION_EVENTS, AdminBlockError, apply_transition, derive_blocks,
@@ -544,6 +560,379 @@ def check_admin_006() -> list[Assertion]:
                                              "random"})
                          and not clock_calls,
                          f"imports={sorted(imports)} 可疑调用={sorted(clock_calls)}"))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# AC-ADMIN-005：UI 内解阻塞的**消费侧**（宿主只提交、Python 只消费并落账）
+# ---------------------------------------------------------------------------
+APPLIER = ROOT / "tools" / "admin-apply.py"
+HOST_WEBUI = ROOT / "host" / "modules" / "webui.mjs"
+CRED_SENTINEL = "SMTP-PASSWORD-SENTINEL"     # 凭据**值**：账本里搜不到
+CRED_FIELD = "password"                      # 凭据**键名**：账本里同样搜不到
+APPLY_NOW = "2026-09-21T00:00:00Z"
+AP_REF = "ap-0007"
+HUMAN_ACTOR = "human:zhang"
+EVENT_PENDING = "admin/block-pending"
+EVENT_RESOLVED = "admin/block-resolved"
+#: 事件 body **唯一**允许的键集（多一个键就是违约：凭据的键名/值都不得进账本）
+EVENT_BODY_KEYS = ("actor", "approval_ref", "block_id", "bytes", "kind", "resolution_sha256", "schema")
+#: 宿主侧**写账本**形状的针（宿主的读路径用 `openLedger(...)`，不含这三根针 —— 所以这三根针是干净的负控）
+HOST_WRITE_NEEDLES = ("new Ledger", ".append(", "ledger.append")
+
+
+def _canonical(fields: dict) -> str:
+    """与宿主 `JSON.stringify(排序后的键)` 同形（键排序、无空格、非 ASCII 不转义）。"""
+    return json.dumps(fields, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _pending(directory: Path, block_id: str, kind: str, fields: dict, *, mode: int = 0o600) -> Path:
+    """**照宿主提交面的形状**造一条待处理项（0600、原子落位、含自述 sha256/bytes）。"""
+    canonical = _canonical(fields)
+    record = {"block_id": block_id, "kind": kind, "submitted_at": APPLY_NOW, "submitted_by": "admin-session",
+              "fields": fields, "payload_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+              "bytes": len(canonical.encode("utf-8")), "schema": 1}
+    directory.mkdir(parents=True, exist_ok=True)
+    temporary = directory / f".{block_id}.{os.getpid()}.tmp"
+    handle = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(handle, "w", encoding="utf-8") as stream:
+        stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+    os.chmod(temporary, mode)                       # umask 不参与：权限是这条链上的**一道门**
+    target = directory / f"{block_id}.json"
+    os.replace(temporary, target)                   # 原子落位（与宿主同一手法）
+    os.chmod(target, mode)
+    return target
+
+
+def _applier(*args: str) -> tuple[int, list[str], str]:
+    """跑一次消费侧 CLI；返回 (退出码, stdout 的非空行, stderr)。"""
+    proc = subprocess.run([sys.executable, str(APPLIER), *args], cwd=str(ROOT), capture_output=True,
+                          text=True, timeout=300, env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+    return (proc.returncode, [line for line in (proc.stdout or "").splitlines() if line.strip()],
+            proc.stderr or "")
+
+
+def _apply(inbox: Path, ledger: Path, *extra: str) -> dict:
+    """带**合法**人工批准引用（ap-NNNN + human:*）跑一次消费侧（stdout 必须**恰好一行** JSON）。"""
+    rc, lines, err = _applier("--inbox", str(inbox), "--ledger", str(ledger), "--approval-ref", AP_REF,
+                              "--actor", HUMAN_ACTOR, "--now", APPLY_NOW, *extra)
+    return {"rc": rc, "lines": lines, "payload": json.loads(lines[0]) if len(lines) == 1 else {}, "stderr": err}
+
+
+def _ledger_rows(path: Path) -> list[dict]:
+    if not path.is_file():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def _legacy_module(scratch: Path) -> tuple[object | None, str]:
+    """HEAD 里的 `admin_blocks.py`（本批次**扩展前**的版本）→ 可导入副本；拿不到就给说明。
+
+    只在 HEAD 与工作副本**不同**时才有意义（提交前的回归点）。副本落在 `tmp/` 的一次性目录里，
+    把 `from ..kernel.canon import …` 换成绝对导入（临时模块没有包上下文）。
+    """
+    import importlib.util  # noqa: PLC0415 —— 只有这条回归路径需要它
+
+    try:
+        proc = subprocess.run(["git", "show", "HEAD:src/quotagent/services/admin_blocks.py"], cwd=str(ROOT),
+                              capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"git 不可用（{type(exc).__name__}: {exc}）"
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None, "HEAD 里没有这个文件（不是 git 工作区）"
+    if proc.stdout == SERVICE.read_text(encoding="utf-8"):
+        return None, "HEAD 与工作副本相同（扩展已提交）：本断言退化为「与 HEAD 自比较」"
+    text = proc.stdout.replace("from ..kernel.canon import canonical_json",
+                               "from quotagent.kernel.canon import canonical_json")
+    target = scratch / "legacy_admin_blocks.py"
+    target.write_text(text, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("legacy_admin_blocks", str(target))
+    if spec is None or spec.loader is None:
+        return None, "无法从 HEAD 版本源码建模块（不假装比过）"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module, "已载入 HEAD 版本（扩展前）并逐字节比对"
+
+
+@register("AC-ADMIN-005", "P2",
+          "UI 内解阻塞的消费侧：宿主提交面只落待处理项（0600、账本零新增），Python 消费侧"
+          "（tools/admin-apply.py，唯一写账本者）带 ap-NNNN 人工批准引用落 admin/block-pending + "
+          "admin/block-resolved（body 既无凭据值也无字段键名）、重复消费幂等、缺/非法人工批准引用一律拒且"
+          "零新增，已解决事实回写判定器（该 block 移出 blocks、counts.resolved 递增）",
+          "qa ac AC-ADMIN-005", evidence_refs=("EV-099",))
+def check_admin_005() -> list[Assertion]:
+    out: list[Assertion] = []
+    root, state, checklist, pipeline = _stack("ac-admin-005")
+    derived = derive_blocks(state, checklist, pipeline, NOW)
+    by_kind = {row["kind"]: row["block_id"] for row in derived["blocks"]}
+    cred_id, plugin_id = by_kind["credential"], by_kind["plugin-request"]
+    cred_fields = {CRED_FIELD: CRED_SENTINEL}
+
+    # --- ① 宿主提交面不写账本；Python 是唯一写者 ---------------------------
+    host_dir = root / "host-side"
+    host_dir.mkdir(parents=True, exist_ok=True)
+    host_ledger = host_dir / "ledger.jsonl"
+    Ledger(host_ledger, realm="contractor:con-B").append("approval/requested", {"n": 1}, actor="agent:x", ts=NOW)
+    host_before = host_ledger.read_bytes()
+    inbox = root / "admin-submissions"
+    submitted = _pending(inbox, cred_id, "credential", cred_fields)
+    submitted_text = submitted.read_text(encoding="utf-8")
+    host_after_submit = host_ledger.read_bytes()
+    out.append(Assertion("① **宿主提交面不写账本**（行为负控）：宿主侧的提交动作（在收件箱里 0600 原子落一条"
+                         "待处理项）**前后**，宿主侧账本**逐字节不变**、目录里也没有多出第二个账本文件；"
+                         "待处理项里**有**凭据正文（它是交给 Python 侧的交接物，不是账本事实）"
+                         "（反例：提交时顺手 append 一行 → 红）",
+                         host_after_submit == host_before
+                         and sorted(path.name for path in host_dir.rglob("*")) == ["ledger.jsonl"]
+                         and CRED_SENTINEL in submitted_text and CRED_FIELD in submitted_text
+                         and oct(stat.S_IMODE(submitted.stat().st_mode)) == "0o600"
+                         and [path.name for path in inbox.glob("*.json")] == [f"{cred_id}.json"],
+                         f"宿主账本 {len(host_before)}→{len(host_after_submit)} 字节；"
+                         f"收件箱={sorted(path.name for path in inbox.iterdir())}；"
+                         f"权限={oct(stat.S_IMODE(submitted.stat().st_mode))}"))
+    host_text = HOST_WEBUI.read_text(encoding="utf-8") if HOST_WEBUI.is_file() else ""
+    host_hits = [needle for needle in HOST_WRITE_NEEDLES if needle in host_text]
+    out.append(Assertion("①·静态 **宿主侧没有写账本路径**（H1 负控）：`host/modules/webui.mjs` 里没有任何"
+                         "**写账本**形状的调用（`new Ledger` / `.append(` / `ledger.append`）—— 它对账本只有"
+                         "读（`openLedger`），提交面只 `writeFileSync` + `renameSync` 落待处理项"
+                         "（反例：出现 `ledger.append` → 红）",
+                         not host_hits,
+                         f"命中={host_hits or '无'}（已扫描 {len(host_text)} 字节；读路径的 openLedger 不算命中）"))
+    py_ledger = root / "py" / "ledger.jsonl"
+    first = _apply(inbox, py_ledger)
+    host_after_apply = host_ledger.read_bytes()
+    rows = _ledger_rows(py_ledger)
+    archived = inbox / "applied" / f"{cred_id}.json"
+    out.append(Assertion("①·**Python 是唯一写者**：跑完消费侧后宿主侧账本**仍逐字节不变**，而 `--ledger` 指向的"
+                         "账本恰新增 2 行；待处理项被**移入** `applied/`（原件逐字节保留、不删源）"
+                         "（反例：消费侧去写宿主账本 / 直接删源 → 红）",
+                         host_after_apply == host_before and first["rc"] == 0 and len(rows) == 2
+                         and first["payload"].get("ledger_added") == 2 and not submitted.exists()
+                         and archived.is_file() and archived.read_text(encoding="utf-8") == submitted_text
+                         and first["payload"].get("ledger_path") == str(py_ledger),
+                         f"宿主账本仍 {len(host_after_apply)} 字节；Python 账本 {len(rows)} 行；"
+                         f"归档={archived.is_file()}；stdout={first['lines']}"))
+
+    # --- ③ 合法应用：恰增两条事件，body 不含凭据 ---------------------------
+    types = [row.get("type") for row in rows]
+    bodies = [row.get("body") if isinstance(row.get("body"), dict) else {} for row in rows]
+    digest = hashlib.sha256(_canonical(cred_fields).encode("utf-8")).hexdigest()
+    out.append(Assertion("③ **合法应用恰增两条事件**且 body 键集恰为契约允许的 7 个键："
+                         "`admin/block-pending`（首次见到该 block）+ `admin/block-resolved`，"
+                         "realm=`admin`、actor 是人署名，`resolution_sha256=sha256:<重算摘要>`、"
+                         "`bytes` 与重算一致（反例：只落 resolved / 多带一个 `fields` 键 → 红）",
+                         first["rc"] == 0 and types == [EVENT_PENDING, EVENT_RESOLVED]
+                         and all(tuple(sorted(body)) == EVENT_BODY_KEYS for body in bodies)
+                         and all(row.get("realm") == "admin" and row.get("actor") == HUMAN_ACTOR for row in rows)
+                         and bodies[1].get("resolution_sha256") == f"sha256:{digest}"
+                         and bodies[1].get("block_id") == cred_id and bodies[1].get("kind") == "credential"
+                         and bodies[1].get("actor") == HUMAN_ACTOR
+                         and bodies[1].get("bytes") == len(_canonical(cred_fields).encode("utf-8"))
+                         and Ledger(py_ledger, realm="admin").verify_report()["ok"] is True,
+                         f"types={types} body[1]={bodies[1] if bodies else {}}"))
+    ledger_text = py_ledger.read_text(encoding="utf-8")
+    out.append(Assertion("③·**账本里搜不到凭据**（两扫：值 + 键名）：整份账本文本里既没有哨兵值"
+                         f"`{CRED_SENTINEL}`，也没有字段键名 `{CRED_FIELD}`；事件 body 里只有 id/kind/状态/"
+                         "引用/哈希（凭据正文由人处理，账本只记哈希）"
+                         "（反例：把 `fields` 整个塞进 body → 红）",
+                         CRED_SENTINEL not in ledger_text and CRED_FIELD not in ledger_text
+                         and all(CRED_SENTINEL not in json.dumps(body, ensure_ascii=False) for body in bodies)
+                         and all(CRED_FIELD not in json.dumps(body, ensure_ascii=False) for body in bodies),
+                         f"账本 {len(ledger_text)} 字节；哨兵={'命中' if CRED_SENTINEL in ledger_text else '未命中'} "
+                         f"键名({'命中' if CRED_FIELD in ledger_text else '未命中'})"))
+
+    # --- ④ 重复消费幂等 ---------------------------------------------------
+    _pending(inbox, cred_id, "credential", cred_fields)          # 同一份材料再送一次（宿主回投/人工重试）
+    before_lines = len(_ledger_rows(py_ledger))
+    again = _apply(inbox, py_ledger)
+    after_lines = len(_ledger_rows(py_ledger))
+    empty = _apply(inbox, py_ledger)                              # 收件箱已空（全部归档）再跑一次
+    out.append(Assertion("④ **重复消费幂等**：同一 `(block_id, payload_sha256)` 再消费一次 → 账本**零新增**、"
+                         "stdout 的 `duplicates` 里点名该 block（带 `duplicate` 字样）、`ledger_added=0`；"
+                         "收件箱空了以后再跑一次照样零新增、退出码 0"
+                         "（反例：重复落一条 resolved → 红）",
+                         again["rc"] == 0 and again["payload"].get("ledger_added") == 0
+                         and after_lines == before_lines == 2 and again["payload"].get("applied") == []
+                         and cred_id in [item.get("block_id") for item in again["payload"].get("duplicates", [])]
+                         and "duplicate" in json.dumps(again["payload"].get("duplicates"), ensure_ascii=False)
+                         and empty["rc"] == 0 and empty["payload"].get("ledger_added") == 0
+                         and len(_ledger_rows(py_ledger)) == 2,
+                         f"lines {before_lines}→{after_lines}；duplicates={again['payload'].get('duplicates')}；"
+                         f"空收件箱={empty['lines']}"))
+
+    # --- ⑤ 状态回写：已解决事实进判定器 -----------------------------------
+    with_facts = derive_blocks(state, checklist, pipeline, NOW, resolutions_path=py_ledger)
+    live_ids = [row["block_id"] for row in with_facts["blocks"]]
+    out.append(Assertion("⑤ **状态回写**：带 `resolutions_path`（刚落的账本）重跑判定器 → 该 block 从 `blocks`"
+                         "（活动清单）里**消失**、`counts.resolved` +1、`counts.blocked` -1（总数守恒），"
+                         "其余阻塞一条不少；`progress.resolutions` 标注事实源状态；同输入两次字节一致"
+                         "（反例：账本里有 resolved 行而面板照旧报 blocked → 红）",
+                         cred_id not in live_ids and len(live_ids) == len(derived["blocks"]) - 1
+                         and with_facts["counts"]["resolved"] == 1
+                         and with_facts["counts"]["blocked"] == derived["counts"]["blocked"] - 1 == 5
+                         and sum(with_facts["counts"].values()) == 6
+                         and with_facts["progress"]["resolutions"]["status"] == "ok"
+                         and with_facts["progress"]["resolutions"]["resolved_ids"] == 1
+                         and sorted(live_ids) == sorted(row["block_id"] for row in derived["blocks"]
+                                                        if row["block_id"] != cred_id)
+                         and render(with_facts) == render(derive_blocks(state, checklist, pipeline, NOW,
+                                                                       resolutions_path=py_ledger)),
+                         f"活动 {len(derived['blocks'])}→{len(live_ids)}；counts {derived['counts']} → "
+                         f"{with_facts['counts']}；resolutions={with_facts['progress']['resolutions']}"))
+    rendered_facts = render(with_facts)
+    out.append(Assertion("⑤·**判定器输出侧也不出凭据**：带已解决事实的判定器输出里同样搜不到哨兵值与字段键名"
+                         "（账本只提供 `block_id` 与 state，判定器不把账本行原文抄进输出）"
+                         "（反例：把账本 body 整个回填进 block 记录 → 红）",
+                         CRED_SENTINEL not in rendered_facts and CRED_FIELD not in rendered_facts,
+                         f"输出 {len(rendered_facts)} 字节；哨兵={'命中' if CRED_SENTINEL in rendered_facts else '未命中'}"))
+
+    # --- ⑥ 权限门与自述门 -------------------------------------------------
+    inbox_mode = root / "inbox-mode"
+    loose = _pending(inbox_mode, plugin_id, "plugin-request", {"key": CRED_SENTINEL}, mode=0o644)
+    ledger_mode = root / "py" / "mode.jsonl"
+    mode_run = _apply(inbox_mode, ledger_mode)
+    out.append(Assertion("⑥ **权限 0644 的待处理项被拒**（权限是链上的一道门，不自动改权限、不猜测）："
+                         "退出码非 0、`ok=false`、理由点名权限，账本**连空文件都没创建**，源文件原地不动"
+                         "（反例：0644 照样消费 → 红）",
+                         mode_run["rc"] != 0 and mode_run["payload"].get("ok") is False
+                         and "600" in json.dumps(mode_run["payload"].get("refused"), ensure_ascii=False)
+                         and not ledger_mode.exists() and loose.is_file()
+                         and loose.read_text(encoding="utf-8").count(CRED_SENTINEL) == 1,
+                         f"rc={mode_run['rc']} refused={mode_run['payload'].get('refused')} "
+                         f"账本存在={ledger_mode.exists()}"))
+    inbox_tamper = root / "inbox-tamper"
+    tampered = _pending(inbox_tamper, plugin_id, "plugin-request", {"key": CRED_SENTINEL})
+    declared = json.loads(tampered.read_text(encoding="utf-8"))
+    declared["bytes"] = int(declared["bytes"]) + 1                     # 自述字节数对不上重算结果
+    tampered.write_text(json.dumps(declared, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.chmod(tampered, 0o600)
+    ledger_tamper = root / "py" / "tamper.jsonl"
+    tamper_run = _apply(inbox_tamper, ledger_tamper)
+    out.append(Assertion("⑥·**自述不可信即拒**：待处理项自述的 `bytes`/`payload_sha256` 与 `fields` 的**重算**结果"
+                         "不一致 → 拒绝落账（退出码非 0、账本零新增）；消费侧不采信文件自述"
+                         "（反例：直接采信自述摘要 → 红）",
+                         tamper_run["rc"] != 0 and tamper_run["payload"].get("ok") is False
+                         and "bytes" in json.dumps(tamper_run["payload"].get("refused"), ensure_ascii=False)
+                         and not ledger_tamper.exists() and tampered.is_file(),
+                         f"rc={tamper_run['rc']} refused={tamper_run['payload'].get('refused')}"))
+
+    # --- ② 缺/非法人工批准引用与非人 actor 一律拒且零新增 ------------------
+    gate_inbox = root / "inbox-gate"
+    _pending(gate_inbox, cred_id, "credential", cred_fields)   # 合法待处理项：只有 CLI 门能拦住它
+    gate_ledger = root / "py" / "gate.jsonl"
+    base = ["--inbox", str(gate_inbox), "--ledger", str(gate_ledger)]
+    ref_probes = {"缺 --approval-ref": None, "空串": "", "编号不是四位数": "ap-1",
+                  "人类署名混用": HUMAN_ACTOR, "agent 自带": "agent:bot", "空引用词": "还没有批准"}
+    ref_results = {}
+    for name, ref in ref_probes.items():
+        args = base + ["--actor", HUMAN_ACTOR, "--now", APPLY_NOW]
+        if ref is not None:
+            args += ["--approval-ref", ref]
+        ref_results[name] = _applier(*args)
+    bad_refs = {name: item for name, item in ref_results.items()
+                if not (item[0] != 0 and len(item[1]) == 1 and json.loads(item[1][0]).get("ok") is False)}
+    out.append(Assertion("② **缺/非法人工批准引用一律拒且零新增**（6 种形态：缺参数 / 空串 / `ap-1` / "
+                         "`human:*` 混用 / `agent:*` 代签 / 没形状的自由文本）：退出码非 0、stdout 恰一行 JSON "
+                         "且 `ok=false`、账本**连空文件都没创建**；即便收件箱里躺着**合法**的待处理项，"
+                         "没有被批准引用也不会被消费（人工门不可绕过）"
+                         "（反例：任何一种被放行 → 红）",
+                         not bad_refs and not gate_ledger.exists()
+                         and (gate_inbox / f"{cred_id}.json").is_file()
+                         and not (gate_inbox / "applied").exists(),
+                         f"放行/形状不对={bad_refs or '无'}；账本存在={gate_ledger.exists()}；"
+                         f"收件箱={sorted(path.name for path in gate_inbox.iterdir())}"))
+    actor_probes = {"缺 --actor": None, "空 actor": "", "agent 代签": "agent:bot", "只有 human:": "human:"}
+    actor_results = {}
+    for name, actor in actor_probes.items():
+        args = base + ["--approval-ref", AP_REF, "--now", APPLY_NOW]
+        if actor is not None:
+            args += ["--actor", actor]
+        actor_results[name] = _applier(*args)
+    bad_actors = {name for name, item in actor_results.items()
+                  if not (item[0] != 0 and len(item[1]) == 1 and json.loads(item[1][0]).get("ok") is False)}
+    # 注：`2026-09-21`（只有日期）按 ISO 8601 是**合法**时间（当日 00:00，与 `admin_blocks._moment`
+    # 同一口径），所以这里用**真的越界**值做探针，而不是拿"没有秒"冒充非法。
+    now_probes = {"缺 --now": None, "空 now": "", "非法 ISO": "not-a-time",
+                  "月份越界": "2026-13-45T00:00:00Z", "时间越界": "2026-09-21T99:99:99Z"}
+    now_results = {}
+    for name, moment in now_probes.items():
+        args = base + ["--approval-ref", AP_REF, "--actor", HUMAN_ACTOR]
+        if moment is not None:
+            args += ["--now", moment]
+        now_results[name] = _applier(*args)
+    bad_now = {name for name, item in now_results.items()
+               if not (item[0] != 0 and len(item[1]) == 1 and json.loads(item[1][0]).get("ok") is False)}
+    out.append(Assertion("②·**另外两道用法门**：`--actor` 不是 `human:<名>`（缺/空/`agent:*`/只有前缀）与 "
+                         "`--now` 缺失或不是合法 ISO → 一律拒（退出码非 0、恰一行 JSON、`ok=false`、"
+                         "账本零新增）—— 消费侧**不读墙钟**、agent 不得代签"
+                         "（反例：actor 用 `agent:*` 被放行 / 缺 now 时静默用墙钟 → 红）",
+                         not bad_actors and not bad_now and not gate_ledger.exists(),
+                         f"actor 放行={bad_actors or '无'}；now 放行={bad_now or '无'}"))
+    dry = _apply(gate_inbox, gate_ledger, "--dry-run")
+    out.append(Assertion("②·`--dry-run` 只预演不落账：退出码 0、`ledger_added=0`、账本**没有被创建**、"
+                         "待处理项还在收件箱里（没有归档、没有被消费）",
+                         dry["rc"] == 0 and dry["payload"].get("ledger_added") == 0
+                         and not gate_ledger.exists() and (gate_inbox / f"{cred_id}.json").is_file()
+                         and [
+                             item.get("block_id") for item in dry["payload"].get("applied", [])
+                         ] == [cred_id],
+                         f"rc={dry['rc']} applied={dry['payload'].get('applied')} "
+                         f"账本存在={gate_ledger.exists()}"))
+
+    # --- ⑦ 已解决事实源缺失/损坏：不猜、但说出来 ---------------------------
+    gone = derive_blocks(state, checklist, pipeline, NOW, resolutions_path=root / "nope.jsonl")
+    out.append(Assertion("⑦ 已解决事实源**缺失** → 按「无已解决事实」处理（不猜、不编：该阻塞照旧 blocked、"
+                         "计数与不传该参数时**一条不差**），但 `reason`/`next_action` 必须明说，"
+                         "`progress.resolutions` 给出逐源状态；`degraded` 的口径**不变**（仍只看那三个真源）"
+                         "（反例：读不到就当成「没有阻塞」→ 数变小 → 红）",
+                         gone["counts"] == derived["counts"] and len(gone["blocks"]) == len(derived["blocks"])
+                         and gone["counts"]["resolved"] == 0 and gone["degraded"] is False
+                         and "resolutions=missing" in str(gone["reason"])
+                         and bool(str(gone["next_action"]))
+                         and gone["progress"]["resolutions"]["status"] == "missing",
+                         f"counts={gone['counts']} degraded={gone['degraded']} "
+                         f"resolutions={gone['progress']['resolutions']}"))
+    junk = root / "junk.jsonl"
+    good_line = {"seq": 1, "type": EVENT_RESOLVED,
+                 "body": {"block_id": plugin_id, "kind": "plugin-request",
+                          "resolution_sha256": "sha256:" + "b" * 64, "bytes": 12, "approval_ref": AP_REF,
+                          "actor": HUMAN_ACTOR, "schema": 1, "reason": "账本行里的别字段"}}
+    junk.write_text(json.dumps(good_line, ensure_ascii=False) + "\n"
+                    + '{"type": "admin/block-resolved", "body": {"block' + "\n", encoding="utf-8")
+    partial = derive_blocks(state, checklist, pipeline, NOW, resolutions_path=junk)
+    partial_text = render(partial)
+    out.append(Assertion("⑦·已解决事实源**半损坏**（一行读得出来、一行是半截 JSON）→ 可读的事实照报"
+                         "（那条真变 resolved）、读不到的绝不补，`status=partial` 且 `skipped` 计数可见；"
+                         "**只取 `block_id` 与 state**：账本行里别的字段既不进输出也不进记录"
+                         "（反例：一行坏了就整份当空 → 已解决的又变回 blocked；或把账本行原文抄进输出 → 红）",
+                         partial["progress"]["resolutions"]["status"] == "partial"
+                         and partial["progress"]["resolutions"]["skipped"] == 1
+                         and partial["counts"]["resolved"] == 1
+                         and plugin_id not in [row["block_id"] for row in partial["blocks"]]
+                         and len(partial["blocks"]) == len(derived["blocks"]) - 1
+                         and "resolutions=partial" in str(partial["reason"])
+                         and "账本行里的别字段" not in partial_text,
+                         f"status={partial['progress']['resolutions']['status']} "
+                         f"counts={partial['counts']} 抄了别字段={'是' if '账本行里的别字段' in partial_text else '否'}"))
+
+    # --- ⑧ 旧行为回归：不传 resolutions_path 时逐字节不变 -----------------
+    legacy, legacy_note = _legacy_module(root)
+    current = render(derive_blocks(state, checklist, pipeline, NOW))
+    explicit_none = render(derive_blocks(state, checklist, pipeline, NOW, resolutions_path=None))
+    ledger_records = [_record(cred_id, "resolved")]
+    legacy_plain = True if legacy is None else \
+        render(legacy.derive_blocks(state, checklist, pipeline, NOW)) == current
+    legacy_with_records = True if legacy is None else \
+        render(legacy.derive_blocks(state, checklist, pipeline, NOW, records=ledger_records)) == \
+        render(derive_blocks(state, checklist, pipeline, NOW, records=ledger_records))
+    out.append(Assertion("⑧ **旧行为回归**（不传 `resolutions_path` 时与扩展前**逐字节一致**）：本批次新增的读侧"
+                         "只在**显式传入**时才生效 —— 与 HEAD 里的旧实现（扩展前）在同夹具上 `render()` 字节相同"
+                         "（含 `records=` 那条路径）、不传参数与显式 `resolutions_path=None` 字节相同、"
+                         "`progress` 里**没有** `resolutions` 键（反例：默认路径顺手读了账本 / 多出一个键 → 红）",
+                         legacy_plain and legacy_with_records and explicit_none == current
+                         and "resolutions" not in derive_blocks(state, checklist, pipeline, NOW)["progress"],
+                         f"{legacy_note}；字节={len(current)}；与 HEAD 一致={legacy_plain}"
+                         f"（records= 路径 {legacy_with_records}）；显式 None 一致={explicit_none == current}"))
     return out
 
 

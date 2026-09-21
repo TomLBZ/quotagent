@@ -35,15 +35,24 @@
   `phase`/`next_task`/`human_required`/`blockers`/`notes`，其余键**不读也不回显**，只计个数
   `redacted_fields`；未知形状的条目宁可跳过并计数，也不 `json.dumps` 整条读进来。
 
+- **已解决事实的读侧（AC-ADMIN-005 的"状态回写"）**：`resolutions_path=`（可选）指向一份 JSONL
+  （账本文件），判定器**只读**其中 `type == "admin/block-resolved"` 行的 **`block_id` 与 state**
+  （其余字段既不读也不回填）。命中的阻塞在输出里转 `state="resolved"`、从 `blocks`（活动清单）
+  移除、`counts.resolved` 递增；**不传该参数时行为与扩展前逐字节相同**（默认路径一票不改）。
+  读不到/损坏 → **不猜**：按"无已解决事实"处理（该阻塞照旧 blocked，不会凭空消失），
+  但在 `reason`/`next_action` 里明说，并把逐源状态放进 `progress.resolutions`。
+  **`degraded` 的口径不变**（仍只看那三个真源）——这一点在 docstring 里写死，不许含糊。
+
 【本批次**未做**（诚实标注，不是"已完成"）】
-- 四条事件名 `admin/block-pending|resolved|rejected|expired` **尚未登记**进
-  `docs/design/05-events.md` 与 `kernel/events.py` 的 `DEFAULT_TABLE`（本项目"声明即登记"）。
-  本任务只能动本文件，登记属于真正落账那一批（T-265）：**登记前不得把 `events` 里的载荷写进账本**。
 - `apply_transition` 只能校验"引用给没给、形状合不合法"。引用**是不是**一笔 `granted` 且
   `decided_by=human:*` 的批准，必须到账本 / `ApprovalService` 里核（先例：
   `services/retention_exec.py` 的 `_approval_state`）。**引用本身不是批准**。
 - `replay()`（从账本重建当前状态，AC-ADMIN-006 的另一半）属写入侧的账本重放，本批不做；
   调用方可以把自己重建出的记录经 `records=` 传进来，判定器按 `block_id` 采纳其状态。
+  已解决事实的**读**由本文件的 `resolutions_path=` 承担（只取 id + state，不是全量重放）。
+- 四条事件名 `admin/block-pending|resolved|rejected|expired` 已登记（`kernel/events.py` 的
+  `DEFAULT_TABLE` 与 `docs/design/05-events.md`）；**落账**由 `tools/admin-apply.py`（T-265）做 ——
+  本文件依旧**只产出载荷 / 只读事实**，没有一个写账本的调用。
 """
 
 from __future__ import annotations
@@ -398,6 +407,100 @@ def read_sources(state_path: Any, checklist_path: Any, pipeline_snapshot_path: A
 
 
 # ---------------------------------------------------------------------------
+# 已解决事实（AC-ADMIN-005 的读侧）：JSONL 里的 `admin/block-resolved` 行
+# ---------------------------------------------------------------------------
+RESOLVED_EVENT = "admin/block-resolved"   #: 账本事件名（与 `tools/admin-apply.py` 同一口径）
+#: `progress.resolutions.status` 的取值域（absent = 调用方没要求这条事实源）
+RESOLUTION_STATUSES = ("absent", "ok", "partial", "missing")
+
+
+def _read_resolutions(path: Any) -> dict:
+    """读已解决事实（JSONL：账本行）。**只取** `admin/block-resolved` 行的 `block_id` 与 state。
+
+    返回 `{"status", "detail", "facts": {block_id: "resolved"}, "skipped", "lines"}`：
+
+    · `path` 为空（`None`）→ `absent`：调用方没要求这条事实源（**旧行为**，一条都不读）；
+    · 文件不存在 / 读不到 → `missing`：**一条已解决事实都不算**（读不到 ≠ 零已解决 —— 数不会因此变小）；
+    · 有行读不出来（不是合法 JSON / 不是对象 / 是 `admin/block-resolved` 却没有可用的 block_id）→
+      逐行计入 `skipped`，`status=partial`：**可读的事实照报，读不到的一律不补**（不猜、不编）；
+    · 文件在、行都读得出来 → `ok`（一行已解决事实都没有也算 `ok`：那是"确实没有已解决事实"）。
+
+    `state` 只有一个取值 `resolved`（事件名本身即状态）；**其余字段一律不读**，也不带进输出。
+    """
+    if path is None:
+        return {"status": "absent", "detail": "", "facts": {}, "skipped": 0, "lines": 0, "path": None}
+    target = Path(str(path))
+    if not target.is_file():
+        return {"status": "missing", "detail": "文件不存在（没有真源就没有事实，不当作空文件）",
+                "facts": {}, "skipped": 0, "lines": 0, "path": str(target)}
+    try:
+        text = target.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {"status": "missing", "detail": f"读不到：{exc}", "facts": {}, "skipped": 0, "lines": 0,
+                "path": str(target)}
+
+    facts: dict[str, str] = {}
+    lines = skipped = 0
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        lines += 1
+        try:
+            record = json.loads(line)
+        except ValueError:
+            skipped += 1
+            continue
+        if not isinstance(record, dict):
+            skipped += 1
+            continue
+        if record.get("type") != RESOLVED_EVENT:
+            continue                       # 别的行（含 admin/block-pending）不是已解决事实：不读
+        raw_body = record.get("body")
+        body = raw_body if isinstance(raw_body, dict) else {}
+        block_id = body.get("block_id")
+        if not isinstance(block_id, str) or not block_id.strip():
+            skipped += 1                   # 声称有事实却读不出 id：计入 skipped，绝不补一个 id
+            continue
+        facts[block_id.strip()] = RESOLVED
+    if skipped:
+        detail = (f"{lines} 行里 {skipped} 行读不出已解决事实（可读的照报，读不到的不补）："
+                  f"本次只采纳 {len(facts)} 条")
+        return {"status": "partial", "detail": detail, "facts": facts, "skipped": skipped, "lines": lines,
+                "path": str(target)}
+    return {"status": "ok", "detail": "", "facts": facts, "skipped": 0, "lines": lines,
+            "path": str(target)}
+
+
+def _resolution_rows(facts: dict, derived_by_id: dict) -> list[dict]:
+    """已解决事实 → 记录行（**只把 state 改成 resolved**）。
+
+    源里有这条阻塞时，字段仍**取自真源**（不是从账本行抄的：账本只提供"这条已解决"这一个事实）；
+    源里已经没有的 id（历史阻塞）只留一条最小记录 —— 它绝不会因此回到 `blocks`（终态不在 `LIVE_STATES`）。
+    """
+    rows = []
+    for block_id in sorted(facts):
+        base = derived_by_id.get(block_id)
+        if base is not None:
+            row = dict(base)
+        else:
+            row = {"block_id": block_id, "kind": "other",
+                   "reason": "（账本侧有 admin/block-resolved 事实；判定器只读 block_id 与 state，其余字段不回填）",
+                   "required_action": "（账本侧已有处置）", "refs": [], "source": "ledger", "task": None,
+                   "redacted_fields": 0}
+        row["state"] = RESOLVED
+        rows.append(row)
+    return rows
+
+
+def _resolution_note(resolutions: dict) -> str:
+    """事实源不可读时的说明（`reason`/`next_action` 必须明说，不许静默）。"""
+    if resolutions["status"] in ("absent", "ok"):
+        return ""
+    return (f"已解决事实源不可用：resolutions={resolutions['status']}（{resolutions['detail']}）——"
+            f"本次按「无已解决事实」处理（读不到 ≠ 零已解决：已解决的阻塞不会凭空消失，也不会凭空多出）")
+
+
+# ---------------------------------------------------------------------------
 # 判定器（纯函数：同输入两次字节一致；不让时钟进任何状态）
 # ---------------------------------------------------------------------------
 def _moment(now: Any) -> float:
@@ -484,7 +587,8 @@ def _degraded_action(sources: dict) -> str:
 
 
 def derive_blocks(state_path: Any, checklist_path: Any, pipeline_snapshot_path: Any, now: Any, *,
-                  records: Iterable | None = None, max_blocks: int = DEFAULT_MAX_BLOCKS) -> dict:
+                  records: Iterable | None = None, max_blocks: int = DEFAULT_MAX_BLOCKS,
+                  resolutions_path: Any = None) -> dict:
     """真源 → 阻塞清单 + 只读计数/进度（唯一判定入口；纯函数，零副作用）。
 
     形状（键名即契约；与宿主 `host/modules/admin-view.mjs` 的读取端逐键对齐）::
@@ -493,13 +597,23 @@ def derive_blocks(state_path: Any, checklist_path: Any, pipeline_snapshot_path: 
          "counts": {blocked, pending, resolved, rejected, expired},
          "counts_source": "<口径来源：多少条记录、按什么计数、覆盖哪些可读源>",
          "progress": {phase, next_task, done, todo, by_status, checklist_rows, source,
-                      sources, blocks_bounded, records_rejected},
+                      sources, blocks_bounded, records_rejected[, resolutions]},
          "degraded": bool, "reason": str|None, "next_action": str|None}
 
     · `blocks` = 存活阻塞（`blocked`/`pending`）的**有界**清单（上限 `max_blocks`）；
-    · `counts` = 对**全部**已知记录的逐状态计数（含 `records=` 传入的账本侧记录）；
+    · `counts` = 对**全部**已知记录的逐状态计数（含 `records=` 传入的账本侧记录与
+      `resolutions_path=` 读到的已解决事实）；
     · `counts_source` / `progress.source` = 口径来源（宿主缺这两个键即判降级，所以它们不是装饰）；
     · 源缺失/损坏 → `degraded=true` + `reason` + `next_action`（`progress.sources` 逐源给状态）。
+
+    `resolutions_path=`（可选；AC-ADMIN-005 的状态回写）：
+    · 传了就**只**读其中 `admin/block-resolved` 行的 `block_id` 与 state（其余字段不读、不回填）；
+      命中的阻塞转 `state="resolved"`、从 `blocks` 移除、`counts.resolved` 递增，
+      事实源逐源状态进 `progress.resolutions`；
+    · **不传（None）时输出与未加此参数时逐字节相同** —— 默认路径一票不改（回归点）；
+    · 读不到/损坏 → 按"无已解决事实"处理（该阻塞照旧 blocked：绝不凭空消失），
+      但一定写进 `reason`/`next_action` 与 `progress.resolutions`（不许静默）；
+      `degraded` 的口径**不变**（仍只看 state/checklist/pipeline 三个真源）。
     """
     _moment(now)                                     # 校验 now（显式注入；**不参与任何状态判定**）
     if isinstance(max_blocks, bool) or not isinstance(max_blocks, int) or max_blocks < 1:
@@ -507,12 +621,18 @@ def derive_blocks(state_path: Any, checklist_path: Any, pipeline_snapshot_path: 
 
     sources = read_sources(state_path, checklist_path, pipeline_snapshot_path)
     broken = [name for name in SOURCES if sources[name]["status"] != "ok"]
+    resolutions = _read_resolutions(resolutions_path)                 # `absent`：一条都不读（旧行为）
 
     merged: dict[str, dict] = {}
     known, rejected_records = _normalize_records(records)
     for row in known:
         merged[row["block_id"]] = row
     derived = [record for name in SOURCES for record in sources[name]["records"]]
+    if resolutions["facts"]:                          # 空事实 = 这一步整个跳过 → 旧输出逐字节不变
+        # 已解决事实**不改**真源记录的任何字段，只把 state 改成 `resolved`（字段仍取自真源）；
+        # 调用方显式传入的 `records=` 优先于账本侧事实（那是更当前的视图）。
+        for row in _resolution_rows(resolutions["facts"], {row["block_id"]: row for row in derived}):
+            merged.setdefault(row["block_id"], row)
     for row in derived:
         merged.setdefault(row["block_id"], row)      # 账本侧记录优先（同 block_id 只出现一次）
 
@@ -541,14 +661,29 @@ def derive_blocks(state_path: Any, checklist_path: Any, pipeline_snapshot_path: 
                            "truncated": len(live) > len(listed)},
         "records_rejected": rejected_records,
     }
+    if resolutions_path is not None:                  # 只在调用方**要求**这条事实源时才出现（旧输出不变）
+        progress["resolutions"] = {
+            "status": resolutions["status"], "path": str(resolutions["path"]),
+            "resolved_ids": len(resolutions["facts"]), "skipped": resolutions["skipped"],
+            "lines": resolutions["lines"],
+            "detail": resolutions["detail"] or "只读 admin/block-resolved 行的 block_id 与 state",
+        }
+    reason = _degraded_reason(sources) if broken else None
+    next_action = _degraded_action(sources) if broken else None
+    note = _resolution_note(resolutions) if resolutions_path is not None else ""
+    if note:                                          # 读不到就说出来（`degraded` 口径不变，仍只看三个真源）
+        reason = f"{reason}；{note}" if reason else note
+        next_action = (f"{next_action}；先修好该 JSONL（账本）或不要传 resolutions_path —— 不要用空值顶替"
+                       if next_action else
+                       "先修好该 JSONL（账本）再重跑，或不要传 resolutions_path（不传即不读已解决事实）")
     return {
         "blocks": listed,
         "counts": counts,
         "counts_source": _counts_source(sources, len(all_records)),
         "progress": progress,
         "degraded": bool(broken),
-        "reason": _degraded_reason(sources) if broken else None,
-        "next_action": _degraded_action(sources) if broken else None,
+        "reason": reason,
+        "next_action": next_action,
     }
 
 
@@ -651,4 +786,5 @@ __all__ = ["derive_blocks", "read_sources", "render", "apply_transition", "class
            "BLOCKED", "PENDING", "RESOLVED", "REJECTED", "EXPIRED", "SOURCES", "SOURCE_STATE",
            "SOURCE_CHECKLIST", "SOURCE_PIPELINE", "STATE_READ_KEYS", "BLOCKER_READ_KEYS",
            "CHECKLIST_STATUSES", "KINDS", "PLUGIN_KEYWORDS", "CREDENTIAL_KEYWORDS", "CALIBER",
-           "DEFAULT_MAX_BLOCKS", "REASON_CLIP", "APPROVAL_REF_RE", "SHA256_RE", "AdminBlockError"]
+           "DEFAULT_MAX_BLOCKS", "REASON_CLIP", "APPROVAL_REF_RE", "SHA256_RE", "AdminBlockError",
+           "RESOLVED_EVENT", "RESOLUTION_STATUSES"]

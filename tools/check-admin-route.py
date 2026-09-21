@@ -487,6 +487,43 @@ finally:
             proc.kill()
 
 failed = [item for item in CHECKS if not item["ok"]]
+
+# ---- T-265b：解阻塞提交面（宿主侧）——只落待处理项、账本零新增、不回显材料 ----
+import hashlib as _hl
+import os as _os
+import stat as _stat
+
+_BLOCK_ID = None
+try:
+    _blocks = json.loads(curl(f"http://127.0.0.1:{port}{prefix}/admin/api/blocks", cookie=cookie)[1])
+    _BLOCK_ID = next((b["block_id"] for b in (_blocks.get("blocks") or [])), None)
+except Exception:
+    _BLOCK_ID = None
+
+if _BLOCK_ID:
+    _before = {}
+    for _p in (ledger_contractor, ledger_supplier):
+        try:
+            _before[_p] = _hl.sha256(Path(_p).read_bytes()).hexdigest()
+        except OSError:
+            _before[_p] = None
+    _sentinel = "SMTP-IMAP-CRED-SENTINEL-e2e"
+    _code, _body = curl(f"http://127.0.0.1:{port}{prefix}/admin/api/blocks/{_BLOCK_ID}/resolve",
+                        cookie=cookie, method="POST", data=f"kind=credential&material={_sentinel}")
+    check("T-265b 提交面：带会话提交材料 → 202，响应体不回显材料（哨兵出现 0 次）",
+          _code == 202 and _sentinel not in _body, f"status={_code} sentinel_in_body={_sentinel in _body}")
+    _inbox = Path(__file__).resolve().parents[1] / "tmp" / "e2e-admin-inbox"
+    check("T-265b 提交面：**账本零新增**（宿主不写账本；业务账本逐一比对哈希）",
+          all((_before[_p] is None and not Path(_p).exists())
+              or _hl.sha256(Path(_p).read_bytes()).hexdigest() == _before[_p]
+              for _p in _before),
+          f"before={list(_before.values())}")
+    _c2, _ = curl(f"http://127.0.0.1:{port}{prefix}/admin/api/blocks/{_BLOCK_ID}/resolve", method="POST",
+                  data="kind=credential&material=x")
+    check("T-265b 提交面：无会话提交一律 401（写类提交不缺 token）", _c2 == 401, f"status={_c2}")
+else:
+    check("T-265b 提交面：夹具里至少有一条阻塞（否则本组断言空转）", False, "无 block 可用")
+
 print(json.dumps({"checks": CHECKS, "passed": len(CHECKS) - len(failed), "total": len(CHECKS),
                   "failures": len(failed)}, ensure_ascii=False, indent=2))
 for item in failed:

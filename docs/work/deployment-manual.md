@@ -259,5 +259,20 @@ ac-registry  approval-digest  audit-hook  breaker  breaker-route  bridge  bridge
   `忽略 …：权限 0o644 不是 600` 或 `读 token 失败`；权限不对会被**拒绝加载**（不是静默使用）。
 - **无暗门**：不存在"超时自动批准/自动解除"；会话过期只减权，已解除的阻塞与账本不受影响。
 
+### 在 UI 内解阻塞（T-265 闭环）
+
+1. 面板每条阻塞右侧有「提交材料」表单（或直接 `POST /quotagent/admin/api/blocks/<block_id>/resolve`，
+   带会话与 `material=<值>`）→ 202；材料落在 `tmp/ui-shared/admin-submissions/<block_id>.json`（**0600**）。
+   **此时账本没有任何新增**（宿主不写账本），面板上也**不会**假称已解决。
+2. 由人（或经批准的操作）执行消费——这是唯一写账本的一步：
+   `python3 tools/admin-apply.py --inbox tmp/ui-shared/admin-submissions \
+      --ledger tmp/ui-shared/admin/ledger.jsonl --approval-ref ap-NNNN --actor human:<人名> --now <ISO>`
+   落 `admin/block-pending` + `admin/block-resolved`（**body 不含凭据值，也不含字段名**），源件移入 `applied/`；重复消费幂等。
+3. 快照刷新带上 `--resolutions tmp/ui-shared/admin/ledger.jsonl`（`ws-gateway` 探活钩子已带），
+   面板随后显示 `blocked` 递减、`resolved` 递增。
+4. 反例：缺 `--approval-ref` → 退出码 2 且拒绝（人工门不可绕过）；无会话提交 → 401。
+5. 已知边界：`approval_ref` 目前**只校验形状**（`ap-NNNN`），尚未与批准记录对照（登记 T-265b2）；
+   凭据提交后**不会**自动接进服务（如 SMTP 传输仍需 T-259）。
+
 ### 门清单更新
 `tools/verify.sh help` 打印全部（从脚本自身解析，不再手写）。本轮新增 `admin-route`。

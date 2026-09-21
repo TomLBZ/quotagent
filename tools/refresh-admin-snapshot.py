@@ -81,6 +81,8 @@ def main(argv: list | None = None) -> int:
                         help="三域快照真源（默认 tmp/ui-shared/pipeline.json）")
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="输出文件（原子写：先 .tmp 再 replace）")
     parser.add_argument("--now", default=None, help="快照时点（ISO8601；不给取当前 UTC；给定即逐字节可复现）")
+    parser.add_argument("--resolutions", default="",
+                        help="admin 账本（JSONL）：读 admin/block-resolved 行作为**已解决事实**（不传 = 与旧行为逐字节一致）")
     args = parser.parse_args(argv)
 
     state, checklist, pipeline = _resolve(args.state), _resolve(args.checklist), _resolve(args.pipeline)
@@ -88,7 +90,8 @@ def main(argv: list | None = None) -> int:
     now = args.now or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
     try:
-        derived = derive_blocks(state, checklist, pipeline, now)
+        resolutions = Path(args.resolutions) if args.resolutions else None
+        derived = derive_blocks(state, checklist, pipeline, now, resolutions_path=resolutions)
     except AdminBlockError as exc:                      # 用法错误：拒绝，不产出半个快照
         print(json.dumps({"ok": False, "error": f"判定器拒绝输入：{exc}"}, ensure_ascii=False, sort_keys=True))
         return 2

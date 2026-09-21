@@ -56,7 +56,8 @@ def refresh_admin_snapshot() -> None:
                                "--state", str(ROOT / ".agents" / "state.json"),
                                "--checklist", str(ROOT / "docs" / "work" / "progress-checklist.md"),
                                "--pipeline", str(ROOT / "tmp" / "ui-shared" / "pipeline.json"),
-                               "--out", str(ROOT / "tmp" / "ui-shared" / "admin.json")],
+                               "--out", str(ROOT / "tmp" / "ui-shared" / "admin.json"),
+                               "--resolutions", str(ROOT / "tmp" / "ui-shared" / "admin" / "ledger.jsonl")],
                               capture_output=True, timeout=120, check=False)
         if proc.returncode != 0:
             print(f"[webui-serve] admin 快照刷新失败 rc={proc.returncode} "

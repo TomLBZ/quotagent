@@ -1,0 +1,60 @@
+EV-133 T-265 在 UI 内解阻塞：提交面（宿主） + 消费面（Python 唯一写账本）闭环
+
+[1] 契约
+· 宿主 `POST /quotagent/admin/api/blocks/<id>/resolve`（需会话 + token）→ **只落待处理项**
+  `tmp/ui-shared/admin-submissions/<block_id>.json`（原子写 + 显式 chmod **0600**，目录 0700），
+  返回 202 `{payload_sha256,bytes,next_action}`；**响应不回显材料**；宿主侧账本零新增（H1）。
+· Python `tools/admin-apply.py`（**唯一写账本的一方**）：校验 `--approval-ref ap-NNNN` 与 `--actor human:*`
+  （用法门在构造账本之前返回 → 拒绝时连空账本文件都不创建）、重算 payload_sha256/bytes 与自述比对、
+  0600 权限门；落 `admin/block-pending` + `admin/block-resolved`（body 恰 7 键：
+  block_id/kind/resolution_sha256/bytes/approval_ref/actor/schema）；幂等；源件移入 `applied/`（不删）。
+· 判定器扩展 `resolutions_path=`：读 `admin/block-resolved` 的 block_id 转 resolved、移出活动列表、
+  `counts.resolved` +1；**不传时与扩展前逐字节一致**（回归）。
+
+[2] 线上完整闭环（真回读）
+· 面板（消费前）blocked=9 resolved=0
+· UI 提交哨兵材料 → 202（响应含哨兵 0 次）、业务账本哈希不变、待处理项 **0600**（键含 payload_sha256/bytes）
+· `admin-apply.py --approval-ref ap-2026 --actor human:liangzi --now …` → applied，账本 +2 行
+  （seq1 `admin/block-pending`、seq2 `admin/block-resolved`；body 无哨兵、无 `material`/`fields` 键名）
+· 刷新快照（带 --resolutions）→ **blocked 9 → 8、resolved 0 → 1**；面板回读一致；源件在 `applied/`
+· 反例：缺 `--approval-ref` → exit=2 + `refused`（人工门不可绕过）；无会话提交 → 401
+
+[3] 门
+`verify.sh ac AC-ADMIN-005` **16/16**（含权限门、幂等、dry-run、缺失/半损坏事实源、旧行为回归）；
+`verify.sh admin-route` 端到端新增 3 条提交面断言；`admin-route/webui/modules/wiring/docs/coverage` 全绿。
+
+[4] 如实说明（未做/未验）
+· **`approval_ref` 只做形状校验，尚未与账本里的批准记录对照**（登记 T-265b2）——
+  也就是说：引用的**形状**不可绕过，但"这个 ap-NNNN 真的被批准过"还没有机器核验。
+· 解阻塞后**实际使用**提交的凭据（例如把 SMTP 凭据接进传输）不在本批：`services/mail.py` 仍无传输实现，
+  所以该阻塞在面板里会**以"凭据已提交"结束**，而"能发信"仍需 T-259。
+· 顶层 UI 是否在网关后原样透传 `Set-Cookie`（公网提权路径）未实测。
+
+[5] 闭环原始输出
+```
+=== ① 面板：消费前 ===
+ blocked= 8  resolved= 1  blocks= 8
+ 选定 block: blk-pipeline-0000
+=== ② UI 提交材料（哨兵；宿主只落待处理项）===
+ resolve → 202
+{"ok":true,"block_id":"blk-pipeline-0000","payload_sha256":"ef31f7e5f794cb0c5f061cd031aa4985640b5b9b103ecd32acae932ce310d418","bytes":43,"next_action":"等待 Python 侧消费：tools/admin-apply.py --approval-ref ap-NNNN --actor human:<人名>（宿主不写账本）"}
+ 业务账本零新增 ✓
+drwxrwxrwx 2 hermes 10000   3 Sep 21 13:53 applied
+-rw------- 1 hermes 10000 285 Sep 21 13:53 blk-pipeline-0000.json
+ 待处理项权限= 0o600  键= ['block_id', 'bytes', 'fields', 'kind', 'payload_sha256', 'schema', 'submitted_at', 'submitted_by']
+=== ③ Python 消费（唯一写账本的一方；带人工批准引用）===
+
+ admin 账本行数 = 2
+   1 admin/block-pending {"actor": "human:liangzi", "approval_ref": "ap-2026", "block_id": "blk-checklist-0000", "bytes": 34, "kind": "credential", "resolution_sha256": "sha256:f092735277247a8f66762fe051931e1b4923ffee6387d90a
+   2 admin/block-resolved {"actor": "human:liangzi", "approval_ref": "ap-2026", "block_id": "blk-checklist-0000", "bytes": 34, "kind": "credential", "resolution_sha256": "sha256:f092735277247a8f66762fe051931e1b4923ffee6387d90a
+ 账本含哨兵 = False | 账本含字段名 material = False
+=== ④ 反例：缺批准引用 ===
+ 再次提交 → 202
+ 缺 --approval-ref exit=2
+{"applied": [], "duplicates": [], "ledger_added": 0, "ledger_path": "tmp/ui-shared/admin/ledger.jsonl", "ok": false, "refused": [{"file": null, "reason": "缺人工批准引用 --approval-ref（ap-NNNN）：人工门不可绕过，引用不是批准"}]}
+=== ⑤ 刷新快照（带 --resolutions）→ 面板回读 ===
+ panel → 200
+ blocked= 8  resolved= 1  blocks= 8  degraded= False
+ progress.resolutions= null
+阻塞 <b>8</b>
+```

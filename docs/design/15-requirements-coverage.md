@@ -120,6 +120,7 @@
 | FR-ADMIN-001 | host/modules/admin-view.mjs | 见对应 AC | 直引 |
 | FR-ADMIN-002 | host/modules/admin-guard.mjs | 见对应 AC | 直引 |
 | FR-ADMIN-003 | host/modules/admin-view.mjs | 见对应 AC | 直引 |
+| FR-ADMIN-005 | tools/admin-apply.py（唯一写账本的一方）+ host/modules/webui.mjs（提交面，只落待处理项） | 见 AC-ADMIN-005 | 直引 |
 | FR-ADMIN-004 | src/quotagent/services/admin_blocks.py | 见对应 AC | 直引 |
 | FR-ADMIN-006 | src/quotagent/services/admin_blocks.py | 见对应 AC | 直引 |
 | FR-ADMIN-007 | host/modules/admin-guard.mjs | 见对应 AC | 直引 |
