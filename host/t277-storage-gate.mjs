@@ -21,7 +21,7 @@
  *   · 只有第 5/6 条会**故意**制造"半写行 / 超长行 / 越界符号链"（模拟别的写入方或崩溃），
  *     因为"报破条数"必须有个破的样本才验得出来；这些样本全部落在临时目录里。
  *
- * 断言（18 条 + 空集合守卫；每条都写清「什么情况下必须变红」）：
+ * 断言（19 条 + 空集合守卫；每条都写清「什么情况下必须变红」）：
  *   1 契约正控：`tools/storage.py` 能编译、声明上界表与拒绝码闭合集合（每条码都有 next_action）；
  *     `storage-view` manifest 齐备；打印两件产物的路径/字节/sha256（变异自证靠这一行）
  *   2 storage-view 挂载：provide 拦截拿得到句柄（键**恰好** config/headline/snapshot）；dispose 前 effect>0
@@ -41,9 +41,14 @@
  *     扫描器**非空转**（合成坏源码必须命中 ≥5 处）
  *   8 拒写事实三类：`--ledger` 声明的路径、仓库内 `tmp/ui-shared/<realm>/ledger.jsonl`（绝对构造 +
  *     名字叫 `ledger.jsonl` 的相对构造）、`user-space/` 里别人的 ns → 全 `storage-fact-path`；
- *     且**事实区的账本文件逐字节未变** + 事实区/用户空间的**文件清单未变**（没有新文件）、目标不存在。
- *     口径：事实区里同时住着派生的快照 JSON（`pipeline.json`/`admin.json`/`retention-plan.json`），
- *     别的组件会按需重写它们（实测观察到）—— "零变化"按**事实**断言，不拿派生副本当判据（那是假红）
+ *     且**本用例自己触及的事实区目标**（白名单：`--ledger` 指的那份账本、它构造的 snapshot 输出目标、
+ *     它指过去的"别人的 ns"）保持原样、目标不存在。
+ *     **前提（实测踩到，必须写在判据里）**：事实区可能被**无关写入者**（运行中服务 / 定时任务：
+ *     线上 webui 会按需重写 `pipeline.json`/`admin.json`/`retention-plan.json`，平台反馈会往
+ *     `ui-feedback/` 落回执，内核账本由服务自己追加）在**任何时刻**改写 ⇒ 本断言**只覆盖本用例
+ *     触及的目标**（全程快照对比），不拿"整个事实区字节/清单不变"当判据（那是把无关写入者算成本
+ *     工具写的：假红）。账本类目标退化为**只增不改**（无关写入者只会追加；本工具的写一定带哨兵，
+ *     由哨兵检索兜底），非账本类目标要求逐字节不变
  *   9 快照 → 只读聚合正控：真跑 `snapshot --out` → storage-view 读它，`counts` 与**独立遍历**（本门自己走一遍树）
  *     的手算一致；两次字节一致、跨实例一致
  *   10 按键白名单投影（负控）：注入含哨兵的快照（正文 / 路径原文 / 凭据）→ 输出里一个都不出现；
@@ -62,7 +67,11 @@
  *   17 Python 侧可用性不伪装："未配 / 不是目录" → `storage-unavailable` + 有名 reason；"确实没有"（空租户 /
  *     没这个键 / 路径缺席）→ `ok:true` + 有名 reason（两种情形必须可区分）
  *   18 拒绝留痕汇总：整轮跑下来的**每一条**拒绝都在闭合码集合里且都带 `next_action`
- *   19 空集合守卫（一条都没跑 = 红）
+ *   19 全局层（事实区零写入，**白名单口径**）：本用例运行期间**没有任何写入落到事实区** ——
+ *     白名单内（本用例触及的目标）按第 8 条的规则必须原样；白名单外的变化**不判红**，但**如实
+ *     计数并打印**（无关写入者：运行中服务 / 定时任务）。判据本身**非空转自证**（8 组合成样本：
+ *     追加/改写/截断/哨兵/凭空出现/消失/无变化，期望的红绿逐条核对）
+ *   20 空集合守卫（一条都没跑 = 红）
  *
  * 变异模式（单点变异自证，自带防假变异）：`node host/t277-storage-gate.mjs --mutate <1..4>`
  *   ① `tools/storage.py`：跨租户分支被短路（`../<别的 ns>/x` 不再拒）
@@ -115,7 +124,7 @@ const isPlain = (value) => Boolean(value) && typeof value === 'object' && !Array
 const finish = () => {
   // 空集合守卫：一条断言都没跑 = 红（「没跑到」不得当成「通过」）
   if (CHECKS.length === 0) {
-    check('19 空集合守卫：门至少跑了一条断言（反例：门只打印了 JSON 却没跑断言）', false, 'CHECKS 为空')
+    check('20 空集合守卫：门至少跑了一条断言（反例：门只打印了 JSON 却没跑断言）', false, 'CHECKS 为空')
   }
   const failures = CHECKS.filter((item) => !item.ok).length
   writeSync(1, json({ checks: CHECKS, passed: CHECKS.length - failures, total: CHECKS.length, failures })
@@ -217,20 +226,114 @@ const treeDigest = (root, skip = new Set()) => {
 }
 
 /**
- * 事实区里**账本文件**的逐字节指纹（`rel:sha256`）。
+ * 事实区（`tmp/ui-shared/**` + `user-space/**`）里**本用例自己触及的目标集合**（白名单）。
  *
- * 口径备忘（实测踩到）：`tmp/ui-shared` 下同时住着**账本（事实）**与**派生的快照 JSON**
- * （`pipeline.json`/`admin.json`/`retention-plan.json` —— 别的组件会按需重写它们，实测观察到
- * 十来分钟内被重写了一次）。所以"事实区零变化"必须**按事实断言**：
- * ① 每份 `ledger.jsonl` 逐字节一致；② 文件清单不变（没有新文件，尤其没有我们要写的那几个名字）。
- * 拿整棵树的内容当判据会把"别人重写派生副本"误判成"本工具写了事实区"，那是假红。
+ * 只有这些路径的变化才可能意味着"本工具写了事实区"；白名单外的变化一律来自**无关写入者**
+ * （线上服务 / 定时任务：账本由服务自己追加、派生快照 JSON 由服务按需重写、平台反馈往
+ * `ui-feedback/` 落回执）—— 不判红，但如实计数并打印（便于以后定位）。
+ *
+ * 白名单的构成就是本门第 8 条真跑出来的那几个目标：
+ *   · `contractor/ledger.jsonl` —— `--ledger` 声明的路径（f1 的目标、f7 的 `--out` 目标）
+ *   · `supplier/ledger.jsonl`   —— 用绝对路径构造的事实区目标（f3）
+ *   · `contractor/bogus.json`   —— 构造的 snapshot 输出目标（f7，必须不存在）
+ *   · `user-space/zz-t277-other` —— root 指过去的"别人的 ns"（f5，必须不存在）
  */
-const ledgerFileDigest = (root) => (existsSync(root) ? walkStorage(root) : [])
-  .filter((item) => item.rel.endsWith('ledger.jsonl'))
-  .map((item) => `${item.rel}:${sha256(readFileSync(join(root, item.rel), 'utf8'))}`)
+const FACT_ROOTS = [UI_SHARED, USER_SPACE]
+const WHITELIST = new Map([
+  [UI_SHARED, ['contractor/ledger.jsonl', 'supplier/ledger.jsonl', 'contractor/bogus.json']],
+  [USER_SPACE, ['zz-t277-other']],
+])
 
-/** 一棵树的文件清单（相对路径，稳定排序；不读内容）。 */
-const pathSet = (root) => (existsSync(root) ? walkStorage(root) : []).map((item) => item.rel)
+/** 白名单里属于"账本类"的目标：别的合法写入者只会**追加**（判据 = 只增不改 + 无哨兵）。 */
+const APPEND_ONLY = new Set(['contractor/ledger.jsonl', 'supplier/ledger.jsonl'])
+
+/** 事实区一棵树的逐字节指纹（`rel → sha256`；用于"白名单外变化"的计数与打印）。 */
+const factDigest = (root) => new Map((existsSync(root) ? walkStorage(root) : [])
+  .map((item) => [item.rel, sha256(readFileSync(join(root, item.rel), 'utf8'))]))
+
+/** 白名单目标的快照状态（`{exists, text}`；目录或不可读 → `text=null`，只按存在性判）。 */
+const factTargetState = (root, rel) => {
+  const path = join(root, rel)
+  if (!existsSync(path)) return { exists: false, text: null }
+  try {
+    return { exists: true, text: readFileSync(path, 'utf8') }
+  } catch {
+    return { exists: true, text: null }
+  }
+}
+
+/**
+ * 白名单目标**是否被本用例写过**：`null` = 没写（绿），否则返回必须变红的原因。
+ * 判据（每条都是"这个工具真的往事实区写了"的充分证据）：
+ *   · 本不存在 → 出现（本用例只会**被拒**，不可能创建）；存在 → 消失（本工具不删事实）
+ *   · 正文里出现本门哨兵（本门任何一次事实区写入尝试都带哨兵，这是兜底）
+ *   · 账本类：只增不改（无关写入者只会追加；head 被改 = 改写；变短 = 截断）
+ *   · 非账本类：逐字节不变
+ */
+const whitelistViolation = (before, after, appendOnly) => {
+  if (!before.exists && after.exists) return '白名单目标原不存在、现在出现了'
+  if (before.exists && !after.exists) return '白名单目标原来存在、现在没了'
+  if (!before.exists && !after.exists) return null
+  if (before.text === null || after.text === null) {
+    return before.text === after.text ? null : '白名单目标的类型/可读性变了'
+  }
+  if ([BODY_SENTINEL, SECRET, PATH_SENTINEL].some((needle) => after.text.includes(needle))) {
+    return '白名单目标正文里出现本门哨兵（= 本工具真的写了它）'
+  }
+  if (appendOnly) {
+    return after.text.startsWith(before.text) ? null : '白名单账本被改写（不是只在尾部追加）'
+  }
+  return after.text === before.text ? null : '白名单目标逐字节变了'
+}
+
+/**
+ * 判据的**非空转自证**：合成样本逐条核对期望的红/绿。
+ * 没有这组对照，"判据恒绿"与"事实区真的没被写"就分不开（第 7 条扫描器用的是同一条纪律）。
+ */
+const state = (exists, text) => ({ exists, text })
+const WHITELIST_SELF_TEST = [
+  ['账本被无关写入者**只追加** → 不判红（这正是解耦的目的）',
+    state(true, 'a\n'), state(true, 'a\nb\n'), true, false],
+  ['账本 head 被改写 → 红', state(true, 'a\n'), state(true, 'x\na\n'), true, true],
+  ['账本被截断 → 红', state(true, 'a\nb\n'), state(true, 'a\n'), true, true],
+  [`账本里出现本门哨兵 → 红`, state(true, 'a\n'), state(true, `a\n${BODY_SENTINEL}\n`), true, true],
+  ['非账本目标被改写 → 红', state(true, '{}'), state(true, '{ }'), false, true],
+  ['非账本目标逐字节没变 → 不判红', state(true, '{}'), state(true, '{}'), false, false],
+  ['本用例构造的目标凭空出现 → 红', state(false, null), state(true, '{}'), false, true],
+  ['本用例构造的目标消失 → 红', state(true, '{}'), state(false, null), false, true],
+]
+const selfTestBad = WHITELIST_SELF_TEST.filter(([, before, after, appendOnly, expectRed]) =>
+  Boolean(whitelistViolation(before, after, appendOnly)) !== expectRed)
+const SELF_TEST_DETAIL = `${WHITELIST_SELF_TEST.length - selfTestBad.length}/${WHITELIST_SELF_TEST.length}`
+  + ` 与预期一致（追加不判红 / 改写·截断·哨兵·凭空出现·消失 判红）`
+
+/**
+ * 白名单**全程快照对比**的裁决：白名单内的变化 = 红；白名单外的变化 = 如实计数（不判红）。
+ * 两个返回字段各自进 detail，便于以后出现"门红"时一眼看到谁动了事实区。
+ */
+const factVerdict = () => {
+  const violations = []
+  const unrelated = []
+  for (const root of FACT_ROOTS) {
+    const allow = new Set(WHITELIST.get(root) ?? [])
+    for (const [rel, before] of FACT_TARGETS_BEFORE.get(root) ?? []) {
+      const bad = whitelistViolation(before, factTargetState(root, rel), APPEND_ONLY.has(rel))
+      if (bad) violations.push(`${posix(relative(ROOT, join(root, rel)))}：${bad}`)
+    }
+    const digestBefore = FACT_DIGEST_BEFORE.get(root) ?? new Map()
+    const digestAfter = factDigest(root)
+    for (const rel of new Set([...digestBefore.keys(), ...digestAfter.keys()])) {
+      if (allow.has(rel)) continue
+      if (digestBefore.get(rel) === digestAfter.get(rel)) continue
+      const kind = digestBefore.has(rel) ? (digestAfter.has(rel) ? '改写' : '消失') : '新增'
+      unrelated.push(`${kind} ${posix(relative(ROOT, join(root, rel)))}`)
+    }
+  }
+  const shown = unrelated.slice(0, 6)
+  return { violations, unrelated, shown,
+    text: `${unrelated.length} 处白名单外变化（不判红，如实计数）：`
+      + `${shown.length ? shown.join('、') : '无'}${unrelated.length > shown.length ? ' …' : ''}` }
+}
 
 /** 在目录树里检索一段文本（只读）。 */
 const scanTreeText = (root, needle) => (existsSync(root) ? walkStorage(root) : [])
@@ -341,11 +444,15 @@ const pyArtifact = { path: PY_PATH, source: readFileSync(PY_PATH, 'utf8') }
 const modArtifact = await loadArtifact(MODULE_PATH)
 const S = modArtifact.mod
 
-/** 整轮跑下来，产品树侧的"零变化"基线（事实区账本 / 事实区文件清单 / 用户空间清单 / 默认存储根）。 */
-const LEDGER_BYTES_BEFORE = ledgerFileDigest(UI_SHARED)
-const UI_PATHS_BEFORE = pathSet(UI_SHARED)
+/**
+ * 整轮跑下来，产品树侧的"零变化"基线。
+ * 事实区**只记本用例触及目标的全文**（白名单）+ 整棵树指纹（仅用于**计数**白名单外的变化），
+ * 不把"整个事实区逐字节不变"当判据 —— 理由见文件头第 8 条的前提。
+ */
+const FACT_DIGEST_BEFORE = new Map(FACT_ROOTS.map((root) => [root, factDigest(root)]))
+const FACT_TARGETS_BEFORE = new Map(FACT_ROOTS.map((root) => [root,
+  (WHITELIST.get(root) ?? []).map((rel) => [rel, factTargetState(root, rel)])]))
 const DEFAULT_ROOT_BEFORE = treeDigest(DEFAULT_ROOT_DIR)
-const USER_SPACE_PATHS_BEFORE = pathSet(USER_SPACE)
 const MODULE_TREE_BEFORE = treeDigest(join(HERE, 'modules'))
 const MOUNTS = []
 
@@ -634,33 +741,32 @@ try {
   const f6 = pyRun(['--root', join(USER_SPACE, 'acme'), 'list-files', '--ns', 'beta'])
   const f7 = pyRun(['--root', ROOT_A, '--ledger', ledgerPath, 'snapshot', '--out',
     join(UI_SHARED, 'contractor', 'bogus.json')])
-  const LEDGER_AFTER = ledgerFileDigest(UI_SHARED)
-  const UI_PATHS_AFTER = pathSet(UI_SHARED)
+  const v8 = factVerdict()
   const DEFAULT_ROOT_AFTER = treeDigest(DEFAULT_ROOT_DIR)
-  const USER_SPACE_PATHS_AFTER = pathSet(USER_SPACE)
   const factCodes = [f1, f2, f3, f4, f5, f6, f7].map((item) => item.payload?.code)
   const ledgerSentinel = scanTreeText(UI_SHARED, BODY_SENTINEL)
   check('8 拒写事实三类：①`--ledger` 声明的路径（含当目标与当 snapshot 输出）②仓库内 '
     + '`tmp/ui-shared/<realm>/ledger.jsonl`（绝对构造 + 名字叫 `ledger.jsonl` 的相对构造）'
     + '③`user-space/` 里别人的 ns（root 指过去 / 或 root 是本 ns 却操作别人的 ns）'
     + '—— 七种构造全 `storage-fact-path` + next_action；'
-    + '**且事实区的账本文件逐字节未变、事实区与用户空间的文件清单未变（没有新文件）、'
-    + '哨兵检索不到、目标目录不存在**（口径：派生快照 JSON 由别的组件按需重写，不拿它当判据）',
+    + '**且本用例自己触及的事实区目标（白名单）保持原样**（`--ledger` 指的那份账本与绝对路径'
+    + '构造的那份账本**只增不改**、无本门哨兵；构造的 snapshot 输出目标与"别人的 ns"**必须不存在**）、'
+    + '哨兵检索不到。**前提：事实区可能被无关写入者（运行中服务 / 定时任务）改动 ⇒ 本断言只覆盖'
+    + '本用例触及的目标，全程快照对比**（不拿"整个事实区清单/字节不变"当判据，那是把无关写入者'
+    + '算成本工具写的假红；白名单外的变化由第 19 条如实计数并打印）',
   factCodes.every((code) => code === 'storage-fact-path')
   && [f1, f2, f3, f4, f5, f6, f7].every((item) => String(item.payload?.next_action ?? '').length > 0)
-  && json(LEDGER_BYTES_BEFORE) === json(LEDGER_AFTER) && ledgerSentinel.length === 0
-  && json(UI_PATHS_BEFORE) === json(UI_PATHS_AFTER)
+  && v8.violations.length === 0 && ledgerSentinel.length === 0
   && !existsSync(join(UI_SHARED, 'contractor', 'bogus.json')) && !existsSync(userSpaceOther)
-  && json(USER_SPACE_PATHS_BEFORE) === json(USER_SPACE_PATHS_AFTER)
   && json(DEFAULT_ROOT_BEFORE) === json(DEFAULT_ROOT_AFTER),
-  `七种构造码=${json(factCodes)}；账本逐字节一致=${json(LEDGER_BYTES_BEFORE) === json(LEDGER_AFTER)}`
-  + `（${LEDGER_AFTER.length} 份 ledger.jsonl）；事实区文件清单一致=${json(UI_PATHS_BEFORE)
-    === json(UI_PATHS_AFTER)}（${UI_PATHS_AFTER.length} 个文件）；哨兵命中=${json(ledgerSentinel)}；`
+  `七种构造码=${json(factCodes)}；白名单目标违规=${v8.violations.length} 条`
+  + `${v8.violations.length ? `（${json(v8.violations)}）` : ''}；`
+  + `白名单目标=${json([...WHITELIST.get(UI_SHARED), ...WHITELIST.get(USER_SPACE)])}；`
+  + `哨兵命中=${json(ledgerSentinel)}；`
   + `bogus.json 存在=${existsSync(join(UI_SHARED, 'contractor', 'bogus.json'))}；`
   + `别人 ns 目录存在=${existsSync(userSpaceOther)}；`
-  + `用户空间清单一致=${json(USER_SPACE_PATHS_BEFORE) === json(USER_SPACE_PATHS_AFTER)}`
-  + `（${USER_SPACE_PATHS_AFTER.length} 个文件）；默认存储根指纹一致=${json(DEFAULT_ROOT_BEFORE)
-    === json(DEFAULT_ROOT_AFTER)}`)
+  + `默认存储根指纹一致=${json(DEFAULT_ROOT_BEFORE) === json(DEFAULT_ROOT_AFTER)}；`
+  + `${v8.text}`)
 
   // ---------- 9. 快照 → 只读聚合正控（独立遍历对照） ----------
   pyRun(['--root', ROOT_C, 'open-append', '--ns', 'acme', '--rel', 'logs/a.log', '--text', '第一行'] )
@@ -941,10 +1047,32 @@ try {
   + `缺 next_action=${missingAction.length} 条；`
   + `模块树未变=${json(MODULE_TREE_BEFORE) === json(treeDigest(join(HERE, 'modules')))}`)
 
+  // ---------- 19. 全局层：事实区零写入（白名单口径） ----------
+  const v19 = factVerdict()
+  const ledgerSentinel19 = scanTreeText(UI_SHARED, BODY_SENTINEL)
+  const userSpaceSentinel19 = scanTreeText(USER_SPACE, BODY_SENTINEL)
+  const uiFiles19 = walkStorage(UI_SHARED).length
+  const userFiles19 = walkStorage(USER_SPACE).length
+  check('19 全局层（**事实区零写入**，白名单口径）：本用例运行期间**没有任何写入落到事实区** —— '
+    + '白名单内（本用例触及的目标：`--ledger` 指的那份账本、绝对构造的那份账本、构造的 snapshot '
+    + '输出目标、"别人的 ns"）逐字节不变 / 账本类只增不改 + 无本门哨兵；**白名单外的变化不判红，'
+    + '但如实计数并打印**（无关写入者：运行中服务 / 定时任务）。**前提：事实区可能被无关写入者改动 '
+    + '⇒ 本判据只覆盖本用例触及的目标，全程快照对比**（改写/截断/凭空出现/消失/哨兵 都必须变红）；'
+    + '判据**非空转自证**：8 组合成样本（追加/改写/截断/哨兵/改写非账本/无变化/凭空出现/消失）'
+    + '逐条核对期望的红绿',
+  v19.violations.length === 0 && selfTestBad.length === 0
+  && ledgerSentinel19.length === 0 && userSpaceSentinel19.length === 0,
+  `白名单目标违规=${v19.violations.length} 条`
+  + `${v19.violations.length ? `（${json(v19.violations)}）` : ''}；`
+  + `事实区哨兵命中=${json([...ledgerSentinel19, ...userSpaceSentinel19])}；`
+  + `${v19.text}；非空转自证=${SELF_TEST_DETAIL}`
+  + `${selfTestBad.length ? `（偏差 ${json(selfTestBad.map(([label]) => label))}）` : ''}；`
+  + `全程对比的树规模=tmp/ui-shared ${uiFiles19} 个文件 / user-space ${userFiles19} 个文件`)
+
   // 收尾：被围的模块树必须零变化（门上变异模式会写回来，这里确认"跑完是干净的"）
   const moduleTreeAfter = treeDigest(join(HERE, 'modules'))
   if (json(moduleTreeAfter) !== json(MODULE_TREE_BEFORE)) {
-    check('19 门跑完模块树零变化（防"忘了还原"）', false,
+    check('20 门跑完模块树零变化（防"忘了还原"）', false,
       `模块树指纹变了：before=${MODULE_TREE_BEFORE.length}项 after=${moduleTreeAfter.length}项`)
   }
 } catch (error) {

@@ -62,6 +62,11 @@ case "${1:-}" in
   p0-no-node)
     # P0 可复跑性（ADR-0013 §8）：把 Node 藏起来，P0 阶段的 AC 仍必须全绿。
     # 注意：空集合必须判为失败（否则"没跑到"会被当成"全绿"）。
+    # 诊断口径：子进程输出**不再丢**。单条 AC 首次红 → 立刻**隔离重试**一次（同命令、同环境、
+    # 只跑这一条）；**连续两次红才算真红** —— 真红时把该 AC 的 stdout/stderr 原样回显，并把
+    # 日志路径写进错误信息。首红次绿 = 瞬时命中：不判红，但把第 1 次的原样输出回显出来、日志留在
+    # tmp/（下次出现直接看证据定位，不用猜）。日志目录每跑一次 mktemp 独立新建 —— 不与别的门
+    # 共享临时路径（并发跑时不会互相覆盖/误删）。
     acs=$("$HERE/run.sh" -m quotagent.qa list 2>/dev/null | "$QUOTAGENT_PY" -c '
 import json, sys
 data = json.load(sys.stdin)
@@ -72,11 +77,40 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
       echo "P0 AC 集合异常（只取到 $count 条，ADR-0013 §8 说的是 34 条）：拒绝给出假的绿灯" >&2
       exit 2
     fi
+    mkdir -p "$ROOT/tmp"
+    P0_LOG_DIR=$(mktemp -d "$ROOT/tmp/p0-no-node.XXXXXX")
+    P0_TRANSIENT=0
     for ac in $acs; do
-      QUOTAGENT_NODE=/nonexistent/node PATH=/usr/bin:/bin "$HERE/run.sh" -m quotagent.qa ac "$ac" >/dev/null 2>&1 \
-        || { echo "P0 AC 在无 Node 环境下失败: $ac" >&2; exit 1; }
+      P0_ATTEMPT=1
+      while :; do
+        P0_LOG="$P0_LOG_DIR/$ac.attempt$P0_ATTEMPT.log"
+        QUOTAGENT_NODE=/nonexistent/node PATH=/usr/bin:/bin \
+          "$HERE/run.sh" -m quotagent.qa ac "$ac" >"$P0_LOG" 2>&1
+        P0_STATUS=$?
+        [ "$P0_STATUS" -eq 0 ] && break
+        if [ "$P0_ATTEMPT" -ge 2 ]; then
+          echo "P0 AC 在无 Node 环境下**连续两次**失败（真红）: $ac（exit=$P0_STATUS）" >&2
+          echo "  —— 该 AC 的 stdout/stderr 原样回显（完整日志: $P0_LOG）——" >&2
+          cat "$P0_LOG" >&2
+          echo "  —— 回显结束；本轮全部日志: $P0_LOG_DIR ——" >&2
+          exit 1
+        fi
+        echo "[warn] $ac 第 1 次红（exit=$P0_STATUS）→ 隔离重试一次（判据：连续两次红才算真红）" >&2
+        sleep 1
+        P0_ATTEMPT=2
+      done
+      if [ "$P0_ATTEMPT" -gt 1 ]; then
+        P0_TRANSIENT=$((P0_TRANSIENT + 1))
+        echo "[warn] $ac 首红次绿（瞬时命中，不判红，但原样输出必须留证）: $P0_LOG_DIR/$ac.attempt1.log" >&2
+        cat "$P0_LOG_DIR/$ac.attempt1.log" >&2
+      fi
     done
-    echo "P0 阶段 $count 条 AC 在无 Node 环境下全绿（P0 不因引入宿主而失去可复跑性）"
+    if [ "$P0_TRANSIENT" -gt 0 ]; then
+      echo "P0 阶段 $count 条 AC 在无 Node 环境下全绿（P0 不因引入宿主而失去可复跑性）；"\
+"瞬时命中 $P0_TRANSIENT 条（隔离重试后绿，原样输出已回显，日志: $P0_LOG_DIR）"
+    else
+      echo "P0 阶段 $count 条 AC 在无 Node 环境下全绿（P0 不因引入宿主而失去可复跑性）；无瞬时命中（日志: $P0_LOG_DIR）"
+    fi
     ;;
   ac-registry)
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-ac-registry.py"

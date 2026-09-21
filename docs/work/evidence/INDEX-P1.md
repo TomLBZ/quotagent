@@ -36,3 +36,4 @@
 | EV-057 | 演化门骨架（`verify.sh evolution` 15/15 含负控）（详情见 EV 文件本体） | T-220 / 评审 C §7.1 第 7 条 |
 | EV-058 | 进树模块 manifest + fixture A1..A6（`verify.sh modules` 36/36，含负控）：inject 白名单/零残留/config 负控/事件声明/确定性/无跨模块 import；含"inject 写内建 mixin 会永 pending"的实测发现；并复核 `g1` 门 | T-221 / 评审 C §7.1 第 5 条 |
 | EV-150 | AI agent 决策建议层（`advice-panel`，确定性规则、`engine=rules`）：围栏门 30/30（含 4 处单点变异全部变红 + 防假变异自检 + 产品树字节还原）+ 真 HTTP 端到端 14/14（两个真进程：有数据的一件 + 空投影的一件）；空投影必须 `degraded+reason` 且建议数 0、两视角建议确实不同、私域哨兵 0 次、十道门全绿（详情见 EV 文件本体） | AC-ADV-001 | P2 |
+| EV-151 | 门维护：storage 门对**无关写入者**解耦（第 8 条收窄为"本用例自身触及目标"的白名单 + 新增第 19 条全局层断言；并发写入者下 19/19 仍绿，旧门同一写入者下必红（A/B 实测）；负控创建白名单目标 → 17/19 必红；变异 1..4 全 ok）+ `p0-no-node` **失败可诊断**（输出落 `tmp/p0-no-node.<mktemp>/`、失败原样回显、连续两次红才算真红；瞬时分支实测首红次绿）。p0-no-node 瞬时红的真因量出来了：文档门 `md_files()` 扫 `tmp/**`（267 个 .md 里 166 个在 tmp/）与整树副本门 TOCTOU，16 次里 2 次 `FileNotFoundError`；文档门本轮未改，残留记为 D-071（详情见 EV 文件本体） | storage / p0-no-node / D-071 | P2 |

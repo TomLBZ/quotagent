@@ -1,14 +1,14 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-21T12:14:22Z",
+  "updated_at": "2026-09-21T20:31:00Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
   "next_task": "T-264 系统管理 UI（admin 道 + token 提权 + 视角切换 + agent 进度/阻塞面板）",
   "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
-  "last_verified_command": "tools/verify.sh all",
-  "last_verified_result": "PASS：41 个门入口全绿（pipeline-view 13/13、pipeline-route 端到端、webui 22/22、coverage 7/7）+ g1 0（63/63 AC）+ clean-copy 0；公网 /api/pipeline 200",
-  "last_verified_evidence": "docs/work/evidence/EV-095-t260-pipeline-view.txt",
-  "last_verified_commit": "1a70ac3",
+  "last_verified_command": "tools/verify.sh storage | p0-no-node | docs | ac-registry | coverage | wiring | plugins | modules | g1",
+  "last_verified_result": "PASS：九道门全绿（storage 19/19，含并发写入者下 19/19、负控 17/19 必红、变异 1..4 全 ok；p0-no-node 59 条 AC 无 Node 全绿，并发另一门跑亦绿；docs / ac-registry / coverage / wiring / plugins / modules 绿；g1 退出 0）",
+  "last_verified_evidence": "docs/work/evidence/EV-151-storage-decouple-and-p0-diagnosable.txt",
+  "last_verified_commit": "000b775",
   "blockers": [],
   "human_required": [
     "T-117 现场验证 V-001..V-012：备料已完成；**P1 按用户指令以\"V 全部通过\"为前提推进**（planning_assumptions，非结论），V 的正式 conclusion 与 G0/G1 签署仍需人工",
@@ -19,7 +19,8 @@
   ],
   "known_defects": [
     "D-001",
-    "D-002"
+    "D-002",
+    "D-071"
   ],
   "open_questions": [
     "V-001..V-012 结论待人工（备料与自检已完成，见 docs/work/validation/ 与 EV-036/EV-037）"
@@ -105,6 +106,7 @@
     "t254b": "刷新钩子已接（seed 后 + 探活时）；真回读发现并修：相对路径 / 走查清文件 / 我造的 NameError",
     "t257": "done：FAQ 沉淀与复用落地（AC-FAQ-001 20/20、6/6 变异）；矩阵缺口 FR 只剩 FR-INTEG-003",
     "t258": "done：邮件集成无凭据部分（AC-MAIL-001 20/20、10/10 变异）；无 mail/sent 事件；发信登记 T-259=blocked",
-    "t260": "done：三域（谈判/FAQ/邮件）运维道可见；pipeline-view 为第九件自进化产出（ap-0110）"
+    "t260": "done：三域（谈判/FAQ/邮件）运维道可见；pipeline-view 为第九件自进化产出（ap-0110）",
+    "gate_flakes_gatefix": "done（EV-151 / D-071）：storage 门对无关写入者解耦（第 8 条收窄为本用例触及目标的白名单 + 新增第 19 条全局层断言；账本类只增不改 + 哨兵兜底；白名单外变化如实计数不判红；8 组合成样本非空转自证；负控与变异 1..4 均实测）；tools/verify.sh 的 p0-no-node 输出不丢（tmp/p0-no-node.<mktemp>/ + 失败原样回显 + 连续两次红才算真红）。p0-no-node 瞬时红的真因已量出：文档门 md_files() 扫 tmp/**（267 个 .md 里 166 个在 tmp/），与整树副本门 new_scratch TOCTOU → FileNotFoundError（16 次里 2 次）；文档门本轮未改，残留记为 D-071"
   }
 }

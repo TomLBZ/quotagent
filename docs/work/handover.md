@@ -4,9 +4,9 @@
 
 ## 现在在哪
 
-**P2 进行中**：自进化流水线已实装，**9 件自进化产出插件**，四道接线可见。
-本批 AI agent **决策建议层**（`advice-panel`，`engine=rules`，`verify.sh advice` 30/30 + 14/14）。
-实况/原始输出：`docs/work/progress-checklist.md`、`docs/work/evidence/EV-150`。
+**P2 进行中**：9 件自进化产出插件，四道接线可见；AI agent **决策建议层**（`advice-panel`，`verify.sh advice` 30/30 + 14/14）。
+本轮修两处「门偶尔红」：storage 门改**白名单口径**（只断言本用例触及的目标；白名单外变化计数不判红）+ `p0-no-node` 输出不丢/连续两次红。真因=**文档门扫 `tmp/**` 的 TOCTOU**（2/16 复现，未改文档门）。
+实况：`progress-checklist.md`、EV-150/EV-151。
 
 ## 下一步唯一动作
 
