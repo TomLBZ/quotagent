@@ -35,6 +35,7 @@ export const Config = object({
   ledger_contractor: string().default(''),
   ledger_supplier: string().default(''),
   ledger_evolve: string().default(''),   // 自进化账本（运维视角读它的**归纳**，不出正文）
+  retention_plan: string().default(''),  // 留存计划的**绝对路径**（生产 cwd≠仓库根，相对路径会读不到）
 })
 
 const html = (title, body, prefix) => `<!doctype html><html lang="zh"><head><meta charset="utf-8">
@@ -101,7 +102,8 @@ export function apply(ctx, config) {
    * 文件缺失或损坏 → 交给插件降级（degraded），**不自己算留存**。
    */
   const retentionPlanOf = (view) => {
-    const file = join(String(config.ui_shared ?? 'tmp/ui-shared'), 'retention-plan.json')
+    const file = String(config.retention_plan ?? '') ||
+      join(String(config.ui_shared ?? 'tmp/ui-shared'), 'retention-plan.json')
     try {
       const parsed = JSON.parse(readFileSync(file, 'utf8'))
       const entry = parsed?.views?.[view]

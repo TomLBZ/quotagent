@@ -194,6 +194,8 @@ const main = async () => {
       port: Number(args.port ?? 8093),
       listen_host: String(args.host ?? '127.0.0.1'),
       route_prefix: String(args.prefix ?? '/quotagent'),
+      // 留存计划的**绝对路径**（生产 cwd≠仓库根）：由 webui-serve 传入；缺失时路由降级
+      retention_plan: String(args['retention-plan'] ?? process.env.QUOTAGENT_UI_RETENTION_PLAN ?? ''),
       views: String(args.views ?? 'contractor,supplier').split(',').map((item) => item.trim()).filter(Boolean),
       ledger_contractor: contractorLedger,
       ledger_supplier: String(args['ledger-supplier'] ?? ''),

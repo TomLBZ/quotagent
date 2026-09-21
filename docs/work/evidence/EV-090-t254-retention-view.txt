@@ -34,3 +34,25 @@ $ 公网 https://novara.remoteblossom.com/quotagent/api/retention → 200
 
 结论：T-252/T-253 留下的"判定器无消费者"缺口已闭合 —— 留存计划现在在**现有 dashboard 的运维道**
 可见（`/quotagent/ops/` 与 `/quotagent/api/retention`），并可由公网访问。
+
+[5] 线上真回读暴露的**三个问题**（门全绿时都没发现；已修，这是本轮最有价值的部分）
+① **相对路径**：`webui` 用 `join('tmp/ui-shared', ...)` 读计划，而生产进程 cwd ≠ 仓库根 → 读不到。
+   修：新增 CLI 参数 `--retention-plan`（绝对路径），由 `webui-serve.py` 以绝对路径传入（同既有 ledger 参数的做法）。
+② **计划文件被走查清掉**：服务启动时 `webui-serve.py` 会跑 g1 走查 seed，走查会清 `ui-shared/`
+   → 计划文件被带走 → 路由长期停在 `degraded`（"形状非法：不猜，计数不展示"）。
+   修：**刷新钩子** —— ① `main()` 里 seed 之后立即刷新；② `probe()`（网关周期性探活）里刷新。
+   这样：启动即新鲜，且任何清目录的任务之后，最多一个探活周期就恢复。
+③ **我自己造的启动崩溃**：先写了 `probe()` 里的调用，但函数定义那次编辑在同一脚本的后续步骤（且脚本已中断）
+   → `NameError: name 'refresh_retention_plan' is not defined` → 健康探测失败 → 服务一直起不来（公网 502）。
+   修：补上定义（并在脚本里断言"定义在调用之前"）。
+   教训：**改服务入口脚本后必须真的重启并回读**；`py_compile` 抓不到"调用了未定义的函数"。
+
+[6] 修复后的线上真回读（原始输出）
+$ curl http://127.0.0.1:8093/quotagent/api/retention → 200
+  degraded = False
+  headline = 待归档 0 / 待销毁副本 0 / 需人工门 0 / 已拒 0
+  counts = {"keep": 17, "archive": 0, "purge-copy": 0, "accepted": 17, "rejected": 0, "refused": 0, "approval_required": 0}
+  action_mix = [{"action": "keep", "count": 17}]
+$ curl /quotagent/api/ops → 200（retention_headline = 待归档 0 / 待销毁副本 0 / 需人工门 0 / 已拒 0）
+$ 公网 https://novara.remoteblossom.com/quotagent/api/retention → 200
+（真实账本：contractor 17 行 / supplier 3 行；当前策略下全部 keep = 未到期，故"待归档 0"是对的 —— 数据的样子，不是功能没接。）
