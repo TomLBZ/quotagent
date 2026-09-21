@@ -221,6 +221,25 @@ const main = async () => {
     // 默认 0 = 全部走 base，行为与未接线时完全一致（升级路径安全）。
     let canaryDispatch = null
     let canaryProbe = null   // {decision, exited, samples}
+    let breakerHandle = null
+    let breakerRefused = 0
+    let breakerLastRefusal = null
+
+    // 熔断器（**自进化产出的中间件**，T-241）：连续失败达阈值就快速失败，保护下游
+    const { apply: breakerApply, Config: breakerConfig } = await import('./modules/circuit-breaker.mjs')
+    const brbox = {}
+    const breakerCtx = new Context()          // 自己的 ctx：不依赖 canary 分支里创建的那个（它们是不同关注点）
+    await breakerCtx.plugin(EventsService)
+    await breakerCtx.plugin({ name: 'circuit-breaker', inject: [], Config: breakerConfig,
+      apply: async (inner, cfg) => {
+        const original = inner.provide.bind(inner)
+        inner.provide = (service, value) => { if (service === 'breaker') brbox.handle = value; return original(service, value) }
+        await breakerApply(inner, cfg)
+      } }, breakerConfig.parse({ key: `bridge:${String(args.method)}`,
+        failure_threshold: Number(args['breaker-threshold'] ?? 5),
+        cooldown_ms: Number(args['breaker-cooldown-ms'] ?? 1000) }))
+    breakerHandle = brbox.handle
+
     // 编排 lib 的导入必须在**函数作用域**（放 if 块里会让 catch 看不到 → CanaryApprovalRequired is not defined）
     const { runCanary, CanaryApprovalRequired } = await import('./lib/canary-run.mjs')
     let auditSlice = null
@@ -322,7 +341,15 @@ const main = async () => {
             : { ok: false, event: 'evolve/canary-exited', detail: (out.stderr || out.stdout || '').trim().slice(0, 200) }
         }
       } else {
-        frame = await client.call(String(args.method), params, { id: Number(args.id ?? 1) })
+        // 熔断在**调用之前**：打开期间直接快速失败，不去打下游（省资源也防雪崩）
+        const methodKey = `bridge:${String(args.method)}`
+        const repeat = Math.max(1, Number(args.repeat ?? 1))
+        for (let i = 0; i < repeat; i++) {
+          const permit = breakerHandle ? breakerHandle.allow({ key: methodKey }) : { allowed: true }
+          if (!permit.allowed) { breakerRefused += 1; breakerLastRefusal = permit; continue }
+          frame = await client.call(String(args.method), params, { id: Number(args.id ?? 1) + i })
+          if (breakerHandle) breakerHandle.record({ key: methodKey, ok: frame && frame.n === 'result' })
+        }
       }
       call = frame
     }
@@ -331,6 +358,8 @@ const main = async () => {
     emit({ ok: Boolean(call ? call.n === 'result' : true), action: 'bridge', phase: 'call',
            profile: profileName, realm: profile.realm, ledger_path: ledgerPath,
            call_lane, call_fallback,
+           breaker: breakerHandle ? { state: breakerHandle.state({ key: `bridge:${String(args.method)}` }),
+             stats: breakerHandle.stats(), refused: breakerRefused, last_refusal: breakerLastRefusal } : null,
            canary: canaryProbe ? { decision: canaryProbe.decision, exited: canaryProbe.exited,
              samples: canaryProbe.samples, ledger_record: canaryProbe.ledger_record ?? null } : null,
            audit: auditSlice ? { records: auditSlice.decisions({ limit: 5 }).length, stats: auditSlice.stats(),

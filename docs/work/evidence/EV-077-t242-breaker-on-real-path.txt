@@ -1,0 +1,47 @@
+EV-077 T-242 熔断器接到**真实调用路径**（自进化产出的中间件真正上线）
+生成时间 2026-09-21T09:49:33Z
+命令与原始输出（原样留档）
+
+[1] 正常流量：6 次真实桥调用，断路器一次都不拒
+$ node host/cli.mjs bridge --profile contractor-ops --method ledger.count --repeat 6
+exit=0 | breaker={"state": {"key": "bridge:ledger.count", "state": "closed", "consecutive_failures": 0, "half_open_used": 0, "opened_count": 0}, "stats": {"allowed": 6, "refused": 0, "opened": 0, "closed": 0, "half_open_tried": 0, "half_open_ok": 0, "buckets": {"bridge:ledger.count": "closed"}}, "refused": 0, "last_refusal": null}
+（allowed=6、refused=0、state=closed —— 熔断不误伤正常流量）
+
+[2] 连续失败：对不存在的方法连打 8 次 → 阈值 5 后**打开**，后 3 次快速失败
+$ node host/cli.mjs bridge --profile contractor-ops --method no.such/method --repeat 8
+exit=0 | breaker={"state": {"key": "bridge:no.such/method", "state": "open", "consecutive_failures": 5, "half_open_used": 0, "opened_count": 1}, "stats": {"allowed": 5, "refused": 3, "opened": 1, "closed": 0, "half_open_tried": 0, "half_open_ok": 0, "buckets": {"bridge:no.such/method": "open"}}, "refused": 3, "last_refusal": {"allowed": false, "state": "open", "retry_after_ms": 1000, "reason": "circuit-open", "next_action": "等冷却或改用降级路径"}}
+
+[3] 端到端门：$ tools/verify.sh breaker-route → 4/4
+[
+  {
+    "name": "正控：正常方法重复调用 6 次，断路器**一次都不拒**（熔断不误伤正常流量）",
+    "ok": true,
+    "detail": "exit=0 refused=0 state=closed allowed=6"
+  },
+  {
+    "name": "负控：连续失败达阈值 → 断路器打开，后续调用被**快速失败**（不再打下游）",
+    "ok": true,
+    "detail": "exit=0 refused=3 state=open consecutive=5"
+  },
+  {
+    "name": "可解释：被拒时给出 reason=circuit-open + retry_after_ms + next_action（不返回裸 false）",
+    "ok": true,
+    "detail": "reason=circuit-open retry_after_ms=1000 next_action=等冷却或改用降级路径"
+  },
+  {
+    "name": "如实记录：失败的调用被计入断路器统计（allowed 只统计真正打到下游的那几次）",
+    "ok": true,
+    "detail": "allowed=5 refused=3（repeat=8）"
+  }
+]
+
+[4] 单元门（逻辑层）：$ tools/verify.sh breaker → 10/10
+
+结论：T-241 由自进化产出的中间件 `circuit-breaker` **已经真正接在调用路径上**（不是"入树了事"）：
+调用前 `allow()`、调用后 `record(ok)`；打开期间**快速失败不打下游**；拒绝可解释；统计如实
+（allowed + refused == 调用次数）。顺序写死：**熔断判定 → 准入(governor) → 调用**。
+
+[5] 本轮自身过失（如实记录）：接线同一处连踩三次——① 挂载块被放进 canary 的条件分支（无 canary 参数时不执行 →
+句柄为 null）；② 移出后引用了分支里才创建的 `ctx`（ReferenceError）；③ 才改为**熔断器自己的 ctx**。
+教训：**中间件的挂载必须无条件、且用独立 ctx**，不要借用其它分支的上下文。
+
