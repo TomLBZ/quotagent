@@ -4,19 +4,15 @@
 
 ## 现在在哪
 
-**P1 已开工**。宿主直接依赖 cordis 4.0.0-rc.10（ADR-0012；`host/`）；桥接见 ADR-0013；
+**P1 已开工**。宿主直接依赖 cordis 4.0.0-rc.10（ADR-0012）；桥接见 ADR-0013；
 P1 前提与 MVP 判据见 ADR-0014（V 按指令"假设通过"，`register.json.planning_assumptions`
-标 not_a_conclusion，**V 的 status 保持 open**）。执行顺序 = 16 批（`decisions.md` D-007）。
-
-## 最后验证
-
-`verify.sh docs|v|cordis` 均 PASS；P0 34 条 AC 仍全绿；远端 refs 已回读（EV-003）。
+标 not_a_conclusion，**V 的 status 保持 open**）。顺序 = 16 批（`decisions.md` D-007）。
+`verify.sh docs|v|cordis` 均 PASS；P0 34 条 AC 全绿；远端已回读（EV-003）。
 
 ## 下一步唯一动作
 
 **B1** 补文档覆盖缺口（FR-QEP-005/006→T-202、FR-COST-003→T-208、FR-UX-002→T-210、
-roadmap S1.2/S1.14、AC 契约表加 g1、新子目录预算行）→ **B2**（T-201 双侧进程分离 + profiles，
-AC-PLUGIN-003）。写冲突面同刻只允许一批持有。
+roadmap S1.2/S1.14、AC 表加 g1、新子目录预算行）→ **B2**（T-201 双侧进程分离 + profiles，AC-PLUGIN-003）。
 
 ## 不变量
 
@@ -25,4 +21,4 @@ AC-PLUGIN-003）。写冲突面同刻只允许一批持有。
 
 ## 阻塞
 
-无。V 项真实结论仍待人工（不影响 P1 按假设推进）。
+无。V 项真实结论仍待人工。
