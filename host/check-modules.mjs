@@ -119,6 +119,11 @@ const STUBS = {
       privacy: { private_keys_included: false, entry_bodies_included: false } }),
     summary: () => 'stub',
   },
+  priceHistory: {
+    // fixture 的 stub：只满足"能分组算描述统计"；统计口径由 price-history 模块自己的门验
+    forSupplier: () => ({ count: 0, min: null, median: null, max: null, latest: null, trend: 'unknown' }),
+    bySupplier: () => [],
+  },
   compare: { flagCount: () => 0 },
   bridge: { surface: () => ({}) },
 }

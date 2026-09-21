@@ -146,12 +146,16 @@ const main = async () => {
         inner.provide = (service, value) => { if (service === 'observability') obox.handle = value; return original(service, value) }
         await obsApply(inner, cfg)
       } }, obsConfig.parse({}))
+    // 价格序列插件（自进化产出，T-237/T-238）：按行项目分组
+    const { apply: historyApply, Config: historyConfig } = await import('./modules/price-history.mjs')
+    await ctx.plugin({ name: 'price-history', inject: [], Config: historyConfig,
+      apply: (inner, cfg) => historyApply(inner, cfg) }, historyConfig.parse({ key_field: 'supplier_id' }))
     const contractorLedger = String(args['ledger-contractor'] ?? ledgerPath)
     ctx.provide('ledgerView', openLedger(contractorLedger))
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability'],   // 投影/准入/观测都是独立插件，必须一起注入
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory'],   // 投影/准入/观测/价格序列都是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -173,6 +177,7 @@ const main = async () => {
              .map((view) => box.handle.viewUrl(view)),
            ledgers: { contractor: contractorLedger, supplier: String(args['ledger-supplier'] ?? '') },
            observability_route: `${String(args.prefix ?? '/quotagent')}/api/obs`,
+           history_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/history`),
            observability: obox.handle ? obox.handle.summary() : null,
            note: '每方视角读自己的账本（结构性隔离）+ 投影白名单（纵深防御）；宿主不写账本' }) + '\n')
     // 保活：直到收到信号（ws-gateway 以 SIGTERM 停服）

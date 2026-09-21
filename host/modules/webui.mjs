@@ -15,11 +15,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability']   // 每个都是独立插件（准入 / 观测）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory']   // 每个都是独立插件（准入 / 观测）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory']
 
 export const provides = ['webui']
 
@@ -84,6 +84,27 @@ export function apply(ctx, config) {
   })
 
   const obs = ctx.observability   // 本地句柄（D-027：不按请求去 ctx 里查自己依赖的服务）
+  const history = ctx.priceHistory
+  /**
+   * 价格序列的输入：**原始行**的 `body.lines[]`，但只取非私域字段（`item_id` / `unit_price`）。
+   * 为什么要用原始行：投影层只保留 `seq/type/summary/ts`，价格明细会被截掉（实测 groups=0）。
+   * 为什么这样仍然安全：只输出这两个字段，其中任何一个都不在本视角的 `privateKeys` 里；
+   * 并且这里**额外做一次私域键过滤**（纵深防御，与本文件既有的"抑制原因对外通用"同一纪律）。
+   */
+  const priceRows = (view) => {
+    const rule = rules[view] || { privateKeys: [] }
+    return ledgerOf(view).rows().flatMap((row) => {
+      const lines = row && row.body && Array.isArray(row.body.lines) ? row.body.lines : []
+      return lines
+        .filter((line) => line && line.item_id !== undefined && line.unit_price !== undefined
+          && !Object.keys(line).some((key) => rule.privateKeys.includes(key)))
+        .map((line) => ({ supplier_id: String(line.item_id), unit_price: line.unit_price }))
+    })
+  }
+  /** price-history 插件按 `key_field` 分组；UI 侧把分组键统一叫 group（插件字段名是实现细节） */
+  const seriesView = (view) => history.bySupplier(priceRows(view))
+    .map((item) => ({ group: item.supplier_id, count: item.count, min: item.min, median: item.median,
+      max: item.max, latest: item.latest, trend: item.trend }))
   const handle = (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
     const path = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) || '/' : url.pathname
@@ -126,7 +147,23 @@ export function apply(ctx, config) {
         html(`${config.page_title} · ${rules[view].title}`,
           `<p>本视角只显示 <code>${rules[view].types.join(' ')}</code> 的事件；`
           + `供应商视角显式拒收私域键 <code>${rules.supplier.privateKeys.join(' ')}</code>。</p>`
-          + `<p>JSON：<code>${prefix}/${view}/api/events</code></p>${table}`, prefix))
+          + `<p>JSON：<code>${prefix}/${view}/api/events</code> · <code>${prefix}/${view}/api/history</code></p>`
+          + `<h3>价格序列（按行项目）</h3><p>由自进化产出的插件 <code>price-history</code> 计算</p>`
+          + (() => {
+            const series = seriesView(view)
+            if (!series.length) return '<p>（本视角账本里暂无可比价格行）</p>'
+            return `<table><tr><th>行项目</th><th>次数</th><th>最低</th><th>中位</th><th>最高</th><th>最新</th><th>趋势</th></tr>${
+              series.map((item) => `<tr><td>${item.group}</td><td>${item.count}</td><td>${item.min}</td>`
+                + `<td>${item.median}</td><td>${item.max}</td><td>${item.latest}</td><td>${item.trend}</td></tr>`).join('')}</table>`
+          })()
+          + table, prefix))
+    }
+    const viewHistory = path.match(/^\/([a-z]+)\/api\/history\/?$/)
+    if (viewHistory && rules[viewHistory[1]]) {
+      const view = viewHistory[1]
+      const series = seriesView(view)
+      return json(200, { view, source: 'price-history（自进化产出的插件）', groups: series.length,
+        series, note: '按行项目聚合的价格序列描述统计；输入只来自本视角的公开投影' })
     }
     const viewApi = path.match(/^\/([a-z]+)\/api\/events\/?$/)
     if (viewApi && rules[viewApi[1]]) {
@@ -144,7 +181,7 @@ export function apply(ctx, config) {
         `<ul>${rows}</ul>`
         + '<p>本 UI 由 cordis 插件 <code>webui</code> 提供；每个视角读**自己的**账本，宿主不写账本。</p>', prefix))
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/api/status` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/<view>/api/history` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

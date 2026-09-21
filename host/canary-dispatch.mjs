@@ -178,9 +178,12 @@ const e2e = async ({ weightBps, candidate }) => {
   const { apply: obsApplyE2E, Config: obsConfigE2E } = await import('./modules/observability.mjs')
   await ctx.plugin({ name: 'observability#e2e', inject: ['governor', 'audit', 'canary'], Config: obsConfigE2E,
     apply: (inner, cfg) => obsApplyE2E(inner, cfg) }, obsConfigE2E.parse({}))
+  const { apply: histApplyE2E, Config: histConfigE2E } = await import('./modules/price-history.mjs')
+  await ctx.plugin({ name: 'price-history#e2e', inject: [], Config: histConfigE2E,
+    apply: (inner, cfg) => histApplyE2E(inner, cfg) }, histConfigE2E.parse({ key_field: 'supplier_id' }))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }

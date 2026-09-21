@@ -19,6 +19,7 @@ import { Config as governorConfig, apply as governorApply } from './modules/gove
 import { Config as auditConfig, apply as auditApply } from './modules/audit-hook.mjs'
 import { Config as canaryConfig, apply as canaryApply } from './modules/canary.mjs'
 import { Config as obsConfig, apply as obsApply } from './modules/observability.mjs'
+import { Config as historyConfig, apply as historyApply } from './modules/price-history.mjs'
 
 const facts = { checks: [] }
 let failures = 0
@@ -42,6 +43,11 @@ const RAW = [
   { seq: 5, type: 'quote/submitted', correlation_id: 'q-0008', actor: 'agent:sourcing', ts: '2026-09-21T14:00:00Z',
     body: { quote_id: 'q-0008', total_amount: 99000, cost_floor: 70000 } },
 ]
+// 价格序列用例：RAW 里补一条带 `body.lines[]` 的行（真数据流不能只靠"形状对"来假装）
+RAW.push({ seq: 999, type: 'quote/submitted', ts: '2026-09-21T00:00:00Z', realm: 'contractor:con-B',
+  body: { quote_id: 'q-hist-1', lines: [{ item_id: 'L-001', unit_price: 11 }, { item_id: 'L-001', unit_price: 13 },
+    { item_id: 'L-002', unit_price: 22 }] } })
+
 const ledgerStub = (rows) => ({
   path: '/tmp/stub-ledger.jsonl',
   rows: () => rows,
@@ -91,6 +97,7 @@ const mountObs = async (targetCtx) => {
   await wrap({ apply: auditApply, Config: auditConfig }, { capacity: 200 }, 'audit', 'audit')
   await wrap({ apply: canaryApply, Config: canaryConfig }, { weight_bps: 0 }, 'canary', 'canary')
   await wrap({ apply: obsApply, Config: obsConfig, inject: ['governor', 'audit', 'canary'] }, {}, 'observability', 'obs')
+  await wrap({ apply: historyApply, Config: historyConfig, inject: [] }, { key_field: 'supplier_id' }, 'priceHistory', 'history')
 }
 await mountObs(ctx)
 
@@ -100,7 +107,7 @@ const gfiber = await ctx.plugin(governorMount('governor#probe', gbox),
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -198,7 +205,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -224,6 +231,20 @@ check('观测正控：/api/obs 返回 200 且含 governor/audit/canary 三个来
   && typeof obsJson.summary === 'string' && !obsRes.text.includes('private:')
   && typeof obsJson.observability?.governor?.stats?.admitted === 'number',
   `status=${obsRes.status} sources=${(obsJson.observability?.sources ?? []).join(',')} summary=${String(obsJson.summary).slice(0, 60)}`)
+
+// 4d. T-238：自进化产出的插件（price-history）在双方视角都可见
+const hist = await get('/contractor/api/history')
+let histJson = {}
+try { histJson = JSON.parse(hist.text) } catch (err) { histJson = {} }
+const supHist = await get('/supplier/api/history')
+check('价格序列正控：/contractor/api/history 与 /supplier/api/history 都 200（**双方视角各自可见**），'
+  + '形状来自自进化插件 price-history，且响应里不含私域键',
+  hist.status === 200 && supHist.status === 200 && typeof histJson.groups === 'number'
+  && Array.isArray(histJson.series) && histJson.groups >= 1
+  && histJson.series.every((item) => typeof item.median === 'number' && ['up', 'down', 'flat'].includes(item.trend))
+  && String(histJson.source).includes('price-history')
+  && !hist.text.includes('cost_floor') && !hist.text.includes('private:'),
+  `status=${hist.status}/${supHist.status} groups=${histJson.groups} source=${String(histJson.source).slice(0, 40)}`)
 
 // 4. 未知视角
 const unknown = await get('/nonexistent/')

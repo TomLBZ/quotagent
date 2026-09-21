@@ -1,0 +1,99 @@
+EV-073 T-238 自进化产出的插件接入 WebUI 双方视角（price-history）
+生成时间 2026-09-21T09:39:16Z
+命令与原始输出（原样留档）
+
+[1] 线上真实进程回读（重启后；网关 "already healthy" 不换代码 → 先杀进程再 ensure）
+$ curl -s http://127.0.0.1:8093/quotagent/contractor/api/history → 200
+{
+  "view": "contractor",
+  "source": "price-history（自进化产出的插件）",
+  "groups": 2,
+  "series": [
+    {
+      "group": "L-001",
+      "count": 2,
+      "min": 86,
+      "median": 86,
+      "max": 86,
+      "latest": 86,
+      "trend": "flat"
+    },
+    {
+      "group": "L-002",
+      "count": 2,
+      "min": 11.5,
+      "median": 11.5,
+      "max": 11.5,
+      "latest": 11.5,
+      "trend": "flat"
+    }
+  ],
+  "note": "按行项目聚合的价格序列描述统计；输入只来自本视角的公开投影"
+}
+$ curl -s http://127.0.0.1:8093/quotagent/supplier/api/history   → 200
+{
+  "view": "supplier",
+  "source": "price-history（自进化产出的插件）",
+  "groups": 2,
+  "series": [
+    {
+      "group": "L-001",
+      "count": 1,
+      "min": 86,
+      "median": 86,
+      "max": 86,
+      "latest": 86,
+      "trend": "flat"
+    },
+    {
+      "group": "L-002",
+      "count": 1,
+      "min": 11.5,
+      "median": 11.5,
+      "max": 11.5,
+      "latest": 11.5,
+      "trend": "flat"
+    }
+  ],
+  "note": "按行项目聚合的价格序列描述统计；输入只来自本视角的公开投影"
+}
+
+[2] 公网回读（Cloudflare → 主机 NPM → ws-gateway → 插件）
+$ curl -s -o /dev/null -w '%{http_code}' https://novara.remoteblossom.com/quotagent/contractor/api/history
+200
+{
+  "view": "contractor",
+  "source": "price-history（自进化产出的插件）",
+  "groups": 2,
+  "series": [
+    {
+      "group": "L-001",
+      "count": 2,
+      "min": 86,
+      "median": 86,
+      "max": 86,
+      "latest": 86,
+      "trend": "flat"
+    },
+    {
+      "group": "L-002",
+      "count": 2,
+      "min": 11.5,
+      "median": 11.5,
+      "max": 11.5,
+      "latest": 11.5,
+      "trend": "flat"
+    }
+  ],
+  "note": "按行项目聚合的价格序列描述统计；输入只来自本视角的公开投影"
+}
+
+200
+
+[3] 门：verify.sh webui → 16/16（新增"价格序列正控"：双方视角都 200、groups ≥ 1、中位数为数、趋势∈up/down/flat、响应无私域键）
+     verify.sh modules / canary-route / plugins 同步通过（新增依赖 → 同步 fixture stub 与 e2e 挂载）
+
+结论：T-237 由自进化流程产出的 `price-history` 插件**已经在用户可见路径上工作**：
+双方视角各有一条 `/api/history` 与页面上的一块价格序列表；输入只取非私域字段（`item_id`/`unit_price`），
+且 UI 侧再做一次私域键过滤（纵深防御）。**未改动已晋升产物**（它有哈希追溯，改了就红——这是特性）。
+
