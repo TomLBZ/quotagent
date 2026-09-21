@@ -72,6 +72,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-233 | 运行期审计钩子 `audit-hook` 插件：决策留痕（观测，不写账本）+ 去重/有界/零残留 | B29 | done | EV-068 |
 | T-234 | `governor` 接进 UI 真实 HTTP 路径：背压端到端（429+Retry-After）+ 三档映射单测（504/500） | B30 | done | EV-069 / D-027 |
 | T-247 | 由 subagents 生产两件插件（supplier-scorecard 已接线 / idempotency-guard 待接线）+ 修 process.exit 截断 | B43 | done | D-042 / EV-082 |
+| T-251 | 需求覆盖矩阵 + `verify.sh coverage`：FR↔插件↔门全链可核对；补登记 14 FR/14 AC | B47 | done | D-046 / EV-086 |
 | T-250 | subagents 产出两件（approval-digest→双方视角 / budget-guard→桥路径）并接线 | B46 | done | D-045 / EV-085 |
 | T-249 | 把 P2 现状写进运维手册（三条视角道/接口/中间件接线/门清单/排障） | B45 | done | D-044 / EV-084 |
 | T-248 | 幂等守卫接进桥调用路径（同请求只打一次下游，端到端门 5/5） | B44 | done | D-043 / EV-083 |

@@ -124,6 +124,20 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-INTEG-006 | P1 | 桥的故障语义：SIGKILL 后哈希链仍真且 durable 零丢失、重启留痕；在途请求记 unknown；重启预算 3/30s 超限降只读（只关 fact/commit）；背压丢 live 必留痕（计数 + 时间窗）且 durable 可补齐；锚点不在链中→`kernel/bridge-fault` + 只读；无孤儿；启动失败退出码 3 且账本零新增 | `qa ac AC-INTEG-006`（入口 `tools/verify.sh bridge`） |
 | AC-INTEG-003 | P2 | 邮件发送失败不落账为"已发送"（账实一致） | `qa ac AC-INTEG-003` |
 | AC-TRUST-001 | P0/P1 | 对方私域字段在本侧投影、模型输入、视图中三处均不存在（INV-008） | `qa ac AC-TRUST-001` |
+| AC-RUNTIME-003 | P2 | FR-RUNTIME-003：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（audit-hook 门 7/7） | 见 `evidence/EV-068` |
+| AC-RUNTIME-004 | P2 | FR-RUNTIME-004：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（budget-guard 门 10/10 + budget-route 门 5/5） | 见 `evidence/EV-085` |
+| AC-RUNTIME-005 | P2 | FR-RUNTIME-005：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（breaker 门 10/10 + breaker-route 门 4/4） | 见 `evidence/EV-077` |
+| AC-RUNTIME-006 | P2 | FR-RUNTIME-006：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（governor 门 9/9） | 见 `evidence/EV-067` |
+| AC-RUNTIME-007 | P2 | FR-RUNTIME-007：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（observability 门 6/6） | 见 `evidence/EV-071` |
+| AC-RUNTIME-008 | P2 | FR-RUNTIME-008：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（modules 门 248/248） | 见 `evidence/EV-038` |
+| AC-RUNTIME-009 | P2 | FR-RUNTIME-009：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（idempotency-guard 门 10/10 + idem-route 门 5/5） | 见 `evidence/EV-083` |
+| AC-EVIDENCE-003 | P2 | FR-EVIDENCE-006：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（evolve-module 追溯门 11/11 + webui 21/21） | 见 `evidence/EV-075` |
+| AC-EVOLVE-005 | P2 | FR-EVOLVE-007：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（evolve-journal 门 7/7） | 见 `evidence/EV-080` |
+| AC-PRICE-002 | P2 | FR-PRICE-003：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（evolve-module 追溯门 11/11 + webui 21/21） | 见 `evidence/EV-073` |
+| AC-RFQ-005 | P2 | FR-RFQ-007：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（modules 门 248/248） | 见 `evidence/EV-039` |
+| AC-EVAL-003 | P2 | FR-EVAL-005：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（supplier-scorecard 门 10/10 + webui 21/21） | 见 `evidence/EV-082` |
+| AC-RUNTIME-010 | P2 | FR-UX-004：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（ops-view 门 9/9 + webui 21/21） | 见 `evidence/EV-079` |
+| AC-PLUGIN-004 | P2 | FR-PLUGIN-004：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（coverage 门 + plugins 门 + evolve-module 门） | 见 `evidence/EV-086` |
 
 ## 7. 证据制度
 

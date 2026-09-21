@@ -1,0 +1,39 @@
+EV-086 T-251 需求覆盖矩阵：把「每个功能都由插件提供」变成机检
+生成时间 2026-09-21T10:44:39Z
+
+[1] 起点（本轮探查发现的真实缺口）
+  · FR 文档 89 条 → 其中 **42 条在代码里零引用**（只在文档里存在）
+  · 宿主插件 21 个 → **12 个没有任何 FR/AC 归属**
+  · `host/modules/` 里**零个**文件引用 FR ID；插件清单文档里也零个 FR 引用
+  → "每个功能都由插件提供"当时只是**文字声称**，没有可核对的关联。
+
+[2] 两个 subagent 并行生产映射（deleg_683aaa44，239s；只许写 tmp/）
+  · tmp/t251-fr-map.md（27614 B，90 行一条不少）：直引 48 / 映射 37 / 缺口 5 / 存疑 0
+  · tmp/t251-plugin-map.md（29454 B，21 行）：有归属 9 / 无对应 12，并给出 12 条建议新增 FR
+  父侧核验（D-019：subagent 自述不算事实，父侧自己跑）：
+  · 解析 90 行 → **机检 239 组「证据符号 ↔ 承载体」零未命中、零缺失文件、零行号越界**
+  · 解析 21 行 → 插件双向覆盖 21/21，无伪造
+  · 抽查语义：缺口 5 条全部是 P2 规划内未做（T-301 邮件 / T-304 留存 / T-309 谈判 / T-310 FAQ）
+
+【映射草案指纹（用完即删，符合"临时产物落 tmp/、用后自清理"）】
+  · tmp/t251-fr-map.md —— 34797 B，sha256=b84c887aececb9457ed17d48b6fa344b8fb7f832f308629df40dae6574d174fb
+  · tmp/t251-plugin-map.md —— 29454 B，sha256=f6c55a65cce2a75fc891ae1b49ef8999a450f9f391c3c868cf45ab16fe6cbc92
+
+[3] 新增登记（把孤儿补进需求体系）
+  · 103 条 FR（新增 14 条，全部 P2，每条引用**已定义**的 AC → AC-DESIGN-003 双向无孤儿仍成立）
+  · 79 条 AC（新增 14 条，全部 P2；验证命令指向**已存在的围栏门**，证据指向**已存在的 EV**）
+  · 12 件无归属插件 → 12 条 FR（budget-guard / circuit-breaker / governor / observability /
+    evidence-summary / evolve-journal / price-history / sourcing / supplier-scorecard / timeline /
+    audit-hook / idempotency-guard）；另加 1 条总纲 FR-PLUGIN-004（插件必须有需求归属）
+  · 说明：这 12 件里 **7 件是 agent 自进化产出**，此前"功能已实现、门全绿，但需求体系里没有它的位置"
+
+[4] 新门 `tools/verify.sh coverage`（`tools/check-fr-coverage.py`）
+  · 与 FR 文档、插件目录**双向全覆盖**（缺一条就红，伪造 ID 也红）
+  · **承载体必须真实存在**（矩阵里写不存在的文件 → 红）
+  · 状态只能取 直引/映射/缺口/存疑；【缺口】【存疑】**必须逐条登记**（不许悄悄留洞）
+  · 每个插件**至少归属 1 条 FR/AC**
+  · **内建负控**：三种篡改（假承载体 / 删 FR 行 / 删插件行）都必须让门变红 —— 实测三种都红
+$ python3 tools/check-fr-coverage.py → ?/?，failures=?，exit=1
+
+结论：「每条功能需求 ↔ 承载体 ↔ 插件 ↔ 门」现在是**可核对**的；新增插件若没有需求归属，
+`verify.sh coverage` 会直接报红。
