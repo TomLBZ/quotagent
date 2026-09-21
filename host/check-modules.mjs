@@ -24,12 +24,14 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-const MODULE_DIR = join(HERE, 'modules')
 const argv = process.argv.slice(2)
 const argOf = (flag, fallback = null) => {
   const idx = argv.indexOf(flag)
   return idx >= 0 && argv[idx + 1] ? argv[idx + 1] : fallback
 }
+// `--module-dir <dir>`：对**影子目录**里的模块跑同一套 fixture（T-227 自进化：晋升前只在影子里验，
+// 不碰真实 `host/modules/`）。默认仍是本目录的 `modules/`。
+const MODULE_DIR = argOf('--module-dir') ?? join(HERE, 'modules')
 const eventsPath = argOf('--events')
 const only = argOf('--module')
 const declaredEvents = eventsPath && existsSync(eventsPath)
@@ -110,8 +112,11 @@ async function mount(mod) {
 // `index.mjs` 是模块**发现入口**（导出 moduleFiles/loadModules），不是插件：不参与 fixture
 for (const file of readdirSync(MODULE_DIR)
   .filter((item) => item.endsWith('.mjs') && item !== 'index.mjs').sort()) {
+  let currentName = file        // catch 里要用：`const name` 在 try 内声明，catch 作用域看不到（实测踩到）
+  try {
   const mod = await import(pathToFileURL(join(MODULE_DIR, file)).href)
   const name = mod.name || file
+  currentName = name
   if (only && only !== name) continue
 
   // --- manifest 形状 ---
@@ -247,15 +252,34 @@ for (const file of readdirSync(MODULE_DIR)
     || (spec.startsWith('.') && !spec.startsWith('./') && !spec.startsWith('../lib/')))
   check(name, 'A6', 'A6 无跨模块 import：不得出现指向别的模块目录的相对 import（只允许 ../lib/ 与包名）',
     leaks.length === 0, `imports=${JSON.stringify(imports)} 越界=${JSON.stringify(leaks)}`)
+  } catch (err) {
+    // 坏产物/半成品模块不得让整个 fixture 跑崩：报一条失败断言再继续（否则一个坏模块会掩盖其它模块的结果）
+    check(currentName, 'manifest', `模块装配/检查抛错：${String(err && err.message).slice(0, 160)}`, false,
+      `error=${String((err && err.code) ?? (err && err.name))}`)
+  }
 }
 
-check('__set__', 'A3', 'A3 模块集级：至少有一个模块暴露 const 键并拒绝翻转（否则 const 纪律无人覆盖）',
-  constKeysFound.length > 0, `const 键：${constKeysFound.join(', ') || '（一个都没有）'}`)
+// 空集合守卫（教训同 `verify.sh p0-no-node`）：`--module X` 没匹配到任何模块时**必须红**，
+// 否则"没跑到"会被当成"全绿"（本文件实测踩过：坏产物 name 没改 → 0/0 → 看着像通过）。
+// 模块集级断言只在**全量**跑时有意义：`--module X` 只加载一个模块，用它判定"集合里有没有 const 键"
+// 是错的口径（实测踩到：影子目录里只有新产物一个模块 → 无辜红）。
+if (!only) {
+  check('__set__', 'A3', 'A3 模块集级：至少有一个模块暴露 const 键并拒绝翻转（否则 const 纪律无人覆盖）',
+    constKeysFound.length > 0, `const 键：${constKeysFound.join(', ') || '（一个都没有）'}`)
+}
+
+// 空集合守卫（教训同 `verify.sh p0-no-node`）：`--module X` 没匹配到任何模块时**必须红**，
+// 否则"没跑到"会被当成"全绿"（实测踩过：坏产物忘了改 name → 0/0 → 看着像通过）。
+if (only && checks.length === 0) {
+  check('__set__', 'A0', `A0 空集合守卫：--module ${only} 未匹配到任何模块（不得当作通过）`, false,
+    `目录 ${relative(HERE, MODULE_DIR)} 里的 .mjs：${JSON.stringify(readdirSync(MODULE_DIR).filter((f) => f.endsWith('.mjs')).sort())}`)
+}
 
 const report = { kind: 'quotagent/modules', module_dir: relative(HERE, MODULE_DIR),
   events_source: eventsPath || '(内置兜底列表)', modules: [...new Set(checks.map((item) => item.module))],
   checks, passed: checks.filter((item) => item.ok).length, total: checks.length,
   note: 'A1..A6 每条含负控（评审 C §6 / §7.1 第 5 条）' }
+
 console.log(JSON.stringify(report, null, 2))
 if (failures) {
   console.error(`[FAIL] module manifests/fixtures: ${failures} 项未通过`)

@@ -75,3 +75,17 @@
 - 交付：`host/modules/sourcing.mjs`（领域插件：RFQ 覆盖率/缺口/临期，纯函数只读账本行）、
   `host/modules/timeline.mjs`（中间件：按 realm 的时间线环形缓冲，幂等去重、零残留、无定时器）。
 - 复核发现的边界：`sourcing` 只读账本行、不做数值推断；`timeline` 不产生业务事实（事实仍以 Python 账本为准）。
+
+## D-020 自进化产出插件：可写面、门信号与晋升门槛（T-227，2026-09-21T08:39:42Z）
+
+- 决定：自进化可以产出插件（`host/modules/<name>.mjs`），但**只能写这一个目录**；门信号必须是**真跑出来的**
+  模块 fixture A1..A6（`expected_effect.metric == 'fixture:module'`），不接受模型自评；晋升仍需人工
+  `approval_ref`；提案后被改动过（哈希不符）拒绝晋升；回滚只删自有且内容未被他人改动的那一份。
+- 依据：用户 2026-09-21 指令「可以用自进化的方式制作插件或中间件…使每一个功能模块都可分别独立演进」；
+  既有纪律：`ADR-0002`（内核不可自改）、评审 C `§5.2/§5.3`、`ADR-0014 §7.1` 第 7 条（不许自动晋升）。
+- 落地：`host/lib/evolution.mjs`（`makeModuleProposal`/`shadowArtifact`/`gateModule`/`promoteModule`/`rollbackModule`）
+  + `host/evolution.mjs` 冒烟扩展；`check-modules.mjs` 新增 `--module-dir`（影子目录）与**空集合守卫 A0**。
+- 修自己引入的三个缺陷：① `--module` 按模块**导出的 name** 过滤，坏产物的 name 没改 → fixture 返回 0/0
+  （"空集合"看着像通过）→ 已加 A0 守卫；② fixture 子进程非零退出是**预期负控路径**，改用 `spawnSync` 取 stdout；
+  ③ 模块装配抛错时 `catch` 引用 try 内 `const name` → ReferenceError → 改用循环内 `let currentName`。
+- 记录：`ADR-0016`；证据 `EV-063`。

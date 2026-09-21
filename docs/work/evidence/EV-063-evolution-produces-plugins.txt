@@ -1,0 +1,109 @@
+EV-063 自进化产出插件（T-227）：提案→影子→真跑 fixture→门→晋升→回滚
+生成时间：2026-09-21T08:39:42Z（UTC）
+
+约束（用户 2026-09-21）："当 agent 自进化能力上线后，可以用自进化的方式制作插件或中间件等来使每一个
+功能模块都可分别独立演进"。以下为 `tools/verify.sh evolution` 的原始输出（27 条 ok）。
+
+$ tools/verify.sh evolution
+budget=rejected regressed=rejected"
+    },
+    {
+      "name": "负控：无人工 approval_ref 的 promote 被拒（P1 不允许自动晋升）",
+      "ok": true,
+      "detail": "code=promote-needs-approval"
+    },
+    {
+      "name": "负控：门未通过的提案即使带批准也不得晋升",
+      "ok": true,
+      "detail": "code=promote-gate-failed"
+    },
+    {
+      "name": "正控：门通过 + 带人工 approval_ref → 晋升并把该提案拥有的键折进 base",
+      "ok": true,
+      "detail": "keys=[\"compare.weights.price\"] approval_ref=ap-0001"
+    },
+    {
+      "name": "事件由 **Python 侧**落账（宿主不写账本）：5 条 evolve/* 依次进账本且 seq 递增",
+      "ok": true,
+      "detail": "seqs=1,2,3,4,5 ledger=evolve-7AKmsy/evolve.jsonl"
+    },
+    {
+      "name": "回滚：dispose 回收全部 effect 且 journal 只撤该提案拥有的键",
+      "ok": true,
+      "detail": "effects=1 revoked=[\"compare.weights.price\"]"
+    },
+    {
+      "name": "模块提案：绑定产物路径/内容哈希/字节数，且指标来源固定为 fixture:module（不接受模型自评）",
+      "ok": true,
+      "detail": "path=<sandbox>/host/modules/smoke-widget.mjs bytes=594"
+    },
+    {
+      "name": "影子写入：产物只落影子目录，真实 host/modules/ **未被触碰**",
+      "ok": true,
+      "detail": "shadow=<sandbox>/host/modules/smoke-widget.mjs 真目录 7 → 7"
+    },
+    {
+      "name": "门（模块版）：五条 AND 全过 —— 门信号是**真跑出来的 fixture A1..A6**，不是自报",
+      "ok": true,
+      "detail": "fixture 13/13；宿主不变量实测=true；checks=5"
+    },
+    {
+      "name": "门负控：坏产物（inject 写内建 mixin）被**真实 fixture** 抓出 → 门 rejected → 晋升被拒",
+      "ok": true,
+      "detail": "fixture 3/6（失败 3）；门=rejected；晋升=promote-gate-failed"
+    },
+    {
+      "name": "负控：写目标超出可写面（如服务层目录）必须被拒——可写面只有 host/modules/",
+      "ok": true,
+      "detail": "error=artifact-outside-write-surface"
+    },
+    {
+      "name": "负控：非插件文件（缺 apply）不得进 host/modules/",
+      "ok": true,
+      "detail": "error=artifact-not-a-module"
+    },
+    {
+      "name": "负控：指标来源是\"模型自评\"必须被拒（门信号只能是真实 fixture）",
+      "ok": true,
+      "detail": "error=effect-invalid"
+    },
+    {
+      "name": "负控：没有人工 approval_ref 不得晋升（门通过也不行）",
+      "ok": true,
+      "detail": "error=promote-needs-approval"
+    },
+    {
+      "name": "晋升正控：门通过 + 人工引用 → 产物写入（沙盒）host/modules/，真实目录仍未被触碰",
+      "ok": true,
+      "detail": "written=<sandbox>/host/modules/smoke-widget.mjs；真目录 7 个文件"
+    },
+    {
+      "name": "负控：影子产物与提案哈希不一致（提案后被偷改）必须拒绝晋升",
+      "ok": true,
+      "detail": "error=artifact-tampered"
+    },
+    {
+      "name": "回滚：内容被他人改过时拒绝删除；自有内容才撤（只撤自己拥有的）",
+      "ok": true,
+      "detail": "拒绝代码=rollback-refused-modified；自有回滚 removed=true revoked=[\"artifact:smoke-widget\"]"
+    },
+    {
+      "name": "模块产物的演化事件同样由 Python 侧落账（连续 seq，追加在既有 5 条之后）",
+      "ok": true,
+      "detail": "seqs=6,7,8,9,10"
+    }
+  ]
+}
+（exit=0）
+
+关键点（逐条可在上面输出里核到）：
+- 正控：合法插件提案 → 影子写入 → **对影子产物真跑** A1..A6（13/13）→ 五条 AND 门 passed →
+  带 `ap-0001` 晋升 → 产物写入沙盒 `host/modules/`，**真实仓库目录未被触碰**（文件数前后一致）；
+- 负控 1：坏产物（把内建 mixin `events` 写进 `inject`）被**真实 fixture** 抓出 → 门 rejected → 晋升被拒；
+- 负控 2：写目标超出可写面（服务层目录）→ `artifact-outside-write-surface`；
+- 负控 3：非插件文件（缺 apply）→ `artifact-not-a-module`；
+- 负控 4：指标来源写成"模型自评"→ `effect-invalid`；
+- 负控 5：无人工 `approval_ref` → `promote-needs-approval`（门通过也不行）；
+- 负控 6：提案后影子产物被偷改 → `artifact-tampered`；
+- 负控 7：产物被他人改过再回滚 → `rollback-refused-modified`；
+- 事件：模块提案整链 5 条 `evolve/*` 由 **Python 侧**落账，seq 连续追加。

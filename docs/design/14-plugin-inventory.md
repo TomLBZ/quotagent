@@ -47,6 +47,21 @@
 |---|---|---|
 | `quotagent`（工作区网关路由 `/quotagent`） | `tools/webui-serve.py` → cordis 插件 `webui` | 幂等接入脚本 `tools/ws-integrate.py` |
 
-## 5. 尚未归属的功能（诚实清单）
+## 5. 自进化产出的插件（`ADR-0016` / `T-227`）
+
+新增功能有两条合法来源：**人写**（`T-2xx` 批次）与**自进化提案**。后者走：
+
+1. `makeModuleProposal`（`host/lib/evolution.mjs`）绑定产物路径 / `sha256` 内容哈希 / 字节数；
+2. 产物先写**影子目录**，用 `node host/check-modules.mjs --module <name> --module-dir <shadow>/modules` **真跑** A1..A6；
+3. `gateModule` 五条 AND（fixture 全绿 / 不变量 / 反例集 / 预算 / 人工介入率不升）；
+4. `promoteModule` 写真实 `host/modules/`，**必须**带人工 `approval_ref`（`ap-NNNN`）且影子哈希与提案一致；
+5. 回滚只删自有产物（内容被他人改过则拒绝）。
+
+不变量：**自进化只能写 `host/modules/`**（内核/服务层不可自改）；门里的 `expected_effect.metric` 固定为
+`fixture:module`（不接受模型自评）；晋升后必须在本表补一行并至少被一个 profile 装配，否则 `tools/verify.sh plugins` 会红。
+
+机检：`tools/verify.sh evolution`（27 条断言，含 7 条负控）。
+
+## 6. 尚未归属的功能（诚实清单）
 
 无。新增功能前先在本文件登记归属；`tools/verify.sh plugins` 会比对 `host/modules/*.mjs` 与本表，缺行即红。
