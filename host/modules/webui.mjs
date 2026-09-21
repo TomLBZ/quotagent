@@ -10,7 +10,8 @@
  * 零残留（A2）：HTTP server 由 `ctx.effect()` 注册，dispose 即 `server.close()`（端口释放）。
  */
 import { createServer } from 'node:http'
-import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { array, number, object, string } from '../lib/std-schema.mjs'
 import { openLedger } from '../lib/ledger-view.mjs'
@@ -38,6 +39,7 @@ export const Config = object({
   retention_plan: string().default(''),  // 留存计划的**绝对路径**（生产 cwd≠仓库根，相对路径会读不到）
   pipeline_snapshot: string().default(''),  // 三域快照的**绝对路径**（同上）
   admin_snapshot: string().default(''),     // 系统管理快照（阻塞/进度）的**绝对路径**（同上）
+  admin_inbox: string().default(''),        // 待处理提交目录（宿主写这里；Only Python 消费，账号不写账本）
 })
 
 const html = (title, body, prefix) => `<!doctype html><html lang="zh"><head><meta charset="utf-8">
@@ -399,13 +401,18 @@ export function apply(ctx, config) {
     const deny = () => send(401, 'application/json; charset=utf-8', '{"error":"unauthorized"}')
     const adminHtml = (data) => {
       const rows = (data.blocks || []).map((b) => `<tr><td><code>${b.block_id}</code></td><td>${b.kind}</td>`
-        + `<td>${b.reason}</td><td>${b.required_action}</td></tr>`).join('')
+        + `<td>${b.reason}</td><td>${b.required_action}</td>`
+        + `<td><form method="post" action="${prefix}/admin/api/blocks/${encodeURIComponent(b.block_id)}/resolve">`
+        + `<input type="hidden" name="kind" value="${b.kind}">`
+        + `<input name="material" type="password" autocomplete="off" placeholder="凭据/材料" size="14">`
+        + `<button type="submit">提交</button></form>`
+        + `<span class="dim">（提交只落待处理项；落账本要人工批准引用）</span></td></tr>`).join('')
       const switchLinks = Object.keys(rules).map((v) => `<a href="${prefix}/admin/api/switch?to=${v}">${v}</a>`).join(' · ')
       return `${data.degraded ? `<p>降级：<code>${data.reason ?? ''}</code> —— ${data.next_action ?? ''}</p>` : ''}`
         + `<p>进度：阶段 <b>${data.progress?.phase ?? '—'}</b> · 下一步 <b>${data.progress?.next_task ?? '—'}</b>`
         + ` · 已完 <b>${data.progress?.done ?? 0}</b> / 待做 <b>${data.progress?.todo ?? 0}</b></p>`
         + `<p>阻塞 <b>${data.counts?.blocked ?? 0}</b> 条（口径：${data.counts?.source ?? '—'}）</p>`
-        + `<table><thead><tr><th>block</th><th>kind</th><th>原因</th><th>需要你做的事</th></tr></thead><tbody>${rows}</tbody></table>`
+        + `<table><thead><tr><th>block</th><th>kind</th><th>原因</th><th>需要你做的事</th><th>提交材料</th></tr></thead><tbody>${rows}</tbody></table>`
         + `<p>切换视角：${switchLinks}</p>`
     }
     if (/^\/admin\/?$/.test(path)) {
@@ -426,6 +433,40 @@ export function apply(ctx, config) {
     if (/^\/admin\/api\/blocks\/?$/.test(path)) {
       if (!adminGuard.authorized(req).ok) return deny()
       return json(200, adminView.snapshot())
+    }
+    if (/^\/admin\/api\/blocks\/[^/]+\/resolve\/?$/.test(path) && String(req.method) === 'POST') {
+      if (!adminGuard.authorized(req).ok) return deny()
+      const blockId = decodeURIComponent(path.split('/')[4] ?? '')
+      return readBody((body) => {
+        const form = new URLSearchParams(body)
+        const fields = {}
+        const RESERVED = ['token', 'kind']   // 保留键：不算用户提交的字段（否则只带 kind 的空提交会被误判为有内容）
+        for (const [k, v] of form.entries()) { if (!RESERVED.includes(k) && String(v) !== '') fields[k] = String(v) }
+        if (Object.keys(fields).length === 0) return json(400, { error: 'no-fields', hint: '至少提交一个字段' })
+        const keys = Object.keys(fields).sort()
+        const canonical = JSON.stringify(Object.fromEntries(keys.map((k) => [k, fields[k]])))
+        const payloadSha = createHash('sha256').update(canonical).digest('hex')
+        const bytes = Buffer.byteLength(canonical)
+        const record = { block_id: blockId, kind: String(form.get('kind') ?? 'other'), submitted_at: new Date().toISOString(),
+          submitted_by: 'admin-session', fields, payload_sha256: payloadSha, bytes, schema: 1 }
+        // 只落待处理项（0600、原子写）；**账本零新增**（宿主不写账本），也不回显任何字段值
+        const dir = String(config.admin_inbox ?? '')
+        if (dir === '') return json(503, { error: 'inbox-unconfigured', hint: '服务未配置 admin_inbox（宿主侧待处理目录）' })
+        try {
+          mkdirSync(dir, { recursive: true, mode: 0o700 })
+          try { chmodSync(dir, 0o700) } catch (err) { /* 同上：FS 不支持时尽力而为 */ }
+          const tmp = `${dir}/.${blockId}.${process.pid}.tmp`
+          writeFileSync(tmp, JSON.stringify(record) + '\n', { mode: 0o600 })
+          try { chmodSync(tmp, 0o600) } catch (err) { /* FS 不支持 POSIX 位时尽力而为 */ }
+          renameSync(tmp, `${dir}/${blockId}.json`)
+          try { rmSync(tmp, { force: true }) } catch (err) { /* 已 rename 成功，残留清理尽力而为 */ }
+        } catch (err) {
+          return json(500, { error: 'inbox-write-failed', detail: String(err).slice(0, 120) })
+        }
+        return send(202, 'application/json; charset=utf-8',
+          JSON.stringify({ ok: true, block_id: blockId, payload_sha256: payloadSha, bytes,
+            next_action: '等待 Python 侧消费：tools/admin-apply.py --approval-ref ap-NNNN --actor human:<人名>（宿主不写账本）' }))
+      })
     }
     if (/^\/admin\/api\/switch\/?$/.test(path)) {
       if (!adminGuard.authorized(req).ok) return deny()

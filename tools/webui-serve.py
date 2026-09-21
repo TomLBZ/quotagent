@@ -177,7 +177,9 @@ def main(argv: list[str]) -> int:
             "--pipeline-snapshot", os.environ.get(
                 "QUOTAGENT_UI_PIPELINE", str(ROOT / "tmp" / "ui-shared" / "pipeline.json")),
             "--admin-snapshot", os.environ.get(
-                "QUOTAGENT_UI_ADMIN", str(ROOT / "tmp" / "ui-shared" / "admin.json"))]
+                "QUOTAGENT_UI_ADMIN", str(ROOT / "tmp" / "ui-shared" / "admin.json")),
+            "--admin-inbox", os.environ.get(
+                "QUOTAGENT_UI_ADMIN_INBOX", str(ROOT / "tmp" / "ui-shared" / "admin-submissions"))]
     # 管理员 token：**进子进程环境变量，不进 argv**（argv 在 ps 里可见）
     tok = admin_token()
     env = dict(os.environ)

@@ -208,6 +208,7 @@ const main = async () => {
       retention_plan: String(args['retention-plan'] ?? process.env.QUOTAGENT_UI_RETENTION_PLAN ?? ''),
       pipeline_snapshot: String(args['pipeline-snapshot'] ?? process.env.QUOTAGENT_UI_PIPELINE ?? ''),
       admin_snapshot: String(args['admin-snapshot'] ?? process.env.QUOTAGENT_UI_ADMIN ?? ''),
+      admin_inbox: String(args['admin-inbox'] ?? process.env.QUOTAGENT_UI_ADMIN_INBOX ?? ''),
       views: String(args.views ?? 'contractor,supplier').split(',').map((item) => item.trim()).filter(Boolean),
       ledger_contractor: contractorLedger,
       ledger_supplier: String(args['ledger-supplier'] ?? ''),
