@@ -16,6 +16,21 @@
       "produced_by": "tools/evolve-module.mjs（提案→影子→真跑 fixture→五门→带引用晋升）",
       "ledger": "tmp/evolve/ledger.jsonl（evolve/proposed|shadowed|gated|promoted）",
       "evidence": "EV-072"
+    },
+    {
+      "name": "evidence-summary",
+      "proposal_id": "sha256:f88e3b87b71d21e5910979097892922025bde9cb5bef0a81524bbdd5fd179814",
+      "artifact_hash": "sha256:be399b59ac3f2f99188f2e3e81948939d9c74c7a7a791bbca71ef26ebab98763",
+      "bytes": 3374,
+      "approval_ref": "ap-0101",
+      "gate": "passed",
+      "fixture": {
+        "passed": 13,
+        "total": 13
+      },
+      "produced_by": "tools/evolve-module.mjs",
+      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+      "evidence": null
     }
   ]
 }

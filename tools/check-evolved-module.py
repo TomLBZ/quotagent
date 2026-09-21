@@ -43,9 +43,12 @@ def main() -> int:
             continue
         raw = path.read_bytes()
         digest = hashlib.sha256(raw).hexdigest()
+        # 记录里可能带 `sha256:` 前缀（取决于产出路径），统一归一化后比较——让校验器容忍两种写法，
+        # 而不是反过来要求数据迁就工具。
+        recorded = str(item.get("artifact_hash", "")).removeprefix("sha256:")
         check(f"{name} · 产物在树", True, str(path.relative_to(ROOT)))
-        check(f"{name} · 哈希与产出记录一致（未被偷改）", digest == item.get("artifact_hash"),
-              f"记录 {item.get('artifact_hash', '')[:12]}… vs 当前 {digest[:12]}…")
+        check(f"{name} · 哈希与产出记录一致（未被偷改）", digest == recorded,
+              f"记录 {recorded[:12]}… vs 当前 {digest[:12]}…")
         check(f"{name} · 字节数与记录一致", len(raw) == item.get("bytes"),
               f"记录 {item.get('bytes')} vs 当前 {len(raw)}")
         check(f"{name} · 晋升前有门通过记录 + 人工引用", item.get("gate") == "passed"

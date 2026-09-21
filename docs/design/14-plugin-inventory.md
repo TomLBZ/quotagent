@@ -22,6 +22,7 @@
 | `host/modules/canary.mjs` | 自进化产物的真实路由分流 + 自动回滚判定（进/升需人工引用，回滚自动） | `canary` | `contractor-ops` | 只改本文件；阈值/分流语义变更须同步 ADR-0017 与其断言 |
 | `host/modules/observability.mjs` | 运行期观测的只读聚合（governor 准入 / audit 留痕 / canary 分流三源合一；不写账本、不写文件、无墙钟依赖） | `observability` | `webui`（经 `/quotagent/api/obs`） | 只改本文件；聚合字段变更须同步 `verify.sh observability` 与其 A5 确定性断言 |
 | `host/modules/price-history.mjs` | 价格历史的只读描述统计（按供应商：次数/最低/中位/最高/最新 + 离散趋势）——**自进化产出的第一个进树插件** | `priceHistory` | `webui`（`host/profiles.mjs`） | 只改本文件；产物由 `tools/evolve-module.mjs` 产出，哈希受 `verify.sh evolve-module` 追溯 |
+| `host/modules/evidence-summary.mjs` | 账本"证据面"的只读统计（按类型计数、关联数、带引用行数、时间跨度）——**第二个自进化产出** | `evidenceSummary` | `webui`（`host/profiles.mjs`） | 只改本文件；产物由 `tools/evolve-module.mjs` 产出，哈希受 `verify.sh evolve-module` 追溯 |
 | `host/modules/webui.mjs` | 双方视角 WebUI（承包商/供应商两个路由；只读账本） | `webui` | `webui` | 只改本文件 + `host/lib/ledger-view.mjs`；接入见 `docs/work/deployment-manual.md` |
 
 目录即清单：新增功能 = 新增 `host/modules/<name>.mjs`（`host/modules/index.mjs` 自动发现），不必改中心清单；模块被哪个 profile 挂载仍写在 `host/profiles.mjs`（组成即数据，ADR-0015）。

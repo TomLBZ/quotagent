@@ -1,0 +1,30 @@
+EV-074 T-239 第二次自进化产出（evidence-summary）+ 护栏与追溯负控
+生成时间 2026-09-21T09:41:18Z
+命令与原始输出（原样留档）
+
+[1] 真护栏：驱动器现在从**账本**读同类失败历史喂给提案
+same_kind_history = {'total': 1, 'failed': 1}
+（读的是 T-237 那次被门拒的 evolve/gated 记录；再失败一次（failed ≥ 2）就会 `same-kind-escalated` 强制转人工）
+
+[2] 正式晋升（第二个产物）
+$ tools/cordis.sh run ../tools/evolve-module.mjs --source-file tmp/t239-artifact.mjs --name evidence-summary --approval-ref ap-0101
+exit=0 | ok=True | fixture=13/13 | scenarios={'s1': 0, 's2': 0, 's3': 0, 's4': 0}
+promote=promoted | in_tree=True | in_tree_fixture=13/13
+[{'name': '产物 fixture A1..A6 全绿', 'ok': True, 'detail': 'fixture 13/13（每个模块 12 条以上，含负控）'}, {'name': 'INV-001..010 全绿', 'ok': True, 'detail': 'invariants=true'}, {'name': '反例集全绿', 'ok': True, 'detail': 'counterexamples=true'}, {'name': '成本/延迟不超预算', 'ok': True, 'detail': 'cost=n/a latency=n/a'}, {'name': '人工介入率不上升', 'ok': True, 'detail': '介入率 0 → 0（用"多问人"换指标即越界）'}]
+
+[3] 账本（H1：Python 侧写）
+{"actor":"agent:t237","body":{"actor":"agent:t237","artifact_hash":"sha256:be399b59ac3f2f99188f2e3e81948939d9c74c7a7a791bbca71ef26ebab98763","bytes":3374,"id":"sha256:f88e3b87b71d21e5910979097892922025bde9cb5bef0a81524bbdd5fd179814","name":"evidence-summary","target":"/workspace/projects/quotagent/host/modules/evidence-summary.mjs"},"body_hash":"sha256:e2820908d7534153fa2cb9caea1bf182d39b024ea846e2910b131536d29bd2ab","class":"intent","correlation_id":"sha256:f88e3b87b71d21e5910979097892922025bde9cb5bef0a81524bbdd5fd179814","entry_hash":"sha256:88cce3cf64a9e3ff663fb824b17e16199f64301997caec625de99cba88885840","prev_hash":"sha256:6719b8ede5250fc2d092a9d1bd30ca503282265453b6b9e15c9c10163d460a40","realm":"contractor:con-B","refs":{},"seq":15,"ts":"2026-09-21T09:40:32Z","type":"evolve/proposed"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","hash":"sha256:be399b59ac3f2f99188f2e3e81948939d9c74c7a7a791bbca71ef26ebab98763","id":"sha256:f88e3b87b71d21e5910979097892922025bde9cb5bef0a81524bbdd5fd179814","shadow_path":"/workspace/projects/quotagent/tmp/t237-shadow/modules/evidence-summary.mjs"},"body_hash":"sha256:d6e383ba65e2982126506b94b9cbd60b074233d6bbcc891321bdcc82a05dd8a2","class":"intent","correlation_id":"sha256:f88e3b87b71d21e5910979097892922025bde9cb5bef0a81524bbdd5fd179814","entry_hash":"sha256:441e7b7b5d0f4fdf855f717497dc19c6c90f7766866b61fbaeaccee217cd05d7","prev_hash":"sha256:88cce3cf64a9e3ff663fb824b17e16199f64301997caec625de99cba88885840","realm":"contractor:con-B","refs":{},"seq":16,"ts":"2026-09-21T09:40:33Z","type":"evolve/shadowed"}
+{"actor":"host:gate-runner","body":{"actor":"host:gate-runner","fixture":"13/13","id":"sha256:f88e3b87b71d21e5910979097892922025bde9cb5bef0a81524bbdd5fd179814","reasons":[],"verdict":"passed"},"body_hash":"sha256:949225df5c74113dfdeb985cf71775e996918d577c902a96527661ddaf0c9c1e","class":"intent","correlation_id":"sha256:f88e3b87b71d21e5910979097892922025bde9cb5bef0a81524bbdd5fd179814","entry_hash":"sha256:3626a925977a9bed2d523b04bd9e7d7a08b4c549db5ecc448c63458f18f516a1","prev_hash":"sha256:441e7b7b5d0f4fdf855f717497dc19c6c90f7766866b61fbaeaccee217cd05d7","realm":"contractor:con-B","refs":{},"seq":17,"ts":"2026-09-21T09:40:33Z","type":"evolve/gated"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","approval_ref":"ap-0101","artifact_hash":"sha256:be399b59ac3f2f99188f2e3e81948939d9c74c7a7a791bbca71ef26ebab98763","id":"sha256:f88e3b87b71d21e5910979097892922025bde9cb5bef0a81524bbdd5fd179814","written_to":"host/modules/evidence-summary.mjs"},"body_hash":"sha256:b768de75cb490b0b98470d5bf61905efddf40060e6fc604581163958fa1ebd87","class":"intent","correlation_id":"sha256:f88e3b87b71d21e5910979097892922025bde9cb5bef0a81524bbdd5fd179814","entry_hash":"sha256:ba3201fb096acac82b488128cac614efa4e095cefd99658627ca81ba304c6bed","prev_hash":"sha256:3626a925977a9bed2d523b04bd9e7d7a08b4c549db5ecc448c63458f18f516a1","realm":"contractor:con-B","refs":{},"seq":18,"ts":"2026-09-21T09:40:45Z","type":"evolve/promoted"}
+
+[4] 追溯门 + **偷改负控**
+$ tools/verify.sh evolve-module        → exit=0（11/11）
+$ 追加一行注释到 host/modules/evidence-summary.mjs
+$ tools/verify.sh evolve-module        → exit=1（**哈希不符 → 门红**，追溯链真的在起作用）
+$ 还原文件
+$ tools/verify.sh evolve-module        → exit=0
+
+结论：自进化产出路径**可重复**（两次产出、两条日志记录、两个进树插件、各自的哈希都被追溯），
+且护栏（同类失败转人工）与追溯门（偷改即红）都经过实测；驱动脚本本身**没有为第二次产出改过流程代码**。
+

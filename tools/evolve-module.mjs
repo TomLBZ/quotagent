@@ -78,6 +78,14 @@ const modulesBeforeMs = Date.now()
 runVerify('modules')
 const baselineMs = Date.now() - modulesBeforeMs
 
+// 同类失败历史：从**账本**读（H1：host 只读账本，写入仍由 Python 侧负责）。
+// 不喂 history，`makeModuleProposal` 的"同类连续失败转人工"护栏等于没有——这是本轮补上的真缺口。
+const history = existsSync(ledger)
+  ? readFileSync(ledger, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line))
+    .filter((item) => item.type === 'evolve/gated' && (item.body?.verdict === 'rejected'))
+    .map(() => ({ kind: 'module', outcome: 'failed' }))
+  : []
+
 let proposal
 try {
   proposal = makeModuleProposal({
@@ -88,7 +96,7 @@ try {
     risks: arg('--risks', '统计口径若与内核 measures 不一致会造成误读 → 只输出离散趋势与描述统计，不参与任何判定'),
     rollback_plan: '删除 host/modules/<name>.mjs 并移除装配点（回滚只需一次 revert；产物为纯函数，无迁移）',
     evidence_refs: (arg('--evidence-refs', 'EV-072') ?? '').split(',').filter(Boolean),
-  })
+  }, { history })
 } catch (err) {
   if (err instanceof EvolutionError) emit({ ok: false, stage: 'proposal', code: err.code, error: err.message }, 2)
   throw err
@@ -164,6 +172,7 @@ emit({
   gate: { verdict: gateVerdict.verdict, checks: gateVerdict.checks },
   scenarios: Object.fromEntries(scenarios.map((item) => [item.name, item.exit])),
   promote: promoted, promote_error: promoteError, dry_run: dryRun,
+  same_kind_history: proposal.same_kind_history,
   in_tree: inTree, in_tree_fixture: inTreeFixture,
   modules_gate_before: modulesBefore.exit, modules_gate_after: runVerify('modules').exit,
   ledger_events: events,
