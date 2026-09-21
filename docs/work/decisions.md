@@ -192,3 +192,21 @@
 说明请求期读取本身可行——差异只在 `governor` 是新加的服务名，需确认包装 ctx 的 inject 列表确实生效。
 
 接线仍**已回退**（门红不留树）；`governor` 只在其自身门内被验证，尚未在 UI 路径生效。
+
+## D-027 T-234 根因与收口：`governor` 的自引用（2026-09-21T09:11:03Z）
+
+**根因（已定位并修复）**：`host/modules/governor.mjs` 的方法内部用 `ctx.governor.admit/release` **自引用**。
+当模块以"包装挂载"（探针/CLI 为了抓句柄都用这个模式）被挂时，包装的 ctx 里**没有** `governor` 注入 →
+请求期访问该属性会被 cordis 的 ctx 代理拒绝，报 `cannot get property "governor" without inject`（全路由 500）。
+修法：**本地句柄自引用**（`const handle = {...}`，方法内用 `handle.admit/release`，最后 `ctx.provide('governor', handle)`），
+不再经由 ctx 查自己。修后 `verify.sh webui` **11/11**、`verify.sh governor` **9/9**。
+
+**纪律（本轮三次踩坑的共同形状）**：模块**不要靠 `ctx.<自己>` 取自己**——包装挂载/多实例场景下 ctx 里未必有自己；
+一律用本地常量引用。这条适用于所有进树模块。
+
+**已完成**：`governor` 已接进 UI 的真实 HTTP 路径（`webui` 注入 `governor`，请求经 `governor.run` 包装），
+`cli.mjs webui` 动作挂载 `governor`（`--capacity`/`--timeout-ms` 可调），线上服务重启后三路由 200。
+
+**未完成（如实登记）**：**429/504 的 HTTP 映射尚未端到端断言**。我在检查器里加过一条"额度耗尽 → 429 + Retry-After"
+的断言，但它实测返回 200（未确证原因），按"不确证不写绿"的纪律**撤掉了该断言**，并把本条留在 D-027。
+语义层（背压/超时/有界重试）由 `verify.sh governor` 9/9 覆盖；缺的是"UI 路径上的 HTTP 状态码映射"这一层。

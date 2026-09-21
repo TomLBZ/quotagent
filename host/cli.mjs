@@ -107,6 +107,11 @@ const main = async () => {
     const { VIEW_RULES } = await import('./modules/projection.mjs')
     const ctx = new Context()
     await ctx.plugin(EventsService)
+    // 运行期准入（独立插件）先挂：webui 的 inject 依赖它
+    const { apply: governorApply, Config: governorConfig } = await import('./modules/governor.mjs')
+    await ctx.plugin({ name: 'governor', inject: [], Config: governorConfig,
+      apply: (inner, cfg) => governorApply(inner, cfg) },
+      governorConfig.parse({ capacity: Number(args.capacity ?? 64), timeout_ms: Number(args['timeout-ms'] ?? 5000) }))
     // 投影服务（独立插件）必须先挂：webui 的 inject 依赖它
     const { apply: projectionApply, Config: projectionConfig } = await import('./modules/projection.mjs')
     await ctx.plugin({

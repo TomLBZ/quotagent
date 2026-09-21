@@ -68,6 +68,14 @@ const STUBS = {
     },
     convert: (qty, factor) => ({ qty: Number(qty), factor: Number(factor), base: Number(qty) * Number(factor) }),
   },
+  governor: {
+    admit: () => ({ admitted: true, remaining: 1, capacity: 1 }),
+    release: () => ({ remaining: 1 }),
+    run: async ({ fn }) => ({ ok: true, attempts: 1, result: await fn({ aborted: false }) }),
+    stats: () => ({ admitted: 0, refused: 0, timeouts: 0, retries: 0, completed: 0, failed: 0, buckets: {} }),
+    setClock: () => {},
+    config: () => ({ capacity: 64, timeout_ms: 5000, max_retries: 0, retry_limit: 3, retry_backoff_ms: 50 }),
+  },
   canary: {
     // fixture 的 stub：只满足"能分桶、能记样本"；分流语义由 canary 模块自己的 fixture 与 canary 门验
     bucket: () => 'base',

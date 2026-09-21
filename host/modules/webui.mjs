@@ -15,11 +15,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection']   // 账本只读视图 + 视角投影服务（投影是独立插件）
+export const inject = ['ledgerView', 'projection', 'governor']   // + 运行期准入（governor 是独立插件）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection']
+export const usedServices = ['ledgerView', 'projection', 'governor']
 
 export const provides = ['webui']
 
@@ -62,9 +62,31 @@ export function apply(ctx, config) {
     return publicRows
   }
 
-  const server = createServer((req, res) => {
+  const governor = ctx.governor
+  const server = createServer(async (req, res) => {
     try {
-      return handle(req, res)
+      // 运行期准入（独立插件 governor）：背压 → 429 + Retry-After（**可解释**）；超时 → 504；其它 → 500。
+      // 默认配置（capacity 64 / timeout 5s）等价于直通，升级路径零影响。
+      const key = `webui:${String(req.url ?? '/').split('?')[0]}`
+      const routed = await governor.run({ key, fn: async () => handle(req, res) }).catch((err) => {
+        const code = err?.code
+        if (code === 'backpressure') {
+          res.writeHead(429, { 'content-type': 'application/json; charset=utf-8',
+            'retry-after': String(Math.ceil((err.detail?.retry_after_ms ?? 0) / 1000)) })
+          res.end(JSON.stringify({ error: 'backpressure', reason: err.detail?.reason,
+            retry_after_ms: err.detail?.retry_after_ms, next_action: err.detail?.next_action }) + '\n')
+        } else if (code === 'timeout') {
+          if (!res.headersSent) {
+            res.writeHead(504, { 'content-type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify({ error: 'timeout', detail: String(err.message).slice(0, 120) }) + '\n')
+          } else { res.end() }
+        } else if (!res.headersSent) {
+          res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
+          res.end(JSON.stringify({ error: 'internal-error', detail: String(err?.message).slice(0, 120) }) + '\n')
+        } else { res.end() }
+        return null
+      })
+      return routed === null ? undefined : routed?.result
     } catch (err) {
       // 服务不得被单个请求杀死（实测教训）：先尽量回 500，再自报日志
       console.error(`[webui] 请求处理失败 ${req.url}：${String(err).slice(0, 160)}`)

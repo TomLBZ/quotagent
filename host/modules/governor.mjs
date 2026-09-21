@@ -52,7 +52,7 @@ export function apply(ctx, config) {
     return buckets.get(key)
   }
 
-  ctx.provide('governor', {
+  const handle = {
     /** 准入：拿不到 credit 就拒绝，并说清"什么时候再来"（不是裸 false）。 */
     admit: ({ key = config.key, cost = 1 } = {}) => {
       const bucket = bucketOf(key)
@@ -84,7 +84,7 @@ export function apply(ctx, config) {
         throw new GovernorError('retry-limit-exceeded',
           `请求重试 ${retries} 次超过硬上界 ${config.retry_limit}（不许无界重试）`)
       }
-      const admission = ctx.governor.admit({ key })
+      const admission = handle.admit({ key })
       if (!admission.admitted) {
         const err = new GovernorError('backpressure', `额度耗尽（key=${key}）`, admission)
         err.detail = admission
@@ -107,7 +107,7 @@ export function apply(ctx, config) {
           })
           clearTimeout(timer)
           stats.completed += 1
-          ctx.governor.release({ key })
+          handle.release({ key })
           return { ok: true, attempts: attempt, result }
         } catch (err) {
           clearTimeout(timer)
@@ -115,12 +115,12 @@ export function apply(ctx, config) {
           if (err?.code === 'timeout') {
             stats.timeouts += 1
             if (attempt > allowed) {
-              ctx.governor.release({ key })
+              handle.release({ key })
               stats.failed += 1
               throw err                                    // 超时且重试用尽 → **显式**抛出
             }
           } else if (attempt > allowed) {
-            ctx.governor.release({ key })
+            handle.release({ key })
             stats.failed += 1
             throw err
           }
@@ -128,7 +128,7 @@ export function apply(ctx, config) {
           await sleep(config.retry_backoff_ms)
         }
       }
-      ctx.governor.release({ key })
+      handle.release({ key })
       throw lastError ?? new GovernorError('governor-unreachable', 'run 走到了不可达分支')
     },
     stats: () => ({ ...stats, buckets: Object.fromEntries([...buckets].map(([k, v]) => [k, v.credits])) }),
@@ -136,7 +136,8 @@ export function apply(ctx, config) {
     setClock: (impl, sleepImpl) => { clock = impl ?? (() => Date.now()); clock.__sleep = sleepImpl ?? null },
     config: () => ({ key: config.key, capacity: config.capacity, timeout_ms: config.timeout_ms,
       max_retries: config.max_retries, retry_limit: config.retry_limit, retry_backoff_ms: config.retry_backoff_ms }),
-  })
+  }
+  ctx.provide('governor', handle)
 }
 
 /** A5 采样点：只回配置与初始额度（不含时间/随机 → 字节可复现）。 */

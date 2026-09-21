@@ -15,6 +15,7 @@ import { Context, EventsService } from 'cordis'
 import { createServer as probeServer } from 'node:net'
 import { apply as webuiApply, Config as webuiConfig } from './modules/webui.mjs'
 import { Config as projectionConfig, apply as projectionApply, project, projectWithAudit, VIEW_RULES } from './modules/projection.mjs'
+import { Config as governorConfig, apply as governorApply } from './modules/governor.mjs'
 
 const facts = { checks: [] }
 let failures = 0
@@ -61,10 +62,22 @@ const projectionFiber = await ctx.plugin({
   },
 }, projectionConfig.parse({}))
 
+const governorMount = (name, sink) => ({
+  name, inject: [], Config: governorConfig,
+  apply: async (inner, config) => {
+    const original = inner.provide.bind(inner)
+    inner.provide = (service, value) => { if (service === 'governor') sink.handle = value; return original(service, value) }
+    await governorApply(inner, config)
+  },
+})
+const gbox = {}
+const gfiber = await ctx.plugin(governorMount('governor#probe', gbox),
+  governorConfig.parse({ capacity: 64, timeout_ms: 5000 }))
+
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -151,6 +164,7 @@ const brokenBox = {}
 const brokenCtx = new Context()
 await brokenCtx.plugin(EventsService)
 brokenCtx.provide('ledgerView', ledgerStub(BROKEN))
+await brokenCtx.plugin(governorMount('governor#broken', {}), governorConfig.parse({ capacity: 64, timeout_ms: 5000 }))
 // 投影服务也要提供（webui 的 inject 依赖它；fixture 里只验"坏数据不杀服务"，投影用真实插件）
 await brokenCtx.plugin({
   name: 'projection#broken',
@@ -160,7 +174,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection'],
+  inject: ['ledgerView', 'projection', 'governor'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -186,6 +200,7 @@ check('WebUI 负控：未知路径/视角返回 404 且带可用路径提示（�
 const port = box.handle.port
 await fiber.dispose()
 await projectionFiber.dispose()
+await gfiber.dispose()
 await new Promise((resolve) => setTimeout(resolve, 50))
 const freed = await new Promise((resolve) => {
   const probe = probeServer()

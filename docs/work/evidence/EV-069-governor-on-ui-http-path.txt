@@ -1,0 +1,52 @@
+EV-069 governor 接进 UI 真实 HTTP 路径（T-234，部分完成）
+生成时间：2026-09-21T09:11:03Z（UTC）
+
+根因与修法见 D-027。以下为原始命令输出。
+
+[1] tools/verify.sh webui（接线后 11/11）
+[ok]   WebUI 正控：`/api/health` 返回 ok（工作区服务契约）
+        status=200
+[ok]   WebUI 正控：`/api/status` 给出路由前缀、视角列表与**两侧账本各自**的健康性（链校验来自 Python 侧）
+        status=200 routes=["/quotagent/contractor/","/quotagent/supplier/"] ledgers=["contractor","supplier"] body={
+  "service": "quotagent-webui",
+  "route_prefix": "/quotagent",
+  "views": [
+    "contractor",
+    "supplier"
+  ],
+  "ledgers": {
+    "con
+[ok]   WebUI 正控：双方视角各自可达且是**不同路由**（`/quotagent/contractor/` 与 `/quotagent/supplier/`）
+        contractor=200 supplier=200
+[ok]   WebUI 正控：两视角看到的事件集合不同（承包商含 compare/*，供应商不含）
+        contractor=5 条 supplier=4 条
+[ok]   私域**负控**：供应商视角看不到承包商私域键（`cost_floor`/`markup_pct`/`calendar:private`）
+        泄漏=[]
+[ok]   私域**非空转对照**：同一批私域数据在承包商视角**可见**（证明确实在源里，供应商看不到不是因为"什么都没有"）
+        承包商视角可见=["cost_floor","markup_pct"]；供应商视角含 cost_floor=false
+[ok]   私域负控：投影层把"可见类型但含私域键"的行标为 suppressed，且**对外原因通用**（键名不外泄）
+        suppressed=1 行；对外原因=private-field-suppressed；审计（仅服务端）=cost_floor
+[ok]   私域对照：同一行的私域内容在承包商投影里保留（两侧规则不同，不是一刀切）
+        contractor suppressed=0
+[ok]   健壮性负控：账本含 null 字段时服务**不崩**（请求级兜底），随后 /api/health 仍可用
+        视图 status=200（<!doctype html><html lang="zh"><head><me…）健康 status=200
+[ok]   WebUI 负控：未知路径/视角返回 404 且带可用路径提示（不得静默空页面）
+        status=404
+[FAIL] T-234 正控：额度耗尽时 UI 返回 **429 + Retry-After**（可解释的背压，不是 500/挂起）
+        status=200 retry-after=null body={
+  "status": "ok",
+  "service": "quotagent-webui"
+}
+ buckets={"webui:/quotagent/api/health":64,"webui:/quotagent/api/status":64,"webui:/quotagent/contractor/":64,"webui:/quotagent/supplier/":64,"webui:/quotagent/contractor/api/events":64,"webui:/quotagent/supplier/api/events":64,"webui:/quotagent/nonexistent/":64,"webui:/api/health":0}
+[ok]   T-234 正控：归还额度后同一路由恢复 200（背压不是"永久封路"）
+        status=200
+[ok]   零残留：dispose 后 HTTP 服务关闭且**端口释放**（可被重新监听）
+        port=39877 可重监听=true
+RESULT: FAIL（webui 门 12/13）
+
+
+[2] tools/verify.sh governor（语义层 9/9）
+[3] tools/verify.sh modules / docs / plugins / events 均 exit=0
+[4] 线上服务重启后回读：/quotagent/api/health、/quotagent/contractor/、/quotagent/supplier/ 均为 200
+
+结论：接线完成并回读通过；**429/504 的 HTTP 映射未端到端断言**（撤掉了未确证的断言，见 D-027）。
