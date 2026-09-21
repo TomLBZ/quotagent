@@ -116,6 +116,7 @@
 
 | FR-UX-005 | tools/refresh-ui-snapshots.py、host/modules/pipeline-view.mjs | AC-UI-002 + AC-PIPELINE-001 | 直引 |
 
+
 ## 2. 插件归属
 
 | 插件 | 归属 FR/AC | 强度 |

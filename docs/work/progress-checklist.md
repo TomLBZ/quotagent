@@ -81,6 +81,13 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-261a | 三域面板的"演示种子"标注：运维手册补节 + D-054（真流程种真事件、演员可识别、幂等） | B61 | done | — |
 | T-262a | 业务双方视角：`/<view>/api/negotiation`、`/<view>/api/faq` + 页面区块 + 门断言（webui 25/25）+ D-055 | B63 | done | EV-097 |
 | T-263a | 有界与顺序补真数据门（7 条→5 条、seq 倒序、投影哨兵）+ D-056 口径 | B65 | done | EV-098 |
+| T-270 | dashboard 可见性缺陷：清单只在进程启动时读一次 → 按 mtime 重读 + 服务名可点链接（workspace 仓库 `5d00ab6`） | B66 | done | — |
+| T-266 | P3 需求与验收规格落库（`docs/work/plans/p3-spec.json`：41 FR + 42 AC 全文）+ 3 份规划文档 | B66 | done | EV-131 |
+| T-264 | 系统管理 UI：`/quotagent/admin/` 道 + token 提权 + 视角切换 + agent 进度/阻塞面板 | B67 | todo | D-059 |
+| T-265 | 阻塞解除闭环：宿主只落待处理提交 → Python 侧消费 → 账本 `admin/block-resolved` | B68 | todo | D-059 |
+| T-267 | 插件市场插件 + 用户空间插件全生命周期与隔离四件套 + 提权 | B69 | todo | D-060 |
+| T-268 | agent 运行期插件（上下文/记忆/harness，参考 deepseek harness） | B70 | todo | D-061 |
+| T-269 | 存储插件（文件管理 / 数据库，接口与隔离先行） | B70 | todo | D-061 |
 | T-263 | 三域视图**变异自证**：逐处偷改实现 → 对应门必须真变红（`verify.sh ui-mutate`，4/4 红且还原） | B65 | done | EV-098 |
 | T-262 | 快照写入器加**有界的最近列表**（谈判轮次 / FAQ 条目），供业务视角渲染 | B64 | done | EV-097 |
 | T-261 | UI 种子：`tools/ui-seed-pipeline.py` + `verify.sh ui-seed`（7/7）+ 接进 serve 启动流程 + 线上非 0 回读 | B62 | done | D-054 / EV-096 |

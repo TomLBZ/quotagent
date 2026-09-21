@@ -1,0 +1,29 @@
+EV-131 P3 新需求落库：41 FR + 42 AC 全文进规格文件 + 3 份规划文档
+
+[1] 用户提出的新需求（2026-09-21，逐条进规格）
+· 系统管理 UI（deployer/installer/admin）；任一侧 UI 输 token 提权；管理员 UI 可切到任一侧
+· 系统面板可见 agent 进度与**阻塞**（Jev 建议层缺 key、邮件缺 SMTP/IMAP 凭据）并可**在 UI 内解除**
+· 插件列表/市场本身是插件；agent 的上下文管理/记忆/harness 由插件提供（参考 deepseek harness）
+· 用户空间插件：agent panel 提需求 → 自动开发 → 自动进管理列表 → 重载/卸载/迭代/改进
+· 用户空间插件**独立 instance 与文件管理，防串用**；管理员可提权为系统级
+· 文件管理 / 数据库也由插件提供
+
+[2] 落库结果（本文件所在提交）
+· `docs/work/plans/p3-spec.json`（42792 B）：41 条 FR 与 42 条 AC **全文**（含每条建议的验证命令与证据文件名）
+· `docs/design/21-admin-console-contract.md`（9062 B）：admin 道契约、硬边界、被否决选项、未决项
+· `docs/design/22-plugin-market-and-user-space.md`（13691 B）：市场/用户空间插件/隔离四件套/提权流程
+· `docs/design/23-agent-runtime-and-storage-plugins.md`（10478 B）：上下文/记忆/harness + 文件/数据库插件
+
+[3] 落库过程中门抓到的两个真问题（都改成纪律）
+· **`.md` 草稿留在 `tmp/` 会拖红 `docs` 门**（门扫全仓含 tmp；实测 104 处未解析）→ D-058：
+  机器搬运的草稿用 `.md.txt`
+· **FR 落表必须关联 AC，而 AC 只有门与证据真实存在时才能落表** → 直接落表等于用指向空气的命令冒充已登记
+  → D-059：P3 全文先落规格 JSON，规划文档不写 ID 记号，**每实现一批迁一批进正式表**
+
+[4] 门（实跑）
+docs=0 · coverage=0 · plugins=0（撤回误加的 FR 行与矩阵缺口行后复绿；
+未改任何门、未放宽任何 AC）
+
+[5] 待做
+T-264（admin 道 + 提权 + 阻塞面板）→ T-265（解阻塞闭环）→ T-267（市场 + 用户空间插件）→
+T-268（agent 运行期插件）→ T-269（存储插件）。每条迁移时把对应 FR/AC 行落进正式表并补 EV。
