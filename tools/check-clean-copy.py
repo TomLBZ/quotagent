@@ -19,8 +19,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / 'tmp' / 'clean-copy'
 GATES = [('docs', ['docs']), ('cordis 冒烟', ['cordis']), ('事件门', ['events']),
-         ('进树模块 fixture', ['modules']), ('WebUI 门', ['webui']),
-         ('不变量门', ['invariants']), ('演化门', ['evolution']),
+         ('进树模块 fixture', ['modules']), ('插件清单门', ['plugins']), ('WebUI 门', ['webui']),
+         ('canary 门', ['canary']), ('不变量门', ['invariants']), ('演化门', ['evolution']),
          ('AC 注册表', ['ac-registry']), ('无 Node 下的 P0', ['p0-no-node'])]
 
 
@@ -45,7 +45,8 @@ def main(argv: list[str]) -> int:
 
     # 自足性前置断言：被 import 的宿主库层必须在副本里存在（正是历史缺陷点）
     required = ['host/lib/config.mjs', 'host/lib/schema.mjs', 'host/lib/frozen.mjs', 'host/lib/std-schema.mjs',
-                'host/lib/ledger-view.mjs', 'host/modules/webui.mjs', 'host/modules/index.mjs',
+                'host/lib/ledger-view.mjs', 'host/modules/webui.mjs', 'host/modules/index.mjs', 'host/modules/canary.mjs', 'host/canary.mjs',
+                'docs/design/adr/0016-self-evolution-artifact-surface.md', 'docs/design/adr/0017-canary-routing-and-auto-rollback.md',
                 'host/package-lock.json', 'src/quotagent/kernel/ledger.py']
     missing = [rel for rel in required if not (WORK / rel).exists()]
     print(f"[{'ok' if not missing else 'FAIL'}] 自足性：{len(required) - len(missing)}/{len(required)} 个必需文件在副本里"
