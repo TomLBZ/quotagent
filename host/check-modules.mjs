@@ -155,6 +155,14 @@ const STUBS = {
       degraded: true, omitted_views: 0, source: 'pipeline-view' }),
     headline: () => '（stub）',
   },
+  adminGuard: {
+    config: () => ({ token_env: 'QUOTAGENT_ADMIN_TOKEN', token_file: '' }),
+    needs: [],
+  },
+  adminView: {
+    config: () => ({ admin_snapshot: '' }),
+    needs: [],
+  },
   retentionView: {
     // fixture 的 stub：只满足"能聚合留存计划"；口径由 retention-view 自己的门验
     snapshot: () => ({ counts: {}, action_mix: [], pending_approvals: 0, refused: 0, oldest: [],

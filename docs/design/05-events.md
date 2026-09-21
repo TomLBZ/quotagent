@@ -120,6 +120,10 @@
 | `sync/suggestion-raised` | emit | ✔ | `ctx.sync` | 对非权威字段的本地修改转为建议（不外发，03 §4.3） |
 | `evidence/pack-exported` | emit | ✔ | `ctx.evidence` | 审计包（含 Merkle 根） |
 | `evidence/retention-archived` | `emit` | 到期归档动作落痕（T-252；判定器只管计划，落痕由执行方做） | 逐条取证；body 只出计数与哈希，**不得复活已销毁数据** |
+| `admin/block-pending` | `emit` | 阻塞进入待处理（宿主已收到用户在 UI 内提交的解决材料）——由 Python 侧写者落痕（T-265） | 逐条取证；**凭据正文与私钥一律不进账本** |
+| `admin/block-resolved` | `emit` | 阻塞已解除（带人工批准引用 `ap-NNNN`；body 只出 block_id/kind/resolution_sha256，**不含凭据正文**） | 逐条取证；**凭据正文与私钥一律不进账本** |
+| `admin/block-rejected` | `emit` | 阻塞解除被拒（人工门拒绝；同样不带凭据正文） | 逐条取证；**凭据正文与私钥一律不进账本** |
+| `admin/block-expired` | `emit` | 阻塞状态过期（只减权不增权，**不存在超时自动批准/自动解除**） | 逐条取证；**凭据正文与私钥一律不进账本** |
 | `evidence/retention-copy-purged` | `emit` | 派生副本销毁落痕（同上） | 同上；归档包一次成型，事后补写即自证篡改 |
 | `evolve/proposed` | serial | ✔ | `ctx.evolve` | 自进化提案（P3 阶段）；族内后续名称见 `07`，**登记时必须在本表逐条声明**（事件门机检：事件表有而本表无即红） |
 | `evolve/shadowed` | serial | ✔ | 影子 → 门 | 隔离 realm 挂提案后条目树（账本复制到新文件，含 `MetricDelta`） |

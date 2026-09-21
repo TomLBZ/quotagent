@@ -145,6 +145,15 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-PIPELINE-001 | P2 | 运维道可见 P2 新服务：`pipeline-view` 只组合不自算、降级优先、有界、确定性、零 I/O、不出正文与私域；`GET /api/pipeline` 200 且含谈判/FAQ/邮件三域，`transport.available=false`（本轮无发信能力只能这么报） | `tools/verify.sh pipeline-route` | 见 `evidence/EV-095` |
 | AC-UI-002 | P2 | 运维快照写入器（Python 侧）形状合规：两视角齐全、删不掉 `generated_at` 之外的时间键、无私域与正文、**只读账本（不新增行）**、同输入两次除 `generated_at` 外一致 | `qa ac AC-UI-002` | 见 `evidence/EV-095` |
 | AC-UI-003 | P2 | UI 演示种子（`tools/ui-seed-pipeline.py`）：用**真服务**种出三域事件且 `added>0`；**再跑幂等**（`added==0` 且账本逐字节不变）；快照里两视角三域计数**全部非 0**（面板不是空面板）；写入者一律 `human:ui-seed`/`agent:ui-seed`（不冒充业务主体） | `tools/verify.sh ui-seed` | 见 `evidence/EV-096` |
+| AC-ADMIN-001 | P2 | 第四道未提权不出内容：`/quotagent/admin/`、`/admin/api/blocks`、`/admin/api/session` 三路在无 token 且无会话时 401，body 逐字节等于固定体 `{"error":"unauthorized"}`（与未知子路径同形），响应里搜不到任何 block_id/计数/面板字段；同进程内三道行为不变（webui 回归绿） | `tools/verify.sh admin-route` | 见 `evidence/EV-132` |
+| AC-ADMIN-002 | P2 | 提权端点契约：`POST /quotagent/admin/api/elevate` 用正确 token → 200 且 `Set-Cookie` 为 `HttpOnly; SameSite=Strict; Path=/quotagent/admin` 的不透明随机 id（≥128 bit，非 token 派生）；响应体与页面里搜不到 token；提权前后账本零变化（宿主不写账本） | `tools/verify.sh admin-route` | 见 `evidence/EV-132` |
+| AC-ADMIN-003 | P2 | 切视角不改字段面：`GET /admin/api/switch?to=supplier` → 302 到 `/quotagent/supplier/`；已提权会话下 `/supplier/` 与 `/supplier/api/events` 的响应与同夹具**未提权**请求逐字节相同（管理员身份不得成为看到私域键的新路径） | `tools/verify.sh admin-route` | 见 `evidence/EV-132` |
+| AC-ADMIN-004 | P2 | 面板是真数据：阻塞清单由 Python 判定器从**真来源**（任务登记表 blocked 行 + 服务自述不可用原因）生成，至少 2 条且 kind 含 `plugin-request`（Jev 建议层）与 `credential`（邮件缺 SMTP/IMAP 凭据）；计数只读、标注口径来源、不得由列表长度推计数（D-056）；快照幂等且不含正文与私域键；源缺失/损坏 → 降级不崩不猜 | `tools/verify.sh ac AC-ADMIN-004` | 见 `evidence/EV-132` |
+| AC-ADMIN-006 | P2 | 状态机与唯一写者（Python 侧）：只接受 `blocked→pending→resolved/rejected/expired`；非法转移（跳过 pending、回退、自环等）全部拒绝且账本零新增；合法转移产出 `admin/block-*` 事件载荷且**必须带 `human:` 批准引用**（人工门不可绕过）；时钟推后任意时长结果字节不变（不存在超时自动批准） | `tools/verify.sh ac AC-ADMIN-006` | 见 `evidence/EV-132` |
+| AC-ADMIN-007 | P2 | 粒度与无暗门：会话过期后 `/admin/*` 回到统一拒绝体、切换失效，但已 resolved 的阻塞与账本不受影响；会话有效但写类提交不带 token → 401；把时钟推过任意时长 → 阻塞仍 blocked、账本无 resolved 行（源码级 + 行为双证「无超时即成功」分支） | `tools/verify.sh admin-route` | 见 `evidence/EV-132` |
+| AC-ADMIN-008 | P2 | 失败不泄露 + 有界退避：缺 token / 错 token / 会话过期 / 管理道未启用 / 冷却中 五类响应**逐字节相同**；日志尾部搜不到正确 token；连续失败 5 次进入冷却，冷却期内正确 token 也拒、冷却结束不自动提权、冷却不产生任何面板内容或提交写入 | `tools/verify.sh admin-route` | 见 `evidence/EV-132` |
+| AC-ADMIN-009 | P2 | 反例（机检）：①无 token 调提权端点 → 拒绝且无会话 cookie；②以「接近正确」的三种 token 提权 → 一律拒绝，响应体不含所提交 token、不含正确 token、无 oracle；③被拒后 `/admin/api/blocks` 仍 401 | `tools/verify.sh admin-route` | 见 `evidence/EV-132` |
+| AC-ADMIN-010 | P2 | token 存储与校验（服务端）：只从环境变量或 0600 文件读（0644 文件被拒 = file-insecure-mode；缺失 = 未启用）；先 sha256 归一再用恒定时间比较定长摘要（**源码级**断言无前缀/切片比较）；token 与其摘要（连前 8 位）在响应、快照、日志、页面四处均搜不到 | `tools/verify.sh admin-route` | 见 `evidence/EV-132` |
 
 ## 7. 证据制度
 

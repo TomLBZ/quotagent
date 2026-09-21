@@ -126,6 +126,21 @@ const e2e = async ({ weightBps, candidate }) => {
   const ctx = new Context()
   await ctx.plugin(EventsService)
   ctx.provide('ledgerView', ledgerStub)
+  // 系统管理两插件：e2e 里用真模块挂载（未配 token → admin 道保持未启用，行为与生产一致）
+  {
+    const { apply: avApply2, Config: avConfig2 } = await import('./modules/admin-view.mjs')
+    await ctx.plugin({
+      name: 'admin-view',   // 与提供者模块同名：wiring 门按 服务→提供者 映射查找（B2）
+      inject: [], Config: avConfig2,
+      apply: (inner, cfg) => avApply2(inner, { ...cfg, admin_snapshot: '' }),
+    })
+    const { apply: agApply2, Config: agConfig2 } = await import('./modules/admin-guard.mjs')
+    await ctx.plugin({
+      name: 'admin-guard',
+      inject: [], Config: agConfig2,
+      apply: (inner, cfg) => agApply2(inner, { ...cfg, token_env: 'QUOTAGENT_ADMIN_TOKEN', token_file: '' }),
+    })
+  }
   const cbox = {}
   const cfiber = await ctx.plugin({
     name: 'canary#e2e', inject: [], Config: canaryConfig,
@@ -207,7 +222,7 @@ const e2e = async ({ weightBps, candidate }) => {
     apply: (inner, cfg) => histApplyE2E(inner, cfg) }, histConfigE2E.parse({ key_field: 'supplier_id' }))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }

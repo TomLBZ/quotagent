@@ -237,3 +237,27 @@ ac-registry  approval-digest  audit-hook  breaker  breaker-route  bridge  bridge
   `verify.sh docs && <本批相关门>` → `git commit` → `git push` → **对新 HEAD 跑 `clean-copy`**。
 - `ui-mutate`：逐处偷改实现，验证对应门**真的会红**（自带防假变异）。性质类断言（有界/定序/投影/幂等/只读）
   写完必须跑一次它。
+
+### 系统管理道（admin，给 deployer / installer / admin）
+
+- 入口：`/quotagent/admin/`（公网同前缀）。**未提权一律 401 固定体 `{"error":"unauthorized"}`**，
+  与"未知子路径"同形（缺 token / 错 token / 未启用 / 会话过期 / 冷却中 五类不做区分，无 oracle）。
+- 提权：任意一道 UI（`/contractor/`、`/supplier/`）页面底部有**管理员 token 表单**，
+  或直接 `POST /quotagent/admin/api/elevate`（`token=<值>`，表单体）。成功后拿到
+  `qa_admin=<不透明 id>`（`HttpOnly; SameSite=Strict; Path=/quotagent/admin`，非 token 派生）。
+- 面板：`GET /quotagent/admin/api/blocks` → `{blocks, counts, progress, degraded, reason, next_action}`
+  ——阻塞与进度都来自 **Python 侧真源**（`.agents/state.json` 的阻塞/人工项 + 进度清单 + 三域快照的 transport 不可用）。
+  计数带 `counts.source` 口径说明；**源读不到就 `degraded=true`**，不会用"零阻塞"冒充健康。
+- 切视角：`GET /quotagent/admin/api/switch?to=<contractor|supplier|ops|admin>` → 302。
+  **切换只改导航与道可见性，不改变任何字段白名单**——管理员身份不是看到私域键的新路径。
+- **token 供给（唯一两条链，都不进仓库、不进 argv、不进日志）**：
+  1. 本机：`/workspace/config/quotagent-admin-token`（权限必须 **600**；本机已生成一个随机值，
+     可自行替换：`printf '%s\n' '<新值>' > /workspace/config/quotagent-admin-token && chmod 600 …`）；
+  2. 编排：环境变量 `QUOTAGENT_ADMIN_TOKEN`（由 `ws-gateway` 传进服务，服务再注入子进程环境）。
+  没配 = **未启用**（fail-closed），并且面板会把"管理员 token 未配置"本身当成一条阻塞显示。
+- 排障：提权一直 401 时，先看 `/workspace/logs/quotagent.log` 有没有
+  `忽略 …：权限 0o644 不是 600` 或 `读 token 失败`；权限不对会被**拒绝加载**（不是静默使用）。
+- **无暗门**：不存在"超时自动批准/自动解除"；会话过期只减权，已解除的阻塞与账本不受影响。
+
+### 门清单更新
+`tools/verify.sh help` 打印全部（从脚本自身解析，不再手写）。本轮新增 `admin-route`。

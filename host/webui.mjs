@@ -28,6 +28,8 @@ import { Config as scConfig3, apply as scApply3 } from './modules/supplier-score
 import { Config as apConfig3, apply as apApply3 } from './modules/approval-digest.mjs'
 import { Config as rvConfig3, apply as rvApply3 } from './modules/retention-view.mjs'
 import { Config as pvConfig3, apply as pvApply3 } from './modules/pipeline-view.mjs'
+import { Config as agConfig3, apply as agApply3 } from './modules/admin-guard.mjs'
+import { Config as avConfig3, apply as avApply3 } from './modules/admin-view.mjs'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -128,6 +130,8 @@ const mountObs = async (targetCtx) => {
   await wrap({ apply: apApply3, Config: apConfig3, inject: [] }, {}, 'approvalDigest', 'approvals')
   await wrap({ apply: rvApply3, Config: rvConfig3, inject: [] }, {}, 'retentionView', 'retention')
   await wrap({ apply: pvApply3, Config: pvConfig3, inject: [] }, {}, 'pipelineView', 'pipeline')
+  await wrap({ apply: avApply3, Config: avConfig3, inject: [] }, {}, 'adminView', 'admin-view')
+  await wrap({ apply: agApply3, Config: agConfig3, inject: [] }, { token_env: 'QUOTAGENT_ADMIN_TOKEN' }, 'adminGuard', 'admin-guard')
 }
 await mountObs(ctx)
 
@@ -166,7 +170,7 @@ writeFileSync(pipeFixture, JSON.stringify({
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -264,7 +268,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)

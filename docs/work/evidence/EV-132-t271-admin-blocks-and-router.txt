@@ -1,0 +1,261 @@
+EV-132 T-271/T-272 系统管理道：Python 判定器 + 宿主门卫/视图 + 围栅门与端到端
+
+[1] Python 侧（subagent 产出，父方实跑核验）
+· `src/quotagent/services/admin_blocks.py`（37461 B）：纯函数判定器 + 只读采集器（`now` 显式传入、不读墙钟）
+  真源：`.agents/state.json` 的 human_required/blocked + 进度清单 blocked 行 + 三域快照的 transport 不可用
+  真跑结果：9 条存活阻塞，kinds = credential / plugin-request / other；counts.blocked=9；
+  progress.done/todo = 90/17（与独立复算一致）
+· `tools/refresh-admin-snapshot.py`（6178 B）：原子写、缺源给全零形状、**不创建账本**、确定性
+· `src/quotagent/qa/checks_admin.py`：AC-ADMIN-004（15/15）与 AC-ADMIN-006（11/11）
+
+[2] 宿主侧（subagent 产出，父方实跑核验）
+· `host/modules/admin-guard.mjs`（16461 B）：token（sha256 归一 + 恒定时间比较）、不透明会话（192 bit）、
+  失败五类统一拒绝体、有界冷却（冷却内正确 token 也拒、结束不自动提权）、假时钟可注入
+· `host/modules/admin-view.mjs`（16984 B）：只读聚合 + 按键白名单投影 + 降级优先 + 有界 + 确定性
+
+[3] 原始输出（本次实跑）
+$ node host/t271-admin-gate.mjs
+(exit=0)
+ed\":9,\"rejected\":1,\"expired\":0,\"source\":\"ledger\"}"},{"name":"12 快照降级负控：10 类缺失/坏形状 → **不抛**、degraded:true + 有名 reason（闭合集合）+ next_action、全零且与正常输出**同键集**、headline 无数字；合法零计数**不**降级；没有任何一条降级被当成健康（「读不到」不得显示成「零阻塞」）；互操作：计数口径读 `counts.source`、进度口径读 `progress.caliber`（或由 `sources` 键名拼出）各读各的，进度里的声明型字段照常投影、嵌套对象与非法键名一律丢弃","ok":true,"detail":"10 类坏输入全部降级=true；合法零计数 → degraded=false counts={\"blocked\":0,\"pending\":0,\"resolved\":0,\"rejected\":0,\"expired\":0,\"source\":\"registry\"}；互操作（counts.source + progress.caliber）→ degraded=false counts.source=registry+facts progress={\"checklist_rows\":120,\"done\":41,\"todo\":7,\"phase\":\"P3 落地\",\"next_task\":\"T-272\",\"source\":\"progress-checklist+services\"}；无 source/caliber 时由 sources 键名拼标签 → mail+registry；降级原因闭合集合=9 个"},{"name":"13 有界负控：max_blocks=3 + 10 条 → 只列前 3 条、omitted_blocks=7；max_refs=1 → 每块只留 1 个 ref、omitted_refs 报数；max_blocks=0 → 不列任何块、omitted_blocks=10（计数一条不少，仍照抄 counts）","ok":true,"detail":"max_blocks=3 → 3 条（bound-1,bound-2,bound-3）omitted_blocks=7 omitted_refs=6；max_blocks=0 → 0 条 omitted_blocks=10；counts.blocked=10（照抄，不受有界影响）"},{"name":"14 确定性负控：同一实例两次 snapshot() **字节一致**、跨实例一致、冻结输入不抛错且结果一致、headline 两次一致（不读墙钟、不随机、不依赖输入顺序）","ok":true,"detail":"两次一致=true（663 字节）；跨实例一致=true；冻结输入一致=true；headline 两次一致=true"},{"name":"15 泄漏负控：私域/正文的**键名与键值**（含计数里的额外键、进度里的非法键名与非数字、嵌套对象 `sources`/`by_status`、控制字符）一个都不出现在输出里；被过滤的保留字段统一 `(redacted)`（干净字段照常可读）；块键/计数键/进度键都落在白名单内","ok":true,"detail":"泄漏=无；含 (redacted)=true；块 refs=[\"(redacted)\",\"(redacted)\",\"ref-ok-1\"]（干净 ref 照常可读）；progress={\"done\":1,\"phase\":\"phase-ok\",\"next_task\":\"(redacted)\",\"source\":\"registry\"}（手算 {\"done\":1,\"phase\":\"phase-ok\",\"next_task\":\"(redacted)\",\"source\":\"registry\"}）；counts 键集=blocked|expired|pending|rejected|resolved|source；块键集=block_id|kind|reason|refs|required_action|state"},{"name":"16 静态负控：两模块源码（剥注释后的可执行代码）零写文件/子进程/网络/事件/随机/定时器/账本调用（无写账本路径 = H1；连注释带数据都不出现账本一词）；guard 只读墙钟一次且仅用于默认时钟（可被 setClock 替换）；token 比较只有 sha256 + 恒定时间比较（没有字符串前缀/切片类比较）；扫描器**非空转**对照","ok":true,"detail":"guard 命中=无；view 命中=无；比较类写法命中=无；墙钟只在 2 行默认时钟定义里出现（每行都定义 clock）=true：let clock = () => Date.now() | setClock: (impl) => { clock = typeof impl === 'functio；全文件出现账本一词的文件=无；非空转对照命中 9/9 处=writeFileSync,spawn,ctx.events,setInterval(,Math.random,ledger,append(,Date.now,process.env"},{"name":"17 配置契约负控：两模块未知键/错误类型/非对象入参一律被拒（不得静默放行）；默认值逐条断言；max_blocks 越界夹取（1e9→1000 只列 1000、omitted 200；-5→0；NaN→默认 20；5.7→5）；failure_threshold 夹取（0→1：一次失败即冷却）","ok":true,"detail":"未知键/错类型/非对象：view=refused/refused/refused，guard=refused/refused/refused；默认 max_blocks=20 max_refs=4 max_bytes=256；1e9 → 1000 条 omitted=200；-5 → 0 条；NaN → 20 条；5.7 → 5 条；threshold=0 → 一次失败即 cooldown_active=true"},{"name":"18 token 四处不出现（宿主侧四搜）：stats/config/elevate/authorized/unauthorized/cookie/五类拒绝体全部串起来都搜不到 token，也搜不到它的 sha256 摘要（连前 8 位都没有）；本门自身输出里同样没有","ok":true,"detail":"搜索面 3034 字节；含 token=false；含 sha256=false；含摘要前 8 位=false；token 来源标签（允许、非派生）=env"}],"passed":18,"total":18,"failures":0}
+
+$ python3 tools/check-admin-route.py
+(exit=0)
+      "name": "③ 第四道未提权不出内容：/admin/ · /api/blocks · /api/session · /api/switch 与**未知子路径**五路一律 401 且 body 逐字节等于固定体（无区分字段、无面板内容）",
+      "ok": true,
+      "detail": "statuses=[401, 401, 401, 401, 401]；body 去重后 1 种=b'{\"error\":\"unauthorized\"}'（逐字节等于固定体=True）；可疑泄漏词=无"
+    },
+    {
+      "name": "④ 提权端点契约：正确 token（表单体）→ 200 + `Set-Cookie` 四件（HttpOnly/SameSite=Strict/Path=/quotagent/admin）且会话 id 不是 token 的派生；响应体与提权后的 HTML 页面里都搜不到 token",
+      "ok": true,
+      "detail": "status=200；Set-Cookie=qa_admin=1nmvCAJVVbRNNAcrLa6nCgbd4TRDR3DP; HttpOnly; SameSite=Strict; Path=/quotagent/admin；会话 id 长度=32（192 bit，非 token 派生=True）；页面 status=200；响应体=b'{\"elevated\":true,\"expires_at\":1789999733256}\\n'"
+    },
+    {
+      "name": "⑤ 带会话读阻塞面板：200 且含 blocks/counts/progress；≥2 条真阻塞且 kind 含 plugin-request 与 credential；每条含 block_id/kind/reason/required_action/refs；counts 键是状态白名单 + 口径来源（照抄快照声明值，不用列表长度冒充计数）",
+      "ok": true,
+      "detail": "status=200 blocks=3 kinds=['credential', 'plugin-request'] 块键=['block_id', 'kind', 'reason', 'refs', 'required_action', 'state']；counts={\"blocked\": 2, \"pending\": 1, \"resolved\": 3, \"rejected\": 0, \"expired\": 0, \"source\": \"registry+facts\"}；progress={\"blocked\": 2, \"done\": 41, \"todo\": 7, \"source\": \"registry\"}"
+    },
+    {
+      "name": "⑥ 切视角只做 302：带会话 `?to=supplier` → 302 到 /quotagent/supplier/；不带会话 → 401 固定体；非法 to → 401 固定体（白名单，不用 URL 拼路由）",
+      "ok": true,
+      "detail": "带会话 status=302 Location='/quotagent/supplier/'；无会话 status=401 body=b'{\"error\":\"unauthorized\"}'；非法 to status=401"
+    },
+    {
+      "name": "⑦ 反例（机检）：三种「接近正确」的非 admin token 与**无 token**一律 401 且 body 逐字节等于固定体、**没有任何 Set-Cookie**；响应里搜不到所提交的值、原 token 与其摘要",
+      "ok": true,
+      "detail": "变体 status/cookie 对={'合法长度错内容': (401, ''), '正确 token 的 sha256': (401, ''), '正确 token 去末字符': (401, '')}；无 token status=401 Set-Cookie=''；提交值回显=无"
+    },
+    {
+      "name": "⑧ 切视角不改字段面（AC-ADMIN-003）：已提权会话下 /quotagent/supplier/ 与 /quotagent/supplier/api/events 的响应体与**未提权**的同名请求**逐字节相同**；数据面（JSON）两条路径都不出私域键（管理员身份不是看到私域的新路径）",
+      "ok": true,
+      "detail": "/quotagent/supplier/ 200/200 逐字节相同=True；/quotagent/supplier/api/events 200/200 逐字节相同=True；数据面私域键命中=无"
+    },
+    {
+      "name": "⑨ 哨兵四搜：至今所有响应体（页面/JSON）里搜不到 admin token、也搜不到快照里的正文/私域哨兵（脏块的 body 值 / 私域键名与键值；`\"cost_floor\"` 按 JSON 键形搜——`/supplier/` 页面会以「我拒收这些键」的方式点名它们，那是既有行为不是数据泄漏）",
+      "ok": true,
+      "detail": "搜面 7871 字节；含 token=False；含哨兵=False；含 private:=False；含 JSON 键 cost_floor=False"
+    },
+    {
+      "name": "⑩ 失败不泄露 + 有界退避：连续失败达阈值进入冷却后，**正确 token 也拒**（仍 401 固定体、无 Set-Cookie）、已提权会话也拿不到面板内容（冷却不产生任何成功）",
+      "ok": true,
+      "detail": "冷却中正确 token → status=401 cookie='' body=b'{\"error\":\"unauthorized\"}'；冷却中带会话读面板 → status=401"
+    },
+    {
+      "name": "⑪ 回归：同前缀下既有三道未被弄坏（经代理的真 webui）/api/health 200、/api/ops 200、/contractor/ 200",
+      "ok": true,
+      "detail": "health=200 ops=200 contractor=200（真 webui 端口 49337）"
+    }
+  ],
+  "passed": 12,
+  "total": 12,
+  "failures": 0
+}
+
+$ tools/run.sh -m quotagent.qa ac AC-ADMIN-004
+(exit=0)
+,
+      "ok": true,
+      "detail": "bounded={'limit': 1, 'listed': 1, 'omitted': 5, 'truncated': True} counts={'blocked': 4, 'pending': 1, 'resolved': 1, 'rejected': 0, 'expired': 0}"
+    },
+    {
+      "name": "写入器：两次运行都退出 0、stdout 恰好一行 JSON（含 `out`），快照含全部契约键（反例：crash / 打多行 / 少 `degraded` → 红）",
+      "ok": true,
+      "detail": "rc=0/0 keys=['blocks', 'counts', 'counts_source', 'degraded', 'generated_at', 'next_action', 'progress', 'reason'] log={\"blocks\": 6, \"bytes\": 4693, \"counts\": {\"blocked\": 6, \"expired\": 0, \"pending\": 0, \"rejecte"
+    },
+    {
+      "name": "**宿主读取端不会降级**：快照带非空的 `counts_source` 与 `progress.source`（口径来源）——宿主 `host/modules/admin-view.mjs` 缺这两个键就判`snapshot-counts-source-missing`/`snapshot-progress-source-missing`，真实数据也会被显示成降级（反例：删掉口径来源键 → 面板降级 → 红）",
+      "ok": true,
+      "detail": "counts_source=admin_blocks.derive_blocks：6 条记录按 state 逐条计数；可读源=state,checklist,pipel… progress.source=进度数字只读：phase/next_task 取 .agents/state.json（任务登记表）…"
+    },
+    {
+      "name": "快照**幂等**：同输入两次运行除 `generated_at` 外**逐字节一致**；除该键外没有别的时间键；原子写不留 `.tmp` 残留（反例：列表顺序随字典走 / 先后写出两份不同文本 → 红）",
+      "ok": true,
+      "detail": "bytes=4693/4693 多余时间键=[] tmp=[]"
+    },
+    {
+      "name": "快照**不含私域键与私域值**：state.json 白名单外的 `private.reserve_price` 既不出现在快照文本里，也没有出现在任何 block 的字段里（只留 `redacted_fields` 计数）（反例：把整条状态对象 json.dumps 进快照 → 红）",
+      "ok": true,
+      "detail": "哨兵=未命中 redacted=[0, 0, 2, 2, 2, 2]"
+    },
+    {
+      "name": "**不创建账本**：写入器跑完后目标目录只有快照这一个文件（没有 `*.jsonl`、没有目录）；写入器源码无 `Ledger`/`ledger.append`（反例：顺手 `Ledger.append` 补一行 → 红）",
+      "ok": true,
+      "detail": "目录=['snapshot.json'] rc4=0"
+    },
+    {
+      "name": "缺源 → 降级（计数 0 + reason + next_action，不崩不猜）；**可读但确实零阻塞** → 计数 0 且 `degraded=false`：两态靠 `degraded` 与 `progress.sources` 逐源状态区分（反例：读不到时照样报 degraded=false → 把「读不到」写成「零阻塞」→ 红）",
+      "ok": true,
+      "detail": "全缺：degraded=True counts={'blocked': 0, 'pending': 0, 'resolved': 0, 'rejected': 0, 'expired': 0}；零阻塞：degraded=False counts={'blocked': 0, 'pending': 0, 'resolved': 0, 'rejected': 0, 'expired': 0}"
+    },
+    {
+      "name": "源**损坏**（state.json 半截 JSON）→ `degraded=true`、`reason` 点名该源与原因、`next_action` 给出修法，可读源的事实照报（不因为一个源坏了就把别的源也说成 0）；写入器在这种输入下照样写出完整降级形状（反例：抛异常 / 静默当空文件 → 红）",
+      "ok": true,
+      "detail": "sources={'state': 'corrupt', 'checklist': 'ok', 'pipeline': 'ok'} counts={'blocked': 2, 'pending': 0, 'resolved': 0, 'rejected': 0, 'expired': 0} rc3=0"
+    },
+    {
+      "name": "输入契约：`now` 必须显式给出且为合法 ISO（`None` 即拒、绝不回退墙钟），`records` 不是记录集合即拒（用法错误拒绝，不猜）（反例：`now=None` 时静默用墙钟 → 红）",
+      "ok": true,
+      "detail": "None→now 必须显式传入：本判定器不读墙钟（也不让时钟参与任何状态判定） bad_now→now 不是合法 ISO 时间: 'not-a-time'（Invalid is records=42→records 必须是记录的可迭代集合，收到 int"
+    }
+  ],
+  "evidence_refs": [
+    "EV-100"
+  ],
+  "command": "qa ac AC-ADMIN-004",
+  "phase": "P2",
+  "title": "admin 阻塞面板是真数据：判定器从真源（state.json / 进度清单 / 服务自述）生成，kind 覆盖 plugin-request+credential，计数独立可复算（D-056），快照幂等、缺源降级可分辨",
+  "first_failure": "",
+  "exit_code": 0
+}
+运行除 `generated_at` 外**逐字节一致**；除该键外没有别的时间键；原子写不留 `.tmp` 残留（反例：列表顺序随字典走 / 先后写出两份不同文本 → 红）
+  ok   快照**不含私域键与私域值**：state.json 白名单外的 `private.reserve_price` 既不出现在快照文本里，也没有出现在任何 block 的字段里（只留 `redacted_fields` 计数）（反例：把整条状态对象 json.dumps 进快照 → 红）
+  ok   **不创建账本**：写入器跑完后目标目录只有快照这一个文件（没有 `*.jsonl`、没有目录）；写入器源码无 `Ledger`/`ledger.append`（反例：顺手 `Ledger.append` 补一行 → 红）
+  ok   缺源 → 降级（计数 0 + reason + next_action，不崩不猜）；**可读但确实零阻塞** → 计数 0 且 `degraded=false`：两态靠 `degraded` 与 `progress.sources` 逐源状态区分（反例：读不到时照样报 degraded=false → 把「读不到」写成「零阻塞」→ 红）
+  ok   源**损坏**（state.json 半截 JSON）→ `degraded=true`、`reason` 点名该源与原因、`next_action` 给出修法，可读源的事实照报（不因为一个源坏了就把别的源也说成 0）；写入器在这种输入下照样写出完整降级形状（反例：抛异常 / 静默当空文件 → 红）
+  ok   输入契约：`now` 必须显式给出且为合法 ISO（`None` 即拒、绝不回退墙钟），`records` 不是记录集合即拒（用法错误拒绝，不猜）（反例：`now=None` 时静默用墙钟 → 红）
+
+$ tools/run.sh -m quotagent.qa ac AC-ADMIN-006
+(exit=0)
+缀': (False, '批准引用形状非法（须 ap-NNNN 或 human:*，不做修补）'), '乱码': (False, '批准引用形状非法（须 ap-NNNN 或 human:*，不做修补）')}"
+    },
+    {
+      "name": "零新增是**逐字节**的：被拒的每一次调用返回的 `records` 与传入记录 `render()` 完全一致，且 `next_action` 给出怎么重试（反例：返回「改了一半」的记录 → 红）",
+      "ok": true,
+      "detail": "len=6 一致性=[True, True, True, True, True, True]"
+    },
+    {
+      "name": "合法转移：`blocked→pending`（human:* 引用）→ 1 条新记录 + 1 条事件载荷；`pending→resolved`（ap-NNNN 引用）→ 事件类型 `admin/block-resolved`、body 含 `block_id/kind/from/to/approval_ref/resolution_sha256`、记录带 `history`（当前态视图里**替换**该条、位置不变；历史在记录里累积）（反例：跳过历史 / body 少字段 / 记录数凭空膨胀 → 红）",
+      "ok": true,
+      "detail": "events=['admin/block-pending', 'admin/block-resolved'] body=['approval_ref', 'block_id', 'from', 'kind', 'resolution_sha256', 'task', 'to']"
+    },
+    {
+      "name": "事件载荷**不含凭据正文/私域值**：body 只有 id/kind/状态/引用（+任务号与哈希），没有 `reason`/`required_action` 原文，哨兵搜不到；`resolution_sha256` 传非哈希（如凭据正文）即拒（反例：把提交件正文塞进 body → 红）",
+      "ok": true,
+      "detail": "body={'block_id': 'blk-checklist-0000', 'kind': 'credential', 'from': 'pending', 'to': 'resolved', 'approval_ref': 'ap-0007', 'task': 'T-259', 'resolution_sha256': 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'}"
+    },
+    {
+      "name": "终态之后无路可走：已 `resolved` 的 block 再转移（resolved→resolved）被拒且零新增（反例：终态可以再动 → 红）",
+      "ok": true,
+      "detail": "ok=False reason=非法转移 resolved→resolved；resolved 只允许 →（终态，无处可去）（AC-ADMIN-006："
+    },
+    {
+      "name": "`pending` 的三个出口都合法（resolved / rejected / expired 各落一条对应事件）（反例：只放行 resolved → 红）",
+      "ok": true,
+      "detail": "出口={'resolved': True, 'rejected': True, 'expired': True} 事件={'resolved': 'admin/block-resolved', 'rejected': 'admin/block-rejected', 'expired': 'admin/block-expired'}"
+    },
+    {
+      "name": "**没有「超时自动解除」这条通路**：把判定器的时钟推后 100 年，阻塞状态、计数、事件一律不变（`render()` 字节一致）——`now` 只被校验，不参与任何状态判定（反例：加一条按时间自动 resolved 的分支 → 红）",
+      "ok": true,
+      "detail": "NOW=2026-09-21T00:00:00Z LATER=2126-09-21T00:00:00Z counts={'blocked': 5, 'pending': 1, 'resolved': 0, 'rejected': 0, 'expired': 0} states=['blocked', 'pending']"
+    },
+    {
+      "name": "**本服务不写账本**（静态·文本，注释与字符串已剔除）：`services/admin_blocks.py` 的代码里没有账本写入口（`Ledger`/`kernel.ledger`）、没有写文件调用（`write_text`/`write_bytes`/`open(`/`mkdir`），也没有任何 `append(` —— 它只读源、只产出事件载荷（反例：此处出现 `Ledger.append` → 红）",
+      "ok": true,
+      "detail": "命中=无（已扫描代码 18026 字符 / 源 30060 字节）"
+    },
+    {
+      "name": "不读墙钟/不读环境变量（静态·AST）：外部导入只限 json/re/datetime/pathlib/typing/`__future__`（没有 os/time/shutil/subprocess/socket），没有 `now()/today()` 时钟调用与 `os.environ/getenv`（反例：import os + 读环境变量 → 红）",
+      "ok": true,
+      "detail": "imports=['__future__', 'datetime', 'json', 'pathlib', 're', 'typing'] 可疑调用=[]"
+    }
+  ],
+  "evidence_refs": [
+    "EV-101"
+  ],
+  "command": "qa ac AC-ADMIN-006",
+  "phase": "P2",
+  "title": "阻塞状态机（Python 侧唯一写者）：只允许 blocked→pending→resolved/rejected/expired，非法转移与缺人工批准引用一律拒且零新增，合法转移只产出事件载荷（本服务不写账本）",
+  "first_failure": "",
+  "exit_code": 0
+}
+（+任务号与哈希），没有 `reason`/`required_action` 原文，哨兵搜不到；`resolution_sha256` 传非哈希（如凭据正文）即拒（反例：把提交件正文塞进 body → 红）
+  ok   终态之后无路可走：已 `resolved` 的 block 再转移（resolved→resolved）被拒且零新增（反例：终态可以再动 → 红）
+  ok   `pending` 的三个出口都合法（resolved / rejected / expired 各落一条对应事件）（反例：只放行 resolved → 红）
+  ok   **没有「超时自动解除」这条通路**：把判定器的时钟推后 100 年，阻塞状态、计数、事件一律不变（`render()` 字节一致）——`now` 只被校验，不参与任何状态判定（反例：加一条按时间自动 resolved 的分支 → 红）
+  ok   **本服务不写账本**（静态·文本，注释与字符串已剔除）：`services/admin_blocks.py` 的代码里没有账本写入口（`Ledger`/`kernel.ledger`）、没有写文件调用（`write_text`/`write_bytes`/`open(`/`mkdir`），也没有任何 `append(` —— 它只读源、只产出事件载荷（反例：此处出现 `Ledger.append` → 红）
+  ok   不读墙钟/不读环境变量（静态·AST）：外部导入只限 json/re/datetime/pathlib/typing/`__future__`（没有 os/time/shutil/subprocess/socket），没有 `now()/today()` 时钟调用与 `os.environ/getenv`（反例：import os + 读环境变量 → 红）
+
+[4] 父方接线（T-273）
+· `host/modules/webui.mjs`：admin 路由（`/admin/`、`/admin/api/{session,elevate,blocks,switch}`）、
+  `send()` 支持额外响应头（Set-Cookie/Location）、回调式读体（不引入 async）、nav 加入口、
+  **三条业务视角页面都带提权表单**（FR-ADMIN-002：任一侧可提权）
+· `host/webui.mjs`（围栅门）挂载两插件 + inject 同步；`host/cli.mjs` 运行期挂载 + `--admin-snapshot`；
+  `host/canary-dispatch.mjs`（e2e）挂载；`host/profiles.mjs`（webui profile）登记；
+  `host/check-modules.mjs` STUBS +2；`tools/verify.sh` 新增 `admin-route` 门
+· 事件两侧登记：`admin/block-pending|resolved|rejected|expired`（`kernel/events.py` + `05-events.md`）
+
+[5] 如实说明
+· `AC-ADMIN-005`（UI 内解阻塞闭环：宿主只落待处理提交 → Python 消费 → 账本）**未实现**（T-265），故不落表
+· `AC-ADMIN-011`（admin 道变异自证）未做（T-273b）
+· 网关是否原样透传 `Set-Cookie` 未实测（网关层；公网提权路径待验）
+
+[6] 线上真回读（本地 + 公网，重启后）
+```
+=== ① 未提权（三路统一拒绝体）===
+/admin/                  → 401 | {"error":"unauthorized"}
+/admin/api/blocks        → 401 | {"error":"unauthorized"}
+/admin/api/session       → 401 | {"error":"unauthorized"}
+=== ② 提权（token 从 0600 文件读，值不打印）===
+elevate → 200
+set-cookie: qa_admin=<opaque>; HttpOnly; SameSite=Strict; Path=/quotagent/admin
+响应体含 token 次数: 0
+=== ③ 带会话：面板 / 切视角 / 页面 ===
+blocks → 200
+ degraded = False | counts = {"blocked": 9, "pending": 0, "resolved": 0, "rejected": 0, "expired": 0, "source": "admin_blocks.derive_blocks：9 条记录按 state 逐条计数；可读源=state,c
+ progress = {"checklist_rows": 113, "done": 93, "records_rejected": 0, "todo": 18, "phase": "P2-advisor-and-live-canary", "next_task": "T-264 系统管理 UI（admin 道 + token 提权 + 视
+  - credential | blk-checklist-0000 | 提供 SMTP/IMAP 凭据（服务端注入：环境变量或 0600 文件；凭据不得进 HTML/JS、快照、账本、日志四处）并在管理道 UI 
+  - credential | blk-pipeline-0000 | 配置 SMTP/IMAP 凭据后接入（服务自述的下一步；在管理道 UI 内提交后由 Python 侧消费，宿主不写账本）
+  - credential | blk-pipeline-0001 | 配置 SMTP/IMAP 凭据后接入（服务自述的下一步；在管理道 UI 内提交后由 Python 侧消费，宿主不写账本）
+  - other | blk-state-human-required-0000 | 人工确认 T-117 的处理方式（保留 / 解除）并在管理道 UI 内提交，提交由 Python 侧消费（判定器不替人决定）
+  - other | blk-state-human-required-0001 | 人工确认 V-002 的处理方式（保留 / 解除）并在管理道 UI 内提交，提交由 Python 侧消费（判定器不替人决定）
+  - plugin-request | blk-state-human-required-0002 | 把 Jev（advisor 建议层） 的 key 放进 /workspace/config.yaml 的 LLM 段（在管理道 UI 内提交
+  - credential | blk-state-human-required-0003 | 提供 SMTP/IMAP 凭据（服务端注入：环境变量或 0600 文件；凭据不得进 HTML/JS、快照、账本、日志四处）并在管理道 UI 
+  - plugin-request | blk-state-human-required-0004 | 人工确认插件隔离粒度（进程内独立 Context 是否够用）并把结论写进 docs/design，随后由 Python 侧消费该决定并落 a
+switch→supplier: 302 → http://127.0.0.1:8093/quotagent/supplier/
+switch→contractor: 302 → http://127.0.0.1:8093/quotagent/contractor/
+进度：阶段 <b>P2-advisor-and-live-canary</b>
+阻塞 <b>9</b>
+=== ④ 反例与公网 ===
+错 token 提权 → 401
+错 token 响应体 → {"error":"unauthorized"}（必须与 401 固定体逐字节相同）
+无凭证切视角 → 401
+公网 /admin/ → 401
+公网 /                → 200
+公网 /contractor/     → 200
+公网 /supplier/       → 200
+公网 /ops/            → 200
+公网 /api/health      → 200
+公网 /api/pipeline    → 200
+```
+结论：未提权三路 401 固定体；正确 token → 200 + HttpOnly 会话（token 不出现在响应体）；
+面板 `degraded=false`、`counts.blocked=9`（`plugin-request` = Jev key 与隔离粒度；`credential` = SMTP/IMAP；`other` = T-117/V-002 待人工）；
+进度 done=93 / todo=18；切视角 302 双向；错 token 与无凭证一律 401 同形；公网三道 + API 全 200。
+
+[7] 我自己的三个过失（都当场修，如实登记）
+1. `webui-serve.py` 里用了 `stat.S_IMODE` 却没 `import stat` → 读 token 抛 `NameError` →
+   服务按"未启用"**fail-closed**（行为正确，但功能没上）。日志里有一行 `读 token 失败…`
+   —— `py_compile` 抓不到这类错，只有真跑能发现。
+2. `host/canary-dispatch.mjs` 的 e2e 挂载块：我把注释放在对象字面量的**逗号前** →
+   注释吞掉后半行 → 语法错（`Unexpected token 'const'`）。
+3. `adminView.project()` 空参调用 → 插件判 `snapshot-not-an-object` → 面板恒降级。
+   本仓库的写法是**宿主模块把载荷交给插件**（`pipeline.snapshot(payload)`），
+   或用插件自己的 `snapshot()`（读它配置里的路径）。改为 `adminView.snapshot()` 后正常。

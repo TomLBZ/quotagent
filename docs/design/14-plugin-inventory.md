@@ -31,6 +31,8 @@
 | `host/modules/approval-digest.mjs` | 人工门**待批摘要**（总数/按动作/等待时长四桶/置信度分布/最久等待；只给计数与时长，不出正文）——**第六个自进化产出（subagent 生产）** | `approvalDigest` | `webui`（双方视角 `/api/approvals`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh approval-digest` 围栏 |
 | `host/modules/budget-guard.mjs` | 中间件：**窗口成本预算准入**（整数 µ 金额、窗口滚动、超预算拒绝可解释；`budget-exceeded`（等窗口有用）与 `cost-exceeds-budget`（等也没用）分开报）——**第七个自进化产出（subagent 生产）** | `budgetGuard` | `contractor-ops`（桥调用路径） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh budget-guard` + `budget-route` 围栏 |
 | `host/modules/retention-view.mjs` | 留存计划的**只读聚合视图**（计数/动作分布/待人工门/最久项/一行摘要；只组合不自算、不出正文与私域键、确定性、有界）——**第八个自进化产出（subagent 生产，T-254）** | `retentionView` | `webui`（运维视角 `/api/retention`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯 |
+| `host/modules/admin-guard.mjs` | 系统管理道的**门卫**：token 校验（sha256 归一 + 恒定时间比较）、不透明会话（≥128 bit，非 token 派生）、失败五类**统一拒绝体**（无 oracle）、连续失败有界冷却（冷却内正确 token 也拒、结束不自动提权）、可注入假时钟 —— **subagent 生产（T-272）** | `adminGuard` | `webui`（系统管理道） | 只改本文件 |
+| `host/modules/admin-view.mjs` | 系统管理面板的**只读聚合**：阻塞（来自 Python 侧真源）与进度；降级优先、有界、确定性、按键白名单投影、不出正文与私域键 —— **subagent 生产（T-272）** | `adminView` | `webui`（`/quotagent/admin/`） | 只改本文件 |
 | `host/modules/pipeline-view.mjs` | 三域运维快照的**只读聚合**（谈判/FAQ/邮件计数与最近事件；只组合不自算、降级优先、有界、确定性）——**第九个自进化产出（subagent 生产，T-260）** | `pipelineView` | `webui`（运维视角 `/api/pipeline`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯 |
 | `host/modules/webui.mjs` | 双方视角 WebUI（承包商/供应商两个路由；只读账本） | `webui` | `webui` | 只改本文件 + `host/lib/ledger-view.mjs`；接入见 `docs/work/deployment-manual.md` |
 
@@ -55,7 +57,7 @@
 | 层 | 归属 | 说明 |
 |---|---|---|
 | `src/quotagent/kernel/*.py` | 内核（账本唯一写入者、事件总线、插件宿主、QEP、交付） | 内核不可自改（ADR-0002）；`kernel.*` 冻结面 |
-| `src/quotagent/services/*.py` | 业务服务（measures/norm/rfq/intake/realm/approval/costmodel/pricing/commitments/deviation/compare/guard/evaldata/evalmetrics/scenarios/relay/sync/clarify/quotes/capacity/terms/change/export/retention/retention_exec/negotiation/faq/**mail**）——`negotiation.py`（谈判轮次与让步，T-256）、`faq.py`（澄清 FAQ 沉淀与复用，T-257）、`mail.py`（邮件集成无凭据部分，T-258，**发信待凭据**）——`retention.py`（留存与销毁判定器，T-252）当前只实现**判定**：其 AC-AUDIT-003 含"销毁生效后不可再读"，**执行侧未实现故该 AC 未标绿**，执行侧见清单 T-253 | 每个文件 = 一个功能单元；新增服务必须带 AC（`tools/verify.sh ac-registry`） |
+| `src/quotagent/services/*.py` | 业务服务（measures/norm/rfq/intake/realm/approval/costmodel/pricing/commitments/deviation/compare/guard/evaldata/evalmetrics/scenarios/relay/sync/clarify/quotes/capacity/terms/change/export/retention/retention_exec/negotiation/faq/**mail**/admin_blocks）——`negotiation.py`（谈判轮次与让步，T-256）、`faq.py`（澄清 FAQ 沉淀与复用，T-257）、`mail.py`（邮件集成无凭据部分，T-258，**发信待凭据**）——`retention.py`（留存与销毁判定器，T-252）当前只实现**判定**：其 AC-AUDIT-003 含"销毁生效后不可再读"，**执行侧未实现故该 AC 未标绿**，执行侧见清单 T-253 | 每个文件 = 一个功能单元；新增服务必须带 AC（`tools/verify.sh ac-registry`） |
 | `src/quotagent/qa/checks_*.py` | 各 AC 的断言实现 | 改导入清单后必须立刻跑 `tools/verify.sh ac-registry` |
 | `src/quotagent/g1side.py`、`src/quotagent/bridge.py` | 走查单侧进程 / 内核桥端点 | 见 `docs/work/deployment-manual.md` |
 

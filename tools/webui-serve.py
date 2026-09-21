@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import stat
 import os
 import shutil
 import socket
@@ -38,6 +39,54 @@ def refresh_pipeline_snapshot() -> None:
                   f"{(proc.stderr or b'').decode('utf-8', 'ignore')[-120:]}", file=sys.stderr, flush=True)
     except Exception as exc:  # noqa: BLE001
         print(f"[webui-serve] 三域快照刷新异常（不影响探活）：{exc}", file=sys.stderr, flush=True)
+
+
+def refresh_admin_snapshot() -> None:
+    """刷新系统管理快照（阻塞/进度）——与留存计划、三域快照同一模式的**钩子**。
+
+    真源：`.agents/state.json`（任务登记/阻塞/进度）+ `docs/work/progress-checklist.md`（任务行状态）
+    + `tmp/ui-shared/pipeline.json`（服务自述不可用，如邮件通道）。
+    **只读**这些输入、只写一个快照文件；判定在 `services/admin_blocks.py`（Python 管事实）。
+    """
+    script = ROOT / "tools" / "refresh-admin-snapshot.py"
+    if not script.exists():
+        return
+    try:
+        proc = subprocess.run([sys.executable, str(script),
+                               "--state", str(ROOT / ".agents" / "state.json"),
+                               "--checklist", str(ROOT / "docs" / "work" / "progress-checklist.md"),
+                               "--pipeline", str(ROOT / "tmp" / "ui-shared" / "pipeline.json"),
+                               "--out", str(ROOT / "tmp" / "ui-shared" / "admin.json")],
+                              capture_output=True, timeout=120, check=False)
+        if proc.returncode != 0:
+            print(f"[webui-serve] admin 快照刷新失败 rc={proc.returncode} "
+                  f"{(proc.stderr or b'').decode('utf-8', 'ignore')[-120:]}", file=sys.stderr, flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[webui-serve] admin 快照刷新异常（不影响探活）：{exc}", file=sys.stderr, flush=True)
+
+
+def admin_token() -> str:
+    """管理员 token 的**唯一**供给链（绝不落仓库、绝不打印）：
+
+    ① 环境变量 `QUOTAGENT_ADMIN_TOKEN`（容器/编排注入）；
+    ② 0600 文件 `config/quotagent-admin-token`（本机运维自己放，权限必须是 600）；
+    没配就是"未启用"——admin 道保持统一拒绝体，并且**面板会把这件事本身当成一条阻塞显示**。
+    """
+    env = os.environ.get("QUOTAGENT_ADMIN_TOKEN", "").strip()
+    if env:
+        return env
+    path = Path(os.environ.get("QUOTAGENT_ADMIN_TOKEN_FILE", str(ROOT.parent.parent / "config" / "quotagent-admin-token")))
+    try:
+        mode = stat.S_IMODE(path.stat().st_mode)
+        if mode != 0o600:
+            print(f"[webui-serve] 忽略 {path}：权限 {oct(mode)} 不是 600", file=sys.stderr, flush=True)
+            return ""
+        return path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ""
+    except Exception as exc:  # noqa: BLE001
+        print(f"[webui-serve] 读 token 失败（按未启用处理）：{exc}", file=sys.stderr, flush=True)
+        return ""
 
 
 def refresh_retention_plan() -> None:
@@ -73,6 +122,7 @@ def probe(port: int, path: str = HEALTH_PATH, timeout: float = 3.0) -> int:
     # 为什么需要它：清 `tmp/` 的任务会把计划文件带走，界面会长期停在 degraded。
     refresh_retention_plan()
     refresh_pipeline_snapshot()
+    refresh_admin_snapshot()
     try:
         with socket.create_connection(("127.0.0.1", int(port)), timeout=timeout) as sock:
             sock.sendall(f"GET {path} HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n".encode())
@@ -114,6 +164,7 @@ def main(argv: list[str]) -> int:
     # 不补这一下，界面会一直停在 degraded 直到下一次探活。
     refresh_retention_plan()
     refresh_pipeline_snapshot()
+    refresh_admin_snapshot()
     args = [node_bin(), str(ROOT / "host" / "cli.mjs"), "webui", "--profile", "webui", "--port", str(port),
             "--host", os.environ.get("QUOTAGENT_WEBUI_HOST", "127.0.0.1"),
             "--prefix", os.environ.get("QUOTAGENT_WEBUI_PREFIX", "/quotagent"),
@@ -124,8 +175,18 @@ def main(argv: list[str]) -> int:
             "--retention-plan", os.environ.get(
                 "QUOTAGENT_UI_RETENTION_PLAN", str(ROOT / "tmp" / "ui-shared" / "retention-plan.json")),
             "--pipeline-snapshot", os.environ.get(
-                "QUOTAGENT_UI_PIPELINE", str(ROOT / "tmp" / "ui-shared" / "pipeline.json"))]
-    os.execv(args[0], args)  # 不留中间进程（工作区服务模型要求脚本自身就是服务）
+                "QUOTAGENT_UI_PIPELINE", str(ROOT / "tmp" / "ui-shared" / "pipeline.json")),
+            "--admin-snapshot", os.environ.get(
+                "QUOTAGENT_UI_ADMIN", str(ROOT / "tmp" / "ui-shared" / "admin.json"))]
+    # 管理员 token：**进子进程环境变量，不进 argv**（argv 在 ps 里可见）
+    tok = admin_token()
+    env = dict(os.environ)
+    if tok:
+        env["QUOTAGENT_ADMIN_TOKEN"] = tok
+    else:
+        env.pop("QUOTAGENT_ADMIN_TOKEN", None)
+        print("[webui-serve] 未配置管理员 token：admin 道保持未启用（面板会把它当阻塞显示）", file=sys.stderr, flush=True)
+    os.execve(args[0], args, env)  # 不留中间进程（工作区服务模型要求脚本自身就是服务）
     return 0
 
 

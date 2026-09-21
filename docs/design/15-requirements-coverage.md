@@ -117,11 +117,23 @@
 | FR-UX-005 | tools/refresh-ui-snapshots.py、host/modules/pipeline-view.mjs | AC-UI-002 + AC-PIPELINE-001 | 直引 |
 
 
+| FR-ADMIN-001 | host/modules/admin-view.mjs | 见对应 AC | 直引 |
+| FR-ADMIN-002 | host/modules/admin-guard.mjs | 见对应 AC | 直引 |
+| FR-ADMIN-003 | host/modules/admin-view.mjs | 见对应 AC | 直引 |
+| FR-ADMIN-004 | src/quotagent/services/admin_blocks.py | 见对应 AC | 直引 |
+| FR-ADMIN-006 | src/quotagent/services/admin_blocks.py | 见对应 AC | 直引 |
+| FR-ADMIN-007 | host/modules/admin-guard.mjs | 见对应 AC | 直引 |
+| FR-ADMIN-008 | host/modules/admin-guard.mjs | 见对应 AC | 直引 |
+| FR-ADMIN-009 | host/modules/admin-guard.mjs | 见对应 AC | 直引 |
+| FR-ADMIN-010 | host/modules/admin-guard.mjs | 见对应 AC | 直引 |
+
 ## 2. 插件归属
 
 | 插件 | 归属 FR/AC | 强度 |
 |---|---|---|
 | approval-digest | FR-UX-001 | 部分 |
+| admin-guard | FR-ADMIN-002、FR-ADMIN-007、FR-ADMIN-008、FR-ADMIN-009、FR-ADMIN-010（T-272 subagent 产出） | 强 |
+| admin-view | FR-ADMIN-001、FR-ADMIN-003、FR-ADMIN-004（T-272 subagent 产出） | 强 |
 | audit-hook | FR-RUNTIME-003（本次登记） | 强 |
 | bridge-canary | FR-EVOLVE-005 | 部分 |
 | budget-guard | AC-RUNTIME-004（本次登记） | — |

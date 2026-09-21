@@ -83,6 +83,10 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-263a | 有界与顺序补真数据门（7 条→5 条、seq 倒序、投影哨兵）+ D-056 口径 | B65 | done | EV-098 |
 | T-270 | dashboard 可见性缺陷：清单只在进程启动时读一次 → 按 mtime 重读 + 服务名可点链接（workspace 仓库 `5d00ab6`） | B66 | done | — |
 | T-266 | P3 需求与验收规格落库（`docs/work/plans/p3-spec.json`：41 FR + 42 AC 全文）+ 3 份规划文档 | B66 | done | EV-131 |
+| T-271 | Python 侧 admin 阻塞/进度判定器 + 快照写入器 + 2 条 AC 机检（subagent 产出，父方实跑） | B67 | done | EV-132 |
+| T-272 | 宿主侧 admin 门卫/视图插件 + 围栅门 18/18 + 端到端 12/12（subagent 产出，父方实跑） | B67 | done | EV-132 |
+| T-273 | admin 道接入 webui（路由/提权表单/CLI/e2e/profile/stubs/verify.sh）+ 本批 FR/AC 落表 | B67 | done | EV-132 |
+| T-273b | admin 道变异自证（统一拒绝体/投影/状态机/比较写法四处偷改必红；落表待实现） | B68 | todo | — |
 | T-264 | 系统管理 UI：`/quotagent/admin/` 道 + token 提权 + 视角切换 + agent 进度/阻塞面板 | B67 | todo | D-059 |
 | T-265 | 阻塞解除闭环：宿主只落待处理提交 → Python 侧消费 → 账本 `admin/block-resolved` | B68 | todo | D-059 |
 | T-267 | 插件市场插件 + 用户空间插件全生命周期与隔离四件套 + 提权 | B69 | todo | D-060 |

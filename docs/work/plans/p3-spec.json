@@ -7,247 +7,288 @@
    "id": "FR-ADMIN-001",
    "requirement": "新增第四道 UI 道 `/quotagent/admin/`（系统管理），与 `/quotagent/contractor/`、`/quotagent/supplier/`、`/quotagent/ops/` 同前缀并列；该道在**未提权**时不得输出任何面板内容，只给与失败同形的一体化拒绝 | should",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": true
   },
   {
    "id": "FR-ADMIN-002",
    "requirement": "任意一道 UI（contractor / supplier / ops）都提供管理员 token 提权入口；token 只经当次表单请求体提交，**不回显、不写前端存储、不进 HTML/JS、不入账本、不出现在 URL 与日志** | should",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": true
   },
   {
    "id": "FR-ADMIN-003",
    "requirement": "提权后可**切换到任意一道** UI（含回切）；切换只改导航与道可见性，**不改变任何字段白名单**——管理员身份不得成为看到私域键的新路径 | should",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": true
   },
   {
    "id": "FR-ADMIN-004",
    "requirement": "系统管理面板**可见 agent 进度与阻塞**：阻塞项含 `block_id`/`kind`/`reason`/`required_action`/`refs`，至少覆盖插件需求（Jev 建议层 `advisor`）与邮件收发缺凭据两条真实阻塞；进度数字只做只读归纳并标注口径来源 | should",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": true
   },
   {
    "id": "FR-ADMIN-005",
    "requirement": "阻塞可**在 UI 内解除**（提交凭据 / 上传件 / 设置）：提交落为宿主侧「待处理提交」，由 Python 侧消费并落账完成 `resolved`；**提交瞬间宿主侧账本零新增**，宿主永不写账本 | should",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-ADMIN-006",
    "requirement": "阻塞状态机只允许 `blocked → pending → resolved / rejected / expired`，转移只能由 Python 侧写账本产生；宿主对状态**只读**，非法转移一律拒绝且不留部分效果 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": true
   },
   {
    "id": "FR-ADMIN-007",
    "requirement": "提权粒度写死两档：**会话级**只决定道可见性与切换，**请求级**决定一切写类提交（缺 token 即拒）；两档都**无超时自动批准/自动解除**，过期只减权不增权 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": true
   },
   {
    "id": "FR-ADMIN-008",
    "requirement": "提权失败一律**统一响应**（缺 token / 错 token / 过期会话 / 管理道未启用 四类同形），响应体不含 token 或其任何可逆派生；连续失败达阈值进入有界冷却，冷却期不产生任何成功 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": true
   },
   {
    "id": "FR-ADMIN-009",
    "requirement": "反例：无 token 不得提权；非 admin token 一律被拒且不泄露（无 oracle）；被拒后既拿不到面板内容，也不在宿主「待处理提交」目录留下任何文件 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": true
   },
   {
    "id": "FR-ADMIN-010",
    "requirement": "token 校验只在服务端：来源限于环境变量或 0600 文件，先 sha256 归一再用恒定时间比较（不因长度与首字符位置泄露）；token 不得出现在 HTML/JS 响应、快照文件、账本行与宿主日志四处 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（2 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（2 条）",
+   "landed": true
   },
   {
    "id": "FR-MARKET-001",
    "requirement": "**插件列表本身由插件提供**：新增 `host/modules/plugin-market.mjs`，`provides: ['pluginMarket']`，只读聚合三类真源（① `host/modules/*.mjs` 目录 ② `docs/design/14-plugin-inventory.md` 的登记行 ③ `user-space/<ns>/<plugin>/plugin.json` 清单），逐项给出 `source`（`human` / `evolve` / `user-space`）、`wired`（被哪些 profile 装配）与 `provides`；未装配项显式标 `unwired`，**不得隐藏**；列表为空必须报 `degraded`（与\"读不到\"可区分） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（2 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（2 条）",
+   "landed": false
   },
   {
    "id": "FR-MARKET-002",
    "requirement": "**市场目录与已装载项必须分开呈现**：尚未过门/尚未晋升的产物（影子目录、`user-space/<ns>/<plugin>/.shadow/`、未带 `approval_ref` 的提案产物）**不得**出现在\"可安装项\"里；市场中每一条\"可安装\"必须携带 `install_ref`（指向 ADR-0016 的 `promoteModule` 或用户空间装载路径），**无引用的安装项一律拒绝** | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-MARKET-003",
    "requirement": "三源**不一致即报不一致**：同一插件名在目录/清单/用户空间清单之间哈希、版本或装配状态不同时输出 `inconsistent:true` 与逐项差异；**不得取其一而静默** | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-MARKET-004",
    "requirement": "市场是**只读面**：不装载、不下载、不写文件、不启动子进程、不写账本；\"安装/提权\"只产出**指向既有门的引用**，市场自身不得落任何产物 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-MARKET-005",
    "requirement": "市场视图**有界且确定性**：条数上界、稳定排序（同输入同输出）、不含正文与私域键；超上界即截断并报 `truncated:true` 与被丢条数 | should",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-MARKET-006",
    "requirement": "市场**不可用时不得伪装**：真源不可读 → `degraded:true` + `reason` + `next_action`，**不得返回\"看起来健康的零插件清单\"**（零插件 ≠ 读不到，两种情形必须可区分） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-001",
    "requirement": "**自然语言 → 产插件 → 自动进列表**：用户在 agent panel 用自然语言描述需求，agent 产出用户空间插件；产出完成即**自动登记进用户空间管理列表**（无需人工搬运/手工注册动作）。登记真源 = `user-space/<ns>/<plugin>/plugin.json`，并落 `userplugin/created`（含 `source_prompt_digest` 与产物 `sha256`）；同哈希重复登记**幂等** | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-002",
    "requirement": "**写面只有 `user-space/<ns>/<plugin>/`**：写其它路径（`host/modules/`、`src/`、`tools/`、别人的 ns 目录、仓库外路径）一律拒绝（`user-space-outside-ns`），且**目标文件不得出现**；不得\"就近落盘\" | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（2 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（2 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-003",
    "requirement": "**自动重载**：产物或清单变化即触发**该插件**重载（不重启进程、不影响其它插件）；重载得到**新 instance**（新 fiber uid），**不迁移旧内存状态**（沿用 ADR-0015「生效即重启」语义） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-004",
    "requirement": "**自动卸载零残留**：卸载后订阅/定时器/文件句柄/服务注册全部回收，且**不影响**其它用户空间插件与平台插件的既有运行 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-005",
    "requirement": "**迭代/改进 = 新版本**：每次迭代产出版本号 + 内容哈希 + 上一版本引用（历史可查）；旧版本可**回滚**；回滚只撤自己拥有的内容（内容被他人改过即拒 `rollback-refused-modified`） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-006",
    "requirement": "**隔离四件套**：①独立 instance（独立 `Context`/fiber 与独立 effect 列表）②独立命名空间（服务键 `<ns>.<plugin>.<service>`，**不得注册或覆盖平台已占用的服务名**，尤其 `approval`/`ledger*`/`kernel.*`）③独立文件根（挂载期绑定 `user-space/<ns>/<plugin>/`，解析后越界即拒）④独立凭据作用域（只解析 `cred:<ns>/<plugin>:*`） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-007",
    "requirement": "**四类反例必须被结构性拒绝**（不是靠文档纪律）：①写别人目录 ②跨 instance 共享可变状态 ③未提权插件被他人加载 ④**无凭据时自称\"已连接\"**。四类均拒绝并留痕（`userplugin/refused`，带 `code` 与 `next_action`） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-008",
    "requirement": "**管理本身也是插件**：新增 `host/modules/user-plugin-manager.mjs`（`provides: ['userPluginManager']`，动作 `list`/`load`/`unload`/`reload`/`elevate-request`）；**管理面卸载后已装载插件照常运行**（新装载被拒且拒绝不伪装成功） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-009",
    "requirement": "**不耦合进平台**：用户空间插件不得改内核/服务层，**不得改 `host/modules/` 里已晋升产物**（D-053：已晋升产物不改，要新行为就加新插件），只能通过已在 `14-plugin-inventory.md` 登记的服务面 `inject` 消费平台能力；未登记服务名即拒 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-010",
    "requirement": "**提权**（管理员在系统 UI 把用户空间插件升为系统级供他人使用）：①人工门 `approval_ref`（无则拒）②过 ADR-0016 的五条 AND 门（对**影子产物真跑** fixture A1..A6）③影子哈希与清单哈希一致（不一致即 `elevate-tampered`）④写入面仍是 `host/modules/` ⑤落 `userplugin/elevated` + `evolve/promoted` 并在 `14-plugin-inventory.md` 补行 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-011",
    "requirement": "**两个方向都封死**：用户空间路径不得写 `host/modules/`（`makeModuleProposal` 的 target 指向 `user-space/...` → `artifact-outside-write-surface`），用户空间装载路径不得写 `host/modules/`（→ `user-space-outside-ns`）；任一方向能通过即视为不满足 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-USERPLUG-012",
    "requirement": "**未提权不可被他人加载**：跨 ns 加载未提权插件 → `user-plugin-not-elevated` 且目标未被载入（effects 仍为空）；提权后按普通进树插件被任意 profile 装配，并受 `wiring`/`modules`/`plugins` 三门的既有约束 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-STORAGE-001",
    "requirement": "**文件管理由插件提供**（`host/modules/file-store.mjs`，`provides: ['fileStore']`）：原子写（临时文件 + rename，与 FR-INTEG-001 同语义）、每文件返回 `sha256`、按 ns 分区根、路径穿越（`..`/绝对路径/符号链接逃逸）一律拒绝、半写文件不被读取 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-STORAGE-002",
    "requirement": "**数据库由插件提供**（`host/modules/db-store.mjs`，`provides: ['dbStore']`）：只暴露声明式接口（不接受 raw SQL/连接串形状的入参），schema/namespace 按 ns 隔离；**账本仍由 Python 独占写入**——数据库插件不得成为第二条事实写路径（H1） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-STORAGE-003",
    "requirement": "存储**可用性不得伪装**：无凭据/无后端时返回 `available:false` + `reason` + `next_action` 且账本零新增；**不得**返回 `connected:true`，也不得用\"看起来健康的空结果\"冒充已连接 | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-STORAGE-004",
    "requirement": "存储**跨 ns 隔离**：一个 ns 不得读写另一个 ns 的文件根或 schema/键；显式构造跨 ns 路径或键必须被拒（`storage-cross-ns`）且**未发生任何写入** | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-STORAGE-005",
    "requirement": "存储插件**不得删除账本行**（账本行永不销毁）；销毁派生副本只能走既有 `retention_exec` 门（FR-EVIDENCE-004），**不得新开销毁路径** | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-STORAGE-006",
    "requirement": "存储插件提供**只读观察面**（容量/计数/失败次数）供自进化 `observe` 使用：有界、确定性、不出正文与私域键 | should",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-AGENTRT-001",
    "requirement": "**上下文组装由插件提供**：新增 `host/modules/agent-context.mjs`（`provides: ['agentContext']`），按能力接缝三角实现（Definition 接口 + Provider 实现 + Consumer）；上下文来源**逐项声明**（账本投影 / 项目知识 / 策略 patch / 会话），产出可重建的输入集合 `inputs[]`（与 `06` §3 规则 4 同义），组装过程**零写账本**（H1） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-AGENTRT-002",
    "requirement": "**记忆由插件提供**且按 `06` §4 **四层分层**：`host/modules/agent-memory.mjs`（`provides: ['agentMemory']`）——①会话记忆进程内、随 fiber 卸载回收（**不落盘**）②项目记忆是账本的可重建投影（**不是数据库表**，丢缓存不丢事实）③策略记忆只能人写（agent 只能提案）④跨方共识只经协议（不得由本插件合并） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-AGENTRT-003",
    "requirement": "记忆写入**必须有 `citations`**：无引用不得进记忆；未确认内容只能以 `[假设]` 标记存在且**不进决策链**；**私域键与对方 realm 内容不进记忆**（跨 realm 不可见，INV-008 在宿主侧同样成立） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-AGENTRT-004",
    "requirement": "**harness 由插件提供且可独立演进**：`host/modules/agent-harness.mjs`（`provides: ['agentHarness']`）承载提示词前缀 / 工具面 / 输出契约 / 人工门接线；harness 插件**不得写账本**（H1）、**不得新增事件类型**（须先两侧登记，`verify.sh events`）、**不得绕过** `agent/tool-call-requested` 与 `agent/output-drafted` 两个拦截点（`05-events.md` §5） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-AGENTRT-005",
    "requirement": "三个插件必须**服务于自进化**：其只读统计（上下文体量、被截断次数、记忆命中/未命中、被拒输出比例、人工改写率）是 `observe(window)` 的**合法信号源**，且读取不改状态；但**门信号仍是真实 fixture**（`expected_effect.metric` 固定 `fixture:module`），**模型自评不得作为指标来源** | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-AGENTRT-006",
    "requirement": "**有界 + 显式降级**：上下文切片条数 / 记忆条目数 / 单条字节数上界必须声明；超界**截断并报截断**（不得静默丢）；无法组装时 `degraded:true` + `reason` + `next_action`，**空上下文不得报 `ok:true`**（\"确实没内容\"与\"没组装出来\"必须可区分） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   },
   {
    "id": "FR-AGENTRT-007",
    "requirement": "**各自独立装卸、卸载零残留**：三件插件可分别装载/卸载/重载；卸载后无订阅/定时器/文件句柄残留；**卸载记忆插件不丢事实**（项目记忆可从账本重建，逐字节一致） | must",
    "priority": "P2",
-   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）"
+   "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
+   "landed": false
   }
  ],
  "acceptance": [
@@ -257,7 +298,8 @@
    "assert": "第四道未提权不出内容：`/quotagent/admin/`、`/quotagent/admin/api/blocks`、`/quotagent/admin/api/session` 三路在无 token 且无会话时返回 401，body 逐字节等于固定体 `{\"error\":\"unauthorized\"}`（与未知子路径同形），响应里搜不到任何 `block_id`/计数/面板字段；同进程内 contractor / supplier / ops 三道行为不变（回归：`tools/verify.sh webui` 仍全绿）",
    "command": "tools/verify.sh admin-route`（需父方新建）",
    "evidence_draft": "见 `evidence/EV-099`",
-   "source_draft": "t264-fr-admin.md.txt"
+   "source_draft": "t264-fr-admin.md.txt",
+   "landed": true
   },
   {
    "id": "AC-ADMIN-002",
@@ -265,7 +307,8 @@
    "assert": "提权端点契约：`POST /quotagent/admin/api/elevate`（`application/x-www-form-urlencoded`，token 只在请求体，URL 与 cookie 里都没有它）用正确 token → 200 且 `Set-Cookie` 为 `HttpOnly; SameSite=Strict; Path=/quotagent/admin` 的不透明随机 id（≥128 bit，非 token 的任何派生）；响应体、页面 HTML/JS、`localStorage`/`sessionStorage` 三处哨兵搜不到 token；提权前后账本行数零变化（宿主不写账本）",
    "command": "tools/verify.sh admin-route`（需父方新建）",
    "evidence_draft": "见 `evidence/EV-099`",
-   "source_draft": "t264-fr-admin.md.txt"
+   "source_draft": "t264-fr-admin.md.txt",
+   "landed": true
   },
   {
    "id": "AC-ADMIN-003",
@@ -273,7 +316,8 @@
    "assert": "切视角不改字段面：`GET /quotagent/admin/api/switch?to=supplier` → 302 到 `/quotagent/supplier/`；已提权会话下 `/quotagent/supplier/` 与 `/quotagent/supplier/api/events` 的响应体，与同一夹具下**未提权**的同名请求**逐字节相同**；投影层私域键（`cost_floor` 等）两条路径都拒收（INV-008 不被管理员身份绕过）",
    "command": "tools/verify.sh admin-route`（需父方新建）",
    "evidence_draft": "见 `evidence/EV-099`",
-   "source_draft": "t264-fr-admin.md.txt"
+   "source_draft": "t264-fr-admin.md.txt",
+   "landed": true
   },
   {
    "id": "AC-ADMIN-004",
@@ -281,7 +325,8 @@
    "assert": "面板是真数据：`/quotagent/admin/api/blocks` 至少报出 2 条阻塞，`kind` 分别含 `plugin-request`（`advisor`／Jev 建议层）与 `credential`（邮件收发缺 SMTP/IMAP 凭据），每条含 `block_id/kind/reason/required_action/refs`；清单由 Python 判定器从**真来源**生成（任务登记表的 blocked 行 + 服务自述的不可用原因，如邮件通道 `available=false`），**不是手写常量表**；进度数字（按状态计数）只读、标注口径来源、不得由列表长度推计数（D-056）；快照写入幂等（同输入两次除 `generated_at` 外逐字节一致）；快照不含正文与私域键；快照缺失或损坏 → 面板降级（计数 0 + reason）不崩不猜",
    "command": "tools/verify.sh ac AC-ADMIN-004",
    "evidence_draft": "见 `evidence/EV-100`",
-   "source_draft": "t264-fr-admin.md.txt"
+   "source_draft": "t264-fr-admin.md.txt",
+   "landed": true
   },
   {
    "id": "AC-ADMIN-005",
@@ -289,7 +334,8 @@
    "assert": "UI 内解阻塞：带 token 的 `POST /quotagent/admin/api/blocks/<id>/resolve`（凭据字段 + 可选上传件）→ 200 且**宿主侧账本零新增**，宿主只在 `tmp/ui-shared/admin-submissions/` 落一条待处理项（block_id、会话引用、件 sha256、字节数）；响应与快照里搜不到凭据值；随后由 Python 侧消费（带人工批准引用 `ap-NNNN`）落一条 `admin/block-resolved`（body 含 block_id/kind/resolution_sha256/approval_ref，**不含凭据正文**）且快照中该 block 转 `resolved`；重复消费幂等",
    "command": "tools/verify.sh admin-route`（需父方新建）",
    "evidence_draft": "见 `evidence/EV-099`",
-   "source_draft": "t264-fr-admin.md.txt"
+   "source_draft": "t264-fr-admin.md.txt",
+   "landed": false
   },
   {
    "id": "AC-ADMIN-006",
@@ -297,7 +343,8 @@
    "assert": "状态机与唯一写者（Python 侧）：`services/admin_blocks.py` 只接受 `blocked→pending→resolved / rejected / expired`；非法转移（`resolved→blocked`、`blocked→resolved` 跳过 `pending`、`expired→pending`）全部拒绝且账本零新增；每次合法转移落一条账本事件且只由该服务产生；缺人工批准引用的解阻塞一律拒绝（人工门不可绕过）；宿主侧无写账本路径（H1 负控：屏蔽 Python 写者后状态不变、宿主不产生任何 `admin/*` 行）；`replay()` 可从账本重建当前状态",
    "command": "tools/verify.sh ac AC-ADMIN-006",
    "evidence_draft": "见 `evidence/EV-101`",
-   "source_draft": "t264-fr-admin.md.txt"
+   "source_draft": "t264-fr-admin.md.txt",
+   "landed": true
   },
   {
    "id": "AC-ADMIN-007",
@@ -305,7 +352,8 @@
    "assert": "粒度与无暗门：会话过期后 `/quotagent/admin/*` 回到统一拒绝体、切换失效，但**已 resolved 的阻塞与账本不受影响**；会话有效但写类提交不带 token → 401 且 inbox 零新增；把会话与时钟推过任意时长（含门内快进假时钟）→ 阻塞仍为 `blocked`、账本无任何 `resolved` 行（**不存在超时自动批准/自动解除**）；源码级断言与行为断言双证「无超时即成功」分支",
    "command": "tools/verify.sh admin-route`（需父方新建）",
    "evidence_draft": "见 `evidence/EV-099`",
-   "source_draft": "t264-fr-admin.md.txt"
+   "source_draft": "t264-fr-admin.md.txt",
+   "landed": true
   },
   {
    "id": "AC-ADMIN-008",
@@ -313,7 +361,8 @@
    "assert": "失败不泄露 + 有界退避：缺 token / 错 token / 过期会话 / 管理道未启用（token 文件缺失）四类响应**逐字节相同**（401 固定体，无区分字段）；日志尾部搜不到正确 token；连续失败达 5 次进入冷却，冷却期内**正确 token 也拒绝**、冷却结束不自动提权、冷却不产生任何面板内容或提交写入",
    "command": "tools/verify.sh admin-route`（需父方新建）",
    "evidence_draft": "见 `evidence/EV-099`",
-   "source_draft": "t264-fr-admin.md.txt"
+   "source_draft": "t264-fr-admin.md.txt",
+   "landed": true
   },
   {
    "id": "AC-ADMIN-009",
@@ -321,7 +370,8 @@
    "assert": "反例（机检）：①无 token 调提权端点 → 拒绝且无会话 cookie；②以非 admin token 提权（合法长度错误内容、正确 token 的 sha256 前缀、正确 token 去末字符三种）→ 一律拒绝，响应体不含所提交 token、不含正确 token、不含任何「接近正确」的提示（无 oracle）；③被拒后 `/quotagent/admin/api/blocks` 仍 401 且 `tmp/ui-shared/admin-submissions/` 文件数不变（零新增）",
    "command": "tools/verify.sh admin-route`（需父方新建）",
    "evidence_draft": "见 `evidence/EV-099`",
-   "source_draft": "t264-fr-admin.md.txt"
+   "source_draft": "t264-fr-admin.md.txt",
+   "landed": true
   },
   {
    "id": "AC-ADMIN-010",
@@ -329,7 +379,8 @@
    "assert": "token 存储与校验（服务端）：token 只从 `QUOTAGENT_ADMIN_TOKEN` 或 0600 文件读（文件缺失 = 未启用，仍返回统一拒绝体）；校验先 `sha256(token)` 归一再用 `crypto.timingSafeEqual` 比较定长 32 字节摘要（不因长度或首字符位置短路的源码级断言）；token 哨兵在 HTML/JS 响应体、快照文件、账本行、宿主日志四处均搜不到",
    "command": "tools/verify.sh admin-route`（需父方新建）",
    "evidence_draft": "见 `evidence/EV-099`",
-   "source_draft": "t264-fr-admin.md.txt"
+   "source_draft": "t264-fr-admin.md.txt",
+   "landed": true
   },
   {
    "id": "AC-ADMIN-011",
@@ -337,7 +388,8 @@
    "assert": "变异自证（D-057 纪律）：对 admin 道逐处偷改实现——①统一拒绝体改成分类错误 ②投影白名单改成透传 ③状态机转移放宽为任意 ④token 比较改前缀匹配——四处每一处都必须让对应门**真变红**并还原；变异脚本自带「锚点未命中或改了但字节没变 = 假变异即失败」的防伪检测",
    "command": "tools/verify.sh ui-mutate`（需父方扩展）",
    "evidence_draft": "见 `evidence/EV-102`",
-   "source_draft": "t264-fr-admin.md.txt"
+   "source_draft": "t264-fr-admin.md.txt",
+   "landed": false
   },
   {
    "id": "AC-AGENTRT-001",
@@ -345,7 +397,8 @@
    "assert": "`agentContext` 服务由插件提供；同一账本投影下组装两次 `inputs[]` **逐字节一致**（确定性）；`inputs[]` 每项都可被输入重建路径核对（**人为删一条引用 → 必须失败**）；组装过程账本行数零新增",
    "command": "tools/verify.sh agent-runtime`（**需父方新建**）+ `qa ac AC-AUDIT-002`（已存在，模型输入重建）",
    "evidence_draft": "见 `evidence/EV-127`（**父方创建**）",
-   "source_draft": "t265-fr-agent-runtime.md.txt"
+   "source_draft": "t265-fr-agent-runtime.md.txt",
+   "landed": false
   },
   {
    "id": "AC-AGENTRT-002",
@@ -353,7 +406,8 @@
    "assert": "四层分层各一条：①会话记忆卸载后为**零**，且磁盘上检索不到该内容（不落盘）②项目记忆删掉缓存后由账本重建且逐字节一致 ③策略记忆以 `agent:` 写入被拒、`human:` 通过 ④跨方共识不经本插件合并（对方内容跨 realm 取不到）",
    "command": "tools/verify.sh agent-runtime`（**需父方新建**）+ `tools/verify.sh invariants`（已存在）",
    "evidence_draft": "见 `evidence/EV-127`（**父方创建**）",
-   "source_draft": "t265-fr-agent-runtime.md.txt"
+   "source_draft": "t265-fr-agent-runtime.md.txt",
+   "landed": false
   },
   {
    "id": "AC-AGENTRT-003",
@@ -361,7 +415,8 @@
    "assert": "无 `citations` 的记忆写入 → 拒；`[假设]` 项**存在但不进决策链**（不出现在比价/RFQ 输入）；跨 realm 哨兵不进记忆；私域键不进记忆（`AC-TRUST-001` 的三处口径 + 记忆第四处）",
    "command": "tools/verify.sh agent-runtime`（**需父方新建**）+ `qa ac AC-TRUST-001`（已存在）",
    "evidence_draft": "见 `evidence/EV-128`（**父方创建**）",
-   "source_draft": "t265-fr-agent-runtime.md.txt"
+   "source_draft": "t265-fr-agent-runtime.md.txt",
+   "landed": false
   },
   {
    "id": "AC-AGENTRT-004",
@@ -369,7 +424,8 @@
    "assert": "harness 装载前后账本行数与事件类型集合**不变**；harness 试图写账本/`commit` 被拒；**负控**：构造一个无引用的模型输出 → 必须被 `agent/output-drafted` 拦下（\"绕过拦截点\"的路径不存在）；新增事件类型而不登记 → `verify.sh events` 红",
    "command": "tools/verify.sh events`（已存在，双向登记）+ `tools/verify.sh invariants`（已存在）+ `tools/verify.sh agent-runtime`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-128`（**父方创建**）",
-   "source_draft": "t265-fr-agent-runtime.md.txt"
+   "source_draft": "t265-fr-agent-runtime.md.txt",
+   "landed": false
   },
   {
    "id": "AC-AGENTRT-005",
@@ -377,7 +433,8 @@
    "assert": "五项只读统计可采且带依据事件（不补零）；`observe(window)` 读它不改它（读前后账本零新增）；门里的 `expected_effect.metric` 仍是 `fixture:module`，`model:self-assessment` 仍被拒 `effect-invalid`",
    "command": "tools/verify.sh agent-runtime`（**需父方新建**）+ `tools/verify.sh evolution`（已存在）+ `tools/verify.sh evolve-journal`（已存在）",
    "evidence_draft": "见 `evidence/EV-129`（**父方创建**）",
-   "source_draft": "t265-fr-agent-runtime.md.txt"
+   "source_draft": "t265-fr-agent-runtime.md.txt",
+   "landed": false
   },
   {
    "id": "AC-AGENTRT-006",
@@ -385,7 +442,8 @@
    "assert": "超上界 → `truncated:true` + **被丢条数**（不得静默丢）；组装不可用 → `degraded:true` + `reason` + `next_action`；**空上下文不得报 `ok:true`**（与\"确实无内容\"可区分，两者字段不同）",
    "command": "tools/verify.sh agent-runtime`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-129`（**父方创建**）",
-   "source_draft": "t265-fr-agent-runtime.md.txt"
+   "source_draft": "t265-fr-agent-runtime.md.txt",
+   "landed": false
   },
   {
    "id": "AC-AGENTRT-007",
@@ -393,7 +451,8 @@
    "assert": "三件插件各自卸载：每个卸载后 effects 归零、无定时器/句柄残留、另两件仍工作；**卸载记忆插件后项目记忆仍可重建**（事实不丢，与卸载前逐字节一致）",
    "command": "tools/verify.sh modules`（已存在 248/248，A1..A6 含零残留）+ `tools/verify.sh agent-runtime`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-130`（**父方创建**）",
-   "source_draft": "t265-fr-agent-runtime.md.txt"
+   "source_draft": "t265-fr-agent-runtime.md.txt",
+   "landed": false
   },
   {
    "id": "AC-MARKET-001",
@@ -401,7 +460,8 @@
    "assert": "`pluginMarket` 服务由插件提供且列表**非空**（空列表必须 `degraded`）；列表里的每个进树模块都带 `source`（`human`/`evolve`/`user-space`）与 `wired`（profile 名单，缺者显式 `unwired`）；卸载 `plugin-market` 后其它插件照常运行",
    "command": "tools/verify.sh plugin-market`（**需父方新建**）+ `tools/verify.sh plugins`（已存在，双向全覆盖）",
    "evidence_draft": "见 `evidence/EV-115`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-MARKET-002",
@@ -409,7 +469,8 @@
    "assert": "市场\"可安装项\"与已装载项**分开**；负控：把影子目录/未晋升产物放进可安装候选 → **不得出现**（或出现即 `install_ref` 为空并被拒）；每条可安装项带 `install_ref` 指向既有门；无引用的安装请求被拒且不落产物",
    "command": "tools/verify.sh plugin-market`（**需父方新建**）+ `tools/verify.sh evolution`（已存在，27 条含 7 条负控）",
    "evidence_draft": "见 `evidence/EV-115`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-MARKET-003",
@@ -417,7 +478,8 @@
    "assert": "三种不一致各造一次（目录有/清单无、清单有/目录无、用户空间清单哈希 ≠ 产物哈希）→ 输出 `inconsistent:true` + 逐项差异；**不得**取其一静默通过",
    "command": "tools/verify.sh plugin-market`（**需父方新建**）+ `tools/verify.sh plugins`（已存在）+ `tools/verify.sh coverage`（已存在）",
    "evidence_draft": "见 `evidence/EV-116`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-MARKET-004",
@@ -425,7 +487,8 @@
    "assert": "连读市场面前后：`host/modules/*.mjs` 与 `src/**/*.py` 逐字节与个数不变、无新文件、账本行数零新增、无子进程；四个 profile 的 `config_digest` 不变",
    "command": "tools/verify.sh clean-copy`（已存在）+ `tools/verify.sh invariants`（已存在）+ `tools/verify.sh evolve-module`（已存在，哈希追溯）",
    "evidence_draft": "见 `evidence/EV-116`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-MARKET-005",
@@ -433,7 +496,8 @@
    "assert": "同输入两次输出除时间键外逐字节一致；条数超上界即 `truncated:true` 且带被丢条数；正文与私域哨兵均不出现",
    "command": "tools/verify.sh plugin-market`（**需父方新建**）+ `tools/verify.sh webui`（已存在 21/21）",
    "evidence_draft": "见 `evidence/EV-117`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-MARKET-006",
@@ -441,7 +505,8 @@
    "assert": "真源不可读 → `degraded:true` + `reason` + `next_action`；**与\"真的零插件\"可区分**（前者的 `degraded=true`、后者 `degraded=false` 且列表为空）；两种情形都不得报 `ok:true` 掩盖",
    "command": "tools/verify.sh plugin-market`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-117`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-STORAGE-001",
@@ -449,7 +514,8 @@
    "assert": "写为临时文件 + rename（半写文件不被读取）；`..`/绝对路径/符号链接逃逸三例全部拒且**目标不存在**；返回的 `sha256` 与磁盘内容一致（改一字即不符）",
    "command": "tools/verify.sh storage`（**需父方新建**）+ `qa ac AC-INTEG-001`（已存在，原子写语义）",
    "evidence_draft": "见 `evidence/EV-124`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-STORAGE-002",
@@ -457,7 +523,8 @@
    "assert": "只暴露声明式接口（raw SQL 形状入参被拒）；存储写操作**不产生账本行**、不修改账本文件字节（H1 负控：写前后 `ledger.jsonl` 逐字节一致）；跨 ns schema 被拒",
    "command": "tools/verify.sh storage`（**需父方新建**）+ `tools/verify.sh invariants`（已存在）",
    "evidence_draft": "见 `evidence/EV-124`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-STORAGE-003",
@@ -465,7 +532,8 @@
    "assert": "无凭据/无后端 → `available:false` + `reason` + `next_action` 且账本零新增；**不得**返回 `connected:true`；\"真无数据\"与\"没连上\"必须可区分（`available` 字段不同）",
    "command": "tools/verify.sh storage`（**需父方新建**）+ `qa ac AC-MAIL-001`（已存在，同类\"不假装\"语义）",
    "evidence_draft": "见 `evidence/EV-125`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-STORAGE-004",
@@ -473,7 +541,8 @@
    "assert": "显式构造另一 ns 的文件路径与 schema/键 → 一律 `storage-cross-ns`，**且哨兵文件/键在磁盘与后端都不存在**（只断言返回错误不算通过）",
    "command": "tools/verify.sh storage`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-125`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-STORAGE-005",
@@ -481,7 +550,8 @@
    "assert": "存储插件的删除接口对账本目标**无效果且被拒**；销毁派生副本只能经 `retention_exec`，绕门的销毁请求被拒且目标仍在",
    "command": "qa ac AC-AUDIT-003`（已存在）+ `qa ac AC-AUDIT-005`（已存在）+ `tools/verify.sh storage`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-126`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-STORAGE-006",
@@ -489,7 +559,8 @@
    "assert": "只读观察面（容量/计数/失败次数）可采且带依据、有界、确定性、不含正文与私域哨兵；读它不改任何状态（读前后账本与磁盘零变化）",
    "command": "tools/verify.sh storage`（**需父方新建**）+ `tools/verify.sh webui`（已存在 21/21）",
    "evidence_draft": "见 `evidence/EV-126`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-001",
@@ -497,7 +568,8 @@
    "assert": "给定一段自然语言描述，产出 `user-space/<ns>/<plugin>/plugin.json` 且**在无人工搬运步骤**下出现在管理列表（list 命中）；落 `userplugin/created`（含 `source_prompt_digest` + 产物 `sha256`）；同哈希重复登记**幂等**（不产生第二条 `created`）；清单缺字段即 `manifest-invalid` 且不登记",
    "command": "tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh events`（已存在，事件两侧登记）",
    "evidence_draft": "见 `evidence/EV-118`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-002",
@@ -505,7 +577,8 @@
    "assert": "写面负控四例：target 指向 `host/modules/`、`src/`、`user-space/<other-ns>/`、仓库外路径 → 全部 `user-space-outside-ns`；**且四个目标位置事后都不存在该文件**（只断言\"抛错\"不算通过）",
    "command": "tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh invariants`（已存在）",
    "evidence_draft": "见 `evidence/EV-118`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-003",
@@ -513,7 +586,8 @@
    "assert": "改某插件产物 → 只有该插件重启：其 fiber uid 变化、**其它插件 uid 与配置摘要不变**、进程 pid 不变；重启后旧内存状态**不迁移**（断言草稿为空，而不是旧值）",
    "command": "tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh modules`（已存在，A1..A6 含 uid/零残留）",
    "evidence_draft": "见 `evidence/EV-119`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-004",
@@ -521,7 +595,8 @@
    "assert": "unload 后 effects 归零、订阅不再收到事件、定时器停止触发、文件句柄关闭；**其它插件**（同 ns 与平台插件）的 effect 计数与行为逐项不变",
    "command": "tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh modules`（已存在 248/248）",
    "evidence_draft": "见 `evidence/EV-119`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-005",
@@ -529,7 +604,8 @@
    "assert": "v2 产出后历史含 v1（版本号 + 哈希 + 父引用，可查）；回滚到 v1 成功且**只撤自有内容**；把产物改一字再回滚 → `rollback-refused-modified` 且文件仍在（两个方向都断言）",
    "command": "tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh evolution`（已存在，回滚负控）",
    "evidence_draft": "见 `evidence/EV-120`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-006",
@@ -537,7 +613,8 @@
    "assert": "隔离四件套各一条：①两个 ns 的同名插件 instance uid 不同且可分别卸载（互不影响）②服务键命名空间化，且**注册平台保留名（`approval`）被拒**③文件根绑定后 `../` 与符号链接越界均被拒 ④凭据只解析本 ns 前缀（借别人的 `cred:` 前缀被拒）",
    "command": "tools/verify.sh user-space`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-120`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-007",
@@ -545,7 +622,8 @@
    "assert": "**四条反例全拒且留痕**：①写别人目录 ②跨 instance 共享可变状态（A 实例写、B 实例读到 → 必须读不到，即无共享）③未提权插件被他人加载 ④**无凭据时装已连接**（返回 `connected:true` 即失败，必须 `available:false` + `reason` + `next_action`）；四条各给出拒绝码 + `next_action`，且落 `userplugin/refused`",
    "command": "tools/verify.sh user-space`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-121`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-008",
@@ -553,7 +631,8 @@
    "assert": "`user-plugin-manager` 可装卸；装载后 `list/load/unload/reload` 可用；**卸载管理面后**已装载插件仍在跑（事件仍派发、列表快照仍可读），但新装载被拒且拒绝**不伪装成功**（不得返回 `ok:true`）",
    "command": "tools/verify.sh user-space`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-121`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-009",
@@ -561,7 +640,8 @@
    "assert": "装载/卸载若干用户空间插件前后：`host/modules/*.mjs`（含已晋升产物）与 `src/**/*.py` 逐字节不变；账本新增事件类型**只在 `userplugin/*` 白名单内**；用户插件 `inject` 未登记服务名即拒",
    "command": "tools/verify.sh evolve-module`（已存在，追溯）+ `tools/verify.sh wiring`（已存在）+ `tools/verify.sh clean-copy`（已存在）",
    "evidence_draft": "见 `evidence/EV-122`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-010",
@@ -569,7 +649,8 @@
    "assert": "提权全链三负一正：无 `approval_ref` → `elevate-needs-approval`；门未过（坏产物 inject 写内建 mixin，影子 fixture 真红）→ `elevate-gate-failed`；影子哈希 ≠ 清单哈希 → `elevate-tampered`；三者齐备 → 产物写入 `host/modules/<name>.mjs` 且落 `userplugin/elevated` + `evolve/promoted`；随后 `plugins`/`coverage` 因缺登记行**必须变红**（不补行不算完）",
    "command": "tools/verify.sh evolution`（已存在）+ `tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh plugins`（已存在）",
    "evidence_draft": "见 `evidence/EV-122`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-011",
@@ -577,7 +658,8 @@
    "assert": "跨 ns 加载**未提权**插件 → `user-plugin-not-elevated` 且目标未被载入（effects 仍为空）；同一插件提权后按进树插件被 profile 装配成功并过 `wiring`/`modules`/`plugins`",
    "command": "tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh wiring`（已存在）+ `tools/verify.sh modules`（已存在）",
    "evidence_draft": "见 `evidence/EV-123`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   },
   {
    "id": "AC-USERPLUG-012",
@@ -585,7 +667,8 @@
    "assert": "两个方向都封死：①`makeModuleProposal` 的 target = `user-space/<ns>/<plugin>/` → `artifact-outside-write-surface`；②用户空间装载路径的 target = `host/modules/` → `user-space-outside-ns`；任一方向能通过即失败（\"卡住一个方向\"不算隔离）",
    "command": "tools/verify.sh evolution`（已存在）+ `tools/verify.sh user-space`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-123`（**父方创建**）",
-   "source_draft": "t265-fr-plugins.md.txt"
+   "source_draft": "t265-fr-plugins.md.txt",
+   "landed": false
   }
  ]
 }

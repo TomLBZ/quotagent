@@ -155,6 +155,12 @@ const main = async () => {
     await ctx.plugin({ name: 'circuit-breaker', inject: [], Config: brConfig2,
       apply: (inner, cfg) => brApply2(inner, cfg) }, brConfig2.parse({}))
     // 三域运维快照视图（subagent 产出，T-260）
+    const { apply: avApply, Config: avConfig } = await import('./modules/admin-view.mjs')
+    await ctx.plugin({ name: 'admin-view', inject: [], Config: avConfig,
+      apply: (inner, config) => avApply(inner, { ...config, admin_snapshot: String(args['admin-snapshot'] ?? process.env.QUOTAGENT_UI_ADMIN ?? '') }) })
+    const { apply: agApply, Config: agConfig } = await import('./modules/admin-guard.mjs')
+    await ctx.plugin({ name: 'admin-guard', inject: [], Config: agConfig,
+      apply: (inner, config) => agApply(inner, { ...config, token_env: 'QUOTAGENT_ADMIN_TOKEN', token_file: String(args['admin-token-file'] ?? '') }) })
     const { apply: pvApply, Config: pvConfig } = await import('./modules/pipeline-view.mjs')
     await ctx.plugin({ name: 'pipeline-view', inject: [], Config: pvConfig,
       apply: (inner, cfg) => pvApply(inner, cfg) }, pvConfig.parse({}))
@@ -187,7 +193,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -201,6 +207,7 @@ const main = async () => {
       // 留存计划的**绝对路径**（生产 cwd≠仓库根）：由 webui-serve 传入；缺失时路由降级
       retention_plan: String(args['retention-plan'] ?? process.env.QUOTAGENT_UI_RETENTION_PLAN ?? ''),
       pipeline_snapshot: String(args['pipeline-snapshot'] ?? process.env.QUOTAGENT_UI_PIPELINE ?? ''),
+      admin_snapshot: String(args['admin-snapshot'] ?? process.env.QUOTAGENT_UI_ADMIN ?? ''),
       views: String(args.views ?? 'contractor,supplier').split(',').map((item) => item.trim()).filter(Boolean),
       ledger_contractor: contractorLedger,
       ledger_supplier: String(args['ledger-supplier'] ?? ''),
@@ -220,6 +227,7 @@ const main = async () => {
            approval_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/approvals`),
            retention_route: `${String(args.prefix ?? '/quotagent')}/api/retention`,
            pipeline_route: `${String(args.prefix ?? '/quotagent')}/api/pipeline`,
+           admin_route: `${String(args.prefix ?? '/quotagent')}/admin/`,
            view_domain_routes: ['contractor', 'supplier'].flatMap((v) => [`${String(args.prefix ?? '/quotagent')}/${v}/api/negotiation`,
              `${String(args.prefix ?? '/quotagent')}/${v}/api/faq`]),
            observability: obox.handle ? obox.handle.summary() : null,

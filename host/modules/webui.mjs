@@ -17,11 +17,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView']   // 每个都是独立插件（准入 / 观测 / 视图）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView']
 
 export const provides = ['webui']
 
@@ -37,6 +37,7 @@ export const Config = object({
   ledger_evolve: string().default(''),   // 自进化账本（运维视角读它的**归纳**，不出正文）
   retention_plan: string().default(''),  // 留存计划的**绝对路径**（生产 cwd≠仓库根，相对路径会读不到）
   pipeline_snapshot: string().default(''),  // 三域快照的**绝对路径**（同上）
+  admin_snapshot: string().default(''),     // 系统管理快照（阻塞/进度）的**绝对路径**（同上）
 })
 
 const html = (title, body, prefix) => `<!doctype html><html lang="zh"><head><meta charset="utf-8">
@@ -45,7 +46,7 @@ code{background:#f3f3f3;padding:.1em .3em;border-radius:3px}table{border-collaps
 td,th{border:1px solid #ddd;padding:.35rem .5rem;text-align:left;font-size:13px}
 nav a{margin-right:1rem}</style></head><body><nav>
 <a href="${prefix}/">总览</a><a href="${prefix}/contractor/">承包商视角</a><a href="${prefix}/supplier/">供应商视角</a>
-<a href="${prefix}/api/status">/api/status</a><a href="${prefix}/api/health">/api/health</a>
+<a href="${prefix}/admin/">系统管理</a><a href="${prefix}/api/status">/api/status</a><a href="${prefix}/api/health">/api/health</a>
 </nav><h1>${title}</h1>${body}</body></html>`
 
 export function apply(ctx, config) {
@@ -97,6 +98,8 @@ export function apply(ctx, config) {
   const approvals = ctx.approvalDigest      // 人工门待批摘要（subagent 产出，T-250）
   const retention = ctx.retentionView       // 留存计划的只读聚合（subagent 产出，T-254）
   const pipeline = ctx.pipelineView         // 三域运维快照的只读聚合（subagent 产出，T-260）
+  const adminGuard = ctx.adminGuard         // 管理员 token / 会话 / 冷却（subagent 产出，T-272）
+  const adminView = ctx.adminView           // 系统管理快照的只读聚合（同上）
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
   const pipelinePayload = () => {
@@ -167,9 +170,16 @@ export function apply(ctx, config) {
   const handle = (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
     const path = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) || '/' : url.pathname
-    const send = (code, type, payload) => {
-      res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' })
+    const send = (code, type, payload, extraHeaders = {}) => {
+      res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store', ...extraHeaders })
       res.end(payload)
+    }
+    // 回调式读体（本处理函数不是 async：不引入 await，避免吞掉异常）
+    const readBody = (done) => {
+      let data = ''
+      req.on('data', (chunk) => { if (data.length < 16384) data += chunk })
+      req.on('end', () => done(data))
+      req.on('error', () => done(''))
     }
     const json = (code, payload) => send(code, 'application/json; charset=utf-8',
       JSON.stringify(payload, null, 2) + '\n')
@@ -269,6 +279,9 @@ export function apply(ctx, config) {
                   + `<td>${s.median_unit_price}</td><td>${s.max_unit_price}</td><td>${s.avg_lead_time_days}</td>`
                   + `<td>${s.deviation_count}</td></tr>`).join('')}</table>`
           })()
+          + `<form method="post" action="${prefix}/admin/api/elevate">`
+          + `<label>管理员 token（提权为系统管理）：<input name="token" type="password" autocomplete="off"></label>`
+          + `<button type="submit">提权</button></form>`
           + (() => {
             const slice = ((pipelinePayload() || {}).views || {})[view] || {}
             const neg = slice.negotiate || {}
@@ -382,7 +395,45 @@ export function apply(ctx, config) {
         `<ul>${rows}</ul><ul><li><a href="${prefix}/ops/">运维视角</a>（系统整体：运行期中间件 + 各视角证据面聚合）</li></ul>`
         + '<p>本 UI 由 cordis 插件 <code>webui</code> 提供；每个视角读**自己的**账本，宿主不写账本。</p>', prefix))
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq` })
+    // ---- 系统管理道（admin）：未提权一律**统一拒绝体**（缺 token / 错 token / 未启用 / 会话过期 / 冷却 五类同形） ----
+    const deny = () => send(401, 'application/json; charset=utf-8', '{"error":"unauthorized"}')
+    const adminHtml = (data) => {
+      const rows = (data.blocks || []).map((b) => `<tr><td><code>${b.block_id}</code></td><td>${b.kind}</td>`
+        + `<td>${b.reason}</td><td>${b.required_action}</td></tr>`).join('')
+      const switchLinks = Object.keys(rules).map((v) => `<a href="${prefix}/admin/api/switch?to=${v}">${v}</a>`).join(' · ')
+      return `${data.degraded ? `<p>降级：<code>${data.reason ?? ''}</code> —— ${data.next_action ?? ''}</p>` : ''}`
+        + `<p>进度：阶段 <b>${data.progress?.phase ?? '—'}</b> · 下一步 <b>${data.progress?.next_task ?? '—'}</b>`
+        + ` · 已完 <b>${data.progress?.done ?? 0}</b> / 待做 <b>${data.progress?.todo ?? 0}</b></p>`
+        + `<p>阻塞 <b>${data.counts?.blocked ?? 0}</b> 条（口径：${data.counts?.source ?? '—'}）</p>`
+        + `<table><thead><tr><th>block</th><th>kind</th><th>原因</th><th>需要你做的事</th></tr></thead><tbody>${rows}</tbody></table>`
+        + `<p>切换视角：${switchLinks}</p>`
+    }
+    if (/^\/admin\/?$/.test(path)) {
+      if (!adminGuard.authorized(req).ok) return deny()
+      return send(200, 'text/html; charset=utf-8', html('系统管理', adminHtml(adminView.snapshot()), prefix))
+    }
+    if (/^\/admin\/api\/session\/?$/.test(path)) {
+      return adminGuard.authorized(req).ok ? json(200, { ok: true, view: 'admin' }) : deny()
+    }
+    if (/^\/admin\/api\/elevate\/?$/.test(path) && String(req.method) === 'POST') {
+      return readBody((body) => {
+        const submitted = new URLSearchParams(body).get('token') ?? ''
+        const out = adminGuard.elevate(submitted)
+        if (!out || !out.ok) return deny()        // 失败五类同形：不区分、不泄露、不给 oracle
+        send(200, 'application/json; charset=utf-8', '{"ok":true,"view":"admin"}', { 'set-cookie': out.cookie })
+      })
+    }
+    if (/^\/admin\/api\/blocks\/?$/.test(path)) {
+      if (!adminGuard.authorized(req).ok) return deny()
+      return json(200, adminView.snapshot())
+    }
+    if (/^\/admin\/api\/switch\/?$/.test(path)) {
+      if (!adminGuard.authorized(req).ok) return deny()
+      const to = String(url.searchParams.get('to') ?? '')
+      if (!Object.prototype.hasOwnProperty.call(rules, to)) return json(400, { error: 'unknown-view', hint: Object.keys(rules).join(' / ') })
+      return send(302, 'text/plain; charset=utf-8', '', { location: `${prefix}/${to}/` })
+    }
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

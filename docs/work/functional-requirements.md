@@ -162,6 +162,15 @@
 | FR-EVAL-005 | 提供按供应商的绩效记分卡（次数、价格分布、交期均值、偏差标记），只读且**不产出评分或排名** | must | P2 | AC-EVAL-003 |
 | FR-UX-004 | 提供运维视角的只读快照（中间件状态 + 熔断 + 证据面聚合 + 人可读摘要），**不属于任何一方**、不出正文与私域键 | must | P2 | AC-RUNTIME-010 |
 | FR-UX-005 | 提供运维快照的定期落盘（谈判/FAQ/邮件三域计数与最近事件），供宿主**只读**展示；快照不得含正文与私域键，且不含 `generated_at` 之外的时间键 | must | P2 | AC-UI-002 、AC-UI-003 |
+| FR-ADMIN-001 | 新增第四道 UI 道 `/quotagent/admin/`（系统管理）：未提权时不得输出任何面板内容，只给与失败同形的统一拒绝体 | should | P2 | AC-ADMIN-001 |
+| FR-ADMIN-002 | 任一道 UI 都提供管理员 token 提权入口；token 只经当次表单请求体提交，不回显、不写前端存储、不进 HTML/JS、不入账本、不出现在 URL 与日志 | should | P2 | AC-ADMIN-002 |
+| FR-ADMIN-003 | 提权后可切换到任意一道 UI（含回切）；切换只改导航与道可见性，不改变任何字段白名单——管理员身份不得成为看到私域键的新路径 | should | P2 | AC-ADMIN-003 |
+| FR-ADMIN-004 | 系统管理面板可见 agent 进度与阻塞（含插件需求与缺凭据两类），清单由 Python 判定器从真来源生成，计数只读并标注口径 | should | P2 | AC-ADMIN-004 |
+| FR-ADMIN-006 | 阻塞状态机只允许 `blocked→pending→resolved/rejected/expired`，转移只能由 Python 侧写账本产生；宿主只读；非法转移一律拒绝且不留部分效果 | must | P2 | AC-ADMIN-006 |
+| FR-ADMIN-007 | 提权粒度两档：会话级决定道可见性与切换，请求级决定一切写类提交（缺 token 即拒）；两档都无超时自动批准/自动解除，过期只减权不增权 | must | P2 | AC-ADMIN-007 |
+| FR-ADMIN-008 | 提权失败一律统一响应（缺 token/错 token/过期会话/未启用/冷却五类同形），不含 token 及其可逆派生；连续失败达阈值进入有界冷却，冷却期不产生任何成功 | must | P2 | AC-ADMIN-008 |
+| FR-ADMIN-009 | 反例：无 token 不得提权；非 admin token 一律被拒且不泄露（无 oracle）；被拒不产生会话，也不在宿主留下任何提交文件 | must | P2 | AC-ADMIN-009 |
+| FR-ADMIN-010 | token 校验只在服务端：来源限于环境变量或 0600 文件，先 sha256 归一再用恒定时间比较；token 不得出现在 HTML/JS 响应、快照文件、账本行与宿主日志四处 | must | P2 | AC-ADMIN-010 |
 ## 7. 阶段分布（用于排期）
 
 | 阶段 | must 数 | 核心内容 |

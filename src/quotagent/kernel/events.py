@@ -148,6 +148,10 @@ class EventBus:
         "po/issued": ("emit", True, ""),
         "evidence/pack-exported": ("emit", True, ""),
         "evidence/retention-archived": ("emit", True, ""),
+        "admin/block-pending": ("emit", True, ""),
+        "admin/block-resolved": ("emit", True, ""),
+        "admin/block-rejected": ("emit", True, ""),
+        "admin/block-expired": ("emit", True, ""),
         "evidence/retention-copy-purged": ("emit", True, ""),
         # negotiate/*（ADR-0019；无 waterfall）
         "negotiate/bounds-declared": ("emit", True, ""),
