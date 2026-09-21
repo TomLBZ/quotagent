@@ -15,11 +15,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView']        // 账本只读视图（生产由 host/lib/ledger-view.mjs 提供）
+export const inject = ['ledgerView', 'projection']   // 账本只读视图 + 视角投影服务（投影是独立插件）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView']
+export const usedServices = ['ledgerView', 'projection']
 
 export const provides = ['webui']
 
@@ -34,77 +34,6 @@ export const Config = object({
   ledger_supplier: string().default(''),
 })
 
-/**
- * 视角投影白名单（**私域边界的机检形态**）：不在白名单里的键一律不出现。
- * `privateKeys` 是要**显式拒收**的承包商私域键（供应商视角连出现都不许）。
- */
-export const VIEW_RULES = {
-  contractor: {
-    title: '承包商视角',
-    types: ['rfq/', 'quote/', 'compare/', 'award/', 'po/', 'change/', 'approval/', 'capacity/', 'terms/'],
-    privateKeys: [],
-    fields: ['seq', 'type', 'correlation_id', 'actor', 'ts', 'summary'],
-  },
-  supplier: {
-    title: '供应商视角',
-    types: ['rfq/', 'quote/', 'award/', 'po/', 'change/', 'clarification/'],
-    privateKeys: ['calendar:private', 'cost_floor', 'markup_pct', 'profiles', 'bidders_private',
-      'authorized_band', 'internal_notes'],
-    fields: ['seq', 'type', 'correlation_id', 'ts', 'summary'],
-  },
-}
-
-const PRIVATE_MARK = 'private'
-
-/** 逐条投影：先按事件类型过滤，再按字段白名单裁剪，最后**显式拒收私域键**。 */
-export function project(view, rows) {
-  return projectWithAudit(view, rows).publicRows
-}
-
-/**
- * 投影 + **服务端审计**。
- *
- * 关键纪律：抑制原因**对外必须是通用的**（`private-field-suppressed`）——把私域键名写进
- * 对方视角的响应里，本身就是一次泄漏（本仓实测：`reason: private:cost_floor` 会把键名送到供应商页面）。
- * 具体键名只出现在 `audit[]` 里，调用方只能写日志/上报，不得放进响应体。
- */
-export function projectWithAudit(view, rows) {
-  const rule = VIEW_RULES[view]
-  if (!rule) throw new Error(`[unknown-view] ${view}`)
-  const audit = []
-  const publicRows = rows
-    .filter((row) => rule.types.some((prefix) => String(row.type).startsWith(prefix)))
-    .map((row) => {
-      const out = {}
-      for (const field of rule.fields) {
-        if (row[field] !== undefined) out[field] = row[field]
-      }
-      out.summary = summarize(row.body)
-      const serialized = JSON.stringify(out).toLowerCase()
-      for (const secret of rule.privateKeys) {
-        if (serialized.includes(secret.toLowerCase())) {
-          audit.push({ seq: row.seq, type: row.type, suppressed_key: secret, view })
-          return { seq: row.seq, type: row.type, suppressed: true, reason: 'private-field-suppressed' }
-        }
-      }
-      return out
-    })
-  return { publicRows, audit }
-}
-
-function summarize(body) {
-  if (!body || typeof body !== 'object') return ''
-  const keys = Object.keys(body).filter((key) => !key.toLowerCase().includes(PRIVATE_MARK))
-  return keys.slice(0, 6).map((key) => {
-    const value = body[key]
-    // `typeof null === 'object'`：必须判空，否则 Object.keys(null) 抛错（实测过一次：单个 null 字段
-    // 就让整个 UI 进程退出）——这类崩溃必须由下方请求级兜底 + 断言双重防住
-    const text = (value !== null && typeof value === 'object')
-      ? `{${Object.keys(value).slice(0, 3).join(',')}}` : String(value)
-    return `${key}=${text.slice(0, 40)}`
-  }).join(' ')
-}
-
 const html = (title, body, prefix) => `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <title>${title}</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
 code{background:#f3f3f3;padding:.1em .3em;border-radius:3px}table{border-collapse:collapse;width:100%}
@@ -115,6 +44,8 @@ nav a{margin-right:1rem}</style></head><body><nav>
 </nav><h1>${title}</h1>${body}</body></html>`
 
 export function apply(ctx, config) {
+  const projection = ctx.projection            // 投影服务（真源在 host/modules/projection.mjs）
+  const rules = projection.rules
   const prefix = config.route_prefix.replace(/\/$/, '')
   // 视角 → 账本：配了自有账本就用它（结构性隔离），否则退回注入的只读视图（fixture/单账本模式）
   const ledgerOf = (view) => {
@@ -123,7 +54,7 @@ export function apply(ctx, config) {
   }
 
   const rowsFor = (view) => {
-    const { publicRows, audit } = projectWithAudit(view, ledgerOf(view).rows())
+    const { publicRows, audit } = projection.projectWithAudit(view, ledgerOf(view).rows())
     if (audit.length) {
       // 审计只走 stderr（宿主日志）；响应体里不得出现私域键名
       console.error(`[webui] ${view} 视角抑制 ${audit.length} 行：${audit.map((item) => item.suppressed_key).join(',')}`)
@@ -173,7 +104,7 @@ export function apply(ctx, config) {
         ledgers, routes: config.views.map((view) => `${prefix}/${view}/`) })
     }
     const viewMatch = path.match(/^\/([a-z]+)\/?$/)
-    if (viewMatch && VIEW_RULES[viewMatch[1]]) {
+    if (viewMatch && rules[viewMatch[1]]) {
       const view = viewMatch[1]
       const rows = rowsFor(view)
       const table = `<table><tr><th>seq</th><th>type</th><th>摘要</th><th>ts</th></tr>${
@@ -181,21 +112,22 @@ export function apply(ctx, config) {
           ? `<tr><td>${row.seq}</td><td>${row.type}</td><td>（已抑制：${row.reason}）</td><td></td></tr>`
           : `<tr><td>${row.seq}</td><td>${row.type}</td><td>${row.summary || ''}</td><td>${row.ts || ''}</td></tr>`).join('')}</table>`
       return send(200, 'text/html; charset=utf-8',
-        html(`${config.page_title} · ${VIEW_RULES[view].title}`,
-          `<p>本视角只显示 <code>${VIEW_RULES[view].types.join(' ')}</code> 的事件；`
-          + `供应商视角显式拒收私域键 <code>${VIEW_RULES.supplier.privateKeys.join(' ')}</code>。</p>`
+        html(`${config.page_title} · ${rules[view].title}`,
+          `<p>本视角只显示 <code>${rules[view].types.join(' ')}</code> 的事件；`
+          + `供应商视角显式拒收私域键 <code>${rules.supplier.privateKeys.join(' ')}</code>。</p>`
           + `<p>JSON：<code>${prefix}/${view}/api/events</code></p>${table}`, prefix))
     }
     const viewApi = path.match(/^\/([a-z]+)\/api\/events\/?$/)
-    if (viewApi && VIEW_RULES[viewApi[1]]) {
-      return json(200, { view: viewApi[1], count: rowsFor(viewApi[1]).length, events: rowsFor(viewApi[1]) })
+    if (viewApi && rules[viewApi[1]]) {
+      const rows = rowsFor(viewApi[1])   // 一次请求只投影一次（原先算两遍：canary 采样会翻倍，实测发现）
+      return json(200, { view: viewApi[1], count: rows.length, events: rows })
     }
     if (path === '/' || path === '') {
-      const rows = config.views.filter((view) => VIEW_RULES[view]).map((view) => {
+      const rows = config.views.filter((view) => rules[view]).map((view) => {
         const ledger = ledgerOf(view)
         let report = { count: 0, ok: false }
         try { report = ledger.verify() } catch (err) { report = { count: 0, ok: false, reason: String(err).slice(0, 60) } }
-        return `<li><a href="${prefix}/${view}/">${VIEW_RULES[view].title}</a>（${report.count} 条，链自洽=${report.ok}）</li>`
+        return `<li><a href="${prefix}/${view}/">${rules[view].title}</a>（${report.count} 条，链自洽=${report.ok}）</li>`
       }).join('')
       return send(200, 'text/html; charset=utf-8', html(config.page_title,
         `<ul>${rows}</ul>`
@@ -217,7 +149,7 @@ export function apply(ctx, config) {
         port,
         prefix,
         viewUrl: (view) => `http://${config.listen_host}:${port}${prefix}/${view}/`,
-        rules: VIEW_RULES,
+        rules,                       // 真源：projection 插件
       })
       resolve()
     })

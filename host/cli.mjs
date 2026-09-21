@@ -103,15 +103,24 @@ const main = async () => {
   if (action === 'webui') {
     // WebUI 插件（每方视角一个路由）。宿主**不写账本**：只读视图 + Python 侧链校验（H1）。
     const { openLedger } = await import('./lib/ledger-view.mjs')
-    const { apply: webuiApply, Config: webuiConfig, VIEW_RULES } = await import('./modules/webui.mjs')
+    const { apply: webuiApply, Config: webuiConfig } = await import('./modules/webui.mjs')
+    const { VIEW_RULES } = await import('./modules/projection.mjs')
     const ctx = new Context()
     await ctx.plugin(EventsService)
+    // 投影服务（独立插件）必须先挂：webui 的 inject 依赖它
+    const { apply: projectionApply, Config: projectionConfig } = await import('./modules/projection.mjs')
+    await ctx.plugin({
+      name: 'projection',
+      inject: [],
+      Config: projectionConfig,
+      apply: (inner, cfg) => projectionApply(inner, cfg),
+    }, projectionConfig.parse({}))
     const contractorLedger = String(args['ledger-contractor'] ?? ledgerPath)
     ctx.provide('ledgerView', openLedger(contractorLedger))
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView'],
+      inject: ['ledgerView', 'projection'],   // 投影是独立插件（host/modules/projection.mjs），必须一起注入
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)

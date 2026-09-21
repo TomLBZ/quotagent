@@ -15,6 +15,7 @@
 | `host/modules/compare.mjs` | 比价排序与权重组合（读账本，不写账本） | `compare` | `contractor-ops`（`compare` 能力位） | 只改本文件；排序语义变更须同步 `AC-COMPARE-*` 与 ADR-0011 |
 | `host/modules/sourcing.mjs` | 领域插件：RFQ 覆盖率与缺口分析（`coverage`/`gaps`/`expiring`，纯函数只读账本行） | `sourcing` | `contractor-ops` | 只改本文件；覆盖率口径变更须同步其 fixture 断言 |
 | `host/modules/timeline.mjs` | 中间件：按 realm 的事件时间线环形缓冲（有界、幂等去重、零残留；不产生业务事实） | `timeline` | `webui` | 只改本文件；容量/去重口径变更须同步其 fixture 断言 |
+| `host/modules/projection.mjs` | 视角投影服务（谁看到什么字段；私域键拒收、抑制原因对外通用） | `projection` | `webui`、`contractor-ops` | 只改本文件；字段白名单变更须同步 `AC-TRUST-001` |
 | `host/modules/canary.mjs` | 自进化产物的真实路由分流 + 自动回滚判定（进/升需人工引用，回滚自动） | `canary` | `contractor-ops` | 只改本文件；阈值/分流语义变更须同步 ADR-0017 与其断言 |
 | `host/modules/webui.mjs` | 双方视角 WebUI（承包商/供应商两个路由；只读账本） | `webui` | `webui` | 只改本文件 + `host/lib/ledger-view.mjs`；接入见 `docs/work/deployment-manual.md` |
 
@@ -31,6 +32,7 @@
 | `host/lib/bridge.mjs` | 桥客户端（首帧 hello、方法面分级） | `kernel-bridge.mjs`、`cli.mjs` |
 | `host/lib/supervisor.mjs` | 重启预算/在途请求/孤儿进程（AC-INTEG-006） | `cli.mjs supervise` |
 | `host/lib/evolution.mjs` | 演化门骨架（提案/影子/门/晋升/回滚，T-220） | `evolution.mjs` |
+| `host/lib/canary-dispatch.mjs` | 把 canary 分流接到真实请求路径（按 key 选实现、回灌样本、**候选失败回退 base / base 失败原样抛**） | `canary` 及其调用方（`webui` 路径） |
 | `host/lib/ledger-view.mjs` | 只读账本视图（H1：宿主不写账本） | `webui.mjs`、`cli.mjs webui` |
 
 ## 3. Python 侧功能（`src/quotagent/`，每个服务也是一个可独立演进的单元）

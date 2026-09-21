@@ -108,3 +108,12 @@ curl -s http://127.0.0.1:80/quotagent/api/status        # 经工作区网关（�
   路由写在 `gateway.routes`；改完需**重启 gateway**（它启动时读路由表）。
 - 门：`tools/verify.sh webui`（11 条断言：健康契约、两侧路由与内容差异、私域负控与非空转对照、
   坏数据不杀服务、dispose 后端口释放）。
+
+### canary 接线与"必须重启"的纪律（T-230）
+
+- UI 的视角投影由**独立插件** `projection` 提供，`webui` 注入它；canary 的分流就是作用在这条真实路径上
+  （`host/lib/canary-dispatch.mjs`：按 key 选实现、回灌样本；候选失败回退 base，base 失败原样抛）。
+- **改完宿主代码必须真的重启服务并回读**：本轮实测过——门全绿但 `cli.mjs` 的 `inject` 漏了 `projection`，
+  `ws-gateway restart` 后服务起不来。命令：
+  `python3 -c` 杀旧进程后 `/workspace/bin/ws-gateway start quotagent`（"already healthy" 不会重载代码），
+  再 `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8093/quotagent/api/health` 回读。

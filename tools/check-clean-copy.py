@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / 'tmp' / 'clean-copy'
 GATES = [('docs', ['docs']), ('cordis 冒烟', ['cordis']), ('事件门', ['events']),
          ('进树模块 fixture', ['modules']), ('插件清单门', ['plugins']), ('WebUI 门', ['webui']),
-         ('canary 门', ['canary']), ('不变量门', ['invariants']), ('演化门', ['evolution']),
+         ('canary 门', ['canary']), ('canary-route 门', ['canary-route']), ('不变量门', ['invariants']), ('演化门', ['evolution']),
          ('AC 注册表', ['ac-registry']), ('无 Node 下的 P0', ['p0-no-node'])]
 
 

@@ -68,6 +68,15 @@ const STUBS = {
     },
     convert: (qty, factor) => ({ qty: Number(qty), factor: Number(factor), base: Number(qty) * Number(factor) }),
   },
+  projection: {
+    // fixture 的 stub：webui 只依赖"拿得到投影服务"，具体规则由 projection 模块自己的 fixture 验
+    rules: { contractor: { title: '承包商视角', types: ['rfq/'], privateKeys: [], fields: ['seq', 'type'] },
+      supplier: { title: '供应商视角', types: ['rfq/'], privateKeys: [], fields: ['seq', 'type'] } },
+    fields: ['seq', 'type'],
+    project: (view, rows) => rows,
+    projectWithAudit: (view, rows) => ({ publicRows: rows, audit: [] }),
+    summarize: () => '',
+  },
   ledgerView: {
     count: () => 0,
     head: () => 'sha256:' + '0'.repeat(64),

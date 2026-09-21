@@ -13,7 +13,8 @@
  */
 import { Context, EventsService } from 'cordis'
 import { createServer as probeServer } from 'node:net'
-import { apply as webuiApply, Config as webuiConfig, project, projectWithAudit, VIEW_RULES } from './modules/webui.mjs'
+import { apply as webuiApply, Config as webuiConfig } from './modules/webui.mjs'
+import { Config as projectionConfig, apply as projectionApply, project, projectWithAudit, VIEW_RULES } from './modules/projection.mjs'
 
 const facts = { checks: [] }
 let failures = 0
@@ -48,10 +49,22 @@ await ctx.plugin(EventsService)
 // 让 webui 能 inject 到 ledgerView：在**根 ctx** provide（fixture stub）
 ctx.provide('ledgerView', ledgerStub(RAW))
 
+const projectionBox = {}
+const projectionFiber = await ctx.plugin({
+  name: 'projection#probe',
+  inject: [],
+  Config: projectionConfig,
+  apply: async (inner, config) => {
+    const original = inner.provide.bind(inner)
+    inner.provide = (service, value) => { if (service === 'projection') projectionBox.handle = value; return original(service, value) }
+    await projectionApply(inner, config)
+  },
+}, projectionConfig.parse({}))
+
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView'],
+  inject: ['ledgerView', 'projection'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -129,9 +142,16 @@ const brokenBox = {}
 const brokenCtx = new Context()
 await brokenCtx.plugin(EventsService)
 brokenCtx.provide('ledgerView', ledgerStub(BROKEN))
+// 投影服务也要提供（webui 的 inject 依赖它；fixture 里只验"坏数据不杀服务"，投影用真实插件）
+await brokenCtx.plugin({
+  name: 'projection#broken',
+  inject: [],
+  Config: projectionConfig,
+  apply: (inner, cfg) => projectionApply(inner, cfg),
+}, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView'],
+  inject: ['ledgerView', 'projection'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -156,6 +176,7 @@ check('WebUI 负控：未知路径/视角返回 404 且带可用路径提示（�
 // 5. 零残留：dispose 后端口释放，可被重新监听
 const port = box.handle.port
 await fiber.dispose()
+await projectionFiber.dispose()
 await new Promise((resolve) => setTimeout(resolve, 50))
 const freed = await new Promise((resolve) => {
   const probe = probeServer()

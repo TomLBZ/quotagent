@@ -101,3 +101,17 @@
   新增 canary 事件后事件门绿但该脚本拒收 —— 改为从 `kernel/events.py` 的 `DEFAULT_TABLE` **派生**（单一真源），
   派生失败才退回显式白名单（不静默放宽）。
 - 记录：`ADR-0017`；证据 `EV-064`。
+
+## D-022 canary 接线到真实入口：投影独立成插件 + 失败隔离语义（T-230，2026-09-21T08:49:26Z）
+
+- 决定：把"谁看到什么字段"从 `webui` 里抽成**独立插件** `projection`（`provides: ['projection']`），
+  `webui` 改为 `inject: ['ledgerView', 'projection']`；宿主用 `host/lib/canary-dispatch.mjs` 把 canary 的
+  分桶接到**真实请求路径**（UI 的视角投影）上，每次请求都回灌样本给判定器。
+- 失败隔离语义（`host/canary-dispatch.mjs`）：**候选实现抛错 → 回退 base 且如实记 `ok:false`**；
+  **base 抛错 → 原样抛出**（不得静默回退掩盖真实故障）。这条由 `canary-route` 门的负控守住。
+- 零影响升级：`weight_bps = 0` 时全部走 base，输出与未接线时字节一致（端到端断言）。
+- 顺带修两个真问题：① UI 处理一个 `/api/events` 请求**投影了两次**（`count` 与 `events` 各算一遍）→
+  一次请求只投影一次（否则 canary 采样翻倍、判定失真）；② **线上服务重启才发现** `cli.mjs` 里 webui 的挂载
+  包装 `inject` 没跟着加 `projection` → 服务起不来（`cannot get property "projection" without inject`）。
+  后者只在"真的重启服务"时暴露，说明"门全绿"不等于"服务能起"——已作为纪律记入本批次。
+- 记录：`ADR-0017 §4`（本决定补上其"已知限制"里那一条）；证据 `EV-065`。
