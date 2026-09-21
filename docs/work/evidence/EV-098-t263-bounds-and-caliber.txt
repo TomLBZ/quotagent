@@ -24,3 +24,20 @@ supplier 账本 append 7 条 `faq/entry-published`（rfq_rev 1..7，塞 `subject
 [5] 待做（T-263 本体）
 **变异自证**：逐处偷改实现（上限 5→50、倒序→正序、投影→透传、去掉有界切片）→ 对应门必须真变红，
 且变异脚本自带"防伪"（锚点未命中或零字节变化即报"假变异"）。
+
+[6] 变异自证原始输出（`python3 tools/mutate-ui-views.py`，EXIT=0）
+（脚本已从 tmp 提升为 `tools/mutate-ui-views.py` + `verify.sh ui-mutate`：
+ 证据要能**再跑一次**，放 tmp 里就被 gitignore 掉了）
+
+```text
+✓ M1 写入器上限 5→50（有界被破坏） → ui-seed exit=1 FAIL: ④ 有界：7 条谈判轮次 → recent 只出 5 条（反例：把上限改成 50 → 红） | rc=0 n | 还原一致=True
+✓ M2 写入器倒序→正序（最新在后） → ui-seed exit=1 FAIL: ④ 定序：recent **最新在前**（尝试号 7,6,5,4,3 —— 反例：改成正序 → 红） | a | 还原一致=True
+✓ M3 写入器原样透传（正文/私域随行出去） → ui-seed exit=1 FAIL: contractor 谈判 recent 真数据非空且键合规 | n=1 | 还原一致=True
+✓ M4 路由去掉按键投影（原样透传） → webui exit=1  | 还原一致=True
+
+结论：4/4 处变异真变红且已还原（全部通过）
+  ✓ M1 写入器上限 5→50（有界被破坏）
+  ✓ M2 写入器倒序→正序（最新在后）
+  ✓ M3 写入器原样透传（正文/私域随行出去）
+  ✓ M4 路由去掉按键投影（原样透传）
+```

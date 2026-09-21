@@ -81,7 +81,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-261a | 三域面板的"演示种子"标注：运维手册补节 + D-054（真流程种真事件、演员可识别、幂等） | B61 | done | — |
 | T-262a | 业务双方视角：`/<view>/api/negotiation`、`/<view>/api/faq` + 页面区块 + 门断言（webui 25/25）+ D-055 | B63 | done | EV-097 |
 | T-263a | 有界与顺序补真数据门（7 条→5 条、seq 倒序、投影哨兵）+ D-056 口径 | B65 | done | EV-098 |
-| T-263 | 三域视图**变异自证**：逐处偷改实现 → 对应门必须真变红（脚本自带防假变异） | B65 | in-progress | EV-098 |
+| T-263 | 三域视图**变异自证**：逐处偷改实现 → 对应门必须真变红（`verify.sh ui-mutate`，4/4 红且还原） | B65 | done | EV-098 |
 | T-262 | 快照写入器加**有界的最近列表**（谈判轮次 / FAQ 条目），供业务视角渲染 | B64 | done | EV-097 |
 | T-261 | UI 种子：`tools/ui-seed-pipeline.py` + `verify.sh ui-seed`（7/7）+ 接进 serve 启动流程 + 线上非 0 回读 | B62 | done | D-054 / EV-096 |
 | T-260 | 实现：`tools/refresh-ui-snapshots.py` + `pipeline-view`（第九个自进化产出）+ `/api/pipeline` + 门与端到端；线上与公网 200 | B60 | done | D-053 / EV-095 |
