@@ -166,3 +166,17 @@ GATE g1            exit=0  `全量 AC：81/81 通过` + 走查 `结论：14/14 �
 · 本次「只追加证据/状态」的提交（EV-152 §七 + `.agents/state.json` 的 `last_verified_commit=b53a8f0`）
   按 `last_verified_commit_semantics` 不改写上一次验证的语义（其后的提交只追加证据/状态）；
   它的 sha 与回读见交付报告（不预写未知 sha）。
+
+==========================================================================================
+八、追加验证（提交之后补做）：`tools/verify.sh clean-copy` —— 校验的是**已提交内容**
+==========================================================================================
+命令：`tools/verify.sh clean-copy`（`git archive HEAD` 解到 tmp/clean-copy，只给裸解释器，跑 15 道门）
+结果：**exit=0，RESULT: PASS（15 道门在干净副本里全绿；已提交内容自足可复现）**
+  · 干净副本：`tmp/clean-copy`，**471 个文件**（仅已提交内容）；自足性 13/13 必需文件在
+  · `[ok] docs: exit=0 | RESULT: PASS`（干净副本里文档门同样按"契约文档集合"扫，绿）
+  · `[ok] 无 Node 下的 P0: exit=0 | P0 阶段 59 条 AC 在无 Node 环境下全绿；无瞬时命中`
+  · 其余：cordis 冒烟 / 事件门 / 进树模块 fixture / 插件清单门 / WebUI 门 / canary / canary-route /
+    bridge-canary 11/11 / governor 9/9 / audit-hook 7/7 / 不变量 22/22 / 演化门 / AC 注册表 全 exit=0
+  · 原文全文：tmp/zz-d071/clean-copy.log（`grep -c '^\[ok\]' = 16`、`grep -c '^\[FAIL\]' = 0`）
+⇒ 修好的文档门在**已提交内容**上同样成立（"本地能跑、克隆就废"这类缺陷本轮未出现）。
+仍**未**做的：clean-copy 只是"解包后跑一遍"，没有做"clean-copy 期间与文档门长时间并发"的观察（见 §六.3）。
