@@ -86,6 +86,10 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec node host/t247-scorecard-gate.mjs "$@"
     ;;
+  budget-route)
+    shift
+    exec python3 tools/check-budget-route.py "$@"
+    ;;
   idem-route)
     shift
     exec python3 tools/check-idem-route.py "$@"
@@ -93,6 +97,18 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
   idempotency-guard)
     shift
     exec node host/t247-idem-gate.mjs "$@"
+    ;;
+  approval-digest)
+    shift
+    exec node host/t250-approval-gate.mjs "$@"
+    ;;
+  budget-guard)
+    shift
+    exec node host/t250-budget-gate.mjs "$@"
+    ;;
+  budget-route)
+    shift
+    exec python3 tools/check-budget-route.py "$@"
     ;;
   wiring)
     shift
@@ -176,7 +192,7 @@ audit)
     exit 2
     ;;
   *)
-    echo "用法: tools/verify.sh docs|ac <AC-ID>|all|suite <name>|cordis|v|smoke|events|invariants|evolution|modules|webui|plugins|canary|canary-route|bridge-canary|governor|audit-hook|clean-copy|bridge|p0-no-node|ac-registry|audit|g0|g1|g2" >&2
+    echo "用法: tools/verify.sh ac-registry|approval-digest|audit-hook|breaker|breaker-route|bridge|bridge-canary|budget-guard|budget-route|canary|canary-route|clean-copy|cordis|docs|events|evolution|evolve-journal|evolve-module|g1|governor|idem-route|idempotency-guard|invariants|modules|observability|ops-view|p0-no-node|plugins|smoke|supplier-scorecard|v|webui|wiring" >&2
     exit 2
     ;;
 esac

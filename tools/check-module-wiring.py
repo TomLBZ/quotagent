@@ -34,6 +34,7 @@ PROVIDERS = {
     "priceHistory": "price-history", "evidenceSummary": "evidence-summary", "breaker": "circuit-breaker",
     "opsView": "ops-view", "evolveJournal": "evolve-journal",
     "supplierScorecard": "supplier-scorecard", "idempotency": "idempotency-guard",
+    "approvalDigest": "approval-digest", "budgetGuard": "budget-guard",
 }
 
 

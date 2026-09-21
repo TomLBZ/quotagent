@@ -28,6 +28,8 @@
 | `host/modules/evolve-journal.mjs` | **自进化流水**的只读归纳（提案/影子/门两态/晋升/回滚/canary 进出 + 最近事件；只给计数，不出正文）——**第五个自进化产出** | `evolveJournal` | `webui`（`host/profiles.mjs`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh evolve-journal` 围栏 |
 | `host/modules/supplier-scorecard.mjs` | 见产物头部注释（**由 subagent 产出、经同一条自进化流程晋升**） | 见模块 `provides` | `webui`（`host/profiles.mjs`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh supplier-scorecard` 围栏 |
 | `host/modules/idempotency-guard.mjs` | 见产物头部注释（**由 subagent 产出、经同一条自进化流程晋升**） | `idempotency` | `contractor-ops`（桥调用路径） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh idempotency-guard` 围栏 |
+| `host/modules/approval-digest.mjs` | 人工门**待批摘要**（总数/按动作/等待时长四桶/置信度分布/最久等待；只给计数与时长，不出正文）——**第六个自进化产出（subagent 生产）** | `approvalDigest` | `webui`（双方视角 `/api/approvals`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh approval-digest` 围栏 |
+| `host/modules/budget-guard.mjs` | 中间件：**窗口成本预算准入**（整数 µ 金额、窗口滚动、超预算拒绝可解释；`budget-exceeded`（等窗口有用）与 `cost-exceeds-budget`（等也没用）分开报）——**第七个自进化产出（subagent 生产）** | `budgetGuard` | `contractor-ops`（桥调用路径） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh budget-guard` + `budget-route` 围栏 |
 | `host/modules/webui.mjs` | 双方视角 WebUI（承包商/供应商两个路由；只读账本） | `webui` | `webui` | 只改本文件 + `host/lib/ledger-view.mjs`；接入见 `docs/work/deployment-manual.md` |
 
 目录即清单：新增功能 = 新增 `host/modules/<name>.mjs`（`host/modules/index.mjs` 自动发现），不必改中心清单；模块被哪个 profile 挂载仍写在 `host/profiles.mjs`（组成即数据，ADR-0015）。

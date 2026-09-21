@@ -15,11 +15,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard']   // 每个都是独立插件（准入 / 观测）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest']   // 每个都是独立插件（准入 / 观测）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest']
 
 export const provides = ['webui']
 
@@ -90,6 +90,25 @@ export function apply(ctx, config) {
   const ops = ctx.opsView               // 运维视角（第四个自进化产出，T-243）
   const journal = ctx.evolveJournal     // 自进化流水（第五个自进化产出，T-245）
   const scorecard = ctx.supplierScorecard   // 供应商绩效记分卡（subagent 产出，T-247）
+  const approvals = ctx.approvalDigest      // 人工门待批摘要（subagent 产出，T-250）
+  /**
+   * 从账本行推导**当前仍待批**的事项：按 `approval_id` 取该项的**最后一条** `approval/*` 事件，
+   * 若最后状态是 granted/aborted 就不算待批。只读、只用公开行（门里断言响应不含正文与私域键）。
+   */
+  const pendingApprovals = (view) => {
+    const last = new Map()
+    for (const row of ledgerOf(view).rows()) {
+      const type = String(row?.type ?? '')
+      if (!type.startsWith('approval/')) continue
+      const id = String(row?.body?.approval_id ?? row?.approval_id ?? '')
+      if (!id) continue
+      last.set(id, row)
+    }
+    return [...last.values()].filter((row) => {
+      const type = String(row.type)
+      return type !== 'approval/granted' && type !== 'approval/aborted'
+    })
+  }
   /** 自进化账本行的只读读取（读不到就当空：运维页不能因为账本还没生成而崩） */
   const evolveRows = () => {
     if (!config.ledger_evolve) return []
@@ -214,6 +233,14 @@ export function apply(ctx, config) {
                   + `<td>${s.median_unit_price}</td><td>${s.max_unit_price}</td><td>${s.avg_lead_time_days}</td>`
                   + `<td>${s.deviation_count}</td></tr>`).join('')}</table>`
           })()
+          + (() => {
+            const pend = approvals.digest(pendingApprovals(view))
+            const oldest = approvals.oldest(pendingApprovals(view))
+            return `<h3>待批事项（人工门）</h3><p>由 subagent 产出、经自进化流程晋升的插件 <code>approval-digest</code> 归纳：`
+              + `共 <b>${pend.total}</b> 项待批；按等待时长 ${pend.by_age.map((b) => `${b.bucket}=${b.count}`).join(' · ')}`
+              + `；超过 ${pend.limits.stale_hours}h 的 <b>${pend.stale}</b> 项</p>`
+              + (oldest ? `<p>最久等待：<code>${oldest.id}</code>（${oldest.action}，${Math.round(oldest.waited_seconds / 3600)} 小时）</p>` : '')
+          })()
           + `<h3>价格序列（按行项目）</h3><p>由自进化产出的插件 <code>price-history</code> 计算</p>`
           + (() => {
             const series = seriesView(view)
@@ -231,6 +258,15 @@ export function apply(ctx, config) {
       const summary = evidence.summarize(rowsFor(view))
       return json(200, { view, source: 'evidence-summary（自进化产出的插件）', summary,
         note: '账本证据面：按类型计数 / 关联数 / 带引用行数 / 时间跨度；只统计公开投影后的行' })
+    }
+    const viewApprovals = path.match(/^\/([a-z]+)\/api\/approvals\/?$/)
+    if (viewApprovals && rules[viewApprovals[1]]) {
+      const view = viewApprovals[1]
+      const rows = pendingApprovals(view)
+      const digest = approvals.digest(rows)
+      return json(200, { view, source: 'approval-digest（subagent 产出、经自进化流程晋升）',
+        digest, by_policy: approvals.byPolicy(rows), oldest: approvals.oldest(rows),
+        note: '当前仍待批的事项摘要（按 approval_id 取最后状态推导）；只给计数与等待时长，不出正文' })
     }
     const viewScore = path.match(/^\/([a-z]+)\/api\/scorecard\/?$/)
     if (viewScore && rules[viewScore[1]]) {
@@ -265,7 +301,7 @@ export function apply(ctx, config) {
         `<ul>${rows}</ul><ul><li><a href="${prefix}/ops/">运维视角</a>（系统整体：运行期中间件 + 各视角证据面聚合）</li></ul>`
         + '<p>本 UI 由 cordis 插件 <code>webui</code> 提供；每个视角读**自己的**账本，宿主不写账本。</p>', prefix))
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

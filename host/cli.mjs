@@ -154,6 +154,10 @@ const main = async () => {
     const { apply: brApply2, Config: brConfig2 } = await import('./modules/circuit-breaker.mjs')
     await ctx.plugin({ name: 'circuit-breaker', inject: [], Config: brConfig2,
       apply: (inner, cfg) => brApply2(inner, cfg) }, brConfig2.parse({}))
+    // 人工门待批摘要（subagent 产出，T-250）
+    const { apply: apApply, Config: apConfig } = await import('./modules/approval-digest.mjs')
+    await ctx.plugin({ name: 'approval-digest', inject: [], Config: apConfig,
+      apply: (inner, cfg) => apApply(inner, cfg) }, apConfig.parse({}))
     // 供应商绩效记分卡（subagent 产出，T-247）
     const { apply: scApply, Config: scConfig } = await import('./modules/supplier-scorecard.mjs')
     await ctx.plugin({ name: 'supplier-scorecard', inject: [], Config: scConfig,
@@ -175,7 +179,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -202,6 +206,7 @@ const main = async () => {
            evidence_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/evidence`),
            ops_routes: [`${String(args.prefix ?? '/quotagent')}/ops/`, `${String(args.prefix ?? '/quotagent')}/api/ops`],
            scorecard_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/scorecard`),
+           approval_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/approvals`),
            observability: obox.handle ? obox.handle.summary() : null,
            note: '每方视角读自己的账本（结构性隔离）+ 投影白名单（纵深防御）；宿主不写账本' }) + '\n')
     // 保活：直到收到信号（ws-gateway 以 SIGTERM 停服）
@@ -246,6 +251,22 @@ const main = async () => {
     let idemHandle = null
     let idemLast = null
     let idemReused = 0
+    let budgetHandle = null
+    let budgetLast = null
+    let budgetRefused = 0
+
+    // 成本预算守卫（subagent 产出、自进化晋升的中间件，T-250）：窗口内累计成本，超预算就拒绝（可解释）
+    const { apply: budgetApply, Config: budgetConfig } = await import('./modules/budget-guard.mjs')
+    const bbox = {}
+    const budgetCtx = new Context()
+    await budgetCtx.plugin(EventsService)
+    await budgetCtx.plugin({ name: 'budget-guard', inject: [], Config: budgetConfig,
+      apply: async (inner, cfg) => {
+        const original = inner.provide.bind(inner)
+        inner.provide = (service, value) => { if (service === 'budgetGuard') bbox.handle = value; return original(service, value) }
+        await budgetApply(inner, cfg)
+      } }, budgetConfig.parse({ budget: Number(args.budget ?? 1000) }))
+    budgetHandle = bbox.handle
 
     // 幂等守卫（subagent 产出、自进化晋升的中间件，T-247/T-248）：同一请求不重复打下游
     const { apply: idemApply, Config: idemConfig } = await import('./modules/idempotency-guard.mjs')
@@ -398,7 +419,20 @@ const main = async () => {
                 reason: idemLast.reason, next_action: idemLast.next_action } } }
             continue
           }
-          // ② 熔断准入 → 真调用
+          // ② 成本预算：窗口内累计，超预算**不执行**（可解释；不改熔断计数）
+          budgetLast = budgetHandle
+            ? budgetHandle.charge({ key: `budget:${profileName}`, cost: Number(args.cost ?? 1) })
+            : { admitted: true }
+          if (budgetHandle && budgetLast.admitted === false) {
+            budgetRefused += 1
+            if (idemHandle) idemHandle.finish({ ...idemInput, ok: false, result_digest: null })
+            // 同形契约（D-043）：自造帧必须与桥帧同形 {n, p:{id, m, result, error}}
+            frame = { n: 'result', p: { id: Number(args.id ?? 1) + i, m: String(args.method), error: null,
+              result: { budget_refused: true, spent: budgetLast.spent, remaining: budgetLast.remaining,
+                reason: budgetLast.reason, next_action: budgetLast.next_action } } }
+            continue
+          }
+          // ③ 熔断准入 → 真调用
           const permit = breakerHandle ? breakerHandle.allow({ key: methodKey }) : { allowed: true }
           if (!permit.allowed) { breakerRefused += 1; breakerLastRefusal = permit; continue }
           frame = await client.call(String(args.method), loopParams, { id: Number(args.id ?? 1) + i })
@@ -420,6 +454,8 @@ const main = async () => {
     emit({ ok: Boolean(call ? call.n === 'result' : true), action: 'bridge', phase: 'call',
            profile: profileName, realm: profile.realm, ledger_path: ledgerPath,
            call_lane, call_fallback,
+           budget: budgetHandle ? { refused: budgetRefused, last: budgetLast, stats: budgetHandle.stats(),
+             config: budgetHandle.config() } : null,
            idem: idemHandle ? { last: idemLast, reused: idemReused, stats: idemHandle.stats(),
              config: idemHandle.config() } : null,
            breaker: breakerHandle ? { state: breakerHandle.state({ key: `bridge:${String(args.method)}` }),

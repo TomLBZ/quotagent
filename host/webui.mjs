@@ -25,6 +25,7 @@ import { Config as brConfig3, apply as brApply3 } from './modules/circuit-breake
 import { Config as opsConfig3, apply as opsApply3 } from './modules/ops-view.mjs'
 import { Config as jConfig3, apply as jApply3 } from './modules/evolve-journal.mjs'
 import { Config as scConfig3, apply as scApply3 } from './modules/supplier-scorecard.mjs'
+import { Config as apConfig3, apply as apApply3 } from './modules/approval-digest.mjs'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -61,6 +62,11 @@ RAW.push({ seq: 998, type: 'quote/submitted', ts: '2026-09-21T01:00:00Z', realm:
   body: { quote_id: 'q-sc-1', supplier_id: 'sup-A',
     lines: [{ item_id: 'L-009', unit_price: 88, lead_time_days: 5 },
       { item_id: 'L-009', unit_price: 92, lead_time_days: 7 }] } })
+
+// 待批摘要用例：RAW 里补一条 `approval/requested`（门必须喂真数据）
+RAW.push({ seq: 997, type: 'approval/requested', ts: '2026-09-21T00:30:00Z', realm: 'contractor:con-B',
+  body: { approval_id: 'ap-777', action: 'quote.submit', waited_seconds: 7200, model_confidence: 0.72,
+    timeout_policy: 'remind', summary: '不该外泄的正文' } })
 
 const ledgerStub = (rows) => ({
   path: '/tmp/stub-ledger.jsonl',
@@ -117,6 +123,7 @@ const mountObs = async (targetCtx) => {
   await wrap({ apply: opsApply3, Config: opsConfig3, inject: ['observability', 'breaker', 'evidenceSummary'] }, {}, 'opsView', 'ops')
   await wrap({ apply: jApply3, Config: jConfig3, inject: [] }, {}, 'evolveJournal', 'journal')
   await wrap({ apply: scApply3, Config: scConfig3, inject: [] }, {}, 'supplierScorecard', 'scorecard')
+  await wrap({ apply: apApply3, Config: apConfig3, inject: [] }, {}, 'approvalDigest', 'approvals')
 }
 await mountObs(ctx)
 
@@ -134,7 +141,7 @@ writeFileSync(evolvePath, [
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -232,7 +239,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -325,6 +332,19 @@ check('绩效记分卡正控：/contractor/api/scorecard 与 /supplier/api/score
   && String(scJson.source).includes('supplier-scorecard')
   && !/"body"\s*:/.test(sc1.text) && !sc1.text.includes('private:') && !sc1.text.includes('cost_floor'),
   `status=${sc1.status}/${sc2.status} groups=${scJson.groups}`)
+
+// 4i. T-250：人工门待批摘要（subagent 产出）在双方视角可见，且不出正文/私域
+const ap1 = await get('/contractor/api/approvals')
+let apJson = {}
+try { apJson = JSON.parse(ap1.text) } catch (err) { apJson = {} }
+const ap2 = await get('/supplier/api/approvals')
+check('待批摘要正控：/contractor/api/approvals 与 /supplier/api/approvals 都 200，含待批总数与等待时长分桶，'
+  + '来源为 subagent 产出并晋升的 approval-digest，且不出正文/私域',
+  ap1.status === 200 && ap2.status === 200 && (apJson.digest?.total ?? 0) >= 1
+  && Array.isArray(apJson.digest?.by_age) && apJson.digest.by_age.length >= 1
+  && String(apJson.source).includes('approval-digest')
+  && !ap1.text.includes('不该外泄的正文') && !/"body"\s*:/.test(ap1.text) && !ap1.text.includes('private:'),
+  `status=${ap1.status}/${ap2.status} total=${apJson.digest?.total} age=${JSON.stringify(apJson.digest?.by_age)}`)
 
 // 4. 未知视角
 const unknown = await get('/nonexistent/')

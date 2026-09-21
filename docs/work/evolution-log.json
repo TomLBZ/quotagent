@@ -106,6 +106,36 @@
       "produced_by": "tools/evolve-module.mjs",
       "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
       "evidence": null
+    },
+    {
+      "name": "approval-digest",
+      "proposal_id": "sha256:174ab8a68eda670bc36264825dd3c64f7593ec2dcd8ada8a492bdbab2ae1d8a9",
+      "artifact_hash": "sha256:d421207e8822901ef57871c2e0321ca8467b2e8e9b200614dc2bf29670972c7b",
+      "bytes": 16519,
+      "approval_ref": "ap-0107",
+      "gate": "passed",
+      "fixture": {
+        "passed": 13,
+        "total": 13
+      },
+      "produced_by": "tools/evolve-module.mjs",
+      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+      "evidence": null
+    },
+    {
+      "name": "budget-guard",
+      "proposal_id": "sha256:8dc66183f624a0c91a8e0a8dd6f020115cdbfe604d914a52226d7ae2ca0d15b3",
+      "artifact_hash": "sha256:b8196aa0d5b437efdffa896e08d0865d03a7bbe425f8ce1571184a7258739bab",
+      "bytes": 21885,
+      "approval_ref": "ap-0108",
+      "gate": "passed",
+      "fixture": {
+        "passed": 13,
+        "total": 13
+      },
+      "produced_by": "tools/evolve-module.mjs",
+      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+      "evidence": null
     }
   ]
 }

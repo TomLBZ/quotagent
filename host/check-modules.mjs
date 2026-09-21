@@ -149,6 +149,13 @@ const STUBS = {
       privacy: { entry_bodies_included: false, private_keys_included: false } }),
     summary: () => 'stub',
   },
+  approvalDigest: {
+    // fixture 的 stub：只满足"能归纳待批事项"；口径由 approval-digest 模块自己的门验
+    digest: () => ({ rows: 0, total: 0, skipped: 0, by_action: [], by_age: [], by_confidence: {},
+      oldest: null, stale: 0, limits: { stale_hours: 24, max_buckets: 4 } }),
+    byPolicy: () => [],
+    oldest: () => null,
+  },
   supplierScorecard: {
     // fixture 的 stub：只满足"能按供应商聚合"；口径由 supplier-scorecard 模块自己的门验
     scorecard: () => [],

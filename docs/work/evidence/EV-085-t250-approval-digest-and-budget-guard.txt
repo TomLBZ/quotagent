@@ -1,0 +1,48 @@
+EV-085 T-250 两件 subagent 产出的插件：待批摘要（已接线双方视角）+ 预算守卫（已接线桥路径）
+生成时间 2026-09-21T10:37:56Z
+以下为原始命令与原始输出（原样留档）
+
+[1] 生产与父侧核验（D-019：subagent 自述不算事实）
+两个 subagent 并行（deleg_20c18eda，320.36s）各交「产物 + 围栏门」，授权范围只写 tmp/ 产物与 host/<门>.mjs。
+父侧自己实跑核验：
+  · node --check 两个产物 + 两个门 → 全 0
+  · 纪律扫描（禁字：new Date(/setTimeout(/setInterval(/writeFileSync/appendFileSync/ctx.on(/Math.random(）→ 干净；
+    墙钟只出现在可被 setClock 替换的默认时钟
+  · 围栏门（父侧实跑）：approval-digest 10/10、budget-guard 10/10
+  · 官方 fixture（父侧实跑，13 条 = manifest×2 + A1×4 + A2×2 + A3 + A4 + A5 + A6）：
+    approval-digest 13/13、budget-guard 13/13
+  · 两件都由 subagent 做了**变异测试自证**（各 4 处单点变异 → 门全部变红，复原后复绿）
+→ 并按同一条自进化流程晋升：approval-digest（approval_ref=ap-0107）、budget-guard（ap-0108），
+  进树后 fixture 各 13/13。
+
+[2] 预算守卫接进桥调用路径（顺序写死：idem 判重 → budget 计费 → breaker 准入 → 真调用）
+$ tools/verify.sh budget-route → 5/5
+  正控①：预算 2 / 每次 1 / 4 个不同请求 → 后两次被拒（reason=budget-exceeded + next_action）
+  硬证据②：**只有 2 个请求打到下游**（breaker.stats.allowed = 2，不是 4）——被拒的请求没有浪费下游
+  负控③：预算拒绝不误伤幂等（reused = 0）
+  负控④：预算充足（100）时一次都不拒（admitted ≥ 3）
+  负控⑤：单次成本 > 整窗预算 → reason 与"等窗口"区分开（等也没用）
+$ node host/cli.mjs bridge --profile contractor-ops --method ledger.count --budget 1 --cost 1 --repeat 3
+  → budget.refused=2、last.reason=budget-exceeded
+    （4 个中间件分工：governor 并发额度 / breaker 连续失败 / idempotency 请求身份 / budget 窗口花费）
+
+[3] 待批摘要接进**双方视角**：/quotagent/<view>/api/approvals + 页面"待批事项（人工门）"区块
+$ curl -s http://127.0.0.1:8093/quotagent/contractor/api/approvals → 200
+{"view": "contractor", "source": "approval-digest（subagent 产出、经自进化流程晋升）", "digest": {"rows": 0, "total": 0, "skipped": 0, "by_action": [], "by_age": [{"bucket": "<1h", "count": 0}, {"bucket": "1-6h", "count": 0}, {"bucket": "6-24h", "count": 0}, {"bucket": ">24h", "count": 0}], "by_confidence": {"none": 0, "low": 0, "mid": 0, "high": 0}, "oldest": null, "stale": 0, "limits": {"stale_hours": 24, "max_buckets": 4}}, "by_policy": [], "oldest": null, "note": "当前仍待批的事项摘要（按 approval_id 取最后状态推导）；只给计数与等待时长，不出正文"}
+$ curl -s http://127.0.0.1:8093/quotagent/supplier/api/approvals → 200
+$ curl -s http://127.0.0.1:8093/quotagent/api/ops → 200（运维道未受影响）
+$ 公网 https://novara.remoteblossom.com/quotagent/contractor/api/approvals → 200
+页面同时显示：待批总数、按等待时长分桶、超过 stale_hours 的项数、最久等待项与其 action。
+待批状态由账本行的**最后一条** `approval/*` 事件推导（granted/aborted 即不再待批），纯只读。
+
+[4] 门（实测）
+$ tools/verify.sh webui → 21/21（新增"待批摘要正控"：双方视角都 200、total ≥ 1、分桶非空、
+  来源指向 approval-digest、**无正文/私域**）
+$ tools/verify.sh approval-digest → 10/10 ；budget-guard → 10/10 ；budget-route → 5/5
+$ 全部门（32 个入口，含 modules/plugins/wiring/canary-route/evolve-module）→ **红门：无**
+$ tools/verify.sh g1 → 退出 0（57/57 AC + 14/14 MVP 判据）
+$ tools/verify.sh clean-copy → 退出 0（HEAD 干净副本里关键门全绿）
+
+结论：两件 subagent 产出**均已接线并上线**——一件可见于**双方视角**、一件生效于**桥调用路径**；
+"产出 → 核验 → 晋升 → 接线 → 可见/可验 → 可追溯（哈希）"闭环保持。
+自进化产物累计 **9 件**，其中 **4 件由 subagents 生产**。

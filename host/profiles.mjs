@@ -14,7 +14,7 @@ export const PROFILES = {
     label: '承包商运营台',
     realm: 'contractor:con-B',
     ledger: 'ledger-contractor.jsonl',
-    modules: ['config', 'frozen', 'kernel-bridge', 'sourcing', 'compare', 'guard', 'approval', 'queue', 'canary', 'bridge-canary', 'governor', 'audit-hook', 'circuit-breaker', 'idempotency-guard'],
+    modules: ['config', 'frozen', 'kernel-bridge', 'sourcing', 'compare', 'guard', 'approval', 'queue', 'canary', 'bridge-canary', 'governor', 'audit-hook', 'circuit-breaker', 'idempotency-guard', 'budget-guard'],
     sidecar: 'deferred-to-B3',
     config: {
       approval: { queue: { enabled: true }, auto_approve: false },
@@ -30,7 +30,7 @@ export const PROFILES = {
     label: '双方视角 WebUI（view-host）',
     realm: 'contractor:con-B',
     ledger: 'ledger-contractor.jsonl',
-    modules: ['config', 'projection', 'webui', 'timeline', 'canary', 'audit-hook', 'governor', 'observability', 'price-history', 'evidence-summary', 'ops-view', 'evolve-journal', 'supplier-scorecard'],
+    modules: ['config', 'projection', 'webui', 'timeline', 'canary', 'audit-hook', 'governor', 'observability', 'price-history', 'evidence-summary', 'ops-view', 'evolve-journal', 'supplier-scorecard', 'approval-digest'],
     sidecar: 'read-only',
     config: {
       // 一个进程两个路由：承包商视角读承包商账本、供应商视角读供应商账本（结构性隔离）
