@@ -61,8 +61,11 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-ac-registry.py"
     ;;
   events)
-  python3 tools/check-events.py
-  ;;
+    python3 tools/check-events.py
+    ;;
+  invariants)
+    exec "$QUOTAGENT_PY" "$ROOT/tools/check-invariants.py" "$@"
+    ;;
 audit)
     exec "$HERE/run.sh" -m quotagent.qa ac AC-AUDIT-004
     ;;
@@ -85,7 +88,7 @@ audit)
     exit 2
     ;;
   *)
-    echo "用法: tools/verify.sh docs|ac <AC-ID>|all|suite <name>|cordis|v|smoke|events|bridge|p0-no-node|ac-registry|audit|g0|g1|g2" >&2
+    echo "用法: tools/verify.sh docs|ac <AC-ID>|all|suite <name>|cordis|v|smoke|events|invariants|bridge|p0-no-node|ac-registry|audit|g0|g1|g2" >&2
     exit 2
     ;;
 esac

@@ -235,3 +235,10 @@
 | INV-008 | 私域服务在对方 realm 中取不到值 | AC-TRUST-001 |
 | INV-009 | 归一化不可行即拒绝，无兜底 | AC-NORM-002 |
 | INV-010 | 内核命名空间不可被 agent patch | AC-EVOLVE-003 |
+
+- **宿主强制不变量（H1/H2/H3/H5/H6）机检**（评审 C §4.2 / `ADR-0014 §7`）：入口 `tools/verify.sh invariants`（Python 侧 H1/H2/H3 + Node 侧 H5/H6）。每条都写成「正控 + 负控」，负控是把违规场景真跑出来断言检测器报红：
+  · H1 账本唯一写入口：宿主直写一行 → 哈希链失败并冻结停发；桥只开 read/compute；
+  · H2 事件声明表：未声明事件不可订阅/不可 emit；`emit` 派发 `bail` 事件被拒；
+  · H3 承诺出口唯一化：三条承诺路径无批准即抛错、agent 代签被拒、批准不可跨 scope 复用；
+  · H5 冻结面：`kernel.*` 伪造更新被拒（frozen）且配置摘要不变；**否决必须由宿主显式安装**（裸 context 上 `fiber.update` 不会自动被白名单拦下）；
+  · H6 卸载残留：干净插件 dispose 后 effect=0 且资源计数差分全 0；泄漏定时器必须被检出。

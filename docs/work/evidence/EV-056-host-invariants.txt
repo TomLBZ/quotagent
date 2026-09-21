@@ -1,0 +1,66 @@
+EV-056 — 宿主强制不变量 H1/H2/H3/H5/H6（T-219 / 评审 C §7.1 第 6 条 / ADR-0014 §7）
+
+时间: 2026-09-21T05:06:51Z
+commit: 884fed6
+命令: tools/verify.sh invariants（Python 侧 H1/H2/H3 + Node 侧 H5/H6）
+退出码 0；输出如下（含每条的正控与负控）：
+
+  [ok] H1 正控：Python 侧 append 后哈希链自洽
+  checked=1 ok=True
+  [ok] H1 负控：宿主直写账本一行被核对发现（哈希链失败）
+  {"ok": false, "checked": 1, "first_bad_seq": 1, "reason": "body_hash 与 body 不一致（内容被篡改）", "head_hash": "sha256:b3b471acd6
+  [ok] H1 负控：链失效即冻结、拒绝继续写入（停发前置条件）
+  append 被拒
+  [ok] H1 负控：桥只开 read/compute，承诺类方法只声明不暴露
+  exposed=0 条，refused=['approval.decide', 'award.commit', 'change.approve', 'po.issue', 'qep.receive', 'qep.send', 'quote.submit']
+  [ok] H2 正控：已声明事件按 mode 派发成功（监听器收到）
+  event=agent/assumption-raised seen=['ok'] seen=['ok']
+  [ok] H2 负控：未声明的事件名无法订阅、也无法 emit（未声明即不可派发）
+  on=UnknownEventError emit=UnknownEventError
+  [ok] H2 负控：用 `emit` 派发声明为 `bail` 的事件被拒绝（模式不得错用）
+  event=change/rejected error=事件 'change/rejected' 的 @mode 是 bail，只能用 bail() 分发（05-events.md §0 规则 1
+  [ok] H2 负控：`dispatch` 对未声明事件同样拒绝（不走宽容分支）
+  result=UnknownEventError
+  [ok] H2 正控：事件表本身可枚举（唯一真源在 Python 侧）
+  declared=85 条
+  [ok] H3 负控：三条承诺路径无批准记录时全部抛错（INV-005）
+  {"提交报价": "ApprovalRequired", "授标承诺": "ApprovalRequired", "发 PO": "CommitmentError"}
+  [ok] H3 负控：agent 代签被拒（批准只能由人产生）
+  error=批准记录只能由人产生（by 必须以 'human:' 开头），收到 'agent:planner'；agent 不得代签
+  [ok] H3 负控：批准绑定 scope（报价批准不能复用到授标承诺）
+  error=批准 ap-0001 不适用于 scope='award.commit' ref='awin-1'（当前: scope=
+  [ok] H3 正控：有有效批准后承诺路径成功并落账
+  submitted=q-1
+  [ok] H5 正控：授权来源改登记键（norm.tolerance_bps）被接受
+  reasons=[]
+  [ok] H5 负控：`kernel.*` 伪造更新被拒（理由 frozen —— 含人也不能改 INV-010）
+  rules=["frozen"]
+  [ok] H5 负控：agent 更新 `kernel.*` 同样被拒
+  rules=["frozen"]
+  [ok] H5 负控：`humanOnly` 区间的 agent 更新被拒（human-only）
+  rules=["human-only"]
+  [ok] H5 负控：白名单外的陌生键被拒（unknown-key；H10）
+  rules=["unknown-key"]
+  [ok] H5 负控：被拒的更新不得改变配置（摘要前后一致）
+  sha256:2ec51d002df37… → sha256:2ec51d002df37…
+  [ok] H5 负控：**没有安装否决 hook** 时 `fiber.update` 不会因白名单/冻结面被拦（故否决必须由宿主显式安装）
+  update error=null；配置未变则需靠已安装的 hook
+  [ok] H6 正控：干净插件 dispose 后 effect 数为 0 且资源计数差分全 0
+  effects 2 → 0；counters={"timers":0,"subscriptions":0}
+  [ok] H6 负控：泄漏定时器的插件被检出（资源计数差分非 0 → 检查器必须报红）
+  counters={"timers":1,"subscriptions":0}（>0 才算检出）
+  宿主强制不变量：22/22 通过
+
+--- 口径说明 ---
+· 每条不变量都是「正控 + **负控**」：负控把违规场景真跑出来，断言检测器报红 —— 不是口头声明；
+· H1 负控三点：宿主直写账本一行即被核对发现、链失效即冻结停发、桥面不含任何写入口；
+· H2 负控三点：未声明事件不可订阅/不可 emit、`emit` 派发 `bail` 事件被拒（模式不得错用）、`dispatch` 不走宽容分支；
+· H3 负控三点：三条承诺路径无批准即抛错、agent 代签被拒、批准不可跨 scope 复用；
+· H5 用生产白名单（host/lib/schema.mjs）与生产校验器（host/lib/frozen.mjs）：`kernel.*` 被拒且配置摘要不变；
+  并以"裸 context 上 fiber.update 不被白名单拦下"证明**否决必须由宿主显式安装**（忘了装/装错位置都失效）；
+· H6 正控：干净插件 dispose 后 effect 2 → 0、资源计数差分全 0；负控：泄漏定时器必须被检出（counters.timers>0）。
+
+--- 本轮同时纠正的记账错误 ---
+上一轮曾把 P1 记为"收口完成"。按 `评审 C §7.1` 的 8 条最小集核对后，第 5/6/7 条当时**未做**：
+本批完成第 6 条（T-219，本文）；第 7 条（演化门骨架 T-220）与第 5 条（模块 manifest/fixture T-221）已补登记为 todo。
+结论：**P1 尚未收口**，剩余 T-220、T-221。

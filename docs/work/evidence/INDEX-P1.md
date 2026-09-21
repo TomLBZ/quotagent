@@ -21,3 +21,4 @@
 | EV-053 | 比较表导出（AC-COMPARE-004 13 断言）：逐行（含被排除行及其原因/next_action）、与 Evaluation 及**账本**逐行一致（篡改分数即定位失败）、引用链全部可解析（篡改引用即失败）、含 Flag 与差异说明、确定性字节一致、CSV 回读与 BOM、导出留痕 `compare/table-exported`；含修掉的悬空引用 `ledger:0` 与被排除行缺引用 | AC-COMPARE-004 / T-214 |
 | EV-054 | RFQ 分发记录与截止管理（AC-RFQ-003 10 断言）：分发逐参与者留痕且版本以快照哈希锚定、历史只增、名单问题即拒；截止剩余小时/临近阈值可配/是否已过；提醒按 overdue|due-soon 分流且幂等、绝不自动顺延截止 | AC-RFQ-003 / T-215a |
 | EV-055 | 部署手册干净副本实跑（T-215b）：`git archive HEAD` → 裸解释器 `verify.sh smoke` / `verify.sh docs` / `python3 tools/g1-walkthrough.py` 的原始输出；并含 `verify.sh g1` 聚合门（全量 57 条 AC + 14 条 MVP 判据）的结论 | T-215b / S1.14 |
+| EV-056 | 宿主强制不变量 H1/H2/H3/H5/H6（`verify.sh invariants` 22/22）：每条含正控与负控；H1 宿主直写账本/冻结停发/桥面无写入口；H2 未声明事件与模式错用；H3 三条承诺路径+代签+跨 scope；H5 生产白名单/校验器 + 否决必须显式安装；H6 effect=0 且资源计数差分全 0（泄漏必被检出）；并纠正上一轮的收口记账（§7.1 第 5/6/7 条） | T-219 / 评审 C §7.1 |
