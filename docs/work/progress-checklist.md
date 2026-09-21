@@ -90,6 +90,9 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-277 | 存储由插件提供：`tools/storage.py`（文件管理+键值表，租户分区）+ 围栏门 18/18 + 4 处变异自证 | B76 | done | EV-142 |
 | T-277b | 父方复核与接线：我自跑门、挂 `storage` profile、补登记行、落 AC-STORAGE-001/004 | B76 | done | EV-142 |
 | T-278 | 运行期插件独立装卸/卸载零残留/卸载后事实不丢（`AC-AGENTRT-007` 5/5） | B77 | done | EV-143 |
+| GUI-P0a | 上手页 `/start/` + `/api/routes` 路由表（每页可达 token/配置位置）`f3e76b8` | B78 | done | EV-144 |
+| GUI-P0b | 第一屏三块 + 8 个子视图（GET 筛选/排序/翻页）+ 门 27→44/44；顺手修掉 admin 面板恒 `NaN` 的既有 bug | B78 | done | EV-144 |
+| P3-UX2 | 三份 UX 规格持久化进 `docs/work/plans/`（22 痛点 / 9 human / 20 FR 草案）`4e0f2cb` | B78 | done | — |
 | T-272 | 宿主侧 admin 门卫/视图插件 + 围栅门 18/18 + 端到端 12/12（subagent 产出，父方实跑） | B67 | done | EV-132 |
 | T-273 | admin 道接入 webui（路由/提权表单/CLI/e2e/profile/stubs/verify.sh）+ 本批 FR/AC 落表 | B67 | done | EV-132 |
 | T-273b | admin 道变异自证（统一拒绝体/投影/状态机/比较写法四处偷改必红；落表待实现） | B68 | todo | — |

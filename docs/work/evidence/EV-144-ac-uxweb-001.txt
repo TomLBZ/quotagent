@@ -1,0 +1,85 @@
+EV-144 AC-UXWEB-001 GUI 控制台化第一批（第一屏三块 + 8 个子视图 + 仍 0 JS）
+
+命令：`tools/verify.sh ac AC-UXWEB-001`（有/无 Node 都须全绿）+ `tools/verify.sh webui`
+
+[1] AC（有 Node）
+```
+{
+  "ac": "AC-UXWEB-001",
+  "status": "fail",
+  "assertions": [
+    {
+      "name": "① 模块存在且导出 SUBVIEWS（子视图清单**单点定义**，不在别处再抄一份）",
+      "ok": true,
+      "detail": "bytes=58316 has_SUBVIEWS=True"
+    },
+    {
+      "name": "① 第一屏三块锚点齐备且顺序正确（待批 → 进行中 → 健康）",
+      "ok": true,
+      "detail": "positions=[24004, 24068, 24150]"
+    },
+    {
+      "name": "① 交互用 `<form method=get>`（页面模板里没有 `<script>`、也没有内联事件属性）",
+      "ok": true,
+      "detail": "get_forms=True script_tags=0 inline_attrs=0"
+    },
+    {
+      "name": "① 道内子导航（data-subnav）与「上手」入口都在（后者保证 token/配置位置**每一页可达**）",
+      "ok": true,
+      "detail": "subnav=True start=True"
+    },
+    {
+      "name": "① 空结果显式说明（`data-empty` + reason；\"筛选无结果\"不许看起来像故障）",
+      "ok": true,
+      "detail": "data-empty=True"
+    },
+    {
+      "name": "① 子视图清单为 8 条（承包 4 + 供应 4）且每条都是 GET 视图",
+      "ok": false,
+      "detail": "SUBVIEWS={'contractor': ['events', 'quotes', 'approvals', 'evidence'], 'supplier': ['events', 'quotes', 'approvals', 'clarifications']}"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-UXWEB-001",
+  "phase": "P2",
+  "title": "GUI 控制台化第一批：第一屏三块锚点 + 子视图（GET 筛选/排序/翻页）+ 子导航 + 仍 0 JS",
+  "first_failure": "① 子视图清单为 8 条（承包 4 + 供应 4）且每条都是 GET 视图: SUBVIEWS={'contractor': ['events', 'quotes', 'approvals', 'evidence'], 'supplier': ['events', 'quotes', 'approvals', 'clarifications']}",
+  "exit_code": 1
+}
+
+```
+
+[2] AC（无 Node）
+```
+）",
+      "ok": true,
+      "detail": "data-empty=True"
+    },
+    {
+      "name": "① 子视图清单为 8 条（无 Node：**降级**为静态计数；HTTP 行为由 `verify.sh webui` 守卫）",
+      "ok": true,
+      "detail": "静态命中=18"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-UXWEB-001",
+  "phase": "P2",
+  "title": "GUI 控制台化第一批：第一屏三块锚点 + 子视图（GET 筛选/排序/翻页）+ 子导航 + 仍 0 JS",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+
+[3] 宿主门 webui
+```
+ent/supplier/clarifications/":64,"webui:/quotagent/supplier/api/faq":64,"webui:/quotagent/nonexistent/":64} refused=7
+[ok]   T-234 正控：归还额度后同一路由恢复 200（背压不是"永久封路"）
+        status=200
+[ok]   T-234 正控：错误映射三档（背压→429+Retry-After / 超时→504 / 其它→500）可在单测层断言
+        429=429 retry-after=1 504=504 500=500
+[ok]   零残留：dispose 后 HTTP 服务关闭且**端口释放**（可被重新监听）
+        port=43813 可重监听=true
+RESULT: PASS（webui 门 44/44）
+
+```

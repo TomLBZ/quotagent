@@ -154,6 +154,8 @@
 | FR-STORAGE-001 | tools/storage.py + host/modules/storage-view.mjs | 见 AC-STORAGE-001 | 直引 |
 | FR-STORAGE-004 | tools/storage.py | 见 AC-STORAGE-004 | 直引 |
 | FR-STORAGE-006 | tools/storage.py + host/modules/storage-view.mjs | 见 AC-STORAGE-006 | 直引 |
+| FR-UXWEB-001 | host/modules/webui.mjs | 见 AC-UXWEB-001 | 直引 |
+| FR-UXWEB-002 | host/modules/webui.mjs | 见 AC-UXWEB-001 | 直引 |
 
 ## 2. 插件归属
 

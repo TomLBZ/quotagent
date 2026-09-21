@@ -103,7 +103,7 @@ const main = async () => {
   if (action === 'webui') {
     // WebUI 插件（每方视角一个路由）。宿主**不写账本**：只读视图 + Python 侧链校验（H1）。
     const { openLedger } = await import('./lib/ledger-view.mjs')
-    const { apply: webuiApply, Config: webuiConfig } = await import('./modules/webui.mjs')
+    const { apply: webuiApply, Config: webuiConfig, SUBVIEWS } = await import('./modules/webui.mjs')
     const { VIEW_RULES } = await import('./modules/projection.mjs')
     const ctx = new Context()
     await ctx.plugin(EventsService)
@@ -234,6 +234,9 @@ const main = async () => {
            ops_routes: [`${String(args.prefix ?? '/quotagent')}/ops/`, `${String(args.prefix ?? '/quotagent')}/api/ops`],
            scorecard_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/scorecard`),
            approval_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/approvals`),
+           // 道内子视图（P0-3）：清单**从模块导出读**（不在 CLI 里再抄一份，避免两处各记一遍而漂移）
+           subview_routes: Object.entries(SUBVIEWS).flatMap(([view, subs]) =>
+             subs.map((sub) => `${String(args.prefix ?? '/quotagent')}/${view}/${sub}/`)),
            retention_route: `${String(args.prefix ?? '/quotagent')}/api/retention`,
            pipeline_route: `${String(args.prefix ?? '/quotagent')}/api/pipeline`,
            admin_route: `${String(args.prefix ?? '/quotagent')}/admin/`,

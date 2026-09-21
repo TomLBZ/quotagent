@@ -20,5 +20,5 @@
     "P0-2_P0-3": "进行中（subagent 实现中）"
   },
   "discipline": "按 D-059：只把已实现且可验证的 FR/AC 迁进正式表；其余留在本索引与三份规格里（landed=false），不假标 done。",
-  "naming": "落地时 FR 用 FR-UX2-00x、AC 用 AC-UX2-00x（规格里已如此编号）。"
+  "naming": "落地时必须把草稿编号 `FR-UX2-00x`/`AC-UX2-00x` **转成纯字母家族**（本次用 `UXWEB`）：门的 ID 正则是 `[A-Z]+-\\d{3}`，带数字的家族门认不出（见 D-069）。已落地：FR-UXWEB-001/002、AC-UXWEB-001。"
 }

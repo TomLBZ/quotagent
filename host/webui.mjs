@@ -33,8 +33,14 @@ import { Config as avConfig3, apply as avApply3 } from './modules/admin-view.mjs
 import { Config as pmConfig3, apply as pmApply3 } from './modules/plugin-market.mjs'
 import { Config as upConfig3, apply as upApply3 } from './modules/user-plugin-manager.mjs'
 import { mkdtempSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+
+// 门自己注入的**假** admin token：只为在夹具里取到第四道页面（`/quotagent/admin/`）的 HTML。
+// 值不落任何文件、不出本进程；admin-guard 在 apply() 时读它（见 admin-guard 的 configured）。
+const GATE_TOKEN = 'gate-token-p0a-9d21'
+process.env.QUOTAGENT_ADMIN_TOKEN = GATE_TOKEN
 
 const facts = { checks: [] }
 let failures = 0
@@ -430,6 +436,259 @@ check('待批摘要正控：/contractor/api/approvals 与 /supplier/api/approval
   && String(apJson.source).includes('approval-digest')
   && !ap1.text.includes('不该外泄的正文') && !/"body"\s*:/.test(ap1.text) && !ap1.text.includes('private:'),
   `status=${ap1.status}/${ap2.status} total=${apJson.digest?.total} age=${JSON.stringify(apJson.digest?.by_age)}`)
+
+// ============================================================================
+// P0-2 / P0-3 门扩充（**只增不改**：上面 27 条一字不动）
+//   E2   四道页面 0 <script> / 0 内联事件属性；子视图页面同形
+//   E2b  八个新子路由各 200 且带道内子导航 + GET 表单
+//   E4   第一屏三个 data-block 锚点存在且顺序正确
+//   E5   筛选非空转（不同参数值 → 不同响应体 + 不同行集合）
+//   E6   空结果**显式说明**「筛选无结果」
+//   E7   分页不重叠 + 不丢行（与全量集合自证比对）
+//   E8   applied 回显（含夹取后的真值）
+//   E9   排序非空转（同一行集合、不同行序）
+//   E10  私域哨兵负控（子视图页面）+ 非空转对照
+//   E11  既有 JSON 路由**字节不变**（夹具内确定性路由，逐字节 sha256）
+//   E12  三条非确定路由（内含实时计数 / 读 Python 快照）顶层键集不变
+//   E13  四道页面都有道内子导航，且「上手」入口保留
+//   E14  从 dashboard 到达不变
+// ============================================================================
+const P02_SUBVIEWS = {
+  contractor: ['events', 'quotes', 'approvals', 'evidence'],
+  supplier: ['events', 'quotes', 'approvals', 'clarifications'],
+}
+const sha256 = (buf) => createHash('sha256').update(buf).digest('hex')
+const getBytes = async (path) => {
+  const res = await fetch(`${base}${path}`)
+  const buf = Buffer.from(await res.arrayBuffer())
+  return { status: res.status, buf, text: buf.toString('utf8') }
+}
+const rowsOf = (text) => [...String(text).matchAll(/data-row="([^"]*)"/g)].map((match) => match[1])
+const appliedOf = (text) => {
+  const match = String(text).match(/当前筛选已应用：([^<]*)/)
+  return match ? match[1].trim() : ''
+}
+const INLINE_EVENT = /\son[a-z]+\s*=/i
+
+// E2：四道页面（admin 道用门自己注入的假 token 真提权拿页面，否则第四道是 401 固定体，断言会空转）
+const homePage = await get('/')
+const adminElevate = await fetch(`${base}/admin/api/elevate`, { method: 'POST', body: `token=${GATE_TOKEN}` })
+const adminCookie = String(adminElevate.headers.get('set-cookie') ?? '').split(';')[0]
+const adminPage = await fetch(`${base}/admin/`, { headers: { cookie: adminCookie } })
+const adminText = await adminPage.text()
+// 第四道（真实 webui 的 /admin/，提权后）必须是**真面板**而不是坏页面：既有的逗号连写曾让响应体只剩 `NaN`
+check('P0-2/E13b 真 webui 的第四道（`/admin/`，门内提权后）**真的是面板**：含阻塞清单与进度区、'
+  + '含用户空间插件与插件市场两块，且响应体不是 `NaN`/空（这是回归锁：曾因返回链里的逗号连写整块面板变成 `NaN`）',
+  adminPage.status === 200 && adminText.includes('阻塞清单') && adminText.includes('进度与口径来源')
+  && adminText.includes('用户空间插件') && adminText.includes('插件市场') && adminText !== 'NaN',
+  `status=${adminPage.status} len=${adminText.length} 含阻塞清单=${adminText.includes('阻塞清单')} `
+  + `含市场=${adminText.includes('插件市场')} 体就是 NaN=${adminText === 'NaN'}`)
+const fourPages = [['/', homePage], ['/contractor/', contractor], ['/supplier/', supplier],
+  ['/ops/', opsPage], ['/admin/', { status: adminPage.status, text: adminText }]]
+const scripty = fourPages.filter(([, page]) => page.text.includes('<script'))
+const handlery = fourPages.filter(([, page]) => INLINE_EVENT.test(page.text))
+check('P0-2/E2 四道页面（含 admin 道真提权）仍 **0 行 `<script>` 且 0 个内联事件属性**'
+  + '（零 JS 是机检事实：交互只允许 `<form method=get>` 与 `<a>`）',
+  fourPages.every(([, page]) => page.status === 200) && scripty.length === 0 && handlery.length === 0
+  && adminElevate.status === 200,
+  `status=${fourPages.map(([name, page]) => `${name}=${page.status}`).join(' ')}；提权 status=${adminElevate.status}；`
+  + `含 <script>=${scripty.map(([name]) => name).join(',') || '无'}；含内联事件=${handlery.map(([name]) => name).join(',') || '无'}`)
+
+// E2b / E2c：八个新子路由
+const subPages = {}
+for (const [view, subs] of Object.entries(P02_SUBVIEWS)) {
+  for (const sub of subs) subPages[`/${view}/${sub}/`] = await get(`/${view}/${sub}/`)
+}
+const subBad = Object.entries(subPages).filter(([, res]) => res.status !== 200)
+const subNoNav = Object.entries(subPages).filter(([path, res]) => !res.text.includes(`data-subnav="${path.split('/')[1]}"`))
+const subNoForm = Object.entries(subPages).filter(([, res]) => !/<form method="get"/.test(res.text))
+check('P0-3/E2b 八个新子路由**各返回 200**，页面里有**道内子导航**（`data-subnav`）与 `<form method="get">` 筛选表单'
+  + '（无 JS 也能用；`/supplier/evidence/` 不在清单里是**有意**的：供应商道是 clarifications）',
+  subBad.length === 0 && subNoNav.length === 0 && subNoForm.length === 0 && Object.keys(subPages).length === 8,
+  `status=${Object.entries(subPages).map(([path, res]) => `${path}=${res.status}`).join(' ')}；`
+  + `缺子导航=${subNoNav.map(([path]) => path).join(',') || '无'}；缺 GET 表单=${subNoForm.map(([path]) => path).join(',') || '无'}`)
+const subScripty = Object.entries(subPages).filter(([, res]) => res.text.includes('<script') || INLINE_EVENT.test(res.text))
+check('P0-3/E2c 子视图页面同样 **0 `<script>` / 0 内联事件属性**（新页面不得偷偷引入脚本）',
+  subScripty.length === 0, `命中=${subScripty.map(([path]) => path).join(',') || '无'}`)
+
+// E4：第一屏三块（contractor / supplier）
+const P02_BLOCKS = ['pending-approvals', 'in-progress', 'health']
+const blockBad = []
+const blockReport = []
+for (const [name, page] of [['/contractor/', contractor], ['/supplier/', supplier]]) {
+  const at = P02_BLOCKS.map((block) => page.text.indexOf(`data-block="${block}"`))
+  const counts = P02_BLOCKS.map((block) => (page.text.match(new RegExp(`data-block="${block}"`, 'g')) || []).length)
+  const ordered = at.every((index) => index >= 0) && at[0] < at[1] && at[1] < at[2]
+  const single = counts.every((count) => count === 1)
+  const asSection = P02_BLOCKS.every((block) => page.text.includes(`<section data-block="${block}">`))
+  blockReport.push(`${name}: 位置=${JSON.stringify(at)} 出现次数=${JSON.stringify(counts)} 顺序正确=${ordered} 都是<section>=${asSection}`)
+  if (!(ordered && single && asSection)) blockBad.push(name)
+}
+check('P0-2/E4 第一屏三个 `data-block` 锚点（pending-approvals → in-progress → health）**各一次、顺序正确**、'
+  + '且都挂在 `<section>` 上（顺序错了 → 第一屏的顺序就错了）',
+  blockBad.length === 0, blockReport.join('；'))
+
+// E5：筛选非空转（同一参数下不同值 → 结果必须不同）
+const evAll = await get('/contractor/events/')
+const evQuote = await get('/contractor/events/?q=quote')
+const evRfq = await get('/contractor/events/?q=rfq')
+const rowsAll = rowsOf(evAll.text)
+const rowsQuote = rowsOf(evQuote.text)
+const rowsRfq = rowsOf(evRfq.text)
+check('P0-3/E5 筛选**非空转**：`?q=quote` 与 `?q=rfq` 响应体不同、行集合不同，且都**严格小于**不带筛选的全量'
+  + '（同一参数不同值必须给出不同结果，否则筛选只是装饰）',
+  evAll.status === 200 && evQuote.status === 200 && evRfq.status === 200
+  && evQuote.text !== evRfq.text
+  && rowsQuote.length > 0 && rowsRfq.length > 0 && rowsQuote.join(',') !== rowsRfq.join(',')
+  && rowsQuote.length < rowsAll.length && rowsRfq.length < rowsAll.length,
+  `全量=${rowsAll.length} 行；q=quote→${rowsQuote.length} 行[${rowsQuote.join(',')}]；`
+  + `q=rfq→${rowsRfq.length} 行[${rowsRfq.join(',')}]`)
+
+// E6：空结果显式说明（两种空法都要说清楚：筛掉的和本来就没有的）
+const evNone = await get('/contractor/events/?q=zzzz-no-such-thing')
+const clrEmpty = await get('/supplier/clarifications/')   // 夹具里供应商侧没有任何 clarification/* 行
+check('P0-3/E6 空结果**显式说明**（不是看起来像坏页面）：`?q=<无命中>` → 200 + `data-empty` + 0 行 + 文案点名「筛选无结果」；'
+  + '数据源本来就没有的（夹具里 `/supplier/clarifications/`）→ 另一条文案「本子视图暂无数据」+ `data-empty-reason="no-rows"`'
+  + '（两种空法不许混成一条、也不许留白）',
+  evNone.status === 200 && rowsOf(evNone.text).length === 0
+  && evNone.text.includes('data-empty="1"') && evNone.text.includes('data-empty-reason="no-match"')
+  && evNone.text.includes('筛选无结果')
+  && clrEmpty.status === 200 && rowsOf(clrEmpty.text).length === 0
+  && clrEmpty.text.includes('data-empty="1"') && clrEmpty.text.includes('data-empty-reason="no-rows"')
+  && clrEmpty.text.includes('本子视图暂无数据'),
+  `无命中：status=${evNone.status} 行数=${rowsOf(evNone.text).length} 含「筛选无结果」=${evNone.text.includes('筛选无结果')}；`
+  + `本来没有：status=${clrEmpty.status} 行数=${rowsOf(clrEmpty.text).length} `
+  + `含「本子视图暂无数据」=${clrEmpty.text.includes('本子视图暂无数据')}`)
+
+// E7 / E7b：分页不重叠 + 不丢行
+const pageOne = await get('/contractor/events/?limit=2&page=1')
+const pageTwo = await get('/contractor/events/?limit=2&page=2')
+const r1 = rowsOf(pageOne.text)
+const r2 = rowsOf(pageTwo.text)
+const overlap = r1.filter((key) => r2.includes(key))
+check('P0-3/E7 分页**不重叠**：`?limit=2&page=1` 与 `?limit=2&page=2` 的行集合**交集为空**，且各 2 行',
+  pageOne.status === 200 && pageTwo.status === 200 && r1.length === 2 && r2.length === 2 && overlap.length === 0,
+  `page1=[${r1.join(',')}] page2=[${r2.join(',')}] 交集=[${overlap.join(',')}]`)
+const walked = []
+for (let page = 1; page <= Math.max(1, Math.ceil(rowsAll.length / 2)); page += 1) {
+  const res = await get(`/contractor/events/?limit=2&page=${page}`)
+  walked.push(...rowsOf(res.text))
+}
+const duplicated = walked.filter((key, index) => walked.indexOf(key) !== index)
+check('P0-3/E7b 分页**不丢行**：逐页（limit=2）取回的行**并集 == 全量行集合**，且跨页无重复'
+  + '（自证：同一夹具的同一账本投影）',
+  duplicated.length === 0 && walked.length === rowsAll.length && rowsAll.length >= 4
+  && JSON.stringify([...walked].sort()) === JSON.stringify([...rowsAll].sort()),
+  `逐页取回 ${walked.length} 行 / 全量 ${rowsAll.length} 行；重复=[${duplicated.join(',')}]；`
+  + `并集=[${[...walked].sort().join(',')}]`)
+
+// E8：applied 回显（夹取后的真值）
+const clamped = await get('/contractor/events/?limit=99999&sort=DROP&page=-1')
+const clampedApplied = appliedOf(clamped.text)
+check('P0-3/E8 `applied` 回显存在且是**夹取后的真值**：limit 99999→200、sort DROP→desc、page -1→1，'
+  + '夹取过程也在页面上报清（请求值原样出现，便于人工核对）',
+  clamped.status === 200 && clampedApplied.includes('limit=200') && !clampedApplied.includes('99999')
+  && clampedApplied.includes('sort=desc') && clampedApplied.includes('page=1')
+  && clamped.text.includes('99999') && clamped.text.includes('DROP'),
+  `applied=「${clampedApplied}」；夹取说明里含原值=${clamped.text.includes('99999')}/${clamped.text.includes('DROP')}`)
+const negLimit = await get('/contractor/events/?limit=-1')
+check('P0-3/E8b 非法/越界 `limit` 夹取到**默认 20** 并在 applied 回显（`limit=-1`）',
+  negLimit.status === 200 && appliedOf(negLimit.text).includes('limit=20'),
+  `applied=「${appliedOf(negLimit.text)}」`)
+
+// E9：排序非空转
+const ascPage = await get('/contractor/events/?sort=asc')
+const descPage = await get('/contractor/events/?sort=desc')
+const ascRows = rowsOf(ascPage.text)
+const descRows = rowsOf(descPage.text)
+check('P0-3/E9 排序**非空转**：`sort=asc` 与 `sort=desc` 的**行集合相同、行序不同**（响应体也不同）',
+  ascPage.status === 200 && descPage.status === 200
+  && [...ascRows].sort().join(',') === [...descRows].sort().join(',')
+  && ascRows.join(',') !== descRows.join(',') && ascPage.text !== descPage.text,
+  `asc=[${ascRows.join(',')}] desc=[${descRows.join(',')}]`)
+
+// E10：私域哨兵负控（子视图页面）+ 非空转对照
+const P02_SENTINELS = ['cost_floor', 'markup_pct', 'calendar:private', 'bidders_private', 'private:',
+  'reserve_price', 'cost_model']
+const supplierSubPages = Object.entries(subPages).filter(([path]) => path.startsWith('/supplier/'))
+const leaks = []
+for (const [path, res] of supplierSubPages) {
+  for (const needle of P02_SENTINELS) if (res.text.includes(needle)) leaks.push(`${path}:${needle}`)
+}
+check('P0-3/E10 私域**负控**：供应商侧四个子视图页面里搜不到私域哨兵（' + P02_SENTINELS.join(' / ') + '）；'
+  + '**非空转对照**：同一批数据在承包商侧子视图里可见（证明源里确实有，不是\"什么都没有\"）',
+  leaks.length === 0 && evAll.text.includes('cost_floor'),
+  `供应商侧命中=${leaks.join(',') || '无'}；承包商 /contractor/events/ 含 cost_floor=${evAll.text.includes('cost_floor')}`)
+
+// E11：既有 JSON 路由字节不变（夹具内确定性路由）
+const FROZEN_SHA = {
+  '/api/health': 'd7cc1159637ab26f7a24ab32ad9474578573afbc50e8a4eebd84a24e3c867f7b',
+  '/api/status': '6aee6ecf98d18b6a882d476b3c3d72d9c3ab19f229496fb49984a4ee74ee721f',
+  '/api/pipeline': '52b5553c4a5741610e24d61d83431c91bcb88913fc9b22aed3b2c512108c0d7c',
+  '/contractor/api/events': '8e109436cd6f47bc5ad0bbd63f71dabac13f60e5264739f95af121fcee30de81',
+  '/supplier/api/events': '978e49abb74f5ec6cf60309a89eca654cd99599a17bf11976361919b7fc894bd',
+  '/contractor/api/evidence': 'e7eeade9618a5ba45da8bc354c33456e651d55b9a28b37991abc7da36b7601fc',
+  '/supplier/api/evidence': '8e964775bdeb98deb6c53f3be68fae4785e9c2e0b8ec1ab0cbeb3164dd79f60e',
+  '/contractor/api/history': 'c8397ff6d8da31273c651548194208547c9e87ac7b75d05bbb68647c2112c1f5',
+  '/supplier/api/history': '8342f5f75053785932f73c390939d5f84419e344420b063476a11e829b4aec5d',
+  '/contractor/api/approvals': 'da2ea5cb5652504479b1c0fbed466692f21a98f7ecfc9145f1c81eef420497ec',
+  '/supplier/api/approvals': '5763b641e0e31cdd6858ba4387510b71c6495c03e9f1c027095ff295a2bb3643',
+  '/contractor/api/scorecard': 'b061b79e2d401af5b8734d25ac6302482893c8aba19e3ce0d16ecbb8cc5896a0',
+  '/supplier/api/scorecard': 'f90d113b23d85998299fb193d82667c2e1af357da042d2c6e6e68de2b56cfe17',
+  '/contractor/api/negotiation': 'eee3b89df35d4d64f3c720e38f199de6c6b79a7892e819ca0059e6652fefddbf',
+  '/supplier/api/negotiation': 'a92cbdb36ff13fb04ae99ee42b6ad85fc9d3c5fbb7b27a47867ee4437386d7b2',
+  '/contractor/api/faq': '8368207200a683e3a80dbac63b6a3535306430b33e8517fd166f15cfe4395675',
+  '/supplier/api/faq': '42bd0dfaec4ed5a77f1df50b9ee1753025d16ea254f760b70f8f6d053de98053',
+}
+const byteBad = []
+const byteSeen = []
+for (const [path, want] of Object.entries(FROZEN_SHA)) {
+  const res = await getBytes(path)
+  const got = sha256(res.buf)
+  byteSeen.push(`${path}=${got}`)
+  if (res.status !== 200 || got !== want) byteBad.push(`${path}(status=${res.status} sha256=${got})`)
+}
+check('P0-2/E11 既有 JSON 路由**字节不变**（' + Object.keys(FROZEN_SHA).length
+  + ' 条夹具内确定性路由，逐字节 sha256 比对；基线取自**改动前**的同一夹具运行）',
+  byteBad.length === 0,
+  byteBad.length ? `不一致=${byteBad.join(' ')}` : `全部逐字节一致：${byteSeen.join(' ')}`)
+
+// E12：非确定三条（内含实时计数 / 读 Python 侧快照文件）→ 不比字节，比**顶层键集**
+const FROZEN_KEYS = {
+  '/api/retention': ['source', 'retention', 'headline', 'note'],
+  '/api/obs': ['service', 'observability', 'summary'],
+  '/api/ops': ['view', 'source', 'summary', 'runtime', 'breaker', 'evidence_by_view', 'evolve_journal',
+    'retention', 'retention_headline', 'note'],
+}
+const keyBad = []
+for (const [path, keys] of Object.entries(FROZEN_KEYS)) {
+  const res = await get(path)
+  let body = {}
+  try { body = JSON.parse(res.text) } catch (err) { body = {} }
+  const got = Object.keys(body).sort().join(',')
+  if (res.status !== 200 || got !== [...keys].sort().join(',')) keyBad.push(`${path}(status=${res.status} keys=${got})`)
+}
+check('P0-2/E12 三条**不可逐字节比对**的路由（内含实时请求计数 / 读 Python 侧写的快照）**顶层键集不变**：'
+  + Object.keys(FROZEN_KEYS).join(' · ') + '（字节不变在 E11 里证；这三条用键集防守，避免门自己变成 flaky）',
+  keyBad.length === 0, keyBad.join(' ') || `键集一致：${Object.keys(FROZEN_KEYS).join(' ')}`)
+
+// E13：四道页面的道内子导航 + 上手入口
+const navBad = []
+for (const [name, view, page] of [['/', null, homePage], ['/contractor/', 'contractor', contractor],
+  ['/supplier/', 'supplier', supplier], ['/ops/', 'ops', opsPage], ['/admin/', 'admin', { status: adminPage.status, text: adminText }]]) {
+  const subOk = view === null || page.text.includes(`data-subnav="${view}"`)
+  const startOk = page.text.includes('/quotagent/start/') && page.text.includes('上手')
+  if (!(subOk && startOk)) navBad.push(`${name}(子导航=${subOk} 上手入口=${startOk})`)
+}
+check('P0-2/E13 四道页面都有**道内导航**（`data-subnav`：能回该道其它子视图 + 首页），'
+  + '且「上手（token／配置放哪里？）」入口一处不少（总览页只需保留上手入口）',
+  navBad.length === 0, `不达标=${navBad.join(',') || '无'}`)
+
+// E14：从 dashboard 到达不变
+check('P0-2/E14 从现有 dashboard 到达**不变**：总览页仍含四道链接（含运维视角）',
+  homePage.status === 200 && ['contractor', 'supplier', 'ops']
+    .every((view) => homePage.text.includes(`/quotagent/${view}/`)),
+  `status=${homePage.status} 含运维视角=${homePage.text.includes('/quotagent/ops/')}`)
 
 // 4. 未知视角
 const unknown = await get('/nonexistent/')

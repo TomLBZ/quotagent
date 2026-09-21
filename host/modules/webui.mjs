@@ -46,11 +46,64 @@ const html = (title, body, prefix) => `<!doctype html><html lang="zh"><head><met
 <title>${title}</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
 code{background:#f3f3f3;padding:.1em .3em;border-radius:3px}table{border-collapse:collapse;width:100%}
 td,th{border:1px solid #ddd;padding:.35rem .5rem;text-align:left;font-size:13px}
-nav a{margin-right:1rem}</style></head><body><nav>
+nav a{margin-right:1rem}details{margin:.6rem 0}summary{cursor:pointer}</style></head><body><nav>
 <a href="${prefix}/">总览</a><a href="${prefix}/start/">上手（token／配置放哪里？）</a>
 <a href="${prefix}/contractor/">承包商视角</a><a href="${prefix}/supplier/">供应商视角</a>
+<a href="${prefix}/ops/">运维视角</a>
 <a href="${prefix}/admin/">系统管理</a><a href="${prefix}/api/status">/api/status</a><a href="${prefix}/api/health">/api/health</a>
 </nav><h1>${title}</h1>${body}</body></html>`
+
+/**
+ * 道内子视图（**静态声明**，P0-3）：`/<view>/<sub>/`。
+ * 新增子视图必须同步三处：本表、`/api/routes`、门 `host/webui.mjs`（否则门抓不到"新增路由没登记"）。
+ * 供应商道**没有** evidence（有 clarifications）：两道的子视图清单本来就不同，不是笔误。
+ */
+export const SUBVIEWS = {
+  contractor: ['events', 'quotes', 'approvals', 'evidence'],
+  supplier: ['events', 'quotes', 'approvals', 'clarifications'],
+}
+
+/** 子视图中文名（导航与标题用；键必须与 SUBVIEWS 完全对应）。 */
+const SUB_TITLE = { events: '事件', quotes: '报价', approvals: '待批', evidence: '证据面', clarifications: '澄清' }
+
+/** 分页/筛选的**夹取口径**（写死一处；回显的 applied 即真值，请求值一并报出便于人工核对）。 */
+const LIMIT_DEFAULT = 20
+const LIMIT_MAX = 200
+const PAGE_DEFAULT = 1
+const SORTS = ['desc', 'asc']
+const SORT_DEFAULT = SORTS[0]
+const LIMIT_CHOICES = [10, 20, 50, 200]
+
+/** ops / admin 两道的道内导航（本步不新增子路由，用**页内锚点**：一跳可达这件事本身保留）。 */
+const OPS_SECTIONS = [['runtime', '运行期'], ['pipeline', '三域流水'], ['retention', '留存计划'],
+  ['evolve', '自进化'], ['evidence', '证据面']]
+const ADMIN_SECTIONS = [['blocks', '阻塞清单'], ['progress', '进度'], ['user-plugins', '用户空间插件'],
+  ['market', '插件市场']]
+
+/** HTML 转义：页面全部由字符串拼装，任何来自账本/快照/参数表的字节都必须先过这里。 */
+const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/** 整数解析：只认十进制整数字面量（`-1` 认；`2.5` / `abc` / 空 → null = "不是整数"，不猜）。 */
+const intOrNull = (value) => {
+  if (value === null || value === undefined) return null
+  const text = String(value).trim()
+  return /^-?\d+$/.test(text) ? Number(text) : null
+}
+
+/** 道内子导航：能回**该道其它子视图 + 首页**（`data-subnav` 是门的抓手，也是"道内互跳"的机检形态）。 */
+const subNav = (prefix, view, current) => {
+  const links = [`<a href="${prefix}/${view}/">首页</a>`]
+  for (const sub of SUBVIEWS[view] ?? []) {
+    links.push(`<a href="${prefix}/${view}/${sub}/"${sub === current ? ' aria-current="page"' : ''}>${SUB_TITLE[sub] ?? sub}</a>`)
+  }
+  return `<nav data-subnav="${view}">${links.join(' ')}</nav>`
+}
+
+/** 页内锚点导航（ops / admin 两道；同样带 `data-subnav` 抓手）。 */
+const anchorNav = (view, home, sections) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
+  .concat(sections.map(([id, label]) => `<a href="${home}#${id}">${label}</a>`)).join(' ')}</nav>`
+
 
 /** 上手页（**未提权也能看**）：三步上手 + 提权 token 放哪里 + 配置/凭据放哪里 + 四个视图能做什么。
  *  只讲机制与命令，**不显示任何状态位/凭据值**（宿主零写面、零凭据）。 */
@@ -216,6 +269,315 @@ export function apply(ctx, config) {
   const seriesView = (view) => history.bySupplier(priceRows(view))
     .map((item) => ({ group: item.supplier_id, count: item.count, min: item.min, median: item.median,
       max: item.max, latest: item.latest, trend: item.trend }))
+
+  // ==========================================================================================
+  // P0-3 道内子视图：全部只读 GET，交互只用 `<form method=get>` + `<a>`（0 JS / 0 内联事件）。
+  // 数据**只**来自现有服务与注入参数（本视角账本投影 / approval-digest / evidence-summary），
+  // 宿主不重算任何业务口径。筛选/排序/翻页必须**非空转**：同参数不同值 → 结果必须不同。
+  // ==========================================================================================
+
+  /** 参数解析 + **夹取**（每一处夹取都进 notes，页面上必须报出来）。 */
+  const parseParams = (url) => {
+    const notes = []
+    const limitRaw = url.searchParams.get('limit')
+    let limit = LIMIT_DEFAULT
+    if (limitRaw !== null && String(limitRaw).trim() !== '') {
+      const value = intOrNull(limitRaw)
+      if (value === null || value < 1) notes.push(`limit=${limitRaw} 不是 ≥1 的整数 → 回落默认 ${LIMIT_DEFAULT}`)
+      else if (value > LIMIT_MAX) {
+        limit = LIMIT_MAX
+        notes.push(`limit=${limitRaw} 超过上限 → 夹取到 ${LIMIT_MAX}`)
+      } else limit = value
+    }
+    const sortRaw = url.searchParams.get('sort') ?? url.searchParams.get('order')
+    let sort = SORT_DEFAULT
+    if (sortRaw !== null && String(sortRaw).trim() !== '') {
+      const value = String(sortRaw).trim().toLowerCase()
+      if (SORTS.includes(value)) sort = value
+      else notes.push(`sort=${sortRaw} 不在 ${SORTS.join('/')} 内 → 回落默认 ${SORT_DEFAULT}`)
+    }
+    return { limit, sort, notes,
+      q: String(url.searchParams.get('q') ?? '').trim(),
+      type: String(url.searchParams.get('type') ?? '').trim(),
+      pageRaw: url.searchParams.get('page'), offsetRaw: url.searchParams.get('offset') }
+  }
+
+  /** 筛选：`q` 命中（类型/摘要/关联号/键）与 `type`（事件类型片段）。空条件 = 不筛（非空转的前提）。 */
+  const filterRows = (rows, params) => {
+    const needle = params.q.toLowerCase()
+    const typeNeedle = params.type.toLowerCase()
+    return rows.filter((row) => (needle === '' || row.haystack.toLowerCase().includes(needle))
+      && (typeNeedle === '' || String(row.type).toLowerCase().includes(typeNeedle)))
+  }
+
+  /** 排序：`desc`（默认，新→旧）/ `asc`（旧→新）按 `order`（账本行 = seq；聚合行 = 源内序号）。 */
+  const sortRows = (rows, sort) => {
+    const direction = sort === 'asc' ? 1 : -1
+    return [...rows].sort((left, right) => (left.order === right.order ? 0 : (left.order < right.order ? -direction : direction)))
+  }
+
+  /** 翻页：**同一有序数组切片** → 不重叠、不丢行（夹取后的 page/offset 就是回显的真值）。 */
+  const paginate = (rows, params) => {
+    const notes = [...params.notes]
+    const total = rows.length
+    const maxPage = Math.max(1, Math.ceil(total / params.limit))
+    let page = PAGE_DEFAULT
+    const offsetRaw = params.offsetRaw
+    if (offsetRaw !== null && String(offsetRaw).trim() !== '') {
+      const value = intOrNull(offsetRaw)
+      if (value === null || value < 0) notes.push(`offset=${offsetRaw} 不是 ≥0 的整数 → 回落第 ${PAGE_DEFAULT} 页`)
+      else {
+        const clamped = Math.min(value, (maxPage - 1) * params.limit)
+        if (clamped !== value) notes.push(`offset=${offsetRaw} 超过最后一页起点 → 夹取到 ${clamped}`)
+        page = Math.floor(clamped / params.limit) + 1
+      }
+    } else if (params.pageRaw !== null && String(params.pageRaw).trim() !== '') {
+      const value = intOrNull(params.pageRaw)
+      if (value === null || value < 1) notes.push(`page=${params.pageRaw} 不是 ≥1 的整数 → 回落第 ${PAGE_DEFAULT} 页`)
+      else if (value > maxPage) {
+        page = maxPage
+        notes.push(`page=${params.pageRaw} 超过总页数 → 夹取到第 ${maxPage} 页`)
+      } else page = value
+    }
+    const offset = (page - 1) * params.limit
+    return { page, offset, maxPage, total, slice: rows.slice(offset, offset + params.limit), notes }
+  }
+
+  /** 账本行 → 子视图行：只输出**本视角字段白名单**内的字段（投影之外再兜一层，抑制行不出正文）。 */
+  const ledgerRowsOf = (view, rows) => {
+    const allowed = new Set(rules[view]?.fields ?? [])
+    return rows.map((row, index) => {
+      const summary = row.suppressed ? `（已抑制：${row.reason}）` : String(row.summary ?? '')
+      const values = { seq: row.seq, type: row.type, correlation_id: row.correlation_id, actor: row.actor, ts: row.ts, summary }
+      for (const field of Object.keys(values)) if (!allowed.has(field)) values[field] = ''
+      return { key: String(row.seq ?? index + 1), type: String(row.type ?? ''),
+        order: typeof row.seq === 'number' && Number.isFinite(row.seq) ? row.seq : index + 1, values,
+        // 关键词命中的字段面：seq / 类型 / 关联号 / ts / 摘要（缺的**不**留 "undefined" 这种字面量）
+        haystack: [row.seq, row.type, row.correlation_id, row.ts, summary]
+          .filter((value) => value !== null && value !== undefined && String(value) !== '').join(' ') }
+    })
+  }
+
+  const LEDGER_COLUMNS = [['seq', 'seq'], ['type', 'type'], ['correlation_id', '关联号'], ['actor', 'actor'],
+    ['ts', 'ts'], ['summary', '摘要']]
+
+  /** 子视图数据源：**只读**现有服务/注入参数（不新增口径、不自己算业务数）。 */
+  const subSource = (view, sub, publicRows) => {
+    if (sub === 'events') {
+      return { rows: ledgerRowsOf(view, publicRows), what: '本视角全部事件（公开投影后的行）',
+        columns: (rules[view]?.fields ?? []).map((field) => ({ key: field, label: (LEDGER_COLUMNS.find(([k]) => k === field) ?? [field, field])[1] })) }
+    }
+    if (sub === 'quotes' || sub === 'clarifications') {
+      const prefixOf = sub === 'quotes' ? 'quote/' : 'clarification/'
+      const picked = publicRows.filter((row) => String(row.type).startsWith(prefixOf))
+      return { rows: ledgerRowsOf(view, picked), what: `本视角 ${prefixOf}* 事件（公开投影后的行）`,
+        columns: (rules[view]?.fields ?? []).map((field) => ({ key: field, label: (LEDGER_COLUMNS.find(([k]) => k === field) ?? [field, field])[1] })) }
+    }
+    if (sub === 'approvals') {
+      const pending = pendingApprovals(view)
+      const digest = approvals.digest(pending)
+      const policies = approvals.byPolicy(pending)
+      return { rows: digest.by_action.map((item, index) => ({ key: item.action, type: 'approval', order: index + 1,
+          values: { action: item.action, count: item.count }, haystack: `${item.action} ${item.count}` })),
+        columns: [{ key: 'action', label: '动作' }, { key: 'count', label: '待批数' }],
+        what: '人工门待批摘要（approval-digest 聚合：只出 counting 与 id/动作/等待，不出正文）',
+        extra: `<h3>聚合口径（approval-digest）</h3><p>入参 <b>${digest.rows}</b> 行 / 计入 <b>${digest.total}</b> 项 /`
+          + ` 跳过 <b>${digest.skipped}</b> 行；按等待时长 ${digest.by_age.map((b) => `${b.bucket}=${b.count}`).join(' · ')}；`
+          + `策略 ${policies.map((p) => `${p.policy}=${p.count}`).join(' · ') || '—'}；超过 ${digest.limits.stale_hours}h 的 `
+          + `<b>${digest.stale}</b> 项</p>`
+          + (digest.oldest ? `<p>最久等待：<code>${esc(digest.oldest.id)}</code>（${esc(digest.oldest.action)}，`
+            + `${Math.round(digest.oldest.waited_seconds / 3600)} 小时）</p>` : '<p>当前没有可计项的待批（reason=<code>no-pending-approvals</code>）</p>')
+          + `<p>JSON：<code>${prefix}/${view}/api/approvals</code></p>` }
+    }
+    if (sub === 'evidence') {
+      const summary = evidence.summarize(publicRows)
+      return { rows: summary.by_type.map((item, index) => ({ key: item.type, type: item.type, order: index + 1,
+          values: { type: item.type, count: item.count }, haystack: `${item.type} ${item.count}` })),
+        columns: [{ key: 'type', label: '事件类型' }, { key: 'count', label: '行数' }],
+        what: '账本证据面（evidence-summary 聚合；输入 = 本视角公开投影后的行）',
+        extra: `<h3>证据面聚合</h3><p>共 <b>${summary.rows}</b> 行 / <b>${summary.types}</b> 种类型 / `
+          + `<b>${summary.correlations}</b> 个关联 / <b>${summary.rows_with_refs}</b> 行带引用；时间跨度 `
+          + `<code>${esc(summary.span.first ?? '—')} → ${esc(summary.span.last ?? '—')}</code></p>`
+          + `<p>JSON：<code>${prefix}/${view}/api/evidence</code></p>` }
+    }
+    return { rows: [], columns: [], what: '（未登记的子视图）' }
+  }
+
+  const tableOf = (rows, columns) => `<table data-rows="${rows.length}"><tr>`
+    + columns.map((column) => `<th>${esc(column.label)}</th>`).join('') + '</tr>'
+    + rows.map((row) => `<tr data-row="${esc(row.key)}">`
+      + columns.map((column) => `<td>${esc(row.values[column.key] ?? '')}</td>`).join('') + '</tr>').join('')
+    + '</table>'
+
+  /** 空结果必须**显式说明**："筛选无结果" 与 "本视图暂无数据" 是两件事，都不许看起来像坏页面。 */
+  const emptyHtml = (view, sub, params, sourceTotal) => {
+    const filtered = params.q !== '' || params.type !== ''
+    const reason = filtered ? 'no-match' : 'no-rows'
+    const text = filtered
+      ? `筛选无结果：当前条件（q=${params.q || '-'} / type=${params.type || '-'}）在 ${sourceTotal} 行数据里命中 0 行 ——`
+        + `这是筛选结果，不是页面坏了`
+      : `本子视图暂无数据：${sourceTotal} 行数据源里没有该类型的事件 —— 不是页面坏了`
+    return `<p class="empty" data-empty="1" data-empty-reason="${reason}">${esc(text)}。`
+      + `<a href="${prefix}/${view}/${sub}/">清除筛选</a></p>`
+  }
+
+  /** 子视图页面（P0-3）：顶部道内子导航 + GET 筛选表单 + 表 + 底部 applied 回显（含夹取说明）。 */
+  const subviewPage = (view, sub, url) => {
+    const publicRows = rowsFor(view)
+    const source = subSource(view, sub, publicRows)
+    const params = parseParams(url)
+    const page = paginate(sortRows(filterRows(source.rows, params), params.sort), params)
+    const applied = `limit=${params.limit} offset=${page.offset} page=${page.page} sort=${params.sort} `
+      + `q=${params.q === '' ? '-' : esc(params.q)} type=${params.type === '' ? '-' : esc(params.type)} `
+      + `命中=${page.slice.length} 过滤后=${page.total} 数据源=${source.rows.length} 总页数=${page.maxPage}`
+    const form = `<form method="get" action="${prefix}/${view}/${sub}/">`
+      + `<label>关键词 <input name="q" value="${esc(params.q)}" size="14"></label> `
+      + `<label>类型 <input name="type" value="${esc(params.type)}" size="10" placeholder="如 quote/"></label> `
+      + `<label>排序 <select name="sort">${SORTS.map((item) => `<option value="${item}"${item === params.sort ? ' selected' : ''}>${item}</option>`).join('')}</select></label> `
+      + `<label>每页 <select name="limit">${LIMIT_CHOICES.map((item) => `<option value="${item}"${item === params.limit ? ' selected' : ''}>${item}</option>`).join('')}</select></label> `
+      + `<label>页 <input name="page" value="${page.page}" size="3"></label> `
+      + `<button type="submit">应用筛选</button></form>`
+    return html(`${config.page_title} · ${rules[view].title} · ${SUB_TITLE[sub] ?? sub}`,
+      subNav(prefix, view, sub)
+      + `<p><a href="${prefix}/${view}/">← 回 ${rules[view].title}</a> · `
+      + `<a href="${prefix}/${view}/${sub}/?limit=${LIMIT_MAX}&page=1">一次看 ${LIMIT_MAX} 行</a> · `
+      + `<a href="${prefix}/${view}/${sub}/">清除筛选/排序/翻页</a></p>`
+      + `<p>数据来源：${source.what}。本页**只读**：不发写请求、不写账本、无脚本。</p>`
+      + form
+      + (page.slice.length ? tableOf(page.slice, source.columns) : emptyHtml(view, sub, params, source.rows.length))
+      + (source.extra ?? '')
+      + `<p class="applied" data-applied="1">当前筛选已应用：${applied}</p>`
+      + (page.notes.length
+        ? `<ul class="clamp" data-clamp="${page.notes.length}">${page.notes.map((note) => `<li>夹取：${esc(note)}</li>`).join('')}</ul>`
+        : `<p class="clamp" data-clamp="0">夹取：无（本次请求的参数都在允许范围内）</p>`), prefix)
+  }
+  /**
+   * 视角首页（P0-2 重排）：第一屏**固定三块**
+   *   `data-block="pending-approvals"` → 今天要处理的（待批事项）+ 筛选/下钻表单
+   *   `data-block="in-progress"`       → 进行中（最新 RFQ / 报价数 / 比价 / 偏差标记 / 价格组）+ 表单
+   *   `data-block="health"`            → 异常与健康（证据面 / 链自洽 / 被抑制行 / 快照新鲜度）+ 表单
+   * 其余细节（记分卡 / 谈判 / FAQ / 价格表 / 原始事件 / 提权表单）下沉 `<details>`：
+   * 展开才占屏，但**既有标记与提权入口一个不少**（FR-ADMIN-002）。
+   * 每块里"能做的动作"必须是**表单/链接**（筛选、翻页、跳子视图），不是一句说明文字。
+   */
+  const viewPageHtml = (view) => {
+    const rows = rowsFor(view)
+    const suppressed = rows.filter((row) => row.suppressed).length
+    let report = { ok: false, count: rows.length }
+    try { report = ledgerOf(view).verify() } catch (err) { report = { ok: false, count: rows.length, reason: String(err).slice(0, 80) } }
+    const summary = evidence.summarize(rows)
+    const pending = pendingApprovals(view)
+    const digest = approvals.digest(pending)
+    const oldest = approvals.oldest(pending)
+    const scores = scorecard.bySupplier(ledgerOf(view).rows())
+    const flags = scores.reduce((sum, item) => sum + (typeof item.deviation_count === 'number' ? item.deviation_count : 0), 0)
+    const series = seriesView(view)
+    const medians = series.map((item) => item.median).filter((value) => typeof value === 'number')
+    const payload = pipelinePayload() || {}
+    const slice = (payload.views || {})[view] || {}
+    const neg = slice.negotiate || {}
+    const faq = slice.faq || {}
+    const reversed = [...rows].reverse()
+    const lastOf = (type) => reversed.find((row) => String(row.type).startsWith(type)) ?? null
+    const lastRfq = lastOf('rfq/')
+    const lastCompare = lastOf('compare/')
+    const lastRow = rows.length ? rows[rows.length - 1] : null
+    const quoteCount = rows.filter((row) => String(row.type).startsWith('quote/')).length
+    const sortForm = (target, label) => `<form method="get" action="${prefix}/${view}/${target}/">`
+      + `<label>关键词 <input name="q" size="12"></label> `
+      + `<label>排序 <select name="sort"><option value="desc" selected>新→旧</option><option value="asc">旧→新</option></select></label> `
+      + `<label>每页 <select name="limit"><option value="20" selected>20</option><option value="50">50</option><option value="200">200</option></select></label> `
+      + `<button type="submit">${label}</button></form>`
+
+    const pendingBlock = `<section data-block="pending-approvals">
+<h2>待批事项（人工门）· 待我处理</h2>
+<p>由 subagent 产出、经自进化流程晋升的插件 <code>approval-digest</code> 归纳：共 <b>${digest.total}</b> 项待批；
+按等待时长 ${digest.by_age.map((bucket) => `${bucket.bucket}=${bucket.count}`).join(' · ')}；
+超过 ${digest.limits.stale_hours}h 的 <b>${digest.stale}</b> 项</p>
+${oldest ? `<p>最久等待：<code>${esc(oldest.id)}</code>（${esc(oldest.action)}，${Math.round(oldest.waited_seconds / 3600)} 小时）</p>`
+    : '<p>当前没有待批事项（reason=<code>no-pending-approvals</code>）—— 不是空表，是队列真的空了。</p>'}
+${sortForm('approvals', '看待批')}
+<p><a href="${prefix}/${view}/approvals/">全部待批（可筛选/翻页）→</a> ·
+<a href="${prefix}/${view}/approvals/?limit=200&amp;page=1">一次看 200 行 →</a> ·
+<a href="${prefix}/admin/">系统管理（提权后可达）</a></p>
+</section>`
+
+    const inProgressBlock = `<section data-block="in-progress">
+<h2>进行中</h2>
+<p>最新 RFQ 包：${lastRfq ? `<code>seq ${esc(lastRfq.seq)}</code> ${esc(lastRfq.summary || lastRfq.type)}` : '—（本视角暂无 RFQ 事件）'}</p>
+<p>报价 <b>${quoteCount}</b> 条 · 比价评估 ${lastCompare
+      ? `<code>seq ${esc(lastCompare.seq)}（${esc(lastCompare.type)}）</code>` : '—（本视角不可见 compare/*）'}
+· 偏差标记 <b>${flags}</b> 个 · 价格序列 <b>${series.length}</b> 组${medians.length
+      ? `（跨组中位 ${Math.min(...medians)}–${Math.max(...medians)}，来自 price-history）` : ''}</p>
+${sortForm('quotes', '看报价')}
+<p><a href="${prefix}/${view}/quotes/">报价与行项目 →</a> ·
+<a href="${prefix}/${view}/events/?type=quote/">只看 quote/* 事件 →</a></p>
+</section>`
+
+    const healthBlock = `<section data-block="health">
+<h2>异常与健康 · 账本证据面</h2>
+<p>由自进化产出的插件 <code>evidence-summary</code> 计算：共 <b>${summary.rows}</b> 行 / <b>${summary.types}</b> 种类型 /
+<b>${summary.correlations}</b> 个关联 / <b>${summary.rows_with_refs}</b> 行带引用；时间跨度
+<code>${esc(summary.span.first ?? '—')}</code> → <code>${esc(summary.span.last ?? '—')}</code>；
+链自洽 <b>${report.ok}</b>（${report.count} 条）</p>
+<p>最后事件：${lastRow ? `<code>seq ${esc(lastRow.seq)} ${esc(lastRow.type)}</code>` : '—'} ·
+本视角被抑制行 <b>${suppressed}</b> 行 · 快照声明的生成时间
+<code>${esc(payload.generated_at ?? '缺失（degraded）')}</code>（快照由 Python 侧写、宿主只读；宿主不读墙钟）</p>
+${sortForm('events', '筛查事件')}
+<p><a href="${prefix}/${view}/events/">原始事件 →</a> ·
+<a href="${prefix}/${view}/evidence/?limit=200&amp;page=1">证据面与类型分布 →</a> ·
+<a href="${prefix}/api/status">/api/status</a> · <a href="${prefix}/ops/">运维视角</a></p>
+</section>`
+
+    const scoreHtml = `<details><summary>供应商绩效记分卡（折叠）</summary>`
+      + (scores.length
+        ? `<h3>供应商绩效记分卡</h3><p>由 subagent 产出、经自进化流程晋升的插件 <code>supplier-scorecard</code> 计算</p>`
+          + `<table><tr><th>供应商</th><th>报价次数</th><th>最低</th><th>中位</th><th>最高</th><th>平均交期(天)</th><th>偏差标记</th></tr>${
+            scores.map((item) => `<tr><td>${esc(item.supplier_id)}</td><td>${esc(item.quote_count)}</td><td>${esc(item.min_unit_price)}</td>`
+              + `<td>${esc(item.median_unit_price)}</td><td>${esc(item.max_unit_price)}</td><td>${esc(item.avg_lead_time_days)}</td>`
+              + `<td>${esc(item.deviation_count)}</td></tr>`).join('')}</table>`
+        : '<h3>供应商绩效记分卡</h3><p>（本视角暂无可聚合的供应商行）</p>')
+      + `</details>`
+
+    const domainHtml = `<details><summary>谈判轮次与 FAQ（折叠）</summary>`
+      + `<h3>谈判轮次（本视角）</h3><p>线程 <b>${neg.threads ?? 0}</b> / 轮次 <b>${neg.rounds ?? 0}</b> / 被拒 <b>${neg.rejected ?? 0}</b></p>`
+      + `<p>最近：<code>${esc((neg.recent || []).map((item) => `${item.thread_id}#${item.attempt_no}(${item.status ?? '—'})`).join(' · ') || '—')}</code></p>`
+      + `<h3>FAQ（本视角）</h3><p>条目 <b>${faq.entries ?? 0}</b>（版本 ${esc((faq.revs || []).join('、') || '—')}）</p>`
+      + `<p>最近：<code>${esc((faq.recent || []).map((item) => `${item.entry_id}@rev${item.rfq_rev}`).join(' · ') || '—')}</code></p>`
+      + `<p>JSON：<code>${prefix}/${view}/api/negotiation</code> · <code>${prefix}/${view}/api/faq</code></p></details>`
+
+    const priceHtml = `<details><summary>价格序列（按行项目，折叠）</summary><h3>价格序列（按行项目）</h3>`
+      + `<p>由自进化产出的插件 <code>price-history</code> 计算</p>`
+      + (series.length
+        ? `<table><tr><th>行项目</th><th>次数</th><th>最低</th><th>中位</th><th>最高</th><th>最新</th><th>趋势</th></tr>${
+          series.map((item) => `<tr><td>${esc(item.group)}</td><td>${esc(item.count)}</td><td>${esc(item.min)}</td>`
+            + `<td>${esc(item.median)}</td><td>${esc(item.max)}</td><td>${esc(item.latest)}</td><td>${esc(item.trend)}</td></tr>`).join('')}</table>`
+        : '<p>（本视角账本里暂无可比价格行）</p>')
+      + `</details>`
+
+    const rawHtml = `<details><summary>最近事件（原始表，最多 40 行，折叠）</summary><h3>最近事件</h3>`
+      + `<table><tr><th>seq</th><th>type</th><th>摘要</th><th>ts</th></tr>${
+        rows.slice(-40).reverse().map((row) => row.suppressed
+          ? `<tr><td>${esc(row.seq)}</td><td>${esc(row.type)}</td><td>（已抑制：${esc(row.reason)}）</td><td></td></tr>`
+          : `<tr><td>${esc(row.seq)}</td><td>${esc(row.type)}</td><td>${esc(row.summary || '')}</td><td>${esc(row.ts || '')}</td></tr>`).join('')}</table>`
+      + `<p><a href="${prefix}/${view}/events/">带筛选/翻页的事件子视图 →</a></p></details>`
+
+    const elevateHtml = `<details><summary>系统管理提权（业务用户无需使用；入口保留）</summary>
+<h3>管理员提权</h3>
+<form method="post" action="${prefix}/admin/api/elevate">
+<label>管理员 token（提权为系统管理）：<input name="token" type="password" autocomplete="off"></label>
+<button type="submit">提权</button></form>
+<p>token 只经当次请求体提交、不回显；cookie 只对 <code>${prefix}/admin/**</code> 生效。token 放哪里见
+<a href="${prefix}/start/">上手页</a>。</p></details>`
+
+    return html(`${config.page_title} · ${rules[view].title}`,
+      subNav(prefix, view, null)
+      + `<p>本视角只显示 <code>${(rules[view].types ?? []).join(' ')}</code> 的事件；`
+      + `供应商视角显式拒收私域键 <code>${rules.supplier.privateKeys.join(' ')}</code>。</p>`
+      + `<p>JSON：<code>${prefix}/${view}/api/events</code> · <code>${prefix}/${view}/api/history</code> · <code>${prefix}/${view}/api/evidence</code></p>`
+      + pendingBlock + inProgressBlock + healthBlock
+      + scoreHtml + domainHtml + priceHtml + rawHtml + elevateHtml, prefix)
+  }
   const handle = (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
     const path = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) || '/' : url.pathname
@@ -246,6 +608,11 @@ export function apply(ctx, config) {
           { path: `${prefix}/api/status`, method: 'GET', auth: 'none', what: '状态与账本校验' },
           { path: `${prefix}/api/obs`, method: 'GET', auth: 'none', what: '运行期观测（只读）' },
           { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
+          // 道内子视图（P0-3）：只读 GET + `<form method=get>` 筛选/翻页/排序（无脚本）
+          ...Object.entries(SUBVIEWS).flatMap(([view, subs]) => subs.map((sub) => ({
+            path: `${prefix}/${view}/${sub}/`, method: 'GET', auth: 'none',
+            what: `${view} 道的 ${sub} 子视图（limit/page/sort/q/type 参数；夹取后回显 applied）`,
+          }))),
           { path: `${prefix}/admin/api/session`, method: 'GET', auth: 'admin-session', what: '会话探测' },
           { path: `${prefix}/admin/api/elevate`, method: 'POST', auth: 'token', what: '用管理员 token 换不透明会话（cookie 只对 admin 前缀生效）' },
           { path: `${prefix}/admin/api/blocks`, method: 'GET', auth: 'admin-session', what: '阻塞与进度面板' },
@@ -267,6 +634,7 @@ export function apply(ctx, config) {
         + 'text-align:left;font-size:13px}nav a{margin-right:1rem}</style></head><body>'
         + `<nav><a href="${prefix}/">总览</a><a href="${prefix}/start/">上手</a>`
         + `<a href="${prefix}/contractor/">承包商视角</a><a href="${prefix}/supplier/">供应商视角</a>`
+        + `<a href="${prefix}/ops/">运维视角</a>`
         + `<a href="${prefix}/admin/">系统管理</a></nav>`
         + '<h1>quotagent 上手</h1>' + onboardingHtml(prefix, config.views) + '</body></html>')
     }
@@ -305,23 +673,24 @@ export function apply(ctx, config) {
       return send(200, 'text/html; charset=utf-8',
         html(`${config.page_title} · 运维视角`,
           `<p>本视角**不属于任何一方**：只看系统整体（运行期中间件状态 + 各视角账本的证据面聚合），不显示条目正文与私域键。</p>`
+          + anchorNav('ops', `${prefix}/ops/`, OPS_SECTIONS)
           + `<p>JSON：<code>${prefix}/api/ops</code></p>`
-          + `<h3>运行期</h3><p>${ops.summary({ rows: [] })}</p>`
+          + `<h3 id="runtime">运行期</h3><p>${ops.summary({ rows: [] })}</p>`
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
           + `<tr><td>admitted=${g.admitted ?? 0} refused=${g.refused ?? 0} timeouts=${g.timeouts ?? 0} failed=${g.failed ?? 0}</td>`
           + `<td>allowed=${b.allowed ?? 0} refused=${b.refused ?? 0} opened=${b.opened ?? 0} closed=${b.closed ?? 0}</td></tr></table>`
-          + `<h3>三域流水（谈判 / FAQ / 邮件）</h3><p>由 subagent 产出并晋升的插件 <code>pipeline-view</code> 聚合：<b>${pipeline.headline(pipelinePayload())}</b></p>`
+          + `<h3 id="pipeline">三域流水（谈判 / FAQ / 邮件）</h3><p>由 subagent 产出并晋升的插件 <code>pipeline-view</code> 聚合：<b>${pipeline.headline(pipelinePayload())}</b></p>`
           + `<p>邮件：运输通道 <b>${(pipeline.snapshot(pipelinePayload()).transport || {}).available ? '可用' : '不可用'}</b>（本轮无凭据，故必须报不可用）</p>`
-          + `<h3>留存计划（只读）</h3><p>判定在 Python 侧（<code>services/retention.py</code>），由 subagent 产出并晋升的插件 <code>retention-view</code> 聚合：<b>${retention.headline(retentionPlanOf('contractor'))}</b></p>`
+          + `<h3 id="retention">留存计划（只读）</h3><p>判定在 Python 侧（<code>services/retention.py</code>），由 subagent 产出并晋升的插件 <code>retention-view</code> 聚合：<b>${retention.headline(retentionPlanOf('contractor'))}</b></p>`
           + `<p>账本行永不销毁；销毁只作用于派生副本，不可重建物须过人工门（ADR-0018）</p>`
-          + `<h3>自进化流水</h3><p>由自进化产出的插件 <code>evolve-journal</code> 归纳（只给计数，不出正文）</p>`
+          + `<h3 id="evolve">自进化流水</h3><p>由自进化产出的插件 <code>evolve-journal</code> 归纳（只给计数，不出正文）</p>`
           + (() => {
             const ev = journal.summarize(evolveRows())
             return `<p>提案 <b>${ev.proposed}</b> / 影子 <b>${ev.shadowed}</b> / 门 <b>${ev.gated.passed}</b> 过 `
               + `<b>${ev.gated.rejected}</b> 拒 / 晋升 <b>${ev.promoted}</b> / 回滚 <b>${ev.rolled_back}</b> / `
               + `canary 进 <b>${ev.canary.entered}</b> 出 <b>${ev.canary.exited}</b>；最近 <code>${ev.last_event ?? '—'}</code></p>`
           })()
-          + `<h3>各视角账本证据面（聚合）</h3>`
+          + `<h3 id="evidence">各视角账本证据面（聚合）</h3>`
           + `<table><tr><th>视角</th><th>行数</th><th>类型数</th><th>关联数</th><th>带引用行</th><th>时间跨度</th></tr>${rowsHtml}</table>`,
           prefix))
     }
@@ -338,64 +707,13 @@ export function apply(ctx, config) {
     }
     const viewMatch = path.match(/^\/([a-z]+)\/?$/)
     if (viewMatch && rules[viewMatch[1]]) {
-      const view = viewMatch[1]
-      const rows = rowsFor(view)
-      const table = `<table><tr><th>seq</th><th>type</th><th>摘要</th><th>ts</th></tr>${
-        rows.slice(-40).reverse().map((row) => row.suppressed
-          ? `<tr><td>${row.seq}</td><td>${row.type}</td><td>（已抑制：${row.reason}）</td><td></td></tr>`
-          : `<tr><td>${row.seq}</td><td>${row.type}</td><td>${row.summary || ''}</td><td>${row.ts || ''}</td></tr>`).join('')}</table>`
-      return send(200, 'text/html; charset=utf-8',
-        html(`${config.page_title} · ${rules[view].title}`,
-          `<p>本视角只显示 <code>${rules[view].types.join(' ')}</code> 的事件；`
-          + `供应商视角显式拒收私域键 <code>${rules.supplier.privateKeys.join(' ')}</code>。</p>`
-          + `<p>JSON：<code>${prefix}/${view}/api/events</code> · <code>${prefix}/${view}/api/history</code> · <code>${prefix}/${view}/api/evidence</code></p>`
-          + (() => {
-            const s = evidence.summarize(rows)
-            const span = s.span
-            return `<h3>账本证据面</h3><p>由自进化产出的插件 <code>evidence-summary</code> 计算：`
-              + `共 <b>${s.rows}</b> 行 / <b>${s.types}</b> 种类型 / <b>${s.correlations}</b> 个关联 / `
-              + `<b>${s.rows_with_refs}</b> 行带引用；时间跨度 <code>${span.first ?? '—'}</code> → <code>${span.last ?? '—'}</code></p>`
-          })()
-          + (() => {
-            const sc = scorecard.bySupplier(ledgerOf(view).rows())
-            if (!sc.length) return '<h3>供应商绩效记分卡</h3><p>（本视角暂无可聚合的供应商行）</p>'
-            return `<h3>供应商绩效记分卡</h3><p>由 subagent 产出、经自进化流程晋升的插件 <code>supplier-scorecard</code> 计算</p>`
-              + `<table><tr><th>供应商</th><th>报价次数</th><th>最低</th><th>中位</th><th>最高</th><th>平均交期(天)</th><th>偏差标记</th></tr>${
-                sc.map((s) => `<tr><td>${s.supplier_id}</td><td>${s.quote_count}</td><td>${s.min_unit_price}</td>`
-                  + `<td>${s.median_unit_price}</td><td>${s.max_unit_price}</td><td>${s.avg_lead_time_days}</td>`
-                  + `<td>${s.deviation_count}</td></tr>`).join('')}</table>`
-          })()
-          + `<form method="post" action="${prefix}/admin/api/elevate">`
-          + `<label>管理员 token（提权为系统管理）：<input name="token" type="password" autocomplete="off"></label>`
-          + `<button type="submit">提权</button></form>`
-          + (() => {
-            const slice = ((pipelinePayload() || {}).views || {})[view] || {}
-            const neg = slice.negotiate || {}
-            const faq = slice.faq || {}
-            const negRecent = (neg.recent || []).map((r) => `${r.thread_id}#${r.attempt_no}(${r.status ?? '—'})`).join(' · ') || '—'
-            const faqRecent = (faq.recent || []).map((r) => `${r.entry_id}@rev${r.rfq_rev}`).join(' · ') || '—'
-            return `<h3>谈判轮次（本视角）</h3><p>线程 <b>${neg.threads ?? 0}</b> / 轮次 <b>${neg.rounds ?? 0}</b> / 被拒 <b>${neg.rejected ?? 0}</b></p>`
-              + `<p>最近：<code>${negRecent}</code></p>`
-              + `<h3>FAQ（本视角）</h3><p>条目 <b>${faq.entries ?? 0}</b>（版本 ${(faq.revs || []).join('、') || '—'}）</p>`
-              + `<p>最近：<code>${faqRecent}</code></p>`
-          })()
-          + (() => {
-            const pend = approvals.digest(pendingApprovals(view))
-            const oldest = approvals.oldest(pendingApprovals(view))
-            return `<h3>待批事项（人工门）</h3><p>由 subagent 产出、经自进化流程晋升的插件 <code>approval-digest</code> 归纳：`
-              + `共 <b>${pend.total}</b> 项待批；按等待时长 ${pend.by_age.map((b) => `${b.bucket}=${b.count}`).join(' · ')}`
-              + `；超过 ${pend.limits.stale_hours}h 的 <b>${pend.stale}</b> 项</p>`
-              + (oldest ? `<p>最久等待：<code>${oldest.id}</code>（${oldest.action}，${Math.round(oldest.waited_seconds / 3600)} 小时）</p>` : '')
-          })()
-          + `<h3>价格序列（按行项目）</h3><p>由自进化产出的插件 <code>price-history</code> 计算</p>`
-          + (() => {
-            const series = seriesView(view)
-            if (!series.length) return '<p>（本视角账本里暂无可比价格行）</p>'
-            return `<table><tr><th>行项目</th><th>次数</th><th>最低</th><th>中位</th><th>最高</th><th>最新</th><th>趋势</th></tr>${
-              series.map((item) => `<tr><td>${item.group}</td><td>${item.count}</td><td>${item.min}</td>`
-                + `<td>${item.median}</td><td>${item.max}</td><td>${item.latest}</td><td>${item.trend}</td></tr>`).join('')}</table>`
-          })()
-          + table, prefix))
+      // 第一屏三块 + 其余下沉 <details>（细节见 viewPageHtml 的注释）
+      return send(200, 'text/html; charset=utf-8', viewPageHtml(viewMatch[1]))
+    }
+    // 道内子视图（P0-3）：`/<view>/<sub>/`——全部 GET、只读、无脚本；筛选/排序/翻页走查询参数
+    const subMatch = path.match(/^\/([a-z]+)\/([a-z-]+)\/?$/)
+    if (subMatch && rules[subMatch[1]] && (SUBVIEWS[subMatch[1]] ?? []).includes(subMatch[2])) {
+      return send(200, 'text/html; charset=utf-8', subviewPage(subMatch[1], subMatch[2], url))
     }
     const viewEvidence = path.match(/^\/([a-z]+)\/api\/evidence\/?$/)
     if (viewEvidence && rules[viewEvidence[1]]) {
@@ -492,13 +810,16 @@ export function apply(ctx, config) {
         + `<button type="submit">提交</button></form>`
         + `<span class="dim">（提交只落待处理项；落账本要人工批准引用）</span></td></tr>`).join('')
       const switchLinks = Object.keys(rules).map((v) => `<a href="${prefix}/admin/api/switch?to=${v}">${v}</a>`).join(' · ')
-      return `${data.degraded ? `<p>降级：<code>${data.reason ?? ''}</code> —— ${data.next_action ?? ''}</p>` : ''}`
+      return `${anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS)}`
+        + `${data.degraded ? `<p>降级：<code>${data.reason ?? ''}</code> —— ${data.next_action ?? ''}</p>` : ''}`
+        + `<h3 id="progress">进度与口径来源</h3>`
         + `<p>进度：阶段 <b>${data.progress?.phase ?? '—'}</b> · 下一步 <b>${data.progress?.next_task ?? '—'}</b>`
         + ` · 已完 <b>${data.progress?.done ?? 0}</b> / 待做 <b>${data.progress?.todo ?? 0}</b></p>`
+        + `<h3 id="blocks">阻塞清单</h3>`
         + `<p>阻塞 <b>${data.counts?.blocked ?? 0}</b> 条（口径：${data.counts?.source ?? '—'}）</p>`
         + `<table><thead><tr><th>block</th><th>kind</th><th>原因</th><th>需要你做的事</th><th>提交材料</th></tr></thead><tbody>${rows}</tbody></table>`
         + `<p>切换视角：${switchLinks}</p>`
-        + (() => { const u = userPlugins.list(); return `<h3>用户空间插件（管理面本身也是插件）</h3>`
+        + (() => { const u = userPlugins.list(); return `<h3 id="user-plugins">用户空间插件（管理面本身也是插件）</h3>`
             + `<p>命名空间 <b>${(u.namespaces || []).length}</b> 个 · 插件 <b>${u.counts?.plugins ?? 0}</b> · 已装载 <b>${u.counts?.loaded ?? 0}</b>${u.degraded ? ` · <b>降级</b>：${u.reason ?? ''}` : ''}</p>`
             + (u.namespaces || []).map((n) => `<p><code>${n.ns}</code>：` + (n.plugins || []).map((p) =>
                 `<code>${p.name}@${p.version ?? '-'}</code> <form style="display:inline" method="post" action="${prefix}/admin/api/user-plugins/load">`
@@ -507,7 +828,8 @@ export function apply(ctx, config) {
             + `<p>向 agent 提需求（本平台侧只登记待办；产出与落账本由 agent / Python 侧完成）：</p>`
             + `<form method="post" action="${prefix}/admin/api/user-plugins/request">`
             + `<input name="ns" placeholder="命名空间" size="10"><input name="description" placeholder="你想让它做什么" size="40">`
-            + `<button type="submit">提需求</button></form>` })(),        + (() => { const m = pluginMarket.snapshot(); return `<h3>插件市场（只读）</h3>`
+            + `<button type="submit">提需求</button></form>` })()
+        + (() => { const m = pluginMarket.snapshot(); return `<h3 id="market">插件市场（只读）</h3>`
             + `<p>共 <b>${m.counts?.total ?? 0}</b> 项（人工 ${m.counts?.human ?? 0} / 自进化 ${m.counts?.evolve ?? 0} / 用户空间 ${m.counts?.user_space ?? 0}）；未装配 <b>${m.counts?.unwired ?? 0}</b>；三源一致 <b>${!m.inconsistent}</b></p>`
             + `<p>${(m.differences || []).map((d) => `<code>${d}</code>`).join(' · ') || '（无差异）'}</p>` })()
     }
