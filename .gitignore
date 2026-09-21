@@ -22,3 +22,6 @@ docs/work/evidence/**/tmp/
 
 # 本机用户手册：逐批 goal 指令表（每台机器自备，不入库）
 USER-GOALS.md
+
+# 用户空间插件（运行时产物：独立 instance / 独立文件根 / 独立凭据作用域）
+user-space/
