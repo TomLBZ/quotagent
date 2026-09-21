@@ -147,6 +147,7 @@
 
 | FR-USERPLUG-001 | tools/userplugin-record.py + host/lib/user-space.mjs（scan/列表） | 见 AC-USERPLUG-001 | 直引 |
 | FR-USERPLUG-005 | tools/userplugin-record.py + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-005 | 直引 |
+| FR-USERPLUG-010 | tools/userplugin-elevate.py + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-010 | 直引 |
 
 ## 2. 插件归属
 

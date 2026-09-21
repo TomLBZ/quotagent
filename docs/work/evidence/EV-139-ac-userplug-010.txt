@@ -1,0 +1,127 @@
+EV-139 AC-USERPLUG-010 提权（用户空间插件 → 系统级插件）
+
+命令：`tools/verify.sh ac AC-USERPLUG-010`（有/无 Node 两环境都须全绿：ADR-0013 §8）
+
+[1] 有 Node
+```
+{
+  "ac": "AC-USERPLUG-010",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "① agent 发起提权 → 拒绝 `approval-ref-not-human`（人工门不可绕过）",
+      "ok": true,
+      "detail": "codes=['approval-ref-not-human'] promote_exists=False rc=1"
+    },
+    {
+      "name": "② 引用形状不对（`ap-12`）→ 拒绝 `approval-ref-malformed`",
+      "ok": true,
+      "detail": "codes=['approval-ref-malformed']"
+    },
+    {
+      "name": "③ 产物与载荷哈希不一致 → 拒绝 `shadow-hash-mismatch`，且**树里什么都没有**",
+      "ok": true,
+      "detail": "codes=['shadow-hash-mismatch'] promote_exists=False"
+    },
+    {
+      "name": "④ 人类 actor + 影子哈希一致 → **真写**晋升目标并落 `userplugin/elevated`",
+      "ok": true,
+      "detail": "applied=1 wrote=True elevated=1 ref=ap-0111 actor=human:deployer"
+    },
+    {
+      "name": "⑤ 不真不记：账本里的 `artifact_sha256` == 写入前后现算的产物哈希",
+      "ok": true,
+      "detail": "recorded=04b0a09b6eeca236 现算=04b0a09b6eeca236"
+    },
+    {
+      "name": "⑥ 目标已存在 → 拒绝 `target-exists`，且既有文件**逐字节不变**",
+      "ok": true,
+      "detail": "codes=['target-exists']"
+    },
+    {
+      "name": "⑦ 清单 name 试图越出晋升目录 → 拒绝 `target-name-mismatch`（越界写面不可达）",
+      "ok": true,
+      "detail": "codes=['target-name-mismatch']"
+    },
+    {
+      "name": "⑧ 载荷里没有人工门引用 → 拒绝 `elevate-needs-approval`",
+      "ok": true,
+      "detail": "codes=['elevate-needs-approval']"
+    },
+    {
+      "name": "⑨ 幂等：待办件已消费 → 不新增 elevated 行（也不重复写）",
+      "ok": true,
+      "detail": "before=1 after=1 rc=0"
+    },
+    {
+      "name": "⑩ 六次拒绝全部零写账本（拒绝不产生 `userplugin/elevated`）",
+      "ok": true,
+      "detail": "拒绝数=6 elevated=1 （初始待办件 1）"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-USERPLUG-010",
+  "phase": "P2",
+  "title": "提权：用户空间插件 → 系统级插件（人工门 + 影子哈希 + 真写 + 不覆盖）",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+
+[2] 无 Node
+```
+rue,
+      "detail": "codes=['target-exists']"
+    },
+    {
+      "name": "⑦ 清单 name 试图越出晋升目录 → 拒绝 `target-name-mismatch`（越界写面不可达）",
+      "ok": true,
+      "detail": "codes=['target-name-mismatch']"
+    },
+    {
+      "name": "⑧ 载荷里没有人工门引用 → 拒绝 `elevate-needs-approval`",
+      "ok": true,
+      "detail": "codes=['elevate-needs-approval']"
+    },
+    {
+      "name": "⑨ 幂等：待办件已消费 → 不新增 elevated 行（也不重复写）",
+      "ok": true,
+      "detail": "before=1 after=1 rc=0"
+    },
+    {
+      "name": "⑩ 六次拒绝全部零写账本（拒绝不产生 `userplugin/elevated`）",
+      "ok": true,
+      "detail": "拒绝数=6 elevated=1 （初始待办件 1）"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-USERPLUG-010",
+  "phase": "P2",
+  "title": "提权：用户空间插件 → 系统级插件（人工门 + 影子哈希 + 真写 + 不覆盖）",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+
+[3] 线上演示（临时晋升目录 + 临时账本，避免把未真进树的 elevated 记进真账本）
+```
+=== ① 线上：管理面产提权待办载荷（真 HTTP，需会话）===
+提权申请 → 202
+ kind= None ref= None target= None written= None
+ next_action= None
+-rw------- 1 hermes 10000 373 Sep 21 14:47 tmp/ui-shared/user-plugin-elevations/req-47d35ff9edbe8bb7.json
+=== ② Python 侧真跑（临时晋升目录 + 临时账本：绝不把假的 elevated 写进真账本）===
+ ok= False applied= [] refused= ['shadow-hash-mismatch']
+ 写出来的模块:
+total 0
+ 账本(临时):
+   {"actor":"agent:local","body":{"code":"shadow-hash-mismatch","ns":"con-a","plugin":"quote-trend","schema":1},"body_hash":"sha256:f81f2062a8824e45564947eb01d62bc71fdfbee8c44d5afe09acdf9e63f26f6d","class":"fact","correlation_id":"upe-refuse-req-47d35ff9edbe8bb7.json-shadow-hash-mismatch","entry_hash":
+ 真 host/modules 是否被改动:
+ （空=未动）
++ FR-USERPLUG-010
++ AC-USERPLUG-010
++ 矩阵行
+
+```
