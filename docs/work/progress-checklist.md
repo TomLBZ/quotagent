@@ -72,7 +72,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-233 | 运行期审计钩子 `audit-hook` 插件：决策留痕（观测，不写账本）+ 去重/有界/零残留 | B29 | done | EV-068 |
 | T-234 | `governor` 接进 UI 真实 HTTP 路径：背压端到端（429+Retry-After）+ 三档映射单测（504/500） | B30 | done | EV-069 / D-027 |
 | T-247 | 由 subagents 生产两件插件（supplier-scorecard 已接线 / idempotency-guard 待接线）+ 修 process.exit 截断 | B43 | done | D-042 / EV-082 |
-| T-248 | 把 idempotency-guard 接进桥调用路径（宿主层幂等：同一请求不重复打账本） | B44 | todo | — |
+| T-248 | 幂等守卫接进桥调用路径（同请求只打一次下游，端到端门 5/5） | B44 | done | D-043 / EV-083 |
 | T-246 | 把"新增依赖同步四处"的人肉清单变成机检（verify.sh wiring 5/5，抓出 2 个孤儿 stub） | B42 | done | D-041 / EV-081 |
 | T-245 | 第五个自进化产出（evolve-journal）：自进化流水接进运维视角（webui 门 19/19） | B41 | done | D-040 / EV-080 |
 | T-244 | 运维视角挂到 /quotagent/ops/（第三条视角道齐备，webui 门 18/18） | B40 | done | D-039 / EV-079 |

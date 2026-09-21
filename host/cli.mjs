@@ -243,6 +243,22 @@ const main = async () => {
     let breakerHandle = null
     let breakerRefused = 0
     let breakerLastRefusal = null
+    let idemHandle = null
+    let idemLast = null
+    let idemReused = 0
+
+    // 幂等守卫（subagent 产出、自进化晋升的中间件，T-247/T-248）：同一请求不重复打下游
+    const { apply: idemApply, Config: idemConfig } = await import('./modules/idempotency-guard.mjs')
+    const ibox = {}
+    const idemCtx = new Context()
+    await idemCtx.plugin(EventsService)
+    await idemCtx.plugin({ name: 'idempotency-guard', inject: [], Config: idemConfig,
+      apply: async (inner, cfg) => {
+        const original = inner.provide.bind(inner)
+        inner.provide = (service, value) => { if (service === 'idempotency') ibox.handle = value; return original(service, value) }
+        await idemApply(inner, cfg)
+      } }, idemConfig.parse({}))
+    idemHandle = ibox.handle
 
     // 熔断器（**自进化产出的中间件**，T-241）：连续失败达阈值就快速失败，保护下游
     const { apply: breakerApply, Config: breakerConfig } = await import('./modules/circuit-breaker.mjs')
@@ -362,12 +378,39 @@ const main = async () => {
       } else {
         // 熔断在**调用之前**：打开期间直接快速失败，不去打下游（省资源也防雪崩）
         const methodKey = `bridge:${String(args.method)}`
-        const repeat = Math.max(1, Number(args.repeat ?? 1))
+        // `--idem-probe N`：同一请求（同 params）连发 N 次，用来验证"重复请求被认出来、不重复执行"
+        const idemProbe = Math.max(1, Number(args['idem-probe'] ?? 1))
+        const repeat = idemProbe > 1 ? idemProbe : Math.max(1, Number(args.repeat ?? 1))
+        // 语义分清：`--repeat N` = **N 个不同请求**（params 带 probe 索引，像 canary 探针一样）；
+        // `--idem-probe N` = **同一请求 N 次**（用来验证判重）。否则两个门会互相干扰（实测 breaker-route 红）。
+        const sameRequest = idemProbe > 1
         for (let i = 0; i < repeat; i++) {
+          const loopParams = sameRequest ? params : { ...params, probe: i }
+          const idemInput = { method: String(args.method), params: loopParams }
+          // ① 幂等判定：重复的在途/已完成请求**不执行**，直接给可解释结论（复用而非重放副作用）
+          idemLast = idemHandle ? idemHandle.begin(idemInput) : { decision: 'fresh' }
+          if (idemHandle && (idemLast.decision === 'duplicate-inflight' || idemLast.decision === 'duplicate-done')) {
+            idemReused += 1
+            // **同形契约**（D-023）：桥帧形状是 `{n, p:{id, m, result, error}}`，
+            // 自己造的"复用帧"必须同形，否则调用方读 `call.p.id` 直接 TypeError（本轮实测踩到）。
+            frame = { n: 'result', p: { id: Number(args.id ?? 1) + i, m: String(args.method), error: null,
+              result: { reused: true, decision: idemLast.decision, key: idemLast.key,
+                reason: idemLast.reason, next_action: idemLast.next_action } } }
+            continue
+          }
+          // ② 熔断准入 → 真调用
           const permit = breakerHandle ? breakerHandle.allow({ key: methodKey }) : { allowed: true }
           if (!permit.allowed) { breakerRefused += 1; breakerLastRefusal = permit; continue }
-          frame = await client.call(String(args.method), params, { id: Number(args.id ?? 1) + i })
-          if (breakerHandle) breakerHandle.record({ key: methodKey, ok: frame && frame.n === 'result' })
+          frame = await client.call(String(args.method), loopParams, { id: Number(args.id ?? 1) + i })
+          // ③ 落完成态（含结果摘要）：失败也记，但失败**不得**被复用成成功（由模块自身的门保证）
+          const ok = Boolean(frame && frame.n === 'result')
+          if (breakerHandle) breakerHandle.record({ key: methodKey, ok })
+          if (idemHandle) {
+            const { createHash } = await import('node:crypto')
+            const digest = ok ? 'sha256:' + createHash('sha256')
+              .update(JSON.stringify(frame.result ?? null)).digest('hex') : null
+            idemHandle.finish({ ...idemInput, ok, result_digest: digest })
+          }
         }
       }
       call = frame
@@ -377,6 +420,8 @@ const main = async () => {
     emit({ ok: Boolean(call ? call.n === 'result' : true), action: 'bridge', phase: 'call',
            profile: profileName, realm: profile.realm, ledger_path: ledgerPath,
            call_lane, call_fallback,
+           idem: idemHandle ? { last: idemLast, reused: idemReused, stats: idemHandle.stats(),
+             config: idemHandle.config() } : null,
            breaker: breakerHandle ? { state: breakerHandle.state({ key: `bridge:${String(args.method)}` }),
              stats: breakerHandle.stats(), refused: breakerRefused, last_refusal: breakerLastRefusal } : null,
            canary: canaryProbe ? { decision: canaryProbe.decision, exited: canaryProbe.exited,

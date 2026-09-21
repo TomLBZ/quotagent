@@ -1,0 +1,62 @@
+EV-083 T-248 幂等守卫接进**真实桥调用路径**（subagent 产出的中间件真正上线）
+生成时间 2026-09-21T10:22:44Z
+命令与原始输出（原样留档）
+
+[1] 同一请求连发 3 次 → 只执行一次，后两次**复用**结论
+$ node host/cli.mjs bridge --profile contractor-ops --method ledger.count --idem-probe 3
+exit=0 | ok=True | idem={"last": {"key": "ledger.count||sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a", "method": "ledger.count", "correlation_id": "", "params_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a", "window_ms": 60000, "decision": "duplicate-done", "allowed": false, "reusable": true, "replay": false, "result_digest": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b", "finished_at": 1789986164258, "age_ms": 0, "reason": "already-completed", "next_action": "直接复用 result_digest（已完成的同一请求），不要重放副作用"}, "reused": 2, "stats": {"fresh": 1, "duplicate_inflight": 0, "duplicate_done": 2, "replay": 0, "finished": 1, "failed": 0, "expired": 0, "evicted": 0, "seen_evicted": 0, "unknown": 0, "entries": 1, "seen": 1, "window_max": 256, "replay_memory": 64}, "config": {"key": "host", "window_ms": 60000, "inflight_ttl_ms": 30000, "window_max": 256, "window_max_limit": 1024, "replay_memory": 64, "replay_memory_limit": 256}}
+   ← reused=2，last.decision=duplicate-done
+   ← 硬证据：breaker.allowed=1（repeat=3 → **只打了一次下游**）
+
+[2] 失败请求连发 2 次 → 第二次判 `replay`（允许重试），**不得**被复用成成功
+$ node host/cli.mjs bridge --profile contractor-ops --method no.such/method --idem-probe 2
+exit=0 | idem={"last": {"key": "no.such/method||sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a", "method": "no.such/method", "correlation_id": "", "params_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a", "window_ms": 60000, "decision": "replay", "allowed": true, "reusable": false, "replay": true, "previous": {"ok": false, "finished_at": 1789986164435}, "reason": "last-attempt-failed", "next_action": "同一请求上次失败（失败结果**不得**被复用成成功）：允许重试，这次是一次新的执行"}, "reused": 0, "stats": {"fresh": 1, "duplicate_inflight": 0, "duplicate_done": 0, "replay": 1, "finished": 0, "failed": 2, "expired": 0, "evicted": 0, "seen_evicted": 0, "unknown": 0, "entries": 1, "seen": 1, "window_max": 256, "replay_memory": 64}, "config": {"key": "host", "window_ms": 60000, "inflight_ttl_ms": 30000, "window_max": 256, "window_max_limit": 1024, "replay_memory": 64, "replay_memory_limit": 256}}
+
+[3] 端到端门：$ tools/verify.sh idem-route → 5/5
+[
+  {
+    "name": "正控①：同一请求连发 3 次 → 后两次判**重复**并复用结论，不重复执行",
+    "ok": true,
+    "detail": "reused=2 last=duplicate-done"
+  },
+  {
+    "name": "硬证据①：**只打了一次下游**（熔断器 allowed 计数 = 1，其余被幂等挡下）",
+    "ok": true,
+    "detail": "breaker.allowed=1（repeat=3）"
+  },
+  {
+    "name": "负控②：换了 params 的请求仍判 `fresh`（幂等不许变成'什么都拦'）",
+    "ok": true,
+    "detail": "decision=fresh"
+  },
+  {
+    "name": "负控③：失败请求连发 2 次 → 第二次判 `replay`（允许重试）而**不是** duplicate-done（失败不得被复用成成功）",
+    "ok": true,
+    "detail": "decision=replay reused=0 reason=last-attempt-failed"
+  },
+  {
+    "name": "如实记录：三种判定都被计入统计（fresh / duplicate / replay）",
+    "ok": true,
+    "detail": "stats={\"fresh\": 1, \"duplicate_inflight\": 0, \"duplicate_done\": 0, \"replay\": 1, \"finished\": 0, \"failed\": 2, \"expired\": 0, \"evicted\": 0, \"seen_evicted\": 0, \"un"
+  }
+]
+
+结论：`idempotency-guard`（subagent 产出、经自进化晋升）现在**真的接在调用路径上**：
+调用前 `begin()` 判重 → 重复（在途/已完成）**不执行**、给可解释结论并复用；调用后 `finish()` 落完成态（含结果摘要）。
+失败态**不得**被复用成成功（由模块自身的门 + 端到端门双重保证）。
+与既有中间件的分工：governor 管额度、breaker 管连续失败熔断、**它管"同一件事是不是已经做过"**。
+
+[4] 本轮又踩了一次**同形契约**（D-023 的老坑，记录在案）
+我自己造的"复用帧"写成 `{n, id, m, result}`，而桥帧形状是 `{n, p:{id,m,result,error}}`
+→ 调用方读 `call.p.id` 直接 `TypeError: Cannot read properties of undefined`（实测 exit=3）。
+改正为同形帧后 5/5 通过。**教训：只要是自己构造"看起来像下游返回"的对象，必须先核对形状契约。**
+
+[5] 加装幂等层后立刻暴露的一处**语义干扰**（门抓住了，值得记）
+装上幂等后 `breaker-route` 门变红（2/4）：它的 `--repeat 6` 原本表示"6 次独立调用"，
+但幂等层把"同 method + 同 params"认成**同一个请求** → 第 2 次起变成复用，`allowed` 只剩 1，门红。
+修法是把语义分清并写死：
+  · `--repeat N`      = **N 个不同请求**（params 带 `probe` 索引，与 canary 探针同款）
+  · `--idem-probe N`  = **同一请求 N 次**（用于验证判重）
+修后 breaker-route 4/4、idem-route 5/5 同时绿。
+**教训**：多个中间件串在同一条路径上时，**参数语义必须显式区分**——否则一个中间件的正确行为
+会被另一个中间件的门读成"回归"（本轮正是门把这件事抓出来的）。
