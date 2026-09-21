@@ -186,6 +186,9 @@ const main = async () => {
     await ctx.plugin({ name: 'pipeline-view', inject: [], Config: pvConfig,
       apply: (inner, cfg) => pvApply(inner, cfg) }, pvConfig.parse({}))
     // 邮件域只读视图（本批新增）：读 Python 侧写的状态快照（**绝对路径**；空 = 未配置 → 视图降级）
+    const { apply: bhApply, Config: bhConfig } = await import('./modules/bid-heuristics.mjs')
+    await ctx.plugin({ name: 'bid-heuristics', inject: [], Config: bhConfig,
+      apply: (inner, cfg) => bhApply(inner, cfg) }, bhConfig.parse({}))
     const { apply: mvApply, Config: mvConfig } = await import('./modules/mail-view.mjs')
     await ctx.plugin({ name: 'mail-view', inject: [], Config: mvConfig,
       apply: (inner, cfg) => mvApply(inner, { ...cfg,
@@ -221,7 +224,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)

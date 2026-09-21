@@ -39,6 +39,7 @@ PROVIDERS = {
     "adminGuard": "admin-guard", "adminView": "admin-view", "pluginMarket": "plugin-market", "userPluginManager": "user-plugin-manager",
     "configView": "config-view",
     "mailView": "mail-view",
+    "bidHeuristics": "bid-heuristics",
 }
 
 

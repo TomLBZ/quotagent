@@ -18,11 +18,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics']
 
 export const provides = ['webui']
 
@@ -97,12 +97,16 @@ const subNav = (prefix, view, current) => {
   for (const sub of SUBVIEWS[view] ?? []) {
     links.push(`<a href="${prefix}/${view}/${sub}/"${sub === current ? ' aria-current="page"' : ''}>${SUB_TITLE[sub] ?? sub}</a>`)
   }
+  // 比价 heuristics（T-279）：业务方看得见、点得到（新页面本身零内联脚本）
+  links.push(`<a href="${prefix}/${view}/heuristics/" data-heuristics-link="1"${current === 'heuristics' ? ' aria-current="page"' : ''}>比价口径</a>`)
   return `<nav data-subnav="${view}">${links.join(' ')}</nav>`
 }
 
 /** 页内锚点导航（ops / admin 两道；同样带 `data-subnav` 抓手）。 */
-const anchorNav = (view, home, sections) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
-  .concat(sections.map(([id, label]) => `<a href="${home}#${id}">${label}</a>`)).join(' ')}</nav>`
+const anchorNav = (view, home, sections, extras = []) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
+  .concat(sections.map(([id, label]) => `<a href="${home}#${id}">${label}</a>`))
+  .concat(extras.map(([href, label]) => `<a href="${href}" data-heuristics-link="1">${label}</a>`))
+  .join(' ')}</nav>`
 
 
 /** 上手页（**未提权也能看**）：三步上手 + 提权 token 放哪里 + 配置/凭据放哪里 + 四个视图能做什么。
@@ -209,6 +213,7 @@ export function apply(ctx, config) {
   const userPlugins = ctx.userPluginManager  // 用户空间插件管理面（subagent 产出，T-268）
   const configView = ctx.configView          // 配置与凭据的可视面 + 干跑 + 待处理项（本批新增模块）
   const mailView = ctx.mailView              // 邮件域（SMTP/IMAP）的只读运维视图（**本批新增模块**）
+  const bid = ctx.bidHeuristics              // 比价 heuristics（domain 插件，T-279）：只做算术，不读账本
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
   const pipelinePayload = () => {
@@ -328,6 +333,205 @@ export function apply(ctx, config) {
   const seriesView = (view) => history.bySupplier(priceRows(view))
     .map((item) => ({ group: item.supplier_id, count: item.count, min: item.min, median: item.median,
       max: item.max, latest: item.latest, trend: item.trend }))
+
+  // ==========================================================================================
+  // 比价 heuristics（T-279）：**为什么这家排在这里** + 双方**自己调权重**。
+  //   · 打分与解释在 `host/modules/bid-heuristics.mjs`（domain 插件，只做算术、不读账本）；
+  //   · 本文件只做两件事：把**本视角自己的**公开行**映射成候选**（白名单字段，逐行审阅）、渲染页面；
+  //   · 候选字段映射（**只读投影后的公开行**；私域键的行整行跳过，只取下列字段的**真值**）：
+  //       代号   `body.supplier_id` → `body.quote_id` → 行 `correlation_id`
+  //       行项目 `line.item_id` / `body.item_id`（**归一按行项目分组**：不同行项目的单价不可比）
+  //       单价   `line.unit_price`（行项目报价）/ `body.final_price`·`body.proposed_price`（报价级单价）
+  //       交期   `body.lead_time_days`                    （天）
+  //       付款条件 `body.payment_terms_offered.days` / `body.payment_terms.days`（净账期天数）
+  //       质保   `body.warranty_months` / `line.warranty_months`（月）
+  //       偏差   `body.deviation_count` / `body.deviations[]` 长度（计数）
+  //     取不到的字段**不补默认值**（插件里记进 missing，不当 0）。
+  // ==========================================================================================
+  const HEURISTICS_FACTORS = [
+    ['price', '单价', 'w_price'], ['delivery', '交期', 'w_delivery'], ['payment', '付款条件', 'w_payment'],
+    ['warranty', '质保', 'w_warranty'], ['deviation', '偏差计数', 'w_deviation'],
+  ]
+  /**
+   * 私域防线（**纵深防御**）：本视角的 `privateKeys` + `private` 字样**一律**跳过；
+   * 另外几个已知私域键名只在**要防另一方的视角**上额外跳过 —— 承包商视角没有"要防的另一方"，
+   * 不该把**自己**账本里带私域键的行从自己的比价页上藏起来（那会变成"悄悄少了几家候选"）。
+   */
+  const VIEW_EXTRA_PRIVATE_KEYS = { supplier: ['reserve_price', 'cost_model', 'cost_floor', 'markup_pct'] }
+  const hasPrivateKey = (value, view) => {
+    if (!value || typeof value !== 'object') return false
+    const rule = rules[view] || { privateKeys: [] }
+    const extra = VIEW_EXTRA_PRIVATE_KEYS[view] ?? []
+    return Object.keys(value).some((key) => {
+      const lowered = key.toLowerCase()
+      return (rule.privateKeys ?? []).includes(key) || lowered.includes('private') || extra.includes(lowered)
+    })
+  }
+  const numField = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined)
+  /** 净账期天数：数字直接用；对象取 `days`（其余形状按"取不到"处理，不猜）。 */
+  const netDays = (value) => {
+    const direct = numField(value)
+    if (direct !== undefined) return direct
+    if (value && typeof value === 'object' && !Array.isArray(value)) return numField(value.days)
+    return undefined
+  }
+  /** 偏差计数：数字优先；数组取长度（"有几条偏差"这件事本身就是计数，不是判定）。 */
+  const deviationCount = (value) => {
+    const direct = numField(value)
+    if (direct !== undefined) return direct
+    return Array.isArray(value) ? value.length : undefined
+  }
+  /**
+   * 本视角的候选：只读自己的账本行 → 只取上文那 6 个字段（带私域键的行整行跳过）。
+   * 返回 `{ list, skipped }`：**被跳过的条数必须在页面上报出来**（否则就成了"悄悄少了几家候选"）。
+   */
+  const heuristicsCandidates = (view) => {
+    const out = []
+    let skipped = 0
+    for (const row of ledgerOf(view).rows()) {
+      const body = row && typeof row.body === 'object' && row.body !== null ? row.body : {}
+      if (hasPrivateKey(body, view)) { skipped += 1; continue }   // 行体带私域 → 连这行都不进候选
+      const lines = Array.isArray(body.lines) ? body.lines : []
+      const textOf = (value) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined)
+      const code = [body.supplier_id, body.quote_id, row?.correlation_id]
+        .map((value) => (typeof value === 'string' ? value.trim() : '')).find((text) => text !== '')
+      if (!code) continue
+      const shared = {
+        code,
+        lead_time_days: numField(body.lead_time_days),
+        payment_terms: netDays(body.payment_terms_offered) ?? netDays(body.payment_terms),
+        warranty_months: numField(body.warranty_months),
+        deviation_count: deviationCount(body.deviation_count) ?? deviationCount(body.deviations),
+      }
+      for (const line of lines) {
+        if (!line || typeof line !== 'object' || Array.isArray(line)) continue
+        if (hasPrivateKey(line, view)) continue         // 行项目带私域 → 跳过该行项目
+        out.push({
+          ...shared,
+          item: textOf(line.item_id),
+          unit_price: numField(line.unit_price),
+          lead_time_days: shared.lead_time_days ?? numField(line.lead_time_days),
+          warranty_months: shared.warranty_months ?? numField(line.warranty_months),
+          deviation_count: shared.deviation_count ?? deviationCount(line.deviation_count),
+        })
+      }
+      // 报价级单价（账本里 `quote/price-proposed` / `quote/human-approved` 的形状：`item_id` + 单价）：
+      // 行项目明细在别的行上时，这一条也要能进候选（否则这些账本上比价页会是空的）
+      if (lines.length === 0) {
+        const item = textOf(body.item_id)
+        const unitPrice = numField(body.final_price) ?? numField(body.proposed_price)
+        if (item !== undefined && unitPrice !== undefined) out.push({ ...shared, item, unit_price: unitPrice })
+      }
+    }
+    // 同一代号出现多次 = 该供应商的多个行项目报价：**按代号聚合取最优**没有口径依据（谁最优？），
+    // 所以这里保持"一行一个候选"的原始形状，并把代号重复的事实报在 counts 里（页面自述）。
+    return { list: out, skipped }
+  }
+  /** 权重参数解析：只放行有限数；不是数字的参数**不进 payload**（页面上如实报出请求原值）。 */
+  const heuristicsWeights = (url) => {
+    const weights = {}
+    const notes = []
+    const submitted = {}
+    for (const [, label, param] of HEURISTICS_FACTORS) {
+      const raw = url.searchParams.get(param)
+      submitted[param] = raw ?? ''
+      if (raw === null || String(raw).trim() === '') continue
+      const value = Number(String(raw).trim())
+      if (!Number.isFinite(value)) { notes.push(`${param}=${raw} 不是有限数 → 该分量用默认权重（未参与本次排名）`); continue }
+      weights[param.replace(/^w_/, '')] = value
+    }
+    return { weights, notes, submitted }
+  }
+  const heuristicsLabel = (factor) => (HEURISTICS_FACTORS.find(([name]) => name === factor) ?? [factor, factor])[1]
+  const heuristicsRun = (view, url) => {
+    const parsed = heuristicsWeights(url)
+    const candidates = heuristicsCandidates(view)
+    const payload = bid.rank({ weights: parsed.weights, candidates: candidates.list })
+    const codes = new Set(candidates.list.map((item) => item.code))
+    return { parsed, payload,
+      counts: { ...payload.counts, codes: codes.size, factor_values: candidates.list.length,
+        skipped_private: candidates.skipped },
+      notes: [...parsed.notes, ...(payload.clamp_notes ?? [])] }
+  }
+  /** 页面（SSR，**零内联脚本**：权重输入是 `<form method=get>`，预设是 `<a>` 链接）。 */
+  const heuristicsHtml = (view, url) => {
+    const { parsed, payload, counts, notes } = heuristicsRun(view, url)
+    const weightInputs = HEURISTICS_FACTORS.map(([factor, label, param]) => {
+      const current = parsed.submitted[param] !== '' ? parsed.submitted[param] : String(payload.weights_applied[factor] ?? '')
+      return `<label>${label} <input name="${param}" value="${esc(current)}" size="5"></label>`
+    }).join(' ')
+    const presets = [['price', '只看单价'], ['delivery', '只看交期'], ['payment', '只看付款条件'],
+      ['warranty', '只看质保'], ['deviation', '只看偏差']]
+      .map(([factor, label]) => `<a href="${prefix}/${view}/heuristics/?w_${factor}=1">${label}</a>`).join(' · ')
+    const weightRow = HEURISTICS_FACTORS.map(([factor, label]) =>
+      `<td data-weight="${factor}">${esc(label)}：${esc(payload.weights_applied[factor] ?? '—')}` +
+      `<br><small>提交 ${esc(parsed.submitted[`w_${factor}`] === '' ? '（未提交）' : parsed.submitted[`w_${factor}`])}</small></td>`).join('')
+    const rows = payload.rows.map((row) => `<tr data-row="${esc(row.code)}" data-rank="${row.rank}">`
+      + `<td>${row.rank}</td><td><code>${esc(row.code)}</code></td><td data-score="${row.score}">${row.score}</td>`
+      + HEURISTICS_FACTORS.map(([factor]) => `<td data-contribution="${factor}">${row.contributions[factor]}</td>`).join('')
+      + `<td>${esc((row.coverage?.present ?? []).map(heuristicsLabel).join('/') || '—')}</td>`
+      + `<td>${esc((row.coverage?.missing ?? []).map(heuristicsLabel).join('/') || '无（五个因子都取得到）')}</td>`
+      + `<td>${esc(row.item ?? '—')}</td>`
+      + `<td>${esc(row.hint ?? '')}</td></tr>`).join('')
+    const header = `<tr><th>名次</th><th>代号</th><th>得分<br><small>越高越前</small></th>`
+      + HEURISTICS_FACTORS.map(([factor, label]) => `<th>${label}<br><small>贡献点</small></th>`).join('')
+      + `<th>可用因子</th><th>缺失因子</th><th>行项目</th><th>如何提升排名</th></tr>`
+    const degradedText = `<p class="degraded" data-degraded="1">降级（**不冒充健康**）：<code>${esc(payload.reason)}</code>`
+      + ` → 本次没有可排名的候选（数据来源见下）。这不是页面坏了。</p>`
+    return subNav(prefix, view, 'heuristics')
+      + `<p><a href="${prefix}/${view}/">← 回 ${rules[view].title}</a> · JSON：<code>${prefix}/${view}/api/heuristics</code>`
+      + ` （参数同本页：<code>w_price</code>/<code>w_delivery</code>/<code>w_payment</code>/<code>w_warranty</code>/<code>w_deviation</code>）</p>`
+      + `<p>本页让双方看到**为什么这家排在这里**，并**自己调权重**。数据只来自<b>本视角自己的公开投影行</b>`
+      + `（本插件不读账本、不写账本、不落任何文件）；排序口径与 Python 侧 <code>services/compare.py</code> 同名同向`
+      + `（五个分量 = 单价 / 交期 / 付款条件 / 质保 / 偏差计数），同权重下**名次一致**。</p>`
+      + `<form method="get" action="${prefix}/${view}/heuristics/">${weightInputs} `
+      + `<button type="submit">用这组权重排名</button></form>`
+      + `<p>预设：${presets} · <a href="${prefix}/${view}/heuristics/">恢复默认权重</a>`
+      + `（预设与手填都走 <code>form method=get</code> / 链接，浏览器里不需要脚本）</p>`
+      + `<h3 id="weights">① 本次生效的权重（归一后和为一）</h3>`
+      + `<table data-heuristics="weights">${weightRow}</table>`
+      + `<p data-normalized-sum="1">归一后权重和 = <code>${esc(payload.weights_applied ? payload.normalized_sum : '—')}</code>`
+      + `（契约：与 1 的绝对差 ≤ <code>${esc(payload.normalization?.tolerance)}</code>；越界权重被夹取并回显在下面）</p>`
+      + (notes.length
+        ? `<ul class="clamp" data-clamp="${notes.length}">${notes.map((note) => `<li>夹取：${esc(note)}</li>`).join('')}</ul>`
+        : `<p class="clamp" data-clamp="0">夹取：无（本次请求的权重都是 [0,1] 内的有限数）</p>`)
+      + `<h3 id="ranking">② 排名（贡献分解）</h3>`
+      + `<p data-heuristics="counts">候选 <b>${counts.candidates}</b> 条（其中可排名 <b>${counts.usable}</b>、`
+      + `代号 <b>${counts.codes}</b> 个、行项目报价 <b>${counts.factor_values}</b> 条）；`
+      + `本次显示 <b>${counts.ranked}</b> 条；截断 <b>${payload.truncated}</b>（超上限被丢 <b>${payload.omitted}</b> 条，`
+      + `上限来自插件配置 <code>max_candidates</code>）；数据不完整的候选 <b>${counts.incomplete}</b> 条`
+      + `（缺失因子共 ${counts.missing_factors} 个，缺失因子**不计分也不当成 0**）；`
+      + `取不到任何因子的候选 <b>${counts.excluded_invalid}</b> 条（不进排名）；`
+      + `完全相同的候选去重 <b>${counts.duplicates ?? 0}</b> 条；`
+      + `带私域键、整行跳过的行 <b>${counts.skipped_private}</b> 条（跳过就要说出来，不悄悄少候选）；`
+      + `行项目 <b>${counts.items}</b> 个（归一基数：<code>${esc(payload.baseline)}</code> —— `
+      + `<code>per-item</code> 表示**同一行项目内的候选才互相比较**，不同行项目的单价不可比）。</p>`
+      + (payload.degraded ? degradedText
+        : (rows ? `<table data-heuristics="rows">${header}${rows}</table>`
+          : `<p class="empty" data-empty="1" data-empty-reason="no-rows">本次没有可排名的候选：`
+            + (counts.zero_weight > 0
+              ? `本次权重只落在候选**取不到**的因子上（被这样排除的候选 <b>${counts.zero_weight}</b> 条）`
+                + ` —— 换一组权重，或等对方的报价里带上那些字段`
+              : '本视角账本里没有可分解为五分量的报价行（不是页面坏了）')
+            + `。</p>`))
+      + `<p class="applied" data-applied="1">当前已应用：权重 ${esc(JSON.stringify(payload.weights_applied))}；`
+      + `得分范围 0–100（越高越前）；贡献点之和 == 得分（绝对容差 ${esc(payload.point_tolerance)}）</p>`
+      + `<p><small>分数与贡献点是**无量纲**的（极差归一后的加权份额），页面**不显示别人报价的绝对值、`
+      + `也不显示任何差值** —— 名次与份额都不该被用来反推对方的口径或底价。</small></p>`
+  }
+  /** JSON（机器可读；与页面同参数、同数据、同口径）。 */
+  const heuristicsJson = (view, url) => {
+    const { payload, counts, notes } = heuristicsRun(view, url)
+    return { view, source: 'bid-heuristics（domain 插件：只做算术，不读账本、不写账本）',
+      rows: payload.rows, baseline: payload.baseline,
+      weights_applied: payload.weights_applied, weights_requested: payload.weights_requested,
+      normalized_sum: payload.normalized_sum, normalization: payload.normalization,
+      point_tolerance: payload.point_tolerance, counts, truncated: payload.truncated, omitted: payload.omitted,
+      degraded: payload.degraded, reason: payload.reason, clamp_notes: notes, factors: payload.factors,
+      note: '五个分量的贡献点（无量纲）；极差归一按行项目分组（baseline=per-item 时同项才互相比较）；'
+        + '同权重下与 services/compare.py 名次一致；只输出白名单字段（行项目/代号/名次/分数/贡献/缺失/提示），'
+        + '不出任何绝对量级与私域键' }
+  }
 
   // ==========================================================================================
   // P0-3 道内子视图：全部只读 GET，交互只用 `<form method=get>` + `<a>`（0 JS / 0 内联事件）。
@@ -815,6 +1019,13 @@ ${sortForm('events', '筛查事件')}
           // 邮件域（SMTP/IMAP）：页面 + 只读 JSON；数据来自 Python 侧快照（宿主不联网、不发信）
           { path: `${prefix}/ops/mail/`, method: 'GET', auth: 'none', what: '邮件域只读页（队列计数 / 最近一次尝试与 reason / available / next_action；零内联脚本）' },
           { path: `${prefix}/api/mail`, method: 'GET', auth: 'none', what: '邮件域只读 JSON（来源 Python 侧快照；不含凭据值）' },
+          // 比价 heuristics（T-279）：双方各自可见、可自己调权重看名次怎么变（页面零内联脚本）
+          ...config.views.filter((v) => rules[v]).flatMap((v) => [
+            { path: `${prefix}/${v}/heuristics/`, method: 'GET', auth: 'none',
+              what: `${v} 道的比价 heuristics 页（权重输入 + 名次 + 每项贡献分解 + 如何提升排名；w_price 等五个参数）` },
+            { path: `${prefix}/${v}/api/heuristics`, method: 'GET', auth: 'none',
+              what: `${v} 道的比价 heuristics JSON（参数同页面；只出白名单字段，不出绝对量级与私域键）` },
+          ]),
           { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
           // 道内子视图（P0-3）：只读 GET + `<form method=get>` 筛选/翻页/排序（无脚本）
           ...Object.entries(SUBVIEWS).flatMap(([view, subs]) => subs.map((sub) => ({
@@ -890,7 +1101,8 @@ ${sortForm('events', '筛查事件')}
       return send(200, 'text/html; charset=utf-8',
         html(`${config.page_title} · 运维视角`,
           `<p>本视角**不属于任何一方**：只看系统整体（运行期中间件状态 + 各视角账本的证据面聚合），不显示条目正文与私域键。</p>`
-          + anchorNav('ops', `${prefix}/ops/`, OPS_SECTIONS)
+          + anchorNav('ops', `${prefix}/ops/`, OPS_SECTIONS,
+            [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']])
           + `<p>JSON：<code>${prefix}/api/ops</code></p>`
           + `<h3 id="runtime">运行期</h3><p>${ops.summary({ rows: [] })}</p>`
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
@@ -993,6 +1205,18 @@ ${sortForm('events', '筛查事件')}
           + `<a href="${prefix}/api/mail">/api/mail</a></nav>`
           + mailHtml()))
     }
+    const viewHeuristics = path.match(/^\/([a-z]+)\/api\/heuristics\/?$/)
+    if (viewHeuristics && rules[viewHeuristics[1]]) {
+      // 比价 heuristics（只读）：候选与权重进插件，名次与贡献解释出响应；宿主不写任何东西
+      return json(200, heuristicsJson(viewHeuristics[1], url))
+    }
+    const viewHeuristicsPage = path.match(/^\/([a-z]+)\/heuristics\/?$/)
+    if (viewHeuristicsPage && rules[viewHeuristicsPage[1]]) {
+      // 页面：SSR + `<form method=get>` 调权重（零内联脚本；改权重这件事本身也不产生任何写入）
+      return send(200, 'text/html; charset=utf-8',
+        html(`${config.page_title} · ${rules[viewHeuristicsPage[1]].title} · 比价口径`,
+          heuristicsHtml(viewHeuristicsPage[1], url), prefix))
+    }
     const viewApprovals = path.match(/^\/([a-z]+)\/api\/approvals\/?$/)
     if (viewApprovals && rules[viewApprovals[1]]) {
       const view = viewApprovals[1]
@@ -1046,7 +1270,8 @@ ${sortForm('events', '筛查事件')}
         + `<button type="submit">提交</button></form>`
         + `<span class="dim">（提交只落待处理项；落账本要人工批准引用）</span></td></tr>`).join('')
       const switchLinks = Object.keys(rules).map((v) => `<a href="${prefix}/admin/api/switch?to=${v}">${v}</a>`).join(' · ')
-      return `${anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS)}`
+      return `${anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS,
+        [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']])}`
         + `${data.degraded ? `<p>降级：<code>${data.reason ?? ''}</code> —— ${data.next_action ?? ''}</p>` : ''}`
         + `<h3 id="progress">进度与口径来源</h3>`
         + `<p>进度：阶段 <b>${data.progress?.phase ?? '—'}</b> · 下一步 <b>${data.progress?.next_task ?? '—'}</b>`
@@ -1251,7 +1476,7 @@ ${sortForm('events', '筛查事件')}
       if (!Object.prototype.hasOwnProperty.call(rules, to)) return json(400, { error: 'unknown-view', hint: Object.keys(rules).join(' / ') })
       return send(302, 'text/plain; charset=utf-8', '', { location: `${prefix}/${to}/` })
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

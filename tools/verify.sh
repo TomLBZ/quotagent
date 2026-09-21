@@ -98,6 +98,12 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec node host/t247-scorecard-gate.mjs "$@"
     ;;
+  bid-heuristics)
+    # 比价 heuristics（T-279）：① 插件围栏门（含 4 处单点变异）② 真 HTTP 端到端（真进程真回读、
+    # 双方视角各自 200、改权重后响应体不同、私域哨兵 0 次）。两半都跑，任一失败即红。
+    "${QUOTAGENT_NODE:-node}" "$HERE/../host/t279-heuristics-gate.mjs" || exit 1
+    exec "$QUOTAGENT_PY" "$HERE/check-heuristics-route.py" "$@"
+    ;;
   mail)
     shift
     exec python3 tools/check-mail.py "$@"

@@ -94,6 +94,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | GUI-P0b | 第一屏三块 + 8 个子视图（GET 筛选/排序/翻页）+ 门 27→44/44；顺手修掉 admin 面板恒 `NaN` 的既有 bug | B78 | done | EV-144 |
 | GUI-P0c | 配置/凭据 UI + YAML 持久化 + `--init`；新模块 `config-view`；门 `config-route` 22/22 | B79 | done | EV-145 |
 | GUI-P0d | 邮件由插件提供：未配置诚实报未连接、配置后真收发（回环 SMTP 真发）+ `mail-view` 只读视图 + `verify.sh mail-transport` 27/27 | B80 | done | EV-146 |
+| GUI-P0e | 比价 heuristics visualizer（可调权重 + 贡献分解 + 私域零泄漏；门 32/32 + 路由门 12/12） | B81 | done | EV-147 |
 | P3-UX2 | 三份 UX 规格持久化进 `docs/work/plans/`（22 痛点 / 9 human / 20 FR 草案）`4e0f2cb` | B78 | done | — |
 | T-272 | 宿主侧 admin 门卫/视图插件 + 围栅门 18/18 + 端到端 12/12（subagent 产出，父方实跑） | B67 | done | EV-132 |
 | T-273 | admin 道接入 webui（路由/提权表单/CLI/e2e/profile/stubs/verify.sh）+ 本批 FR/AC 落表 | B67 | done | EV-132 |

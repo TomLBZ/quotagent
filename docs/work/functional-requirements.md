@@ -202,6 +202,7 @@
 | FR-CONFIG-002 | P2 | **凭据可 UI 提交且只写不回显**：状态视图只给 `configured` / `source` / `required_mode` / `fingerprint_first8` / `next_action`；提交与轮换**绝不回显值**；未提权对配置与凭据的 11 条路径一律 **401 同形**（无 oracle、不泄漏键名）；YAML 只实现**声明清楚的子集**，锚点/别名/多文档等一律拒并给 reason（不静默糊掉） | AC-CONFIG-001 |
 | FR-MAIL-001 | P2 | **邮件收发由插件提供**（`services/mail_transport.py`，标准库 `smtplib`/`imaplib`）：SMTP 参数与 IMAP 参数从配置读（**环境变量优先于** `/workspace/config.yaml`）；**未配置必须如实报未连接**（`available:false` + reason + next_action，且给出与"连不上"**可区分**的 reason），配置了就真能收发；凭据不进日志/账本正文/异常消息 | AC-MAIL-001 |
 | FR-MAIL-002 | P2 | 邮件相关配置键**进白名单**（⇒ 既有配置 UI 可直接改并持久化到 YAML，不新增第二条写路径）；宿主侧只读视图 `host/modules/mail-view.mjs`（队列计数 / 最近结果与 reason / `available` / `next_action`，零写面）+ `GET /quotagent/ops/mail/`（0 行 `<script>`）与 `GET /quotagent/api/mail` | AC-MAIL-002 |
+| FR-VIZ-001 | P2 | **比价 heuristics 可视化（domain 插件）**：把候选按**可调权重**（价格/交期/付款/质保/偏差）排序，并给出**每项的贡献分解**与确定性的"如何提升排名"提示；权重越界**夹取并回显**（归一后和为一）；有界并诚实报 `omitted`；**私域零泄漏**（供应商侧不得因排名暗示标底：带私域键的行整行跳过并报数，带哨兵与不带哨兵的输出**逐字节一致**）；页面 SSE 交互（`<form method=get>`，无内联脚本） | AC-VIZ-001 |
 ## 7. 阶段分布（用于排期）
 
 | 阶段 | must 数 | 核心内容 |

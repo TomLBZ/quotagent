@@ -215,6 +215,13 @@ const STUBS = {
     scorecard: () => [],
     bySupplier: () => [],
   },
+  bidHeuristics: {
+    // fixture 的 stub：只满足"能排名/能取分量元数据"；口径由 bid-heuristics 自己的门验
+    rank: () => ({ rows: [], weights_applied: {}, counts: {}, truncated: false, omitted: 0,
+      degraded: true, reason: 'stub' }),
+    factors: () => [],
+    config: () => ({ weights: {}, max_candidates: 50 }),
+  },
   evolveJournal: {
     // fixture 的 stub：只满足"能归纳流水"；口径由 evolve-journal 模块自己的门验
     summarize: () => ({ rows: 0, by_type: [], proposed: 0, shadowed: 0,

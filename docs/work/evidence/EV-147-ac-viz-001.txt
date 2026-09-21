@@ -1,0 +1,145 @@
+EV-147 AC-VIZ-001 比价 heuristics visualizer（可调权重 / 贡献分解 / 私域零泄漏）
+
+[宿主门 bid-heuristics]
+```
+name": "④ 权重越界/非数字**夹取并回显**（页面写出夹取说明与请求原值；JSON 里 applied 是夹取后的真值、requested 照抄原值；两个分量都没被静默当成 0）",
+      "ok": true,
+      "detail": "status=200；applied={\"price\": 0.714285714286, \"delivery\": 0.107142857143, \"payment\": 0.071428571429, \"warranty\": 0.035714285714, \"deviation\": 0.071428571429} requested={\"price\": 9, \"delivery\": null, \"payment\": null, \"warranty\": null, \"deviation\": null} notes=[\"w_delivery=abc 不是有限数 → 该分量用默认权重（未参与本次排名）\", \"权重 price=9 夹取上界 1\", \"权重 delivery 未提交 → 用默认 0.15\", \"权重 payment 未提交 → 用默认 0.1\", \"权重 warranty 未提交 → 用默认 0.05\", \"权重 deviation 未提交 → 用默认 0.1\"]"
+    },
+    {
+      "name": "⑤ 私域哨兵 **0 次**：供应商侧页面/JSON（含换权重的那次）里搜不到承包商私域键与哨兵串；承包商侧自己的比价页也一个都不出（只出代号/分数/贡献，私域键的值连读都不读）；**非空转对照**：同一批私域数据确实在夹具账本里 —— 承包商侧同类行（q-costfloor）**是**候选、供应商侧同类行（q-leaky）**不进排名**，而「跳过 N 条」这件事本身在页面上有报数",
+      "ok": true,
+      "detail": "供应商侧命中键=[] 哨兵=[]；承包商侧比价页命中键=[] 哨兵=[]；夹具确实含哨兵=True；供应商侧含 q-leaky=False；承包商页候选=['q-costfloor', 'q-beta', 'q-gamma', 'q-alpha']；跳过私域行=1/1"
+    },
+    {
+      "name": "⑤ 新页面/JSON **0 行脚本 / 0 内联事件**（零 JS 是机检事实：交互只用 `form method=get` 与链接）",
+      "ok": true,
+      "detail": "含脚本=无；含内联事件=无"
+    },
+    {
+      "name": "⑤ 既有路由没被弄坏（`/api/ops`、`/contractor/api/scorecard`、`/contractor/` 都 200），且本门全程**不涉未提权的 admin**（`/admin/` 仍 401 固定体：不需要管理员身份就能验比价口径）",
+      "ok": true,
+      "detail": "ops=200 scorecard=200 home=200 admin=401"
+    },
+    {
+      "name": "⑤ 宿主**零写面**（跑完一整轮之后夹具账本逐字节不变、目录没有多出/少掉任何文件；宿主不写账本、不落待处理项）",
+      "ok": true,
+      "detail": "账本字节不变=True；目录不变=True（4 项）"
+    }
+  ],
+  "passed": 12,
+  "total": 12,
+  "failures": 0
+}
+
+```
+
+[AC（有 Node）]
+```
+{
+  "ac": "AC-VIZ-001",
+  "status": "fail",
+  "assertions": [
+    {
+      "name": "① 插件与围栏门齐备",
+      "ok": true,
+      "detail": "module=18818B gate=46325B"
+    },
+    {
+      "name": "① 语义齐备：可调权重 / 贡献分解 / 有界（omitted）/ 降级（degraded）/ 夹取",
+      "ok": false,
+      "detail": "marks={'weights': True, 'contributions': True, 'omitted': True, 'degraded': False, 'clamp': True}"
+    },
+    {
+      "name": "① 宿主侧零写面/零外部副作用（不写文件、不起子进程、不联网）",
+      "ok": true,
+      "detail": "命中=[]"
+    },
+    {
+      "name": "① 交互用 `<form method=get>`（非注释源码里无 `<script`、无内联事件属性）",
+      "ok": false,
+      "detail": "script=0"
+    },
+    {
+      "name": "① 围栏门含权重敏感/私域哨兵负控/变异自证（不是空壳门）",
+      "ok": false,
+      "detail": "marks={'sensitivity': False, 'weights': True, 'sentinel': False, 'mutate': True, 'restored': False}"
+    },
+    {
+      "name": "① `verify.sh bid-heuristics` 门已挂",
+      "ok": true,
+      "detail": "gate=True"
+    },
+    {
+      "name": "① 插件模块可加载且导出预期符号（非空转）",
+      "ok": true,
+      "detail": "exports=['Config', 'DEGRADED_REASONS', 'FACTORS', 'FACTOR_FIELDS', 'WHOLE_SET', 'apply']"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-VIZ-001",
+  "phase": "P2",
+  "title": "比价 heuristics：权重可调且回显、贡献可分解、私域零泄漏、零写面、页面仍无内联脚本",
+  "first_failure": "① 语义齐备：可调权重 / 贡献分解 / 有界（omitted）/ 降级（degraded）/ 夹取: marks={'weights': True, 'contributions': True, 'omitted': True, 'degraded': False, 'clamp': True}",
+  "exit_code": 1
+}
+
+```
+
+[AC（无 Node：降级）]
+```
+",
+      "ok": true,
+      "detail": "bytes=18818"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-VIZ-001",
+  "phase": "P2",
+  "title": "比价 heuristics：权重可调且回显、贡献可分解、私域零泄漏、零写面、页面仍无内联脚本",
+  "first_failure": "① 语义齐备：可调权重 / 贡献分解 / 有界（omitted）/ 降级（degraded）/ 夹取: marks={'weights': True, 'contributions': True, 'omitted': True, 'degraded': False, 'clamp': True}",
+  "exit_code": 1
+}
+
+```
+
+[父方真机复核]
+```
+=== ① 语法 ===
+  ok host/modules/bid-heuristics.mjs       
+  ok host/t279-heuristics-gate.mjs         
+  ok host/modules/webui.mjs                
+  ok host/profiles.mjs                     
+  ok host/cli.mjs                          
+  py ok
+=== ② 重启（先看真 PID）===
+1014765 /usr/local/bin/node /workspace/project
+  就绪（PID 1015860）
+=== ③ 新路由真回读 + 改权重两次对比（我自己做）===
+  /contractor/heuristics/        → 200
+  /supplier/heuristics/          → 200
+  /contractor/api/heuristics     → 200
+  /supplier/api/heuristics       → 200
+  两版权重响应不同 = True
+  A 权重回显 = {'price': 0.8, 'delivery': 0, 'payment': 0.08, 'warranty': 0.04, 'deviation': 0.08} | B 权重回显 = {'price': 0, 'delivery': 0.8, 'payment': 0.08, 'warranty': 0.04, 'deviation': 0.08}
+  A sha = 97bde141ad98f6bd | B sha = 21dc9726c90e1c09
+=== ④ 哨兵零泄漏（我自己扫两视角 + 换权重）===
+  contractor/heuristics/                     哨兵命中=0
+  supplier/heuristics/                       哨兵命中=0
+  contractor/api/heuristics?w_price=1        哨兵命中=0
+  supplier/api/heuristics?w_price=0&w_delivery=1 哨兵命中=0
+  新页面 0 脚本？ contractor=0 supplier=0
+=== ⑤ 门 ===
+  bid-heuristics  0
+  webui           0
+  modules         0
+  wiring          0
+  plugins         0
+  coverage        0
+  docs            0
+  ac-registry     0
+  mail-transport  0
+  config-route    0
+  bid-heuristics: "passed":32,"total":32,"failures":0
+
+```
