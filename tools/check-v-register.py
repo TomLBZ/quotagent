@@ -100,6 +100,18 @@ def main() -> int:
     report.ok("已填结论的条目都有签字与证据；未填的保持 open") if not unclosed else \
         report.fail("结论与签字/证据不一致", unclosed)
 
+    assumptions = data.get("planning_assumptions") or []
+    bad_assumptions = []
+    for entry in assumptions:
+        if entry.get("not_a_conclusion") is not True:
+            bad_assumptions.append(f"{entry.get('ids')}: 缺少 not_a_conclusion=true（假设不得当结论）")
+        covered = set(entry.get("ids") or [])
+        overlapping = covered & {vid for vid in IDS if checks.get(vid, {}).get("status") != "open"}
+        if overlapping:
+            bad_assumptions.append(f"{overlapping}: 已被假设覆盖却又填了结论（要么撤假设，要么撤结论）")
+    report.ok(f"计划假设已声明且标 not_a_conclusion（{len(assumptions)} 条，不改变 V 的状态）") \
+        if not bad_assumptions else report.fail("计划假设登记有问题", bad_assumptions)
+
     missing_files = []
     for vid in IDS:
         path = VALIDATION_DIR / f"{vid}.md"

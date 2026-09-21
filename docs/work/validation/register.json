@@ -18,7 +18,8 @@
     ],
     "decided_by_prefix": "human:",
     "evidence_dir": "docs/work/evidence",
-    "validator": "tools/verify.sh v（实现 tools/check-v-register.py）"
+    "validator": "tools/verify.sh v（实现 tools/check-v-register.py）",
+    "planning_assumptions_must_be_marked": "not_a_conclusion=true；不得写入 checks[].conclusion"
   },
   "checks": [
     {
@@ -254,6 +255,29 @@
       "decided_by": null,
       "decided_at": null,
       "evidence": []
+    }
+  ],
+  "planning_assumptions": [
+    {
+      "ids": [
+        "V-001",
+        "V-002",
+        "V-003",
+        "V-004",
+        "V-005",
+        "V-006",
+        "V-007",
+        "V-008",
+        "V-009",
+        "V-010",
+        "V-011",
+        "V-012"
+      ],
+      "assumption": "全部通过",
+      "basis": "用户指令 2026-09-12：假设所有人工辅助验证通过，全面推进到 MVP；人工批准原则上默认通过",
+      "effect": "P1（T-201..T-215）按此前提开发；不改变任何 V 的 status",
+      "not_a_conclusion": true,
+      "still_required": "V 项的 conclusion 与 G0/G1 签署仍需人工（07 §6）"
     }
   ]
 }

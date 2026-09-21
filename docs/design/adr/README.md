@@ -16,6 +16,8 @@
 | ADR-0008 | P0 的 QEP 落地细节：HMAC-SHA256 签名占位 + 文件投递命名/原子写 + QEP 落账事件 | accepted |
 | ADR-0009 | P0 的归一化链语义、声明容差、汇率时点精确命中、版本不可变与读包两条门 | accepted |
 | ADR-0010 | P0 的人工门（批准绑 scope+ref、只能由人产生）与 realm 过滤（三处过滤点、私域工件哈希引用） | accepted |
+| ADR-0013 | cordis 宿主与 Python 内核的桥接协议（NDJSON/stdio v1、版本握手、方法分级、背压与故障语义） | accepted |
+| ADR-0014 | P1 的推进前提（V 假设通过，标 not_a_conclusion）、MVP 判据、削减顺序与"绝不许假"清单 | accepted |
 | ADR-0012 | 直接依赖 cordis 4.0.0-rc.10 作为宿主层（取代 ADR-0001 的"不引入其代码"；含实测约定与桥接边界） | accepted |
 | ADR-0011 | P0 的比价 TCO 口径与引用链、护栏只标注（Flag 枚举扩展 `private_leak`）、场景集确定性与指标基线 | accepted |
 
