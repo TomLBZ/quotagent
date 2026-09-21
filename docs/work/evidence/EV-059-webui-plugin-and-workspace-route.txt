@@ -1,0 +1,79 @@
+EV-059 WebUI 插件（双方视角路由）+ 工作区接入（T-222）
+生成时间：2026-09-21T08:22:34Z（UTC）
+
+约束（用户 2026-09-21）："项目的每个功能都应被插件提供"、"项目如果具有了 WebUI，需要能够从现有的
+dashboard 访问"、"可以用不同的 routes 去提供从双方视角可见的不同 UI"。以下为原始命令输出。
+
+[1] tools/verify.sh webui（cordis 插件 webui 的 HTTP 级检查）
+[ok]   WebUI 正控：`/api/health` 返回 ok（工作区服务契约）
+        status=200
+[ok]   WebUI 正控：`/api/status` 给出路由前缀、视角列表与**两侧账本各自**的健康性（链校验来自 Python 侧）
+        routes=["/quotagent/contractor/","/quotagent/supplier/"] ledgers=["contractor","supplier"]
+[ok]   WebUI 正控：双方视角各自可达且是**不同路由**（`/quotagent/contractor/` 与 `/quotagent/supplier/`）
+        contractor=200 supplier=200
+[ok]   WebUI 正控：两视角看到的事件集合不同（承包商含 compare/*，供应商不含）
+        contractor=5 条 supplier=4 条
+[ok]   私域**负控**：供应商视角看不到承包商私域键（`cost_floor`/`markup_pct`/`calendar:private`）
+        泄漏=[]
+[ok]   私域**非空转对照**：同一批私域数据在承包商视角**可见**（证明确实在源里，供应商看不到不是因为"什么都没有"）
+        承包商视角可见=["cost_floor","markup_pct"]；供应商视角含 cost_floor=false
+[ok]   私域负控：投影层把"可见类型但含私域键"的行标为 suppressed，且**对外原因通用**（键名不外泄）
+        suppressed=1 行；对外原因=private-field-suppressed；审计（仅服务端）=cost_floor
+[ok]   私域对照：同一行的私域内容在承包商投影里保留（两侧规则不同，不是一刀切）
+        contractor suppressed=0
+[ok]   健壮性负控：账本含 null 字段时服务**不崩**（请求级兜底），随后 /api/health 仍可用
+        视图 status=200（<!doctype html><html lang="zh"><head><me…）健康 status=200
+[ok]   WebUI 负控：未知路径/视角返回 404 且带可用路径提示（不得静默空页面）
+        status=404
+[ok]   零残留：dispose 后 HTTP 服务关闭且**端口释放**（可被重新监听）
+        port=32831 可重监听=true
+RESULT: PASS（webui 门 11/11）
+（exit=0）
+
+[2] tools/verify.sh modules（进树模块 fixture A1..A6；webui 为第 4 个模块 + 模块集级 A3 断言）
+rdis 内建 mixin（`events`）——写进去插件会永远 pending（实测）
+        inject=["ledgerView"] builtin=["events"]
+[ok] webui · A1 — A1 正控：provided service 在插件内可取到（句柄非空）
+        handle keys=["url","port","prefix","viewUrl","rules"]
+[ok] webui · A1 — A1 负控：取用未在 `inject` 声明的服务必须抛错（不得静默可用）
+        error=cannot get property "service-not-injected-webui" without inject
+[ok] webui · A2 — A2 正控：dispose 后 effect 数为 0 且资源计数差分全 0
+        effects 2 → 0；counters={"timers":0,"listeners":0} released=1
+[ok] webui · A2 — A2 负控：泄漏定时器的条目被检出（计数差分非 0 → 检查器必须报红）
+        counters={"timers":1,"listeners":0}
+[ok] webui · A3 — A3 config 负控：未知键被拒（本模块无 const 键，const 负控在模块集级断言里）
+        unknown=refused constKey=（无） flip=n/a
+[ok] webui · A4 — A4 事件声明：源码里 emit 的事件名必须都在事件表里（真源在 Python 侧，静态扫描）
+        emit=[] 未声明=[]；事件表 89 条
+[ok] webui · A5 — A5 确定性：同输入两次输出字节一致（无墙钟/无自增序号）
+        len=35 equal=true
+[ok] webui · A6 — A6 无跨模块 import：不得出现指向别的模块目录的相对 import（只允许 ../lib/ 与包名）
+        imports=["node:http","../lib/std-schema.mjs","../lib/ledger-view.mjs"] 越界=[]
+[ok] __set__ · A3 — A3 模块集级：至少有一个模块暴露 const 键并拒绝翻转（否则 const 纪律无人覆盖）
+        const 键：compare.deterministic, kernel-bridge.credit_window, norm.enforce_tolerance
+------------------------------------------------------------------------
+模块：5 个（compare, kernel-bridge, norm, webui, __set__）；事件表 89 条（真源：Python 侧）
+fixture 断言：49/49 通过；报告落 /workspace/projects/quotagent/tmp/modules-report.json
+（exit=0）
+
+[3] python3 tools/ws-integrate.py（登记服务与路由 + 回读校验）
+[ws-integrate] 清单已登记（幂等，无改动）
+[ws-integrate] ws-gateway stop quotagent: rc=0 quotagent: not running
+[ws-integrate] ws-gateway start quotagent: rc=0 quotagent: already healthy
+[ws-integrate] 直连 :8093 → 200；经网关 :80 → 200；dashboard 路由表包含 /quotagent = True（/api/status 200）
+[ws-integrate] 经网关 /quotagent/contractor/ → 200 4290 B
+[ws-integrate] 经网关 /quotagent/supplier/ → 200 1172 B
+[ws-integrate] PASS：quotagent UI 已可从现有 dashboard 访问
+
+[4] 公网链路：$ curl -s -m 15 -o /dev/null -w '%{http_code}' https://novara.remoteblossom.com/quotagent/api/health
+200
+
+[5] ws-gateway 日志尾部（/quotagent 路由留痕）
+2026-09-21T08:22:38+0000 127.0.0.1 GET /healthz :: "GET /healthz HTTP/1.0" 200 -
+2026-09-21T08:22:38+0000 127.0.0.1 GET /api/status :: "GET /api/status HTTP/1.1" 200 -
+2026-09-21T08:22:38+0000 127.0.0.1 GET /quotagent/contractor/ :: "GET /quotagent/contractor/ HTTP/1.1" 200 -
+2026-09-21T08:22:38+0000 127.0.0.1 GET /quotagent/supplier/ :: "GET /quotagent/supplier/ HTTP/1.1" 200 -
+2026-09-21T08:22:38+0000 172.16.1.2 GET /quotagent/api/health :: "GET /quotagent/api/health HTTP/1.1" 200 -
+
+结论：WebUI 由 cordis 插件提供（非宿主内嵌代码），双方视角各一路由；已登记进工作区清单、可从现有
+dashboard（同源网关）访问、公网 200；私域负控与"坏数据不杀服务"两条为实测得到的真实缺陷修补。

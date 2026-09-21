@@ -25,6 +25,18 @@ export const PROFILES = {
       transport: { kind: 'file-drop', dir: 'inbox' },
     },
   },
+  'webui': {
+    role: 'view-host',
+    label: '双方视角 WebUI（view-host）',
+    realm: 'contractor:con-B',
+    ledger: 'ledger-contractor.jsonl',
+    modules: ['config', 'webui'],
+    sidecar: 'read-only',
+    config: {
+      // 一个进程两个路由：承包商视角读承包商账本、供应商视角读供应商账本（结构性隔离）
+      // 真正的账本路径由 tools/webui-serve.py 经 CLI 参数给出（机器相关，不进 profile 数据）
+    },
+  },
   'supplier-bid': {
     role: 'supplier',
     label: '供应商报价台',

@@ -51,6 +51,8 @@ stdout 只输出**一行 JSON**，日志走 stderr（ADR-0013 的帧纪律）。
 
 ## 进树模块与 fixture（T-221 / 评审 C §6）
 
+WebUI 也是模块（`modules/webui.mjs`）：双方视角两个路由、每方读自己的账本、dispose 释放端口；接入 dashboard 见 `docs/work/deployment-manual.md`，门 `tools/verify.sh webui`。
+
 - `host/modules/{kernel-bridge,norm,compare}.mjs`：一模块一 manifest（`name/inject/provides/Config/apply/disposer`）。
 - 入口 `tools/verify.sh modules`（fixture A1..A6，每条带负控；规格见 `docs/design/04-services-catalog.md` §9）。
 - `host/lib/std-schema.mjs`：standard-schema v1 构造器（cordis 只消费 `Config["~standard"].validate`，不导出 `Schema`）。

@@ -60,6 +60,9 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-215b | P1 | 部署与操作手册（一页能跑起来）+ `verify.sh g1` 聚合门（MVP 判据见 ADR-0014 §3） | FR-RUNTIME-001 | AC-RUNTIME-001、走查 14 条判据 | done | EV-055 |
 | T-219 | P1 | 宿主强制不变量 H1/H2/H3/H5/H6 各带负控（评审 C §7.1 第 6 条） | FR-PLUGIN-004 | `tools/verify.sh invariants` 22/22 | done | EV-056 |
 | T-220 | P1 | 演化门机检骨架：proposal 记录 + patch/journal 归属 + 影子挂载 + dispose 回滚 + promote 必带人工 `approval_ref`（§7.1 第 7 条） | FR-EVOLVE-001 | `verify.sh evolution` 15/15（含负控） | done | EV-057 |
+| T-223 | 模型 Jev 调研报告（强项/用法/适用性/插件建议） | B22 | done | EV-060 |
+| T-224 | Jev 建议层插件（`advisor`）：建议不入判定、低置信转人工、外部失败降级 | B23+ | todo | — |
+| T-222 | WebUI 插件（双方视角路由）+ 工作区接入（从现有 dashboard 可访问） | B20/B21 | done | EV-059 |
 | T-221 | P1 | 每个进树模块的 manifest（name/inject/Config/apply）+ fixture A1..A6 + ≥1 契约测试（§7.1 第 5 条） | FR-PLUGIN-001 | `verify.sh modules` 36/36（3 模块 × 12 项） | done | EV-058 |
 | T-216 | P1 | 桥接协议最小闭环（握手/版本协商/方法面/身份注入/错误码） | FR-INTEG-004 | AC-INTEG-004, AC-INTEG-005 | done | EV-040 |
 | T-217 | P1 | 桥的故障语义（SIGKILL/断连 + 背压 + 在途请求记 unknown + 重启预算 + 锚点）（S1.16） | FR-INTEG-004 | AC-INTEG-006 | done | EV-041 |

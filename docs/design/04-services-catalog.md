@@ -258,7 +258,21 @@
 - 回滚：`dispose()`（effect 逆序回收）+ journal 撤回，**不依赖人工删文件**。
 - 事件：`evolve/proposed|shadowed|gated|promoted|rolled-back`（两侧已登记；由 Python 侧落账）。
 
-## 9. 进树模块的 manifest 与 fixture（评审 C §6 / §7.1 第 5 条 / T-221）
+## 9. 进树模块
+
+### 9.3 `webui`（WebUI 插件，T-222）
+
+每个**功能都由插件提供**（用户 2026-09-21）：UI 不是宿主内嵌代码，而是 `host/modules/webui.mjs`
+——与 `kernel-bridge`/`norm`/`compare` 同形的 cordis 插件（`name/inject/provides/Config/apply`；
+`inject` 里**不写** `events`：它是内建 mixin，写进去插件会永远停在 pending，实测）。
+
+- 路由：`/quotagent/`（总览）、`/api/health`、`/api/status`（两侧账本各自计数 + 链自洽性，链校验由 Python 侧给出）、
+  **双方视角各一个**：`/quotagent/contractor/` 与 `/quotagent/supplier/`（含各自 `/api/events`）。
+- **结构性隔离**：每个视角只读**自己的**账本（`ledger_contractor`/`ledger_supplier`）；投影白名单（`VIEW_RULES`）是纵深防御；
+  私域键在对方视角被抑制且**对外只说"含私域字段"**（键名仅留服务端 stderr —— 集成实测出的泄漏）。
+- 健壮性：请求级兜底（单个坏数据记录不得杀死服务，实测过一次）；`ctx.effect()` 注册 HTTP 服务，dispose 即释放端口。
+- 宿主**不写**账本（H1）。接入工作区 dashboard 见 `docs/work/deployment-manual.md`，机检 `tools/verify.sh webui`。
+的 manifest 与 fixture（评审 C §6 / §7.1 第 5 条 / T-221）
 
 - 进树模块（P1 树 = `kernel-bridge` + `norm` + 消费者 `compare`，见 `§7.1` 第 3 条）各有 manifest：
   `{name, inject, provides, Config, apply, disposer, usedServices, builtin}` 放在 `host/modules/*.mjs`。

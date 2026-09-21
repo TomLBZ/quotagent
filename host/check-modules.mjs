@@ -38,6 +38,7 @@ const declaredEvents = eventsPath && existsSync(eventsPath)
 
 const checks = []
 let failures = 0
+const constKeysFound = []  // A3 模块集级汇总：哪些模块真的有 const 键
 const check = (moduleName, fixture, name, ok, detail = '') => {
   checks.push({ module: moduleName, fixture, name, ok: Boolean(ok), detail })
   if (!ok) failures += 1
@@ -98,7 +99,9 @@ async function mount(mod) {
       await mod.apply(inner, config)
     },
   }
-  const fiber = await ctx.plugin(wrapper, mod.Config.parse({}))
+  // 模块若监听端口（webui），fixture 一律用临时端口 0，避免多个挂载互相抢端口
+  const draft = mod.Config.parse({})
+  const fiber = await ctx.plugin(wrapper, ('port' in draft) ? { ...draft, port: 0 } : draft)
   return { ctx, fiber, box }
 }
 
@@ -161,6 +164,7 @@ for (const file of readdirSync(MODULE_DIR).filter((item) => item.endsWith('.mjs'
   counters.timers = 0
 
   // --- A3 config 负控 ---
+  //（constKeysFound 见文件末尾汇总断言）
   let unknownKey = 'accepted'
   try {
     mod.Config.parse({ mystery_key: 1 })
@@ -173,9 +177,14 @@ for (const file of readdirSync(MODULE_DIR).filter((item) => item.endsWith('.mjs'
       mod.Config.parse({ [constKey]: node.value === true ? false : true })
     } catch { flipped = 'refused' }
   }
-  check(name, 'A3', 'A3 config 负控：未知键被拒；翻转 const 键被拒（如 require_approval=true→false 这类）',
-    unknownKey === 'refused' && flipped === 'refused',
-    `unknown=${unknownKey} constKey=${constKey} flip=${flipped}`)
+  // A3 口径：**每个**模块都必须拒未知键；const 键负控是**模块集级**要求（有 const 键的模块逐个验，
+  // 没有 const 键的模块不硬套——否则断言在测"模块有没有恰好存在某个键"，与 config 否决纪律无关）
+  const a3Ok = unknownKey === 'refused' && (constKey ? flipped === 'refused' : true)
+  check(name, 'A3', constKey
+    ? 'A3 config 负控：未知键被拒；翻转 const 键被拒'
+    : 'A3 config 负控：未知键被拒（本模块无 const 键，const 负控在模块集级断言里）',
+    a3Ok, `unknown=${unknownKey} constKey=${constKey ?? '（无）'} flip=${flipped}`)
+  if (constKey) constKeysFound.push(`${name}.${constKey}`)
 
   // --- A4 事件声明 + A5 确定性（都用同一份"活着"的实例） ---
   const live = await mount(mod)
@@ -200,6 +209,7 @@ for (const file of readdirSync(MODULE_DIR).filter((item) => item.endsWith('.mjs'
   const sample = () => {
     if (name === 'kernel-bridge') return JSON.stringify(live.box.handle.surface())
     if (name === 'norm') return JSON.stringify(live.box.handle.convert(120, 1))
+    if (name === 'webui') return JSON.stringify({ prefix: live.box.handle.prefix, port: live.box.handle.port > 0 })
     return JSON.stringify(live.box.handle.normalize([{ item_id: 'L-001', qty: 120, factor: 1 }]))
   }
   const first = sample()
@@ -218,6 +228,9 @@ for (const file of readdirSync(MODULE_DIR).filter((item) => item.endsWith('.mjs'
   check(name, 'A6', 'A6 无跨模块 import：不得出现指向别的模块目录的相对 import（只允许 ../lib/ 与包名）',
     leaks.length === 0, `imports=${JSON.stringify(imports)} 越界=${JSON.stringify(leaks)}`)
 }
+
+check('__set__', 'A3', 'A3 模块集级：至少有一个模块暴露 const 键并拒绝翻转（否则 const 纪律无人覆盖）',
+  constKeysFound.length > 0, `const 键：${constKeysFound.join(', ') || '（一个都没有）'}`)
 
 const report = { kind: 'quotagent/modules', module_dir: relative(HERE, MODULE_DIR),
   events_source: eventsPath || '(内置兜底列表)', modules: [...new Set(checks.map((item) => item.module))],

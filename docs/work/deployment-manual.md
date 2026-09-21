@@ -89,3 +89,22 @@ tools/verify.sh g1
 5. `tools/verify.sh audit`（审计包独立验证 + 篡改必失败）
 6. `tools/run.sh -m quotagent.qa suite s4`（反例集全部被拦并留痕）
 7. `tools/verify.sh g1`（总门：全量 AC + 走查，作为收尾）
+
+## WebUI 与工作区接入（T-222）
+
+WebUI 是 **cordis 插件** `webui`（`host/modules/webui.mjs`），由工作区服务 `quotagent` 拉起
+（`tools/webui-serve.py`：带 `--healthz` 时走工作区健康契约，否则先跑一次 `g1-walkthrough.py --keep-shared`
+拿到**真实**两侧账本，再 `exec` node 起 UI —— UI 展示的就是 MVP 门产出的数据）。
+
+```bash
+python3 tools/ws-integrate.py        # 幂等接入：登记服务+路由，并回读校验（直连 / 经网关 / dashboard 路由表）
+curl -s http://127.0.0.1:8093/quotagent/api/health      # 直连
+curl -s http://127.0.0.1:80/quotagent/api/status        # 经工作区网关（与 dashboard 同源）
+# 公网（Cloudflare → 云端 NPM → ZT → 主机 NPM → ws-gateway）：https://<dashboard 域名>/quotagent/
+```
+
+- 双方视角：`/quotagent/contractor/`（承包商）与 `/quotagent/supplier/`（供应商）。
+- 工作区清单 `/workspace/services/services.json` 里 `quotagent` 是**顶层服务键**（与 `dashboard` 同级），
+  路由写在 `gateway.routes`；改完需**重启 gateway**（它启动时读路由表）。
+- 门：`tools/verify.sh webui`（11 条断言：健康契约、两侧路由与内容差异、私域负控与非空转对照、
+  坏数据不杀服务、dispose 后端口释放）。

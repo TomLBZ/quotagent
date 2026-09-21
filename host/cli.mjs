@@ -100,6 +100,47 @@ const describe = (state) => ({
 })
 
 const main = async () => {
+  if (action === 'webui') {
+    // WebUI 插件（每方视角一个路由）。宿主**不写账本**：只读视图 + Python 侧链校验（H1）。
+    const { openLedger } = await import('./lib/ledger-view.mjs')
+    const { apply: webuiApply, Config: webuiConfig, VIEW_RULES } = await import('./modules/webui.mjs')
+    const ctx = new Context()
+    await ctx.plugin(EventsService)
+    const contractorLedger = String(args['ledger-contractor'] ?? ledgerPath)
+    ctx.provide('ledgerView', openLedger(contractorLedger))
+    const box = {}
+    const fiber = await ctx.plugin({
+      name: 'webui',
+      inject: ['ledgerView'],
+      Config: webuiConfig,
+      apply: async (inner, config) => {
+        const original = inner.provide.bind(inner)
+        inner.provide = (service, value) => { if (service === 'webui') box.handle = value; return original(service, value) }
+        await webuiApply(inner, config)
+      },
+    }, {
+      port: Number(args.port ?? 8093),
+      listen_host: String(args.host ?? '127.0.0.1'),
+      route_prefix: String(args.prefix ?? '/quotagent'),
+      views: String(args.views ?? 'contractor,supplier').split(',').map((item) => item.trim()).filter(Boolean),
+      ledger_contractor: contractorLedger,
+      ledger_supplier: String(args['ledger-supplier'] ?? ''),
+    })
+    // 注意：这里**不能**用 emit()（它写完就 process.exit）——UI 是常驻服务
+    process.stdout.write(JSON.stringify({ ok: true, action: 'webui', profile: profileName, pid: process.pid,
+           url: box.handle?.url, port: box.handle?.port, prefix: box.handle?.prefix,
+           views: Object.keys(VIEW_RULES), routes: (box.handle ? Object.keys(VIEW_RULES) : [])
+             .map((view) => box.handle.viewUrl(view)),
+           ledgers: { contractor: contractorLedger, supplier: String(args['ledger-supplier'] ?? '') },
+           note: '每方视角读自己的账本（结构性隔离）+ 投影白名单（纵深防御）；宿主不写账本' }) + '\n')
+    // 保活：直到收到信号（ws-gateway 以 SIGTERM 停服）
+    await new Promise((resolve) => {
+      const stop = async () => { await fiber.dispose(); resolve() }
+      process.on('SIGTERM', stop)
+      process.on('SIGINT', stop)
+    })
+    return
+  }
   if (action === 'status') {
     const onDisk = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')) : null
     emit({ ok: true, action: 'status', profile: profileName, realm: profile.realm, dir,

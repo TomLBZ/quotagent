@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 import subprocess
 import sys
 from pathlib import Path
@@ -79,6 +80,9 @@ class Bridge:
         except Exception:  # noqa: BLE001
             self.proc.kill()
         return self.proc.returncode
+
+
+KEEP_SHARED = "--keep-shared" in sys.argv  # 给 WebUI 复读用；默认仍自清理
 
 
 def main() -> int:
@@ -222,7 +226,10 @@ def main() -> int:
                                       f"(pid {item['pid']}, 账本 {item['ledger_count']} 条)"
                                       for item in timeline))
     print(f"结论：{len(results) - len(failed)}/{len(results)} 条通过")
-    shutil.rmtree(SHARED, ignore_errors=True)
+    if not KEEP_SHARED:
+        shutil.rmtree(SHARED, ignore_errors=True)
+    else:
+        print(f"[keep-shared] 两侧账本保留在 {SHARED}（contractor/supplier）")
     return 0 if not failed else 1
 
 
