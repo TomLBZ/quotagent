@@ -1,10 +1,12 @@
 # 运行时产物（实现期起生效）
+# 注意：`lib/` 只忽略**仓库根**的 lib/ —— 写成 `lib/` 会连 `host/lib/` 一起吞掉（实测：
+# host/lib/*.mjs 全部不在版本控制里，fresh clone 直接失去宿主库层）。
 .venv/
 __pycache__/
 *.py[cod]
 node_modules/
 dist/
-lib/
+/lib/
 coverage/
 tmp/
 
