@@ -54,7 +54,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-210 | P1 | 人工门队列视图 + 超时策略三选一（S1.12） | FR-APPROVE-003, FR-UX-001 | AC-APPROVE-003 | done | EV-049 |
 | T-211 | P1 | 条款库与冲突标注（S1.11） | FR-TERMS-001, FR-TERMS-002, FR-GUARD-004 | AC-TERMS-001 | done | EV-050 |
 | T-212 | P1 | 变更闭环（S1.11 前置：变更与报价版本衔接） | FR-CHANGE-001, FR-CHANGE-002 | AC-CHANGE-001, AC-CHANGE-002 | done | EV-051 |
-| T-213 | P1 | 授标与 PO 闭环 | FR-AWARD-001..003 | AC-AWARD-001, AC-AWARD-002 | todo | – |
+| T-213 | P1 | 授标与 PO 闭环（含事件门机检） | FR-AWARD-001..003 | AC-AWARD-001, AC-AWARD-002 | done | EV-052 |
 | T-214 | P1 | 比较表导出 | FR-COMPARE-004, FR-UX-003 | AC-COMPARE-004 | todo | – |
 | T-215 | P1 | 部署与操作手册 | FR-RFQ-004, FR-RFQ-005 | AC-RFQ-003 | todo | – |
 | T-216 | P1 | 桥接协议最小闭环（握手/版本协商/方法面/身份注入/错误码） | FR-INTEG-004 | AC-INTEG-004, AC-INTEG-005 | done | EV-040 |

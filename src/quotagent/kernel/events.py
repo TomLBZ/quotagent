@@ -132,9 +132,11 @@ class EventBus:
         "compare/rank-computed": ("emit", True, ""),
         "compare/flag-raised": ("emit", True, ""),
         "award/intent-proposed": ("emit", True, ""),
+        "award/intent-withdrawn": ("emit", True, ""),
         "award/commit-requested": ("serial", False, ""),
         "award/committed": ("emit", True, ""),
         "po/issued": ("emit", True, ""),
+        "evidence/pack-exported": ("emit", True, ""),
         # §4 agent 侧（live）
         "agent/step-start": ("emit", False, ""),
         "agent/step-end": ("emit", False, ""),

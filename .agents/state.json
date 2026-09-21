@@ -3,11 +3,11 @@
   "updated_at": "2026-09-21",
   "phase": "P1-mvp",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-213",
-  "next_action": "批次 B14：T-213 授标与 PO 闭环（FR-AWARD-001..003 / AC-AWARD-001/002）—— 授标意向 → 人工批准 → 授标确认 → PO 生成；PO 内容必须可追溯到授标确认与报价条目（逐行引用）；未中标者收到结果通知（不泄露他人报价）；实现落 services/award.py 扩展（P0 已有意向/确认骨架）",
-  "last_verified_command": "tools/verify.sh docs && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh ac-registry && tools/verify.sh audit && tools/verify.sh v && 全量 53 条 AC && qa suite s1..s4",
-  "last_verified_result": "PASS（docs 门 76 文件/0 未解析；bridge 31 断言；cordis 18/18；p0-no-node 34 条；ac-registry 53 条注册/P0 全注册；audit 12 断言；V 登记 12 条 open；53 条 AC 全绿；s1..s4 全绿）",
-  "last_verified_evidence": "docs/work/evidence/EV-051-change-lifecycle.txt",
+  "next_task": "T-214",
+  "next_action": "批次 B15：T-214 比较表导出（FR-COMPARE-004 / AC-COMPARE-004）—— 导出 CSV（P1；Excel 依赖零第三方约束，故 CSV 为主、xlsx 若需则按「零依赖」评估）；导出必须与账本逐行一致（同一次排序的引用链）且含 Flag 与差异说明；导出文件落 tmp/ 并用后自清理。实现落 services/export.py（新）+ qa/checks_export.py",
+  "last_verified_command": "tools/verify.sh docs && tools/verify.sh events && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh ac-registry && tools/verify.sh audit && tools/verify.sh v && 全量 55 条 AC && qa suite s1..s4",
+  "last_verified_result": "PASS（docs 门 77 文件/0 未解析；events 门 84 声明 ↔ 81 登记全一致；bridge 31 断言；cordis 18/18；p0-no-node 34 条；ac-registry 55 条注册；audit 12 断言；V 12 条 open；55 条 AC 全绿；s1..s4 全绿）",
+  "last_verified_evidence": "docs/work/evidence/EV-052-award-and-po.txt",
   "last_verified_commit": "1a70ac3",
   "blockers": [],
   "human_required": [
@@ -52,7 +52,9 @@
     "evidence": "kernel/evidence.py（export 带签名与清单绑定 / verify(keystore,require_signature) / inclusion_proof / verify_inclusion / sign_pack）；kernel/canon.py 增 merkle_proof|merkle_verify；入口 tools/audit-verify.py 与 tools/verify.sh audit",
     "approval_queue": "services/approval.py：request(..., timeout_policy, timeout_s, escalate_to, summary, confidence, flags) / queue_view() / sweep()（remind|escalate|abort，永不 granted）；事件 approval/reminded|escalated|aborted 已登记",
     "terms": "services/terms.py：TermLibrary（define/revise 版本化、library(as_of)、apply_defaults 只补缺失键并标 library-default、conflicts 四类状态、escalate 送人工门）；guard 的条款差异计算已下沉到本服务；事件 terms/defined|applied|conflict 已登记",
-    "change": "services/change.py：ChangeService（propose 引用校验与拒绝码、recompute 可重放、approve 经人工门且仅 human:*、effective_total 只计已批准变更）；事件 change/proposed|priced|approved|rejected 已登记；ctx.change 已入 04/01"
+    "change": "services/change.py：ChangeService（propose 引用校验与拒绝码、recompute 可重放、approve 经人工门且仅 human:*、effective_total 只计已批准变更）；事件 change/proposed|priced|approved|rejected 已登记；ctx.change 已入 04/01",
+    "award": "services/commitments.py：intent()/withdraw()（无义务、可复）、commit_award（意向状态 + 中标行快照）、issue_po（先判派生再判批准；行来源链 trace_mode=full|ref-only）、trace()；事件 award/intent-proposed|intent-withdrawn|committed、po/issued、evidence/pack-exported 已登记",
+    "gates": "tools/verify.sh: docs|events|bridge|cordis|p0-no-node|ac-registry|audit|v （events 门 = tools/check-events.py，含双向负控）"
   },
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态"
 }

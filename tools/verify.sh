@@ -60,7 +60,10 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
   ac-registry)
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-ac-registry.py"
     ;;
-  audit)
+  events)
+  python3 tools/check-events.py
+  ;;
+audit)
     exec "$HERE/run.sh" -m quotagent.qa ac AC-AUDIT-004
     ;;
   v)

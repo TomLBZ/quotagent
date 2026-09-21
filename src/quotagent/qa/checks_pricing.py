@@ -196,14 +196,13 @@ def ac_approve_002() -> list[Assertion]:
 
     errors: dict[str, str] = {}
     for name, call in (("submit_quote", lambda: gate.submit_quote(quote)),
-                       ("commit_award", lambda: gate.commit_award(intent, supplier_confirmed=True)),
-                       ("issue_po", lambda: gate.issue_po("ai-0001", po_lines))):
+                       ("commit_award", lambda: gate.commit_award(intent, supplier_confirmed=True))):
         try:
             call()
             errors[name] = ""
         except ApprovalRequired as exc:
             errors[name] = str(exc)
-    out.append(Assertion("无批准记录时三条对外承诺路径全部抛错（INV-005 / 规则 3）",
+    out.append(Assertion("无批准记录时对外承诺路径抛错（INV-005 / 规则 3）：报价提交与授标承诺",
                          all(errors.values()), f"errors={errors}"))
     out.append(Assertion("三条路径失败时都不落账（没有既成事实）",
                          ledger.read(type="quote/submitted") == []
@@ -255,6 +254,23 @@ def ac_approve_002() -> list[Assertion]:
                          and len(ledger.read(type="award/committed")) == 1
                          and len(ledger.read(type="po/issued")) == 1,
                          f"award={committed['award_id']} po={po['po_id']}"))
+
+    probe_intent = gate.intent(package_id="pkg-014", quote_id="q-0007", lines=quote["lines"],
+                               reason="PO 门禁探针")
+    probe_approval = approval.request("award.commit", {"intent_id": probe_intent["intent_id"]},
+                                      ref=probe_intent["intent_id"])
+    approval.decide(probe_approval["approval_id"], by="human:zhang", decision="granted")
+    fresh = gate.commit_award(probe_intent["intent_id"], supplier_confirmed=True,
+                              approval_id=probe_approval["approval_id"])
+    po_without_approval = None
+    try:
+        gate.issue_po(fresh["award_id"], po_lines)
+    except ApprovalRequired as exc:
+        po_without_approval = str(exc)
+    out.append(Assertion("PO 也是承诺路径：**有派生依据但无批准**时仍抛错（发 PO 必须过人工门）",
+                         po_without_approval is not None and "缺少人工批准记录" in po_without_approval
+                         and len(ledger.read(type="po/issued")) == 1,
+                         f"error={po_without_approval}"))
 
     orphan_approval = approval.request("po.issue", {"award_id": "ai-9999"}, ref="ai-9999")
     approval.decide(orphan_approval["approval_id"], by="human:zhang", decision="granted")

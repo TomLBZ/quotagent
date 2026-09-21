@@ -145,3 +145,18 @@ def verify(pack: dict, *, keystore=None, require_signature: bool = False) -> dic
     failed = [c for c in checks if not c["ok"]]
     return {"ok": not failed, "checks": checks,
             "first_failure": failed[0]["name"] + ": " + failed[0]["detail"] if failed else ""}
+
+
+def emit_pack_exported(pack: dict, events=None) -> None:
+    """审计包导出留痕（`evidence/pack-exported`：谁在何时导出了哪一段、包哈希与 Merkle 根）。
+
+    只有给了事件总线才落此事件（离线校验/单测可无总线）。
+    """
+    if events is None:
+        return
+    manifest = pack.get("manifest") or {}
+    events.dispatch("evidence/pack-exported", {
+        "package_id": manifest.get("package_id"), "scope": manifest.get("scope"),
+        "count": manifest.get("count"), "pack_hash": manifest.get("pack_hash"),
+        "merkle_root": pack.get("merkle_root"), "signed_by": pack.get("signed_by"),
+        "note": "审计包导出留痕（模型可见 ⟺ 账本可见）"})

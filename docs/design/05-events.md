@@ -88,9 +88,10 @@
 | `capacity/conflict` | emit | ✔ | `ctx.capacity` | 产能/交期不可行 → 只提请人工（不否决、不改交期） |
 | `compare/rank-computed` | emit | ✔ | `ctx.compare` → 人/AwardAdvisor | 排序 + 引用链 |
 | `compare/flag-raised` | emit | ✔ | `ctx.guard` | Flag 从不由模型自行消解 |
-| `negotiate/round` | serial | ✔ | `ctx.negotiate` → approval | 轮次与让步上限来自策略 patch |
+| `negotiate/round` | serial | ✔ | `ctx.negotiate` → approval | 轮次与让步上限来自策略 patch（规划中（P2 谈判阶段）） |
 | `award/intent-proposed` | emit | ✔ | `ctx.award` → 对方 | Intent，可撤回 |
-| `award/confirm-requested` | serial | live | `ctx.award` → 人工门 | 需 `approval/granted` 才能推进 |
+| `award/intent-withdrawn` | emit | ✔ | `ctx.award` | 意向撤回（可复：再次提出得新意向） |
+| `award/commit-requested` | serial | live | `ctx.award` → 人工门 | 需 `approval/granted` 才能推进（名称与事件表一致：`award/committed` 与 `commit-requested` 成对） |
 | `award/committed` | emit | ✔ | 人工签署 → po | 承诺，缺批准即抛错（INV-005） |
 | `po/issued` | emit | ✔ | `ctx.award` → 履约 | 只能由 `AwardCommitment` 派生 |
 | `change/proposed` | serial | ✔ | 双侧 → 结算 | 变更议题（`ref_quote_lines[]` + `delta` + `basis_unit_price_ref`） |
@@ -98,13 +99,13 @@
 | ↳ 字段口径 | – | – | – | `basis_unit_price_refs` 恒为逐行基准引用**列表**（单行也是单元素），`basis_unit_price_ref` 为首元素；引用不可验证即 `change/rejected` |
 | `change/approved` | serial | ✔ | 双侧 → 结算 | 人工批准后生效（commitment：`delta_amount` + `approved_by`） |
 | `change/rejected` | bail | ✔ | 双侧 → 结算 | 缺引用或引用不可验证即拒绝（FR-CHANGE-001） |
-| `acceptance/recorded` / `invoice/matched` | emit | ✔ | 履约 → 结算 | 三方核对留痕 |
+| `acceptance/recorded` / `invoice/matched` | emit | ✔ | 履约 → 结算 | 三方核对留痕（规划中（P4 验收 / P5 结算阶段）） |
 | `sync/merged` | emit | ✔ | `ctx.sync` | 三方协调的合并结果（一致确认 / 权威方胜出 / 人工裁决） |
 | `sync/conflict` | emit | ✔ | `ctx.sync` | 冲突留痕（mine/theirs/base/authority/auto_resolution） |
 | `sync/suspended` | emit | ✔ | `ctx.sync` | 承诺字段或矩阵未覆盖字段的冲突 → 条目挂起待人工 |
 | `sync/suggestion-raised` | emit | ✔ | `ctx.sync` | 对非权威字段的本地修改转为建议（不外发，03 §4.3） |
 | `evidence/pack-exported` | emit | ✔ | `ctx.evidence` | 审计包（含 Merkle 根） |
-| `evolve/*` | serial | ✔ | `ctx.evolve` | 见 `07`；P0 用到 `evolve/proposed`（新增反例，ADR-0011） |
+| `evolve/proposed` | serial | ✔ | `ctx.evolve` | 自进化提案（P3 阶段）；族内后续名称见 `07`，**登记时必须在本表逐条声明**（事件门机检：事件表有而本表无即红） |
 
 ## 4. Agent 侧事件（live）
 

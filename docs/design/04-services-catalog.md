@@ -156,6 +156,11 @@
 - 职责：授标意向→供应商确认→人工签署→承诺；PO 派生。
 - Definition：`intent(package, quote) -> AwardIntent` · `withdraw(id)` · `commit(intent, approval_ref) -> AwardCommitment` · `issue_po(award) -> PO`。
 - 不变量：`commit` 缺 `approval_ref` 或对方 `confirmed` 即抛错；PO 只能由 `AwardCommitment` 派生。
+- P1（T-213）实现口径：意向 `intent()` **不产生义务**、可 `withdraw()`、撤回后可复（复得新意向，旧意向保持 withdrawn）；
+  已撤回或已成承诺的意向不能再承诺（`intent-not-active`）；承诺记录**中标行快照**，PO 行来源链为
+  ① 承诺行快照 → ② 本侧已提交报价的行 → ③ 无快照时仅核对引用形态，且**追溯模式写进 PO 记录**
+  （`trace_mode=full|ref-only`，不静默降级）；`issue_po` **先判派生依据再判批准**（首条错误指向最可行动的下一步）；
+  PO 行必须引用中标条目，有快照时单价必须与中标价一致（`po-line-not-derived` / `po-line-price-mismatch`）。
 - 关联：FR-AWARD-001..004，AC-AWARD-001/002。
 
 ## 4. 供应商侧

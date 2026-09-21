@@ -1,0 +1,69 @@
+EV-052 — 授标与 PO 闭环（T-213 / FR-AWARD-001..003）：意向可撤回且无义务、承诺缺一即抛错、PO 只能派生
+
+时间: 2026-09-21T04:47:19Z
+commit: 344212e
+命令: qa ac AC-AWARD-001 / AC-AWARD-002（新）；AC-PRICE-001、AC-APPROVE-002（回归）
+
+--- AC-AWARD-001（新；退出码 0，8/8 断言）---
+  [ok] 授标意向落账 `award/intent-proposed`（intent 类）且显式声明无义务 — status=proposed rows=1
+  [ok] 意向可撤回：落 `award/intent-withdrawn`，且撤回**不产生任何承诺**（`award/committed` 为空、无义务） — status=withdrawn committed=0
+  [ok] 已撤回的意向不能被承诺（即便有批准 + 供应商确认）——`intent-not-active` — error=[intent-not-active] 意向 awin-0001 当前状态为 'withdrawn'，只有 proposed 的意向才能被承诺（撤回的意向需重新提出）
+  [ok] 撤回后可复：复提得到**新的**意向（新 id，旧意向保持 withdrawn 不改写） — first=awin-0001 second=awin-0002
+  [ok] **缺供应商确认即抛错**（有批准也不行）：意向可撤回，承诺不可凭空产生 — error=授标承诺需要供应商确认（award/confirmed）：意向可撤回，承诺不可凭空产生（FR-AWARD-002）
+  [ok] **缺人工签署即抛错**（有供应商确认也不行，INV-005） — error=动作 'award.commit'（ref='awin-0003'）缺少人工批准记录：承诺类动作必须先经 ctx.approval 并由人批准（INV-005 / AGENTS.md 规则 3）
+  [ok] 两者齐备才成立承诺：落 `award/committed`（commitment 类）且记下批准人与意图引用 — committed={'award_id': 'aw-0001', 'status': 'committed', 'approval_id': 'ap-0002', 'approved_by': 'human:zhang'}
+  [ok] 已成承诺的意向不可再撤回（承诺不是意向） — 已承诺意向被撤回
+
+--- AC-AWARD-002（新；退出码 0，7/7 断言）---
+  [ok] 手工构造 PO 被拒绝：`award_id` 不是本侧承诺 → `po-not-derived`，且在**批准检查之前**就报错（首条错误指向派生依据） — error=[po-not-derived] PO 只能由 AwardCommitment 派生：'po-0001' 不是本侧已成立的承诺（不得手工另建；已成立的承诺：['aw-0001']）
+  [ok] 即便有匹配的批准记录，未知承诺也不能出 PO（批准不能替代派生依据） — error=[po-not-derived] PO 只能由 AwardCommitment 派生：'ai-9999' 不是本侧已成立的承诺（不得手工另建；已成立的承诺：['aw-0001']）
+  [ok] PO 行必须引用中标报价条目：引用不存在的条目 → `po-line-not-derived` — error=[po-line-not-derived] PO 行必须引用中标报价条目：'L-404' 不在 aw-0001 的条目 ['L-001', 'L-002'] 里
+  [ok] PO 不得凭空改价：单价与中标价不一致 → `po-line-price-mismatch` — error=[po-line-price-mismatch] PO 不得凭空改价：L-001 中标单价 84.17，PO 给 79
+  [ok] PO 由承诺派生并落账 `po/issued`：带 approval_id、意图引用与完整追溯链（po → 承诺 → 意向 → 报价） — po={'po_id': 'po-0001', 'award_id': 'aw-0001', 'intent_id': 'awin-0001', 'quote_id': 'q-0007', 'line_count': 2, 'trace_mode': 'full', 'total_amount': 10580.4, 'chain': 'po → aw-0001 → awin-0
+  [ok] 逐行可追溯：每行带 `ref_line` 与单价基准引用，且单价与中标行逐行相等 — lines=[{'ref_line': 'L-001', 'qty': 120.0, 'unit_price': 84.17, 'basis': 'q-0007#L-001:unit_price', 'trace': 'full'}, {'ref_line': 'L-002', 'qty': 40.0, 'unit_price': 12.0, 'basis': 'q-0007#
+  [ok] PO 仍走人工门：无批准记录时不落账（`po/issued` 条数不变） — 无批准也出了 PO
+
+--- AC-PRICE-001（回归；退出码 0，7/7 断言）---
+  [ok] 定价产出为 Intent（账本事件 class=intent，不是承诺） — class=intent status=proposed
+  [ok] 定价按流水线给出（成本基线 → 市场参考 → 策略加价 → 风险准备金），各阶段可查 — baseline=74.4876 markup=8.938512000000001 price=85.92889536 stages=['cost_baseline', 'market_reference', 'strategy_markup', 'risk_reserve', 'band_check']
+  [ok] 越界（超授权区间）无条件请求批准，且状态为待批（不得直接产出可提交价格） — in_band=False status=awaiting_approval price=107.4111192 approval=ap-0001
+  [ok] 最终数字不能由 agent 确认（代签被拒绝） — error=最终报价数字必须由人确定（by 必须以 'human:' 开头），收到 'agent:price'（FR-PRICE-002）
+  [ok] 未经人确认的定价结果不得进入提交路径（人工门前置） — error=定价建议 pp-0002 尚未获得人确认，不得提交（FR-PRICE-002 / 规则 3）
+  [ok] 人确认后最终数字落定，且落账 quote/human-approved — status=human_confirmed final=107.4111192 approved_events=1
+  [ok] 区间内的定价不需要人工门（门只在越界时强制触发） — in_band=True approval=None
+
+--- AC-APPROVE-002（回归；退出码 0，9/9 断言）---
+  [ok] 无批准记录时对外承诺路径抛错（INV-005 / 规则 3）：报价提交与授标承诺 — errors={'submit_quote': "动作 'quote.submit'（ref='q-0007'）缺少人工批准记录：承诺类动作必须先经 ctx.approval 并由人批准（INV-005 / AGENTS.md 规则 3）", 'commit_award': "动作 'award.commit'（ref='ai-0001'）缺少人工批准记录：承诺类动作必须先经 
+  [ok] 三条路径失败时都不落账（没有既成事实） — submitted=0 committed=0 po=0
+  [ok] 伪造的批准引用被拒绝（批准必须落在账本里） — error=不存在的批准记录: ap-fake
+  [ok] 有批准后提交报价成功并落账 quote/submitted（门不是装饰） — submitted={'quote_id': 'q-0007', 'approval_id': 'ap-0001', 'approved_by': 'human:zhang', 'submitted_at': '2026-09-21T04:47:19Z', 'ledger_ref': {'seq': 4, 'entry_hash': 'sha256:020be8e86eb679
+  [ok] 批准绑定 scope：报价批准不能复用到授标承诺（FR-APPROVE-002） — error=批准 ap-0001 不适用于 scope='award.commit' ref='ai-0001'（当前: scope='quote.submit' ref='q-0007' status=granted）
+  [ok] 授标承诺缺供应商确认即抛错（缺一即不可承诺） — error=授标承诺需要供应商确认（award/confirmed）：意向可撤回，承诺不可凭空产生（FR-AWARD-002）
+  [ok] 有批准 + 供应商确认后授标承诺与 PO 依次成立（PO 由承诺派生） — award=aw-0001 po=po-0001
+  [ok] PO 也是承诺路径：**有派生依据但无批准**时仍抛错（发 PO 必须过人工门） — error=动作 'po.issue'（ref='aw-0002'）缺少人工批准记录：承诺类动作必须先经 ctx.approval 并由人批准（INV-005 / AGENTS.md 规则 3）
+  [ok] PO 不能手工另建（即便有批准，未知承诺 → 抛错，FR-AWARD-002 的 P0 子集） — error=[po-not-derived] PO 只能由 AwardCommitment 派生：'ai-9999' 不是本侧已成立的承诺（不得手工另建；已成立的承诺：['aw-0001', 'aw-0002']）
+
+--- 新增机检：事件门（`tools/check-events.py` / `verify.sh events`）---
+退出码 0（0 = 文档声明与事件表完全一致）：
+  [ok]   规划中（阶段未到，允许未登记）: acceptance/recorded
+  [ok]   规划中（阶段未到，允许未登记）: invoice/matched
+  [ok]   规划中（阶段未到，允许未登记）: negotiate/round
+  事件: 文档声明 84 条，事件表登记 81 条，取交集 81 条
+  [ok]   文档与事件表完全一致（名称与模式）
+
+开工即抓到并修的真实漂移（7 处 → 0 处）：
+· 文档写 `award/confirm-requested`、事件表写 `award/commit-requested` —— 同一事件两个名字（两侧各自"看起来对"）；
+· 文档用通配 `evolve/*` 声明族，而事件表登记了具体名 `evolve/proposed` —— 通配会把族内改名全部掩盖；
+· `evidence/pack-exported` 文档声明了但实现从未发出（B10 的导出路径缺留痕）→ 已补 `emit_pack_exported()`；
+· `acceptance/recorded`、`invoice/matched`、`negotiate/round` 是后续阶段的事件 → 文档说明列标「规划中」（机检放行，阶段到位后必须登记）；
+· 负控实跑：改事件表名 → 红；改文档名 → 红；还原 → 绿（两个方向都测了）。
+
+--- 口径说明（授标闭环） ---
+· 意向不产生义务：`intent()` 落 `award/intent-proposed`（intent 类），`withdraw()` 落 `award/intent-withdrawn`，
+  撤回后 `award/committed` 与 `po/issued` 均为空；复提得到**新**意向（旧意向保持 withdrawn，不改写历史）；
+· 已撤回的意向不能被承诺（`intent-not-active`），已成承诺的意向不可撤回（承诺不是意向）；
+· 承诺缺供应商确认 → 抛错（即便有批准）；缺人工签署 → 抛错（即便有确认）；两者齐备才落 `award/committed`；
+· PO 只能由承诺派生：`issue_po` **先判派生依据再判批准**（首条错误指向最可行动的下一步）；
+  手工构造（未知 award_id）→ `po-not-derived`；行引用不存在的条目 → `po-line-not-derived`；有行快照时改价 → `po-line-price-mismatch`；
+· PO 行来源链：承诺行快照 → 本侧已提交报价的行 → 仅核对引用；**追溯模式写进 PO 记录**（`trace_mode=full|ref-only`，不静默降级）；
+· 仍走人工门：有派生依据但无批准时抛 `ApprovalRequired` 且不落账。
