@@ -131,5 +131,5 @@ check('零残留负控：模块不订阅事件/不注册定时器/不写文件�
   forbidden.length === 0, `forbidden=${forbidden.join(',') || '无'}`)
 
 await a.fiber.dispose(); await b.fiber.dispose()
-console.log(JSON.stringify({ ...facts, total: facts.checks.length, failures }, null, 2))
+console.log(JSON.stringify({ ...facts, passed: facts.checks.length - failures, total: facts.checks.length, failures }, null, 2))
 process.exit(failures === 0 ? 0 : 1)

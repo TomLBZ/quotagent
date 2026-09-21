@@ -1,0 +1,81 @@
+EV-076 T-241 第三次自进化产出：第一个**中间件**（circuit-breaker）
+生成时间 2026-09-21T09:47:22Z
+命令与原始输出（原样留档）
+
+[1] 自进化流程（同一个驱动脚本，流程未改）
+$ tools/cordis.sh run ../tools/evolve-module.mjs --source-file tmp/t241-artifact.mjs --name circuit-breaker --approval-ref ap-0102
+exit=0 | fixture=13/13 | promote=promoted | in_tree_fixture=13/13
+产出日志条目：['price-history', 'evidence-summary', 'circuit-breaker']
+（护栏读数 same_kind_history={'total': 1, 'failed': 1}：failed ≥ 2 会强制转人工）
+
+[2] 账本（H1：Python 侧写）
+{"actor":"agent:t237","body":{"actor":"agent:t237","artifact_hash":"sha256:4bddc04fbd83aafbb95cf9d5551cddf48e74ad779d11052a5cfdf60f6a1abaa6","bytes":5791,"id":"sha256:20e799b34bba40b7cc5f799ea068e4105470dbd6eeda1fa78cf4cb5bf5b9c746","name":"circuit-breaker","target":"/workspace/projects/quotagent/host/modules/circuit-breaker.mjs"},"body_hash":"sha256:e64481dc6c33cfe2a5d7de431cf9346f61eae4099a24d00c0ba771cd75aedc2a","class":"intent","correlation_id":"sha256:20e799b34bba40b7cc5f799ea068e4105470dbd6eeda1fa78cf4cb5bf5b9c746","entry_hash":"sha256:173d3a9609626e87ea9413c3d3dc5b0f2e489cec5a6fc643e917aa26f66d320b","prev_hash":"sha256:ba3201fb096acac82b488128cac614efa4e095cefd99658627ca81ba304c6bed","realm":"contractor:con-B","refs":{},"seq":19,"ts":"2026-09-21T09:45:19Z","type":"evolve/proposed"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","hash":"sha256:4bddc04fbd83aafbb95cf9d5551cddf48e74ad779d11052a5cfdf60f6a1abaa6","id":"sha256:20e799b34bba40b7cc5f799ea068e4105470dbd6eeda1fa78cf4cb5bf5b9c746","shadow_path":"/workspace/projects/quotagent/tmp/t237-shadow/modules/circuit-breaker.mjs"},"body_hash":"sha256:412255d0567c78744e0272fe3072e039117adac77399ff0d75a06f60edc8a7bb","class":"intent","correlation_id":"sha256:20e799b34bba40b7cc5f799ea068e4105470dbd6eeda1fa78cf4cb5bf5b9c746","entry_hash":"sha256:366533d672aa4a69d5e10e1b8dd7cff933453b5f2b923dafe9f60fdabd7742e1","prev_hash":"sha256:173d3a9609626e87ea9413c3d3dc5b0f2e489cec5a6fc643e917aa26f66d320b","realm":"contractor:con-B","refs":{},"seq":20,"ts":"2026-09-21T09:45:19Z","type":"evolve/shadowed"}
+{"actor":"host:gate-runner","body":{"actor":"host:gate-runner","fixture":"13/13","id":"sha256:20e799b34bba40b7cc5f799ea068e4105470dbd6eeda1fa78cf4cb5bf5b9c746","reasons":[],"verdict":"passed"},"body_hash":"sha256:369c2e231ee50f8431ba838acc690b2ca603f003cbf043e67bf3c68f0fb34574","class":"intent","correlation_id":"sha256:20e799b34bba40b7cc5f799ea068e4105470dbd6eeda1fa78cf4cb5bf5b9c746","entry_hash":"sha256:0cce27620aed2b95893b56e5923817aca8b7f0b6145e729499ffc4e03877f079","prev_hash":"sha256:366533d672aa4a69d5e10e1b8dd7cff933453b5f2b923dafe9f60fdabd7742e1","realm":"contractor:con-B","refs":{},"seq":21,"ts":"2026-09-21T09:45:19Z","type":"evolve/gated"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","approval_ref":"ap-0102","artifact_hash":"sha256:4bddc04fbd83aafbb95cf9d5551cddf48e74ad779d11052a5cfdf60f6a1abaa6","id":"sha256:20e799b34bba40b7cc5f799ea068e4105470dbd6eeda1fa78cf4cb5bf5b9c746","written_to":"host/modules/circuit-breaker.mjs"},"body_hash":"sha256:de561eea4e33864fd9168653152dfc3e1473b93c7fbbe8cb01c47234ccbc4c4c","class":"intent","correlation_id":"sha256:20e799b34bba40b7cc5f799ea068e4105470dbd6eeda1fa78cf4cb5bf5b9c746","entry_hash":"sha256:732518f3cdc2bec7d665ea47cb05f48ceb8e0bb0c00ba5c94e73cf4cd9d1e327","prev_hash":"sha256:0cce27620aed2b95893b56e5923817aca8b7f0b6145e729499ffc4e03877f079","realm":"contractor:con-B","refs":{},"seq":22,"ts":"2026-09-21T09:45:43Z","type":"evolve/promoted"}
+
+[3] 围栏门（宿主侧**人工维护**，不由被围对象自己写）：$ tools/verify.sh breaker
+exit=0 | 10/10
+[
+  {
+    "name": "初始正控：closed 时放行，且返回值带 state（不返回裸 true/false）",
+    "ok": true,
+    "detail": "allowed=true state=closed"
+  },
+  {
+    "name": "阈值正控：连续失败达阈值 → 打开，并给出 reason=threshold-reached",
+    "ok": true,
+    "detail": "第 3 次失败后 state=open reason=threshold-reached"
+  },
+  {
+    "name": "打开负控：**快速失败**（不放行）且可解释（reason/retry_after_ms/next_action 齐备）",
+    "ok": true,
+    "detail": "allowed=false reason=circuit-open retry_after_ms=1000"
+  },
+  {
+    "name": "半开正控：冷却到点进入 half-open，只放**有限次**试探（额度用尽即拒且解释）",
+    "ok": true,
+    "detail": "probe1=half-open/true probe2=half-open/half-open-budget-exhausted"
+  },
+  {
+    "name": "半开负控：试探失败 → **立刻重新打开**并重置冷却起点（不许\"半开\"变事实全开）",
+    "ok": true,
+    "detail": "state=open reason=probe-failed"
+  },
+  {
+    "name": "恢复正控：试探成功 → 合上，且连续失败计数清零（不会一次抖动又打开）",
+    "ok": true,
+    "detail": "state=closed failures=0"
+  },
+  {
+    "name": "分桶正控：一个 key 打开不牵连另一个 key（k2 仍放行）",
+    "ok": true,
+    "detail": "k2 state=closed"
+  },
+  {
+    "name": "有界负控：`half_open_max` 超过硬上界时被**夹到上限**（配置也不许无界）",
+    "ok": true,
+    "detail": "half_open_max=3（配置传 99）"
+  },
+  {
+    "name": "确定性正控：注入假时钟跑同一序列两次 → 判定与统计**字节一致**（判定不依赖真实时间）",
+    "ok": true,
+    "detail": "len=568 equal=true"
+  },
+  {
+    "name": "零残留负控：模块不订阅事件/不注册定时器/不写文件（冷却用注入时钟判断）",
+    "ok": true,
+    "detail": "forbidden=无"
+  }
+]
+
+[4] 追溯门：$ tools/verify.sh evolve-module → 16/16（三个产出物的哈希都在追溯之下）
+
+结论：自进化可以产出**中间件**（不只是领域插件）。职责边界写死：
+governor 管"额度/超时/重试"，canary 管"去哪条道"，**breaker 管"连续失败就切断"**；
+判定用**注入时钟**（不注册定时器），假时钟下同序列两次字节一致。
+
+[5] 本轮自身过失（如实记录）：落档脚本因 `host/breaker.mjs` 的 JSON **缺 `passed` 键**而 KeyError 崩溃，
+导致这条 EV 与 D-036 未随代码一起提交，而提交信息却声称已落档 → 后续提交补齐。
+教训：**门输出的 JSON 形状要统一**（都带 passed/total/failures）；**提交信息必须与实际内容一致**。
+
