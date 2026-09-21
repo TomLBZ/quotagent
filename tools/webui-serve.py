@@ -183,6 +183,7 @@ def main(argv: list[str]) -> int:
                 "QUOTAGENT_UI_ADMIN", str(ROOT / "tmp" / "ui-shared" / "admin.json")),
             "--admin-inbox", os.environ.get(
                 "QUOTAGENT_UI_ADMIN_INBOX", str(ROOT / "tmp" / "ui-shared" / "admin-submissions")),
+            "--ui-shared", os.environ.get("QUOTAGENT_UI_SHARED", str(ROOT / "tmp" / "ui-shared")),
             "--market-modules", str(ROOT / "host" / "modules"),
             "--market-inventory", str(ROOT / "docs" / "design" / "14-plugin-inventory.md"),
             "--market-user-space", str(ROOT / "user-space"),

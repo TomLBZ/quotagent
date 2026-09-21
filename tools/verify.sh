@@ -145,6 +145,16 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     "${QUOTAGENT_NODE:-node}" "$HERE/../host/t281-advice-gate.mjs" || exit 1
     exec "$QUOTAGENT_PY" "$HERE/check-advice-route.py" "$@"
     ;;
+  gates)
+    # 审批等多久 / 变更单到底是谁卡着（本批：「审批人等不到」+「变更单扯皮」两条 human problem）：
+    # ① 插件围栏门（33 条断言 + 4 处单点变异 + 还原字节一致；**age 不随两个不同 now 入口变化** /
+    #    空投影两列表为 0 / 插件不能批准 / 每条都有 basis）② 真 HTTP 端到端（真进程真回读：两视角页面与
+    #    JSON 200 / 空投影降级且两列表 0 / 催办 POST 只落 0600 待办件且账本零新增 / 真跑 gate-nudge.py
+    #    落 gate/nudged 且 ops 计数 +1 / 幂等 duplicates / 两条拒绝路径 / 私域哨兵 0 次）。
+    # 两半都跑，任一失败即红。
+    "${QUOTAGENT_NODE:-node}" "$HERE/../host/t282-gate-timeline-gate.mjs" || exit 1
+    exec "$QUOTAGENT_PY" "$HERE/check-gate-timeline-route.py" "$@"
+    ;;
   ui-feedback)
     # WebUI 反馈闭环（用户反馈 → agent 产新版本 → 自动重载 → 页面提示"请刷新"）：
     # ① 插件围栏门（28 条断言 + 4 处单点变异 + 还原字节一致）② 真 HTTP 端到端

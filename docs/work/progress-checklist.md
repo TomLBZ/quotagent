@@ -97,6 +97,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | GUI-P0e | 比价 heuristics visualizer（可调权重 + 贡献分解 + 私域零泄漏；门 32/32 + 路由门 12/12） | B81 | done | EV-147 |
 | DOC-AC1 | AC 归档合法化：门把 `acceptance-criteria-archive*.md` 并入 AC 定义集合（docs/ac-registry/coverage 三处口径统一 + 归档空读守卫 + `archives=[...]` 可观察）；46 条非 P0 老行逐字搬入归档，主文件 32760→25066 B；反向验证 3 例（副本上做，字节还原一致） | B82 | done | EV-149 |
 | P3-UX2 | 三份 UX 规格持久化进 `docs/work/plans/`（22 痛点 / 9 human / 20 FR 草案）`4e0f2cb` | B78 | done | — |
+| T-283 | P2 | 「审批等多久 / 变更单谁卡着」GUI 闭环：`gate-timeline` 插件（等待时长口径=事实 ts 差、不取墙钟、**不能批准**）+ 三路由（页面/JSON/催办 POST 只落 0600 待办件、账本零新增）+ `tools/gate-nudge.py`（唯一落账本者，落 `gate/nudged`）+ 围栏门 33/33（4 处变异自证）与真路由门 11/11 | FR-GATE-001 | AC-GATE-001 | done | EV-153 |
 | T-272 | 宿主侧 admin 门卫/视图插件 + 围栅门 18/18 + 端到端 12/12（subagent 产出，父方实跑） | B67 | done | EV-132 |
 | T-273 | admin 道接入 webui（路由/提权表单/CLI/e2e/profile/stubs/verify.sh）+ 本批 FR/AC 落表 | B67 | done | EV-132 |
 | T-273b | admin 道变异自证（统一拒绝体/投影/状态机/比较写法四处偷改必红；落表待实现） | B68 | todo | — |

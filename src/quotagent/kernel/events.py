@@ -93,6 +93,7 @@ class EventBus:
         "approval/reminded": ("emit", True, ""),
         "approval/escalated": ("emit", True, ""),
         "approval/aborted": ("emit", True, ""),
+        "gate/nudged": ("emit", True, ""),
         "change/proposed": ("serial", True, ""),
         "change/priced": ("serial", True, ""),
         "change/approved": ("serial", True, ""),

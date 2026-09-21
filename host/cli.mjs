@@ -193,6 +193,12 @@ const main = async () => {
     const { apply: advApply, Config: advConfig } = await import('./modules/advice-panel.mjs')
     await ctx.plugin({ name: 'advice-panel', inject: [], Config: advConfig,
       apply: (inner, cfg) => advApply(inner, cfg) }, advConfig.parse({}))
+    // 审批等多久 / 变更单谁卡着（本批）：同规格的纯函数插件（不读账本、不取墙钟、不能批准）
+    const { apply: gtApply, Config: gtConfig } = await import('./modules/gate-timeline.mjs')
+    await ctx.plugin({ name: 'gate-timeline', inject: [], Config: gtConfig,
+      apply: (inner, cfg) => gtApply(inner, { ...cfg, route_prefix: String(args.prefix ?? '/quotagent') }) },
+      gtConfig.parse({}))
+
     const { apply: mvApply, Config: mvConfig } = await import('./modules/mail-view.mjs')
     await ctx.plugin({ name: 'mail-view', inject: [], Config: mvConfig,
       apply: (inner, cfg) => mvApply(inner, { ...cfg,
@@ -237,7 +243,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -257,6 +263,8 @@ const main = async () => {
       ledger_contractor: contractorLedger,
       ledger_supplier: String(args['ledger-supplier'] ?? ''),
       ledger_evolve: String(args['ledger-evolve'] ?? join(REPO_ROOT, 'tmp', 'evolve', 'ledger.jsonl')),
+      // 宿主侧共享目录（催办待办件落 `<ui_shared>/gate-nudges/`；与 ui-feedback 同口径）
+      ui_shared: String(args['ui-shared'] ?? process.env.QUOTAGENT_UI_SHARED ?? 'tmp/ui-shared'),
     })
     // 注意：这里**不能**用 emit()（它写完就 process.exit）——UI 是常驻服务
     process.stdout.write(JSON.stringify({ ok: true, action: 'webui', profile: profileName, pid: process.pid,

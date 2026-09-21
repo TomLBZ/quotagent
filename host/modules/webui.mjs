@@ -11,18 +11,18 @@
  */
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { array, number, object, string } from '../lib/std-schema.mjs'
 import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环 / 决策建议）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环 / 决策建议 / 审批与变更时间线）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline']
 
 export const provides = ['webui']
 
@@ -40,6 +40,7 @@ export const Config = object({
   pipeline_snapshot: string().default(''),  // 三域快照的**绝对路径**（同上）
   admin_snapshot: string().default(''),     // 系统管理快照（阻塞/进度）的**绝对路径**（同上）
   admin_inbox: string().default(''),        // 待处理提交目录（宿主写这里；Only Python 消费，账号不写账本）
+  ui_shared: string().default('tmp/ui-shared'),  // 宿主侧共享目录（`gate-nudges/` = 催办待办件；与 ui-feedback 同口径）
 })
 
 const html = (title, body, prefix) => `<!doctype html><html lang="zh"><head><meta charset="utf-8">
@@ -101,16 +102,20 @@ const subNav = (prefix, view, current) => {
   links.push(`<a href="${prefix}/${view}/heuristics/" data-heuristics-link="1"${current === 'heuristics' ? ' aria-current="page"' : ''}>比价口径</a>`)
   // 决策建议层（本批）：确定性规则派生的下一步（`engine=rules`，同样零内联脚本）
   links.push(`<a href="${prefix}/${view}/advice/" data-advice-link="1"${current === 'advice' ? ' aria-current="page"' : ''}>决策建议</a>`)
+  // 审批等多久 / 变更单谁卡着（本批）：等待时长有口径、卡点有名字、下一步可复制（同样零内联脚本）
+  links.push(`<a href="${prefix}/${view}/gates/" data-gates-link="1"${current === 'gates' ? ' aria-current="page"' : ''}>审批与变更</a>`)
   return `<nav data-subnav="${view}">${links.join(' ')}</nav>`
 }
 
 /** 页内锚点导航（ops / admin 两道；同样带 `data-subnav` 抓手）。
  *  `extras` 是比价口径入口（带 `data-heuristics-link`），`adviceExtras` 是决策建议入口
- *  （带 `data-advice-link`）—— 两种入口的抓手分开，免得门把其中一个当成另一个的证据。 */
-const anchorNav = (view, home, sections, extras = [], adviceExtras = []) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
+ *  （带 `data-advice-link`），`gateExtras` 是审批与变更入口（带 `data-gates-link`）——
+ *  三种入口的抓手分开，免得门把其中一个当成另一个的证据。 */
+const anchorNav = (view, home, sections, extras = [], adviceExtras = [], gateExtras = []) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
   .concat(sections.map(([id, label]) => `<a href="${home}#${id}">${label}</a>`))
   .concat(extras.map(([href, label]) => `<a href="${href}" data-heuristics-link="1">${label}</a>`))
   .concat(adviceExtras.map(([href, label]) => `<a href="${href}" data-advice-link="1">${label}</a>`))
+  .concat(gateExtras.map(([href, label]) => `<a href="${href}" data-gates-link="1">${label}</a>`))
   .join(' ')}</nav>`
 
 
@@ -220,6 +225,7 @@ export function apply(ctx, config) {
   const mailView = ctx.mailView              // 邮件域（SMTP/IMAP）的只读运维视图（**本批新增模块**）
   const bid = ctx.bidHeuristics              // 比价 heuristics（domain 插件，T-279）：只做算术，不读账本
   const advice = ctx.advicePanel             // 决策建议层（domain 插件，本批）：确定性规则派生，不读账本、不联网、不调模型
+  const gates = ctx.gateTimeline             // 审批等多久 / 变更单谁卡着（domain 插件）：只吃白名单载荷，不读账本、不取墙钟
   const feedback = ctx.uiFeedback            // WebUI 反馈闭环（ui-feedback 插件）：版本事实只读 + 只落 0600 待办件
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
@@ -675,6 +681,179 @@ export function apply(ctx, config) {
         : '<p data-advice="notes">说明：无（本次每条输入都进了派生）</p>')
       + `<p><small>**浏览器的极限**：本页只把命令准备好给你复制 —— 批准 / 提交报价 / 定标 / 发 PO / 变更批准`
       + `五件事**永远在终端做人签**（<code>ADR-0013 §3</code>），宿主不能代签。</small></p>`
+  }
+
+  // ==========================================================================================
+  // 审批等多久 / 变更单到底是谁卡着（`gate-timeline` domain 插件，本批）
+  //   · 正面回答两条 human problem：① 人工门挂了多久 / 卡在谁手里 / 再等下去会怎样 / 下一步；
+  //     ② 每张变更单现在什么状态 / 谁欠谁一个动作 / 以哪条账本事件为凭。
+  //   · 本文件只做一件事：把**本视角自己的行**过滤成白名单载荷（带私域键的行整行跳过并报数），
+  //     派生全在 `host/modules/gate-timeline.mjs`（不读账本、不写文件、**不取墙钟**、不调模型）。
+  //   · `as_of` = 本视角行里最大的 `ts`（**事实时刻**，不是墙钟）—— 等待时长因此可复算、不随刷新漂移。
+  //   · 写面只有一处：`POST /<view>/gates/nudge` 落**一条 0600 待办件**（含用户原话 + 目标门 id +
+  //     sha256），**账本零新增**（H1）；唯一落账本者是 `tools/gate-nudge.py`（落 `gate/nudged`，
+  //     只记"谁在什么时候催过哪个门"，**不改门的判定**）。
+  // ==========================================================================================
+  const GATES_CAP = 64        // 喂给插件的每段条目上限（有界；两段各自截断，插件如实报 omitted）
+  /** 人工门事件行的白名单投影（只读这几个键；带私域键的行整行跳过并计数）。 */
+  const gateApprovalRows = (view) => {
+    const out = []
+    let skipped = 0
+    for (const row of ledgerOf(view).rows()) {
+      const body = row && typeof row.body === 'object' && row.body !== null ? row.body : {}
+      if (hasPrivateKey(body, view)) { skipped += 1; continue }
+      if (!String(row?.type ?? '').startsWith('approval/')) continue
+      out.push({ approval_id: body.approval_id, type: row.type, ts: row?.ts, scope: body.scope, ref: body.ref,
+        summary: body.summary, approvers: body.approvers, escalate_to: body.escalate_to,
+        timeout_policy: body.timeout_policy, timeout_s: body.timeout_s })
+    }
+    return { rows: out, skipped }
+  }
+  /** 变更单事件行的白名单投影（**不读 `lines`**：逐行明细不是本页的口径来源）。 */
+  const gateChangeRows = (view) => {
+    const out = []
+    let skipped = 0
+    for (const row of ledgerOf(view).rows()) {
+      const body = row && typeof row.body === 'object' && row.body !== null ? row.body : {}
+      if (hasPrivateKey(body, view)) { skipped += 1; continue }
+      if (!String(row?.type ?? '').startsWith('change/')) continue
+      out.push({ change_id: body.change_id, type: row.type, ts: row?.ts, quote_id: body.quote_id,
+        delta_amount: body.delta_amount, basis_unit_price_refs: body.basis_unit_price_refs,
+        basis_unit_price_ref: body.basis_unit_price_ref, approved_by: body.approved_by,
+        approval_id: body.approval_id, code: body.code })
+    }
+    return { rows: out, skipped }
+  }
+  const gatesPayload = (view) => {
+    const approvals = gateApprovalRows(view)
+    const changes = gateChangeRows(view)
+    return {
+      view,
+      // **事实时刻**：本视角投影里最大的 ts（没有可解析的 ts 就是 null ⇒ 插件拒绝给等待时长，不猜时钟）
+      as_of: lastTsOf(ledgerOf(view).rows()),
+      approvals: approvals.rows.slice(0, GATES_CAP),
+      changes: changes.rows.slice(0, GATES_CAP),
+    }
+  }
+  const gatesRun = (view) => gates.timeline(gatesPayload(view))
+  /** JSON（机器可读；与页面同数据、同口径；引擎自述与时间口径一起给）。 */
+  const gatesJson = (view) => {
+    const run = gatesRun(view)
+    const meta = gates.meta()
+    return { view, source: 'gate-timeline（domain 插件：确定性规则；不读账本、不写账本、不取墙钟、不调模型）',
+      engine: run.engine, engine_note: run.engine_note, as_of: run.as_of, age_clock: run.age_clock,
+      age_basis_note: run.age_basis_note, ignored_now_inputs: run.ignored_now_inputs,
+      gates: run.gates, changes: run.changes, counts: run.counts, bounds: run.bounds,
+      truncated: run.truncated, omitted: run.omitted, degraded: run.degraded, reason: run.reason,
+      notes: run.notes, privacy: run.privacy,
+      meta: { engine: meta.engine, age_clock: meta.age_clock, sections: meta.sections,
+        degraded_reasons: meta.degraded_reasons, nudge_codes: meta.nudge_codes, nudge_action: meta.nudge_action,
+        timeout_policies: meta.timeout_policies, can_approve: meta.can_approve },
+      note: 'engine=rules：本接口给的是**确定性规则**从投影派生的"谁在等、等了多久、谁欠谁一个动作"，'
+        + '不含模型推测；`age_seconds` 的口径是 `as_of − 该门 requested 事件的事实 ts`（**不取墙钟**，'
+        + '所以同一份快照在任何时刻返回同一组数字）；`next_action` 是可直接复制的命令或本前缀下的路由；'
+        + '本插件**没有**批准/提交/签收这类方法（`meta.can_approve=false`），催办只落待办件、不改门的判定' }
+  }
+  /** 页面（SSR，**零内联脚本**：下一步是 `<pre><code>` 里的命令/路由，催办用 `<form method=post>`）。 */
+  const gatesHtml = (view) => {
+    const run = gatesRun(view)
+    const gateRows = run.gates.map((item) => `<tr data-gate-id="${esc(item.id)}" data-gate-owner="${esc(item.owner)}"`
+      + ` data-gate-age-seconds="${esc(String(item.age_seconds))}">`
+      + `<td><b>${esc(String(item.age_seconds))}</b> 秒<br><small>${esc(item.age_basis)}</small></td>`
+      + `<td><code>${esc(item.id)}</code><br><small>${esc(item.kind)}</small></td>`
+      + `<td>${esc(item.subject)}</td>`
+      + `<td><code>${esc(item.owner)}</code></td>`
+      + `<td>${esc(item.consequence)}<br><small>阻塞：${esc(item.blocked_by)}</small></td>`
+      + `<td data-gate-next-action="${esc(item.id)}"><pre>${esc(item.next_action)}</pre></td></tr>`).join('')
+    const changeRows = run.changes.map((item) => `<tr data-change-id="${esc(item.id)}" data-change-state="${esc(item.state)}"`
+      + ` data-owed-by="${esc(item.owed_by)}">`
+      + `<td><code>${esc(item.id)}</code></td><td>${esc(item.state)}</td><td><code>${esc(item.owed_by)}</code></td>`
+      + `<td>${esc(item.waiting_since)}</td>`
+      + `<td data-change-basis="${esc(item.basis.join(' '))}">${item.basis.map((token) => `<code>${esc(token)}</code>`).join(' ')}</td>`
+      + `<td><pre>${esc(item.next_action)}</pre></td></tr>`).join('')
+    const gateHeader = '<tr><th>等了多久（口径写在下面）</th><th>门</th><th>对象</th><th>卡在谁手里</th>'
+      + '<th>再等下去会发生什么</th><th>下一步（可复制）</th></tr>'
+    const changeHeader = '<tr><th>变更单</th><th>状态</th><th>谁欠一个动作</th><th>从哪条事件起在等</th>'
+      + '<th>凭据（账本事件/计数引用）</th><th>下一步（可复制）</th></tr>'
+    return subNav(prefix, view, 'gates')
+      + `<p><a href="${prefix}/${view}/">← 回 ${rules[view].title}</a> · JSON：<code>${prefix}/${view}/api/gates</code>`
+      + ` · <a href="${prefix}/${view}/gates/">重新派生</a>（本页每次都是现算的，没有缓存）</p>`
+      + `<p data-gates-engine="${esc(run.engine)}"><b>引擎：<code>engine=${esc(run.engine)}</code></b> —— `
+      + `${esc(run.engine_note)}（规则写在 <code>host/modules/gate-timeline.mjs</code>；宿主不读账本、不写账本、不取墙钟）。</p>`
+      + `<p data-age-clock="${esc(run.age_clock)}" data-gates="age-basis"><b>「等了多久」的口径</b>：`
+      + `${esc(run.age_basis_note)}；参照事实时刻 <code>as_of=${esc(run.as_of ?? '（本视角还没有可解析的事件 ts）')}</code>`
+      + `（= 本视角投影里最大的 <code>ts</code>，**不是墙钟**）；被忽略的墙钟入口：`
+      + `<code>${esc(run.ignored_now_inputs.join(', '))}</code>（给它们任何值，本页数字都不变）。</p>`
+      + (run.degraded
+        ? `<p class="degraded" data-gates-degraded="1"><b>降级（**不冒充健康、也不给你编条目**）</b>：`
+          + `<code>${esc(run.reason)}</code> —— 待办人工门 <b>0</b> 条、变更单 <b>0</b> 条。`
+          + `${run.reason === 'no-usable-inputs' ? '本视角投影里还没有可供派生的 approval/*、change/* 事实行（不是页面坏了）。' : ''}`
+          + `${run.reason === 'no-signal' ? '数据齐了，但既没有"还在等"的门、也没有变更单 —— 这本身就是结论，不编一条兜底项。' : ''}`
+          + `</p>`
+        : '')
+      + `<h3 id="gates">还在等的人工门（<b data-gates-gate-count="${run.counts.gates.shown}">${run.counts.gates.shown}</b> 条）</h3>`
+      + (run.gates.length
+        ? `<table data-gates="table">${gateHeader}${gateRows}</table>`
+        : `<p data-gates="table-none">当前没有"还在等"的人工门（口径：本视角投影里最后一条 approval/* 不是 granted/denied/aborted）`
+          + `；生成口径下共有 <b>${run.counts.gates.found}</b> 条。</p>`)
+      + `<h3 id="changes">变更单时间线（<b data-gates-change-count="${run.counts.changes.shown}">${run.counts.changes.shown}</b> 张）</h3>`
+      + (run.changes.length
+        ? `<table data-gates="changes">${changeHeader}${changeRows}</table>`
+        : `<p data-gates="changes-none">当前没有变更单（本视角投影里没有 change/* 行）`
+          + `；生成口径下共有 <b>${run.counts.changes.found}</b> 张。</p>`)
+      + `<p data-gates="counts">生成 <b>${run.counts.gates.found}</b> 门 / <b>${run.counts.changes.found}</b> 变更单；`
+      + `展示 <b>${run.counts.shown}</b> 条（上限 <code>max_items=${run.bounds.max_items}</code>，两段各自截断）；`
+      + `截断 <b>${run.truncated}</b>（被丢 <b>${run.omitted}</b> 条，照实报）；`
+      + `超时策略分布（生成口径）：remind <b>${run.counts.by_policy.remind}</b> / `
+      + `escalate <b>${run.counts.by_policy.escalate}</b> / abort <b>${run.counts.by_policy.abort}</b> / `
+      + `未声明或认不出 <b>${run.counts.by_policy.unknown}</b>；变更状态分布：`
+      + `等签（priced）<b>${run.counts.by_state.priced}</b> / 等定价（proposed）<b>${run.counts.by_state.proposed}</b> / `
+      + `待补引用（rejected）<b>${run.counts.by_state.rejected}</b> / 已生效（approved）<b>${run.counts.by_state.approved}</b> / `
+      + `认不出 <b>${run.counts.by_state.unknown}</b></p>`
+      + (run.notes.length
+        ? `<ul data-gates="notes">${run.notes.map((text) => `<li>${esc(text)}</li>`).join('')}</ul>`
+        : '<p data-gates="notes">说明：无（本次每条输入都进了派生）</p>')
+      + `<h3 id="nudge">催办 / 转交（**不改任何门的判定状态**）</h3>`
+      + `<p>催办只做两件事：把**你的原话**与**目标门 id** 落成一条 <b>0600 待办件</b>（宿主**不写账本**），`
+      + `由 <code>tools/gate-nudge.py</code> 落一条 <code>gate/nudged</code>（只记"谁在什么时候催过哪个门"）。`
+      + `催办**不是批准**：账本里不会因此多出一条 granted。</p>`
+      + `<form method="post" action="${prefix}/${esc(view)}/gates/nudge">`
+      + `<p><label>目标门 id：<input name="id" size="18" placeholder="ap-0007"></label></p>`
+      + `<p><textarea name="reason" rows="3" cols="72" placeholder="例如：这批料已经到场了，等您签字才能开工"></textarea></p>`
+      + `<p><button type="submit">提交催办（只落待办件）</button></p></form>`
+      + `<p>等价命令行：<pre>curl -s -X POST ${prefix}/${esc(view)}/gates/nudge -d 'id=ap-0007' -d 'reason=现场催一下'</pre></p>`
+      + `<p><small>**浏览器的极限**：批准 / 提交报价 / 定标 / 发 PO / 变更批准五件事**永远在终端做人签**`
+      + `（<code>ADR-0013 §3</code>）：本插件**没有**批准/签收/提交这类方法（<code>can_approve=false</code>），`
+      + `它只能告知与转交催办。本页 **0 行脚本、0 内联事件**。</small></p>`
+  }
+
+  /** 催办提交：插件只产载荷，**宿主只落一条 0600 待办件**（账本零新增；唯一落账本者是 Python 侧）。 */
+  const submitNudge = (view, form) => {
+    const out = gates.nudge(gatesPayload(view), { view, gate_id: String(form.get('id') ?? form.get('gate_id') ?? '').trim(),
+      reason: form.get('reason') ?? '' })
+    if (!out.ok) return { ...out, file: '' }
+    const dir = join(String(config.ui_shared ?? '').trim(), 'gate-nudges')
+    if (String(config.ui_shared ?? '').trim() === '') {
+      return { ...out, ok: false, code: 'pending-write-failed', file: '',
+        next_action: '宿主未配置 ui_shared：无法确定待办件目录，拒绝写任何地方' }
+    }
+    try {
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+      try { chmodSync(dir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
+      const file = join(dir, `${out.id}.json`)
+      if (existsSync(file)) {
+        return { ...out, duplicate: true, file: `gate-nudges/${out.id}.json`,
+          next_action: `待办件已存在（同一份门 + 理由）：跑 tools/gate-nudge.py --now <ISO8601> 消费它（唯一落账本者）` }
+      }
+      const tmp = join(dir, `.${out.id}.${process.pid}.tmp`)
+      writeFileSync(tmp, JSON.stringify(out.record, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
+      chmodSync(tmp, 0o600)                      // 显式 chmod：不受 umask 影响（待办件必须**恰为** 0600）
+      renameSync(tmp, file)
+      return { ...out, duplicate: false, file: `gate-nudges/${out.id}.json` }
+    } catch (err) {
+      return { ...out, ok: false, code: 'pending-write-failed', file: '',
+        next_action: `待办件写失败（${String(err && err.code ? err.code : err).slice(0, 40)}）：先修目录权限再重提` }
+    }
   }
 
   // ==========================================================================================
@@ -1208,6 +1387,15 @@ ${sortForm('events', '筛查事件')}
             { path: `${prefix}/${v}/api/advice`, method: 'GET', auth: 'none',
               what: `${v} 道的决策建议 JSON（同页同口径；无可分数据时 degraded+reason 且 items 为空）` },
           ]),
+          // 审批等多久 / 变更单谁卡着（`gate-timeline` 插件）：等待时长有口径（不取墙钟）、催办只落 0600 待办件
+          ...config.views.filter((v) => rules[v]).flatMap((v) => [
+            { path: `${prefix}/${v}/gates/`, method: 'GET', auth: 'none',
+              what: `${v} 道的审批与变更页（人工门等了多久 / 卡在谁手里 / 再等下去会怎样 / 下一步；变更单状态与谁欠动作）` },
+            { path: `${prefix}/${v}/api/gates`, method: 'GET', auth: 'none',
+              what: `${v} 道的审批与变更 JSON（同页同口径；age 口径写在 age_basis；空投影 degraded+reason 且两列表为空）` },
+            { path: `${prefix}/${v}/gates/nudge`, method: 'POST', auth: 'none',
+              what: `${v} 道的催办提交（**只落 0600 待办件**、账本零新增；202 + next_action；不改任何门的判定）` },
+          ]),
           { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
           // WebUI 反馈闭环（ui-feedback 插件）：SSR 表单页（**0 内联脚本**）+ 只落 0600 待办件 + 只读观察面
           ...config.views.flatMap((v) => [
@@ -1240,7 +1428,7 @@ ${sortForm('events', '筛查事件')}
           { path: `${prefix}/admin/api/config/audit`, method: 'GET', auth: 'admin-session', what: '配置变更审计（只读；来源 Python 侧账本）' },
           { path: `${prefix}/admin/api/credentials`, method: 'GET', auth: 'admin-session', what: '凭据状态（configured/source/required_mode/指纹前 8/next_action；**不出值**）' },
           { path: `${prefix}/admin/api/credentials/<name>`, method: 'POST', auth: 'admin-session', what: '提交/轮换凭据（只写不回显：响应只有 ok + next_action）' }],
-        write_surface: { browser_writable: [`${prefix}/admin/**`],
+        write_surface: { browser_writable: [`${prefix}/admin/**`, `${prefix}/<view>/gates/nudge`],
           note: '浏览器永远不能签的五个动作：批准 / 提交报价 / 定标 / 发 PO / 变更批准（人工门在终端）' },
       })
     }
@@ -1318,7 +1506,8 @@ ${sortForm('events', '筛查事件')}
           `<p>本视角**不属于任何一方**：只看系统整体（运行期中间件状态 + 各视角账本的证据面聚合），不显示条目正文与私域键。</p>`
           + anchorNav('ops', `${prefix}/ops/`, OPS_SECTIONS,
             [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
-            [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']])
+            [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']],
+            [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']])
           + `<p>JSON：<code>${prefix}/api/ops</code></p>`
           + `<h3 id="runtime">运行期</h3><p>${ops.summary({ rows: [] })}</p>`
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
@@ -1438,6 +1627,31 @@ ${sortForm('events', '筛查事件')}
         html(`${config.page_title} · ${rules[viewAdvicePage[1]].title} · 决策建议`,
           adviceHtml(viewAdvicePage[1]), prefix))
     }
+    // 审批等多久 / 变更单谁卡着（gate-timeline 插件）：催办 POST **只落 0600 待办件**（账本零新增）
+    const viewGatesNudge = path.match(/^\/([a-z]+)\/gates\/nudge\/?$/)
+    if (viewGatesNudge && rules[viewGatesNudge[1]]) {
+      const view = viewGatesNudge[1]
+      if (String(req.method) !== 'POST') {
+        return json(405, { service: 'gate-timeline', view, ok: false, code: 'method-not-allowed',
+          next_action: '催办用 POST（页面上的表单就是 POST；本路由没有 GET 形态）' })
+      }
+      return readBody((body) => {
+        const out = submitNudge(view, new URLSearchParams(body))
+        const code = out.ok ? 202
+          : (out.code === 'pending-write-failed' ? 500 : (out.code === 'gate-not-found' ? 404 : 400))
+        return json(code, { service: 'gate-timeline', view, ...out })
+      })
+    }
+    const viewGatesApi = path.match(/^\/([a-z]+)\/api\/gates\/?$/)
+    if (viewGatesApi && rules[viewGatesApi[1]]) {
+      // JSON（只读）：等待时长/口径/卡点/后果 + 变更单时间线；宿主不写任何东西
+      return json(200, gatesJson(viewGatesApi[1]))
+    }
+    const viewGatesPage = path.match(/^\/([a-z]+)\/gates\/?$/)
+    if (viewGatesPage && rules[viewGatesPage[1]]) {
+      return send(200, 'text/html; charset=utf-8',
+        html(`${config.page_title} · ${rules[viewGatesPage[1]].title} · 审批与变更`, gatesHtml(viewGatesPage[1]), prefix))
+    }
     const viewHeuristicsPage = path.match(/^\/([a-z]+)\/heuristics\/?$/)
     if (viewHeuristicsPage && rules[viewHeuristicsPage[1]]) {
       // 页面：SSR + `<form method=get>` 调权重（零内联脚本；改权重这件事本身也不产生任何写入）
@@ -1500,7 +1714,8 @@ ${sortForm('events', '筛查事件')}
       const switchLinks = Object.keys(rules).map((v) => `<a href="${prefix}/admin/api/switch?to=${v}">${v}</a>`).join(' · ')
       return `${anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS,
         [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
-        [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']])}`
+        [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']],
+        [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']])}`
         + `${data.degraded ? `<p>降级：<code>${data.reason ?? ''}</code> —— ${data.next_action ?? ''}</p>` : ''}`
         + `<h3 id="progress">进度与口径来源</h3>`
         + `<p>进度：阶段 <b>${data.progress?.phase ?? '—'}</b> · 下一步 <b>${data.progress?.next_task ?? '—'}</b>`
@@ -1705,7 +1920,7 @@ ${sortForm('events', '筛查事件')}
       if (!Object.prototype.hasOwnProperty.call(rules, to)) return json(400, { error: 'unknown-view', hint: Object.keys(rules).join(' / ') })
       return send(302, 'text/plain; charset=utf-8', '', { location: `${prefix}/${to}/` })
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/advice/ / ${prefix}/<view>/api/advice / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/advice/ / ${prefix}/<view>/api/advice / ${prefix}/<view>/gates/ / ${prefix}/<view>/api/gates / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

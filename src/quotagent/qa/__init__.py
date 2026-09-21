@@ -28,3 +28,4 @@ from . import checks_mail_transport  # noqa: F401,E402  (AC-MAIL-001：邮件收
 from . import checks_viz  # noqa: F401,E402  (AC-VIZ-001：比价 heuristics)
 from . import checks_uifb  # noqa: F401,E402  (AC-UIFB-001：WebUI 反馈闭环)
 from . import checks_adv  # noqa: F401,E402  (AC-ADV-001：AI agent 决策建议层)
+from . import checks_gate  # noqa: F401,E402  (AC-GATE-001：审批等多久 / 变更单谁卡着)

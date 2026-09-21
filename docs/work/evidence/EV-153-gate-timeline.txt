@@ -1,0 +1,261 @@
+EV-153 —— 「审批等多久 / 变更单到底是谁卡着」（GUI 闭环插件 `gate-timeline` + 唯一落账本者 `gate-nudge.py`）
+
+时间：2026-09-21（本机实测）
+提交：工作树（父方收口前）
+新增：host/modules/gate-timeline.mjs · host/t282-gate-timeline-gate.mjs · tools/gate-nudge.py ·
+      tools/check-gate-timeline-route.py · src/quotagent/qa/checks_gate.py · docs/work/evidence/EV-153-*.txt
+回答的两条 human problem（出处 `docs/work/plans/ux-双方痛点与交互需求.md.txt`）：
+  （a）「审批人等不到」（P-02/P-03）：人工门挂了多久、卡在谁手里、再等下去会发生什么、next_action 是什么
+  （b）「变更单扯皮」（P-14）  ：每张变更单什么状态、谁欠谁一个动作、以账本事件/计数引用为凭
+
+§一 语法与可执行性（真跑，原始输出）
+================================================================================
+$ node --check host/modules/gate-timeline.mjs                     → OK（exit 0）
+$ node --check host/t282-gate-timeline-gate.mjs                   → OK（exit 0）
+$ node --check host/modules/webui.mjs                             → OK（exit 0）
+$ python3 -m py_compile tools/gate-nudge.py tools/check-gate-timeline-route.py src/quotagent/qa/checks_gate.py
+                                                                  → OK（exit 0）
+
+§二 围栏门（`tools/verify.sh gates` 前半）：node host/t282-gate-timeline-gate.mjs
+================================================================================
+{"passed": 33, "total": 33, "failures": 0}
+[ok] 1 契约正控：manifest 齐备（name/inject/builtin/usedServices/provides=[gateTimeline]/Config/apply/fixture/ENGINE/ENGINE_NOTE/AGE_CLOCK/AGE_BASIS_NOTE/IGNORED_NOW_INPUTS/两段/闭合的降级原因与催办 code/三条超时策略/已决事件/五个变更状态/四条真 CLI），且只 import ../lib 白名单（或 node:），源码里 0 个脚本字面量
+        载入=/workspace/projects/quotagent/host/modules/gate-timeline.mjs；问题键=无；越界 import=无；含脚本字面量=false；解析钩子=已装；字节=38822
+[ok] 2 挂载正控：cordis 挂载后 provide 拦截拿得到句柄（timeline/nudge/meta/config），dispose 后 effect 归零
+        句柄键=requests|timeline|nudge|meta|config；effect 1 → 0
+[ok] 4 **「等了多久」的口径不来自墙钟**（本门最核心的一条）：同一份快照在两个不同 `now` 入口（载荷 `payload.now` / 配置 `config.now`，各给两个不同的值）下输出**逐字节一致**，且 `age_seconds` 等于手算的「as_of(12:00) − requested 事实 ts」= [7200, 3600, 1800, 600]
+        载荷 now 两个值一致=true；配置 now 两个值一致=true；手算 age=[7200,3600,1800,600]；实得 id=["ap-0001","ap-0002","ap-0003","ap-0005"]
+[ok] 5 口径自述正控：每条门都带非空 `age_basis`（含 `as_of`、本门 requested 的事实 ts 与"不取墙钟"字样），输出里 `age_clock="facts-only"`，且 `ignored_now_inputs` 列出被忽略的两个墙钟入口
+        示例 age_basis=age_seconds = as_of − 该门 approval/requested 事件的事实 ts（as_of = 本视角投影里最大的事件 ts，即系统已知的最新事实时刻） —— 本页不取墙钟：同一份快照在任何时刻打开，等待时长都一样…；age_clock=facts-only
+[ok] 6 门条目形状正控：键集**恰 9 键**（id/kind/subject/owner/age_seconds/age_basis/consequence/next_action/blocked_by）、owner/subject/consequence 非空、next_action 指向**真 CLI**、`blocked_by` 必须写明"不能代签"、age_seconds 是 ≥0 的有限数；变更单键集恰 6 键；两类 id 各自唯一
+        门键集固定=true 变更键集固定=true；异常门=0；id 唯一=true；门=4 变更单=4
+[ok] 8 超时策略后果正控（**再等下去会发生什么**）：escalate+已超时 → "转给人类上级"；remind+未超时 → "再等约 82800 秒"；abort+已超时 → "作废（需重新发起）"；认不出的策略 → "按绝不自动批准处理"；**三条策略里没有"会批准"这种话**
+        ap-0001=已超过超时阈值（等了 7200 秒 ≥ 阈值 3600 秒）：再等下去会**转给人类上级**继续等待（approval/…；ap-0002=再等约 82800 秒（阈值 86400 秒）就触发策略「remind」：只会*…；ap-0005=超时阈值 60 秒，已等 600 秒；再等下去：未知超时策略：按"绝不自动批准"…
+[ok] 9 **每条变更单都有 `basis`** 正控：非空且每个 token 都解析回载荷真键（`changes[<id>].<键>` / `approvals[<id>].<键>` / `events[<事件类型>].count`）；**非空转对照**：不存在的 ref / 不存在的键 / 坏形状 / 空 basis / 不存在的事件类型 五种篡改都必须判假
+        不达标条=0；对照全部判假=true；示例 basis=["changes[chg-0001].type","changes[chg-0001].ts","events[change/priced].count","approvals[ap-0003].ts"]
+[ok] 11 「谁欠谁一个动作」正控：`priced` 且有对应 `change.approve` 门 → 用队列里的**真审批人**（`human:caiwu`）；`priced` 但没有对应门 → `human:unassigned`（不编人名，并留说明）；`proposed`→`contractor-agent`；`rejected`→`proposer`；`approved`→`none`
+        实得 owed_by=["human:caiwu","human:unassigned","proposer","none"]；期望=["human:caiwu","human:unassigned","proposer","none"]；说明=["changes[chg-0002] 已定价但没有对应的 change.approve 人工门 → 欠谁签如实记 unassigned（不编人名）"]
+[ok] 11b 已决判据正控（**与账本语义对齐**）：请求与决定落在**同一时刻**（同 ts）⇒ 以**终态**为准、**不算还在等**（否则页面说"待批"、Python 侧说"已决"，同一件事两个口径）；决定之后又出现新的请求 ⇒ 仍算还在等，且**等待起点 = 最后一次请求**（重开的门重新计时：11:00 那条，不是 09:00 那条）
+        同刻 requested+granted → 门=0（期望 0）；决定后重开 → 门=1（期望 1）age=3600（期望 [3600]：as_of 12:00 − 最后一次请求 11:00）
+[ok] 12 **插件不能批准**（硬负控）：句柄方法集合恰为 `config|meta|nudge|requests|timeline`，没有任何 `approve/decide/grant/submit/sign/ack/commit/accept` 方法；`meta.can_approve=false`；催办载荷里只有 `requested_action="nudge"`，且记录与自述里都没有任何审批类字段名
+        句柄键=config|meta|nudge|requests|timeline；无审批方法=true；can_approve=false；记录的 requested_action=nudge
+[ok] 14 催办拒绝路径正控：`gate-not-found`（门不在本视角投影的待办列表里）/`empty-reason`/`reason-too-long`/`view-unknown`/`payload-unusable` 各自给**具体 code + 非空 next_action**，且 `record` 为 null（拒绝时**不产任何落盘载荷**）
+        不合格=[]；codes=["gate-not-found","empty-reason","reason-too-long","view-unknown","payload-unusable"]
+[ok] 15 **空投影不编**（硬负控）：空载荷 / 非对象 / 坏形状 / 缺关键字段一律 `degraded:true` + **有名** reason + **两个列表都为 0**，且不抛错；"载荷不能用"（no-usable-inputs）与"数据齐但无可报项"（no-signal）是**两个不同**的 reason（不许含糊成一条）
+        抛错=无；空对象→true/no-usable-inputs/门=0/变更=0 | undefined→true/payload-not-an-object/门=0/变更=0 | null→true/payload-not-an-object/门=0/变更=0 | 字符串→true/payload-not-an-object/门=0/变更=0 | 数字→true/payload-not-an-object/门=0/变更=0 | 空数组段→true/no-usable-inputs/门=0/变更=0 | 坏形状段→true/no-usable-inputs/门=0/变更=0 | 缺关键字段→true/no-usable-inputs/门=0/变更=0；no-signal→no-signal；正常=false
+[ok] 17 私域哨兵负控：加在条目上的私域键（`private:*`/`reserve_price`/`cost_model`/`bidders_private`/`authorized_band`/`internal_notes`）**读都不读** → 带哨兵与不带哨兵输出**逐字节一致**、哨兵与键名 0 命中；**非空转对照**：同一批哨兵在输入里确实存在
+        输出命中=无；键名命中=无；输入命中（对照）=COST-MODEL-SENTINEL-9a,PRIVATE-NOTE-SENTINEL-7f,987654321；逐字节一致=true
+[ok] 18 有界与 `omitted` 诚实负控：`max_items` 夹取生效（0 → 下界 1；1000 → 上界 200；非数字 → 回落 20）；**两段各自截断**并如实报 `omitted`/`truncated`；`shown+omitted==found`；`by_policy`/`by_state` 之和 == 生成条数（截断只影响展示，不改口径）
+        上限 2 → 门 2/变更 2 omitted=4 truncated=true；策略和=4 状态和=4；上限 1000 → 0；上限 0 → 6；'many' → 挂载即拒：[config-invalid] max_items 必须是数字
+[ok] 19 零写面负控：产物**零写面、不读账本、不联网、不调模型、不取墙钟**（无写/读文件、账本、墙钟、随机、网络、子进程、事件订阅、定时器）且扫描器**非空转**（对照样本必须命中 ≥3）
+        产物命中=无；对照样本命中=openLedger,fetch(,setInterval(
+[ok] 22 真 HTTP 正控：`/t282/<view>/gates/` 与 `/<view>/api/gates` 两视角各自 200；`/api/routes` 登记了页面/JSON/催办 POST **三条路由且 `auth=none`**；页面含道内子导航与「审批与变更」入口、`data-age-clock="facts-only"` 与口径那句话、逐条 `data-gate-next-action`；JSON 契约齐备（engine/age_clock/age_basis_note/ignored_now_inputs/gates/changes/counts/bounds/degraded/reason）
+        status=200/200/200/200；路由=["GET /t282/contractor/gates/","GET /t282/contractor/api/gates","POST /t282/contractor/gates/nudge","GET /t282/supplier/gates/","GET /t282/supplier/api/gates","POST /t282/supplier/gates/nudge"]；入口=true；承包商门=2（ap-0007 已决的 ap-0001 不进列表）变更=1；age=[12600,9000]
+[ok] 23 真 HTTP 正控 + 负控：承包商侧真数据（2 条待批门 + 1 张变更单，`degraded:false`）；**供应商侧空投影** → 页面 `data-gates-degraded="1"` + 有名 reason + **两个列表计数都为 0**、JSON `gates:[]`/`changes:[]`；两视角的**页面与 JSON 都 0 行脚本 / 0 内联事件**（扫描器非空转）
+        含脚本=0；JSON 含脚本=0；对照=true；供应商 degraded=true/no-usable-inputs 门=0 变更=0；页面计数（承包商 门=2 变更=1｜供应商 门=0 变更=0）
+[ok] 24 真 HTTP 催办 POST：202 + 待办件 id + `next_action`；待办件**恰 0600**、**原话逐字**、sha256 由门独立重算一致、`submitted_at` 为空；**账本零新增**（夹具逐字节不变）；同一 URL 两次 GET **逐字节一致**（HTTP 层的"不随窗口变"）
+        POST=202 id=gn-contractor-3a8af8ae2440 code=accepted；mode=0600；原话逐字=true；账本未变=true；页面两次一致=true；next_action=跑 tools/gate-nudge.py --now <ISO8601> 消费待办件（唯一落账本者，落 gate/nu…
+[ok] 26 变异前基线：四条场景（age 来自事实 ts / 空投影不编 / 每条都有 basis / 不得批准）在**真产物**上全真（否则变异变红就说明不了任何事：基线本来就是红的）
+        基线={"age 来自事实 ts":true,"空投影不编":true,"每条都有 basis":true,"不得批准":true}
+[ok] 27 变异：变异1：age 改从 config.now（墙钟）算 —— 等待时长随"当前时间"漂移
+        必须红的是「age 来自事实 ts」；实际红=age 来自事实 ts；四条场景={"age 来自事实 ts":false,"空投影不编":true,"每条都有 basis":true,"不得批准":true}；字节已变=true
+[ok] 27 变异：变异2：空投影守卫失效（没数据也报 degraded:false）
+        必须红的是「空投影不编」；实际红=空投影不编；四条场景={"age 来自事实 ts":true,"空投影不编":false,"每条都有 basis":true,"不得批准":true}；字节已变=true
+[ok] 27 变异：变异3：变更单不再带 basis（凭据断链）
+        必须红的是「每条都有 basis」；实际红=每条都有 basis；四条场景={"age 来自事实 ts":true,"空投影不编":true,"每条都有 basis":false,"不得批准":true}；字节已变=true
+[ok] 27 变异：变异4：句柄多出一个 approve 方法（插件"能批准"了）
+        必须红的是「不得批准」；实际红=不得批准；四条场景={"age 来自事实 ts":true,"空投影不编":true,"每条都有 basis":true,"不得批准":false}；字节已变=true
+[ok] 27 防假变异（自检）：找不到唯一锚点的"变异"必须被判定为**假变异**（返回 null），把锚点替换成它自己也不算变异 —— 否则"变异后门还绿"会被误读成"门很稳"
+        不存在的锚点→已判假变异；自我替换→已判假变异
+[ok] 27 还原：本门全程**没有写过产品树** —— `host/modules/gate-timeline.mjs` 与 `host/modules/webui.mjs` 跑完之后与跑之前**逐字节一致**（变异只写在临时目录的副本里）
+        gate-timeline sha256 前=001b649c6f609d8f… 后=001b649c6f609d8f…；webui 未变=true；变异小结=变异1：age 改从 config.now（墙钟）算 —— 等待时长随"当前时间"漂移 → 红=age 来自事实 ts；变异2：空投影守卫失效（没数据也报 degraded:false） → 红=空投影不编；变异3：变更单不再带 basis（凭据断链） → 红=每条都有 basis；变异4：句柄多出一个 approve 方法（插件"能批准"了） → 红=不得批准
+
+「age 不随窗口变化」的原始行（第 4 条，本门最核心的一条）：
+        载荷 now 两个值一致=true；配置 now 两个值一致=true；手算 age=[7200,3600,1800,600]；实得 id=["ap-0001","ap-0002","ap-0003","ap-0005"]
+
+「空投影两列表为 0」的原始行（第 15 条 + 第 23 条真 HTTP 供应商侧）：
+        抛错=无；空对象→true/no-usable-inputs/门=0/变更=0 | undefined→true/payload-not-an-object/门=0/变更=0 | null→true/payload-not-an-object/门=0/变更=0 | 字符串→true/payload-not-an-object/门=0/变更=0 | 数字→true/payload-not-an-object/门=0/变更=0 | 空数组段→true/no-usable-inputs/门=0/变更=0 | 坏形状段→true/no-usable-inputs/门=0/变更=0 | 缺关键字段→true/no-usable-inputs/门=0/变更=0；no-signal→no-signal；正常=false
+        含脚本=0；JSON 含脚本=0；对照=true；供应商 degraded=true/no-usable-inputs 门=0 变更=0；页面计数（承包商 门=2 变更=1｜供应商 门=0 变更=0）
+
+「插件不能批准」的原始行（第 12 条）：
+        句柄键=config|meta|nudge|requests|timeline；无审批方法=true；can_approve=false；记录的 requested_action=nudge
+
+4 处单点变异的原始行（第 27 条）+ 防假变异自检 + 还原：
+        必须红的是「age 来自事实 ts」；实际红=age 来自事实 ts；四条场景={"age 来自事实 ts":false,"空投影不编":true,"每条都有 basis":true,"不得批准":true}；字节已变=true
+        必须红的是「空投影不编」；实际红=空投影不编；四条场景={"age 来自事实 ts":true,"空投影不编":false,"每条都有 basis":true,"不得批准":true}；字节已变=true
+        必须红的是「每条都有 basis」；实际红=每条都有 basis；四条场景={"age 来自事实 ts":true,"空投影不编":true,"每条都有 basis":false,"不得批准":true}；字节已变=true
+        必须红的是「不得批准」；实际红=不得批准；四条场景={"age 来自事实 ts":true,"空投影不编":true,"每条都有 basis":true,"不得批准":false}；字节已变=true
+        不存在的锚点→已判假变异；自我替换→已判假变异
+        gate-timeline sha256 前=001b649c6f609d8f… 后=001b649c6f609d8f…；webui 未变=true；变异小结=变异1：age 改从 config.now（墙钟）算 —— 等待时长随"当前时间"漂移 → 红=age 来自事实 ts；变异2：空投影守卫失效（没数据也报 degraded:false） → 红=空投影不编；变异3：变更单不再带 basis（凭据断链） → 红=每条都有 basis；变异4：句柄多出一个 approve 方法（插件"能批准"了） → 红=不得批准
+
+§三 真 HTTP 端到端（`tools/verify.sh gates` 后半）：python3 tools/check-gate-timeline-route.py
+================================================================================
+{"passed": 11, "total": 11, "failures": 0}
+[ok] ① 夹具就绪（承包商 6 行真哈希链 / 供应商 0 行空账本 / 私有 ui-shared / 哨兵在文件里）
+        账本行=6 链自洽=True；哨兵命中=['COST-MODEL-SENTINEL-9a', 'RESERVE-PRICE-SENTINEL-4b', 'PRIVATE-NOTE-SENTINEL-7f', '987654321']
+[ok] ② 真进程就绪（`cli.mjs webui` + `/api/health` 200；**不需要**管理员 token）
+        port=45309 prefix=/qgate pid=1272982
+[ok] ③ `/api/routes` 登记了两视角 ×（页面 + JSON + 催办 POST）**六条路由**，`auth` 都是 `none`（看等待时长不需要管理员身份）
+        命中=["GET /qgate/contractor/gates/", "GET /qgate/contractor/api/gates", "POST /qgate/contractor/gates/nudge", "GET /qgate/supplier/gates/", "GET /qgate/supplier/api/gates", "POST /qgate/supplier/gates/nudge"]
+[ok] ③ 承包商侧 gates 页/JSON 200 且是**真页面/真契约**：道内子导航含「审批与变更」入口、`data-age-clock="facts-only"` + 口径文案、**逐条 `data-gate-next-action`**、JSON 契约齐备（engine/age_clock/age_basis_note/gates/changes/counts/degraded）
+        status=200/200；入口=True；时钟口径=True；next_action 行=['ap-0007', 'ap-0009']；门=2 变更=1
+[ok] ④ **等待时长有口径且可复算**：JSON 的 `age_seconds` == 手算 `as_of(11:30) − requested 事实 ts`（[12600, 9000]，且已 granted 的 ap-0001 **不进**等待列表）；每条都带 `age_basis`（含 `as_of` 与「不取墙钟」）；同一 URL 两次 GET **逐字节一致**（不随刷新漂移）
+        id=['ap-0007', 'ap-0009'] age=[12600, 9000]（期望 [12600, 9000]）；as_of=2026-09-21T11:30:00Z；每条 basis 合格=True；页面两次一致=True；JSON 两次一致=True
+[ok] ⑤ **空投影不编**（真进程真回读）：供应商侧（空账本）页面 `data-gates-degraded="1"` + 有名 reason + **两个列表计数都为 0**，JSON `gates:[]`/`changes:[]` + `degraded:true`（没数据就不编，也不冒充健康）
+        page=200 degraded=True reason=no-usable-inputs；JSON degraded=True/no-usable-inputs 门=[] 变更=[]；页面计数=0/0
+[ok] ⑥ 催办 POST：**202** + 待办件 id + `next_action`；待办件**恰 0600**、**原话逐字**、sha256 由本脚本独立重算一致；**宿主账本零新增**（夹具账本 POST 前后逐字节一致）
+        status=202 id=gn-contractor-59a5b7fc3b78；文件=['gn-contractor-59a5b7fc3b78.json'] mode=['0o600'] 逐字=True 哈希=True；账本未变=True；next_action=跑 tools/gate-nudge.py --now <ISO8601> 消费待办件（唯一落账本者，落 gate/nudged：只记"谁在…
+[ok] ⑦ 真跑 `tools/gate-nudge.py`（**唯一落账本者**）：落一条 `gate/nudged`（body **恰 5 键**：gate_id/view/actor/reason_sha256/ok，**不含理由正文**）→ 待办件移入 `applied/`（不删）；**真回读** `/api/status` 的账本行数 **6 → 7**（ops 计数 +1）
+        rc=0 err=；ledger_added=1；body 键=['actor', 'gate_id', 'ok', 'reason_sha256', 'view']；applied=['gn-contractor-59a5b7fc3b78.json']；计数 6 → 7；账本里有理由正文=False
+[ok] ⑧ **幂等**：同一份（门 + 理由）再提交 + 再跑 → 第二次标 `duplicates`（`already-nudged`）、**账本零新增**、`exit 0`；两次提交拿到**同一个待办件 id**（同一份事实只有一条）
+        rc=0/0；ledger_added=1/0；duplicates=[{"file": "gn-contractor-9095ce5e5a00.json", "gate_id": "ap-0007", "matched": "applied-archive", "reason": "already-nudged", "reason_sha256": "4f27c9c745151097e；err=/
+[ok] ⑨ **拒绝路径**各自给具体 `code` + `next_action`，且**拒绝时账本零新增**：不存在的门 → POST **404 `gate-not-found`**（页面上的门 id 才是真的）；被改过的待办件 → `pending-tampered`
+        POST=404 code=gate-not-found；脚本 rc=1 code=pending-tampered；账本行 8 → 8
+[ok] ⑩ 两视角 gates 页/JSON 里私域键名与哨兵 **0 命中**（这类键连读都不读）+ **非空转对照**（同一批哨兵确实写在夹具账本文件里）；四份响应 **0 行脚本 / 0 内联事件**（扫描器非空转）；既有路由没坏、未提权 `/admin/` 仍 401 固定体
+        承包商命中=无；供应商命中=无；夹具里确实有哨兵=['COST-MODEL-SENTINEL-9a', 'RESERVE-PRICE-SENTINEL-4b', 'PRIVATE-NOTE-SENTINEL-7f', '987654321']；含脚本=无；home=200 ops=200 admin=401
+
+POST 后计数与 mode 实测（第 ⑥ / ⑦ / ⑧ 条）：
+        status=202 id=gn-contractor-59a5b7fc3b78；文件=['gn-contractor-59a5b7fc3b78.json'] mode=['0o600'] 逐字=True 哈希=True；账本未变=True；next_action=跑 tools/gate-nudge.py --now <ISO8601> 消费待办件（唯一落账本者，落 gate/nudged：只记"谁在…
+        rc=0 err=；ledger_added=1；body 键=['actor', 'gate_id', 'ok', 'reason_sha256', 'view']；applied=['gn-contractor-59a5b7fc3b78.json']；计数 6 → 7；账本里有理由正文=False
+        rc=0/0；ledger_added=1/0；duplicates=[{"file": "gn-contractor-9095ce5e5a00.json", "gate_id": "ap-0007", "matched": "applied-archive", "reason": "already-nudged", "reason_sha256": "4f27c9c745151097e；err=/
+
+§四 AC 机检：tools/verify.sh ac AC-GATE-001
+================================================================================
+{
+  "ac": "AC-GATE-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "① 插件 / 围栏门 / 真路由门 / Python 唯一落账本者四件齐备",
+      "ok": true,
+      "detail": "module=30567B gate=59510B route=23478B nudge=19065B"
+    },
+    {
+      "name": "① 语义齐备：`AGE_CLOCK=facts-only` / 两个墙钟入口 / 三条超时策略 / 闭合降级原因 / `NUDGE_ACTION=nudge` / 四个 commit scope / 有界 / privacy / 已决事件",
+      "ok": true,
+      "detail": "marks={'age_clock': True, 'now_inputs': True, 'policy': True, 'no_auto_grant': True, 'reasons_closed': True, 'action': True, 'commits': True, 'bounded': True, 'privacy': True, 'resolved': True}"
+    },
+    {
+      "name": "① **零写面 / 不读账本 / 不取墙钟 / 不随机 / 不联网 / 不起子进程**（非注释源码静态扫描；扫描器非空转：对照样本必须命中 ≥3）",
+      "ok": true,
+      "detail": "产物命中=[]；对照样本命中=['openLedger', 'setInterval(', 'Date.now']"
+    },
+    {
+      "name": "① 三条路由 + 四道页面子导航入口齐备（`<view>/gates/` + `<view>/api/gates` + `<view>/gates/nudge` + `data-gates-link`）；页面模板里无内联脚本 / 无内联事件属性",
+      "ok": true,
+      "detail": "routes=True script=0"
+    },
+    {
+      "name": "① 围栏门含确定性 / 哨兵 / 变异自证 / 字节还原 / 空投影不编 / basis 溯源 / 不得批准 / 手算表（不是空壳门）",
+      "ok": true,
+      "detail": "marks={'确定性': True, '哨兵': True, '变异': True, '还原': True, '空投影': True, 'basis': True, '不得批准': True, '手算': True}"
+    },
+    {
+      "name": "① `verify.sh gates` 门已挂（围栏门 + 真路由门两半）",
+      "ok": true,
+      "detail": "gate=True"
+    },
+    {
+      "name": "② Python 侧唯一落账本者形态：真账本模块 + `gate/nudged` + body 恰 5 键（**不含理由正文**）+ 归档不删 + 幂等 + 四种拒绝码 + 待办件 0600 + 时间只来自 `--now`（不取墙钟）",
+      "ok": true,
+      "detail": "marks={'ledger': True, 'event': True, 'five_keys': True, 'no_reason_in_body': True, 'archive': True, 'idempotent': True, 'refusals': True, 'mode_600': True, 'no_wall_clock': True}"
+    },
+    {
+      "name": "③ 真执行探针：`engine=\"rules\"` + `age_clock=\"facts-only\"` + 每条门/变更单形状固定 + 确定性（两次逐字节一致）",
+      "ok": true,
+      "detail": "engine=rules clock=facts-only deterministic=True keys=True/True"
+    },
+    {
+      "name": "③ 真执行探针：**等待时长不来自墙钟** —— 两个墙钟入口（`payload.now`/`config.now`）各给两个不同值，输出**逐字节不变**，且 `age_seconds` 等于手算 `as_of(12:00) − requested ts`（[7200, 3600]；已 granted 的门不进列表）",
+      "ok": true,
+      "detail": "clock_invariant=True ages=[7200, 3600] ids=['ap-0001', 'ap-0002'] 策略里没有自动批准=True"
+    },
+    {
+      "name": "③ 真执行探针：**空投影不编**（`degraded` + 有名 reason + **两个列表都为 0**）且「载荷不能用」与「数据齐但无可报项」是两个不同 reason",
+      "ok": true,
+      "detail": "empty=no-usable-inputs/0 no_signal=no-signal/0"
+    },
+    {
+      "name": "③ 真执行探针：每条都带依据（门的 `age_basis` + 变更单的非空 `basis`）、`next_action` 是可照做的真命令/路由、且催办只产 `nudge` 载荷（**不含任何审批动作**）",
+      "ok": true,
+      "detail": "nudge=nudge record_keys=['bytes', 'gate_id', 'kind', 'note', 'reason', 'reason_sha256', 'requested_action', 'schema', 'submitted_at', 'view'] refuse=gate-not-found/True"
+    },
+    {
+      "name": "③ 真执行探针：私域哨兵**不参与计算且零泄漏**（带哨兵与不带哨兵逐字节一致、命中 0）",
+      "ok": true,
+      "detail": "sentinel_no_effect=True leak=0"
+    }
+  ],
+  "evidence_refs": [
+    "EV-153"
+  ],
+  "command": "tools/verify.sh ac AC-GATE-001",
+  "phase": "P2",
+  "title": "审批等多久 / 变更单谁卡着：等待时长口径来自事实 ts（不取墙钟）、每条有据可溯、空投影不编、插件不能批准、催办只落待办件且唯一落账本者落 gate/nudged",
+  "first_failure": "",
+  "exit_code": 0
+}
+[PASS] AC-GATE-001 — 审批等多久 / 变更单谁卡着：等待时长口径来自事实 ts（不取墙钟）、每条有据可溯、空投影不编、插件不能批准、催办只落待办件且唯一落账本者落 gate/nudged
+  ok   ① 插件 / 围栏门 / 真路由门 / Python 唯一落账本者四件齐备
+  ok   ① 语义齐备：`AGE_CLOCK=facts-only` / 两个墙钟入口 / 三条超时策略 / 闭合降级原因 / `NUDGE_ACTION=nudge` / 四个 commit scope / 有界 / privacy / 已决事件
+  ok   ① **零写面 / 不读账本 / 不取墙钟 / 不随机 / 不联网 / 不起子进程**（非注释源码静态扫描；扫描器非空转：对照样本必须命中 ≥3）
+  ok   ① 三条路由 + 四道页面子导航入口齐备（`<view>/gates/` + `<view>/api/gates` + `<view>/gates/nudge` + `data-gates-link`）；页面模板里无内联脚本 / 无内联事件属性
+  ok   ① 围栏门含确定性 / 哨兵 / 变异自证 / 字节还原 / 空投影不编 / basis 溯源 / 不得批准 / 手算表（不是空壳门）
+  ok   ① `verify.sh gates` 门已挂（围栏门 + 真路由门两半）
+  ok   ② Python 侧唯一落账本者形态：真账本模块 + `gate/nudged` + body 恰 5 键（**不含理由正文**）+ 归档不删 + 幂等 + 四种拒绝码 + 待办件 0600 + 时间只来自 `--now`（不取墙钟）
+  ok   ③ 真执行探针：`engine="rules"` + `age_clock="facts-only"` + 每条门/变更单形状固定 + 确定性（两次逐字节一致）
+  ok   ③ 真执行探针：**等待时长不来自墙钟** —— 两个墙钟入口（`payload.now`/`config.now`）各给两个不同值，输出**逐字节不变**，且 `age_seconds` 等于手算 `as_of(12:00) − requested ts`（[7200, 3600]；已 granted 的门不进列表）
+  ok   ③ 真执行探针：**空投影不编**（`degraded` + 有名 reason + **两个列表都为 0**）且「载荷不能用」与「数据齐但无可报项」是两个不同 reason
+  ok   ③ 真执行探针：每条都带依据（门的 `age_basis` + 变更单的非空 `basis`）、`next_action` 是可照做的真命令/路由、且催办只产 `nudge` 载荷（**不含任何审批动作**）
+  ok   ③ 真执行探针：私域哨兵**不参与计算且零泄漏**（带哨兵与不带哨兵逐字节一致、命中 0）
+
+§五 线上真回读（原始输出见 tmp/gate-timeline-run.out §「线上形状真回读」与 §「线上服务（8093）」）
+================================================================================
+· 线上形状（同一条入口 `host/cli.mjs webui` + 真 HTTP + 真 Python 落账本者，夹具用**真哈希链**账本）：
+  GET /qlive/contractor/api/gates → age_seconds 9000 / 3600（手算：as_of 10:30 − requested 08:00 / 09:30）；
+  POST /qlive/contractor/gates/nudge → **202**，待办件 `-rw-------`（**恰 0600**）、理由原话在位；
+  `tools/gate-nudge.py` → `ledger_added=1`、body 恰 5 键；**/api/status 计数 4 → 5（ops 计数 +1）**；
+  账本里搜不到理由正文（0 命中）；同一份（门+理由）再提再跑 → `duplicates=[already-nudged]`、`ledger_added=0`；
+  不存在的门 → **404 `gate-not-found`** + next_action 明说"账本零新增"；页面 **0 行 `<script>` / 0 内联事件**。
+· 线上服务（8093，`ws-gateway` 托管，真 PID：1076825 → kill → `ws-gateway ensure quotagent` → 1273063）：
+  三条路由 + 既有路由全 200；`/quotagent/contractor/api/gates` → `gates=0 changes=1`，
+  与**Python 侧同一判据**（"最后一次 requested 之后没有决定"）独立复算结果 `[]` **一致**；
+  当前没有待批门 ⇒ 线上 POST **如实拒绝 404**；拒绝后账本零新增（线上账本 `gate/nudged` 行数 **0**）。
+· 注：`ws-gateway ensure` 在**首次探活窗口**里会打印 "FAILED to come up"（服务要跑 15s 种子：g1 走查 + 三域种子），
+  20 秒后 `pgrep` + `/api/health` 均正常 —— 这是种子期与探活窗口的竞态，不是起不来。
+
+§六 本轮实测发现并修掉的一处**真缺陷**（宿主与 Python 两个口径不一致）
+================================================================================
+现象：线上演示账本里 `ap-0001` 的 `approval/requested` 与 `approval/granted` 落在**同一秒**（21:06:37Z），
+      宿主侧"最后一条事件"的并列裁决用事件类型字典序 ⇒ 把 `approval/requested` 当成"还在等"，
+      页面显示"待批"，而 Python 侧（按账本追加序取最后一条）判为"已决" ⇒ 同一件事两个口径（D-055/D-056 禁止）。
+修法：判据改成 **"最后一次 requested 之后（含同一时刻）出现过 granted/denied/aborted ⇒ 已决"**（终态优先）。
+      与账本追加序一致、与入参顺序无关（确定性），并把这条判据固化成门 `t282` 第 11b 条：
+      同刻 requested+granted → 门数 0；决定之后又出现新请求（重开）→ 仍算还在等，且**等待起点 = 最后一次请求**。
+复验：线上 `/quotagent/contractor/api/gates` 的 `gates` 由 **2 → 0**，与 Python 侧独立复算一致；
+      真路由门与围栏门全绿（见 §二 / §三）。
+
+§七 事件登记、组装面与文档（同一批）
+================================================================================
+· `gate/nudged`（emit，durable）**双侧**登记：`docs/design/05-events.md` §3 + `src/quotagent/kernel/events.py`
+  —— `tools/verify.sh events`：「文档与事件表完全一致（名称与模式）」。
+· FR/AC：`FR-GATE-001` + `AC-GATE-001`（P2，机检 `src/quotagent/qa/checks_gate.py` 12/12）；
+  覆盖矩阵 `docs/design/15-requirements-coverage.md` 的「FR 覆盖」与「插件归属」两处；
+  插件清单 `docs/design/14-plugin-inventory.md` §1 一行。
+· 组装面同步（本仓教训：新增依赖要**同时补齐所有组装服务的地方**，漏一处就起不来）：
+  `host/profiles.mjs`（webui profile modules）、`host/cli.mjs`（运行期挂载 + `ui_shared` 参数）、
+  `host/canary-dispatch.mjs`（e2e 挂载）、`host/webui.mjs`（门挂载 + 两处 inject）、
+  `host/t279/t280/t281`（各一行 `mountReal`）、`host/check-modules.mjs`（STUBS 表）、
+  `tools/check-module-wiring.py`（PROVIDERS 映射）、`tools/verify.sh`（新门 `gates`）、
+  `tools/webui-serve.py`（显式 `--ui-shared`）。
+· 全量门：`gates` / `advice` / `webui`（51/51）/ `modules`（482/482，38 个模块）/ `wiring`（5/5）/
+  `plugins`（4/4）/ `coverage`（7/7）/ `docs` / `ac-registry` / `canary-route`（8/8）/
+  `bid-heuristics`（32/32 + 12/12）/ `ui-feedback`（28/28 + 11/11）**全部 exit 0**（原始输出在 run 文件）。
+
+§八 本批文件字节与哈希（最终代码）
+================================================================================
+host/modules/gate-timeline.mjs        38822 B  sha256=001b649c6f609d8f8902132bdb4d4a88
+host/modules/webui.mjs                148223 B  sha256=ea5109064d4dc8dc41cf89e1255f1639
+tools/gate-nudge.py                   22230 B  sha256=dca58f0d7deddb964ea208c7e76258a7
+host/t282-gate-timeline-gate.mjs      68986 B  sha256=277a0f9fa30fd3e90ea2fb0588dfd37d
+tools/check-gate-timeline-route.py    26535 B  sha256=4ed66d571fe3eb54084fa61bfc8bbfde

@@ -246,6 +246,25 @@ const STUBS = {
       canary: { entered: 0, exited: 0 }, unknown_types: [], recent: [], last_event: null,
       privacy: { entry_bodies_included: false } }),
   },
+  gateTimeline: {
+    // fixture 的 stub：只满足"能派生等待时长/变更时间线、能产催办载荷"；口径与 4 处变异由
+    // gate-timeline 自己的门验（t282）
+    timeline: () => ({ source: 'gate-timeline', engine: 'rules', engine_note: 'stub', view: '', as_of: null,
+      age_clock: 'facts-only', age_basis_note: 'stub', ignored_now_inputs: ['payload.now', 'config.now'],
+      gates: [], changes: [], counts: { gates: { found: 0, shown: 0, omitted: 0 },
+        changes: { found: 0, shown: 0, omitted: 0 }, by_policy: {}, by_state: {}, shown: 0, omitted: 0 },
+      bounds: { max_items: 20, sections: ['approvals', 'changes'], reason_max_bytes: 2048 },
+      truncated: false, omitted: 0, degraded: true, reason: 'stub', notes: [],
+      privacy: { private_keys_read: false, model_calls: 0, network_calls: 0, clock_reads: 0 } }),
+    nudge: () => ({ ok: false, code: 'gate-not-found', view: '', gate_id: '', reason_sha256: '', bytes: 0,
+      id: '', record: null, next_action: 'stub' }),
+    meta: () => ({ engine: 'rules', engine_note: 'stub', age_clock: 'facts-only', age_basis_note: 'stub',
+      ignored_now_inputs: ['payload.now', 'config.now'], sections: ['approvals', 'changes'],
+      degraded_reasons: [], nudge_codes: [], nudge_action: 'nudge', kind: 'gate-nudge', schema: 1,
+      timeout_policies: [], resolved_approval_events: [], commit_scopes: [], change_states: [],
+      bounds: { max_items: 20, reason_max_bytes: 2048 }, can_approve: false }),
+    config: () => ({ max_items: 20, route_prefix: '/quotagent', reason_max_bytes: 2048, age_clock: 'facts-only' }),
+  },
   advicePanel: {
     // fixture 的 stub：只满足"能派生建议/能自述引擎"；规则口径与 4 处变异由 advice-panel 自己的门验（t281）
     advise: () => ({ source: 'advice-panel', engine: 'rules', engine_note: 'stub', view: '', as_of: null,
