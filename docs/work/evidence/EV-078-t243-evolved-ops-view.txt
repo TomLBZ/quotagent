@@ -1,0 +1,71 @@
+EV-078 T-243 第四次自进化产出：运维视角插件（ops-view）
+生成时间 2026-09-21T09:51:37Z
+命令与原始输出（原样留档）
+
+[1] 走同一条自进化路径（第四次；驱动脚本未改流程）
+$ tools/cordis.sh run ../tools/evolve-module.mjs --source-file tmp/t243-artifact.mjs --name ops-view --approval-ref ap-0103
+exit=0 | fixture=13/13 | promote=promoted | in_tree=True
+产出日志条目：['price-history', 'evidence-summary', 'circuit-breaker', 'ops-view']
+
+[2] 账本（H1：Python 侧写）
+{"actor":"agent:t237","body":{"actor":"agent:t237","artifact_hash":"sha256:14948a40890d7dcfcf0a28e8bc84171f2fc767514346d056071bcb49df05ed66","bytes":3354,"id":"sha256:8e3c7e07d06db7b8c82eccdb8a162c011ec949bb5b146be3edb1692260a3a20b","name":"ops-view","target":"/workspace/projects/quotagent/host/modules/ops-view.mjs"},"body_hash":"sha256:9dedc5f4235259db8479c2c75fe4f60c826ef71cc4f40bbf004d203752e9b8bb","class":"intent","correlation_id":"sha256:8e3c7e07d06db7b8c82eccdb8a162c011ec949bb5b146be3edb1692260a3a20b","entry_hash":"sha256:9314e33b0cff1a56991eeefe1c7a3d4f3bce3287d3bc267a3d7b0216ae7a9dc5","prev_hash":"sha256:732518f3cdc2bec7d665ea47cb05f48ceb8e0bb0c00ba5c94e73cf4cd9d1e327","realm":"contractor:con-B","refs":{},"seq":23,"ts":"2026-09-21T09:50:50Z","type":"evolve/proposed"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","hash":"sha256:14948a40890d7dcfcf0a28e8bc84171f2fc767514346d056071bcb49df05ed66","id":"sha256:8e3c7e07d06db7b8c82eccdb8a162c011ec949bb5b146be3edb1692260a3a20b","shadow_path":"/workspace/projects/quotagent/tmp/t237-shadow/modules/ops-view.mjs"},"body_hash":"sha256:fed931867bb62e3b80da78a6b20d888534f8fa4af6c892c1f6de264b0dce7cdb","class":"intent","correlation_id":"sha256:8e3c7e07d06db7b8c82eccdb8a162c011ec949bb5b146be3edb1692260a3a20b","entry_hash":"sha256:a423e4848925ad76f3ffb00a7fa90eed5521f10fedca4457b1df77bf8539d5e8","prev_hash":"sha256:9314e33b0cff1a56991eeefe1c7a3d4f3bce3287d3bc267a3d7b0216ae7a9dc5","realm":"contractor:con-B","refs":{},"seq":24,"ts":"2026-09-21T09:50:50Z","type":"evolve/shadowed"}
+{"actor":"host:gate-runner","body":{"actor":"host:gate-runner","fixture":"13/13","id":"sha256:8e3c7e07d06db7b8c82eccdb8a162c011ec949bb5b146be3edb1692260a3a20b","reasons":[],"verdict":"passed"},"body_hash":"sha256:c0a9d8426eac04e561af470101df25399aeea8316f7e710568a8995f6a45ed1c","class":"intent","correlation_id":"sha256:8e3c7e07d06db7b8c82eccdb8a162c011ec949bb5b146be3edb1692260a3a20b","entry_hash":"sha256:c54bfb349188b868bca5ddc3c78f65bbd081f39783ec63a35c22eddc51ba2040","prev_hash":"sha256:a423e4848925ad76f3ffb00a7fa90eed5521f10fedca4457b1df77bf8539d5e8","realm":"contractor:con-B","refs":{},"seq":25,"ts":"2026-09-21T09:50:50Z","type":"evolve/gated"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","approval_ref":"ap-0103","artifact_hash":"sha256:14948a40890d7dcfcf0a28e8bc84171f2fc767514346d056071bcb49df05ed66","id":"sha256:8e3c7e07d06db7b8c82eccdb8a162c011ec949bb5b146be3edb1692260a3a20b","written_to":"host/modules/ops-view.mjs"},"body_hash":"sha256:53ee56b8519f9792977189f69effc65eb3b59abe9aaedbc3604530c8625fc755","class":"intent","correlation_id":"sha256:8e3c7e07d06db7b8c82eccdb8a162c011ec949bb5b146be3edb1692260a3a20b","entry_hash":"sha256:9a3b183cc4ccb61cc21089d56b516086eb0c91f0dcdf91ef25050cd3e43bb025","prev_hash":"sha256:c54bfb349188b868bca5ddc3c78f65bbd081f39783ec63a35c22eddc51ba2040","realm":"contractor:con-B","refs":{},"seq":26,"ts":"2026-09-21T09:51:14Z","type":"evolve/promoted"}
+
+[3] 围栏门（宿主侧人工维护）：$ tools/verify.sh ops-view → 9/9
+[
+  {
+    "name": "形状正控：快照含 runtime（governor/audit/canary）+ breaker + evidence，并声明三源",
+    "ok": true,
+    "detail": "view=ops sources=observability,breaker,evidenceSummary"
+  },
+  {
+    "name": "组合正控：runtime.governor 与来源 `observability` 的统计**逐字段相等**（不许自己另立口径）",
+    "ok": true,
+    "detail": "gov keys=admitted|refused|timeouts|retries|completed|failed|buckets"
+  },
+  {
+    "name": "输入即事实：给 2 行报 2 行、给空数组报 0 行（**不编**，也不去别处捞数据）",
+    "ok": true,
+    "detail": "rows=2/0 types=2"
+  },
+  {
+    "name": "只读正控：反复取快照/摘要**不改变**任何来源的统计（观测无副作用）",
+    "ok": true,
+    "detail": "before==after=true"
+  },
+  {
+    "name": "确定性正控：同状态两次快照**字节一致**（不使用墙钟/随机）",
+    "ok": true,
+    "detail": "len=1082 equal=true"
+  },
+  {
+    "name": "泄漏负控：快照里**没有条目正文、没有私域键名**（运维视角同样受投影纪律约束）",
+    "ok": true,
+    "detail": "contains_body=false"
+  },
+  {
+    "name": "降级正控：来源\"有问题\"（额度耗尽 / 熔断打开）时快照仍可读，并**如实**带出这些事实",
+    "ok": true,
+    "detail": "gov.refused=1 breaker=open opened=1"
+  },
+  {
+    "name": "零残留负控：模块不订阅事件/不注册定时器/不写文件（纯组合，无副作用）",
+    "ok": true,
+    "detail": "forbidden=无"
+  },
+  {
+    "name": "摘要正控：人类可读摘要覆盖 governor/breaker/canary/evidence 四段（运维一眼看清系统状态）",
+    "ok": true,
+    "detail": "governor: admitted=4 refused=1 timeouts=0 failed=0 | breaker: allowed=0 refused=0 opened=1 closed=0 | canary: phase=base"
+  }
+]
+
+[4] 追溯门：$ tools/verify.sh evolve-module → 21/21（四个产物的哈希都在追溯之下）
+
+结论：产出的是**第三个视角**（运维）的视图插件 —— 与两个业务视角（contractor/supplier）分道，
+只做组合（读 observability/breaker/evidenceSummary），不自己另立统计口径；
+输入即事实（rows 由调用方给，给 0 就报 0）；不输出正文与私域键；判定不用墙钟。
+下一步（T-244）：把它挂到 `/quotagent/ops/` 路由上，形成"不同 routes → 不同视角 UI"的第三条道。
+

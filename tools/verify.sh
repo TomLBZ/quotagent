@@ -82,6 +82,10 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-plugin-inventory.py" "$@"
     ;;
+  ops-view)
+    shift
+    exec node host/ops-view.mjs "$@"
+    ;;
   breaker-route)
     shift
     exec python3 tools/check-breaker-route.py "$@"

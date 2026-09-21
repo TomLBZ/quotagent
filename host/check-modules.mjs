@@ -130,6 +130,15 @@ const STUBS = {
       span: { count: 0, first: null, last: null } }),
     byType: () => [],
   },
+  breaker: {
+    // fixture 的 stub：只满足"能查状态/统计"；熔断语义由 breaker 门与 ops-view 门验
+    allow: () => ({ allowed: true, state: 'closed', retry_after_ms: 0 }),
+    record: () => ({ state: 'closed', consecutive_failures: 0 }),
+    state: () => ({ key: 'host', state: 'closed', consecutive_failures: 0, half_open_used: 0, opened_count: 0 }),
+    stats: () => ({ allowed: 0, refused: 0, opened: 0, closed: 0, half_open_tried: 0, half_open_ok: 0, buckets: {} }),
+    config: () => ({ key: 'host', failure_threshold: 5, cooldown_ms: 1000, half_open_max: 1, half_open_limit: 3 }),
+    setClock: () => {},
+  },
   compare: { flagCount: () => 0 },
   bridge: { surface: () => ({}) },
 }
