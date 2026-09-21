@@ -220,6 +220,8 @@ const main = async () => {
            approval_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/approvals`),
            retention_route: `${String(args.prefix ?? '/quotagent')}/api/retention`,
            pipeline_route: `${String(args.prefix ?? '/quotagent')}/api/pipeline`,
+           view_domain_routes: ['contractor', 'supplier'].flatMap((v) => [`${String(args.prefix ?? '/quotagent')}/${v}/api/negotiation`,
+             `${String(args.prefix ?? '/quotagent')}/${v}/api/faq`]),
            observability: obox.handle ? obox.handle.summary() : null,
            note: '每方视角读自己的账本（结构性隔离）+ 投影白名单（纵深防御）；宿主不写账本' }) + '\n')
     // 保活：直到收到信号（ws-gateway 以 SIGTERM 停服）

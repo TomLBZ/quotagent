@@ -270,6 +270,17 @@ export function apply(ctx, config) {
                   + `<td>${s.deviation_count}</td></tr>`).join('')}</table>`
           })()
           + (() => {
+            const slice = ((pipelinePayload() || {}).views || {})[view] || {}
+            const neg = slice.negotiate || {}
+            const faq = slice.faq || {}
+            const negRecent = (neg.recent || []).map((r) => `${r.thread_id}#${r.attempt_no}(${r.status ?? '—'})`).join(' · ') || '—'
+            const faqRecent = (faq.recent || []).map((r) => `${r.entry_id}@rev${r.rfq_rev}`).join(' · ') || '—'
+            return `<h3>谈判轮次（本视角）</h3><p>线程 <b>${neg.threads ?? 0}</b> / 轮次 <b>${neg.rounds ?? 0}</b> / 被拒 <b>${neg.rejected ?? 0}</b></p>`
+              + `<p>最近：<code>${negRecent}</code></p>`
+              + `<h3>FAQ（本视角）</h3><p>条目 <b>${faq.entries ?? 0}</b>（版本 ${(faq.revs || []).join('、') || '—'}）</p>`
+              + `<p>最近：<code>${faqRecent}</code></p>`
+          })()
+          + (() => {
             const pend = approvals.digest(pendingApprovals(view))
             const oldest = approvals.oldest(pendingApprovals(view))
             return `<h3>待批事项（人工门）</h3><p>由 subagent 产出、经自进化流程晋升的插件 <code>approval-digest</code> 归纳：`
@@ -294,6 +305,19 @@ export function apply(ctx, config) {
       const summary = evidence.summarize(rowsFor(view))
       return json(200, { view, source: 'evidence-summary（自进化产出的插件）', summary,
         note: '账本证据面：按类型计数 / 关联数 / 带引用行数 / 时间跨度；只统计公开投影后的行' })
+    }
+    const viewDomain = path.match(/^\/([a-z]+)\/api\/(negotiation|faq)\/?$/)
+    if (viewDomain && rules[viewDomain[1]]) {
+      const view = viewDomain[1]
+      const domain = viewDomain[2]
+      const slice = ((pipelinePayload() || {}).views || {})[view] || {}
+      // URL 用业务词（negotiation/faq），快照用域键（negotiate/faq）—— 这里显式对照，别靠名字凑巧相同
+      const DOMAIN_KEY = { negotiation: 'negotiate', faq: 'faq' }
+      const data = slice[DOMAIN_KEY[domain]] || null
+      const out = { view, domain, source: '三域快照（Python 侧写，宿主只读；判定在 services/*）',
+        degraded: !data, note: '只给计数与最近事件的 id/序号/状态；不出正文与私域键' }
+      if (data) { out.counts = Object.fromEntries(Object.entries(data).filter(([, v]) => typeof v === 'number')); out.recent = Array.isArray(data.recent) ? data.recent : [] }
+      return json(200, out)
     }
     if (/^\/api\/pipeline\/?$/.test(path)) {
       const payload = pipelinePayload()
@@ -351,7 +375,7 @@ export function apply(ctx, config) {
         `<ul>${rows}</ul><ul><li><a href="${prefix}/ops/">运维视角</a>（系统整体：运行期中间件 + 各视角证据面聚合）</li></ul>`
         + '<p>本 UI 由 cordis 插件 <code>webui</code> 提供；每个视角读**自己的**账本，宿主不写账本。</p>', prefix))
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

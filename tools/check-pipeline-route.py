@@ -93,6 +93,29 @@ try:
     check("③ 响应不出正文与私域（\"body\"/private:/reserve_price 均不出现）",
           '"body"' not in body and "private:" not in body and "reserve_price" not in body, f"len={len(body)}")
 
+    # 业务双方视角：谈判轮次与 FAQ 条目（只读快照切片；判定在 Python 侧）
+    for view in ("contractor", "supplier"):
+        c_n, b_n = curl(f"http://127.0.0.1:{port}{prefix}/{view}/api/negotiation")
+        n = {}
+        try:
+            n = json.loads(b_n)
+        except Exception:  # noqa: BLE001
+            n = {}
+        check(f"③ 业务视角 {view}/api/negotiation 200 且含计数（反例：路由不匹配快照域键 → counts 缺失）",
+              c_n == 200 and isinstance(n.get("counts"), dict) and isinstance(n.get("recent"), list),
+              f"status={c_n} counts={json.dumps(n.get('counts'), ensure_ascii=False)[:80]}")
+        c_f, b_f = curl(f"http://127.0.0.1:{port}{prefix}/{view}/api/faq")
+        f = {}
+        try:
+            f = json.loads(b_f)
+        except Exception:  # noqa: BLE001
+            f = {}
+        check(f"③ 业务视角 {view}/api/faq 200 且含计数（反例：同上）",
+              c_f == 200 and isinstance(f.get("counts"), dict) and isinstance(f.get("recent"), list),
+              f"status={c_f} counts={json.dumps(f.get('counts'), ensure_ascii=False)[:80]}")
+        check(f"③ {view} 的两条业务视角响应不出正文与私域",
+              '"body"' not in b_n + b_f and "private:" not in b_n + b_f, "")
+
     code2, _ = curl(f"http://127.0.0.1:{port}{prefix}/api/ops")
     check("④ 既有运维道未被弄坏（/api/ops 仍 200）", code2 == 200, f"status={code2}")
 finally:

@@ -337,6 +337,23 @@ check('绩效记分卡正控：/contractor/api/scorecard 与 /supplier/api/score
   && !/"body"\s*:/.test(sc1.text) && !sc1.text.includes('private:') && !sc1.text.includes('cost_floor'),
   `status=${sc1.status}/${sc2.status} groups=${scJson.groups}`)
 
+// 4l. T-262：谈判轮次与 FAQ 条目在**业务双方视角**可见（渲染只读快照；判定在 Python 侧）
+const nva = await get('/contractor/api/negotiation')
+const nvb = await get('/supplier/api/negotiation')
+let nvJson = {}
+try { nvJson = JSON.parse(nva.text) } catch (err) { nvJson = {} }
+check('业务视角·谈判正控：双方 /<view>/api/negotiation 都 200，含计数与最近轮次，且不出正文/私域',
+  nva.status === 200 && nvb.status === 200 && nvJson.counts && Array.isArray(nvJson.recent)
+  && !/"body"\s*:/.test(nva.text) && !nva.text.includes('private:') && !nva.text.includes('reserve_price'),
+  `status=${nva.status}/${nvb.status} counts=${JSON.stringify(nvJson.counts)} recent=${(nvJson.recent || []).length}`)
+const fqa = await get('/contractor/api/faq')
+let fqJson = {}
+try { fqJson = JSON.parse(fqa.text) } catch (err) { fqJson = {} }
+check('业务视角·FAQ 正控：/<view>/api/faq 200，含条目计数与最近条目，且不出正文/私域',
+  fqa.status === 200 && fqJson.counts && Array.isArray(fqJson.recent)
+  && !/"body"\s*:/.test(fqa.text) && !fqa.text.includes('private:'),
+  `status=${fqa.status} counts=${JSON.stringify(fqJson.counts)} recent=${(fqJson.recent || []).length}`)
+
 // 4k. T-260：谈判/FAQ/邮件三域在运维道可见（Python 写快照，宿主只读聚合）
 const pp = await get('/api/pipeline')
 let ppJson = {}

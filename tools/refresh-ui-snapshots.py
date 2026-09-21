@@ -8,17 +8,24 @@
 形状（`docs/design/20-pipeline-snapshot-contract.md` §2，键名即契约）::
 
     {"generated_at": "<ISO8601>",
-     "views": {"<view>": {"negotiate": {"threads", "open", "closed", "rounds", "rejected", "last"},
-                          "faq":       {"entries", "revs", "last"},
+     "views": {"<view>": {"negotiate": {"threads", "open", "closed", "rounds", "rejected", "last",
+                                        "recent": [{"thread_id", "attempt_no", "status"}]},
+                          "faq":       {"entries", "revs", "last",
+                                        "recent": [{"entry_id", "rfq_rev"}]},
                           "mail":      {"queued", "refused", "transport": {...}}}}}
+
+`recent` 是**有界的最近列表**（业务双方视角要看的"最近发生了什么"）：`negotiate/*` 取 `negotiate/round`、
+`faq/*` 取 `faq/entry-published`，一律**按账本 seq 倒序、至多 `RECENT_LIMIT` 条**，每条**只出**
+上面那三个 / 两个键（id / 序号 / 状态），缺失的键写 `null`（**不补默认值**）；空时给 `[]`（字段不少给）。
 
 **缺账本或缺事件时给全零形状**（字段不少给），不猜、不补默认值 —— 也不给"看起来健康的零"
 （账本不存在就真的没有事实可报；哈希链校验失败会在 stderr 明说，见下）。
 
 契约 §2 的"禁止"（自查纪律）：
-· 只出 id / 序号 / 计数：不出正文、主旨、附件内容；不出 `reserve_price` / `cost_model` /
+· 只出 id / 序号 / 状态 / 计数：不出正文、主旨、附件内容；不出 `reserve_price` / `cost_model` /
   `signature` / `private:` 这些私域键。
-· 除 `generated_at` 外不写任何时间键：账本行的 `ts` 只用来挑"最近一条"，不进快照。
+· 除 `generated_at` 外不写任何时间键：账本行的 `ts`（以及 FAQ 条目的 `published_at`）只用来定序，
+  **不进快照** —— `recent` 一律按账本 `seq` 倒序（与 `ts` 无关），因此同一账本两次运行定序不变。
 · 确定性：同一账本两次运行，除 `generated_at` 外逐字节一致（键全排序、列表定序、不读墙钟除元数据）。
 
 视角 → 账本布局（`--shared-dir`，默认 `tmp/ui-shared`）：按固定顺序找
@@ -45,7 +52,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from quotagent.kernel.ledger import Ledger  # noqa: E402
-from quotagent.services.faq import FaqService  # noqa: E402
+from quotagent.services.faq import ENTRY_PUBLISHED_EVENT, FaqService  # noqa: E402
 from quotagent.services.mail import MailService  # noqa: E402
 from quotagent.services.negotiation import (  # noqa: E402
     BOUNDS_DECLARED_EVENT,
@@ -75,6 +82,8 @@ KIND_BY_EVENT = {
 #: 轮次视图里"已落账的轮次"的状态（`replay()` 里 `negotiate/round` 一律给这个状态）；
 #: 其余状态（`awaiting_approval` / `rejected` / `aborted`）都是**没落成事实的尝试**
 LANDED_ROUND_STATUS = "conceded"
+#: 契约 §2 的"最近列表"上限：**有界**（至多 5 条），只出 id / 序号 / 状态 —— 不出正文
+RECENT_LIMIT = 5
 
 
 class _NoGate:
@@ -128,11 +137,29 @@ def _display(path: Path) -> str:
         return str(path)
 
 
+def _as_text(value) -> str | None:
+    """展示用标识：缺失给 `None`（**不补默认值**、不猜），有值就给字符串。"""
+    return None if value is None else str(value)
+
+
+def _body(row: dict) -> dict:
+    """账本行的 `body`（畸形/缺失时给空 dict —— 只影响这一条，不猜内容）。"""
+    body = row.get("body")
+    return body if isinstance(body, dict) else {}
+
+
+def _recent_rows(rows: list, event: str) -> list:
+    """某域按 **seq 倒序**的最近 `RECENT_LIMIT` 条行（有界；`seq` 是账本序号，定序与 `ts`/墙钟无关）。"""
+    picked = [row for row in rows if str(row.get("type")) == event]
+    picked.sort(key=lambda row: _as_int(row.get("seq")) or 0)
+    return list(reversed(picked[-RECENT_LIMIT:]))
+
+
 # ---------------------------------------------------------------------------
 # 三个域
 # ---------------------------------------------------------------------------
 def _negotiate(ledger: Ledger | None, rows: list) -> dict:
-    """谈判：线程/开关/轮次/被拒尝试 + 最近一条 `negotiate/*` 事件（只出 id/序号/类别）。"""
+    """谈判：线程/开关/轮次/被拒尝试 + 最近一条 `negotiate/*` 事件 + 最近轮次列表（只出 id/序号/状态）。"""
     service = NegotiationService(cost_service=None,  # type: ignore[arg-type] 只调 replay()：不触碰成本/定价
                                  pricing=None,  # type: ignore[arg-type]
                                  approval=_NoGate(), ledger=ledger, events=None, policy={})
@@ -153,7 +180,22 @@ def _negotiate(ledger: Ledger | None, rows: list) -> dict:
         "rounds": rounds,
         "rejected": rejected,
         "last": _negotiate_last(rows),
+        "recent": _negotiate_recent(rows),
     }
+
+
+def _negotiate_recent(rows: list) -> list[dict]:
+    """最近 `RECENT_LIMIT` 条 `negotiate/round` 行（**按 seq 倒序**），每条**只出**三个键。
+
+    直接读账本行、不重放判定：`status` 照抄行里的值（缺失写 `null`，**不补** `conceded`）——
+    快照只报事实，不替事实层说话。空域给 `[]`（字段不少给）。
+    """
+    def one(row: dict) -> dict:
+        body = _body(row)
+        return {"thread_id": _as_text(body.get("thread_id")),
+                "attempt_no": _as_int(body.get("attempt_no")),
+                "status": _as_text(body.get("status"))}
+    return [one(row) for row in _recent_rows(rows, ROUND_EVENT)]
 
 
 def _negotiate_last(rows: list) -> dict:
@@ -175,14 +217,15 @@ def _negotiate_last(rows: list) -> dict:
     return out
 
 
-def _faq(ledger: Ledger | None) -> dict:
-    """FAQ：条目数 + 版本号集合（`rfq_rev`）+ 最近发布的条目 id/版本。"""
+def _faq(ledger: Ledger | None, rows: list) -> dict:
+    """FAQ：条目数 + 版本号集合（`rfq_rev`）+ 最近发布的条目 id/版本 + 最近条目列表。"""
     service = FaqService(realm=ALL_REALMS, ledger=ledger, events=None)
     replayed = service.replay()
     entries = service.entries()
     revs = sorted({value for value in (_as_int(entry.get("rfq_rev")) for entry in entries)
                    if value is not None})
-    return {"entries": int(replayed.get("replayed") or 0), "revs": revs, "last": _faq_last(entries)}
+    return {"entries": int(replayed.get("replayed") or 0), "revs": revs, "last": _faq_last(entries),
+            "recent": _faq_recent(rows)}
 
 
 def _faq_last(entries: list) -> dict:
@@ -196,6 +239,17 @@ def _faq_last(entries: list) -> dict:
     if rev is not None:
         out["rfq_rev"] = rev
     return out
+
+
+def _faq_recent(rows: list) -> list[dict]:
+    """最近 `RECENT_LIMIT` 条 `faq/entry-published` 行（**按 seq 倒序**），每条**只出** entry_id/`rfq_rev`。
+
+    定序用账本 `seq`（不是条目的 `published_at`）：同一次发布两遍写出仍然逐字节一致。
+    """
+    def one(row: dict) -> dict:
+        body = _body(row)
+        return {"entry_id": _as_text(body.get("entry_id")), "rfq_rev": _as_int(body.get("rfq_rev"))}
+    return [one(row) for row in _recent_rows(rows, ENTRY_PUBLISHED_EVENT)]
 
 
 def _mail(ledger: Ledger | None) -> dict:
@@ -217,7 +271,7 @@ def _view(shared: Path, view: str) -> dict:
     path = _ledger_path(shared, view)
     ledger = _open(path)
     rows = [] if ledger is None else ledger.read()
-    return {"negotiate": _negotiate(ledger, rows), "faq": _faq(ledger), "mail": _mail(ledger)}
+    return {"negotiate": _negotiate(ledger, rows), "faq": _faq(ledger, rows), "mail": _mail(ledger)}
 
 
 # ---------------------------------------------------------------------------
@@ -259,8 +313,10 @@ def main(argv: list | None = None) -> int:
                                     "open": body["negotiate"]["open"],
                                     "closed": body["negotiate"]["closed"],
                                     "rounds": body["negotiate"]["rounds"],
-                                    "rejected": body["negotiate"]["rejected"]},
-                      "faq": {"entries": body["faq"]["entries"], "revs": body["faq"]["revs"]},
+                                    "rejected": body["negotiate"]["rejected"],
+                                    "recent": len(body["negotiate"]["recent"])},
+                      "faq": {"entries": body["faq"]["entries"], "revs": body["faq"]["revs"],
+                              "recent": len(body["faq"]["recent"])},
                       "mail": {"queued": body["mail"]["queued"], "refused": body["mail"]["refused"],
                                "transport_available": body["mail"]["transport"]["available"]}}
                for view, body in payload["views"].items()}

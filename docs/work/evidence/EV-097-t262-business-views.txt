@@ -1,0 +1,18 @@
+EV-097 T-262 业务双方视角：谈判轮次与 FAQ 条目
+
+[1] 宿主侧（T-262a，父方实现）
+· host/modules/webui.mjs 新增两条**业务视角**路由：`/<view>/api/negotiation`、`/<view>/api/faq`
+  —— 只读快照的该视角切片，只给计数 + 最近列表；**不出正文与私域键**
+· **域键对照显式写死**（URL `negotiation` vs 快照 `negotiate`）：
+  本轮我第一版没对照，导致谈判路由 `counts=undefined`（FAQ 因名字恰好一致而通过）——
+  这类"名字凑巧相同就绿、改个名就红"的写法已改成显式映射表并写进 D-055
+· 页面（`/<view>/`）新增「谈判轮次（本视角）」与「FAQ（本视角）」区块
+· webui 门新增两条断言 → **25/25 通过**；端到端门 `tools/check-pipeline-route.py` 补 6 条断言
+  （两视角 × 两域 × 含计数与列表、不出正文与私域）
+
+[2] 快照侧（T-262，subagent 产出）
+待落地：`negotiate.recent[]`（`thread_id/attempt_no/status`，seq 倒序至多 5 条）与
+`faq.recent[]`（`entry_id/rfq_rev`）；**不出正文**、不写账本、确定性不变。
+
+[3] 门
+（接线后补：42+ 入口全绿 / g1 / clean-copy / 线上真回读）
