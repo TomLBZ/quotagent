@@ -125,3 +125,26 @@ total 0
 + 矩阵行
 
 ```
+
+[4] 口径对齐后线上重跑（临时晋升目录 + 临时账本）
+```
++ elevate.py 口径对齐宿主
++ record.py 口径对齐 + 兼容旧口径
+py_compile ok
++ 夹具口径对齐
+  ok   ⑧ 载荷里没有人工门引用 → 拒绝 `elevate-needs-approval`
+  ok   ⑨ 幂等：待办件已消费 → 不新增 elevated 行（也不重复写）
+  ok   ⑩ 六次拒绝全部零写账本（拒绝不产生 `userplugin/elevated`）
+  ok   ⑤ manifest 非法 → 落 `userplugin/refused`（code=manifest-invalid）且**不**落 created
+  ok   ⑥ 自述不可信：需求正文与其 sha256 不符 → 拒绝，且不因此创建账本文件
+  ok   ⑨ 每条 `rolled-back` 的目标哈希都真实存在于版本历史（回滚只能回到真实存在过的版本）
+  ok   ⑩ 幂等：重复消费不新增账本行
+=== ④ 线上重跑提权（临时晋升目录 + 临时账本）===
+ ok= True applied= [] refused= []
+ 写出的模块（应与用户空间产物逐字节一致）:
+  模块存在= False 逐字节一致= False
+  临时账本 = 
+ 真 host/modules 改动:
+ （空=未动）
+
+```

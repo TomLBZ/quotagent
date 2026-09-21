@@ -42,17 +42,34 @@ def sha256_text(text: str) -> str:
 
 
 def artifact_hash(plugin_dir: Path) -> tuple[str, int]:
-    """用户空间产物的哈希：`plugin.json` 与 `index.mjs` 的字节（顺序固定），与宿主 `scan()` 同口径。"""
+    """产物哈希 —— **与宿主同一口径**：`sha256(清单里 artifact 指向的那个文件)`。
+
+    宿主的 `scan()` 比的是 `manifest.sha256`（等于产物文件的 sha256），所以两侧必须逐字节同构：
+    口径不一致会让"影子哈希一致"永远不成立（线上第一次提权就是这样被拒的，见 D-065）。
+    """
+    try:
+        manifest = json.loads((plugin_dir / 'plugin.json').read_text(encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        return '', 0
+    artifact = manifest.get('artifact') if isinstance(manifest, dict) else None
+    name = artifact if isinstance(artifact, str) and artifact else 'index.mjs'
+    f = plugin_dir / name
+    if not f.is_file():
+        return '', 0
+    data = f.read_bytes()
+    return 'sha256:' + hashlib.sha256(data).hexdigest(), len(data)
+
+
+def legacy_artifact_hash(plugin_dir: Path) -> str:
+    """**旧口径**（index.mjs + plugin.json 拼接）—— 只用来识别"口径变更前记下的记录"，
+    避免把"口径改了"误报成"内容变了"（那会往账本里写一条假的 `upgraded`）。"""
     blobs = []
-    total = 0
     for name in ('index.mjs', 'plugin.json'):
         f = plugin_dir / name
         if not f.is_file():
-            return '', 0
-        data = f.read_bytes()
-        blobs.append(data)
-        total += len(data)
-    return 'sha256:' + hashlib.sha256(b''.join(blobs)).hexdigest(), total
+            return ''
+        blobs.append(f.read_bytes())
+    return 'sha256:' + hashlib.sha256(b''.join(blobs)).hexdigest()
 
 
 def norm(value: object) -> str:

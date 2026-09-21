@@ -22,10 +22,10 @@ MODULE_SRC = ("export const name = 'quote-trend'\nexport const provides = ['quot
 
 
 def _hash(plugin_dir: Path) -> str:
-    h = hashlib.sha256()
-    for name in ('index.mjs', 'plugin.json'):
-        h.update((plugin_dir / name).read_bytes())
-    return h.hexdigest()
+    """与宿主 `scan()` 同口径：清单里 `artifact` 指向的文件（这里就是 index.mjs）的 sha256。"""
+    manifest = json.loads((plugin_dir / 'plugin.json').read_text(encoding='utf-8'))
+    name = manifest.get('artifact') or 'index.mjs'
+    return hashlib.sha256((plugin_dir / name).read_bytes()).hexdigest()
 
 
 def _setup(base: Path, *, approval_ref: str = 'ap-0111', ns: str = 'con-a',
