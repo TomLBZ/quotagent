@@ -110,6 +110,8 @@ class EventBus:
         "evolve/gated": ("serial", True, ""),
         "evolve/promoted": ("serial", True, ""),
         "evolve/rolled-back": ("serial", True, ""),
+        "evolve/canary-entered": ("serial", True, ""),
+        "evolve/canary-exited": ("serial", True, ""),
         # §3 业务事件（P0 用到/会落账的部分）
         "rfq/published": ("emit", True, ""),
         "rfq/amended": ("emit", True, ""),

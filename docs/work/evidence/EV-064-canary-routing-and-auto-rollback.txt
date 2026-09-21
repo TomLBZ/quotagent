@@ -1,0 +1,91 @@
+EV-064 canary 分流与自动回滚（T-229）
+生成时间：2026-09-21T08:42:42Z（UTC）
+
+约束：`ADR-0016 §3` 的余项（canary 真实路由与自动回滚阈值）+ 用户 2026-09-21 指令（每个功能由插件提供、
+每个模块可独立演进）。以下为原始命令输出。
+
+[1] tools/verify.sh canary（插件 `canary` 的分流/判定语义，11 条断言）
+[ok]   分桶确定性：同一 (realm, key) 两次调用结果一致（哈希分桶，无墙钟/随机）
+        两次=["canary","canary","canary"]
+[ok]   realm 白名单负控：名单内的 realm 全量走 canary，名单外的**永远** base（不得越界分流）
+        名单内=canary 名单外=base
+[ok]   边界：weight=0 → 全部 base；weight=10000 → 全部 canary（不是"差不多"，是精确边界）
+        0 → ["base"]；10000 → ["canary"]
+[ok]   负控：进入 canary 没有人工 approval_ref 必须被拒（它会影响真实流量）
+        error=[canary-needs-approval] 进入 canary 会影响真实流量，必须带形如 ap-0001 的人工引用
+[ok]   负控：重复进入 canary 必须被拒（不得叠加分流）
+        twice=[canary-already-active] 已在 canary 中
+[ok]   样本不足 → insufficient（不得在样本不足时给结论）
+        insufficient：样本不足（base 0 / canary 0，需 20）
+[ok]   退化 → 自动回滚：recommendation=rollback，automatic=true，**不要求**人工批准（安全动作越自动越好）
+        action=rollback automatic=true reasons=["错误率 0 → 3000 bp（阈值 +200）"]
+[ok]   更优 → 建议晋升但 **approval_required=true**（机器人不得自行扩大自己的上线面）
+        action=promote approval_required=true
+[ok]   负控：只有 base 退化时不得回滚 canary（不得把 base 的问题算到 canary 头上）
+        action=promote reasons=["三条指标均不退化且至少一条更优"]
+[ok]   退出 canary 不需要人工引用（安全动作）；未进入时退出必须报错（不得静默 no-op）
+        退出 samples_seen=20；二次退出=[canary-not-active] 当前不在 canary 中
+[ok]   环形窗口有界：超出 window 丢最旧（内存不随样本数无限增长）
+        count=5（window=5，投递 50 条）
+RESULT: PASS（canary 门 11/11）
+（exit=0）
+
+[2] tools/verify.sh evolution（含"晋升 → canary → 退化 → **自动回滚**"整链；31 条断言）
+detail": "error=effect-invalid"
+    },
+    {
+      "name": "负控：没有人工 approval_ref 不得晋升（门通过也不行）",
+      "ok": true,
+      "detail": "error=promote-needs-approval"
+    },
+    {
+      "name": "晋升正控：门通过 + 人工引用 → 产物写入（沙盒）host/modules/，真实目录仍未被触碰",
+      "ok": true,
+      "detail": "written=<sandbox>/host/modules/smoke-widget.mjs；真目录 8 个文件"
+    },
+    {
+      "name": "负控：影子产物与提案哈希不一致（提案后被偷改）必须拒绝晋升",
+      "ok": true,
+      "detail": "error=artifact-tampered"
+    },
+    {
+      "name": "回滚：内容被他人改过时拒绝删除；自有内容才撤（只撤自己拥有的）",
+      "ok": true,
+      "detail": "拒绝代码=rollback-refused-modified；自有回滚 removed=true revoked=[\"artifact:smoke-widget\"]"
+    },
+    {
+      "name": "模块产物的演化事件同样由 Python 侧落账（连续 seq，追加在既有 5 条之后）",
+      "ok": true,
+      "detail": "seqs=6,7,8,9,10"
+    },
+    {
+      "name": "负控：进入 canary 无人工引用必须被拒（影响真实流量，与晋升同一门槛）",
+      "ok": true,
+      "detail": "error=[canary-needs-approval] 进入 canary 会影响真实流量，必须带形如 ap-0001 的人工引用"
+    },
+    {
+      "name": "canary 全链正控：晋升 → 进 canary（批准）→ 退化判定 → **自动回滚** → 产物被删除（安全动作不需人工批准）",
+      "ok": true,
+      "detail": "分流=[\"base\",\"base\",\"base\"] 判定=rollback(auto=true) 退出样本=20 真目录=8"
+    },
+    {
+      "name": "负控：样本不足时不得回滚（薄证据不下结论）",
+      "ok": true,
+      "detail": "insufficient；样本不足（base 3 / canary 3，需 50）"
+    },
+    {
+      "name": "canary 事件由 Python 侧落账（连续 seq，追加在既有 10 条之后）",
+      "ok": true,
+      "detail": "seqs=11,12"
+    }
+  ]
+}
+（exit=0）
+
+结论：
+- 方向性：进入 canary 需人工 `approval_ref`（负控：无引用即拒）；**自动回滚不需要**，`decide()` 返回
+  `automatic=true, approval_required=false`；更优时只给 `promote` 建议且 `approval_required=true`；
+- 分流确定性：`sha256(realm:key)` 分桶，realm 白名单外的请求永远 base；`weight=0/10000` 是精确边界；
+- 薄证据不下结论：样本 < `min_samples` → `insufficient`（负控）；
+- 只有 base 退化不得回滚 canary（负控）；
+- 事件 `evolve/canary-entered`/`evolve/canary-exited` 两侧登记并由 Python 侧落账（seq 连续追加）。

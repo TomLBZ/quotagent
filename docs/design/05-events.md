@@ -113,6 +113,8 @@
 | `evolve/shadowed` | serial | ✔ | 影子 → 门 | 隔离 realm 挂提案后条目树（账本复制到新文件，含 `MetricDelta`） |
 | `evolve/gated` | serial | ✔ | host gate runner | 五条门槛 AND 的裁决与逐条理由 |
 | `evolve/promoted` | serial | ✔ | 人工签署 → journal | 晋升（**必带人工 `approval_ref`**，P1 不允许自动晋升） |
+| `evolve/canary-entered` | serial | ✔ | 人工签署 → canary 路由 | 产物进入真实流量分流（**必带人工 `approval_ref`**：影响真实流量） |
+| `evolve/canary-exited` | serial | ✔ | canary 路由 → journal | 退出 canary；**自动回滚不需要人工批准**（安全动作），带 `reason` 与 `samples_seen` |
 | `evolve/rolled-back` | serial | ✔ | 门 → journal | 回滚：dispose 回收 effect + journal 只撤自己拥有的键 |
 
 ## 4. Agent 侧事件（live）

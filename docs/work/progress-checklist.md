@@ -65,6 +65,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-226 | `timeline` 中间件插件（subagent 交付：按 realm 时间线环形缓冲、幂等去重、零残留） | B23 | done | EV-061 |
 | T-228 | A1 `builtin` 断言改双向（声明即事实）+ 各模块声明与用法对齐 | B23b | done | EV-062 |
 | T-227 | 自进化产出插件：提案交付 `host/modules/*.mjs`，影子目录真跑模块 fixture 当门信号，晋升仍需人工引用（ADR-0016） | B24 | done | EV-063 |
+| T-229 | canary 分流与自动回滚：进/升需人工引用、回滚自动；判定三条阈值 + 样本不足不下结论（`canary` 插件，ADR-0017） | B25 | done | EV-064 |
 | T-224 | Jev 建议层插件（`advisor`）：建议不入判定、低置信转人工、外部失败降级 | B23+ | todo | — |
 | T-222 | WebUI 插件（双方视角路由）+ 工作区接入（从现有 dashboard 可访问） | B20/B21 | done | EV-059 |
 | T-221 | P1 | 每个进树模块的 manifest（name/inject/Config/apply）+ fixture A1..A6 + ≥1 契约测试（§7.1 第 5 条） | FR-PLUGIN-001 | `verify.sh modules` 36/36（3 模块 × 12 项） | done | EV-058 |

@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-21T08:39:42Z",
-  "phase": "P2-advisor-and-canary",
+  "updated_at": "2026-09-21T08:42:42Z",
+  "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
   "next_task": "T-224",
   "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
@@ -69,6 +69,7 @@
     "T-225",
     "T-226",
     "T-227",
-    "T-228"
+    "T-228",
+    "T-229"
   ]
 }

@@ -22,7 +22,23 @@ sys.path.insert(0, str(ROOT / "src"))
 from quotagent.kernel.events import EventBus  # noqa: E402
 from quotagent.kernel.ledger import Ledger  # noqa: E402
 
-ALLOWED = ("evolve/proposed", "evolve/shadowed", "evolve/gated", "evolve/promoted", "evolve/rolled-back")
+def _allowed_events() -> tuple[str, ...]:
+    """可写事件名**从内核事件表派生**（单一真源），不在这里再手抄一份 —— 否则新增 evolve 事件时，
+    事件门绿（两侧登记齐），但这个脚本还停在旧白名单上（本轮实测踩到：canary 事件被拒）。"""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+        from quotagent.kernel.events import EventBus  # noqa: PLC0415
+        table = getattr(EventBus, "DEFAULT_TABLE", None)   # 真源：kernel/events.py 的 DEFAULT_TABLE
+        if isinstance(table, dict):
+            names = tuple(sorted(name for name in table if str(name).startswith("evolve/")))
+            if names:
+                return names
+    except Exception:  # noqa: BLE001 —— 派生失败时退回显式白名单，不静默放宽
+        pass
+    return ("evolve/proposed", "evolve/shadowed", "evolve/gated", "evolve/promoted", "evolve/rolled-back")
+
+
+ALLOWED = _allowed_events()
 
 
 def main(argv: list[str] | None = None) -> int:

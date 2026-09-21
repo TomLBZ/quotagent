@@ -194,6 +194,12 @@ const sandboxModules = join(sandboxHost, 'modules')
 mkdirSync(sandboxModules, { recursive: true })
 symlinkSync(join(ROOT, 'host', 'lib'), join(sandboxHost, 'lib'), 'dir')                 // 影子模块要 `../lib/std-schema.mjs`
 symlinkSync(join(ROOT, 'host', 'node_modules'), join(sandboxHost, 'node_modules'), 'dir') // 解析 'cordis'
+// 影子目录与"真实"目标必须是**两处**（沙盒里若撞成同一路径，回滚删产物会把影子也删掉：实测踩到）
+const shadowHost = join(work, 'shadow-host')
+const shadowModules = join(shadowHost, 'modules')
+mkdirSync(shadowModules, { recursive: true })
+symlinkSync(join(ROOT, 'host', 'lib'), join(shadowHost, 'lib'), 'dir')
+symlinkSync(join(ROOT, 'host', 'node_modules'), join(shadowHost, 'node_modules'), 'dir')
 
 const GOOD_MODULE = [
   "/** 冒烟用最小插件：只提供一个纯函数，不订阅事件、不写文件。 */",
@@ -226,7 +232,7 @@ check('模块提案：绑定产物路径/内容哈希/字节数，且指标来�
   && moduleProposal.source === 'fixture:module',
   `path=${moduleProposal.artifact.path.replace(sandbox, '<sandbox>')} bytes=${moduleProposal.artifact.bytes}`)
 
-const shadowed = shadowArtifact(moduleProposal, { shadowDir: sandboxHost })
+const shadowed = shadowArtifact(moduleProposal, { shadowDir: shadowHost })
 const realModulesAfterShadow = readdirSync(join(ROOT, 'host', 'modules')).filter((f) => f.endsWith('.mjs')).sort()
 check('影子写入：产物只落影子目录，真实 host/modules/ **未被触碰**',
   existsSync(shadowed.shadow_path) && JSON.stringify(realModulesAfterShadow) === JSON.stringify(realModulesBefore),
@@ -246,7 +252,7 @@ const runFixtures = (moduleName, moduleDir) => {
     exit: proc.status }
 }
 
-const fixtureGood = runFixtures('smoke-widget', sandboxModules)
+const fixtureGood = runFixtures('smoke-widget', shadowModules)
 const invariantsReal = (() => {
   try {
     execFileSync(join(ROOT, 'tools', 'verify.sh'), ['invariants'], { cwd: ROOT, encoding: 'utf8', stdio: 'pipe' })
@@ -272,13 +278,13 @@ const badProposal = makeModuleProposal({
   rationale: '负控：坏产物必须被 fixture 抓住', expected_effect: { metric: 'fixture:module', direction: 'up', magnitude: 1 },
   risks: [], rollback_plan: '不晋升', evidence_refs: ['ledger:evolve.jsonl#1'],
 }, { repoRoot: sandbox })
-shadowArtifact(badProposal, { shadowDir: sandboxHost })
-const fixtureBad = runFixtures('smoke-broken', sandboxModules)
+shadowArtifact(badProposal, { shadowDir: shadowHost })
+const fixtureBad = runFixtures('smoke-broken', shadowModules)
 const badVerdict = gateModule(badProposal, { fixture: fixtureBad, invariantsOk: true, counterexamplesOk: true, budgetOk: true,
   humanRateBefore: 1, humanRateAfter: 1 })
 let badPromoteBlocked = null
 try {
-  promoteModule(badProposal, null, { approval_ref: 'ap-0001', gateVerdict: badVerdict, shadowDir: sandboxHost, repoRoot: sandbox })
+  promoteModule(badProposal, null, { approval_ref: 'ap-0001', gateVerdict: badVerdict, shadowDir: shadowHost, repoRoot: sandbox })
 } catch (err) { badPromoteBlocked = err.code }
 check('门负控：坏产物（inject 写内建 mixin）被**真实 fixture** 抓出 → 门 rejected → 晋升被拒',
   badVerdict.verdict === 'rejected' && fixtureBad.failed > 0 && badPromoteBlocked === 'promote-gate-failed',
@@ -315,14 +321,14 @@ check('负控：指标来源是"模型自评"必须被拒（门信号只能是�
 // 负控 5：晋升缺人工 approval_ref
 let noApproval = null
 try {
-  promoteModule(moduleProposal, null, { gateVerdict: gateVerdictModule, shadowDir: sandboxHost, repoRoot: sandbox })
+  promoteModule(moduleProposal, null, { gateVerdict: gateVerdictModule, shadowDir: shadowHost, repoRoot: sandbox })
 } catch (err) { noApproval = err.code }
 check('负控：没有人工 approval_ref 不得晋升（门通过也不行）', noApproval === 'promote-needs-approval', `error=${noApproval}`)
 
 // 正控：带 ap-0001 晋升 → 产物落到沙盒的 host/modules/（真实目录仍不动）
 const journalModule = new PatchJournal()
 const promotedModule = promoteModule(moduleProposal, journalModule,
-  { approval_ref: 'ap-0001', gateVerdict: gateVerdictModule, shadowDir: sandboxHost, repoRoot: sandbox })
+  { approval_ref: 'ap-0001', gateVerdict: gateVerdictModule, shadowDir: shadowHost, repoRoot: sandbox })
 const realModulesAfterPromote = readdirSync(join(ROOT, 'host', 'modules')).filter((f) => f.endsWith('.mjs')).sort()
 check('晋升正控：门通过 + 人工引用 → 产物写入（沙盒）host/modules/，真实目录仍未被触碰',
   promotedModule.status === 'promoted' && existsSync(promotedModule.written_to)
@@ -333,7 +339,7 @@ check('晋升正控：门通过 + 人工引用 → 产物写入（沙盒）host/
 writeFileSync(shadowed.shadow_path, GOOD_MODULE.replace("'ok'", "'tampered'"), 'utf8')
 let tampered = null
 try {
-  promoteModule(moduleProposal, null, { approval_ref: 'ap-0001', gateVerdict: gateVerdictModule, shadowDir: sandboxHost, repoRoot: sandbox })
+  promoteModule(moduleProposal, null, { approval_ref: 'ap-0001', gateVerdict: gateVerdictModule, shadowDir: shadowHost, repoRoot: sandbox })
 } catch (err) { tampered = err.code }
 check('负控：影子产物与提案哈希不一致（提案后被偷改）必须拒绝晋升', tampered === 'artifact-tampered', `error=${tampered}`)
 writeFileSync(shadowed.shadow_path, GOOD_MODULE, 'utf8')   // 还原
@@ -365,6 +371,74 @@ for (const [event, body] of [['evolve/proposed', { id: moduleProposal.id, artifa
 check('模块产物的演化事件同样由 Python 侧落账（连续 seq，追加在既有 5 条之后）',
   moduleEvents.length === 5 && moduleEvents.every((item, idx) => item.seq === idx + 6),
   `seqs=${moduleEvents.map((item) => item.seq).join(',')}`)
+
+
+// --- 8. T-229：canary 分流与**自动回滚**（ADR-0017 / D-021）-----------------------------
+// 方向性纪律：进入 canary 需要人工引用（影响真实流量）；退出/回滚**不需要**（安全动作）。
+const canaryMod = await import('./modules/canary.mjs')
+const mountCanary = async (config) => {
+  const cctx = new Context()
+  await cctx.plugin(EventsService)
+  const boxC = {}
+  const cfiber = await cctx.plugin({
+    name: 'canary#evolve',
+    inject: [],
+    Config: canaryMod.Config,
+    apply: async (inner, cfg) => {
+      const original = inner.provide.bind(inner)
+      inner.provide = (service, value) => { if (service === 'canary') boxC.handle = value; return original(service, value) }
+      await canaryMod.apply(inner, cfg)
+    },
+  }, canaryMod.Config.parse(config))
+  return { box: boxC, fiber: cfiber }
+}
+
+// 全链：晋升（带批准）→ 进 canary（带批准）→ 退化 → 自动回滚 → 删除产物
+const live = await mountCanary({ weight_bps: 5000, min_samples: 5 })
+let canaryNoApproval = null
+try { live.box.handle.enterCanary({ proposal_id: moduleProposal.id }) } catch (err) { canaryNoApproval = String(err.message) }
+check('负控：进入 canary 无人工引用必须被拒（影响真实流量，与晋升同一门槛）',
+  String(canaryNoApproval).includes('canary-needs-approval'), `error=${String(canaryNoApproval).slice(0, 70)}`)
+
+const promoted2 = promoteModule(moduleProposal, null,
+  { approval_ref: 'ap-0011', gateVerdict: gateVerdictModule, shadowDir: shadowHost, repoRoot: sandbox })
+const enteredCanary = live.box.handle.enterCanary({ proposal_id: moduleProposal.id, approval_ref: 'ap-0011' })
+// 分流确定性 + 真实样本：base 全绿，canary 错误率明显更高
+const routed = ['q-1', 'q-2', 'q-3'].map((key) => live.box.handle.bucket({ realm: 'contractor:g1', key }))
+for (let i = 0; i < 10; i++) live.box.handle.record({ lane: 'base', ok: true, latency_ms: 100, cost: 10 })
+for (let i = 0; i < 10; i++) live.box.handle.record({ lane: 'canary', ok: i < 4 ? false : true, latency_ms: 100, cost: 10 })
+const decision = live.box.handle.decide()
+const exitedCanary = live.box.handle.exitCanary({ reason: `auto-rollback:${decision.verdict.reasons[0]}` })
+const rolledAuto = rollbackModule(moduleProposal,
+  { targetPath: promoted2.written_to, expectedHash: promoted2.artifact_hash, journal: null })
+const realModulesAfterCanary = readdirSync(join(ROOT, 'host', 'modules')).filter((f) => f.endsWith('.mjs')).sort()
+check('canary 全链正控：晋升 → 进 canary（批准）→ 退化判定 → **自动回滚** → 产物被删除（安全动作不需人工批准）',
+  enteredCanary.phase === 'canary' && decision.action === 'rollback' && decision.automatic === true
+  && decision.approval_required === false && exitedCanary.phase === 'base' && rolledAuto.removed === true
+  && !existsSync(promoted2.written_to)
+  && JSON.stringify(realModulesAfterCanary) === JSON.stringify(realModulesBefore),
+  `分流=${JSON.stringify(routed)} 判定=${decision.action}(auto=${decision.automatic}) 退出样本=${exitedCanary.samples_seen} 真目录=${realModulesAfterCanary.length}`)
+
+// 负控：样本不足时不得凭薄证据回滚
+const thin = await mountCanary({ weight_bps: 10000, min_samples: 50 })
+thin.box.handle.enterCanary({ proposal_id: 'p-thin', approval_ref: 'ap-0012' })
+for (let i = 0; i < 3; i++) thin.box.handle.record({ lane: 'base', ok: true, latency_ms: 10, cost: 1 })
+for (let i = 0; i < 3; i++) thin.box.handle.record({ lane: 'canary', ok: false, latency_ms: 999, cost: 99 })
+const thinDecision = thin.box.handle.decide()
+check('负控：样本不足时不得回滚（薄证据不下结论）',
+  thinDecision.action === 'hold' && thinDecision.verdict.recommendation === 'insufficient',
+  `${thinDecision.verdict.recommendation}；${thinDecision.verdict.reasons[0]}`)
+await thin.fiber.dispose()
+await live.fiber.dispose()
+
+const canaryEvents = []
+for (const [event, body] of [['evolve/canary-entered', { id: moduleProposal.id, approval_ref: 'ap-0011', weight_bps: 5000, actor: 'host:evolution' }],
+  ['evolve/canary-exited', { id: moduleProposal.id, reason: 'auto-rollback', samples_seen: exitedCanary.samples_seen, actor: 'host:evolution' }]]) {
+  canaryEvents.push(recordEvent(event, body, evolveLedger))
+}
+check('canary 事件由 Python 侧落账（连续 seq，追加在既有 10 条之后）',
+  canaryEvents.length === 2 && canaryEvents.every((item, idx) => item.seq === idx + 11),
+  `seqs=${canaryEvents.map((item) => item.seq).join(',')}`)
 
 rmSync(sandbox, { recursive: true, force: true })
 
