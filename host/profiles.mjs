@@ -50,6 +50,15 @@ export const PROFILES = {
       transport: { kind: 'file-drop', dir: 'inbox' },
     },
   },
+  'storage': {
+    role: 'storage',
+    label: '存储（文件管理 + 键值表）的只读观察面',
+    realm: 'contractor:con-B',
+    ledger: 'ledger-contractor.jsonl',
+    modules: ['config', 'frozen', 'storage-view'],
+    sidecar: 'read-only',
+    config: {},
+  },
   'agent-runtime': {
     role: 'agent-runtime',
     label: 'agent 运行期（上下文 / 记忆四层 / harness）',

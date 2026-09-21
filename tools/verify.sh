@@ -114,6 +114,10 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec node host/t260-pipeline-gate.mjs "$@"
     ;;
+  storage)
+    # 存储（文件管理+键值表）的宿主围栏门（T-277）
+    "${QUOTAGENT_NODE:-node}" "$HERE/../host/t277-storage-gate.mjs"
+    ;;
   agent-runtime)
     # agent 运行期插件（上下文/记忆/harness）的宿主围栏门（T-275）
     "${QUOTAGENT_NODE:-node}" "$HERE/../host/t275-runtime-gate.mjs"

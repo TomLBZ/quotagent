@@ -1,0 +1,114 @@
+EV-142 AC-STORAGE-001/004 存储：逃逸防线与跨租户隔离（真证据）
+
+[AC-STORAGE-001] 有 Node
+```
+{
+  "ac": "AC-STORAGE-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "① 本租户日志可写；`stat` 的 sha256 与磁盘内容一致",
+      "ok": true,
+      "detail": "written=True declared=b38980a0de8c5bc1 disk=b38980a0de8c5bc1"
+    },
+    {
+      "name": "② `..` / 绝对路径 / 符号链三例全拒（`storage-path-escape` 系），且**根外目标一个都不存在**",
+      "ok": true,
+      "detail": "symlink_ok=True codes=['storage-outside-ns', 'storage-path-escape', 'storage-path-escape'] 根外存在=[]"
+    },
+    {
+      "name": "③ 有界读取：`limit=5` 恰返回 5 行，且 `omitted` 恰等于被丢行数（不得静默丢）",
+      "ok": true,
+      "detail": "lines=5 omitted=35 truncated=True"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-STORAGE-001",
+  "phase": "P2",
+  "title": "存储逃逸防线：`..`/绝对路径/符号链三例全拒且根外目标不存在；`sha256` 与磁盘一致；有界读取诚实报破",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+[AC-STORAGE-001] 无 Node
+```
+, 'storage-path-escape'] 根外存在=[]"
+    },
+    {
+      "name": "③ 有界读取：`limit=5` 恰返回 5 行，且 `omitted` 恰等于被丢行数（不得静默丢）",
+      "ok": true,
+      "detail": "lines=5 omitted=35 truncated=True"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-STORAGE-001",
+  "phase": "P2",
+  "title": "存储逃逸防线：`..`/绝对路径/符号链三例全拒且根外目标不存在；`sha256` 与磁盘一致；有界读取诚实报破",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+
+[AC-STORAGE-004] 有 Node
+```
+{
+  "ac": "AC-STORAGE-004",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "① 三种越权形态（ns 逃逸 ×2 + rel 跨根）一律 `storage-outside-ns`",
+      "ok": true,
+      "detail": "{'ns 逃逸 `../beta`': 'storage-outside-ns', 'ns 逃逸 `beta/../alpha`': 'storage-outside-ns', 'rel 跨根 `../beta/x`': 'storage-outside-ns'}"
+    },
+    {
+      "name": "① 越权尝试后：哨兵与越权文件在磁盘上一个都不存在（且没有 beta 目录被顺带创建）",
+      "ok": true,
+      "detail": "哨兵命中=[] 越权残留=[]"
+    },
+    {
+      "name": "② 存储写**不产生账本行**、账本字节零改动（H1：存储不得成为第二条事实写路径）",
+      "ok": true,
+      "detail": "before=9dcc95d864ce after=9dcc95d864ce rows=1"
+    },
+    {
+      "name": "② 往**声明的事实路径**写文件被拒（并给出机器可读 code + next_action）",
+      "ok": true,
+      "detail": "code=storage-fact-path next_action=事实只进账本（Python 内核独占写入）：把目标改到非事实区（缓存/中间产物/"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-STORAGE-004",
+  "phase": "P2",
+  "title": "存储跨租户隔离：ns 逃逸与 rel 跨根一律拒且**根外/别租户哨兵不存在**（不是只返回错误）",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+[AC-STORAGE-004] 无 Node
+```
+1"
+    },
+    {
+      "name": "② 往**声明的事实路径**写文件被拒（并给出机器可读 code + next_action）",
+      "ok": true,
+      "detail": "code=storage-fact-path next_action=事实只进账本（Python 内核独占写入）：把目标改到非事实区（缓存/中间产物/"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-STORAGE-004",
+  "phase": "P2",
+  "title": "存储跨租户隔离：ns 逃逸与 rel 跨根一律拒且**根外/别租户哨兵不存在**（不是只返回错误）",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+
+[宿主围栏门] `node host/t277-storage-gate.mjs`
+```
+**新动作一律拒**（`storage-view-disposed` + next_action）且不抛（拒绝不伪装成功）","ok":true,"detail":"effect [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2] → [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]；ctx.get 全消失=true；dispose 后={\"degraded\":true,\"reason\":\"storage-view-disposed\"}；headline 抛错=false"},{"name":"17 Python 侧可用性不伪装：未配 root / root 不是目录 → `storage-unavailable` + 有名 reason + next_action（**不得**用\"看起来健康的空\"冒充可用）；\"确实没有\"（空租户 / 没这个键 / 路径缺席）→ `ok:true` + 有名 reason —— 两种情形必须可区分；且默认存储根没被碰过","ok":true,"detail":"未配={\"code\":\"storage-unavailable\",\"reason\":\"root-unconfigured\"}；不是目录={\"code\":\"storage-unavailable\",\"reason\":\"root-not-a-directory\"}；路径缺席={\"ok\":true,\"exists\":false,\"reason\":\"path-absent\"}；键缺席={\"ok\":true,\"found\":false,\"reason\":\"key-not-found\"}；空租户={\"ok\":true,\"reason\":\"namespace-empty\"}；默认存储根未变=true"},{"name":"18 拒绝留痕汇总：整轮跑下来的**每一条**拒绝（本门真跑出来的，不是声明）都在闭合码集合里，且都带非空 `next_action`；四类反例各自的码都在其中（①跨租户 ②越界 ③无界/超界读 ④事实路径）","ok":true,"detail":"本轮拒绝 24 次；码集合=[\"storage-outside-ns\",\"storage-path-escape\",\"storage-limit-exceeded\",\"storage-unbounded-read\",\"storage-fact-path\",\"storage-unavailable\"]；越界码=[]；缺 next_action=0 条；模块树未变=true"}],"passed":18,"total":18,"failures":0}
+
+```

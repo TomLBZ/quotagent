@@ -20,3 +20,4 @@ from . import checks_userplugin_versions
 from . import checks_userplugin_elevate
 from . import checks_agentrt  # noqa: F401,E402  (AC-USERPLUG-001：用户空间插件 created/幂等/正文不入账本)
 from . import checks_agentrt_memory  # noqa: F401,E402  (AC-AGENTRT-002：记忆四层边界)
+from . import checks_storage  # noqa: F401,E402  (AC-STORAGE-001/004：逃逸与跨租户)

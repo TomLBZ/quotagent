@@ -175,6 +175,9 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-USERPLUG-010 | P2 | 提权（用户空间 → 系统级）：agent 发起 → `approval-ref-not-human`；引用形状错 → `approval-ref-malformed`；缺引用 → `elevate-needs-approval`；产物哈希与载荷不一致 → `shadow-hash-mismatch`；目标已存在 → `target-exists`（逐字节不覆盖）；清单 name 越界 → `target-name-mismatch`；人类 actor + 哈希一致 → **真写**并落 `userplugin/elevated`（含 `artifact_sha256`/`shadow_sha256`/`approval_ref`/`actor`）；六次拒绝全部零写账本 | `tools/verify.sh ac AC-USERPLUG-010` | EV-139 |
 | AC-AGENTRT-006 | P2 | 运行期插件三件（agent-context/agent-memory/agent-harness）**零写面/零外部副作用**（写文件/子进程/网络/随机/定时器逐类断言）；四层记忆名字与三类关键拒绝码齐全；**有界与降级契约**（`truncated`+`omitted`、`degraded`+`reason`+`next_action`、空上下文可区分）在源码与围栏门里都成立；围栏门真跑 `failures:0` 且断言 ≥22（四类反例 + 4 处变异自证）；无 Node 环境**降级而非变红** | `tools/verify.sh ac AC-AGENTRT-006` + `tools/verify.sh agent-runtime` | EV-140 |
 | AC-AGENTRT-002 | P2 | 记忆四层边界：项目记忆由账本重放**两次逐字节一致**、删掉快照重建仍逐字节一致（丢缓存不丢事实）、每条都带 `citations`、**账本字节零改动**、账本不可读 → `ledger-unreadable` 拒绝（不伪装空投影）；会话层静态零写面 + 磁盘上检索不到会话哨兵；策略只人写/跨方只走协议由围栏门真跑（无 Node **降级**为源码级断言） | `tools/verify.sh ac AC-AGENTRT-002` | EV-141 |
+| AC-STORAGE-001 | P2 | 本租户日志可写且 `stat` 的 `sha256` 与磁盘一致；`..`/绝对路径/符号链三例全拒且**根外目标一个都不存在**；有界读取 `limit=5` 恰返回 5 行且 `omitted` 恰等于被丢行数 | `tools/verify.sh ac AC-STORAGE-001` | EV-142 |
+| AC-STORAGE-004 | P2 | 三种越权形态（`ns=../beta`、`ns=beta/../alpha`、`rel=../beta/x`）一律 `storage-outside-ns`，且越权尝试后哨兵与越权文件**在磁盘上不存在**（不是只返回错误）；存储写不产生账本行、账本字节零改动；往声明的事实路径写被拒 | `tools/verify.sh ac AC-STORAGE-004` | EV-142 |
+| AC-STORAGE-006 | P2 | 只读观察面（`snapshot`）两次输出逐字节一致（确定性）；**读前后存储树字节数不变**（读它不改状态）；输出里不出现日志正文与私域哨兵 | `tools/verify.sh ac AC-STORAGE-006` | EV-142 |
 
 ## 7. 证据制度
 

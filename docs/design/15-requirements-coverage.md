@@ -150,6 +150,9 @@
 | FR-USERPLUG-010 | tools/userplugin-elevate.py + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-010 | 直引 |
 | FR-AGENTRT-006 | host/modules/agent-context.mjs + host/modules/agent-memory.mjs + host/modules/agent-harness.mjs | 见 AC-AGENTRT-006 | 直引 |
 | FR-AGENTRT-002 | tools/refresh-agent-memory.py + host/modules/agent-memory.mjs | 见 AC-AGENTRT-002 | 直引 |
+| FR-STORAGE-001 | tools/storage.py + host/modules/storage-view.mjs | 见 AC-STORAGE-001 | 直引 |
+| FR-STORAGE-004 | tools/storage.py | 见 AC-STORAGE-004 | 直引 |
+| FR-STORAGE-006 | tools/storage.py + host/modules/storage-view.mjs | 见 AC-STORAGE-006 | 直引 |
 
 ## 2. 插件归属
 
@@ -160,6 +163,7 @@
 | agent-context | FR-AGENTRT-006（有界/降级）| 部分 |
 | agent-memory | FR-AGENTRT-006（有界/降级）| 部分 |
 | agent-harness | FR-AGENTRT-006（有界/降级）| 部分 |
+| storage-view | FR-STORAGE-006 | 直引 |
 | plugin-market | FR-MARKET-001、FR-MARKET-002、FR-MARKET-003、FR-MARKET-004、FR-MARKET-005、FR-MARKET-006（T-267 subagent 产出） | 强 |
 | admin-guard | FR-ADMIN-002、FR-ADMIN-007、FR-ADMIN-008、FR-ADMIN-009、FR-ADMIN-010（T-272 subagent 产出） | 强 |
 | admin-view | FR-ADMIN-001、FR-ADMIN-003、FR-ADMIN-004（T-272 subagent 产出） | 强 |
