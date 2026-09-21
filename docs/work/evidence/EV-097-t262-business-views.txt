@@ -43,3 +43,12 @@ $ 页面含「谈判轮次（本视角）」「FAQ（本视角）」两个区块
   提交信息里没提它（提交范围与信息不一致）。这也解释了当时 pipeline-route 的一次瞬时失败
   （子代理正在改这个文件）。**教训：`git add -A` 会扫进别的 agent 在途的编辑；
   多 agent 并行时应显式 `git add <我改的文件>`。**
+
+[8] clean-copy 红 → 修 → 再验（我自己的过失与更正）
+· T-262 那轮我**跑了 clean-copy 看到它红（webui 23/25）却没串进提交链**就提交了 = 红门提交。
+· 根因：新断言依赖真 `tmp/ui-shared/pipeline.json`（gitignored）→ 干净副本里没有 → `counts` 缺失。
+· 修法：门**自带夹具快照**（mkdtemp + 挂载传 `pipeline_snapshot`）；路由改**按键白名单投影**；
+  夹具里放 `SECRET-BODY`/`SECRET-SUBJECT`/`private:` 哨兵做负控 → **webui 门 27/27**。
+· **更正**：`clean-copy` 校验的是 **HEAD**，因此**不可能**放进提交前链（死锁）。
+  正确次序：docs + 相关门 → commit → push → **对新 HEAD 跑 clean-copy**。
+  实测：`254a060` 的 HEAD → `clean-copy=0`（15 道门在干净副本全绿）。
