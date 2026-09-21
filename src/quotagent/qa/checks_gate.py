@@ -246,3 +246,158 @@ def check() -> list[Assertion]:
         out.append(Assertion('③ 插件源码非空（无 Node：**降级**；真执行行为由 `verify.sh gates` 守卫）',
                              len(src) > 20000, f'bytes={len(src)}'))
     return out
+
+
+#: 一次真执行探针（规则 ⑤ 逐行明细）：**逐行手算金额** / 缺依据不入小计 / 空输入 degraded /
+#: 私域两面扫（供应商侧逐字节一致 + 业主侧看得见）。
+PROBE_DETAIL = r"""
+import { changeDetailOf, DETAIL_KEYS, DETAIL_REASONS, MONEY_UNIT, ROUNDING, PRIVATE_COLUMN_VIEWS,
+  PRIVATE_KEY_MARKS } from './host/modules/gate-timeline.mjs'
+const LINES = [
+  { line_id: 'L-001', qty_before: 10, unit_price_before: 6000, qty_after: 12, unit_price_after: 6000 },
+  { line_id: 'L-002', qty_before: 3, unit_price_before: 1000, qty_after: 3, unit_price_after: 1500 },
+  { line_id: 'L-003', qty_before: 3, unit_price_before: 2000, qty_after: null, unit_price_after: 2500 },
+  { line_id: 'L-004', qty_before: 0, unit_price_before: 0, qty_after: 5, unit_price_after: 1000 },
+  { line_id: 'L-005', qty_before: 3, unit_price_before: 1000, qty_after: 1, unit_price_after: 1001 },
+]
+const CLEAN = { view: 'supplier', as_of: '2026-09-25T12:00:00Z',
+  change: { change_id: 'CO-0001', quote_id: 'q-1', ts: '2026-09-25T11:00:00Z', lines: LINES } }
+const SENTINELS = ['COST-MODEL-SENTINEL-9a', 'PRIVATE-NOTE-SENTINEL-7f', 'RESERVE-PRICE-SENTINEL-4b']
+const DIRTY_LINES = LINES.map((line) => ({ ...line, cost_floor: SENTINELS[0], markup_pct: 12.5,
+  reserve_price: SENTINELS[2], 'private:note': SENTINELS[1] }))
+const halfUp = (numerator, denominator) => {
+  const sign = numerator < 0 ? -1 : 1
+  const magnitude = numerator < 0 ? -numerator : numerator
+  return sign * Math.floor((2 * magnitude + denominator) / (2 * denominator))
+}
+const out = changeDetailOf(CLEAN)
+const byId = Object.fromEntries(out.lines.map((line) => [line.line_id, line]))
+const HAND = { 'L-001': [60000, 72000, 12000, 20], 'L-002': [3000, 4500, 1500, 50],
+  'L-004': [0, 5000, 5000, null], 'L-005': [3000, 1001, -1999, -66.63] }
+const rowsOk = Object.entries(HAND).every(([id, expect]) => {
+  const line = byId[id]
+  if (!line) return false
+  return line.amount_before === expect[0] && line.amount_after === expect[1] && line.delta_amount === expect[2]
+    && (expect[3] === null ? line.delta_pct === null : line.delta_pct === expect[3])
+    && line.amount_before === line.qty_before * line.unit_price_before
+    && line.amount_after === line.qty_after * line.unit_price_after
+    && line.delta_amount === line.amount_after - line.amount_before
+    && (line.amount_before === 0 ? line.delta_pct === null
+      : line.delta_pct === halfUp(line.delta_amount * 10000, line.amount_before) / 100)
+})
+const cleanSupplier = JSON.stringify(out)
+const dirtySupplier = JSON.stringify(changeDetailOf({ ...CLEAN,
+  change: { ...CLEAN.change, lines: DIRTY_LINES } }))
+const dirtyOwner = JSON.stringify(changeDetailOf({ view: 'contractor',
+  change: { ...CLEAN.change, lines: DIRTY_LINES } }))
+const empty = changeDetailOf({ view: 'supplier', change: { change_id: 'C', lines: [] } })
+const notFound = changeDetailOf({ view: 'supplier', change_id: 'CO-9999' })
+console.log(JSON.stringify({
+  money: MONEY_UNIT, rounding: ROUNDING, keys: DETAIL_KEYS.length, reasons: DETAIL_REASONS,
+  private_views: PRIVATE_COLUMN_VIEWS, marks: PRIVATE_KEY_MARKS.length,
+  rows_ok: rowsOk, lines: out.lines.length,
+  subtotal: [out.subtotal.amount_before, out.subtotal.amount_after, out.subtotal.delta_amount, out.subtotal.delta_pct],
+  missing: out.basis_missing.map((item) => [item.line_id, item.missing.join(',')]),
+  excluded: !out.lines.some((line) => line.line_id === 'L-003'),
+  empty_degraded: empty.degraded, empty_reason: empty.reason, empty_lines: empty.lines.length,
+  empty_subtotal_null: empty.subtotal.amount_before === null && empty.subtotal.delta_amount === null,
+  nf_reason: notFound.reason, nf_action: Boolean(notFound.next_action && notFound.next_action.length > 10),
+  sentinel_no_effect: cleanSupplier === dirtySupplier,
+  sentinel_leak: SENTINELS.filter((needle) => dirtySupplier.includes(needle)).length,
+  owner_visible: dirtyOwner.includes(SENTINELS[0]) && dirtyOwner.includes('cost_floor'),
+  determinism: JSON.stringify(changeDetailOf(CLEAN)) === cleanSupplier,
+}))
+"""
+
+
+@register('AC-GATE-002', 'P2',
+          '变更单逐行明细：金额整数分逐行手算对账、缺依据的行不入小计、无可用行必降级且明细为空、'
+          '供应商侧私域零泄漏、未知 id 404 + next_action、只读且 0 内联脚本',
+          'tools/verify.sh ac AC-GATE-002', ('EV-154',))
+def check_detail() -> list[Assertion]:
+    out: list[Assertion] = []
+    src = MOD.read_text(encoding='utf-8') if MOD.is_file() else ''
+    gate = (ROOT / 'host' / 't283-change-detail-gate.mjs')
+    gate_src = gate.read_text(encoding='utf-8') if gate.is_file() else ''
+    route = (ROOT / 'tools' / 'check-change-detail-route.py')
+    route_src = route.read_text(encoding='utf-8') if route.is_file() else ''
+    webui = (ROOT / 'host' / 'modules' / 'webui.mjs').read_text(encoding='utf-8')
+    verify = (ROOT / 'tools' / 'verify.sh').read_text(encoding='utf-8')
+
+    out.append(Assertion('① 四件齐备：插件规则 ⑤ + 围栏门 `t283` + 真路由门 + `verify.sh change-detail` 分支',
+                         bool(src) and bool(gate_src) and bool(route_src)
+                         and 'change-detail)' in verify and 't283-change-detail-gate.mjs' in verify
+                         and 'check-change-detail-route.py' in verify,
+                         f'module={len(src)}B gate={len(gate_src)}B route={len(route_src)}B'))
+
+    marks = {
+        'money': "MONEY_UNIT = 'cents'" in src,
+        'rounding': "ROUNDING = 'half-up-to-cent'" in src,
+        'keys': all(key in src for key in ('delta_amount', 'delta_pct', 'amount_before', 'amount_after', 'basis')),
+        'reasons': all(key in src for key in ('no-usable-lines', 'change-not-found', 'payload-not-an-object')),
+        'private': 'PRIVATE_COLUMN_VIEWS' in src and 'PRIVATE_KEY_MARKS' in src,
+        'hand': all(key in src for key in ('DETAIL_LINE_MAX', 'omitted', 'truncated', 'basis_missing')),
+    }
+    out.append(Assertion('① 语义齐备：`MONEY_UNIT="cents"`（整数分）/ `ROUNDING` / 11 键口径 / 闭合的明细降级原因 / '
+                         '私域视图白名单与标记 / 有界（行上限 + omitted）',
+                         all(marks.values()), f'marks={marks}'))
+
+    code = _code_only(src)
+    hits = sorted(set(re.findall(
+        r'writeFileSync|appendFileSync|createWriteStream|mkdirSync|child_process|fetch\(|Date\.now|Math\.random'
+        r'|openLedger|new Date|setInterval\(|setTimeout\(', code)))
+    self_test = re.findall(r'openLedger|setInterval\(|Date\.now',
+                           'openLedger(p); setInterval(f, 1); Date.now()')
+    out.append(Assertion('① 零写面 / 不读账本 / 不取墙钟 / 不随机 / 不联网 / 不起子进程（本批新增的规则 ⑤ 一并受检；'
+                         '扫描器非空转：对照样本必须命中 ≥3）',
+                         not hits and len(self_test) >= 3, f'产物命中={hits}；对照样本命中={self_test}'))
+
+    routes = ('/changes/' in webui and '/api/changes/' in webui and 'change_detail' in webui
+              and 'data-change-detail-link' in webui)
+    out.append(Assertion('① 宿主侧契约：两条新路由 + 变更单列表每行链到明细页（`data-change-detail-link`）+ '
+                         '页面模板 0 内联脚本 / 0 内联事件',
+                         routes and '<script' not in _code_only(webui)
+                         and not re.search(r'\son[a-z]+=', _code_only(webui)),
+                         f'routes={routes} script={_code_only(webui).count("<script")}'))
+    gm = {k: (k in gate_src) for k in ('手算', '缺依据', '哨兵', '变异', '还原', 'degraded', '未纳入小计')}
+    out.append(Assertion('① 围栏门含手算表 / 缺依据不入小计 / 哨兵两面扫 / 变异自证 / 字节还原（不是空壳门）',
+                         sum(gm.values()) >= 6, f'marks={gm}'))
+
+    if _node():
+        proc = subprocess.run(['node', '--input-type=module', '-e', PROBE_DETAIL], cwd=str(ROOT),
+                              capture_output=True, text=True, timeout=120)
+        try:
+            facts = json.loads(proc.stdout.strip().splitlines()[-1])
+        except Exception:  # noqa: BLE001
+            facts = {}
+        out.append(Assertion('③ 真执行探针：**逐行手算金额对账**（4 个可用行逐字段等于手算的整数分、'
+                             '`amount = qty × unit_price`、`delta = after − before`、`delta_pct` 由整数分位 '
+                             'half-up 独立复算）+ 小计 66000→82501 差 16501（25.00%）',
+                             bool(facts.get('rows_ok') and facts.get('lines') == 4
+                                  and facts.get('money') == 'cents' and facts.get('rounding') == 'half-up-to-cent'
+                                  and facts.get('keys') == 11
+                                  and facts.get('subtotal') == [66000, 82501, 16501, 25]
+                                  and facts.get('determinism')),
+                             f"rows_ok={facts.get('rows_ok')} lines={facts.get('lines')} "
+                             f"money={facts.get('money')}/{facts.get('rounding')} subtotal={facts.get('subtotal')}"))
+        out.append(Assertion('③ 真执行探针：**缺依据的行不入小计**（`L-003` 缺 `qty_after` ⇒ 在 `basis_missing` 里、'
+                             '明细里没有它）+ **无可用行必降级且明细为空 + 小计记 null**；未知 id ⇒ '
+                             '`change-not-found` + 非空 `next_action`',
+                             bool(facts.get('missing') == [['L-003', 'qty_after']] and facts.get('excluded')
+                                  and facts.get('empty_degraded') is True
+                                  and facts.get('empty_reason') == 'no-usable-lines'
+                                  and facts.get('empty_lines') == 0 and facts.get('empty_subtotal_null') is True
+                                  and facts.get('nf_reason') == 'change-not-found' and facts.get('nf_action')),
+                             f"missing={facts.get('missing')} excluded={facts.get('excluded')} "
+                             f"empty={facts.get('empty_reason')}/{facts.get('empty_lines')} "
+                             f"nf={facts.get('nf_reason')}/{facts.get('nf_action')}"))
+        out.append(Assertion('③ 真执行探针：私域**两面都扫** —— 供应商侧带哨兵与不带哨兵输出逐字节一致、哨兵 0 命中；'
+                             '承包商侧确实看得见自己的私域列（非空转对照）',
+                             bool(facts.get('sentinel_no_effect') is True and facts.get('sentinel_leak') == 0
+                                  and facts.get('owner_visible') is True),
+                             f"sentinel_no_effect={facts.get('sentinel_no_effect')} "
+                             f"leak={facts.get('sentinel_leak')} owner_visible={facts.get('owner_visible')}"))
+    else:
+        out.append(Assertion('③ 插件源码非空（无 Node：**降级**；真执行行为由 `verify.sh change-detail` 守卫）',
+                             len(src) > 20000, f'bytes={len(src)}'))
+    return out

@@ -155,6 +155,16 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     "${QUOTAGENT_NODE:-node}" "$HERE/../host/t282-gate-timeline-gate.mjs" || exit 1
     exec "$QUOTAGENT_PY" "$HERE/check-gate-timeline-route.py" "$@"
     ;;
+  change-detail)
+    # 变更单**逐行明细**（本批：「变更单到底改了什么、多花多少钱」——P-14 的原话是"看不到明细"）：
+    # ① 插件围栏门（22 条断言 + 4 处单点变异 + 还原字节一致；**逐行手算金额对账** /
+    #    缺依据的行不入小计 / 空输入 degraded + 明细空 + 小计记 null / 供应商侧哨兵逐字节一致）② 真 HTTP
+    #    端到端（真进程真回读：两视角明细页与 JSON 200 / 页面与 JSON 的数字与**手算的整数分**一致 /
+    #    未知 id 页面与 JSON 都 404 + next_action / 私域两面都扫 / 只读⇒账本零新增 / 0 内联脚本）。
+    # 两半都跑，任一失败即红。
+    "${QUOTAGENT_NODE:-node}" "$HERE/../host/t283-change-detail-gate.mjs" || exit 1
+    exec "$QUOTAGENT_PY" "$HERE/check-change-detail-route.py" "$@"
+    ;;
   ui-feedback)
     # WebUI 反馈闭环（用户反馈 → agent 产新版本 → 自动重载 → 页面提示"请刷新"）：
     # ① 插件围栏门（28 条断言 + 4 处单点变异 + 还原字节一致）② 真 HTTP 端到端

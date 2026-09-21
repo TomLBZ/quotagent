@@ -8,7 +8,8 @@
  *       催办请求路由）；
  *   （b）**变更单扯皮**（P-14：页面上只有一行 `delta_amount`、对账靠回忆）：每张变更单现在什么状态
  *       （`state`）、**谁欠谁一个动作**（`owed_by`）、从哪个**账本事件**起就在等（`waiting_since`）、
- *       以 `basis`（账本事件/计数引用）为凭。
+ *       以 `basis`（账本事件/计数引用）为凭；**再加规则 ⑤**：`change_detail` **逐行明细**
+ *       （原量×原价 → 新量×新价 → 差额；金额一律**整数分**、缺依据的行**列入 `basis_missing` 并排除出小计**）。
  *
  * 分工（不重复造轮子，与 `advice-panel` 同一套纪律）：
  *   · Python 侧服务（`services/approval.py` 的人工门与超时策略、`services/change.py` 的变更状态机）
@@ -40,7 +41,12 @@
  *      （作废本次意图，需重新发起）—— 三种策略都**不存在**"超时自动批准"；
  *   ③ `change`  变更单时间线：按 `change_id` 归并 `change/*` 事件 → 状态 + 从哪个事件起在等 + 谁欠动作；
  *   ④ `link`    变更单与人工门的**关联**：`change/priced` 之后欠的动作就是人工门 `change.approve`
- *      （ref = change_id）—— 有对应门就用队列里的真审批人，没有就如实说 `unassigned`（不编人名）。
+ *      （ref = change_id）—— 有对应门就用队列里的真审批人，没有就如实说 `unassigned`（不编人名）；
+ *   ⑤ `detail`  变更单的**逐行明细**（`change_detail`）：每行给 `line_id/desc/qty_before/unit_price_before/
+ *      amount_before/qty_after/unit_price_after/amount_after/delta_amount/delta_pct/basis`，
+ *      并给出行小计与总计差额 —— **金额一律整数分、不出现浮点**；缺原量/原价/新量/新价的行走
+ *      `basis_missing` 且**不计入小计**；整张单一行可用都没有 ⇒ `degraded` + `no-usable-lines` + 明细为空 +
+ *      小计记 `null`（不编 0 冒充「没变」）；私域列只有 `PRIVATE_COLUMN_VIEWS` 里的视角看得见（其余读都不读）。
  */
 import { createHash } from 'node:crypto'
 import { constant, number, object, string } from '../lib/std-schema.mjs'
@@ -131,6 +137,42 @@ export const NUDGE_ACTION = 'nudge'
 export const NUDGE_KIND = 'gate-nudge'
 export const NUDGE_SCHEMA = 1
 
+// ---------------------------------------------------------------------------
+// 变更单**逐行明细**的口径常量（规则 ⑤；改口径就改这里 + 门 `host/t283-change-detail-gate.mjs`）
+// ---------------------------------------------------------------------------
+/** 金额口径的**机读名字**（JSON、页面文案与门都引用这一处真源）。 */
+export const MONEY_UNIT = 'cents'
+
+/** 舍入口径的**机读名字**（`half-up-to-cent` = 到分位、负值**远离零**）。 */
+export const ROUNDING = 'half-up-to-cent'
+
+/** 金额口径的**人话**（页面照抄；把"钱怎么算的"写清，对账才有意义）。 */
+export const MONEY_NOTE = '金额一律用**整数分**参与运算（money_unit=cents）：`amount = qty(整数件) × unit_price(整数分)`、'
+  + '`delta_amount = amount_after − amount_before` —— 全程整数，不出现浮点；唯一的除法在 `delta_pct`：'
+  + '`round_half_up(delta_amount × 10000 ÷ amount_before)` 取到分位（0.01%，负值按**远离零**舍入，'
+  + 'rounding=half-up-to-cent 指的就是这一处），分母为 0 时记 `null`（不猜、不编无穷大）；'
+  + '**入参必须是整数分与整数件**：把账本里的小数金额折算到分位由调用方的载荷装配做'
+  + '（口径同样是 half-up，见 `host/modules/webui.mjs` 的 centsOf），本插件对非整数分/非整数件'
+  + '一律按**缺依据**处理，**不做四舍五入**'
+
+/** 逐行明细的键集（**恰 11 键**；门逐字段断言，顺序即键集本身）。 */
+export const DETAIL_KEYS = ['line_id', 'desc', 'qty_before', 'unit_price_before', 'amount_before',
+  'qty_after', 'unit_price_after', 'amount_after', 'delta_amount', 'delta_pct', 'basis']
+
+/** 逐行明细的降级原因**闭合集合**（与 `DEGRADED_REASONS` 分开：那是"谁在等"，这是"明细"）。 */
+export const DETAIL_REASONS = ['payload-not-an-object', 'change-not-found', 'no-usable-lines']
+
+/** **看得见自己私域列**的视角（变更单的业主侧）；其余视角对私域列**读都不读**。 */
+export const PRIVATE_COLUMN_VIEWS = ['contractor']
+
+/** 私域列名的形状（含 `private` 字样的键也算）—— 与 `host/modules/projection.mjs` 同一套直觉。 */
+export const PRIVATE_KEY_MARKS = ['cost_floor', 'markup_pct', 'reserve_price', 'cost_model']
+
+/** 私域列的**人话**（页面照抄；**不写键名**：键名只在业主侧自己的列里出现，别的视角的输出里一个字都不许有）。 */
+export const PRIVATE_COLUMNS_NOTE = '私域列白名单：只有业主侧（' + PRIVATE_COLUMN_VIEWS.join('/')
+  + '）看得见**自己的**私域列（成本/加价/底价/内部备注这类键）；其余视角**读都不读** —— '
+  + '带私域列与不带私域列的载荷输出**逐字节一致**（不是「藏起来」，是根本没读）'
+
 export const Config = object({
   max_items: number().default(20),          // 每个列表各自的条数上限（夹取区间 [1, 200]）
   route_prefix: string().default('/quotagent'),
@@ -150,6 +192,11 @@ const ID_LIMIT = 64
 const SECTION_MAX = 64
 /** 催办理由的**字节**上界（与宿主落盘形状同口径：超出即拒，不截断成另一份理由）。 */
 const REASON_MAX_BYTES = 2048
+/** 单张变更单最多读入的行数（有界：调用方给 1000 行也不把响应撑大；超出照实报 `lines_not_read`）。 */
+const DETAIL_LINE_MAX = 64
+/** 每行最多回显的私域列数（有界：业主侧也不许把响应撑大）与单个值的字符上限。 */
+const PRIVATE_COL_MAX = 4
+const PRIVATE_VALUE_MAX = 80
 
 const isPlain = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 
@@ -475,6 +522,235 @@ const changeRows = (changes, approvals, options, view, notes) => {
 }
 
 // ---------------------------------------------------------------------------
+// 派生：**变更单逐行明细**（规则 ⑤ —— 正面回答「变更单到底改了什么、多花多少钱」P-14）
+//   口径（全部写进输出，逐条可复算；常量都在本文件里）：
+//     · 只从调用方给的**投影/快照载荷**派生（不读任何存储、不联网、不调模型、不取墙钟）；
+//     · `money_unit = "cents"`：金额一律**整数分**（`amount = qty × unit_price`、`delta = after − before`）；
+//     · `rounding = "half-up-to-cent"`：唯一的除法在 `delta_pct`（分位、负值远离零；分母 0 记 null）；
+//     · **缺依据不得编数**：某行缺原量/原价/新量/新价（或值不是整数分/整数件）⇒ 列入 `basis_missing`
+//       并**排除出小计**；整张单一行可用都没有 ⇒ `degraded` + `no-usable-lines` + 明细为空 + 小计记 null；
+//     · 私域白名单：`PRIVATE_COLUMN_VIEWS` 里的视角照实回显自己的私域列，其余视角**读都不读**。
+// ---------------------------------------------------------------------------
+/** 一行的**四个事实**（缺任何一个都不是"编一个默认值"能补的）。 */
+const DETAIL_FACTS = ['qty_before', 'unit_price_before', 'qty_after', 'unit_price_after']
+
+/**
+ * 整数解析（**只认整数**）：JSON 整数或十进制整数字面量（`-0` 归一成 0）。
+ * 浮点 / 小数字符串 / 科学计数 / 空白 / 布尔 → `null` = "取不到" —— 按**缺依据**处理，
+ * **不四舍五入**（对账最怕的就是"悄悄帮你圆了一下"）。
+ */
+const intOrNull = (value) => {
+  if (typeof value === 'number') return Number.isInteger(value) ? (value === 0 ? 0 : value) : null
+  if (typeof value === 'string') {
+    const text = value.trim()
+    if (!/^-?\d+$/.test(text)) return null
+    const parsed = Number(text)
+    return parsed === 0 ? 0 : parsed
+  }
+  return null
+}
+
+/** 分位 **half-up**（远离零）：`round_half_up(num / denominator)`，全程整数运算（denominator > 0）。 */
+const halfUpDiv = (numerator, denominator) => {
+  const sign = numerator < 0 ? -1 : 1
+  const magnitude = numerator < 0 ? -numerator : numerator
+  return sign * Math.floor((2 * magnitude + denominator) / (2 * denominator))
+}
+
+/** 一个键是不是私域列名（含 `private` 字样的一律算）。 */
+const isPrivateKey = (key) => PRIVATE_KEY_MARKS.includes(String(key).toLowerCase())
+  || String(key).toLowerCase().includes('private')
+
+/** 私域列的值（业主侧自己的东西）：标量原样、其余转成**有界**文本；不出未定义。 */
+const privateValue = (value) => {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number' || typeof value === 'boolean') return value
+  if (typeof value === 'string') return textOrNull(value, PRIVATE_VALUE_MAX) ?? ''
+  const text = JSON.stringify(value)
+  return text === undefined ? '' : (textOrNull(text, PRIVATE_VALUE_MAX) ?? '')
+}
+
+/** 读入 `change.lines`（**有界**：最多 `DETAIL_LINE_MAX` 条；形状不对的整条跳过并报数）。 */
+const readDetailLines = (raw) => {
+  const rows = []
+  const skipped = { shape: 0, over: 0 }
+  if (raw === undefined || raw === null) return { rows, skipped, present: false }
+  if (!Array.isArray(raw)) return { rows, skipped: { ...skipped, shape: 1 }, present: true }
+  if (raw.length > DETAIL_LINE_MAX) skipped.over = raw.length - DETAIL_LINE_MAX
+  for (const entry of raw.slice(0, DETAIL_LINE_MAX)) {
+    if (!isPlain(entry)) { skipped.shape += 1; continue }
+    rows.push(entry)
+  }
+  return { rows, skipped, present: true }
+}
+
+const EMPTY_DETAIL_COUNTS = () => ({ lines_found: 0, lines_read: 0, lines_shown: 0, lines_usable: 0,
+  lines_excluded: 0, lines_not_read: 0, basis_missing: 0, duplicates: 0, omitted: 0, private_columns: 0 })
+
+/** 逐行明细的输出形状（键集固定；`counts`/`subtotal` 同口径）。 */
+const detailShape = (view, asOf, changeId, options, extra) => ({
+  source: 'gate-timeline',
+  engine: ENGINE,
+  engine_note: ENGINE_NOTE,
+  view,
+  as_of: asOf,
+  change_id: changeId,
+  money_unit: MONEY_UNIT,
+  rounding: ROUNDING,
+  money_note: MONEY_NOTE,
+  line_keys: [...DETAIL_KEYS],
+  lines: extra.lines,
+  basis_missing: extra.basis_missing,
+  subtotal: extra.subtotal,
+  private_columns: extra.private_columns,
+  private_columns_note: PRIVATE_COLUMNS_NOTE,
+  counts: extra.counts,
+  bounds: { max_items: options.max_items, lines_max: DETAIL_LINE_MAX, private_columns_max: PRIVATE_COL_MAX },
+  truncated: extra.counts.omitted > 0,
+  omitted: extra.counts.omitted,
+  degraded: extra.reason === null ? false : true,
+  reason: extra.reason,
+  next_action: extra.next_action,
+  ignored_now_inputs: [...IGNORED_NOW_INPUTS],
+  // 说明行的顺序也必须**确定性**（同一份事实在条目逆序输入下逐字节一致）：按字典序排
+  notes: [...extra.notes].sort(byLex),
+  privacy: { private_keys_read: extra.private_keys_read, model_calls: 0, network_calls: 0, clock_reads: 0 },
+})
+
+/**
+ * 纯函数：把**本视角的一张变更单**派生成逐行可核对的明细。
+ * 输入形状（调用方按白名单装配；多余的键**读都不读**）：
+ *   `{ view, as_of, change: { change_id, quote_id, ts, lines: [{ line_id, desc,
+ *      qty_before, unit_price_before, qty_after, unit_price_after }] } }`；`change: null` = 本视角没有这张单。
+ */
+export const changeDetailOf = (payload, config) => {
+  const options = resolvedOptions(config)
+  const blank = {
+    lines: [], basis_missing: [], private_columns: [],
+    subtotal: { lines: 0, amount_before: null, amount_after: null, delta_amount: null, delta_pct: null },
+    counts: EMPTY_DETAIL_COUNTS(), notes: [], private_keys_read: false,
+  }
+  if (!isPlain(payload)) {
+    return detailShape('', null, '', options, { ...blank, reason: 'payload-not-an-object',
+      next_action: '先让宿主把本视角的变更单载荷交给插件（没有事实就没有明细：既不猜、也不编行）' })
+  }
+  const view = textOrNull(payload.view, 32) ?? ''
+  const asOf = textOrNull(payload.as_of, 40)
+  const change = isPlain(payload.change) ? payload.change : null
+  if (change === null) {
+    return detailShape(view, asOf, textOrNull(payload.change_id, ID_LIMIT) ?? '', options, { ...blank,
+      reason: 'change-not-found',
+      next_action: `本视角投影里没有这张变更单：看 ${options.route_prefix}/${view}/gates/ 的变更单列表`
+        + '（每行都有逐行明细链接）拿到**真 id** 再打开 —— 本页不猜 id、也不编行' })
+  }
+  const changeId = textOrNull(change.change_id, ID_LIMIT) ?? ''
+  const quoteId = textOrNull(change.quote_id, 64)
+  const owner = PRIVATE_COLUMN_VIEWS.includes(view)
+  const notes = []
+  const read = readDetailLines(change.lines)
+  if (read.present === false) notes.push('change.lines 段缺失（调用方没给这一行清单）→ 按空读处理：'
+    + '**不等于**「这张单没有行」')
+  if (read.skipped.shape > 0) notes.push(`change.lines 有 ${read.skipped.shape} 条形状不对 → 整条跳过（不猜）`)
+  if (read.skipped.over > 0) notes.push(`change.lines 有 ${read.skipped.over} 条超出单张单读取上限 `
+    + `${DETAIL_LINE_MAX} → 未读（有界，照实报 lines_not_read）`)
+  // 同一 line_id 出现多行 ⇒ 口径不确定：**两行都不计入小计**（与入参顺序无关 ⇒ 确定性）
+  const seen = new Map()
+  for (const entry of read.rows) {
+    const id = textOrNull(entry.line_id, ID_LIMIT)
+    if (id === null) continue
+    seen.set(id, (seen.get(id) ?? 0) + 1)
+  }
+  const basisMissing = []
+  const usable = []
+  const privateColumns = []
+  let duplicates = 0
+  let zeroDenominator = 0
+  for (const entry of read.rows) {
+    const id = textOrNull(entry.line_id, ID_LIMIT)
+    if (id !== null && (seen.get(id) ?? 0) > 1) {
+      duplicates += 1
+      basisMissing.push({ line_id: id, missing: [], reason: 'duplicate-line-id',
+        note: '同一个 line_id 出现多行：哪一行是真的无法判定 → **两行都不计入小计**（不猜）' })
+      continue
+    }
+    if (owner) {
+      let taken = 0
+      for (const key of Object.keys(entry).sort(byLex)) {
+        if (taken >= PRIVATE_COL_MAX) break
+        if (!isPrivateKey(key)) continue
+        privateColumns.push({ line_id: id ?? '', key: String(key), value: privateValue(entry[key]) })
+        taken += 1
+      }
+    }
+    if (id === null) {
+      basisMissing.push({ line_id: '(缺 line_id)', missing: ['line_id'], reason: 'missing-fact',
+        note: '这一行没有 line_id：定位不到原报价条目 → **不计入小计**（不编一个 id）' })
+      continue
+    }
+    const facts = {}
+    const missing = []
+    for (const field of DETAIL_FACTS) {
+      const value = intOrNull(entry[field])
+      facts[field] = value
+      if (value === null) missing.push(field)
+    }
+    if (missing.length > 0) {
+      basisMissing.push({ line_id: id, missing: [...missing], reason: 'missing-fact',
+        note: `这一行缺 ${missing.join('/')}：**缺依据不得编数** → 计入 basis_missing 且**排除出小计**` })
+      continue
+    }
+    const amountBefore = facts.qty_before * facts.unit_price_before
+    const amountAfter = facts.qty_after * facts.unit_price_after
+    const deltaAmount = amountAfter - amountBefore
+    // 分母为 0 ⇒ 百分比**记 null**（不猜、不编无穷大）；差额本身可算，这一行仍计入小计
+    const deltaPct = amountBefore === 0 ? null : halfUpDiv(deltaAmount * 10000, amountBefore) / 100
+    if (deltaPct === null) zeroDenominator += 1
+    const basis = [`change.change_id`, `change.lines[${id}].qty_before`,
+      `change.lines[${id}].unit_price_before`, `change.lines[${id}].qty_after`,
+      `change.lines[${id}].unit_price_after`]
+    if (quoteId !== null) basis.push('change.quote_id')
+    usable.push({ line_id: id, desc: textOrNull(entry.desc, TEXT_MAX) ?? '', qty_before: facts.qty_before,
+      unit_price_before: facts.unit_price_before, amount_before: amountBefore, qty_after: facts.qty_after,
+      unit_price_after: facts.unit_price_after, amount_after: amountAfter, delta_amount: deltaAmount,
+      delta_pct: deltaPct, basis })
+  }
+  const ordered = [...usable].sort((left, right) => byLex(left.line_id, right.line_id))
+  const shown = ordered.slice(0, options.max_items)
+  const subtotal = { lines: ordered.length, amount_before: null, amount_after: null,
+    delta_amount: null, delta_pct: null }
+  if (ordered.length > 0) {
+    let before = 0
+    let after = 0
+    for (const line of ordered) { before += line.amount_before; after += line.amount_after }
+    subtotal.amount_before = before
+    subtotal.amount_after = after
+    subtotal.delta_amount = after - before
+    subtotal.delta_pct = before === 0 ? null : halfUpDiv(subtotal.delta_amount * 10000, before) / 100
+  }
+  const counts = { lines_found: Array.isArray(change.lines) ? change.lines.length : 0,
+    lines_read: read.rows.length, lines_shown: shown.length, lines_usable: ordered.length,
+    lines_excluded: basisMissing.length - duplicates, lines_not_read: read.skipped.over,
+    basis_missing: basisMissing.length, duplicates, omitted: ordered.length - shown.length,
+    private_columns: privateColumns.length }
+  if (counts.omitted > 0) notes.push(`可用行 ${ordered.length} 条 > 展示上限 ${options.max_items} → 展示前 `
+    + `${shown.length} 条（被丢 ${counts.omitted} 条，omitted 照实报）；**总计差额仍按全部可用行算**`
+    + '（截断只影响展示，不改口径）')
+  if (zeroDenominator > 0) notes.push(`有 ${zeroDenominator} 行的原价为 0 ⇒ delta_pct 记 null`
+    + '（分母 0 不猜百分比；该行差额可算，**仍计入小计**）')
+  if (basisMissing.length > 0) notes.push(`有 ${basisMissing.length} 行**未纳入小计**`
+    + '（缺依据 / 重复 line_id / 缺 line_id 都不得编数）：逐行见 `basis_missing`')
+  const reason = ordered.length === 0 ? 'no-usable-lines' : null
+  const next = reason === null
+    ? 'tools/verify.sh ac AC-CHANGE-002   # 按原报价单价逐行复算（本页每行都给 basis 便于核对；'
+      + '本页只展示，不改任何金额）'
+    : '先补齐缺的依据（原量/原价/新量/新价：整数件与**整数分**）再重开本页；'
+      + '缺依据的行**永不计入小计**（宁可少算，也不编一个数）'
+  return detailShape(view, asOf, changeId, options, { lines: shown, basis_missing: basisMissing,
+    private_columns: privateColumns, subtotal, counts, notes, private_keys_read: owner,
+    reason, next_action: next })
+}
+
+// ---------------------------------------------------------------------------
 // 输出
 // ---------------------------------------------------------------------------
 const countsOf = (gateFound, gateShown, changeFound, changeShown, byPolicy, byState) => {
@@ -639,8 +915,10 @@ export const nudgeOf = (payload, request, config) => {
 export function apply(ctx, config) {
   const options = resolvedOptions(config)
   const handle = {
-    requests: ['timeline'],   // 只声明事实：别的都不是服务面（本插件没有、也不许有"批准"类方法）
+    requests: ['timeline', 'change_detail'],   // 只声明事实：别的都不是服务面（本插件没有、也不许有"批准"类方法）
     timeline: (payload) => timelineOf(payload, config),
+    // 变更单**逐行明细**（规则 ⑤）：只吃白名单载荷，金额整数分，缺依据的行排除出小计
+    change_detail: (payload) => changeDetailOf(payload, config),
     nudge: (payload, request) => nudgeOf(payload, request, config),
     meta: () => ({
       engine: ENGINE, engine_note: ENGINE_NOTE, age_clock: AGE_CLOCK, age_basis_note: AGE_BASIS_NOTE,
@@ -649,11 +927,14 @@ export function apply(ctx, config) {
       nudge_action: NUDGE_ACTION, kind: NUDGE_KIND, schema: NUDGE_SCHEMA,
       timeout_policies: [...TIMEOUT_POLICIES], resolved_approval_events: [...RESOLVED_APPROVAL_EVENTS],
       commit_scopes: [...COMMIT_SCOPES], change_states: [...CHANGE_STATES],
-      bounds: { max_items: options.max_items, reason_max_bytes: REASON_MAX_BYTES },
+      money_unit: MONEY_UNIT, rounding: ROUNDING, detail_reasons: [...DETAIL_REASONS],
+      line_keys: [...DETAIL_KEYS], private_column_views: [...PRIVATE_COLUMN_VIEWS],
+      bounds: { max_items: options.max_items, reason_max_bytes: REASON_MAX_BYTES,
+        lines_max: DETAIL_LINE_MAX, private_columns_max: PRIVATE_COL_MAX },
       can_approve: false,      // 机器可读的"不能批准"：本插件的服务面里没有这类方法
     }),
     config: () => ({ max_items: options.max_items, route_prefix: options.route_prefix,
-      reason_max_bytes: REASON_MAX_BYTES, age_clock: AGE_CLOCK }),
+      reason_max_bytes: REASON_MAX_BYTES, age_clock: AGE_CLOCK, money_unit: MONEY_UNIT, rounding: ROUNDING }),
   }
   ctx.provide('gateTimeline', handle)
 }
@@ -682,6 +963,15 @@ export const fixture = {
       ],
     }),
     empty: handle.timeline({ view: 'contractor' }),
+    detail: handle.change_detail({ view: 'contractor', as_of: '2026-09-21T12:00:00Z',
+      change: { change_id: 'CO-0001', quote_id: 'q-1', ts: '2026-09-21T11:00:00Z', lines: [
+        { line_id: 'L-001', desc: '钢筋', qty_before: 10, unit_price_before: 6000, qty_after: 12,
+          unit_price_after: 6000 },
+        { line_id: 'L-002', desc: '水泥', qty_before: 3, unit_price_before: 1000, qty_after: 3,
+          unit_price_after: 1500, cost_floor: 900 },
+      ] } }),
+    detail_missing: handle.change_detail({ view: 'contractor', as_of: '2026-09-21T12:00:00Z',
+      change_id: 'CO-9999' }),
     nudge: handle.nudge({ view: 'contractor', as_of: '2026-09-21T12:00:00Z',
       approvals: [{ approval_id: 'ap-0007', type: 'approval/requested', ts: '2026-09-21T10:00:00Z',
         scope: 'award.commit', ref: 'awin-1' }] }, { gate_id: 'ap-0007', reason: '现场催一下' }),

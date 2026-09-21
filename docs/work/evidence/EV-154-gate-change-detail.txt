@@ -1,0 +1,138 @@
+T-284 证据：**变更单到底改了什么、多花多少钱**（`gate-timeline` 规则 ⑤「逐行明细」）—— 围栏门 22/22 +
+真路由门 9/9 + `AC-GATE-002` 8/8；原始输出见 `tmp/change-detail-run.out`（本文件是从它里摘的原文）
+================================================================================
+
+时间   : 2026-09-21（UTC；见 tmp/change-detail-run.out §0 的 `date -u`）
+命令   : sh tmp/change-detail-run.sh   （它依次跑：语法门 → 重启 → curl 真回读 → 十道门 + 本批两道新门）
+commit : 本轮**未提交**（父方收口）；工作树基线 = `git log -1`（见 §0）
+退出码 : 0（本批两道新门 + 既有九道门全绿；docs 门在 EV-154 落盘后重跑为 0，见 §4 末）
+
+--------------------------------------------------------------------------------
+§1 交付物（文件 + 字节数）
+--------------------------------------------------------------------------------
+host/modules/gate-timeline.mjs        56697 B  规则 ⑤：changeDetailOf + 金额口径常量（扩展**同一插件**，不另起）
+host/modules/webui.mjs               164773 B  两条新路由（页面/JSON）+ 载荷装配（元→整数分 half-up）+ 列表行明细链接
+host/t283-change-detail-gate.mjs      54435 B  围栏门（22 条断言 + 4 处单点变异 + 防假变异 + 还原字节一致）
+tools/check-change-detail-route.py    26128 B  真 HTTP 端到端（真进程 + 真回读 + 手算整数分对账）
+tools/verify.sh                       13475 B  新增 `change-detail` 入口（围栏门 + 真路由门两半）
+src/quotagent/qa/checks_gate.py       28071 B  新增 `AC-GATE-002`（8 条断言；含真执行探针）
+docs/work/acceptance-criteria.md      31237 B  新增 AC-GATE-002 行（并把 AC-GATE-001 里的句柄方法集合同步为 6 个）
+docs/work/functional-requirements.md  32583 B  新增 FR-GATE-002 行（99% 预算，本批刻意写短）
+docs/design/15-requirements-coverage.md 24674 B  FR-GATE-002 行 + gate-timeline 插件归属补 FR-GATE-002
+docs/design/14-plugin-inventory.md    24103 B  gate-timeline 行：规则 ⑤ + 两条新路由 + 两道新门
+docs/work/progress-checklist.md       23936 B  T-284 行（done / EV-154）
+.agents/skills/quotagent-implement-task/references/pitfalls.md        8167 → 6502 B（腾出 1665 B）
+.agents/skills/quotagent-implement-task/references/pitfalls-archive.md  4071 B（新建：最早 14 条**逐字节**搬入）
+
+--------------------------------------------------------------------------------
+§2 口径（写给对账的人）
+--------------------------------------------------------------------------------
+· money_unit = "cents"：金额一律**整数分**参与运算（`amount = qty × unit_price`、`delta = after − before`），
+  全程整数、不出现浮点。
+· rounding = "half-up-to-cent"：唯一出现除法的地方是 `delta_pct`
+  （`round_half_up(delta_amount × 10000 ÷ amount_before)`，取到分位 0.01%，**负值远离零**；分母为 0 记 null）。
+  账本里的金额是**元**（`services/change.py` 的 `old_unit_price` 等），宿主 `changeDetailPayload` 用
+  字符串+整数运算按 half-up 折成整数分送进插件（本批新增的适配；插件只认整数分，非整数分按缺依据处理）。
+· 缺依据不得编数：缺原量/原价/新量/新价（或非整数件/整数分、或同一 line_id 重复）⇒ 列入 `basis_missing`
+  并**排除出小计**；页面/JSON 明说「未纳入小计的行」。
+· 整张单无可用行 ⇒ `degraded:true` + 有名 reason（no-usable-lines）+ 明细为空 + 小计三个数记 **null**（不是 0）；
+  未知 id ⇒ 404 + `next_action`；非对象载荷 ⇒ payload-not-an-object。
+· 逐行明细的真源 = **最后一条带行清单**的 `change/*` 事件（批准/拒绝事件本身不带行清单）。
+
+--------------------------------------------------------------------------------
+§3 手算 vs 实得（围栏门第 3 条 + 真路由门第 ④ 条的原文行；期望值是**按夹具手算的整数分**）
+--------------------------------------------------------------------------------
+L-001: 手算 60000→72000 差 12000 百分比 20.00 ｜实得 60000→72000 差 12000 百分比 20 ｜一致
+L-002: 手算 3000→4500 差 1500 百分比 50.00 ｜实得 3000→4500 差 1500 百分比 50 ｜一致
+L-004: 手算 0→5000 差 5000 百分比 null ｜实得 0→5000 差 5000 百分比 null ｜一致
+L-005: 手算 3000→1001 差 -1999 百分比 -66.63 ｜实得 3000→1001 差 -1999 百分比 -66.63 ｜一致
+小计手算 66000→82501 差 16501（25.00%）｜实得 66000→82501 差 16501（25%）
+（真 HTTP 侧同一张单：账本里写的是**元**（60 元 / 10.01 元），宿主折成整数分后逐行仍与手算一致；
+ 账本行自报 `delta_amount=165.01` 元 ⇒ 16501 分，与本页复算的总计差额**相等**。）
+
+--------------------------------------------------------------------------------
+§4 缺依据的行不入小计（原文行）
+--------------------------------------------------------------------------------
+围栏门第 4 条：
+  basis_missing=["L-003 缺 qty_after"]；明细 id=["L-001","L-002","L-004","L-005"]；
+  小计原金额=66000（手算只含可用行 66000；若含缺依据行会是 72000）
+真路由门第 ⑤ 条：
+  basis_missing=[{"line_id": "L-003", "missing": ["qty_after"], "reason": "missing-fact", ...}]
+  明细 id=['L-001', 'L-002', 'L-004', 'L-005']；
+  小计原金额=66000（手算只含可用行 66000；若含缺依据行会是 72000）
+页面：`未纳入小计的行` 逐字出现在两视角明细页（真 HTTP 断言）。
+
+--------------------------------------------------------------------------------
+§5 供应商侧哨兵（两面都扫）
+--------------------------------------------------------------------------------
+围栏门第 9 条：
+  供应商：逐字节一致=true 哨兵命中=无 键名命中=无；承包商侧命中=COST-MODEL-SENTINEL-9a,
+  PRIVATE-NOTE-SENTINEL-7f,RESERVE-PRICE-SENTINEL-4b 键名=cost_floor,markup_pct,reserve_price,private:
+  私域列 20 条；输入对照=4 个哨兵
+真路由门第 ⑦ 条：
+  供应商侧命中=无；承包商侧哨兵命中=['COST-MODEL-SENTINEL-9a','PRIVATE-NOTE-SENTINEL-7f',
+  'RESERVE-PRICE-SENTINEL-4b']；承包商侧有私域列表=True；夹具里确实有哨兵=[4 个]
+线上（真数据，`tmp/ui-shared/*/ledger.jsonl`）：**两边账本里本来就没有任何哨兵**（夹具侧计数全 0）⇒
+  「供应商侧 0 命中」在线上是**弱证据**（空转），强证据是上面两道门（夹具文件里确实有哨兵、且业主侧确实看得见）。
+
+--------------------------------------------------------------------------------
+§6 curl 真回读（线上 8093，prefix /quotagent；原始 JSON 见 tmp/change-detail-run.out §3）
+--------------------------------------------------------------------------------
+health=200
+GET /quotagent/contractor/api/changes/chg-0001      → 200（真单）
+  reason=None degraded=False
+  L-001 150 × 8600 = 1290000 → 170 × 8600 = 1462000 差 172000（13.33%）
+  subtotal {'lines': 1, 'amount_before': 1290000, 'amount_after': 1462000, 'delta_amount': 172000, 'delta_pct': 13.33}
+  counts {'lines_found': 1, 'lines_read': 1, 'lines_shown': 1, 'lines_usable': 1, 'lines_excluded': 0, ...}
+  ⇒ 与账本里该变更单自报的 `delta_amount = 1720.0`（元）**相等**（172000 分 ÷ 100）
+GET /quotagent/contractor/changes/chg-0001/         → 200（页面；0 行脚本 / 0 内联事件）
+GET /quotagent/contractor/api/changes/CO-9999       → **404** + `change-not-found` + next_action（不编行）
+GET /quotagent/contractor/changes/CO-9999/          → **404**（页面同样是 404，不静默给空页）
+GET /quotagent/supplier/api/changes/chg-0001        → **404**（供应商侧账本里没有这张单 ⇒ change-not-found）
+GET /quotagent/contractor/gates/                    → 200，变更单列表每行带 `data-change-detail-link="chg-0001"`
+供应商侧 gates 页/明细响应：私域键名与哨兵 0 命中（线上无哨兵，见 §5 的口径说明）
+
+--------------------------------------------------------------------------------
+§7 门（本批 + 既有，全部实跑）
+--------------------------------------------------------------------------------
+node host/t283-change-detail-gate.mjs                → passed 22 / total 22 / failures 0（4 处变异全红）
+python3 tools/check-change-detail-route.py           → passed 9 / total 9 / failures 0
+node host/t282-gate-timeline-gate.mjs                → passed 33 / total 33（句柄方法集合已按实际同步为 6 个）
+python3 tools/check-gate-timeline-route.py           → 11/11 绿
+tools/verify.sh advice                               → 围栏门 30/30 + 真路由门 14/14
+tools/verify.sh webui / modules / wiring / plugins    → 绿（webui 51/51；modules 482/482；wiring 5/5；plugins 4/4）
+tools/verify.sh coverage / ac-registry                → 绿（coverage 7/7；AC 定义 128 条 / 注册表 83 条；P0 全注册）
+tools/verify.sh docs                                  → 绿（99 个契约文档受检，ID 完整性 579 定义 / 2841 引用 0 未解析，
+                                                         预算最高 99% = docs/work/functional-requirements.md）
+tools/run.sh -m quotagent.qa ac AC-GATE-002           → [PASS] 8/8
+tools/verify.sh bid-heuristics / ui-feedback / pipeline-view / user-space / plugin-market / storage
+                                                       → 全绿（这六个门也挂真 `gate-timeline`：确认扩展插件
+                                                         没有连带破坏别的装配点；原文见 tmp/change-detail-run.out §13）
+
+--------------------------------------------------------------------------------
+§8 单点变异（4 处，全部变红；原文见围栏门输出）
+--------------------------------------------------------------------------------
+变异1 金额改用"四舍五入到分"的除法      → 红=逐行手算对账/缺依据不入小计
+变异2 缺依据的行也计入小计（编数）      → 红=逐行手算对账/缺依据不入小计/空输入 degraded
+变异3 私域列对**所有**视角都回显        → 红=供应商侧哨兵
+变异4 整张单无可用行也不判降级          → 红=空输入 degraded
+防假变异自检：不存在的锚点 → 判假变异；把锚点替换成它自己 → 判假变异。
+还原：跑完 `gate-timeline.mjs` 与 `webui.mjs` 的 sha256 与跑之前**逐字节一致**（变异只写在临时目录副本）。
+
+--------------------------------------------------------------------------------
+§9 本批踩到并已围住的真实回归（写进夹具，防复发）
+--------------------------------------------------------------------------------
+线上真单 `chg-0001` 的事件序是 change/proposed → change/priced（带行清单）→ change/approved（**不带行**）。
+第一版实现取"最后一条 change/*"当明细来源 ⇒ 线上明细整张变空（reason=no-usable-lines），而门里只有
+"带行清单"的夹具 ⇒ 门全绿。已修：真源改为**最后一条带行清单**的事件；两道门的夹具都补了
+"带行事件之后再来一条不带行的 change/approved"，断言明细**不得**变空（t283 第 12 条 / 路由门第 ④ 条）。
+
+--------------------------------------------------------------------------------
+§10 本批**没有**验证的东西（照实登记）
+--------------------------------------------------------------------------------
+· 线上账本里没有哨兵 ⇒ "供应商侧哨兵 0 命中"在**线上**是空转证据（强证据在两道门的夹具里）。
+· 多行（>1 行）变更单只在门内的夹具上验过；线上真单只有 1 行。
+· 数量为非整数件、金额为非整数分的行，走的是"缺依据"分支（门里验过）；**没有**验过"把非整数件折算成
+  整数件"的任何策略（本批不做折算：宁可少算，也不编数）。
+· `omitted`/`lines_not_read` 的线上表现没验（线上真单只有 1 行，远低于上限）。
+· 明细页在**真浏览器**里的观感（排版/可读性）没有人看；机检只覆盖 0 脚本 / 0 内联事件 / 数字正确。

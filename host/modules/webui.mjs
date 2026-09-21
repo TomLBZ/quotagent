@@ -767,13 +767,16 @@ export function apply(ctx, config) {
       + `<td data-gate-next-action="${esc(item.id)}"><pre>${esc(item.next_action)}</pre></td></tr>`).join('')
     const changeRows = run.changes.map((item) => `<tr data-change-id="${esc(item.id)}" data-change-state="${esc(item.state)}"`
       + ` data-owed-by="${esc(item.owed_by)}">`
-      + `<td><code>${esc(item.id)}</code></td><td>${esc(item.state)}</td><td><code>${esc(item.owed_by)}</code></td>`
+      + `<td><code>${esc(item.id)}</code></td>`
+      // 每一行都链到**自己的逐行明细页**（"变更单到底改了什么、多花多少钱"要能一行一行核）
+      + `<td><a href="${prefix}/${esc(view)}/changes/${esc(item.id)}/" data-change-detail-link="${esc(item.id)}">逐行明细</a></td>`
+      + `<td>${esc(item.state)}</td><td><code>${esc(item.owed_by)}</code></td>`
       + `<td>${esc(item.waiting_since)}</td>`
       + `<td data-change-basis="${esc(item.basis.join(' '))}">${item.basis.map((token) => `<code>${esc(token)}</code>`).join(' ')}</td>`
       + `<td><pre>${esc(item.next_action)}</pre></td></tr>`).join('')
     const gateHeader = '<tr><th>等了多久（口径写在下面）</th><th>门</th><th>对象</th><th>卡在谁手里</th>'
       + '<th>再等下去会发生什么</th><th>下一步（可复制）</th></tr>'
-    const changeHeader = '<tr><th>变更单</th><th>状态</th><th>谁欠一个动作</th><th>从哪条事件起在等</th>'
+    const changeHeader = '<tr><th>变更单</th><th>明细</th><th>状态</th><th>谁欠一个动作</th><th>从哪条事件起在等</th>'
       + '<th>凭据（账本事件/计数引用）</th><th>下一步（可复制）</th></tr>'
     return subNav(prefix, view, 'gates')
       + `<p><a href="${prefix}/${view}/">← 回 ${rules[view].title}</a> · JSON：<code>${prefix}/${view}/api/gates</code>`
@@ -854,6 +857,205 @@ export function apply(ctx, config) {
       return { ...out, ok: false, code: 'pending-write-failed', file: '',
         next_action: `待办件写失败（${String(err && err.code ? err.code : err).slice(0, 40)}）：先修目录权限再重提` }
     }
+  }
+
+  // ==========================================================================================
+  // 变更单**逐行明细**（`gate-timeline` 插件的规则 ⑤，同一个插件不另起）：
+  //   `GET /<view>/changes/<id>/`（SSR）+ `GET /<view>/api/changes/<id>`（JSON）
+  //   · 本文件只做一件事：把**本视角自己的**这张变更单的行过滤成白名单载荷（带私域键的行整行跳过并报数），
+  //     派生全在插件里（金额**整数分**、缺依据的行**排除出小计**、私域列白名单、有界、确定性）；
+  //   · 这两条路由**零写面**（账本零新增）、不取墙钟（`as_of` = 本视角投影里最大的 **事实 ts**）；
+  //   · 未知变更单 id ⇒ **404** + `next_action`（指向列表页拿真 id，不猜 id、也不编行）。
+  // ==========================================================================================
+  /** 账本行的字段名别名（`services/change.py` 的既有写法：`ref_line`/`old_qty`/`new_unit_price`/`basis_unit_price`）。 */
+  const CHANGE_LINE_ALIASES = {
+    line_id: ['line_id', 'ref_line'],
+    desc: ['desc', 'description'],
+    qty_before: ['qty_before', 'old_qty'],
+    unit_price_before: ['unit_price_before', 'old_unit_price', 'basis_unit_price'],
+    qty_after: ['qty_after', 'new_qty'],
+    unit_price_after: ['unit_price_after', 'new_unit_price'],
+  }
+  /**
+   * **账本侧的金额是元**（`services/change.py` 的行里是小数元，如 `86.0`），而本页与插件的口径是
+   * **整数分**（`money_unit=cents`）—— 折算由宿主这一处做，口径是 **half-up 到分位**
+   * （`rounding=half-up-to-cent`：第 3 位小数 ≥5 就进位、负值远离零），全程**字符串 + 整数**运算，
+   * **不引入浮点漂移**；认不出的形状（科学计数法等）返回 `null` ⇒ 交给插件记成**缺依据**（不猜）。
+   */
+  const centsOf = (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) return centsOf(String(value))
+    if (typeof value !== 'string') return null
+    const text = value.trim()
+    if (!/^-?\d+(\.\d+)?$/.test(text)) return null
+    const negative = text.startsWith('-')
+    const [whole, fraction = ''] = (negative ? text.slice(1) : text).split('.')
+    const digits = (fraction + '000').slice(0, 3)
+    const cents = Number(whole) * 100 + Number(digits.slice(0, 2))
+    const rounded = Number(digits.slice(2)) >= 5 ? cents + 1 : cents
+    return negative ? -rounded : rounded
+  }
+  /** 数量**只认整数件**（`150` / `150.0` → 150）；`12.5` 这类非整数件返回 `null`（缺依据，不悄悄圆）。 */
+  const countOf = (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) return Number.isInteger(value) ? value : null
+    if (typeof value !== 'string') return null
+    const text = value.trim()
+    if (!/^-?\d+(\.0+)?$/.test(text)) return null
+    return Math.trunc(Number(text))
+  }
+  const PRIVATE_LINE_MARKS = ['cost_floor', 'markup_pct', 'reserve_price', 'cost_model']
+  /**
+   * 行级私域列：**只有"没有要防的另一方"的视角**（`VIEW_EXTRA_PRIVATE_KEYS` 为空且本视角
+   * `privateKeys` 为空，如承包商）才把自己的私域列带上；另一侧返回 `null` ⇒ 连键名都不带。
+   */
+  const privateLineColumns = (line, view) => {
+    const rule = rules[view] || { privateKeys: [] }
+    if (((rule.privateKeys ?? []).length > 0) || ((VIEW_EXTRA_PRIVATE_KEYS[view] ?? []).length > 0)) return null
+    const out = {}
+    for (const key of Object.keys(line)) {
+      const lowered = key.toLowerCase()
+      if (lowered.includes('private') || PRIVATE_LINE_MARKS.includes(lowered)) out[key] = line[key]
+    }
+    return out
+  }
+  /** `body.lines` → 白名单行（字段名走别名表；**金额折算成整数分**、数量只认整数件；私域列按上一条规则
+   *  带上或丢掉）——有界（同 `GATES_CAP`）。 */
+  const changeLineRows = (raw, view) => {
+    if (!Array.isArray(raw)) return []
+    const out = []
+    for (const line of raw.slice(0, GATES_CAP)) {
+      if (!line || typeof line !== 'object' || Array.isArray(line)) continue
+      const pick = (names) => {
+        for (const name of names) {
+          if (line[name] !== undefined && line[name] !== null) return line[name]
+        }
+        return null
+      }
+      const row = { line_id: pick(CHANGE_LINE_ALIASES.line_id), desc: pick(CHANGE_LINE_ALIASES.desc) ?? '',
+        qty_before: countOf(pick(CHANGE_LINE_ALIASES.qty_before)),
+        unit_price_before: centsOf(pick(CHANGE_LINE_ALIASES.unit_price_before)),
+        qty_after: countOf(pick(CHANGE_LINE_ALIASES.qty_after)),
+        unit_price_after: centsOf(pick(CHANGE_LINE_ALIASES.unit_price_after)) }
+      const extra = privateLineColumns(line, view)
+      if (extra !== null) for (const key of Object.keys(extra)) row[key] = extra[key]
+      out.push(row)
+    }
+    return out
+  }
+  /** 本视角的这一张变更单：**以最后一条带行清单的 `change/*` 事实行为真源**（账本只增不改 ⇒ 现行版本）；
+   *  批准/拒绝这类事件**本身不带行清单**，所以不能拿"最后一条事件"当明细来源 —— 没有带行的行才退回最后一条
+   *  （那种情况会如实说 `no-usable-lines`，而不是拿别的行凑数）。 */
+  const changeDetailPayload = (view, id) => {
+    let last = null
+    let withLines = null
+    let skipped = 0
+    for (const row of ledgerOf(view).rows()) {
+      const body = row && typeof row.body === 'object' && row.body !== null ? row.body : {}
+      if (hasPrivateKey(body, view)) { skipped += 1; continue }
+      if (!String(row?.type ?? '').startsWith('change/')) continue
+      if (String(body.change_id ?? '').trim() !== id) continue
+      const entry = { type: row.type, ts: row?.ts, quote_id: body.quote_id,
+        lines: changeLineRows(body.lines, view) }
+      last = entry
+      if (Array.isArray(body.lines) && body.lines.length > 0) withLines = entry
+    }
+    const source = withLines === null ? last : withLines
+    return { view, as_of: lastTsOf(ledgerOf(view).rows()), skipped_rows: skipped,
+      change: source === null ? null
+        : { change_id: id, quote_id: source.quote_id ?? '', ts: source.ts ?? '', lines: source.lines } }
+  }
+  const changeDetailRun = (view, id) => gates.change_detail(changeDetailPayload(view, id))
+  /** JSON（机器可读；与页面同数据、同口径；金额单位与舍入口径一起给）。 */
+  const changeDetailJson = (view, id) => {
+    const run = changeDetailRun(view, id)
+    const meta = gates.meta()
+    return { view, change_id: id, service: 'gate-timeline',
+      source: 'gate-timeline（domain 插件规则 ⑤：确定性规则；不读账本、不写账本、不取墙钟、不调模型）',
+      engine: run.engine, engine_note: run.engine_note, as_of: run.as_of, as_of_basis: '本视角投影里最大的 ts（事实时刻）',
+      money_unit: run.money_unit, rounding: run.rounding, money_note: run.money_note, line_keys: run.line_keys,
+      lines: run.lines, basis_missing: run.basis_missing, subtotal: run.subtotal,
+      private_columns: run.private_columns, private_columns_note: run.private_columns_note,
+      counts: run.counts, bounds: run.bounds, truncated: run.truncated, omitted: run.omitted,
+      degraded: run.degraded, reason: run.reason, next_action: run.next_action, notes: run.notes,
+      privacy: run.privacy, ignored_now_inputs: run.ignored_now_inputs,
+      meta: { engine: meta.engine, money_unit: meta.money_unit, rounding: meta.rounding,
+        detail_reasons: meta.detail_reasons, line_keys: meta.line_keys,
+        private_column_views: meta.private_column_views, can_approve: meta.can_approve },
+      note: '金额一律**整数分**（money_unit=cents）参与运算、不出现浮点；`delta_amount = amount_after − amount_before`；'
+        + '`delta_pct` 由整数分位 half-up 舍入（分母为 0 记 null）。**缺依据的行不得编数**：'
+        + '缺原量/原价/新量/新价（或值不是整数件/整数分）的行列入 `basis_missing` 并**排除出小计**；'
+        + '整张单一行可用都没有 ⇒ `degraded:true` + 有名 reason + 明细为空 + 小计记 null（不编 0 冒充「没变」）。'
+        + '私域列只有业主侧看得见自己的；其余视角**读都不读**（带私域列与不带私域列输出逐字节一致）。'
+        + '未知 id ⇒ 404 + `next_action`。' }
+  }
+  /** 页面（SSR，**零内联脚本**：数字、口径、依据全在 `<table>`/`<code>` 里，没有一行 JS）。 */
+  const changeDetailHtml = (view, id, run) => {
+    const lineRows = run.lines.map((line) => `<tr data-detail-line="${esc(line.line_id)}"`
+      + ` data-detail-usable="1" data-detail-delta="${esc(String(line.delta_amount))}"`
+      + ` data-detail-amount-before="${esc(String(line.amount_before))}"`
+      + ` data-detail-amount-after="${esc(String(line.amount_after))}">`
+      + `<td><code>${esc(line.line_id)}</code><br><small>${esc(line.desc)}</small></td>`
+      + `<td>${esc(String(line.qty_before))} × <b>${esc(String(line.unit_price_before))}</b>`
+      + ` = <b>${esc(String(line.amount_before))}</b></td>`
+      + `<td>${esc(String(line.qty_after))} × <b>${esc(String(line.unit_price_after))}</b>`
+      + ` = <b>${esc(String(line.amount_after))}</b></td>`
+      + `<td><b>${esc(String(line.delta_amount))}</b></td>`
+      + `<td>${line.delta_pct === null ? '<code>null</code>（原价为 0：分母 0 不猜百分比）'
+        : `${esc(String(line.delta_pct))}%`}</td>`
+      + `<td data-detail-basis="${esc(line.basis.join(' '))}">`
+      + `${line.basis.map((token) => `<code>${esc(token)}</code>`).join(' ')}</td></tr>`).join('')
+    const missingRows = run.basis_missing.map((item) => `<tr data-detail-missing="${esc(item.line_id)}"`
+      + ` data-detail-missing-reason="${esc(item.reason)}">`
+      + `<td><code>${esc(item.line_id)}</code></td>`
+      + `<td>${item.missing.length > 0 ? item.missing.map((key) => `<code>${esc(key)}</code>`).join(' ') : '—'}</td>`
+      + `<td><code>${esc(item.reason)}</code></td><td>${esc(item.note ?? '')}</td></tr>`).join('')
+    const privateBlock = run.private_columns.length > 0
+      ? `<h3 id="private">你自己的私域列（只有本视角看得见；另一侧连读都不读）</h3>`
+        + `<table data-detail-private="1">${run.private_columns.map((item) => `<tr data-detail-private-line="${esc(item.line_id)}">`
+          + `<td><code>${esc(item.line_id)}</code></td><td><code>${esc(item.key)}</code></td>`
+          + `<td>${esc(String(item.value))}</td></tr>`).join('')}</table>`
+      : ''
+    return subNav(prefix, view, 'gates')
+      + `<p><a href="${prefix}/${view}/gates/" data-detail-back="1">← 回变更单列表</a>`
+      + ` · JSON：<code>${prefix}/${view}/api/changes/${esc(id)}</code></p>`
+      + `<p data-change-detail="${esc(id)}" data-money-unit="${esc(run.money_unit)}"`
+      + ` data-rounding="${esc(run.rounding)}"><b>金额口径</b>：${esc(run.money_note)}</p>`
+      + `<p>参照事实时刻 <code>as_of=${esc(run.as_of ?? '（本视角还没有可解析的事件 ts）')}</code>`
+      + `（= 本视角投影里最大的 <code>ts</code>，**不是墙钟**）；被忽略的墙钟入口：`
+      + `<code>${esc(run.ignored_now_inputs.join(', '))}</code>（给它们任何值，本页数字都不变）。</p>`
+      + (run.degraded
+        ? `<p class="degraded" data-change-detail-degraded="1"><b>降级（不给你编行）</b>：`
+          + `<code>${esc(run.reason)}</code> —— ${esc(run.next_action)}</p>`
+        : '')
+      + `<h3 id="lines">逐行明细（<b data-detail-line-count="${run.counts.lines_shown}">${run.counts.lines_shown}</b> 行；`
+      + `可用 <b data-detail-usable-count="${run.counts.lines_usable}">${run.counts.lines_usable}</b> 行）</h3>`
+      + (run.lines.length
+        ? `<table data-detail="lines"><tr><th>行</th><th>原量 × 原单价 = 原金额（分）</th>`
+          + `<th>新量 × 新单价 = 新金额（分）</th><th>差额（分）</th><th>差额%</th><th>依据（basis）</th></tr>`
+          + `${lineRows}</table>`
+        : '<p data-detail="lines-none">没有可核对的可用行（缺依据的行不会被拿来凑数）。</p>')
+      + `<p data-detail-subtotal="1">行小计（**只含可用行**）：`
+      + `原金额 <b data-subtotal-before>${run.subtotal.amount_before === null ? 'null' : esc(String(run.subtotal.amount_before))}</b>`
+      + ` → 新金额 <b data-subtotal-after>${run.subtotal.amount_after === null ? 'null' : esc(String(run.subtotal.amount_after))}</b>`
+      + `；**总计差额** <b data-subtotal-delta>${run.subtotal.delta_amount === null ? 'null' : esc(String(run.subtotal.delta_amount))}</b> 分`
+      + `（${run.subtotal.delta_pct === null ? '<code>null</code>' : `${esc(String(run.subtotal.delta_pct))}%`}），`
+      + `口径：<code>money_unit=${esc(run.money_unit)}</code> / <code>rounding=${esc(run.rounding)}</code>；`
+      + `可用行 <b>${run.subtotal.lines}</b> 行。</p>`
+      + `<h3 id="missing">未纳入小计的行（<b data-detail-missing-count="${run.basis_missing.length}">`
+      + `${run.basis_missing.length}</b> 行）</h3>`
+      + (run.basis_missing.length
+        ? `<p>下表这些行**未纳入小计**（缺依据不得编数：宁可少算，也不编一个数）。</p>`
+          + `<table data-detail="missing"><tr><th>行</th><th>缺哪个事实</th><th>原因码</th><th>说明</th></tr>`
+          + `${missingRows}</table>`
+        : '<p data-detail="missing-none">没有未纳入小计的行（每一行都有四件依据）。</p>')
+      + `<p data-detail-private-note="1">${esc(run.private_columns_note)}</p>`
+      + privateBlock
+      + (run.notes.length
+        ? `<ul data-detail="notes">${run.notes.map((text) => `<li>${esc(text)}</li>`).join('')}</ul>`
+        : '<p data-detail="notes">说明：无（本次每一行都进了派生）</p>')
+      + `<h3 id="next">下一步（可复制）</h3><pre>${esc(run.next_action)}</pre>`
+      + `<p><small>**本页 0 行脚本、0 内联事件**：明细全部是服务端算好的数字与依据；`
+      + `看这张单**不需要**任何审批动作 —— 变更生效只能由 <code>human:*</code> 在**终端**过人工门` 
+      + `（<code>ADR-0013 §3</code>），浏览器不会替你签。</small></p>`
   }
 
   // ==========================================================================================
@@ -1393,6 +1595,11 @@ ${sortForm('events', '筛查事件')}
               what: `${v} 道的审批与变更页（人工门等了多久 / 卡在谁手里 / 再等下去会怎样 / 下一步；变更单状态与谁欠动作）` },
             { path: `${prefix}/${v}/api/gates`, method: 'GET', auth: 'none',
               what: `${v} 道的审批与变更 JSON（同页同口径；age 口径写在 age_basis；空投影 degraded+reason 且两列表为空）` },
+            // 变更单**逐行明细**（同一插件的规则 ⑤）：原量×原价 → 新量×新价 → 差额，金额整数分
+            { path: `${prefix}/${v}/changes/<id>/`, method: 'GET', auth: 'none',
+              what: `${v} 道的变更单逐行明细页（money_unit=cents / rounding 口径写在页面上；缺依据的行明示「未纳入小计」；未知 id → 404 + next_action）` },
+            { path: `${prefix}/${v}/api/changes/<id>`, method: 'GET', auth: 'none',
+              what: `${v} 道的变更单逐行明细 JSON（同页同口径；lines/basis_missing/subtotal/counts/bounds；供应商侧不含任何私域列）` },
             { path: `${prefix}/${v}/gates/nudge`, method: 'POST', auth: 'none',
               what: `${v} 道的催办提交（**只落 0600 待办件**、账本零新增；202 + next_action；不改任何门的判定）` },
           ]),
@@ -1651,6 +1858,21 @@ ${sortForm('events', '筛查事件')}
     if (viewGatesPage && rules[viewGatesPage[1]]) {
       return send(200, 'text/html; charset=utf-8',
         html(`${config.page_title} · ${rules[viewGatesPage[1]].title} · 审批与变更`, gatesHtml(viewGatesPage[1]), prefix))
+    }
+    // 变更单**逐行明细**（gate-timeline 插件规则 ⑤）：两条只读路由（**账本零新增**、不取墙钟）；
+    // 未知 id ⇒ 404 + `next_action`（页面与 JSON 都是 404，不静默返回空页）。
+    const viewChangeDetailApi = path.match(/^\/([a-z]+)\/api\/changes\/([A-Za-z0-9_.:-]+)\/?$/)
+    if (viewChangeDetailApi && rules[viewChangeDetailApi[1]]) {
+      const out = changeDetailJson(viewChangeDetailApi[1], viewChangeDetailApi[2])
+      return json(out.reason === 'change-not-found' ? 404 : 200, out)
+    }
+    const viewChangeDetailPage = path.match(/^\/([a-z]+)\/changes\/([A-Za-z0-9_.:-]+)\/?$/)
+    if (viewChangeDetailPage && rules[viewChangeDetailPage[1]]) {
+      const view = viewChangeDetailPage[1]
+      const id = viewChangeDetailPage[2]
+      const run = changeDetailRun(view, id)
+      return send(run.reason === 'change-not-found' ? 404 : 200, 'text/html; charset=utf-8',
+        html(`${config.page_title} · ${rules[view].title} · 变更单明细 ${id}`, changeDetailHtml(view, id, run), prefix))
     }
     const viewHeuristicsPage = path.match(/^\/([a-z]+)\/heuristics\/?$/)
     if (viewHeuristicsPage && rules[viewHeuristicsPage[1]]) {
@@ -1920,7 +2142,7 @@ ${sortForm('events', '筛查事件')}
       if (!Object.prototype.hasOwnProperty.call(rules, to)) return json(400, { error: 'unknown-view', hint: Object.keys(rules).join(' / ') })
       return send(302, 'text/plain; charset=utf-8', '', { location: `${prefix}/${to}/` })
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/advice/ / ${prefix}/<view>/api/advice / ${prefix}/<view>/gates/ / ${prefix}/<view>/api/gates / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/advice/ / ${prefix}/<view>/api/advice / ${prefix}/<view>/gates/ / ${prefix}/<view>/api/gates / ${prefix}/<view>/changes/<id>/ / ${prefix}/<view>/api/changes/<id> / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

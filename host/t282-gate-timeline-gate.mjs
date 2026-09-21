@@ -20,7 +20,8 @@
  *  10  变更状态机正控：`priced`/`approved`/`rejected`（**先 priced 后 rejected 以 rejected 为准**）/`unknown`
  *  11  「谁欠谁一个动作」正控：`priced` + 有对应 `change.approve` 门 → 用队列里的**真审批人**；
  *      没有对应门 → `human:unassigned`（不编人名）；`proposed`→`contractor-agent`；`approved`→`none`
- *  12  **插件不能批准**（硬负控）：句柄方法集合恰为五个、没有任何审批类方法、`meta.can_approve=false`、
+ *  12  **插件不能批准**（硬负控）：句柄方法集合恰为六个（`change_detail|config|meta|nudge|requests|timeline`）、
+ *      没有任何审批类方法、`meta.can_approve=false`、
  *      催办记录 `requested_action="nudge"` 且记录里没有任何审批类字段名
  *  13  催办载荷正控：含**用户原话逐字**、目标门 id、独立重算的 sha256、id 形状；同一（门+理由）→ 同一 id
  *  14  催办拒绝路径正控：`gate-not-found`/`empty-reason`/`reason-too-long`/`view-unknown`/`payload-unusable`
@@ -329,12 +330,24 @@ try {
     commands: ['quote.submit', 'award.commit', 'po.issue', 'change.approve'].every((scope) =>
       typeof mod.GATE_COMMANDS[scope] === 'string' && mod.GATE_COMMANDS[scope].includes('python3')
       && mod.GATE_COMMANDS[scope].includes('quotagent.g1side')),
+    // 本批（规则 ⑤ 逐行明细）：金额口径 / 闭合的明细降级原因 / 11 键 / 私域视图白名单（围栏变宽=变红）
+    detailMoney: mod.MONEY_UNIT === 'cents' && mod.ROUNDING === 'half-up-to-cent'
+      && typeof mod.MONEY_NOTE === 'string' && mod.MONEY_NOTE.includes('整数分'),
+    detailReasons: JSON.stringify(mod.DETAIL_REASONS)
+      === JSON.stringify(['payload-not-an-object', 'change-not-found', 'no-usable-lines']),
+    detailKeys: Array.isArray(mod.DETAIL_KEYS) && mod.DETAIL_KEYS.length === 11
+      && mod.DETAIL_KEYS.includes('delta_pct') && mod.DETAIL_KEYS.includes('basis'),
+    detailPrivate: JSON.stringify(mod.PRIVATE_COLUMN_VIEWS) === JSON.stringify(['contractor'])
+      && Array.isArray(mod.PRIVATE_KEY_MARKS) && mod.PRIVATE_KEY_MARKS.length === 4,
+    detailFn: typeof mod.changeDetailOf === 'function',
   }
   const manifestBad = Object.entries(manifest).filter(([, ok]) => !ok).map(([key]) => key)
   const scriptNeedle = '<scr' + 'ipt'
   check('1 契约正控：manifest 齐备（name/inject/builtin/usedServices/provides=[gateTimeline]/Config/apply/fixture/'
     + 'ENGINE/ENGINE_NOTE/AGE_CLOCK/AGE_BASIS_NOTE/IGNORED_NOW_INPUTS/两段/闭合的降级原因与催办 code/'
-    + '三条超时策略/已决事件/五个变更状态/四条真 CLI），且只 import ../lib 白名单（或 node:），源码里 0 个脚本字面量',
+    + '三条超时策略/已决事件/五个变更状态/四条真 CLI/**逐行明细口径：`MONEY_UNIT="cents"`（整数分）与 '
+    + 'half-up-to-cent / 闭合的 DETAIL_REASONS / 11 键 / 私域视图白名单**），且只 import ../lib 白名单'
+    + '（或 node:），源码里 0 个脚本字面量',
   manifestBad.length === 0 && importLeaks.length === 0 && !originalSource.includes(scriptNeedle) && hookReady,
   `载入=${TARGET}；问题键=${manifestBad.join(',') || '无'}；越界 import=${importLeaks.join(',') || '无'}；`
   + `含脚本字面量=${originalSource.includes(scriptNeedle)}；解析钩子=${hookReady ? '已装' : '不可用'}；`
@@ -521,7 +534,7 @@ try {
   + `（期望 1）age=${reopened.gates.map((item) => item.age_seconds)}（期望 [3600]：as_of 12:00 − 最后一次请求 11:00）`)
 
   // ---------- 12. 插件不能批准（硬负控） ----------
-  const HANDLE_KEYS = 'config|meta|nudge|requests|timeline'
+  const HANDLE_KEYS = 'change_detail|config|meta|nudge|requests|timeline'
   const handleKeys = Object.keys(live.box.handle).sort().join('|')
   const noApproveWords = !Object.keys(live.box.handle).some((key) => APPROVE_WORDS.test(key))
     && Object.values(meta).every((value) => typeof value !== 'function') && meta.can_approve === false
@@ -529,10 +542,11 @@ try {
     .every((name) => live.box.handle[name] === undefined)
   const nudgeRun = live.box.handle.nudge(FULL, { gate_id: 'ap-0001', reason: '现场催一下' })
   const record = nudgeRun.record
-  check('12 **插件不能批准**（硬负控）：句柄方法集合恰为 `config|meta|nudge|requests|timeline`，'
+  check('12 **插件不能批准**（硬负控）：句柄方法集合恰为 `change_detail|config|meta|nudge|requests|timeline`，'
     + '没有任何 `approve/decide/grant/submit/sign/ack/commit/accept` 方法；`meta.can_approve=false`；'
     + '催办载荷里只有 `requested_action="nudge"`，且记录与自述里都没有任何审批类字段名',
   handleKeys === HANDLE_KEYS && noApproveWords && absent
+  && typeof live.box.handle.change_detail === 'function'
   && record?.requested_action === 'nudge'
   && !Object.keys(record ?? {}).some((key) => APPROVAL_FIELDS.includes(key))
   && String(nudgeRun.next_action).includes('tools/gate-nudge.py')
