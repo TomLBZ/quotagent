@@ -10,16 +10,18 @@
  * 零残留（A2）：HTTP server 由 `ctx.effect()` 注册，dispose 即 `server.close()`（端口释放）。
  */
 import { createServer } from 'node:http'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { array, number, object, string } from '../lib/std-schema.mjs'
 import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest']   // 每个都是独立插件（准入 / 观测）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView']   // 每个都是独立插件（准入 / 观测 / 视图）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView']
 
 export const provides = ['webui']
 
@@ -91,6 +93,23 @@ export function apply(ctx, config) {
   const journal = ctx.evolveJournal     // 自进化流水（第五个自进化产出，T-245）
   const scorecard = ctx.supplierScorecard   // 供应商绩效记分卡（subagent 产出，T-247）
   const approvals = ctx.approvalDigest      // 人工门待批摘要（subagent 产出，T-250）
+  const retention = ctx.retentionView       // 留存计划的只读聚合（subagent 产出，T-254）
+
+  /**
+   * 留存计划：**判定在 Python 侧**（`services/retention.py`），由维护任务落到
+   * `tmp/ui-shared/retention-plan.json`；这里只读文件并交给 `retention-view` 聚合。
+   * 文件缺失或损坏 → 交给插件降级（degraded），**不自己算留存**。
+   */
+  const retentionPlanOf = (view) => {
+    const file = join(String(config.ui_shared ?? 'tmp/ui-shared'), 'retention-plan.json')
+    try {
+      const parsed = JSON.parse(readFileSync(file, 'utf8'))
+      const entry = parsed?.views?.[view]
+      return entry?.plan ?? null
+    } catch (err) {
+      return null
+    }
+  }
   /**
    * 从账本行推导**当前仍待批**的事项：按 `approval_id` 取该项的**最后一条** `approval/*` 事件，
    * 若最后状态是 granted/aborted 就不算待批。只读、只用公开行（门里断言响应不含正文与私域键）。
@@ -184,6 +203,8 @@ export function apply(ctx, config) {
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
           + `<tr><td>admitted=${g.admitted ?? 0} refused=${g.refused ?? 0} timeouts=${g.timeouts ?? 0} failed=${g.failed ?? 0}</td>`
           + `<td>allowed=${b.allowed ?? 0} refused=${b.refused ?? 0} opened=${b.opened ?? 0} closed=${b.closed ?? 0}</td></tr></table>`
+          + `<h3>留存计划（只读）</h3><p>判定在 Python 侧（<code>services/retention.py</code>），由 subagent 产出并晋升的插件 <code>retention-view</code> 聚合：<b>${retention.headline(retentionPlanOf('contractor'))}</b></p>`
+          + `<p>账本行永不销毁；销毁只作用于派生副本，不可重建物须过人工门（ADR-0018）</p>`
           + `<h3>自进化流水</h3><p>由自进化产出的插件 <code>evolve-journal</code> 归纳（只给计数，不出正文）</p>`
           + (() => {
             const ev = journal.summarize(evolveRows())
@@ -202,6 +223,8 @@ export function apply(ctx, config) {
       return json(200, { view: 'ops', source: 'ops-view（自进化产出的插件）', summary: ops.summary({ rows: [] }),
         runtime: runtime.runtime, breaker: runtime.breaker, evidence_by_view: perView,
         evolve_journal: journal.summarize(evolveRows()),
+        retention: retention.snapshot(retentionPlanOf('contractor')),
+        retention_headline: retention.headline(retentionPlanOf('contractor')),
         note: '运维视角：不属于任何一方；只给聚合数字与状态，不给条目正文/私域键' })
     }
     const viewMatch = path.match(/^\/([a-z]+)\/?$/)
@@ -259,6 +282,13 @@ export function apply(ctx, config) {
       return json(200, { view, source: 'evidence-summary（自进化产出的插件）', summary,
         note: '账本证据面：按类型计数 / 关联数 / 带引用行数 / 时间跨度；只统计公开投影后的行' })
     }
+    if (/^\/api\/retention\/?$/.test(path)) {
+      const plan = retentionPlanOf('contractor') ?? retentionPlanOf('supplier')
+      const snap = retention.snapshot(plan)
+      return json(200, { source: 'retention-view（subagent 产出、经自进化流程晋升）+ services/retention.py（判定）',
+        retention: snap, headline: retention.headline(plan),
+        note: '留存计划是**判定**不是执行：账本行永不销毁；销毁只作用于派生副本且不可重建物须过人工门' })
+    }
     const viewApprovals = path.match(/^\/([a-z]+)\/api\/approvals\/?$/)
     if (viewApprovals && rules[viewApprovals[1]]) {
       const view = viewApprovals[1]
@@ -301,7 +331,7 @@ export function apply(ctx, config) {
         `<ul>${rows}</ul><ul><li><a href="${prefix}/ops/">运维视角</a>（系统整体：运行期中间件 + 各视角证据面聚合）</li></ul>`
         + '<p>本 UI 由 cordis 插件 <code>webui</code> 提供；每个视角读**自己的**账本，宿主不写账本。</p>', prefix))
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

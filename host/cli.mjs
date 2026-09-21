@@ -154,6 +154,10 @@ const main = async () => {
     const { apply: brApply2, Config: brConfig2 } = await import('./modules/circuit-breaker.mjs')
     await ctx.plugin({ name: 'circuit-breaker', inject: [], Config: brConfig2,
       apply: (inner, cfg) => brApply2(inner, cfg) }, brConfig2.parse({}))
+    // 留存计划视图（subagent 产出，T-254）
+    const { apply: rvApply, Config: rvConfig } = await import('./modules/retention-view.mjs')
+    await ctx.plugin({ name: 'retention-view', inject: [], Config: rvConfig,
+      apply: (inner, cfg) => rvApply(inner, cfg) }, rvConfig.parse({}))
     // 人工门待批摘要（subagent 产出，T-250）
     const { apply: apApply, Config: apConfig } = await import('./modules/approval-digest.mjs')
     await ctx.plugin({ name: 'approval-digest', inject: [], Config: apConfig,
@@ -179,7 +183,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -207,6 +211,7 @@ const main = async () => {
            ops_routes: [`${String(args.prefix ?? '/quotagent')}/ops/`, `${String(args.prefix ?? '/quotagent')}/api/ops`],
            scorecard_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/scorecard`),
            approval_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/approvals`),
+           retention_route: `${String(args.prefix ?? '/quotagent')}/api/retention`,
            observability: obox.handle ? obox.handle.summary() : null,
            note: '每方视角读自己的账本（结构性隔离）+ 投影白名单（纵深防御）；宿主不写账本' }) + '\n')
     // 保活：直到收到信号（ws-gateway 以 SIGTERM 停服）

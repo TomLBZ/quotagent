@@ -138,6 +138,7 @@
 | sourcing | AC-RFQ-005（本次登记） | — |
 | supplier-scorecard | AC-EVAL-003（本次登记） | — |
 | timeline | AC-RUNTIME-008（本次登记） | — |
+| retention-view | FR-EVIDENCE-004、FR-UX-004（本次登记） | 强 |
 | webui | FR-UX-001、FR-UX-002、FR-INTEG-001 | 强 |
 
 > 更新（T-253）：`FR-EVIDENCE-004` **已完整落地（计划侧 + 执行侧）**，`AC-AUDIT-003`/`AC-AUDIT-005` 均有机检。

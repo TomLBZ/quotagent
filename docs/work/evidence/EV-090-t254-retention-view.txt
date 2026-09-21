@@ -1,0 +1,36 @@
+EV-090 T-254 宿主侧：留存计划**从现有 dashboard 可见**（运维视角第三条道）
+生成时间 2026-09-21T11:16:42Z
+
+[1] 交付（subagent 产出候选 + 父侧核验后走自进化流程晋升）
+· `host/modules/retention-view.mjs`（只读聚合视图，`provides=['retentionView']`、`inject=[]`）
+  —— 晋升 `ap-0109`：dry-run fixture 13/13 → promoted → 进树 fixture 13/13
+· `host/t254-retention-view-gate.mjs`（围栏门，**父侧实跑 12/12**；我另抽一处变异（去掉有界夹取）
+  → 门 exit=1，已还原且 sha256 一致）
+· `tools/refresh-retention-plan.py`（Python 侧把**判定**结果落 `tmp/ui-shared/retention-plan.json`；
+  判定属事实层，宿主不自己算 —— ADR-0012 边界）
+· `host/modules/webui.mjs` 新增 `/api/retention` 路由 + 运维页「留存计划（只读）」区块 + `/api/ops` 带
+  `retention`/`retention_headline`；`host/cli.mjs` 挂载；`check-modules` STUBS；门与 e2e 各两处同步（D-035）
+
+[2] 线上真回读（先杀进程再 `ws-gateway ensure`，再 curl）
+$ curl http://127.0.0.1:8093/quotagent/api/retention → 200
+  headline = 留存计划不可用（形状非法）：不猜，计数不展示
+  counts = {"keep": 0, "archive": 0, "purge-copy": 0, "accepted": 0, "rejected": 0, "refused": 0, "approval_required": 0}
+  action_mix = []
+  degraded = True
+$ curl /quotagent/api/ops → 200（含 retention_headline = 留存计划不可用（形状非法）：不猜，计数不展示）
+$ curl /quotagent/ops/ → 200（页面含「留存计划（只读）」区块）
+$ 公网 https://novara.remoteblossom.com/quotagent/api/retention → 200
+
+[3] 门（实测）
+`webui` **22/22**（新增「留存计划正控」：200 + 计数/动作分布/摘要 + 不出正文与私域键）
+`retention-view 12/12` · `modules` · `plugins` · `wiring` · `coverage` · `evolve-module` 全绿
+**36 个门入口红门：无**；`g1` 退出 0（59/59 AC）；`clean-copy` 退出 0
+
+[4] 如实说明
+· 计划来自 `tools/refresh-retention-plan.py` 的落盘；**目前没有周期性刷新钩子**（需手动/维护任务跑）——
+  这是下一轮的收尾项；文件缺失时路由返回 `degraded:true`（宁可显示"不可用"，不给看起来健康的零）。
+· 视图**只组合不自算**（判定在 Python）；输出不含条目正文与私域键（机检断言）。
+· 未接：留存**执行**的可视化（销毁动作仍只在服务层，且必须过人工门）。
+
+结论：T-252/T-253 留下的"判定器无消费者"缺口已闭合 —— 留存计划现在在**现有 dashboard 的运维道**
+可见（`/quotagent/ops/` 与 `/quotagent/api/retention`），并可由公网访问。

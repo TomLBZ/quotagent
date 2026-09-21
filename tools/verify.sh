@@ -86,6 +86,10 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec node host/t247-scorecard-gate.mjs "$@"
     ;;
+  retention-view)
+    shift
+    exec node host/t254-retention-view-gate.mjs "$@"
+    ;;
   retention)
     shift
     exec python3 tools/check-retention.py "$@"

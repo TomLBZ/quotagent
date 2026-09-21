@@ -136,6 +136,21 @@
       "produced_by": "tools/evolve-module.mjs",
       "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
       "evidence": null
+    },
+    {
+      "name": "retention-view",
+      "proposal_id": "sha256:11498b54d7f9e217788e0434a368a4e267ce3673fdbb95b52bf43901a530678f",
+      "artifact_hash": "sha256:96a1dda2c6f2f1ea9fa2cc5837b280bd66e95f2cd437d22d42ffc66595dbf81f",
+      "bytes": 10158,
+      "approval_ref": "ap-0109",
+      "gate": "passed",
+      "fixture": {
+        "passed": 13,
+        "total": 13
+      },
+      "produced_by": "tools/evolve-module.mjs",
+      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+      "evidence": null
     }
   ]
 }

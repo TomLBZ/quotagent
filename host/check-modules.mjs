@@ -149,6 +149,12 @@ const STUBS = {
       privacy: { entry_bodies_included: false, private_keys_included: false } }),
     summary: () => 'stub',
   },
+  retentionView: {
+    // fixture 的 stub：只满足"能聚合留存计划"；口径由 retention-view 自己的门验
+    snapshot: () => ({ counts: {}, action_mix: [], pending_approvals: 0, refused: 0, oldest: [],
+      bounded: true, omitted: 0, degraded: true, source: 'retention-view' }),
+    headline: () => '（stub）',
+  },
   approvalDigest: {
     // fixture 的 stub：只满足"能归纳待批事项"；口径由 approval-digest 模块自己的门验
     digest: () => ({ rows: 0, total: 0, skipped: 0, by_action: [], by_age: [], by_confidence: {},
