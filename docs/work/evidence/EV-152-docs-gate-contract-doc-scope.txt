@@ -152,3 +152,17 @@ GATE g1            exit=0  `全量 AC：81/81 通过` + 走查 `结论：14/14 �
    而旧门只在崩溃时才有 stderr，没有留下判定依据 —— 这是如实记录的缺口，不是解释。
 7. 本文件里「修前 11/12 红」用的是我自己的合成 hammer；EV-151 用另一个并发面（整树副本门 ×2，16 次）量到
    2/16 红。两个数**同一失败模式、不同 churn 强度**，不能互相替代。
+
+==========================================================================================
+七、提交与远端回读（本文件自身在同一提交里，故 sha 与回读记在**其后只追加证据/状态**的提交里）
+==========================================================================================
+· 本批代码+文档+证据的提交：**b53a8f053439635e7da78769b572aebd46a49ff7**（短 sha b53a8f0）
+  `fix(gate): 文档门扫描范围收窄为「契约文档集合」+ 真契约文档消失仍判红（D-071 收口 / D-072）`
+  15 files changed, 431 insertions(+), 115 deletions(-)（`git show --stat b53a8f0` 可核）
+· `git push origin main` → `To github.com:TomLBZ/quotagent.git  a900e8b..b53a8f0  main -> main`
+· `git ls-remote origin refs/heads/main` 回读（逐字）：
+      b53a8f053439635e7da78769b572aebd46a49ff7	refs/heads/main
+  `git rev-parse HEAD` == `git rev-parse origin/main` == b53a8f0…
+· 本次「只追加证据/状态」的提交（EV-152 §七 + `.agents/state.json` 的 `last_verified_commit=b53a8f0`）
+  按 `last_verified_commit_semantics` 不改写上一次验证的语义（其后的提交只追加证据/状态）；
+  它的 sha 与回读见交付报告（不预写未知 sha）。

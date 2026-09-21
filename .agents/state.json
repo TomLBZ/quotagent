@@ -8,7 +8,7 @@
   "last_verified_command": "tools/verify.sh docs | ac-registry | coverage | p0-no-node | storage | wiring | plugins | modules | g1（p0-no-node 另在 tmp/**/*.md churn + 整树副本门的并发下跑 1 次）",
   "last_verified_result": "PASS：九道门全绿（docs：契约文档 98 个 / 0 未解析；ac-registry、coverage、wiring、plugins 4/4、modules 469/469、storage 均 exit 0；p0-no-node 59 条 AC 无 Node 全绿，且**在并发下**跑一次为「59 条全绿 + 无瞬时命中」；g1 exit 0：全量 AC 81/81 + 走查 14/14。另：文档门并发对照 12/12 绿（同条件旧门 11/12、churn 更快时 12/12 红））",
   "last_verified_evidence": "docs/work/evidence/EV-152-docs-gate-contract-doc-scope.txt",
-  "last_verified_commit": "见 EV-152 §五（本批代码+文档+证据的提交 sha；其后只追加证据/状态的提交不改此语义）",
+  "last_verified_commit": "b53a8f053439635e7da78769b572aebd46a49ff7",
   "blockers": [],
   "human_required": [
     "T-117 现场验证 V-001..V-012：备料已完成；**P1 按用户指令以\"V 全部通过\"为前提推进**（planning_assumptions，非结论），V 的正式 conclusion 与 G0/G1 签署仍需人工",
