@@ -47,6 +47,7 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-AUDIT-001 | P0 | 篡改任意一条历史事件后 `verify_chain()` 返回假；审计包独立验证失败 | `qa ac AC-AUDIT-001` |
 | AC-AUDIT-002 | P0 | 对随机抽样的 20 次模型调用，`rebuild(inputs) == observed_inputs` 全部相等 | `qa ac AC-AUDIT-002` |
 | AC-AUDIT-003 | P2 | 销毁策略生效后目标事件不可再读且销毁动作本身有账本事件 | `qa ac AC-AUDIT-003` |
+| AC-AUDIT-004 | P1 | 审计包带签名与包含证明，且能用独立入口（不接触原账本）验证：篡改任一字段即失败、错误密钥即失败、无签名包在 `--require-signature` 下失败并给出定位 | `qa ac AC-AUDIT-004`（入口 `tools/verify.sh audit`） |
 | AC-EVT-001 | P0 | 五模式各自的分发顺序与返回值符合 `../design/05-events.md` §1 的判据 | `qa ac AC-EVT-001` |
 | AC-EVT-002 | P0 | waterfall 监听器不调 `next()` 时下游不被执行；该短路在 `../design/05-events.md` §5 拦截点总表有登记，且默认事件表的每个 waterfall 事件都在表内 | `qa ac AC-EVT-002` |
 | AC-PLUGIN-001 | P0 | 装载后 `effects()` 非空；卸载后 `effects()` 为空且无残留定时器/订阅 | `qa ac AC-PLUGIN-001` |

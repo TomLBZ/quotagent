@@ -3,11 +3,11 @@
   "updated_at": "2026-09-21",
   "phase": "P1-mvp",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-208",
-  "next_action": "批次 B10：T-208 审计包导出/验证 + 模型输入重建（FR-EVIDENCE-001..003；AC-AUDIT-001/002 已绿）—— 补齐 P1 的\"导出 → 第三方独立验证 → 篡改必失败\"闭环与模型输入可重建；实现落 services/evidence.py 或扩展 kernel/evidence.py + tools/ 下的导出 CLI",
-  "last_verified_command": "tools/verify.sh docs && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh ac-registry && tools/verify.sh v && 全量 48 条 AC && qa suite s1..s4",
-  "last_verified_result": "PASS（docs 门 76 文件/0 未解析；bridge 31 断言；cordis 18/18；p0-no-node 34 条；ac-registry 48 条注册/P0 全注册；V 登记 12 条 open；48 条 AC 全绿；s1..s4 全绿）",
-  "last_verified_evidence": "docs/work/evidence/EV-047-guard-and-capacity.txt",
+  "next_task": "T-210",
+  "next_action": "批次 B11：T-210 人工门队列视图 + 超时策略（FR-APPROVE-003 / AC-APPROVE-003）—— 待批项不阻塞其他工作；超时只升级提醒、**绝无自动批准**（FR-APPROVE-001）；队列可查（等待时长、范围、关联引用）。实现落 services/approval.py 扩展 + 视图导出",
+  "last_verified_command": "tools/verify.sh docs && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh ac-registry && tools/verify.sh audit && tools/verify.sh v && 全量 49 条 AC && qa suite s1..s4",
+  "last_verified_result": "PASS（docs 门 76 文件/0 未解析；bridge 31 断言；cordis 18/18；p0-no-node 34 条；ac-registry 49 条注册/P0 全注册；audit 12 断言；V 登记 12 条 open；49 条 AC 全绿；s1..s4 全绿）",
+  "last_verified_evidence": "docs/work/evidence/EV-048-audit-pack-signature.txt",
   "last_verified_commit": "1a70ac3",
   "blockers": [],
   "human_required": [
@@ -48,7 +48,8 @@
     "sync": "services/sync.py（SyncService：三方协调 reconcile() + 权威方矩阵 FIELD_AUTHORITY + 承诺字段挂起 resolve_human() 双方各一次 human 批准 + suggest() 产出 intent/suggestion）；事件 sync/merged|conflict|suspended|suggestion-raised 已登记",
     "clarify": "services/clarify.py（ClarificationService：ask/answer/broadcast/close/on_package_rev；事件 clarification/asked|answered|answer-drafted|broadcast-incomplete|rejected|reopened）；tools/check-ac-registry.py（verify.sh ac-registry）",
     "quotes": "services/quotes.py（QuoteBook：register/on_amended/active/superseded/open_requote_requests/exclude_superseded；事件 quote/superseded）；compare.rank 支持 book= 显式排除过期报价；kernel/events.py 新增 EventBus.dispatch()（按 @mode 派发）",
-    "capacity": "services/capacity.py（CapacityService：Calendar 产能日历（私域）/ commit / amend（firm+有效期内+模型 → 拒绝）/ feasibility（日历 + 里程碑关键路径）/ conflict_flags（share_safe 对外不带数值）；事件 capacity/committed|firm-change-refused|conflict）"
+    "capacity": "services/capacity.py（CapacityService：Calendar 产能日历（私域）/ commit / amend（firm+有效期内+模型 → 拒绝）/ feasibility（日历 + 里程碑关键路径）/ conflict_flags（share_safe 对外不带数值）；事件 capacity/committed|firm-change-refused|conflict）",
+    "evidence": "kernel/evidence.py（export 带签名与清单绑定 / verify(keystore,require_signature) / inclusion_proof / verify_inclusion / sign_pack）；kernel/canon.py 增 merkle_proof|merkle_verify；入口 tools/audit-verify.py 与 tools/verify.sh audit"
   },
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态"
 }

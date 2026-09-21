@@ -66,3 +66,4 @@
 - **一次性脚本别复用变量名写不同文件**：`p = handover.md` 之后再 `p.write_text(json…)` 会把 state.json 写进
   handover.md（门立刻报预算超限）。目标文件与路径变量一一对应，换文件就换变量名。
 - **改 `src/quotagent/qa/__init__.py` 的导入清单必须立刻跑 `verify.sh ac-registry`**：漏掉一个 `checks_*` 模块会**静默注销若干 AC**（本轮编辑掉 `checks_cost` → 注册表 46→44、P0 的 34 条变成 32 条），而单跑某条 AC 仍然是绿的，只有注册表级检查能发现。
+- **两个摘要互相覆盖时顺序要紧**：审计包的 `pack_hash` 覆盖"除清单外的整包"、`manifest_hash` 覆盖"除自身外的清单"，而清单里含 `pack_hash` —— 必须先算 `pack_hash` 再算 `manifest_hash`，反过来会让两者互相矛盾（实测：签名的验签是过的，但 `manifest_hash` 检查失败）。

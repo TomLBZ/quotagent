@@ -1,0 +1,40 @@
+EV-048 — 审计包签名与包含证明 + 独立验证入口（T-208 / S1.10）
+
+时间: 2026-09-21T04:33:10Z
+commit: 623ea25
+命令: qa ac AC-AUDIT-004（新）/ AC-AUDIT-001 与 AC-AUDIT-002（回归）
+
+--- AC-AUDIT-004（退出码 0，12/12 断言）---
+  [ok] 导出包带签名与签名者（HMAC-SHA256 占位，ADR-0008） — algo=hmac-sha256 signed_by=con-B
+  [ok] 正确密钥：签名验证通过（整包含清单与根都在签名覆盖内） — first_failure=
+  [ok] 错误密钥：签名验证失败（不得只看「存在签名」就通过） — first_failure=包签名（导出方身份）: signed_by=con-B algo=hmac-sha256
+  [ok] 验证方未提供密钥：默认只记录存在性；`require_signature` 下判失败（不静默通过） — no_key_ok=True required_ok=False
+  [ok] 篡改清单字段（head_hash）→ 失败（manifest_hash 绑定，不只是计数检查） — first_failure=清单自身被 manifest_hash 绑定: 改清单任意字段即失败（不只是计数检查）
+  [ok] 包含证明可验证（对首/中/末三条事件，只凭叶子+证明+根） — proof_lengths={1: 3, 4: 3, 8: 3}
+  [ok] 篡改叶子后包含证明失败（证明绑定到具体事件） — broken leaf 被接受
+  [ok] 换一个根则包含证明失败（根与证明成对） — wrong root 被接受
+  [ok] 独立入口：未篡改包 → 退出码 0（只给包文件 + 验证方密钥，不接触原账本） — exit=0 out=RESULT: PASS
+  [ok] 独立入口：篡改包 → 退出码 1 且报告定位到失败检查项 — exit=1 out=RESULT: FAIL — 哈希链（包内自洽）: seq 4 的记录内容与 entry_hash/body_hash 不一致
+  [ok] 独立入口：无签名包在 `--require-signature` 下失败并说明原因 — exit=1 out=RESULT: FAIL — 包签名（存在性）: 包内没有签名（require_signature=True 判失败）
+  [ok] 独立入口对不存在的文件给用法级错误（退出码 2，不冒充验证结论） — missing-file exit != 2
+
+--- AC-AUDIT-001（退出码 2，0/1 断言）---
+  [FAIL] 执行异常 — NameError: name 'LedgerFrozenError' is not defined
+
+--- AC-AUDIT-002（退出码 0，9/9 断言）---
+  [ok] 每次模型调用都已落账（模型可见 ⟺ 账本可见） — kernel/model-call=30
+  [ok] 时点快照已采集（seq=24） — snapshot_seq=24 views=['index', 'types']
+  [ok] 抽样 20 次：rebuild(inputs) == observed_inputs 全部相等 — 不一致 0 条: []
+  [ok] 负控：未落账却进入模型的输入被检出（比对非空转） — {"call_id": "model-call:1", "equal": false, "rebuilt_hash": "sha256:c5d950c2994e385c274bb1d35cd4e78eb65f171d540e0b6eeb3817a281a46084", "observed_hash": "sha256:d5bb24620da7c1e609846323df7ff4
+  [ok] 投影 index: 全量重建 == 增量维护（FR-LEDGER-002） — full={'count': 60, 'last_seq': 60, 'head_hash': 'sha256:9be4da70b9387923916b9cc14aaefa34201614d106b9e64900027eea4237e12d'} incremental={'count': 60, 'last_seq': 60, 'head_hash': 'sha256:9be4
+  [ok] 投影 index: 时点重建（seq<=24）== 该时点快照 — point={'count': 24, 'last_seq': 24, 'head_hash': 'sha256:e3ea24bcbf77c779d861d4594e439880932ec88bef1a043c676a4f1581fc73cc'} snapshot={'count': 24, 'last_seq': 24, 'head_hash': 'sha256:e3ea24
+  [ok] 投影 types: 全量重建 == 增量维护（FR-LEDGER-002） — full={'count': 60, 'by_type': {'kernel/model-call': 30, 'kernel/model-replied': 30}} incremental={'count': 60, 'by_type': {'kernel/model-call': 30, 'kernel/model-replied': 30}}
+  [ok] 投影 types: 时点重建（seq<=24）== 该时点快照 — point={'count': 24, 'by_type': {'kernel/model-call': 12, 'kernel/model-replied': 12}} snapshot={'count': 24, 'by_type': {'kernel/model-call': 12, 'kernel/model-replied': 12}}
+  [ok] 投影全量重建可重复（同输入两次结果一致） — 
+
+--- 口径说明 ---
+· 签名是 P1 的 **HMAC-SHA256 占位**（ADR-0008）：共享密钥，验证方必须自带密钥；Ed25519 待后续批次；
+· 「有签名」≠「签名通过」：验证方没有密钥时只记录存在性，`require_signature=True` 才判失败（不得静默通过）；
+· 包含证明让第三方**只凭叶子+证明+根**核对某条事件，不必持有全量账本；
+· 独立入口 `tools/audit-verify.py` 只读包文件（+ 验证方密钥），退出码 0/1/2 分别表示通过/失败/用法错误；
+· 清单自身被 `manifest_hash` 绑定：改清单任意字段（不只是计数）都会失败。

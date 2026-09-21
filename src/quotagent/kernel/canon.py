@@ -60,3 +60,37 @@ def merkle_root(leaf_hashes: Iterable[str]) -> str:
             nxt.append(HASH_PREFIX + sha256_hex((left + right).encode("utf-8")))
         level = nxt
     return level[0]
+
+
+def merkle_proof(leaf_hashes: Iterable[str], index: int) -> list[dict]:
+    """`index` 处叶子的包含证明（与 `merkle_root` 同构：落单者与自己配对）。"""
+    level = [str(h) for h in leaf_hashes]
+    if not level:
+        raise ValueError("空集合没有包含证明")
+    if not 0 <= index < len(level):
+        raise IndexError(f"index {index} 超出范围（0..{len(level) - 1}）")
+    proof: list[dict] = []
+    cursor = index
+    while len(level) > 1:
+        nxt = []
+        for i in range(0, len(level), 2):
+            left = level[i]
+            right = level[i + 1] if i + 1 < len(level) else level[i]
+            nxt.append(HASH_PREFIX + sha256_hex((left + right).encode("utf-8")))
+        sibling = cursor + 1 if cursor % 2 == 0 else cursor - 1
+        sibling = sibling if sibling < len(level) else cursor
+        proof.append({"side": "right" if cursor % 2 == 0 else "left", "hash": level[sibling]})
+        cursor //= 2
+        level = nxt
+    return proof
+
+
+def merkle_verify(leaf_hash: str, proof: Iterable[dict], root: str) -> bool:
+    """用包含证明把 `leaf_hash` 折到 `root`（验证方只需要叶子、证明与根）。"""
+    current = str(leaf_hash)
+    for step in proof:
+        sibling = str(step.get("hash"))
+        current = (HASH_PREFIX + sha256_hex((current + sibling).encode("utf-8"))
+                   if step.get("side") == "right"
+                   else HASH_PREFIX + sha256_hex((sibling + current).encode("utf-8")))
+    return current == root

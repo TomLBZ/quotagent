@@ -106,7 +106,8 @@
 - 职责：审计包导出——事件切片、Merkle 根、重建验证、留存策略。
 - Definition：`export(scope, period) -> pack` · `verify(pack) -> bool` · `rebuild(inputs) -> inputs'`（P4 校验）。
 - 不变量：`verify(pack)` 对任何被篡改事件返回假；`rebuild` 必须与观测输入逐条相等。
-- 关联：FR-EVIDENCE-001..003，AC-AUDIT-001/002。
+- P1（T-208）：包带**签名**（HMAC-SHA256 占位，ADR-0008）与**包含证明**（第三方只凭叶子+证明+根即可核对）；`manifest_hash` 绑定清单自身（改清单任意字段即失败）；独立验证入口 `tools/audit-verify.py`（只给包文件 + 验证方密钥，不接触原账本；`--require-signature` 对无签名包判失败）。
+- 关联：FR-EVIDENCE-001..003、FR-EVIDENCE-005，AC-AUDIT-001/002/004。
 
 ## 3. 承包商侧
 

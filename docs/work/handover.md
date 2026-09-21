@@ -4,14 +4,15 @@
 
 ## 现在在哪
 
-**P1 进行中**：T-201、T-216、T-217、T-202、T-218、T-203、T-204、T-205 与 **T-206+T-207（护栏扩展 + 产能日历）done**：
-条款冲突覆盖付款/质保/罚则三族；产能风险两条来源（声称超限 + 日历/关键路径）；两类 Flag 均 `requires_human`
-且逐条落账；`firm` 交期有效期内模型改不动（人可改、过期可改、`indicative` 可改）；冲突只提请人工、不改交期不否决。
-`verify.sh docs|bridge|cordis|p0-no-node|ac-registry|v` 全绿；**48 条 AC 与 s1..s4 全绿**。
+**P1 进行中**：T-201、T-216、T-217、T-202、T-218、T-203、T-204、T-205、T-206+T-207 与
+**T-208（审计包签名 + 包含证明 + 独立验证）done**：包带 HMAC 签名与签名者、`manifest_hash` 绑定清单、
+包含证明（第三方只凭叶子+证明+根）、`tools/audit-verify.py` 离线验证（退出码 0/1/2，未提供密钥不得静默通过）。
+`verify.sh docs|bridge|cordis|p0-no-node|ac-registry|audit|v` 全绿；**49 条 AC 与 s1..s4 全绿**。
 
 ## 下一步唯一动作
 
-**B10 = T-208**：审计包导出/验证 + 模型输入重建（AC-AUDIT-001 已绿，补 P1 的导出/验证闭环）。见 state.json。
+**B11 = T-210**：人工门队列视图 + 超时策略（AC-APPROVE-003）—— 待批不阻塞其他工作、**不存在自动批准**。
+拆解见 state.json 的 `next_action`。
 
 ## 不变量
 
