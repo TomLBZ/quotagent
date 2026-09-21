@@ -32,15 +32,44 @@ def _run_writer(requests: Path, user_space: Path, ledger: Path) -> dict:
         return {"rc": r.returncode, "out": {}, "err": (r.stdout + r.stderr)[-300:]}
 
 
-def _scan(user_space: Path) -> dict:
-    script = ("import { scan } from './host/lib/user-space.mjs';"
-              f"console.log(JSON.stringify(scan({json.dumps(str(user_space))})))")
-    r = subprocess.run(["node", "--input-type=module", "-e", script], cwd=str(ROOT),
-                       capture_output=True, text=True, timeout=180)
+def _node_available() -> bool:
+    """Node 是否可用（无 Node 时本检查退化而不是变红：ADR-0013 §8）。"""
+    node = os.environ.get("QUOTAGENT_NODE", "node")
     try:
-        return json.loads(r.stdout.strip().splitlines()[-1])
+        return subprocess.run([node, "--version"], capture_output=True, timeout=30).returncode == 0
     except Exception:  # noqa: BLE001
-        return {"error": (r.stdout + r.stderr)[-300:]}
+        return False
+
+
+def _scan(user_space: Path) -> dict:
+    """管理面 `scan()` 的等价读取。
+
+    Node 可用 → 调**真** `host/lib/user-space.mjs`（单一实现，不重写宿主逻辑）；
+    Node 不可用 → 按**同一规则**（`<ns>/<plugin>/plugin.json`）做 Python 兜底扫描，并在结果里写明
+    `fallback: "python"` —— ADR-0013 §8 要求 phase≠P1 的 AC 在无 Node 环境下也全绿，
+    而"列表可见性"另有宿主门 `verify.sh user-space` 守卫（不靠这一条）。
+    """
+    if _node_available():
+        script = ("import { scan } from './host/lib/user-space.mjs';"
+                  f"console.log(JSON.stringify(scan({json.dumps(str(user_space))})))")
+        r = subprocess.run(["node", "--input-type=module", "-e", script], cwd=str(ROOT),
+                           capture_output=True, text=True, timeout=180)
+        try:
+            out = json.loads(r.stdout.strip().splitlines()[-1])
+            out["fallback"] = ""
+            return out
+        except Exception:  # noqa: BLE001
+            return {"error": (r.stdout + r.stderr)[-300:], "fallback": ""}
+    ns_list = []
+    for plugin_json in sorted(user_space.glob("*/*/plugin.json")):
+        try:
+            manifest = json.loads(plugin_json.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        ns_list.append({"ns": plugin_json.parent.parent.name,
+                        "plugins": [{"name": manifest.get("name"), "version": manifest.get("version"),
+                                     "invalid": False}]})
+    return {"namespaces": ns_list, "degraded": False, "fallback": "python"}
 
 
 @register("AC-USERPLUG-001", "P2",
