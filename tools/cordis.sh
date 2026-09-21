@@ -60,8 +60,10 @@ case "${1:-}" in
   run)
     shift
     [ $# -ge 1 ] || { echo "用法: tools/cordis.sh run <script.mjs> [args...]" >&2; exit 2; }
+    script=$1
+    shift
     install_deps >/dev/null || exit 1
-    exec "$NODE" "$HOST/$1" "${@:2}"
+    exec "$NODE" "$HOST/$script" "$@"
     ;;
   *)
     echo "用法: tools/cordis.sh install|smoke|run <script.mjs>" >&2

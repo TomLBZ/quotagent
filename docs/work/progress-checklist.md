@@ -2,7 +2,8 @@
 
 <!-- budget: 32 KB. status ∈ todo|doing|blocked|done；done 必须有 evidence（AGENTS.md 规则 6） -->
 
-**当前阶段：P0 mock（S0.1–S0.14 已完成）**。设计期任务全部 `done`；P0 其余任务按 `roadmap.md` §2 顺序推进。
+**当前阶段：P1 mvp demo（S1.1 已完成，S1.2 起按 `roadmap.md` §3 推进）**。设计期与 P0 mock（S0.1–S0.15 备料）任务全部 `done`；
+P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假设通过**，在 `validation/register.json.planning_assumptions` 标注（非结论）。
 任务定义（描述与顺序）在 `roadmap.md`；本文件只维护**状态与证据**。
 
 ## 设计期
@@ -40,7 +41,7 @@
 
 | T | 阶段 | 内容 | FR | AC | status | evidence |
 |---|---|---|---|---|---|---|
-| T-201 | P1 | 双侧进程分离 + profiles | FR-PLUGIN-004 | AC-PLUGIN-003 | todo | – |
+| T-201 | P1 | 双侧进程分离 + profiles | FR-PLUGIN-004 | AC-PLUGIN-003 | done | EV-039 |
 | T-202 | P1 | QEP relay/文件绑定 + receipt + 重发 + seq 空洞 | FR-QEP-003, FR-QEP-005, FR-QEP-006, FR-QEP-008, FR-INTEG-002 | AC-QEP-003, AC-INTEG-002 | todo | – |
 | T-203 | P1 | 三方协调 + 字段权威方 + 冲突上报 | FR-QEP-007 | AC-SYNC-001 | todo | – |
 | T-204 | P1 | 澄清工单 + 广播完整性 + 版本重开 | FR-CLARIFY-001..003 | AC-CLARIFY-001..003 | todo | – |

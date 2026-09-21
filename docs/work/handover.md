@@ -4,20 +4,20 @@
 
 ## 现在在哪
 
-**P1 已开工**。宿主直接依赖 cordis 4.0.0-rc.10（ADR-0012）；桥接见 ADR-0013；
-P1 前提与 MVP 判据见 ADR-0014（V 按指令"假设通过"，`register.json.planning_assumptions`
-标 not_a_conclusion，**V 的 status 保持 open**）。顺序 = 16 批（`decisions.md` D-007）。
-`verify.sh docs|v|cordis` 均 PASS；P0 34 条 AC 全绿；远端已回读（EV-003）。
+**P1 进行中**：B2/T-201 done —— 宿主 profile = 组成数据（一 profile 一真进程/一 realm/一账本）；
+配置更新走 cordis 原生 `fiber.update`+`internal/update`：守卫不调 `next()` 即否决 → 配置不变、不重启
+（ADR-0015、`host/CONFIG.md`、EV-039）。宿主钉 `cordis@4.0.0-rc.10`（ADR-0012/0013），
+前提/MVP 判据 ADR-0014（V 项按指令假设通过，非结论）；顺序见 decisions.md D-007。
+`verify.sh docs|v|cordis` PASS；35 条 AC 与 s1..s4 全绿。
 
 ## 下一步唯一动作
 
-**B1** 补文档覆盖缺口（FR-QEP-005/006→T-202、FR-COST-003→T-208、FR-UX-002→T-210、
-roadmap S1.2/S1.14、AC 表加 g1、新子目录预算行）→ **B2**（T-201 双侧进程分离 + profiles，AC-PLUGIN-003）。
+**B3 = T-202**：QEP 跨进程投递 + receipt + 重发 + seq 空洞（AC-QEP-003/AC-INTEG-002）。
+拆解与依赖见 `.agents/state.json` 的 `next_action`。
 
 ## 不变量
 
-内核不可自改 · 账本唯一写者 · 承诺需人批且桥不暴露 commit 面 · 私域不出 realm ·
-不可归一即拒绝 · 护栏只标注 · 无引用即无效 · **V 结论/G0/G1 只能人签**。
+内核不可自改 · 账本唯一写者 · commit 面不进桥 · 私域不出 realm · V 结论只能人签（详见 AGENTS.md）。
 
 ## 阻塞
 

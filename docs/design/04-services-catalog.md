@@ -27,6 +27,8 @@
 - 关联：FR-EVT-001。
 
 ### `ctx.plugin` [P0]
+
+> P1 起，**组成/生命周期**由宿主层 cordis 承担（profile = 组成数据、配置更新走 `fiber.update` + 可否决的 `internal/update`）：见 ADR-0015 与 `host/README.md`。Python 侧仍持有账本与业务服务。
 - 职责：插件装载、依赖（coeffect）协调、卸载回收；对应 Cordis 的 `registry+fiber+reflect` 语义。
 - Definition：`mount(plugin, config) -> fiber` · `unmount(fiber)` · `update(fiber, config)` · `effects(fiber) -> EffectMeta[]`。
 - P0 实现：`src/quotagent/kernel/plugin.py`（fiber 状态机 pending/active/inactive/disposed；ctx 内的注册自动登记为 effect）。
