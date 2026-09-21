@@ -59,3 +59,7 @@
   `tools/verify.sh docs && git add -A && git commit ... && git push`，让门红直接短路整串动作。
 - **给技能文件加内容前先看预算**：`SKILL.md` 8 KB 很容易顶到；踩坑清单溢出时按标准顺序
   **拆文件**（`references/pitfalls.md` + 在 12 §1 补预算行），而不是压缩成看不懂的短句。
+- **跑门不要经管道**：`tools/verify.sh docs | tail -2 && git commit` 会拿到 **`tail` 的退出码**，
+  红门被当成绿门直接提交（B7 实测：handover 1147 B 越界被提交并推送）。收尾固定写法：
+  `tools/verify.sh docs > tmp/gate.out 2>&1; code=$?; [ $code -eq 0 ] && git add -A && git commit ... && git push`
+  ——或先单独跑一次门看退出码，再决定提交。
