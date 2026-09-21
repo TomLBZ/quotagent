@@ -57,15 +57,19 @@ export function apply(ctx, config) {
     /**
      * 一次真实调用：分桶 → 调用 → 回灌样本。返回 `{lane, result, fallback_used}`。
      * 调用方**必须**看 `lane`（不得假设走了哪条道）。
+     *
+     * `opts.key` 可覆盖分桶键：**探针**必须靠它才能在一次命令里同时采样两侧
+     * （固定键 → 40 次探针全落同一条道 → 判定永远"样本不足"，实测）。
+     * 生产路径不传 `opts`，仍用稳定的 `${name}:${method}`。
      */
-    call: (method, params) => {
+    call: (method, params, opts = {}) => {
       if (!registry.base) throw new Error('[dispatch-not-registered] 先 register({base})')
       if (!dispatched(method)) {
         counters.refused += 1
         counters.base += 1
         return { lane: 'base', result: registry.base(method, params), fallback_used: false, dispatched: false }
       }
-      const lane = canary.bucket({ realm: config.realm, key: `${config.name}:${method}` })
+      const lane = canary.bucket({ realm: config.realm, key: opts.key ?? `${config.name}:${method}` })
       const impl = (lane === 'canary' && registry.candidate) ? registry.candidate : registry.base
       const actualLane = (lane === 'canary' && registry.candidate) ? 'canary' : 'base'
       let result

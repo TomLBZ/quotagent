@@ -1,0 +1,45 @@
+EV-070 T-235 canary 探针与自动回滚接到真实命令路径（cli.mjs bridge）
+生成时间 2026-09-21T09:24:23Z
+命令与原始输出（原样留档，未编辑）
+
+[1] 缺人工引用 → 必须拒绝（扩大上线面要人批准，ADR-0017）
+$ node host/cli.mjs bridge --profile contractor-ops --method ledger.count --canary-weight 5000
+exit=2
+{"ok":false,"action":"bridge","phase":"canary-enter","profile":"contractor-ops","error":"进入 canary 需要人工引用（--canary-approval ap-NNNN）：ADR-0017 规定扩大上线面要人批准","code":"canary-approval-required"}
+[bridge-canary] 接线：weight=5000bps 候选=（无） stats={"calls":0,"base":0,"canary":0,"fallbacks":0,"refused":0,"name":"bridge:contractor-ops","realm":"contractor:con-B","has_candidate":false,"candidate_name":""}
+
+[2] 有人工引用 + 40 探针 + 会退化的候选 → 退化判定 → **自动回滚**（免批准）+ 落账
+$ node host/cli.mjs bridge --profile contractor-ops --method ledger.count --canary-weight 5000 \
+    --canary-approval ap-0099 --canary-probe 40 --candidate-module tmp/cand-flaky.mjs
+exit=0
+{"ok":true,"action":"bridge","phase":"call","profile":"contractor-ops","realm":"contractor:con-B","ledger_path":"/workspace/projects/quotagent/tmp/host-root/contractor-ops/ledger-contractor.jsonl","call_lane":"canary","call_fallback":true,"canary":{"decision":{"action":"rollback","automatic":true,"approval_required":false,"verdict":{"recommendation":"rollback","reasons":["错误率 0 → 5000 bp（阈值 +200）"],"base":{"count":29,"errors":0,"error_rate_bps":0,"latency_p95_ms":0,"latency_mean_ms":0,"cost_mean_bps":0},"canary":{"count":22,"errors":11,"error_rate_bps":5000,"latency_p95_ms":0,"latency_mean_ms":0,"cost_mean_bps":0},"computed_by":"canary-router"}},"exited":{"phase":"base","proposal_id":"tmp/cand-flaky.mjs","reason":"auto-rollback:错误率 0 → 5000 bp（阈值 +200）","weight_bps":0,"approval_ref":"ap-0099","samples_seen":51},"samples":{"rounds":40,"fallbacks":11},"ledger_record":{"ok":true,"event":"evolve/canary-exited"}},"audit":{"records":1,"stats":{"captured":1,"deduped":0,"skipped":0,"dropped":0,"size":1,"capacity":200},"slice":[{"type":"canary/dispatch-registered","source":"decision","summary":"weight_bps=5000 candidate=tmp/cand-flaky.mjs"}]},"hello":{"bridge":{"version":"1.0","min_supported":"1.0"},"kernel":{"version":"0.1.0","profile":"contractor-ops","operator":"bridge:contractor-ops"},"qep_versions":["1.0"],"features":["ndjson-stdio","credit-window","commit-surface-closed","fact-surface-closed","identities-injected"],"events_count":91,"methods":["bridge.status","events.declared","ledger.count","ledger.head","ledger.healthy","ledger.read","ledger.verify","measures.convert","measures.factor"],"methods_refused":["qep.receive","qep.send","approval.decide","quote.submit","award.commit","po.issue","change.approve"],"ledger":{"path":"/workspace/projects/quotagent/tmp/host-root/contractor-ops/ledger-contractor.jsonl","head":"sha256:0000000000000000000000000000000000000000000000000000000000000000","seq":0,"healthy":true},"realms":["contractor:con-B"],"max_frame_bytes":8388608,"credit_window":256},"ready":{"profile":"contractor-ops","realm":"contractor:con-B","operator":"bridge:contractor-ops","surfaces_open":["read","compute"],"ledger_seq":0,"credit_window":256,"session":"s-0","restarts":0,"read_only":false,"degraded":null,"non_degradable":["approval-chain","version-binding","signature-verification"]},"call":{"n":"result","id":1,"m":"ledger.count","result":{"marked":true,"probe":39},"error":null},"method":"ledger.count","claim":null,"exit_code":0,"stderr_log_lines":1,"stdout_frames_only":true}
+
+[3] 门：verify.sh bridge-canary
+exit=0
+ds` 白名单外的方法**不参与分流**（始终 base）并计入 refused
+        onCall=canary otherCall=base refused=1
+[ok]   负控→正控：候选抛错时**回退 base**（调用方拿到正确答案），且回退计入统计
+        fallback=true via=base fallbacks=1
+[ok]   负控：base 抛错必须原样抛出（不得静默回退掩盖真实故障）
+        error=base-boom
+[ok]   真实调用回灌样本 → 候选退化时 decide() 给出 **automatic 回滚**（安全动作，无需人工）
+        回退 20 次；base=20 canary=40；action=rollback
+[ok]   候选可替换且统计跟随（晋升产物即按此接口接进来）
+        candidate_name=cand-v2
+[ok]   runCanary 负控：缺人工引用直接拒绝（canary-approval-required，且**不进入** canary）
+        code=canary-approval-required phase=base
+[ok]   runCanary 正控：探针一次性采样**两侧** + 退化判定 + **自动回滚**（安全动作免批准）
+        base=25 canary=21 fallbacks=6 decision=rollback exited=base
+[ok]   runCanary 负控：候选不退化时**不回滚**（推荐只是建议，不擅自扩大上线面）
+        action=hold exited=null phase=canary
+RESULT: PASS（bridge-canary 门 11/11）
+
+[4] 账本（唯一写入者 Python 侧，H1）尾部
+$ tail -1 tmp/evolve/ledger.jsonl
+{"actor":"host:evolution","body":{"automatic":true,"proposal_id":"tmp/cand-flaky.mjs","reason":"auto-rollback:错误率 0 → 5000 bp（阈值 +200）","verdict":{"base":{"cost_mean_bps":0,"count":29,"error_rate_bps":0,"errors":0,"latency_mean_ms":0,"latency_p95_ms":0},"canary":{"cost_mean_bps":0,"count":22,"error_rate_bps":5000,"errors":11,"latency_mean_ms":0,"latency_p95_ms":0},"computed_by":"canary-router","reasons":["错误率 0 → 5000 bp（阈值 +200）"],"recommendation":"rollback"}},"body_hash":"sha256:3e6074739917d7e7542d8a0baf54361804a0c3d3a446ed22e72b2c4bf967af11","class":"intent","correlation_id":"tmp/cand-flaky.mjs","entry_hash":"sha256:e8dddfdbf33d2de14e1c5863f28886c6f1106701790e3438bd0c409b12d1f7e6","prev_hash":"sha256:0a2332a46c687c2345bac707dc5b17c0530b8f479b2a0e441ada384196e5256b","realm":"contractor:con-B","refs":{},"seq":9,"ts":"2026-09-21T09:24:06Z","type":"evolve/canary-exited"}
+总行数 9
+
+结论：① 无批准 → exit 2 且**不进入** canary；② 有批准 → 40 探针真分桶（lane 由 canary 决定、11 次候选失败回退 base）
+→ 判定 rollback（错误率 0 → 5000 bp）→ 自动退出 canary（automatic=true / approval_required=false）
+→ 账本新增 evolve/canary-exited（automatic=true）。方向性：**扩大上线面要人批准，踩刹车可以自动**。
+

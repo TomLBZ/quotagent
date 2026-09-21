@@ -263,3 +263,24 @@
 2. `bridge` 动作里 `canaryProbe = runCanary({...})`，取 `last_result` 作为本命令的输出帧；
 3. `CanaryApprovalRequired` → `emit(..., 2)`；
 4. 回滚时把 `evolve/canary-exited` 交 `tools/evolve-record.py` 落账 + 往 audit 流水记一条 `decision`。
+
+## D-030 T-235 完成：canary 探针 + 退化自动回滚已接真实命令路径（2026-09-21T09:24:23Z）
+
+**命令**：`node host/cli.mjs bridge --profile <p> --method <m> [--params ...] --canary-weight <bps>
+--canary-approval ap-NNNN --canary-probe <N> [--candidate-module <path>]`
+
+**实测（EV-070）**：
+1. `--canary-weight 5000` 但缺 `--canary-approval` → **exit 2**，理由指向 ADR-0017，且**没有进入** canary；
+2. `--canary-approval ap-0099 --canary-probe 40 --candidate-module tmp/cand-flaky.mjs`（候选在偶数探针抛错）→
+   `lane=canary`、11 次回退、判定 **rollback**（错误率 0 → 5000 bp）→ **自动退出 canary**
+   （`automatic=true`、`approval_required=false`）→ 账本新增 `evolve/canary-exited`（`automatic=true`，seq 9）。
+
+**这条纪律的方向性**（写死）：**扩大上线面（进入 canary）必须有人工引用；缩小上线面（回滚）自动执行、免批准**。
+
+**两个真根因（都会让"看起来接好了"的功能其实没接）**：
+1. **`ctx.<自己>` 与块作用域**：canary 句柄必须从**插件自己的 ctx** 捕获（根 ctx 看不到插件提供的服务）；
+   编排 lib 的导入必须放在**函数作用域**——放进 `if` 块会让 `catch` 报 `CanaryApprovalRequired is not defined`。
+   → 同类错误（TDZ/作用域）在本轮同一处共出现 **6 次**，`node --check` 全部抓不到。
+2. **探针的分桶键**：`bridge-canary.call` 的键是稳定的 `${name}:${method}`，**40 次探针会全部落同一条道**
+   → 判定永远"样本不足"，看着像"canary 没生效"。→ 新增 `opts.key` 覆盖（探针用 `probe:<method>:<i>`），
+   生产路径不传 `opts`，键仍稳定。**"探针必须能同时采样两侧"是这条功能能成立的前提。**

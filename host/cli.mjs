@@ -182,14 +182,25 @@ const main = async () => {
     // canary 接线（可选）：`--canary-weight <bps>` > 0 时，真实桥调用按 canary 分桶走 base/候选。
     // 默认 0 = 全部走 base，行为与未接线时完全一致（升级路径安全）。
     let canaryDispatch = null
+    let canaryProbe = null   // {decision, exited, samples}
+    // 编排 lib 的导入必须在**函数作用域**（放 if 块里会让 catch 看不到 → CanaryApprovalRequired is not defined）
+    const { runCanary, CanaryApprovalRequired } = await import('./lib/canary-run.mjs')
     let auditSlice = null
     const canaryWeight = Number(args['canary-weight'] ?? 0)
     if (canaryWeight > 0 || args['candidate-module']) {
       const ctx = new Context()
       await ctx.plugin(EventsService)
       const { apply: canaryApply, Config: canaryConfig } = await import('./modules/canary.mjs')
+      const cbox = {}
       await ctx.plugin({ name: 'canary', inject: [], Config: canaryConfig,
-        apply: (inner, cfg) => canaryApply(inner, cfg) }, canaryConfig.parse({ weight_bps: canaryWeight }))
+        apply: async (inner, cfg) => {
+          const originalProvide = inner.provide.bind(inner)
+          inner.provide = (service, value) => {
+            if (service === 'canary') cbox.handle = value
+            return originalProvide(service, value)
+          }
+          await canaryApply(inner, cfg)
+        } }, canaryConfig.parse({ weight_bps: canaryWeight }))
       const { apply: bcApply, Config: bcConfig } = await import('./modules/bridge-canary.mjs')
       const dbox = {}
       await ctx.plugin({ name: 'bridge-canary', inject: ['canary'], Config: bcConfig,
@@ -202,7 +213,7 @@ const main = async () => {
       const candidate = candidatePath ? (await import(pathToFileURL(resolve(REPO_ROOT, candidatePath)).href)).call : null
       dbox.handle.register({ base: (method, params) => client.call(method, params), candidate,
         candidate_name: candidatePath ?? '' })
-      canaryDispatch = { weight_bps: canaryWeight, candidate: candidatePath, dispatch: dbox.handle }
+      canaryDispatch = { weight_bps: canaryWeight, candidate: candidatePath, dispatch: dbox.handle, canary: cbox.handle }
       // 审计留痕（观测用，**不是账本**）：把这次 canary 决策记进 audit 流水，随命令输出回读
       const { apply: auditApply, Config: auditConfig } = await import('./modules/audit-hook.mjs')
       const abox = {}
@@ -239,10 +250,39 @@ const main = async () => {
       // 候选抛出时 dispatcher 回退 base，调用方仍拿到正确答案（失败隔离）。
       let frame
       if (canaryDispatch) {
-        const routed = canaryDispatch.dispatch.call(String(args.method), params)
-        call_lane = routed.lane
-        call_fallback = routed.fallback_used
-        frame = await routed.result
+        // 编排在 lib 里（D-029）：进（需人工引用）→ 探针 → 判定 → 退化自动回滚（安全动作免批准）
+        try {
+          canaryProbe = runCanary({
+            canary: canaryDispatch.canary,
+            dispatch: canaryDispatch.dispatch,
+            method: String(args.method),
+            params,
+            probeCount: Number(args['canary-probe'] ?? 1),
+            approval_ref: String(args['canary-approval'] ?? ''),
+            proposal_id: String(args['candidate-module'] ?? `bridge:${profileName}`),
+          })
+        } catch (err) {
+          if (err instanceof CanaryApprovalRequired) {
+            emit({ ok: false, action: 'bridge', phase: 'canary-enter', profile: profileName,
+                   error: err.message, code: err.code }, 2)
+          }
+          throw err
+        }
+        frame = await canaryProbe.last_result
+        call_lane = canaryProbe.last_lane
+        call_fallback = canaryProbe.samples.fallbacks > 0
+        // 退化（自动回滚）落账：账本唯一写入者是 Python 侧（H1），宿主只触发工具；工具失败不掩盖回滚事实
+        if (canaryProbe.exited) {
+          const { spawnSync } = await import('node:child_process')
+          const body = JSON.stringify({ proposal_id: canaryProbe.exited.proposal_id ?? null,
+            reason: canaryProbe.exited.reason ?? 'auto-rollback', automatic: true,
+            verdict: canaryProbe.decision?.verdict ?? null })
+          const out = spawnSync('python3', [join(REPO_ROOT, 'tools', 'evolve-record.py'),
+            '--event', 'evolve/canary-exited', '--body', body], { cwd: REPO_ROOT, encoding: 'utf8' })
+          canaryProbe.ledger_record = out.status === 0
+            ? { ok: true, event: 'evolve/canary-exited' }
+            : { ok: false, event: 'evolve/canary-exited', detail: (out.stderr || out.stdout || '').trim().slice(0, 200) }
+        }
       } else {
         frame = await client.call(String(args.method), params, { id: Number(args.id ?? 1) })
       }
@@ -253,6 +293,8 @@ const main = async () => {
     emit({ ok: Boolean(call ? call.n === 'result' : true), action: 'bridge', phase: 'call',
            profile: profileName, realm: profile.realm, ledger_path: ledgerPath,
            call_lane, call_fallback,
+           canary: canaryProbe ? { decision: canaryProbe.decision, exited: canaryProbe.exited,
+             samples: canaryProbe.samples, ledger_record: canaryProbe.ledger_record ?? null } : null,
            audit: auditSlice ? { records: auditSlice.decisions({ limit: 5 }).length, stats: auditSlice.stats(),
              slice: auditSlice.decisions({ limit: 5 }).map((item) => ({ type: item.type, source: item.source, summary: item.summary })) } : null,
            hello: handshake.hello ? {
