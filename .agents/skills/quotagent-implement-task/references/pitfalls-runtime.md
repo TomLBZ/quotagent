@@ -21,3 +21,4 @@
 4. `host/canary-dispatch.mjs` 的 e2e 挂载 + `host/cli.mjs` 的运行期挂载与输出（漏一处，对应门就红）。
 附带纪律：包装挂载必须**照抄模块声明的 inject**（写 `inject: []` 会让模块取不到依赖）；合成模块对象
 （`{apply, Config}`）必须**显式带 inject 字段**，否则 `mod.inject` 是 undefined、静默退回 `[]`（最危险）。
+- **改服务入口脚本后必须真重启并回读**：`py_compile` / `node --check` 只能抓语法，抓不到"调用了未定义的函数"（本轮在 `webui-serve.py` 里先写了 `probe()` 的调用、函数定义却没落盘 → `NameError` → 健康探测失败 → 服务起不来、公网 502）。另外**相对路径在生产 cwd 下会失效**：宿主读落盘文件一律走**绝对路径**（由服务脚本以参数/环境变量传入，同既有 ledger 参数做法）。
