@@ -31,6 +31,21 @@
       "produced_by": "tools/evolve-module.mjs",
       "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
       "evidence": null
+    },
+    {
+      "name": "circuit-breaker",
+      "proposal_id": "sha256:20e799b34bba40b7cc5f799ea068e4105470dbd6eeda1fa78cf4cb5bf5b9c746",
+      "artifact_hash": "sha256:4bddc04fbd83aafbb95cf9d5551cddf48e74ad779d11052a5cfdf60f6a1abaa6",
+      "bytes": 5791,
+      "approval_ref": "ap-0102",
+      "gate": "passed",
+      "fixture": {
+        "passed": 13,
+        "total": 13
+      },
+      "produced_by": "tools/evolve-module.mjs",
+      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+      "evidence": null
     }
   ]
 }
