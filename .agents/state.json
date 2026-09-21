@@ -1,14 +1,14 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-21T21:49:06Z",
+  "updated_at": "2026-09-21T21:54:30Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
   "next_task": "T-264 系统管理 UI（admin 道 + token 提权 + 视角切换 + agent 进度/阻塞面板）",
   "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
   "last_verified_command": "tools/verify.sh docs | ac-registry | coverage | wiring | plugins | modules | g1（docs 另连跑 12 次；反向验证 3 例在整仓副本 /tmp/frwork/copy 上做）",
-  "last_verified_result": "PASS：七道门全绿（docs：契约文档 101 个 / 0 未解析；FR 定义集合 = 主文件 102 条 + 归档 47 条，`fr_archives=[docs/work/functional-requirements-archive.md:47]`，预算最高 99%（INDEX.md 8076/8192 B）；ac-registry、coverage（8/8，含新增的『FR 定义集合非空且归档被读到』守卫）、wiring、plugins、modules 均 exit 0；g1 exit 0）。docs 连续 12 次全绿（12/12），窗口内 docs/work/*.md 逐字节未变、无并发写入者。反向验证 3 例：归档抽 1 行→红、主文件抽 1 行→红（未解析 ID + AC-RUNTIME-003 孤儿两处）、真存在但 0 条 FR 行的归档→docs 与 coverage 双红；还原后 sha256 与 pristine 一致",
+  "last_verified_result": "PASS：七道门全绿（docs：契约文档 101 个 / 0 未解析；FR 定义集合 = 主文件 102 条 + 归档 47 条，`fr_archives=[docs/work/functional-requirements-archive.md:47]`，预算最高 99%（INDEX.md 8076/8192 B）；ac-registry、coverage（8/8，含新增的『FR 定义集合非空且归档被读到』守卫）、wiring、plugins、modules 均 exit 0；g1 exit 0）；`clean-copy` exit 0（HEAD 干净副本 15 道门全绿）。docs 连续 12 次全绿（12/12），窗口内 docs/work/*.md 逐字节未变、无并发写入者。反向验证 3 例：归档抽 1 行→红、主文件抽 1 行→红（未解析 ID + AC-RUNTIME-003 孤儿两处）、真存在但 0 条 FR 行的归档→docs 与 coverage 双红；还原后 sha256 与 pristine 一致",
   "last_verified_evidence": "docs/work/evidence/EV-155-fr-archive-gate.txt",
-  "last_verified_commit": "b53a8f053439635e7da78769b572aebd46a49ff7",
+  "last_verified_commit": "a1831c4d3522daae265b41d08d35362e1531a7b6",
   "blockers": [],
   "human_required": [
     "T-117 现场验证 V-001..V-012：备料已完成；**P1 按用户指令以\"V 全部通过\"为前提推进**（planning_assumptions，非结论），V 的正式 conclusion 与 G0/G1 签署仍需人工",

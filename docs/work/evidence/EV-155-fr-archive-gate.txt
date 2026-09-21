@@ -294,3 +294,13 @@ RESULT: PASS
   8. V-001..V-012 的现场结论与 G0/G1 人工签署：与本批无关，仍待人工。
   9. 门之外的可发现性：`grep -rln functional-requirements .agents/` 无命中（本仓技能不引用 FR 文件），
      故本批**未**改任何 `.agents/skills/*`。
+
+七、提交、远端回读与 clean-copy（本批收尾；本节为**提交后追加**，其余各节内容未改）
+  本批提交：`a1831c4d3522daae265b41d08d35362e1531a7b6`（docs(gate): DOC-FR1 FR 归档合法化 …）
+  远端回读：`git ls-remote origin refs/heads/main` →
+    a1831c4d3522daae265b41d08d35362e1531a7b6	refs/heads/main
+    （与本地 `git rev-parse HEAD` 逐字符一致：是）
+  `tools/verify.sh clean-copy`（校验 **HEAD 版**干净副本，须 commit 后跑）：exit=0
+    末行：RESULT: PASS（15 道门在干净副本里全绿；已提交内容自足可复现）
+  说明：clean-copy 是在**已提交内容**上跑的（15 道门在干净副本里全绿），因此 §五 的 12 次 docs 与七门结果
+  对应的工作树内容与提交内容一致（提交前最后一次七门回归 exit 全 0，见 §五 5.3）。
