@@ -82,6 +82,10 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-plugin-inventory.py" "$@"
     ;;
+  audit-hook)
+    shift
+    exec "$QUOTAGENT_PY" "$ROOT/tools/check-audit-hook.py" "$@"
+    ;;
   governor)
     shift
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-governor.py" "$@"
@@ -132,7 +136,7 @@ audit)
     exit 2
     ;;
   *)
-    echo "用法: tools/verify.sh docs|ac <AC-ID>|all|suite <name>|cordis|v|smoke|events|invariants|evolution|modules|webui|plugins|canary|canary-route|bridge-canary|governor|clean-copy|bridge|p0-no-node|ac-registry|audit|g0|g1|g2" >&2
+    echo "用法: tools/verify.sh docs|ac <AC-ID>|all|suite <name>|cordis|v|smoke|events|invariants|evolution|modules|webui|plugins|canary|canary-route|bridge-canary|governor|audit-hook|clean-copy|bridge|p0-no-node|ac-registry|audit|g0|g1|g2" >&2
     exit 2
     ;;
 esac

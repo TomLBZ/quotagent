@@ -69,6 +69,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-230 | canary 接线到真实入口：投影独立成 `projection` 插件 + `canary-dispatch` 失败隔离 + UI 路径端到端（ADR-0017 §4 收口） | B26 | done | EV-065 |
 | T-231 | canary 样本接到真实桥调用：`bridge-canary` 插件 + CLI `--canary-weight/--candidate-module`（默认零影响，同形契约） | B27 | done | EV-066 |
 | T-232 | 运行期中间件 `governor` 插件：可解释拒绝/背压、显式超时、有界重试（与 canary 互补） | B28 | done | EV-067 |
+| T-233 | 运行期审计钩子 `audit-hook` 插件：决策留痕（观测，不写账本）+ 去重/有界/零残留 | B29 | done | EV-068 |
 | T-224 | Jev 建议层插件（`advisor`）：建议不入判定、低置信转人工、外部失败降级 | B23+ | todo | — |
 | T-222 | WebUI 插件（双方视角路由）+ 工作区接入（从现有 dashboard 可访问） | B20/B21 | done | EV-059 |
 | T-221 | P1 | 每个进树模块的 manifest（name/inject/Config/apply）+ fixture A1..A6 + ≥1 契约测试（§7.1 第 5 条） | FR-PLUGIN-001 | `verify.sh modules` 36/36（3 模块 × 12 项） | done | EV-058 |

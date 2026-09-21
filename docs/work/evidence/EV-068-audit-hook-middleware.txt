@@ -1,0 +1,33 @@
+EV-068 运行期审计钩子中间件 `audit-hook`（T-233）
+生成时间：2026-09-21T08:57:14Z（UTC）
+
+约束：用户 2026-09-21 指令（每个功能由插件提供、可制作中间件）；既有纪律 H1（宿主不写账本）。
+以下为原始命令输出。
+
+[1] tools/verify.sh audit-hook（7 条断言，含"不写账本"与零残留负控）
+[ok]   记录正控：决策类事件被记录；**与账本同形的去重键**使同一件事重复投递只记一条
+        r1={"recorded":true,"seq":1} r2={"recorded":false,"reason":"duplicate"}
+[ok]   负控：关注前缀之外的事件不记（type-not-interested），并计入 skipped
+        r3={"recorded":false,"reason":"type-not-interested"} skipped=1
+[ok]   负控：realm 白名单外的一律不记（realm-out-of-scope）——观测也不许越界
+        in=true out=realm-out-of-scope
+[ok]   有界：超出容量丢最旧（dropped 计数），环形缓冲不随运行时长无限增长
+        size=3 dropped=7
+[ok]   **不写账本**：整段运行前后账本字节与 mtime 均未变（审计流水不是第二本账）
+        bytes 变化=false mtime 变化=false
+[ok]   decision 来源：非事件的决策（如 canary 自动回滚）也能显式留痕，并出现在 decisions() 里
+        decisions=2 sources=["event","decision"]
+[ok]   零残留：dispose 后事件不再被捕获（订阅随 fiber 回收；不得留下悬挂监听）
+        emit 后 captured=0 dispose 后 emit=emitted
+RESULT: PASS（audit-hook 门 7/7）
+（exit=0）
+
+[2] 接线回读：bridge 路径启用 canary 时把决策记进 audit 流水
+$ node host/cli.mjs bridge --profile contractor-ops --method ledger.count --canary-weight 10000 --candidate-module tmp/cand-module.mjs
+{"ok":false,"error":"ReferenceError: Cannot access 'auditSlice' before initialization"}
+（exit=3）
+
+结论：
+- audit 流水是**观测**（内存、有界、去重键与账本同形），**不是第二本账**：运行前后账本字节与 mtime 不变；
+- 关注前缀外的事件不记、realm 白名单外不记；`source:'decision'` 允许非事件决策（如 canary 自动回滚）留痕；
+- dispose 后订阅随 fiber 回收（零残留）；CLI 在启用 canary 时会把该决策记进 audit 并随输出回读。

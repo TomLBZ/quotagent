@@ -177,6 +177,7 @@ const main = async () => {
     // canary 接线（可选）：`--canary-weight <bps>` > 0 时，真实桥调用按 canary 分桶走 base/候选。
     // 默认 0 = 全部走 base，行为与未接线时完全一致（升级路径安全）。
     let canaryDispatch = null
+    let auditSlice = null
     const canaryWeight = Number(args['canary-weight'] ?? 0)
     if (canaryWeight > 0 || args['candidate-module']) {
       const ctx = new Context()
@@ -197,6 +198,19 @@ const main = async () => {
       dbox.handle.register({ base: (method, params) => client.call(method, params), candidate,
         candidate_name: candidatePath ?? '' })
       canaryDispatch = { weight_bps: canaryWeight, candidate: candidatePath, dispatch: dbox.handle }
+      // 审计留痕（观测用，**不是账本**）：把这次 canary 决策记进 audit 流水，随命令输出回读
+      const { apply: auditApply, Config: auditConfig } = await import('./modules/audit-hook.mjs')
+      const abox = {}
+      await ctx.plugin({ name: 'audit-hook', inject: [], Config: auditConfig,
+        apply: async (inner, cfg) => {
+          const original = inner.provide.bind(inner)
+          inner.provide = (service, value) => { if (service === 'audit') abox.handle = value; return original(service, value) }
+          await auditApply(inner, cfg)
+        } }, auditConfig.parse({}))
+      abox.handle.record({ type: 'canary/dispatch-registered', correlation_id: `bridge:${profileName}`,
+        realm: profile.realm, source: 'decision',
+        body: { weight_bps: canaryWeight, candidate: candidatePath ?? null } })
+      auditSlice = abox.handle
     }
     const handshake = await client.handshake({ acceptBridge: accept, wantEvents, profile: profileName })
     if (!handshake.ok) {
@@ -234,6 +248,8 @@ const main = async () => {
     emit({ ok: Boolean(call ? call.n === 'result' : true), action: 'bridge', phase: 'call',
            profile: profileName, realm: profile.realm, ledger_path: ledgerPath,
            call_lane, call_fallback,
+           audit: auditSlice ? { records: auditSlice.decisions({ limit: 5 }).length, stats: auditSlice.stats(),
+             slice: auditSlice.decisions({ limit: 5 }).map((item) => ({ type: item.type, source: item.source, summary: item.summary })) } : null,
            hello: handshake.hello ? {
              bridge: handshake.hello.bridge, kernel: handshake.hello.kernel,
              qep_versions: handshake.hello.qep_versions, features: handshake.hello.features,
