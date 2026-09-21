@@ -145,6 +145,8 @@
 | FR-USERPLUG-011 | host/lib/user-space.mjs + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-011 | 直引 |
 | FR-USERPLUG-012 | host/lib/user-space.mjs + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-012 | 直引 |
 
+| FR-USERPLUG-001 | tools/userplugin-record.py + host/lib/user-space.mjs（scan/列表） | 见 AC-USERPLUG-001 | 直引 |
+
 ## 2. 插件归属
 
 | 插件 | 归属 FR/AC | 强度 |

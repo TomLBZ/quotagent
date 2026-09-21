@@ -15,3 +15,4 @@ from .registry import (ACReport, Assertion, ACCheck, REGISTRY, list_acs, run_ac,
 
 __all__ = ["ACReport", "Assertion", "ACCheck", "REGISTRY", "list_acs", "run_ac", "run_check",
            "EXIT_CONFIG", "EXIT_FAIL", "EXIT_PASS"]
+from . import checks_userplugin  # noqa: F401,E402  (AC-USERPLUG-001：用户空间插件 created/幂等/正文不入账本)

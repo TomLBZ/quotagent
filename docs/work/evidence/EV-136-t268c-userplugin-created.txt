@@ -1,0 +1,26 @@
+EV-136 T-268c 用户空间插件的 created 永久化：Python 侧唯一写账本者 + 机检
+
+[1] `tools/userplugin-record.py`（新增，**唯一写 `userplugin/*` 的一方**）
+· 读 agent panel 提需求留下的待办件（0600；**同时读 `applied/`**，让"幂等"成为可观察事实而不是默认假设）
+· 对每个需求：在 `user-space/<ns>/*/plugin.json` 找已产出插件 → 重算产物哈希
+  （`plugin.json` + `index.mjs` 逐文件 sha256 的规范化拼接，与 mtime 无关）→ 落
+  `userplugin/created`（body 恰 7 键：ns/plugin/version/**source_prompt_digest**/**artifact_sha256**/bytes/schema，
+  **不含需求正文**）；同 `(ns, plugin, artifact_sha256)` 只落一次
+· manifest 非法/缺 name/version → 落 `userplugin/refused`（code=manifest-invalid），**不**落 created
+· 用法错误（缺 `--now`/目录不存在）在**构造 Ledger 之前**返回：拒绝时连空账本文件都不创建
+· 自述不可信：待办件的 `description_sha256` 与正文不符 → 拒绝该件
+
+[2] 机检 `tools/verify.sh ac AC-USERPLUG-001` → **PASS 6/6**
+① 需求产出后恰落一条 created（含 digest 与 artifact_sha256）
+② **需求正文不入账本**（只出摘要）
+③ 产出**自动出现在管理列表**：用**真** `host/lib/user-space.mjs` 的 `scan()` 命中（无人工搬运步骤）
+④ 幂等：重跑标 duplicates、账本零新增、退出码 0
+⑤ manifest 非法 → refused(code=manifest-invalid) 且不落 created
+⑥ 待办件自述与正文不符 → 拒绝且不因此创建账本文件
+
+[3] 如实说明
+· 本批只到 `created`（"产出进列表 + 落痕"）；**迭代/回滚**（版本+哈希+prev、`rollback-refused-modified`）与
+  **提权真写 `host/modules/`**（人工门 + 影子哈希 + 补登记行）属 T-267b2
+· 管理面装载的插件仍一律 `available:false`（无凭据下发通道，不冒充已连接）
+· "agent 产出插件"这一步本批由 **subagent 真做**（见 T-269）；平台侧只负责"自动进列表 + 落痕"，
+  **不假装平台自己会写代码**

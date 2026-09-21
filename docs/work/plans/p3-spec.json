@@ -120,7 +120,7 @@
    "requirement": "**自然语言 → 产插件 → 自动进列表**：用户在 agent panel 用自然语言描述需求，agent 产出用户空间插件；产出完成即**自动登记进用户空间管理列表**（无需人工搬运/手工注册动作）。登记真源 = `user-space/<ns>/<plugin>/plugin.json`，并落 `userplugin/created`（含 `source_prompt_digest` 与产物 `sha256`）；同哈希重复登记**幂等** | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-USERPLUG-002",
@@ -569,7 +569,7 @@
    "command": "tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh events`（已存在，事件两侧登记）",
    "evidence_draft": "见 `evidence/EV-118`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-USERPLUG-002",
