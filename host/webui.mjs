@@ -16,6 +16,9 @@ import { createServer as probeServer } from 'node:net'
 import { apply as webuiApply, Config as webuiConfig, sendGovernorError } from './modules/webui.mjs'
 import { Config as projectionConfig, apply as projectionApply, project, projectWithAudit, VIEW_RULES } from './modules/projection.mjs'
 import { Config as governorConfig, apply as governorApply } from './modules/governor.mjs'
+import { Config as auditConfig, apply as auditApply } from './modules/audit-hook.mjs'
+import { Config as canaryConfig, apply as canaryApply } from './modules/canary.mjs'
+import { Config as obsConfig, apply as obsApply } from './modules/observability.mjs'
 
 const facts = { checks: [] }
 let failures = 0
@@ -71,13 +74,33 @@ const governorMount = (name, sink) => ({
   },
 })
 const gbox = {}
+/** 观测来源 + 聚合（T-236）：三者都必须先挂，webui 的 inject 依赖它们。 */
+const obsBox = {}
+const mountObs = async (targetCtx) => {
+  const wrap = async (mod, cfg, service, key) => {
+    await targetCtx.plugin({
+      // inject 必须**照抄模块声明**：包装挂载里写 inject: [] 会让模块取不到依赖（实测报 without inject）
+      name: `${service}#probe`, inject: mod.inject ?? [], Config: mod.Config,
+      apply: async (inner, c) => {
+        const original = inner.provide.bind(inner)
+        inner.provide = (s, v) => { if (s === service) obsBox[key] = v; return original(s, v) }
+        await mod.apply(inner, c)
+      },
+    }, mod.Config.parse(cfg))
+  }
+  await wrap({ apply: auditApply, Config: auditConfig }, { capacity: 200 }, 'audit', 'audit')
+  await wrap({ apply: canaryApply, Config: canaryConfig }, { weight_bps: 0 }, 'canary', 'canary')
+  await wrap({ apply: obsApply, Config: obsConfig, inject: ['governor', 'audit', 'canary'] }, {}, 'observability', 'obs')
+}
+await mountObs(ctx)
+
 const gfiber = await ctx.plugin(governorMount('governor#probe', gbox),
   governorConfig.parse({ capacity: 64, timeout_ms: 5000 }))
 
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -165,6 +188,7 @@ const brokenCtx = new Context()
 await brokenCtx.plugin(EventsService)
 brokenCtx.provide('ledgerView', ledgerStub(BROKEN))
 await brokenCtx.plugin(governorMount('governor#broken', {}), governorConfig.parse({ capacity: 64, timeout_ms: 5000 }))
+await mountObs(brokenCtx)
 // 投影服务也要提供（webui 的 inject 依赖它；fixture 里只验"坏数据不杀服务"，投影用真实插件）
 await brokenCtx.plugin({
   name: 'projection#broken',
@@ -174,7 +198,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -190,6 +214,16 @@ check('健壮性负控：账本含 null 字段时服务**不崩**（请求级兜
   stillAlive.status === 200 && (brokenView.status === 200 || brokenView.status === 500),
   `视图 status=${brokenView.status}（${brokenText.slice(0, 40)}…）健康 status=${stillAlive.status}`)
 await brokenFiber.dispose()
+
+// 4c. T-236：运行期观测路由（只读、双方视角都可见）
+const obsRes = await get('/api/obs')
+let obsJson = {}
+try { obsJson = JSON.parse(obsRes.text) } catch (err) { obsJson = {} }
+check('观测正控：/api/obs 返回 200 且含 governor/audit/canary 三个来源的统计（不含私域）',
+  obsRes.status === 200 && (obsJson.observability?.sources ?? []).length === 3
+  && typeof obsJson.summary === 'string' && !obsRes.text.includes('private:')
+  && typeof obsJson.observability?.governor?.stats?.admitted === 'number',
+  `status=${obsRes.status} sources=${(obsJson.observability?.sources ?? []).join(',')} summary=${String(obsJson.summary).slice(0, 60)}`)
 
 // 4. 未知视角
 const unknown = await get('/nonexistent/')

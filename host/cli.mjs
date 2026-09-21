@@ -120,12 +120,38 @@ const main = async () => {
       Config: projectionConfig,
       apply: (inner, cfg) => projectionApply(inner, cfg),
     }, projectionConfig.parse({}))
+    // 观测来源：留痕（audit-hook）与分流（canary）——都是独立插件，权重 0 = 零影响
+    const { apply: auditApply, Config: auditConfig } = await import('./modules/audit-hook.mjs')
+    const abox = {}
+    await ctx.plugin({ name: 'audit-hook', inject: [], Config: auditConfig,
+      apply: async (inner, cfg) => {
+        const original = inner.provide.bind(inner)
+        inner.provide = (service, value) => { if (service === 'audit') abox.handle = value; return original(service, value) }
+        await auditApply(inner, cfg)
+      } }, auditConfig.parse({ capacity: 200 }))
+    const { apply: canaryApply2, Config: canaryConfig2 } = await import('./modules/canary.mjs')
+    const cbox2 = {}
+    await ctx.plugin({ name: 'canary', inject: [], Config: canaryConfig2,
+      apply: async (inner, cfg) => {
+        const original = inner.provide.bind(inner)
+        inner.provide = (service, value) => { if (service === 'canary') cbox2.handle = value; return original(service, value) }
+        await canaryApply2(inner, cfg)
+      } }, canaryConfig2.parse({ weight_bps: 0 }))
+    // 观测聚合（独立插件）：只读；它 inject 前三个
+    const { apply: obsApply, Config: obsConfig } = await import('./modules/observability.mjs')
+    const obox = {}
+    await ctx.plugin({ name: 'observability', inject: ['governor', 'audit', 'canary'], Config: obsConfig,
+      apply: async (inner, cfg) => {
+        const original = inner.provide.bind(inner)
+        inner.provide = (service, value) => { if (service === 'observability') obox.handle = value; return original(service, value) }
+        await obsApply(inner, cfg)
+      } }, obsConfig.parse({}))
     const contractorLedger = String(args['ledger-contractor'] ?? ledgerPath)
     ctx.provide('ledgerView', openLedger(contractorLedger))
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor'],   // 投影是独立插件（host/modules/projection.mjs），必须一起注入
+      inject: ['ledgerView', 'projection', 'governor', 'observability'],   // 投影/准入/观测都是独立插件，必须一起注入
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -146,6 +172,8 @@ const main = async () => {
            views: Object.keys(VIEW_RULES), routes: (box.handle ? Object.keys(VIEW_RULES) : [])
              .map((view) => box.handle.viewUrl(view)),
            ledgers: { contractor: contractorLedger, supplier: String(args['ledger-supplier'] ?? '') },
+           observability_route: `${String(args.prefix ?? '/quotagent')}/api/obs`,
+           observability: obox.handle ? obox.handle.summary() : null,
            note: '每方视角读自己的账本（结构性隔离）+ 投影白名单（纵深防御）；宿主不写账本' }) + '\n')
     // 保活：直到收到信号（ws-gateway 以 SIGTERM 停服）
     await new Promise((resolve) => {

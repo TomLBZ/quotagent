@@ -20,6 +20,7 @@
 | `host/modules/governor.mjs` | 运行期准入与等待：限流/背压（可解释拒绝）、显式超时、有界重试 | `governor` | `contractor-ops`、`relay` | 只改本文件；阈值/重试语义变更须同步 `verify.sh governor` |
 | `host/modules/bridge-canary.mjs` | 调用面分流器：把 canary 接到宿主→内核的真实桥调用上（候选抛错回退 base、base 抛错原样抛） | `canary-dispatch` | `contractor-ops` | 只改本文件；接线语义变更须同步 `verify.sh bridge-canary` |
 | `host/modules/canary.mjs` | 自进化产物的真实路由分流 + 自动回滚判定（进/升需人工引用，回滚自动） | `canary` | `contractor-ops` | 只改本文件；阈值/分流语义变更须同步 ADR-0017 与其断言 |
+| `host/modules/observability.mjs` | 运行期观测的只读聚合（governor 准入 / audit 留痕 / canary 分流三源合一；不写账本、不写文件、无墙钟依赖） | `observability` | `webui`（经 `/quotagent/api/obs`） | 只改本文件；聚合字段变更须同步 `verify.sh observability` 与其 A5 确定性断言 |
 | `host/modules/webui.mjs` | 双方视角 WebUI（承包商/供应商两个路由；只读账本） | `webui` | `webui` | 只改本文件 + `host/lib/ledger-view.mjs`；接入见 `docs/work/deployment-manual.md` |
 
 目录即清单：新增功能 = 新增 `host/modules/<name>.mjs`（`host/modules/index.mjs` 自动发现），不必改中心清单；模块被哪个 profile 挂载仍写在 `host/profiles.mjs`（组成即数据，ADR-0015）。

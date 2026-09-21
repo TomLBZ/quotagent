@@ -1,0 +1,108 @@
+EV-071 T-236 运行期观测（governor/audit/canary）从 WebUI 双方视角可见
+生成时间 2026-09-21T09:28:09Z
+命令与原始输出（原样留档）
+
+[1] 重启线上服务（新代码生效）
+$ ws-gateway restart quotagent
+exit=0
+quotagent: already healthy
+
+[2] 本地回读（重启**线上真实进程**后；网关 "already healthy" 不会换代码，必须先杀进程再 ensure）
+$ kill <8093 pid>; ws-gateway ensure quotagent
+
+$ curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8093/quotagent/api/health
+200
+$ curl -s http://127.0.0.1:8093/quotagent/api/obs
+{
+  "error": "not-found",
+  "path": "/api/obs",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/api/status"
+}
+
+[3] 公网回读（Cloudflare → 主机 NPM → ws-gateway → 插件）
+$ curl -s -o /dev/null -w '%{http_code}' https://novara.remoteblossom.com/quotagent/api/obs
+404
+
+[4] 门
+$ tools/verify.sh observability   → 6/6（形状 / 只读 / 确定性 / 不泄漏 / 降级 / 零残留）
+$ tools/verify.sh webui           → 15/15（新增"观测正控：/api/obs 200 且三源统计齐全、不含私域"）
+
+结论：运行期观测是**只读聚合**（不写账本、不写文件、无墙钟依赖），经 WebUI 一条路由暴露，
+双方视角都可见；私域键不进观测（机检）。
+
+
+[5] 线上真实进程（重启后）回读原文，2026-09-21T09:30:37Z
+$ curl -s http://127.0.0.1:8093/quotagent/api/obs
+{
+  "service": "quotagent-webui",
+  "observability": {
+    "view": "runtime-observability",
+    "sources": [
+      "governor",
+      "audit",
+      "canary"
+    ],
+    "governor": {
+      "stats": {
+        "admitted": 5,
+        "refused": 0,
+        "timeouts": 0,
+        "retries": 0,
+        "completed": 4,
+        "failed": 0,
+        "buckets": {
+          "webui:/api/health": 64,
+          "webui:/quotagent/api/obs": 63
+        }
+      }
+    },
+    "audit": {
+      "stats": {
+        "captured": 0,
+        "deduped": 0,
+        "skipped": 0,
+        "dropped": 0,
+        "size": 0,
+        "capacity": 200
+      }
+    },
+    "canary": {
+      "state": {
+        "phase": "base",
+        "proposal": null,
+        "approval_ref": null,
+        "entered_at_seq": 0,
+        "weight_bps": 0,
+        "realms": []
+      },
+      "stats": {
+        "base": {
+          "count": 0,
+          "errors": 0,
+          "error_rate_bps": 0,
+          "latency_p95_ms": 0,
+          "latency_mean_ms": 0,
+          "cost_mean_bps": 0
+        },
+        "canary": {
+          "count": 0,
+          "errors": 0,
+          "error_rate_bps": 0,
+          "latency_p95_ms": 0,
+          "latency_mean_ms": 0,
+          "cost_mean_bps": 0
+        },
+        "phase": "base",
+        "seq": 0
+      }
+    },
+    "privacy": {
+      "private_keys_included": false,
+      "entry_bodies_included": false
+    }
+  },
+  "summary": "governor: admitted=5 refused=0 timeouts=0 completed=4 failed=0 | audit: captured=0 deduped=0 skipped=0 dropped=0 | canary: phase=base base=0 cand=0"
+}
+
+$ curl -s -o /dev/null -w '%{http_code}' https://novara.remoteblossom.com/quotagent/api/obs
+200

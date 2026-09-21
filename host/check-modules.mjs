@@ -81,6 +81,7 @@ const STUBS = {
     bucket: () => 'base',
     record: () => ({ lane: 'base', count: 1 }),
     stats: () => ({ base: { count: 0 }, canary: { count: 0 }, phase: 'base', seq: 0 }),
+    state: () => ({ phase: 'base', proposal: null, approval_ref: null }),
     verdict: () => ({ recommendation: 'insufficient', reasons: [], computed_by: 'stub' }),
     decide: () => ({ action: 'hold', automatic: false, approval_required: false }),
     enterCanary: () => ({ phase: 'canary' }),
@@ -99,6 +100,24 @@ const STUBS = {
     count: () => 0,
     head: () => 'sha256:' + '0'.repeat(64),
     read: () => [],
+  },
+  audit: {
+    // fixture 的 stub：只满足"能记、能查统计"；留痕语义由 audit-hook 模块自己的门验
+    record: () => ({ recorded: false, reason: 'stub' }),
+    decisions: () => [],
+    slice: () => [],
+    stats: () => ({ captured: 0, deduped: 0, skipped: 0, dropped: 0, size: 0, capacity: 200 }),
+    types: () => [],
+    clear: () => ({ cleared: 0 }),
+  },
+  observability: {
+    // fixture 的 stub：只满足"能取快照/摘要"；聚合语义由 observability 模块自己的门验
+    snapshot: () => ({ view: 'runtime-observability', sources: ['governor', 'audit', 'canary'],
+      governor: { stats: { admitted: 0, refused: 0, timeouts: 0, completed: 0, failed: 0 } },
+      audit: { stats: { captured: 0, deduped: 0, skipped: 0, dropped: 0 } },
+      canary: { state: { phase: 'base' }, stats: { base: { count: 0 }, canary: { count: 0 } } },
+      privacy: { private_keys_included: false, entry_bodies_included: false } }),
+    summary: () => 'stub',
   },
   compare: { flagCount: () => 0 },
   bridge: { surface: () => ({}) },

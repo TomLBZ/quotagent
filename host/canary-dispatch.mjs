@@ -171,9 +171,16 @@ const e2e = async ({ weightBps, candidate }) => {
       await projectionApply(inner, cfg)
     },
   }, projectionConfig.parse({}))
+  // 观测来源（T-236）：webui 的 inject 现在还需要 observability（含它的三个来源）
+  const { apply: auditApplyE2E, Config: auditConfigE2E } = await import('./modules/audit-hook.mjs')
+  await ctx.plugin({ name: 'audit#e2e', inject: [], Config: auditConfigE2E,
+    apply: (inner, cfg) => auditApplyE2E(inner, cfg) }, auditConfigE2E.parse({ capacity: 200 }))
+  const { apply: obsApplyE2E, Config: obsConfigE2E } = await import('./modules/observability.mjs')
+  await ctx.plugin({ name: 'observability#e2e', inject: ['governor', 'audit', 'canary'], Config: obsConfigE2E,
+    apply: (inner, cfg) => obsApplyE2E(inner, cfg) }, obsConfigE2E.parse({}))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }

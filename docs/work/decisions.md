@@ -284,3 +284,25 @@
 2. **探针的分桶键**：`bridge-canary.call` 的键是稳定的 `${name}:${method}`，**40 次探针会全部落同一条道**
    → 判定永远"样本不足"，看着像"canary 没生效"。→ 新增 `opts.key` 覆盖（探针用 `probe:<method>:<i>`），
    生产路径不传 `opts`，键仍稳定。**"探针必须能同时采样两侧"是这条功能能成立的前提。**
+
+## D-031 T-236：运行期观测独立成插件，并从 WebUI 双方视角暴露（2026-09-21T09:28:09Z）
+
+**形态**：新插件 `host/modules/observability.mjs`（`provides: ['observability']`，`inject: ['governor','audit','canary']`）
+把三个**运行期**中间件的状态聚成一个**只读**快照：`governor`（准入/超时/完成/失败）、`audit`（留痕统计）、
+`canary`（阶段 + 两侧样本）。暴露路径：`/quotagent/api/obs`（双方视角都可见）。
+
+**四条纪律（都写进机检，不是注释里的口号）**：
+1. **观测不是第二本账**：不写账本（H1）、不写文件、不订阅事件、不注册定时器（静态扫描 + 重挂载干净）；
+2. **无副作用**：反复取快照/摘要**不改变**任何来源的统计；
+3. **确定性**：同一状态下两次快照**字节一致**（不使用墙钟/随机）；
+4. **不成为侧信道**：快照里没有条目正文、没有私域键名（"私域键名泄漏到对方视角"这个坑本项目踩过，B20/B21）。
+
+**装配点**：`webui` profile（`host/profiles.mjs`）与 CLI 的 `webui` 动作；CLI 里 `audit-hook`（容量 200）与
+`canary`（**权重 0 = 零影响**）也一并挂上，因为观测要读它们。
+
+**本轮踩到并固化的两个坑**（都属于"包装挂载"的家族，和 D-027 同源）：
+1. 包装挂载里写 `inject: []` 会让模块**取不到自己的依赖**（报 `cannot get property "..." without inject`）——
+   包装必须**照抄模块声明的 inject**；合成模块对象（`{apply, Config}`）还必须显式带上 `inject` 字段，
+   否则 `mod.inject` 是 `undefined`，静默退回 `[]`（**这个静默退化最危险：代码看着对，插件永远 pending**）。
+2. `inject` 里声明了依赖，**fixture 就必须能给 stub**（`host/check-modules.mjs` 的 STUBS 表）——
+   否则 `verify.sh modules` 直接红。新增依赖 = 同步补两处（stub 表 + 装配点）。

@@ -15,11 +15,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor']   // + 运行期准入（governor 是独立插件）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability']   // 每个都是独立插件（准入 / 观测）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability']
 
 export const provides = ['webui']
 
@@ -83,6 +83,7 @@ export function apply(ctx, config) {
     }
   })
 
+  const obs = ctx.observability   // 本地句柄（D-027：不按请求去 ctx 里查自己依赖的服务）
   const handle = (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
     const path = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) || '/' : url.pathname
@@ -94,6 +95,11 @@ export function apply(ctx, config) {
       JSON.stringify(payload, null, 2) + '\n')
 
     if (path === '/api/health') return json(200, { status: 'ok', service: 'quotagent-webui' })
+    if (path === '/api/obs') {
+      // 运行期观测（只读）：governor 准入 / audit 留痕 / canary 分流——双方视角都可见（不含私域）
+      const snap = obs.snapshot()
+      return json(200, { service: 'quotagent-webui', observability: snap, summary: obs.summary() })
+    }
     if (path === '/api/status') {
       const ledgers = {}
       for (const view of config.views) {
