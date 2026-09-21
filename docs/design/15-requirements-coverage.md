@@ -38,7 +38,7 @@
 | FR-EVIDENCE-001 | src/quotagent/kernel/evidence.py | export(ledger, scope, from_seq, to_seq)（事件切片 | 映射 |
 | FR-EVIDENCE-002 | src/quotagent/kernel/evidence.py | evidence.verify(pack, keystore, require_sign | 直引 |
 | FR-EVIDENCE-003 | src/quotagent/kernel/modelgate.py | ModelGateway.rebuild_matches(call_id) | 映射 |
-| FR-EVIDENCE-004 | src/quotagent/services/retention.py | RetentionPolicy.plan（直引 FR ID） | 直引 |
+| FR-EVIDENCE-004 | src/quotagent/services/retention.py、src/quotagent/services/retention_exec.py | 计划侧（AC-AUDIT-003）+ 执行侧（AC-AUDIT-005），两侧均有门 | 直引 |
 | FR-EVIDENCE-005 | src/quotagent/kernel/evidence.py | sign_pack(pack, keystore, participant) | 直引 |
 | FR-EVOLVE-001 | host/lib/evolution.mjs | makeProposal(input,{history})（target/diff/ra | 映射 |
 | FR-EVOLVE-002 | host/lib/evolution.mjs | shadowMount(proposal,{ledgerPath,shadowDir,p | 映射 |
@@ -140,7 +140,8 @@
 | timeline | AC-RUNTIME-008（本次登记） | — |
 | webui | FR-UX-001、FR-UX-002、FR-INTEG-001 | 强 |
 
-> 更新（T-252）：`FR-EVIDENCE-004` 已从【缺口】转为**部分实现** —— 判定器入库并有机检（`verify.sh retention`），
+> 更新（T-253）：`FR-EVIDENCE-004` **已完整落地（计划侧 + 执行侧）**，`AC-AUDIT-003`/`AC-AUDIT-005` 均有机检。
+> 原注（T-252）：`FR-EVIDENCE-004` 已从【缺口】转为**部分实现** —— 判定器入库并有机检（`verify.sh retention`），
 > 但**执行侧**（删除派生副本、读侧封存）尚未实现；`AC-AUDIT-003` 因此**不标绿**，执行侧见清单 T-253。
 
 ## 3. 缺口与存疑登记
@@ -150,7 +151,7 @@
 | ID | 类型 | 说明 | 计划 |
 |---|---|---|---|
 | FR-CLARIFY-004 | 缺口 | — | P2 规划内未做（T-310） |
-| FR-EVIDENCE-004 | src/quotagent/services/retention.py | RetentionPolicy.plan（直引 FR ID） | 直引 |
+| FR-EVIDENCE-004 | src/quotagent/services/retention.py、src/quotagent/services/retention_exec.py | 计划侧（AC-AUDIT-003）+ 执行侧（AC-AUDIT-005），两侧均有门 | 直引 |
 | FR-NEGO-001 | 缺口 | — | P2 规划内未做（T-309：谈判轮次） |
 | FR-NEGO-002 | 缺口 | — | P2 规划内未做（T-309：让步动作绑人工门） |
 | FR-INTEG-003 | 缺口 | — | P2 规划内未做（T-301：邮件集成） |

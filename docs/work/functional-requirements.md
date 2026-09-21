@@ -83,7 +83,7 @@
 | FR-EVIDENCE-001 | 审计包导出（事件切片 + Merkle 根 + 清单） | must | P1 | AC-AUDIT-001 |
 | FR-EVIDENCE-002 | 审计包独立验证（哈希链 + 签名） | must | P1 | AC-AUDIT-001 |
 | FR-EVIDENCE-003 | 模型输入重建校验（P4 的可机检实现） | must | P1 | AC-AUDIT-002 |
-| FR-EVIDENCE-004 | 留存期与销毁策略可配置，销毁动作留痕 | should | P2 | AC-AUDIT-003 |
+| FR-EVIDENCE-004 | 留存期与销毁策略可配置，销毁动作留痕 | should | P2 | AC-AUDIT-003、AC-AUDIT-005 |
 | FR-EVIDENCE-005 | 审计包必须**签名**（导出方身份可验）并提供**包含证明**；验证方在**不接触原账本**的前提下可独立验证（缺字段/缺密钥不得静默通过） | must | P1 | AC-AUDIT-004 |
 
 ## 4. 承包商侧

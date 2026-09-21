@@ -1,0 +1,43 @@
+EV-088 T-253 FR-EVIDENCE-004 留存执行侧：真删派生副本 + 读侧封存 + 账本落痕
+生成时间 2026-09-21T11:06:05Z
+
+[1] 交付（两个 subagent 并行，deleg_0cfed025，478s；契约先写死再实现）
+· src/quotagent/services/retention_exec.py（37109 B，sha256 8eaa994405a3b4b5…）
+· src/quotagent/qa/checks_retention_exec.py（40872 B，sha256 88a15de45ae4c441…）
+· tmp 实跑/变异脚本（用后清理；一个子代理覆盖了另一个的 tmp/t253-run.py，已改为唯一文件名并由父方统一清理）
+
+[2] 父侧核验（D-019：subagent 自述不算事实，父侧自己跑）
+$ tools/run.sh tmp/t253-qa005-run.py → **status=pass 断言 22/22**（父侧实跑）
+$ tools/run.sh tmp/t253-mutate.py → **5/5 处单点变异全部变红**
+   M1 关根前缀校验 → 越界文件真被删；M2 删人工门校验 → 缺门副本真被删；
+   M3 关幂等短路 → 重跑变 not-a-regular-file；M4 关账本行拦截 → 账本行目标真被删；
+   M5 拉进递归删除能力 → 静态零残留断言红
+   （脚本自带防伪：替换锚点找不到或零字节变化即报"假变异"，不会假装通过）
+
+[3] 关键实跑证据（执行侧）
+· 真删正控：purge 后 exists=False，counts={purged:1, archived:1, refused:0, skipped:0, events_written:2}
+· 账本真落痕：`evidence/retention-copy-purged` + `evidence/retention-archived` 各 1 条
+· 留痕 body 只有 {target, sha256, bytes}，**哨兵文本 SECRET 未复活**
+· 幂等：第二次跑全部 skipped（already-absent / already-archived），events_written=0
+· 封存：`is_sealed()` 由账本重建（新实例照样封存），`assert_readable()` 抛 `TargetSealed`
+· 负控：`../`、绝对路径、符号链接逃逸、目录、未知动作、缺目标 → 全部拒绝；根外真数据字节未变
+· 负控：无引用 / 引用核不出 / 引用格式非法 → approval-missing，文件仍在
+· dry-run：文件仍在、账本零新增、报告里可见"本来会删什么"
+
+[4] 接入
+$ tools/verify.sh retention → exit=0（跑**两侧**：AC-AUDIT-003 计划侧 + AC-AUDIT-005 执行侧）
+· `qa/__init__.py` 注册 `checks_retention`、`checks_retention_exec`
+· 清单补 `retention_exec` 的功能归属行（P3）
+· AC 文档新增 `AC-AUDIT-005`（P2），`FR-EVIDENCE-004` 的 AC 列补引用（AC-DESIGN-003 双向仍成立）
+
+[5] 如实说明（不粉饰，全部来自实现方自述 + 父方抽查）
+· **先删后记的时间窗未消除**：删除与账本 append 之间进程被杀会留下"已删未记"（业务上按未封存处理）。
+  崩溃注入 / 磁盘满 / 权限拒绝三条分支只有代码、**未实测**；已记入 D-048。
+· **归档不删源**（ADR-0018 §1.6 一次成型）：若验收要求"归档后源消失"，这是未覆盖点。
+· 批准必须**可核**：`approved_refs` 只是引用，执行器还要求账本里能核出 `granted` + `human:` + scope；
+  伪造批准 7 种形态全部被拒。
+· 未测：多进程并发、超大文件、非 ASCII 文件名进 tar、Windows 路径、真 Python 3.9（仅注解层兼容）。
+· 两处静态断言钉了实现细节（`resolved.is_file()` 必须在 `unlink()` 之前；`unlink(` ≤3 次）→ 重构会使门红（fail-closed，故意）。
+
+结论：`FR-EVIDENCE-004` **完整落地** —— 计划侧管"能不能删"，执行侧管"删了要留痕、封存后不可再读"。
+破坏性动作的默认值仍是**留存**，可自动的边界仍是**可重建**。
