@@ -1,0 +1,48 @@
+EV-046 — 报价过期与重报（T-205 / FR-RFQ-006）+ 事件派发按 @mode 的修复
+
+时间: 2026-09-21T04:26:08Z
+commit: 418c9c2
+命令: qa ac AC-RFQ-004（新）/ AC-COMPARE-001（强化）/ AC-EVT-001（强化）
+
+--- AC-RFQ-004（退出码 0，10/10 断言）---
+  [ok] 报价必须绑定包版本（缺 rfq_rev 直接拒绝登记） — active=3
+  [ok] 未标记时排除原因仍是版本门 rfq_version_mismatch（与过期标记分层，不混淆） — excluded_codes=['rfq_version_mismatch']
+  [ok] 升版后基于旧版本的活动报价被标记过期（stale=true + superseded_by_rev=2 + status） — superseded=[{"quote_id": "q-rev1-a", "package_id": "pkg-014", "based_on_rev": 1, "superseded_by_rev": 2, "status": "superseded", "stale": true, "supplier": "sup-A", "requires_requote": true, "reason":
+  [ok] 基于新版本的报价不受影响（仍在活动集里） — active=['q-rev2-c']
+  [ok] 过期留痕 quote/superseded（含旧/新版本号与 reason，可审计不清除） — rows=['q-rev1-a', 'q-rev1-b']
+  [ok] 过期报价**不进入排序**，且以 quote_superseded 显式列出（含旧/新版本号与下一步） — ranking=['q-rev2-c'] excluded=[{"quote_id": "q-rev1-a", "code": "quote_superseded", "based_on_rev": 1, "superseded_by_rev": 2, "reason": "报价基于 rev1，已被 rev2 取代（不得静默比较）", "next_action": "请对方基于当前版本重报"}, 
+  [ok] 产生重报请求（含旧/新版本号、供应商与可行动 next_action） — requests=[{"quote_id": "q-rev1-a", "package_id": "pkg-014", "based_on_rev": 1, "superseded_by_rev": 2, "status": "superseded", "stale": true, "supplier": "sup-A", "requires_requote": true, "reason": "
+  [ok] 幂等：对同一升版重复调用不再标记（不产生第二条留痕，重报请求不翻倍） — again=[] rows=2
+  [ok] 继续升版把 rev2 的报价也标记过期（链式失效，不是只处理第一次升版） — superseded=['q-rev2-c'] active=[]
+  [ok] 过期是标记不是删除：过期报价仍可读（含原报价内容与审 trail） — superseded_count=3
+
+--- AC-COMPARE-001（退出码 0，6/6 断言）---
+  [ok] 版本失配的报价被排除在排序之外 — ranking=['q-b', 'q-a'] excluded=['q-stale']
+  [ok] 排名里没有基于 rev1 的报价 — excluded={"quote_id": "q-stale", "code": "rfq_version_mismatch", "quote_rev": 1, "package_rev": 2, "reason": "报价基于 rev1，包当前 rev2", "next_action": "请对方基于 rev2 重报，或把包回退到 rev1（不得静默比较）"}
+  [ok] 产生 rfq/version-mismatch 事件（挂起该报价，含双方版本） — events=[{"quote_id": "q-stale", "quote_rev": 1, "package_rev": 2, "package_id": "pkg-0007", "action": "suspend_quote"}]
+  [ok] 失配报价的金额没有进入任何 TCO 分量（不进排序也不进合计） — prices=[392000.0, 400000.0]
+  [ok] 失配报价被挂起（可读、可审计），不是被静默丢弃 — next_action=请对方基于 rev2 重报，或把包回退到 rev1（不得静默比较）
+  [ok] 挂了事件总线时，bail 模式的 rfq/version-mismatch 仍被正确派发（不得误用 emit） — listener_seen=[{'quote_id': 'q-wired', 'quote_rev': 1, 'package_rev': 2, 'package_id': 'pkg-014', 'action': 'suspend_quote'}] note=
+
+--- AC-EVT-001（退出码 0，10/10 断言）---
+  [ok] emit —— 通知/留痕：全部调用、不看返回值 — order=['A', 'B'] return=None
+  [ok] parallel —— 并发扇出：全部跑完，有错则聚合抛错 — ran=['A', 'B', 'C'] error=AggregateEventError("parallel 事件 't/parallel' 有 1 个监听器抛错: t/parallel#4: ValueError(listener B failed)")
+  [ok] parallel —— 无错时按注册顺序返回结果列表 — results=[1, 2]
+  [ok] serial —— 链式决策：遇非 None 即停 — result='stop' called=['A', 'B']
+  [ok] bail —— 首个有效决策胜出：遇真值即停 — result='winner' called=['A', 'B', 'C']
+  [ok] waterfall —— 中间件：不调 next() 即短路（委托链正常时顺序执行） — result='12' called=['1', '2']
+  [ok] 每个事件只有一个 @mode：用错分发方法/未声明事件即报错（05-events.md §0 规则 1） — emit->EventModeError("事件 't/waterfall' 的 @mode 是 waterfall，只能用 waterfall() 分发（05-events.md §0 规则 1）") waterfall->EventModeError("事件 't/emit' 的 @mode 是 emit，只能用 emit() 分发（05-events.md §0 规则 1）") undecl
+  [ok] on() 返回 disposer，撤销后监听器不再被调用（FR-EVT-002） — before=['X'] after=['X']
+  [ok] dispatch() 按 @mode 选择分发器（emit/bail/serial/waterfall 各就各位） — hits=['emit', 'bail', 'serial'] bail=拒绝 waterfall={'n': 4, 'seen': True}
+  [ok] dispatch() 对缺载体的 waterfall 报确定性错误（不静默） — error=EventError
+
+--- 本轮暴露并修掉的真实缺陷 ---
+现象：`compare.rank` 在**挂了事件总线**时抛 `EventModeError`（事件 `rfq/version-mismatch` 声明为 bail，却被 `emit()` 派发）。
+为什么之前没发现：AC-COMPARE-001 的 compare 实例没挂总线 → 那条路径从未被走到（覆盖漏洞，不是测试写错）。
+修法：① 把"按 @mode 派发"下沉到 `EventBus.dispatch()`（compare/clarify/quotes 统一走它）；② 给 AC-COMPARE-001 补"挂总线 + bail 监听器收到事件"的断言；③ 给 AC-EVT-001 补 dispatch 的四模式断言。
+
+--- 口径说明 ---
+· 过期是**标记**不是删除：报价原样保留（含原内容），只加 stale/superseded_by_rev/status；
+· 两层排除分清楚：标记之前靠版本门（rfq_version_mismatch），标记之后靠台账显式排除（quote_superseded）；
+· 幂等：对同一升版重复调用不再标记（不产生第二条留痕、重报请求不翻倍）；链式升版会把上一版报价也标过期；
+· 重报请求带旧/新版本号与 next_action（可行动），不产生"请重报"这种无信息量的提示。

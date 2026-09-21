@@ -74,6 +74,7 @@
 | `quote/guard-check` | bail | durable | `ctx.guard` → approval | 异常低价/漏项/产能/条款/注入检测 |
 | `quote/human-approved` | emit | ✔ | 人工 → qep | 批准记录（不可由 agent 产生） |
 | `quote/submitted` | emit | ✔ | `ctx.qep` → compare | 报价事实（含 `rfq_rev`） |
+| `quote/superseded` | emit | ✔ | `ctx.quotes` | 包升版后基于旧版本的报价标记过期并可重报（FR-RFQ-006） |
 | `compare/rank-computed` | emit | ✔ | `ctx.compare` → 人/AwardAdvisor | 排序 + 引用链 |
 | `compare/flag-raised` | emit | ✔ | `ctx.guard` | Flag 从不由模型自行消解 |
 | `negotiate/round` | serial | ✔ | `ctx.negotiate` → approval | 轮次与让步上限来自策略 patch |

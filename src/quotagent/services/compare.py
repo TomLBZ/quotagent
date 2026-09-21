@@ -64,13 +64,19 @@ class CompareService:
 
     # --- 排序 -------------------------------------------------------------
     def rank(self, package: dict, quotes: list[dict], *, weights: dict | None = None,
-             policy: dict | None = None, flags: list[dict] | None = None) -> dict:
+             policy: dict | None = None, flags: list[dict] | None = None,
+             book=None) -> dict:
         if self.ledger is not None:
             self.ledger.assert_healthy()
         weights = dict(DEFAULT_WEIGHTS if weights is None else weights)
         policy = dict(DEFAULT_POLICY if policy is None else policy)
 
         included, excluded = [], []
+        # 过期报价（包升版后被标记）先由台账显式摘出：以 quote_superseded 列在 excluded 里，
+        # 而不是"因为没有 rev 匹配所以消失在排名里"（可审计，T-205 / FR-RFQ-006）。
+        if book is not None:
+            quotes, superseded_rows = book.exclude_superseded(quotes)
+            excluded.extend(superseded_rows)
         for quote in sorted(quotes, key=lambda item: item["quote_id"]):
             if quote.get("rfq_rev") != package.get("rev"):
                 excluded.append({
@@ -263,7 +269,7 @@ class CompareService:
         self.ledger.append(event, body, correlation_id=correlation_id, event_class=event_class,
                            actor=self.actor, refs={"package_id": correlation_id})
         if self.events is not None and self.events.mode_of(event) not in (None, "waterfall"):
-            self.events.emit(event, body)
+            self.events.dispatch(event, body)
 
 
 def _minmax(value: float, low: float, high: float) -> float:

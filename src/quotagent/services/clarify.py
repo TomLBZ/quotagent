@@ -233,16 +233,7 @@ class ClarificationService:
         self.ledger.append(type_, body, actor=self.participant, refs=refs)
         if self.events is None:
             return
-        mode = self.events.mode_of(type_)
-        if mode == "bail":
-            return self.events.bail(type_, body)
-        if mode in (None, "emit"):
-            return self.events.emit(type_, body)
-        if mode == "serial":
-            return self.events.serial(type_, body)
-        if mode == "parallel":
-            return self.events.parallel(type_, body)
-        return self.events.waterfall(type_, body)
+        return self.events.dispatch(type_, body)
 
 
 def _sha(text: str) -> str:

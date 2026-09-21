@@ -122,6 +122,15 @@
 - 不变量：条款冲突只能标注并提请人工，不得静默取其一。
 - 关联：FR-TERMS-001..002。
 
+### `ctx.quotes` [P1]
+
+报价生命周期台账（`src/quotagent/services/quotes.py`）：包升版后把基于旧版本的报价标记为**过期**。
+
+- 排序门仍由 `ctx.compare` 承担（`rfq_rev != package.rev` → 不进排序 + `rfq/version-mismatch`，P0）；
+- 本模块补"升版那一刻"的显式标记：`stale` + `superseded_by_rev` + `quote/superseded` 留痕（标记不是删除，报价原样保留可审计）；
+- 产生重报请求（含旧/新版本号与 `next_action`），供提示对方基于新版本重报；
+- `compare.rank(..., book=...)` 会把过期报价以 `code=quote_superseded` **显式列在 excluded**，而不是"消失在排名里"。
+
 ### `ctx.compare` [P0]
 - 职责：归一化报价 → TCO 折算 → 排序建议 → 引用链。
 - Definition：`rank(package, quotes, weights) -> Evaluation` · `tco(quote) -> breakdown` · `cite(evaluation) -> ledger_refs[]`。

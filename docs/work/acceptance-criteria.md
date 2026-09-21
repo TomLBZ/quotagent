@@ -92,6 +92,7 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-RFQ-001 | P0 | 清单条目缺计量规则或接口无唯一责任方 → 校验失败 | `qa ac AC-RFQ-001` |
 | AC-RFQ-002 | P0 | 已发布版本字段无法原地修改；`amend` 产生新版本与字段级 delta | `qa ac AC-RFQ-002` |
 | AC-RFQ-003 | P1 | 分发记录可回答"谁在何时收到哪个版本" | `qa ac AC-RFQ-003` |
+| AC-RFQ-004 | P1 | 包升版后基于旧版本的报价被标记为过期（`stale` + 旧/新版本号、可审计不清除），不进入排序（`compare` 输出里以 `quote_superseded` 显式排除），并产生重报请求 | `qa ac AC-RFQ-004` |
 | AC-INTAKE-001 | P0 | 抽取结果逐条带 `item_id`；无引用者进入 `[假设]` 待确认 | `qa ac AC-INTAKE-001` |
 | AC-INTAKE-002 | P0 | 缺项检测能覆盖人为删减的条目；疑问清单需人工确认后才外发 | `qa ac AC-INTAKE-002` |
 | AC-COST-001 | P0 | 成本构成可按要素分解且可解释；私域服务在对方 realm 取不到值（与 AC-TRUST-001 同测） | `qa ac AC-COST-001` |

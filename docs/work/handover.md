@@ -4,15 +4,15 @@
 
 ## 现在在哪
 
-**P1 进行中**：T-201、T-216、T-217、T-202、T-218、T-203 与 **T-204（澄清工单）done**：
-建单必带版本与条目引用（否则拒绝留痕）；广播缺任一在册投标人不得关闭（INV-006）；
-包升版自动重开且旧答案标 stale；答案草稿经 waterfall 拦私域；回答者必须 human。
-新增 `tools/verify.sh ac-registry`（P0 文档 AC 必须有断言，已负控）。
-`verify.sh docs|bridge|cordis|p0-no-node|v|ac-registry` PASS；**45 条 AC 与 s1..s4 全绿**。
+**P1 进行中**：T-201、T-216、T-217、T-202、T-218、T-203、T-204 与 **T-205（报价过期与重报）done**：
+升版后旧报价标 `stale`/`superseded_by_rev` 并落 `quote/superseded`（不清除，可审计），`compare` 以
+`quote_superseded` **显式排除**，并产生带版本号的重报请求。本轮另修真实缺陷：bail 事件被 emit 派发
+（挂总线即崩）→ 统一走 `EventBus.dispatch()`（见 D-014 / EV-046）。
+`verify.sh docs|bridge|cordis|p0-no-node|ac-registry|v` 全绿；**46 条 AC 与 s1..s4 全绿**。
 
 ## 下一步唯一动作
 
-**B8 = T-205**：包版本变更与报价过期标记（AC-COMPARE-001、AC-RFQ-002）。见 state.json 的 `next_action`。
+**B9 = T-206 + T-207**：护栏扩展（异常低价判定与 Flag）与产能日历/交期校验。见 state.json 的 `next_action`。
 
 ## 不变量
 

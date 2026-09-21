@@ -94,6 +94,7 @@
 | FR-RFQ-003 | 发布产生不可变版本；修改必须升版并给字段级 delta | must | P0 | AC-RFQ-002 |
 | FR-RFQ-004 | 分发记录：谁在何时收到哪个版本 | must | P1 | AC-RFQ-003 |
 | FR-RFQ-005 | 截止时间管理与超时提醒（澄清截止、报价截止） | should | P1 | AC-RFQ-003 |
+| FR-RFQ-006 | 包升版后，基于旧版本的报价必须被标记为**过期**（含旧/新版本号）且不得进入排序，并产生重报请求（提示对方基于新版本重报） | must | P1 | AC-RFQ-004 |
 | FR-COMPARE-001 | 归一化报价 → TCO 折算（价格/交期/付款条件/质保/偏差） | must | P0 | AC-COMPARE-002 |
 | FR-COMPARE-002 | 排序建议：权重来自策略 patch；同输入同输出 | must | P0 | AC-COMPARE-002 |
 | FR-COMPARE-003 | 每个数值必须有引用链（账本条目 + 清单条目） | must | P0 | AC-COMPARE-003 |

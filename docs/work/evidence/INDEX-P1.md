@@ -11,3 +11,4 @@
 | EV-043 | relay 绑定（AC-INTEG-002，11 断言）：relay 只记整包 sha256（不解析 body）；目标不可达→relay/queued→pump→relay/delivered；字节透明（逐字节相同）；篡改包照常转发但接收方验签拒收留痕；spool 被改→拒投 + relay/tamper-detected；账本隔离；发送侧不可达不落半条记录、恢复后重发幂等 | AC-INTEG-002 / T-218 |
 | EV-044 | 账本同步（AC-SYNC-001，15 断言）：三值判定（一致/单侧改/冲突）；单价冲突→供应商胜出、条款冲突→承包商胜出（矩阵为双方共识，对调视角同解）；承诺字段冲突不自动合并+挂起；矩阵未覆盖→转人工；单侧或 agent 批准不算，双方 human 批准才解除挂起；非权威字段改动转 intent/suggestion | AC-SYNC-001 / T-203 |
 | EV-045 | 澄清工单（AC-CLARIFY-001 8 + 002 3 + 003 4 断言）：建单必带 rfq_rev 与条目引用（否则拒绝留痕）；答案草稿经 waterfall 拦私域（strict 短路 / 非 strict 剥字段）；回答者必须 human；广播缺任一在册投标人不得关闭（bail 留痕）、覆盖全可关闭；包升版自动重开且旧答案标 stale/applies_to_rev、广播清空。附 `verify.sh ac-registry` 输出（P0 AC 无「有编号无断言」；负控改名后变红） | AC-CLARIFY-001..003 / T-204 |
+| EV-046 | 报价过期与重报（AC-RFQ-004 10 断言）：升版后旧版本报价标 stale/superseded_by_rev、留痕 `quote/superseded`（可审计不清除）、不进排序且以 `quote_superseded` 显式列出、产生重报请求、链式升版与幂等；另含 AC-COMPARE-001（6 断言）与 AC-EVT-001（10 断言）的强化，修掉"挂总线时 bail 事件被 emit 派发"的真实缺陷 | AC-RFQ-004 / T-205 |

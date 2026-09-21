@@ -115,6 +115,7 @@ class EventBus:
         "quote/guard-check": ("bail", True, ""),
         "quote/human-approved": ("emit", True, ""),
         "quote/submitted": ("emit", True, ""),
+        "quote/superseded": ("emit", True, ""),
         "compare/rank-computed": ("emit", True, ""),
         "compare/flag-raised": ("emit", True, ""),
         "award/intent-proposed": ("emit", True, ""),
@@ -239,6 +240,28 @@ class EventBus:
             if result:
                 return result
         return None
+
+    def dispatch(self, name: str, *args: Any) -> Any:
+        """按事件的 `@mode` 派发（05-events.md §0 规则 1：不得用错模式）。
+
+        `waterfall` 的第一个参数是被链式改写/回退的载体，其余参数原样透传。
+        未声明的事件按 `emit` 处理（live 语义）。
+        """
+        mode = self.mode_of(name)
+        if mode is None or mode == "emit":
+            return self.emit(name, *args)
+        if mode == "bail":
+            return self.bail(name, *args)
+        if mode == "serial":
+            return self.serial(name, *args)
+        if mode == "parallel":
+            return self.parallel(name, *args)
+        if mode == "waterfall":
+            if not args:
+                raise EventError(f"waterfall 事件必须带载体参数: {name!r}")
+            value, *rest = args
+            return self.waterfall(name, value, *rest)
+        raise EventError(f"未知 @mode={mode!r}（事件 {name!r}）")
 
     def waterfall(self, name: str, value: Any, *args: Any):
         """中间件链：监听者签名 (value, next, *args)；不调 next() 即短路。"""

@@ -148,6 +148,33 @@ def ac_evt_001() -> list[Assertion]:
     bus.emit("t/emit")
     out.append(Assertion("on() 返回 disposer，撤销后监听器不再被调用（FR-EVT-002）",
                          before == ["X"] and calls == before, f"before={before} after={calls}"))
+
+    # dispatch()：按 @mode 选择分发器（免去调用方记模式；误用模式由内核直接拒绝）
+    disp_bus = EventBus()
+    disp_bus.declare("probe/dispatch-emit", "emit")
+    disp_bus.declare("probe/dispatch-bail", "bail")
+    disp_bus.declare("probe/dispatch-serial", "serial", reason="探针")
+    disp_bus.declare("probe/dispatch-waterfall", "waterfall", reason="探针")
+    hits: list[tuple[str, object]] = []
+    disp_bus.on("probe/dispatch-emit", lambda payload: hits.append(("emit", payload)))
+    disp_bus.on("probe/dispatch-bail", lambda payload: (hits.append(("bail", payload)), "拒绝")[1])
+    disp_bus.on("probe/dispatch-serial", lambda payload: hits.append(("serial", payload)))
+    disp_bus.on("probe/dispatch-waterfall", lambda value, next_: (value.__setitem__("seen", True), next_(value))[1])
+    disp_bus.dispatch("probe/dispatch-emit", {"n": 1})
+    bail_result = disp_bus.dispatch("probe/dispatch-bail", {"n": 2})
+    disp_bus.dispatch("probe/dispatch-serial", {"n": 3})
+    carried = disp_bus.dispatch("probe/dispatch-waterfall", {"n": 4})
+    out.append(Assertion("dispatch() 按 @mode 选择分发器（emit/bail/serial/waterfall 各就各位）",
+                         [kind for kind, _ in hits] == ["emit", "bail", "serial"]
+                         and bail_result == "拒绝" and carried.get("seen") is True,
+                         f"hits={[kind for kind, _ in hits]} bail={bail_result} waterfall={carried}"))
+    wrong_mode = None
+    try:
+        disp_bus.dispatch("probe/dispatch-waterfall")
+    except Exception as err:  # noqa: BLE001
+        wrong_mode = type(err).__name__
+    out.append(Assertion("dispatch() 对缺载体的 waterfall 报确定性错误（不静默）",
+                         wrong_mode is not None, f"error={wrong_mode}"))
     return out
 
 

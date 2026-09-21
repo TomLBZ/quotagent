@@ -84,6 +84,26 @@ def check_compare_001() -> list[Assertion]:
                          evaluation["excluded"][0]["next_action"]
                          and "rev" in evaluation["excluded"][0]["next_action"],
                          f"next_action={evaluation['excluded'][0].get('next_action')}"))
+
+    # 覆盖漏洞补丁：之前这条 AC 没挂事件总线，于是 compare 误用 emit 派发 bail 事件不会被发现。
+    bus = EventBus()
+    bus.install_defaults()
+    seen: list[dict] = []
+    bus.on("rfq/version-mismatch", lambda payload: seen.append(dict(payload)))
+    wired_root = new_scratch("compare-001-wired")
+    wired = CompareService(ledger=Ledger(wired_root / "wired.jsonl", realm="contractor:con-B"), events=bus)
+    wired_package = {"package_id": "pkg-014", "rev": 2, "items": [{"item_id": "L-001", "qty": 100, "unit": "m"}]}
+    wired_quote = {"quote_id": "q-wired", "rfq_rev": 1, "supplier": {"participant_id": "sup-A"},
+                   "lines": [{"item_id": "L-001", "unit_price": 88.5, "qty": 100, "unit": "m"}]}
+    wired_ok, wired_note = True, ""
+    try:
+        wired.rank(wired_package, [wired_quote, _quote_for_rank(2)])
+    except Exception as err:  # noqa: BLE001 - 这里要的是"不是 EventModeError"
+        wired_ok, wired_note = type(err).__name__ != "EventModeError", f"{type(err).__name__}: {err}"
+    out.append(Assertion("挂了事件总线时，bail 模式的 rfq/version-mismatch 仍被正确派发（不得误用 emit）",
+                         wired_ok and any(item.get("quote_id") == "q-wired" for item in seen)
+                         and "EventModeError" not in wired_note,
+                         f"listener_seen={seen[:1]} note={wired_note}"))
     return out
 
 
@@ -183,3 +203,8 @@ def check_compare_003() -> list[Assertion]:
     out.append(Assertion("排序建议本身也必须带引用链（删掉即失败）",
                          ranking_failure is not None, f"error={ranking_failure}"))
     return out
+
+def _quote_for_rank(rev: int) -> dict:
+    """一条可参与排序的最小报价（用于"挂总线"的对照断言）。"""
+    return {"quote_id": "q-ok", "rfq_rev": rev, "supplier": {"participant_id": "sup-B"},
+            "lines": [{"item_id": "L-001", "unit_price": 90.0, "qty": 100, "unit": "m"}]}
