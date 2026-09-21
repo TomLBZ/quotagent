@@ -3,11 +3,11 @@
   "updated_at": "2026-09-21",
   "phase": "P1-mvp",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-221",
-  "next_action": "批次 B19：T-221 每个进树模块的 manifest（name/inject/Config/apply）+ fixture A1..A6 + ≥1 契约测试（评审 C §7.1 第 5 条）。做法：按 §3 的模块表为已进树模块建 manifest 与 fixture，用 Python runner 驱动取证（与 qa 同形报告）；完成后 P1 收口并复核 ADR-0014 §3 的 MVP 判据",
-  "last_verified_command": "tools/verify.sh docs && tools/verify.sh events && tools/verify.sh invariants && tools/verify.sh evolution && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh ac-registry && tools/verify.sh audit && tools/verify.sh v && qa all",
-  "last_verified_result": "PASS（十入口全绿；invariants 22/22；evolution 15/15；57 条 AC 全绿；s1..s4 全绿）",
-  "last_verified_evidence": "docs/work/evidence/EV-057-evolution-gate-skeleton.txt",
+  "next_task": "P1-收口完成",
+  "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
+  "last_verified_command": "tools/verify.sh g1",
+  "last_verified_result": "PASS：57/57 AC + 14/14 MVP 判据 + 十一个入口（docs/events/invariants/evolution/modules/bridge/cordis/p0-no-node/ac-registry/audit/v）全绿；modules 36/36",
+  "last_verified_evidence": "docs/work/evidence/EV-058-module-manifests-and-fixtures.txt",
   "last_verified_commit": "1a70ac3",
   "blockers": [],
   "human_required": [
@@ -59,7 +59,8 @@
     "rfq": "services/rfq.py：distribute/deliveries（分发记录，快照哈希锚定）、deadline_status/remind（截剩余小时、临近阈值可配、overdue|due-soon 幂等提醒、不顺延）；事件 rfq/distributed|due-soon|overdue 两侧登记；_record 辅助",
     "g1": "tools/g1-walkthrough.py（两个真进程 + 共享目录的一轮走查，14 条判据）、tools/manual-check.py（干净副本实跑手册）、src/quotagent/g1side.py（单侧分阶段工作进程）、verify.sh g1（聚合门，含 qa all）",
     "invariants": "tools/check-invariants.py（H1/H2/H3）+ host/invariants.mjs（H5/H6），入口 verify.sh invariants",
-    "evolution": "host/lib/evolution.mjs（makeProposal/PatchJournal/shadowMount/gate/promote/rollback）、host/evolution.mjs（冒烟）、tools/evolve-record.py（Python 唯一写入者）、verify.sh evolution"
+    "evolution": "host/lib/evolution.mjs（makeProposal/PatchJournal/shadowMount/gate/promote/rollback）、host/evolution.mjs（冒烟）、tools/evolve-record.py（Python 唯一写入者）、verify.sh evolution",
+    "modules": "host/modules/{kernel-bridge,norm,compare}.mjs（manifest）、host/check-modules.mjs、tools/check-modules.py、tools/export-events.py、host/lib/std-schema.mjs；入口 verify.sh modules"
   },
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态"
 }

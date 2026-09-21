@@ -2,13 +2,9 @@
 
 <!-- budget: 4 KB。本目录是"组合层"，业务事实仍在 Python 侧（ADR-0012） -->
 
-P1 起，系统的**组合/插件/事件编排**层直接依赖 [cordis](https://www.npmjs.com/package/cordis)
-（钉 `4.0.0-rc.10`，npm `latest`，2026-09-08 发布），不再用 Python 手写这套微内核
-（ADR-0012 取代 ADR-0001 的"不引入其代码"条款）。P0 的 Python 内核与 34 条 AC 保持原样。
-
-cordis 原生就提供我们 P0 手写过的那套语义（`host/smoke.mjs` 逐条验证，EV-038）：
-`ctx.events.emit/parallel/serial/bail/waterfall`、`fiber.effect()`、卸载回收、重载得新 uid。
-配置更新的细节见 `CONFIG.md`（可否决的 `internal/update` 瀑布）。
+组合/插件/事件编排层直接依赖 [cordis](https://www.npmjs.com/package/cordis)（钉 `4.0.0-rc.10`），
+不再用 Python 手写这套微内核（ADR-0012 取代 ADR-0001 的相关条款）；P0 内核与 34 条 AC 原样保留。
+cordis 原生语义由 `host/smoke.mjs` 逐条验证（EV-038）；配置更新见 `CONFIG.md`。
 
 ## profiles（组成即数据，ADR-0015）
 
@@ -32,16 +28,14 @@ tools/cordis.sh run <script.mjs> # 跑 host/ 下的其它脚本
 tools/verify.sh cordis           # 等价于 smoke，进验证入口
 ```
 
-stdout 只输出**一行 JSON**（机器可读），日志走 stderr——沿用 ADR-0013 的帧纪律。
-解释器解析顺序：`$QUOTAGENT_NODE` → `PATH` 上的 `node` → 工作区运行时
-`/workspace/runtime/node/*/bin/node`（`source /workspace/bin/activate.sh` 后即在 PATH 上）。
+stdout 只输出**一行 JSON**，日志走 stderr（ADR-0013 的帧纪律）。node 解析顺序：`$QUOTAGENT_NODE` → `PATH`
+→ 工作区 `/workspace/runtime/node/*/bin/node`。
 
 ## 边界（谁负责什么）
 
-- **host/（cordis）**：组合装配、插件生命周期、事件编排、配置分层（profiles）、中间件与视图。
-- **src/（Python）**：账本（append-only 哈希链）、业务服务（norm/rfq/cost/pricing/approval/
-  compare/guard/eval/scenarios）、AC 运行器与文档门。**业务事实与不变量以 Python 侧账本为准。**
-- 宿主**不写账本**（B6 起的唯一写者规则）；两侧通过桥接协议通信（ADR-0013），桥接本身要有 AC。
+- **host/（cordis）**：组合装配、生命周期、事件编排、配置分层（profiles）、中间件与视图。
+- **src/（Python）**：账本（append-only 哈希链）、业务服务、AC 运行器与文档门；**事实与不变量以 Python 账本为准**。
+- 宿主**不写账本**；两侧经桥接协议通信（ADR-0013）。
 
 ## 版本与升级
 
@@ -49,10 +43,16 @@ stdout 只输出**一行 JSON**（机器可读），日志走 stderr——沿用
 - 升级 cordis = 改 `package.json` + `npm install` + `tools/cordis.sh smoke` 通过 + 一次独立 commit。
 - cordis 目前是 `4.0.0-rc.*`（预发布）：升级前先跑冒烟与 `qa ac AC-PLUGIN-003`，结论写进 commit 信息。
 
-## 演化门骨架（T-220 / 评审 C §7.1 第 7 条）
+## 演化门骨架（T-220）
 
-- `host/lib/evolution.mjs`：`makeProposal` / `PatchJournal` / `shadowMount` / `gate` / `promote` / `rollback`。
-- `host/evolution.mjs`：冒烟（`tools/verify.sh evolution`），15 条断言含**负控**（模型自评、占用别人的键、
-  kernel 目标、人工介入率上升、无 `approval_ref` 的 promote 全部必须被拒）。
-- 落账纪律：**宿主不写账本**（H1）。事件体交给 `tools/evolve-record.py` 由 Python 侧 append。
-- P1 边界：canary 真实路由、自动晋升/自动回滚阈值留 P2（`ADR-0014 §7`）。
+- `host/lib/evolution.mjs`（提案/journal 归属/影子挂载/门/晋升/回滚）+ `host/evolution.mjs`（冒烟，含负控），
+  入口 `tools/verify.sh evolution`。落账由 `tools/evolve-record.py` 走 Python 侧（宿主不写账本）。
+- P1 不允许自动晋升；canary 真实路由与自动晋升/回滚阈值留 P2（`ADR-0014 §7`）。
+
+## 进树模块与 fixture（T-221 / 评审 C §6）
+
+- `host/modules/{kernel-bridge,norm,compare}.mjs`：一模块一 manifest（`name/inject/provides/Config/apply/disposer`）。
+- 入口 `tools/verify.sh modules`（fixture A1..A6，每条带负控；规格见 `docs/design/04-services-catalog.md` §9）。
+- `host/lib/std-schema.mjs`：standard-schema v1 构造器（cordis 只消费 `Config["~standard"].validate`，不导出 `Schema`）。
+- 两个实测坑：① `inject: ["events"]` 会让插件**永远 pending**（`events` 是内建 mixin）；
+  ② provided service 只能在**插件自己的 ctx** 取（外部取抛 "without inject"），fixture 用包装 `provide` 抓句柄。

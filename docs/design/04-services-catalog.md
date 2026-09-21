@@ -257,3 +257,20 @@
 - 晋升：**P1 不允许自动晋升** —— `promote` 必带形如 `ap-0001` 的人工 `approval_ref`，且门必须已通过；否则拒绝。
 - 回滚：`dispose()`（effect 逆序回收）+ journal 撤回，**不依赖人工删文件**。
 - 事件：`evolve/proposed|shadowed|gated|promoted|rolled-back`（两侧已登记；由 Python 侧落账）。
+
+## 9. 进树模块的 manifest 与 fixture（评审 C §6 / §7.1 第 5 条 / T-221）
+
+- 进树模块（P1 树 = `kernel-bridge` + `norm` + 消费者 `compare`，见 `§7.1` 第 3 条）各有 manifest：
+  `{name, inject, provides, Config, apply, disposer, usedServices, builtin}` 放在 `host/modules/*.mjs`。
+- 每个模块必须通过六条 fixture（`host/check-modules.mjs`，由 `tools/check-modules.py` 驱动，
+  入口 `tools/verify.sh modules`），**每条都带负控**：
+  · A1 inject 白名单：取未声明的服务必须抛错；`usedServices` 必须等于 `inject`；
+    **`inject` 里不得写 cordis 内建 mixin（`events`）**——写进去插件会永远停在 pending（实测）；
+  · A2 零残留：dispose 后 effect 数为 0 且 timer/listener 计数差分全 0（泄漏必须被检出）；
+  · A3 config 负控：未知键被拒、翻转 const 键被拒（`Config` 走 standard-schema，cordis 用 `~standard.validate`）；
+  · A4 事件声明：**源码里 emit 的事件名必须都在事件表里**（真源在 Python 侧，由 `tools/export-events.py` 导出）；
+    桥模块另有运行时负控（emit 未声明事件名被拒）；
+  · A5 确定性：同输入两次派生输出字节一致（引入墙钟/自增序号即红）；
+  · A6 无跨模块 import：只允许 `../lib/` 与包名，指向别的模块目录即红。
+- 配置校验分两层：**模块形状**由本仓 `host/lib/std-schema.mjs`（standard-schema v1）管；
+  **宿主白名单/冻结面**（`kernel.*`、`humanOnly`）由 `host/lib/frozen.mjs` + `host/lib/schema.mjs` 管（H5）。
