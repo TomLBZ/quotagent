@@ -26,9 +26,9 @@
 | T-106 | P0 | 归一化与拒绝语义 | FR-NORM-001..004 | AC-NORM-001..003 | done | EV-016, EV-017, EV-018 |
 | T-107 | P0 | 询价包与清单版本化 | FR-RFQ-001..003 | AC-RFQ-001, AC-RFQ-002 | done | EV-019, EV-020 |
 | T-108 | P0 | 读包抽取、缺项、疑问草案 | FR-INTAKE-001..003 | AC-INTAKE-001, AC-INTAKE-002 | done | EV-021, EV-022 |
-| T-109 | P0 | 成本构成（私域） | FR-COST-001, FR-COST-002 | AC-COST-001, AC-TRUST-001 | done | EV-023, EV-024 |
+| T-109 | P0 | 成本构成（私域） | FR-COST-001..003 | AC-COST-001, AC-TRUST-001 | done | EV-023, EV-024 |
 | T-110 | P0 | 定价建议 + 人工门 | FR-PRICE-001, FR-PRICE-002, FR-APPROVE-001, FR-APPROVE-002 | AC-PRICE-001, AC-APPROVE-001, AC-APPROVE-002 | done | EV-025, EV-026, EV-027 |
-| T-111 | P0 | 偏差与影响量化 | FR-DEV-001 | AC-DEV-001 | done | EV-028 |
+| T-111 | P0 | 偏差与影响量化 | FR-DEV-001, FR-DEV-002 | AC-DEV-001 | done | EV-028 |
 | T-112 | P0 | 比价：TCO + 排序 + 引用链 | FR-COMPARE-001..003 | AC-COMPARE-001..003 | done | EV-029, EV-030, EV-031 |
 | T-113 | P0 | 护栏：漏项 + 注入/私域检测 | FR-GUARD-002, FR-GUARD-005 | AC-GUARD-001, AC-GUARD-003 | done | EV-032, EV-033 |
 | T-114 | P0 | 端到端脚本（S1 合成场景） | FR-EVAL-001 | AC-EVAL-001 | done | EV-034 |
@@ -41,7 +41,7 @@
 | T | 阶段 | 内容 | FR | AC | status | evidence |
 |---|---|---|---|---|---|---|
 | T-201 | P1 | 双侧进程分离 + profiles | FR-PLUGIN-004 | AC-PLUGIN-003 | todo | – |
-| T-202 | P1 | QEP relay/文件绑定 + receipt + 重发 + seq 空洞 | FR-QEP-003, FR-QEP-008, FR-INTEG-002 | AC-QEP-003, AC-INTEG-002 | todo | – |
+| T-202 | P1 | QEP relay/文件绑定 + receipt + 重发 + seq 空洞 | FR-QEP-003, FR-QEP-005, FR-QEP-006, FR-QEP-008, FR-INTEG-002 | AC-QEP-003, AC-INTEG-002 | todo | – |
 | T-203 | P1 | 三方协调 + 字段权威方 + 冲突上报 | FR-QEP-007 | AC-SYNC-001 | todo | – |
 | T-204 | P1 | 澄清工单 + 广播完整性 + 版本重开 | FR-CLARIFY-001..003 | AC-CLARIFY-001..003 | todo | – |
 | T-205 | P1 | 包版本变更与报价过期标记 | FR-NORM-004, FR-RFQ-003 | AC-COMPARE-001, AC-RFQ-002 | todo | – |
@@ -50,7 +50,7 @@
 | T-208 | P1 | 审计包导出/验证 + 模型输入重建 | FR-EVIDENCE-001..003 | AC-AUDIT-001, AC-AUDIT-002 | todo | – |
 | T-209 | P1 | 场景集 S1..S4 + 反例集 | FR-EVAL-001, FR-EVAL-002, FR-EVAL-004 | AC-EVAL-001, AC-EVAL-002 | todo | – |
 | T-210 | P1 | 人工门队列视图 + 超时策略 | FR-APPROVE-003, FR-UX-001 | AC-APPROVE-003 | todo | – |
-| T-211 | P1 | 条款库与冲突标注 | FR-TERMS-001, FR-TERMS-002 | AC-TERMS-001 | todo | – |
+| T-211 | P1 | 条款库与冲突标注 | FR-TERMS-001, FR-TERMS-002, FR-GUARD-004 | AC-TERMS-001 | todo | – |
 | T-212 | P1 | 变更闭环 | FR-CHANGE-001, FR-CHANGE-002 | AC-CHANGE-001, AC-CHANGE-002 | todo | – |
 | T-213 | P1 | 授标与 PO 闭环 | FR-AWARD-001..003 | AC-AWARD-001, AC-AWARD-002 | todo | – |
 | T-214 | P1 | 比较表导出 | FR-COMPARE-004, FR-UX-003 | AC-COMPARE-004 | todo | – |
@@ -69,6 +69,7 @@
 | T-307 | P2 | 性能与规模加固 | NFR-PERF-001..004 | manual（基线对比） | todo | – |
 | T-308 | P2 | 运维手册与 SLA、告警落地 | NFR-UX-001..004 | manual | todo | – |
 | T-309 | P2 | 谈判辅助 | FR-NEGO-001, FR-NEGO-002 | AC-NEGO-001 | todo | – |
+| T-310 | P2 | 澄清 FAQ 沉淀与复用（本 realm 内） | FR-CLARIFY-004 | AC-CLARIFY-004 | todo | – |
 
 ## 缺陷与阻塞
 

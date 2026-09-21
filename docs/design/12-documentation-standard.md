@@ -15,6 +15,7 @@
 | `docs/design/adr/*.md` | 8 KB |
 | `docs/work/*.md` | 32 KB |
 | `docs/work/validation/*.md` | 16 KB |
+| `docs/work/reviews/*.md` | 16 KB |
 | `docs/work/validation/templates/*.md` | 8 KB |
 | `docs/work/evidence/*.md` | 8 KB |
 | `host/*.md` | 4 KB |

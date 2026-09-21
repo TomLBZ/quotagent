@@ -9,7 +9,9 @@ python -m quotagent.qa ac AC-NORM-001        # 单条 AC，打印 JSON {ac, stat
 python -m quotagent.qa suite s1              # 一个场景集
 tools/verify.sh ac AC-NORM-001               # 同上（仓库内运行时入口，自带 sys.path）
 tools/verify.sh smoke                        # 运行时自检（解释器解析 / 标准库依赖 / 临时目录）
-tools/verify.sh g0                           # 阶段门：跑该门要求的全部 AC，返回非零表示未通过
+tools/verify.sh g0|g1|g2                      # 阶段门：跑该门要求的全部 AC，返回非零表示未通过
+tools/verify.sh cordis                       # 宿主层冒烟（cordis 五模式/effect/重载，ADR-0012）
+tools/verify.sh v                            # V-001..V-012 登记表校验（S0.15）
 tools/verify.sh docs                         # 文档门（当前阶段即可运行）
 ```
 
