@@ -57,6 +57,9 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     done
     echo "P0 阶段 $count 条 AC 在无 Node 环境下全绿（P0 不因引入宿主而失去可复跑性）"
     ;;
+  ac-registry)
+    exec "$QUOTAGENT_PY" "$ROOT/tools/check-ac-registry.py"
+    ;;
   v)
     shift
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-v-register.py" "$@"

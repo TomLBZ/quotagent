@@ -1,0 +1,38 @@
+EV-045 — 澄清工单（T-204 / S1.4）：建单引用·广播完整性·版本重开 + AC 注册表检查
+
+时间: 2026-09-21T04:23:06Z
+commit: 9778ce5
+命令: qa ac AC-CLARIFY-001/002/003 && tools/verify.sh ac-registry
+ac-registry 退出码: 0
+  [ok]   文档 63 条 AC，注册表 45 条
+  [info] 尚未到期（P1/P2 等）未注册 18 条：AC-APPROVE-003(P1)、AC-AUDIT-003(P2)、AC-AWARD-001(P0/P1)、AC-AWARD-002(P1)、AC-CAP-001(P1)、AC-CHANGE-001(P1)、AC-CHANGE-002(P1)、AC-CLARIFY-004(P2)…
+  [ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」）
+
+--- AC-CLARIFY-001（退出码 0，8/8 断言）---
+  [ok] 缺版本或缺条目引用的工单**被拒绝**（不是警告） — refusals=[('缺条目引用', '缺条目引用 refs.item_ids：无引用的工单不得建立（FR-CLARIFY-001）'), ('条目引用为空', '缺条目引用 refs.item_ids：无引用的工单不得建立（FR-CLARIFY-001）'), ('缺包版本', '缺 rfq_rev（收到 None）：工单必须绑定包版本（FR-CLARIFY-001）')]
+  [ok] 被拒的建单不进工单表，但**留痕**（clarification/rejected 覆盖两类原因；同一原因的重复拒绝按账本去重键合并，不产生噪声） — tickets=0 rejected=2 reasons=['缺条目引用 refs.item_ids：无引用的工单不得建立（FR-CLARIFY-001）', '缺 rfq_rev（收到 None）：工单必须绑定包版本（FR-CLARIFY-001）']
+  [ok] 合法工单建立并绑定版本与条目引用（落 clarification/asked） — ticket={"ticket_id": "cl-0001", "package_id": "pkg-014", "rfq_rev": 1, "refs": {"item_ids": ["L-001", "L-002"]}, "question": "DN100 壁厚与保温要求?", "asker_realm": "supplier:sup-A", "status": "
+  [ok] 答案草稿含**私域字段** → waterfall 拦下（不落 clarification/answered） — blocked=答案草稿被拦下（私域/合规）：["答案含私域字段 ['internal_cost']：不得外发（strict_private）"]
+  [ok] 拦截有留痕（clarification/rejected 记下被拦原因，含私域字段名） — rejections={"reason": "作答草稿被拦下", "errors": ["答案含私域字段 ['internal_cost']：不得外发（strict_private）"], "ticket_id": "cl-0001", "action": "answer", "at": "2026-09-21T04:23:05Z"}
+  [ok] 回答者必须是 human:*（agent 代答被拒） — refused=True
+  [ok] 合法作答落 clarfication/answered（含版本绑定，broadcast_at 仍为空） — status=answered
+  [ok] 非 strict 模式改为**剥除**私域字段并留痕（stripped），业务字段保留 — answer={"text": "含成本口径", "fields": {"spec": "rev3"}, "by": "human:zhang", "at": "2026-09-21T04:23:05Z", "rfq_rev": 1, "stale": false, "stripped": ["internal_cost"]}
+
+--- AC-CLARIFY-002（退出码 0，3/3 断言）---
+  [ok] 广播名单缺任一在册投标人 → 拒绝（落 bail 事件，列明缺失者） — error=广播名单缺 ['sup-C']：答案未覆盖全部在册投标人，工单不得关闭（INV-006） bail={"ticket_id": "cl-0001", "package_id": "pkg-014", "rfq_rev": 1, "registered": ["sup-A", "sup-B", "sup-C"], "broadcast_to": ["sup-A", "sup-B"], "missing": 
+  [ok] 未完整广播时**工单不得关闭**（close 被拒且状态不变） — refused=工单不得关闭：答案未完整广播给在册投标人（缺 ['sup-C']，INV-006） status=answered
+  [ok] 广播覆盖全部在册投标人（多给不相关的名字不算缺失）→ 可关闭且落完整名单 — closed=closed broadcast={"ticket_id": "cl-0001", "package_id": "pkg-014", "rfq_rev": 1, "broadcast_at": "2026-09-21T04:23:06Z", "broadcast_to": ["sup-A", "sup-B", "sup-C", "sup-D"], "broadcast_complete": true, 
+
+--- AC-CLARIFY-003（退出码 0，4/4 断言）---
+  [ok] 包升版 → 相关工单**自动重开**（含 from_rev/to_rev），无关包的工单不受影响 — reopened=[{'ticket_id': 'cl-0001', 'from_rev': 1, 'to_rev': 2}] untouched=cl-0002
+  [ok] 旧答案标记为**针对旧版本**（stale=true + applies_to_rev=1 + superseded_by_rev=2） — answer={"text": "含保温 30mm", "fields": {}, "by": "human:zhang", "at": "2026-09-21T04:23:06Z", "rfq_rev": 1, "stale": true, "stripped": [], "applies_to_rev": 1, "superseded_by_rev": 2}
+  [ok] 重开留痕 clarification/reopened（含旧答案已失效标记） — events={"ticket_id": "cl-0001", "package_id": "pkg-014", "from_rev": 1, "to_rev": 2, "previous_answer_stale": true, "note": "旧答案只对旧版本有效，不得当作对新版本的回答"}
+  [ok] 旧答案不得当作对新版本的回答：广播被清空 → 直接 close 被拒 — broadcast=None
+
+--- 口径说明 ---
+· 建单"必带版本与条目引用"是**拒绝执行**（落 clarification/rejected、不进工单表），不是警告；
+· 广播完整性由**在册投标人集合**判定：名单缺任一 → 落 bail 事件且 close() 拒绝（INV-006）；多给无关名字不算缺失；
+· 版本重开顺带作废旧答案（stale + applies_to_rev + superseded_by_rev 并清空广播），因此重开后**不能直接关闭**；
+· 答案草稿的私域拦截走 `clarification/answer-drafted` waterfall：strict 模式短路拒绝，非 strict 模式剥字段并留 stripped；
+· 同一原因的重复拒绝会按账本去重键合并（不产生噪声），断言按"原因覆盖"而非条数判断；
+· 顺带发现并修复的漂移：`AC-CLARIFY-001` 文档标 P0 但此前无断言，现已实现；新增 ac-registry 检查（含负控：改名后变红）。

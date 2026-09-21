@@ -105,6 +105,8 @@ class EventBus:
                                         "答案可能含对方私域信息 → 拦截该字段（05 §5）"),
         "clarification/answered": ("emit", True, ""),
         "clarification/broadcast-incomplete": ("bail", True, ""),
+        "clarification/rejected": ("emit", True, ""),
+        "clarification/reopened": ("emit", True, ""),
         "quote/intake-completed": ("emit", True, ""),
         "quote/normalize": ("waterfall", False, "归一化任一环不可行即中断并产出拒绝理由（05 §5 / P6）"),
         "quote/normalized": ("emit", True, ""),

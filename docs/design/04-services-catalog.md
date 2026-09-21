@@ -77,6 +77,8 @@
 - 职责：澄清工单生命周期；答案广播完整性校验；FAQ 沉淀。
 - Definition：`ask(ticket) -> id` · `answer(ticket, text, by)` · `broadcast(ticket) -> receipt` · `faq(query) -> entries`。
 - 不变量：答案未广播给全部在册投标人不得关闭工单；`ticket.rfq_rev` 与包版本不一致时工单自动重开。
+- P1 实现：`src/quotagent/services/clarify.py`（`ClarificationService`）——建单（缺版本或缺条目引用即拒，落 `clarification/rejected`）、作答（草稿先过 `clarification/answer-drafted` waterfall，含对方私域即被拦下，strict 模式直接短路）、广播（在册投标人集合决定完整性，缺任一即落 `clarification/broadcast-incomplete` 且 `close()` 拒绝）、版本重开（`on_package_rev` → 旧答案标 `stale`/`applies_to_rev`）。
+- 回答者必须是 `human:*`（agent 代答被拒）：解答责任在人。
 - 关联：FR-CLARIFY-001..005，AC-CLARIFY-001..003。
 
 ### `ctx.approval` [P0]

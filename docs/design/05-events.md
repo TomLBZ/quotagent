@@ -60,6 +60,8 @@
 | `clarification/answer-drafted` | waterfall | live | agent → guard, 人工门 | guard 可拦截（如答案含对方私域信息） |
 | `clarification/answered` | emit | ✔ | 人工定稿 → 广播 | 必须含完整广播名单 |
 | `clarification/broadcast-incomplete` | bail | durable | `ctx.clarify` → approval | 缺名单即拒收（INV-006） |
+| `clarification/rejected` | emit | ✔ | `ctx.clarify` | 建单/作答被拒留痕（缺版本或条目引用、草稿含私域） |
+| `clarification/reopened` | emit | ✔ | `ctx.clarify` | 包升版后工单自动重开；旧答案标记为针对旧版本 |
 | `quote/intake-completed` | emit | ✔ | `ctx.intake` → pricing | 抽条目结果入账 |
 | `quote/normalize` | waterfall | live | `ctx.norm` | 归一化链：单位→币种→税→计量规则→条目对齐；任一环拒绝即短路 |
 | `quote/normalized` | emit | ✔ | `ctx.norm` → compare | 归一化结果 + 拒绝理由 |

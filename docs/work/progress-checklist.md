@@ -45,7 +45,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-202 | P1 | QEP 顺序/空洞/重发 + 版本协商 | FR-QEP-003, FR-QEP-005, FR-QEP-006, FR-QEP-008 | AC-QEP-003, AC-QEP-004 | done | EV-042 |
 | T-218 | P1 | relay 绑定：opaque 转发 + 不可达排队重试 + 篡改拒投（S1.17） | FR-INTEG-002 | AC-INTEG-002 | done | EV-043 |
 | T-203 | P1 | 三方协调 + 字段权威方 + 冲突上报（S1.3） | FR-QEP-007 | AC-SYNC-001 | done | EV-044 |
-| T-204 | P1 | 澄清工单 + 广播完整性 + 版本重开 | FR-CLARIFY-001..003 | AC-CLARIFY-001..003 | todo | – |
+| T-204 | P1 | 澄清工单 + 广播完整性 + 版本重开（S1.4） | FR-CLARIFY-001..003 | AC-CLARIFY-001..003 | done | EV-045 |
 | T-205 | P1 | 包版本变更与报价过期标记 | FR-NORM-004, FR-RFQ-003 | AC-COMPARE-001, AC-RFQ-002 | todo | – |
 | T-206 | P1 | 护栏扩展：异常低价 | FR-GUARD-001 | AC-GUARD-001 | todo | – |
 | T-207 | P1 | 产能日历与交期校验 | FR-CAP-001, FR-CAP-002, FR-GUARD-003 | AC-CAP-001, AC-GUARD-002 | todo | – |
