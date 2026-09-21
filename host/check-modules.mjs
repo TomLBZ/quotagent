@@ -38,7 +38,9 @@ const declaredEvents = eventsPath && existsSync(eventsPath)
 
 const checks = []
 let failures = 0
-const constKeysFound = []  // A3 模块集级汇总：哪些模块真的有 const 键
+const constKeysFound = []
+// 内建 mixin（`ctx.*` 直接可用，**不是**可 inject 的服务）：写进 inject 会让插件永远 pending（实测）
+const BUILTIN_MIXINS = ['events', 'logger', 'timer', 'registry']  // A3 模块集级汇总：哪些模块真的有 const 键
 const check = (moduleName, fixture, name, ok, detail = '') => {
   checks.push({ module: moduleName, fixture, name, ok: Boolean(ok), detail })
   if (!ok) failures += 1
@@ -105,15 +107,21 @@ async function mount(mod) {
   return { ctx, fiber, box }
 }
 
-for (const file of readdirSync(MODULE_DIR).filter((item) => item.endsWith('.mjs')).sort()) {
+// `index.mjs` 是模块**发现入口**（导出 moduleFiles/loadModules），不是插件：不参与 fixture
+for (const file of readdirSync(MODULE_DIR)
+  .filter((item) => item.endsWith('.mjs') && item !== 'index.mjs').sort()) {
   const mod = await import(pathToFileURL(join(MODULE_DIR, file)).href)
   const name = mod.name || file
   if (only && only !== name) continue
 
   // --- manifest 形状 ---
+  // 契约不全的模块必须**报失败断言**而不是让整脚本抛错（否则一个半成品模块会掩盖其它模块的结果）
   const missing = REQUIRED_MANIFEST.filter((key) => mod[key] === undefined)
-  check(name, 'manifest', 'manifest 必填字段齐备（name/inject/provides/Config/apply/usedServices）',
-    missing.length === 0, missing.length ? `缺 ${missing.join(', ')}` : `inject=${JSON.stringify(mod.inject)}`)
+  const shapeOk = missing.length === 0 && Array.isArray(mod.inject) && Array.isArray(mod.usedServices)
+  check(name, 'manifest', 'manifest 必填字段齐备（name/inject/provides/Config/apply/usedServices，且 inject/usedServices 是数组）',
+    shapeOk, missing.length ? `缺 ${missing.join(', ')}`
+      : `inject=${JSON.stringify(mod.inject)} usedServices=${JSON.stringify(mod.usedServices)}`)
+  if (!shapeOk) continue   // 形状都不对就不进后续 fixture（断言已经红了，不用连带崩溃）
   check(name, 'manifest', 'provides 非空且 Config 实现 standard-schema（cordis 用 `~standard.validate` 校验）',
     Array.isArray(mod.provides) && mod.provides.length > 0
     && typeof mod.Config?.['~standard']?.validate === 'function',
@@ -206,7 +214,10 @@ for (const file of readdirSync(MODULE_DIR).filter((item) => item.endsWith('.mjs'
       `emit=${JSON.stringify(emitted)} 未声明=${JSON.stringify(notDeclared)}；事件表 ${declared.length} 条`)
   }
 
+  // A5 采样点：**模块自带** `fixture.sample(handle)` 优先（新增插件不必改本文件，避免多人抢同一文件）；
+  // 没带就退回内置分支（历史模块保留原样）。
   const sample = () => {
+    if (typeof mod.fixture?.sample === 'function') return JSON.stringify(mod.fixture.sample(live.box.handle))
     if (name === 'kernel-bridge') return JSON.stringify(live.box.handle.surface())
     if (name === 'norm') return JSON.stringify(live.box.handle.convert(120, 1))
     if (name === 'webui') return JSON.stringify({ prefix: live.box.handle.prefix, port: live.box.handle.port > 0 })

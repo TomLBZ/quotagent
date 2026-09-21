@@ -24,8 +24,10 @@ def node_bin() -> str:
 
 
 def main() -> int:
-    proc = subprocess.run([node_bin(), str(ROOT / "host" / "webui.mjs")],
-                          cwd=str(ROOT / "host"), capture_output=True, text=True, timeout=900)
+    # 走 tools/cordis.sh run：它会先确保 host 依赖（干净副本里 node_modules 不存在是正常的，
+    # 门必须能自己把它装回来，否则 fresh clone 上"门红"会把环境问题当成代码问题）
+    proc = subprocess.run([str(ROOT / "tools" / "cordis.sh"), "run", "webui.mjs"],
+                          cwd=str(ROOT), capture_output=True, text=True, timeout=1800)
     try:
         report = json.loads(proc.stdout)
     except json.JSONDecodeError:

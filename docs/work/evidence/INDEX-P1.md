@@ -23,6 +23,7 @@
 | EV-055 | 部署手册干净副本实跑（T-215b）：`git archive HEAD` → 裸解释器 `verify.sh smoke` / `verify.sh docs` / `python3 tools/g1-walkthrough.py` 的原始输出；并含 `verify.sh g1` 聚合门（全量 57 条 AC + 14 条 MVP 判据）的结论 | T-215b / S1.14 |
 | EV-056 | 宿主强制不变量 H1/H2/H3/H5/H6（`verify.sh invariants` 22/22）（详情见 EV 文件本体） | T-219 / 评审 C §7.1 |
 | EV-060 | 模型 Jev 一手来源核验（Cloudflare/Vercel 原文节选） | T-223 | P2 |
+| EV-061 | 插件化（清单门/自动发现/clean-copy 门）+ timeline 中间件 | T-225/T-226 | P2 |
 | EV-059 | WebUI 插件 + 工作区路由接入（双方视角） | T-222 | P2 |
 | EV-057 | 演化门骨架（`verify.sh evolution` 15/15 含负控）（详情见 EV 文件本体） | T-220 / 评审 C §7.1 第 7 条 |
 | EV-058 | 进树模块 manifest + fixture A1..A6（`verify.sh modules` 36/36，含负控）：inject 白名单/零残留/config 负控/事件声明/确定性/无跨模块 import；含"inject 写内建 mixin 会永 pending"的实测发现；并复核 `g1` 门 | T-221 / 评审 C §7.1 第 5 条 |

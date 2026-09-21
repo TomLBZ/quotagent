@@ -58,3 +58,5 @@ WebUI 也是模块（`modules/webui.mjs`）：双方视角两个路由、每方�
 - `host/lib/std-schema.mjs`：standard-schema v1 构造器（cordis 只消费 `Config["~standard"].validate`，不导出 `Schema`）。
 - 两个实测坑：① `inject: ["events"]` 会让插件**永远 pending**（`events` 是内建 mixin）；
   ② provided service 只能在**插件自己的 ctx** 取（外部取抛 "without inject"），fixture 用包装 `provide` 抓句柄。
+
+模块清单与独立演进边界见 `docs/design/14-plugin-inventory.md`；门 `tools/verify.sh plugins`。

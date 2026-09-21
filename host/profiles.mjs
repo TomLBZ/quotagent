@@ -14,7 +14,7 @@ export const PROFILES = {
     label: '承包商运营台',
     realm: 'contractor:con-B',
     ledger: 'ledger-contractor.jsonl',
-    modules: ['config', 'frozen', 'compare', 'guard', 'approval', 'queue'],
+    modules: ['config', 'frozen', 'kernel-bridge', 'sourcing', 'compare', 'guard', 'approval', 'queue'],
     sidecar: 'deferred-to-B3',
     config: {
       approval: { queue: { enabled: true }, auto_approve: false },
@@ -30,7 +30,7 @@ export const PROFILES = {
     label: '双方视角 WebUI（view-host）',
     realm: 'contractor:con-B',
     ledger: 'ledger-contractor.jsonl',
-    modules: ['config', 'webui'],
+    modules: ['config', 'webui', 'timeline'],
     sidecar: 'read-only',
     config: {
       // 一个进程两个路由：承包商视角读承包商账本、供应商视角读供应商账本（结构性隔离）
@@ -42,7 +42,7 @@ export const PROFILES = {
     label: '供应商报价台',
     realm: 'supplier:sup-A',
     ledger: 'ledger-supplier.jsonl',
-    modules: ['config', 'frozen', 'norm', 'cost', 'pricing'],
+    modules: ['config', 'frozen', 'kernel-bridge', 'norm', 'cost', 'pricing'],
     sidecar: 'deferred-to-B3',
     config: {
       norm: { tolerance_bps: 5, fallback_defaults: [] },

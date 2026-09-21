@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-21T08:22:34Z",
+  "updated_at": "2026-09-21T08:25:47Z",
   "phase": "P2-pluginization-and-advisor",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-224",
+  "next_task": "T-227",
   "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
   "last_verified_command": "tools/verify.sh g1",
   "last_verified_result": "PASS：57/57 AC + 14/14 MVP 判据 + 十一个入口（docs/events/invariants/evolution/modules/bridge/cordis/p0-no-node/ac-registry/audit/v）全绿；modules 36/36",
@@ -65,6 +65,8 @@
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态",
   "done_p2": [
     "T-222",
-    "T-223"
+    "T-223",
+    "T-225",
+    "T-226"
   ]
 }

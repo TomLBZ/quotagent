@@ -78,6 +78,14 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
   evolution)
     exec "$NODE_BIN" "$ROOT/host/evolution.mjs" "$@"
     ;;
+  plugins)
+    shift
+    exec "$QUOTAGENT_PY" "$ROOT/tools/check-plugin-inventory.py" "$@"
+    ;;
+  clean-copy)
+    shift
+    exec "$QUOTAGENT_PY" "$ROOT/tools/check-clean-copy.py" "$@"
+    ;;
   webui)
     shift
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-webui.py"
@@ -108,7 +116,7 @@ audit)
     exit 2
     ;;
   *)
-    echo "用法: tools/verify.sh docs|ac <AC-ID>|all|suite <name>|cordis|v|smoke|events|invariants|evolution|modules|webui|bridge|p0-no-node|ac-registry|audit|g0|g1|g2" >&2
+    echo "用法: tools/verify.sh docs|ac <AC-ID>|all|suite <name>|cordis|v|smoke|events|invariants|evolution|modules|webui|plugins|clean-copy|bridge|p0-no-node|ac-registry|audit|g0|g1|g2" >&2
     exit 2
     ;;
 esac
