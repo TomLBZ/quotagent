@@ -158,6 +158,11 @@ const main = async () => {
     const { apply: avApply, Config: avConfig } = await import('./modules/admin-view.mjs')
     await ctx.plugin({ name: 'admin-view', inject: [], Config: avConfig,
       apply: (inner, config) => avApply(inner, { ...config, admin_snapshot: String(args['admin-snapshot'] ?? process.env.QUOTAGENT_UI_ADMIN ?? '') }) })
+    const { apply: pmApply, Config: pmConfig } = await import('./modules/plugin-market.mjs')
+    await ctx.plugin({ name: 'plugin-market', inject: [], Config: pmConfig,
+      apply: (inner, cfg) => pmApply(inner, { ...cfg,
+        modules_dir: String(args['market-modules'] ?? ''), inventory: String(args['market-inventory'] ?? ''),
+        user_space: String(args['market-user-space'] ?? '') }) })
     const { apply: agApply, Config: agConfig } = await import('./modules/admin-guard.mjs')
     await ctx.plugin({ name: 'admin-guard', inject: [], Config: agConfig,
       apply: (inner, config) => agApply(inner, { ...config, token_env: 'QUOTAGENT_ADMIN_TOKEN', token_file: String(args['admin-token-file'] ?? '') }) })
@@ -193,7 +198,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)

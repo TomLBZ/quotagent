@@ -114,6 +114,10 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec node host/t260-pipeline-gate.mjs "$@"
     ;;
+  plugin-market)
+    shift
+    exec node host/t267-market-gate.mjs "$@"
+    ;;
   admin-route)
     shift
     exec python3 tools/check-admin-route.py "$@"

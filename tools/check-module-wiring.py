@@ -36,7 +36,7 @@ PROVIDERS = {
     "supplierScorecard": "supplier-scorecard", "idempotency": "idempotency-guard",
     "approvalDigest": "approval-digest", "budgetGuard": "budget-guard",
     "retentionView": "retention-view", "pipelineView": "pipeline-view",
-    "adminGuard": "admin-guard", "adminView": "admin-view",
+    "adminGuard": "admin-guard", "adminView": "admin-view", "pluginMarket": "plugin-market",
 }
 
 

@@ -1,0 +1,40 @@
+EV-134 T-267 插件市场（plugin-market）：插件列表/市场本身由插件提供
+
+[1] 产物（subagent 产出 → **走既有自进化流程晋升**）
+· 候选 `tmp/t267-market.mjs`（27337 B，sha256 867a7c79…）→ `tools/evolve-module.mjs --name plugin-market --approval-ref ap-0111`
+  → 晋升为 `host/modules/plugin-market.mjs`（字节一致）；`evolution-log.json` 记录 `artifact_hash` 受
+  `verify.sh evolve-module` 追溯（偷改一字节即红）
+· 围栅门 `host/t267-market-gate.mjs`（宿主侧人工维护，53402 B）：**13/13**
+  契约正控 / 挂载与 dispose（卸它不影响其它插件）/ 手算正控 / **只组合不自算** / 三源不一致正控 /
+  降级负控（目录不存在、清单含 NUL、部分源缺失）/ 有界负控（超条数、超字节 → 截断且报被丢条数）/
+  确定性 / 静态负控（零写文件·子进程·网络·事件·随机·定时器·账本调用）/ 键白名单与零泄漏 / 配置契约 /
+  headline / **真数据正控**（真 `host/modules/` + 真清单 → 26 项、三源一致、与 `15` §2 逐名一致）
+
+[2] 变异自证（subagent 已跑 + 父方抽查；自带防假变异：锚点恰命中 1 次 + 字节必变 + 子进程必须红 + finally 还原比对 sha256）
+① 去掉有界夹取 → 红（有界负控）② 三源不一致不报 → 红 ③ 不可读报全零冒充健康 → 红 ④ wired 找不到也报 true → 红
+
+[3] 父方接线（T-267b）
+`host/profiles.mjs`（webui profile 登记）+ `host/cli.mjs`（运行期挂载 + 三参数 modules_dir/inventory/user_space）
++ `host/webui.mjs`（围栅门挂载，绝对路径）+ `host/canary-dispatch.mjs`（e2e 挂载）+ `host/check-modules.mjs`（STUBS）
++ `tools/check-module-wiring.py`（服务→提供者映射）+ `tools/verify.sh plugin-market` 门 + 系统管理道路由
+`/quotagent/admin/api/market`（需会话；未提权 401）+ 面板「插件市场（只读）」区块 + 清单/矩阵登记
+
+[4] 线上真回读
+`/quotagent/admin/api/market`（带会话）→ 200：
+counts = `{human:11, evolve:15, user_space:0, total:26, unwired:0}`，`inconsistent=false`，`degraded=false`
+公网未提权 → 401；`plugin-market`/`modules`/`wiring`/`webui`/`plugins`/`coverage`/`docs` 全绿
+
+[5] 如实说明（已知口径与未做项）
+· `source` 判定是**清单文本口径**（行内出现「自进化 / subagent / ap-」→ evolve）：因此 `canary` 被归为 evolve
+  （门第 13 条把它**显式钉住**，不是隐藏漂移；口径要改就得同步门的手算值）—— 登记为待定口径。
+· 用户空间源的哈希校验**仅在清单声明了 sha256 且 artifact 指向产物文件时**生效（未声明则不校验，不猜）。
+· 「安装 / 提权」动作本身**不在本批**：市场是**零写面只读聚合**，安装只产指向既有门的引用（FR-MARKET-004）；
+  真正的用户空间装载/卸载/提权属 T-267b（用户空间插件生命周期）。
+· 权限类不可读（EACCES）与符号链接越界未造用例（覆盖的是目录缺失/不是目录/清单含 NUL/plugin.json 非法）。
+
+[6] 线上回读原始输出
+```
+market → 200
+ counts= {"human": 11, "evolve": 15, "user_space": 0, "total": 26, "unwired": 0} inconsistent= False degraded= False
+ 样例: [('admin-guard', 'evolve', True), ('admin-view', 'evolve', True), ('approval-digest', 'evolve', True), ('audit-hook', 'human', True), ('bridge-canary', 'human', True), ('budget-guard', 'evolve', True)]
+```

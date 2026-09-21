@@ -128,11 +128,19 @@
 | FR-ADMIN-009 | host/modules/admin-guard.mjs | 见对应 AC | 直引 |
 | FR-ADMIN-010 | host/modules/admin-guard.mjs | 见对应 AC | 直引 |
 
+| FR-MARKET-001 | host/modules/plugin-market.mjs | 见 AC-MARKET-001 | 直引 |
+| FR-MARKET-002 | host/modules/plugin-market.mjs | 见 AC-MARKET-002 | 直引 |
+| FR-MARKET-003 | host/modules/plugin-market.mjs | 见 AC-MARKET-003 | 直引 |
+| FR-MARKET-004 | host/modules/plugin-market.mjs | 见 AC-MARKET-004 | 直引 |
+| FR-MARKET-005 | host/modules/plugin-market.mjs | 见 AC-MARKET-005 | 直引 |
+| FR-MARKET-006 | host/modules/plugin-market.mjs | 见 AC-MARKET-006 | 直引 |
+
 ## 2. 插件归属
 
 | 插件 | 归属 FR/AC | 强度 |
 |---|---|---|
 | approval-digest | FR-UX-001 | 部分 |
+| plugin-market | FR-MARKET-001、FR-MARKET-002、FR-MARKET-003、FR-MARKET-004、FR-MARKET-005、FR-MARKET-006（T-267 subagent 产出） | 强 |
 | admin-guard | FR-ADMIN-002、FR-ADMIN-007、FR-ADMIN-008、FR-ADMIN-009、FR-ADMIN-010（T-272 subagent 产出） | 强 |
 | admin-view | FR-ADMIN-001、FR-ADMIN-003、FR-ADMIN-004（T-272 subagent 产出） | 强 |
 | audit-hook | FR-RUNTIME-003（本次登记） | 强 |

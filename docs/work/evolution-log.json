@@ -166,6 +166,21 @@
       "produced_by": "tools/evolve-module.mjs",
       "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
       "evidence": null
+    },
+    {
+      "name": "plugin-market",
+      "proposal_id": "sha256:0e9d9e8329583ef210e6599fcb25cc3c4260f3ed2dcc9659b90ff5d6f33947bc",
+      "artifact_hash": "sha256:867a7c792ac1f97ff6733e55578808988ab58902251b19290a46c63981343f0a",
+      "bytes": 27337,
+      "approval_ref": "ap-0111",
+      "gate": "passed",
+      "fixture": {
+        "passed": 13,
+        "total": 13
+      },
+      "produced_by": "tools/evolve-module.mjs",
+      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+      "evidence": null
     }
   ]
 }

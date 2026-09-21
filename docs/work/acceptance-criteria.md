@@ -155,6 +155,12 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-ADMIN-009 | P2 | 反例（机检）：①无 token 调提权端点 → 拒绝且无会话 cookie；②以「接近正确」的三种 token 提权 → 一律拒绝，响应体不含所提交 token、不含正确 token、无 oracle；③被拒后 `/admin/api/blocks` 仍 401 | `tools/verify.sh admin-route` | 见 `evidence/EV-132` |
 | AC-ADMIN-010 | P2 | token 存储与校验（服务端）：只从环境变量或 0600 文件读（0644 文件被拒 = file-insecure-mode；缺失 = 未启用）；先 sha256 归一再用恒定时间比较定长摘要（**源码级**断言无前缀/切片比较）；token 与其摘要（连前 8 位）在响应、快照、日志、页面四处均搜不到 | `tools/verify.sh admin-route` | 见 `evidence/EV-132` |
 | AC-ADMIN-005 | P2 | UI 内解阻塞闭环：带 token 的 `POST /admin/api/blocks/<id>/resolve` → 202 且**宿主侧账本零新增**（业务账本哈希逐一不变）、只在 `tmp/ui-shared/admin-submissions/` 落一条 **0600** 待处理项（含 payload_sha256/bytes，响应不回显材料）；Python 侧 `tools/admin-apply.py` 消费（**缺 `human:` 批准引用一律拒且账本零新增**）后落 `admin/block-pending`+`admin/block-resolved`（body 恰 7 键，**不含凭据值也不含字段名**）、幂等（同哈希重跑零新增）、源件移入 `applied/`；判定器带 `resolutions_path` 时该 block 从活动列表移除且 `counts.resolved` +1（不传时与旧行为逐字节一致） | `tools/verify.sh ac AC-ADMIN-005`（端到端另见 `verify.sh admin-route`） | 见 `evidence/EV-133` |
+| AC-MARKET-001 | P2 | pluginMarket 服务由插件提供且列表非空（空列表必 degraded）；每个进树模块都带 source(human/evolve/user-space) 与 wired（找不到即显式 false，不隐藏）；卸载 plugin-market 后其它插件照常运行 | `tools/verify.sh plugin-market` | 见 `evidence/EV-134` |
+| AC-MARKET-002 | P2 | 可安装项与已装载项分开；负控：影子/未晋升产物放进候选**不得出现**；每条可安装带 install_ref 指向既有门；无引用的安装请求被拒且不落产物 | `tools/verify.sh plugin-market` | 见 `evidence/EV-134` |
+| AC-MARKET-003 | P2 | 三种不一致各造一次（目录有/清单无、清单有/目录无、用户空间清单哈希≠产物哈希）→ `inconsistent:true` + 逐项差异，不得取其一静默通过 | `tools/verify.sh plugin-market` | 见 `evidence/EV-134` |
+| AC-MARKET-004 | P2 | 连读市场面前后 `host/modules/*.mjs` 与 `src/**/*.py` 逐字节与个数不变、无新文件、账本零新增、无子进程、四 profile config_digest 不变 | `tools/verify.sh plugin-market` + `clean-copy` + `invariants` | 见 `evidence/EV-134` |
+| AC-MARKET-005 | P2 | 同输入两次输出除时间键外逐字节一致；超上界即 `truncated:true` 并带被丢条数；正文与私域哨兵均不出现 | `tools/verify.sh plugin-market` + `webui` | 见 `evidence/EV-134` |
+| AC-MARKET-006 | P2 | 源不可读 → `degraded:true` + reason + next_action；与"真零插件"可区分；两种情形都不许报 ok:true 掩盖 | `tools/verify.sh plugin-market` | 见 `evidence/EV-134` |
 
 ## 7. 证据制度
 

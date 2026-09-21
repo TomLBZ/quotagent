@@ -180,7 +180,10 @@ def main(argv: list[str]) -> int:
             "--admin-snapshot", os.environ.get(
                 "QUOTAGENT_UI_ADMIN", str(ROOT / "tmp" / "ui-shared" / "admin.json")),
             "--admin-inbox", os.environ.get(
-                "QUOTAGENT_UI_ADMIN_INBOX", str(ROOT / "tmp" / "ui-shared" / "admin-submissions"))]
+                "QUOTAGENT_UI_ADMIN_INBOX", str(ROOT / "tmp" / "ui-shared" / "admin-submissions")),
+            "--market-modules", str(ROOT / "host" / "modules"),
+            "--market-inventory", str(ROOT / "docs" / "design" / "14-plugin-inventory.md"),
+            "--market-user-space", str(ROOT / "user-space")]
     # 管理员 token：**进子进程环境变量，不进 argv**（argv 在 ps 里可见）
     tok = admin_token()
     env = dict(os.environ)

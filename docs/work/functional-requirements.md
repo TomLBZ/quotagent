@@ -172,6 +172,12 @@
 | FR-ADMIN-009 | 反例：无 token 不得提权；非 admin token 一律被拒且不泄露（无 oracle）；被拒不产生会话，也不在宿主留下任何提交文件 | must | P2 | AC-ADMIN-009 |
 | FR-ADMIN-010 | token 校验只在服务端：来源限于环境变量或 0600 文件，先 sha256 归一再用恒定时间比较；token 不得出现在 HTML/JS 响应、快照文件、账本行与宿主日志四处 | must | P2 | AC-ADMIN-010 |
 | FR-ADMIN-005 | 阻塞可在 UI 内解除：提交落为宿主侧「待处理项」（0600），由 Python 侧消费并落账完成；**提交瞬间宿主侧账本零新增**，宿主永不写账本 | should | P2 | AC-ADMIN-005 |
+| FR-MARKET-001 | 插件列表本身由插件提供：只读聚合三真源（目录/清单/用户空间），逐项给 source 与 wired；未装配显式 unwired 不得隐藏；空列表报 degraded | must | P2 | AC-MARKET-001、AC-MARKET-006 |
+| FR-MARKET-002 | 市场目录与已装载项必须分开；未过门/未晋升产物不得进"可安装项"；每条可安装带 install_ref，无引用一律拒 | must | P2 | AC-MARKET-002 |
+| FR-MARKET-003 | 三源不一致即报 inconsistent + 逐项差异，不得取其一静默 | must | P2 | AC-MARKET-003 |
+| FR-MARKET-004 | 市场只读零副作用：不装载/不下载/不写文件/不起子进程/不写账本；"安装/提权"只产指向既有门的引用 | must | P2 | AC-MARKET-004 |
+| FR-MARKET-005 | 有界且确定性：条数上界、稳定排序、不含正文与私域键；超界截断并报被丢条数 | should | P2 | AC-MARKET-005 |
+| FR-MARKET-006 | 不可用不得伪装：degraded + reason + next_action，不得返回"看起来健康的零插件清单" | must | P2 | AC-MARKET-006 |
 ## 7. 阶段分布（用于排期）
 
 | 阶段 | must 数 | 核心内容 |

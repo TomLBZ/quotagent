@@ -78,42 +78,42 @@
    "requirement": "**插件列表本身由插件提供**：新增 `host/modules/plugin-market.mjs`，`provides: ['pluginMarket']`，只读聚合三类真源（① `host/modules/*.mjs` 目录 ② `docs/design/14-plugin-inventory.md` 的登记行 ③ `user-space/<ns>/<plugin>/plugin.json` 清单），逐项给出 `source`（`human` / `evolve` / `user-space`）、`wired`（被哪些 profile 装配）与 `provides`；未装配项显式标 `unwired`，**不得隐藏**；列表为空必须报 `degraded`（与\"读不到\"可区分） | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（2 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-MARKET-002",
    "requirement": "**市场目录与已装载项必须分开呈现**：尚未过门/尚未晋升的产物（影子目录、`user-space/<ns>/<plugin>/.shadow/`、未带 `approval_ref` 的提案产物）**不得**出现在\"可安装项\"里；市场中每一条\"可安装\"必须携带 `install_ref`（指向 ADR-0016 的 `promoteModule` 或用户空间装载路径），**无引用的安装项一律拒绝** | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-MARKET-003",
    "requirement": "三源**不一致即报不一致**：同一插件名在目录/清单/用户空间清单之间哈希、版本或装配状态不同时输出 `inconsistent:true` 与逐项差异；**不得取其一而静默** | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-MARKET-004",
    "requirement": "市场是**只读面**：不装载、不下载、不写文件、不启动子进程、不写账本；\"安装/提权\"只产出**指向既有门的引用**，市场自身不得落任何产物 | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-MARKET-005",
    "requirement": "市场视图**有界且确定性**：条数上界、稳定排序（同输入同输出）、不含正文与私域键；超上界即截断并报 `truncated:true` 与被丢条数 | should",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-MARKET-006",
    "requirement": "市场**不可用时不得伪装**：真源不可读 → `degraded:true` + `reason` + `next_action`，**不得返回\"看起来健康的零插件清单\"**（零插件 ≠ 读不到，两种情形必须可区分） | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-USERPLUG-001",
@@ -461,7 +461,7 @@
    "command": "tools/verify.sh plugin-market`（**需父方新建**）+ `tools/verify.sh plugins`（已存在，双向全覆盖）",
    "evidence_draft": "见 `evidence/EV-115`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-MARKET-002",
@@ -470,7 +470,7 @@
    "command": "tools/verify.sh plugin-market`（**需父方新建**）+ `tools/verify.sh evolution`（已存在，27 条含 7 条负控）",
    "evidence_draft": "见 `evidence/EV-115`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-MARKET-003",
@@ -479,7 +479,7 @@
    "command": "tools/verify.sh plugin-market`（**需父方新建**）+ `tools/verify.sh plugins`（已存在）+ `tools/verify.sh coverage`（已存在）",
    "evidence_draft": "见 `evidence/EV-116`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-MARKET-004",
@@ -488,7 +488,7 @@
    "command": "tools/verify.sh clean-copy`（已存在）+ `tools/verify.sh invariants`（已存在）+ `tools/verify.sh evolve-module`（已存在，哈希追溯）",
    "evidence_draft": "见 `evidence/EV-116`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-MARKET-005",
@@ -497,7 +497,7 @@
    "command": "tools/verify.sh plugin-market`（**需父方新建**）+ `tools/verify.sh webui`（已存在 21/21）",
    "evidence_draft": "见 `evidence/EV-117`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-MARKET-006",
@@ -506,7 +506,7 @@
    "command": "tools/verify.sh plugin-market`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-117`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-STORAGE-001",

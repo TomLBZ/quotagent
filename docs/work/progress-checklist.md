@@ -92,6 +92,8 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-265c | 线上闭环：UI 提交 → 消费 → 面板 blocked 9→8 / resolved 0→1（真回读） | B68 | done | EV-133 |
 | T-265b2 | `approval_ref` 的**账本侧核验**（与批准记录对照，不只形状；先例 `retention_exec`） | B69 | todo | — |
 | T-265 | 阻塞解除闭环：宿主只落待处理提交 → Python 侧消费 → 账本 `admin/block-resolved` | B68 | todo | D-059 |
+| T-267a | `plugin-market` 插件：候选 + 围栅门 13/13 + 4 处变异自证（subagent 产出，父方实跑） | B69 | done | EV-134 |
+| T-267b | 父方接线：profile/CLI/e2e/门/stubs/路由 + 晋升（ap-0111）+ 线上真回读 26 项 | B69 | done | EV-134 |
 | T-267 | 插件市场插件 + 用户空间插件全生命周期与隔离四件套 + 提权 | B69 | todo | D-060 |
 | T-268 | agent 运行期插件（上下文/记忆/harness，参考 deepseek harness） | B70 | todo | D-061 |
 | T-269 | 存储插件（文件管理 / 数据库，接口与隔离先行） | B70 | todo | D-061 |

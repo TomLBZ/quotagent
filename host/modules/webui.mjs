@@ -18,11 +18,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket']
 
 export const provides = ['webui']
 
@@ -102,6 +102,7 @@ export function apply(ctx, config) {
   const pipeline = ctx.pipelineView         // 三域运维快照的只读聚合（subagent 产出，T-260）
   const adminGuard = ctx.adminGuard         // 管理员 token / 会话 / 冷却（subagent 产出，T-272）
   const adminView = ctx.adminView           // 系统管理快照的只读聚合（同上）
+  const pluginMarket = ctx.pluginMarket      // 插件列表/市场的只读聚合（subagent 产出，T-267）
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
   const pipelinePayload = () => {
@@ -414,6 +415,9 @@ export function apply(ctx, config) {
         + `<p>阻塞 <b>${data.counts?.blocked ?? 0}</b> 条（口径：${data.counts?.source ?? '—'}）</p>`
         + `<table><thead><tr><th>block</th><th>kind</th><th>原因</th><th>需要你做的事</th><th>提交材料</th></tr></thead><tbody>${rows}</tbody></table>`
         + `<p>切换视角：${switchLinks}</p>`
+        + (() => { const m = pluginMarket.snapshot(); return `<h3>插件市场（只读）</h3>`
+            + `<p>共 <b>${m.counts?.total ?? 0}</b> 项（人工 ${m.counts?.human ?? 0} / 自进化 ${m.counts?.evolve ?? 0} / 用户空间 ${m.counts?.user_space ?? 0}）；未装配 <b>${m.counts?.unwired ?? 0}</b>；三源一致 <b>${!m.inconsistent}</b></p>`
+            + `<p>${(m.differences || []).map((d) => `<code>${d}</code>`).join(' · ') || '（无差异）'}</p>` })()
     }
     if (/^\/admin\/?$/.test(path)) {
       if (!adminGuard.authorized(req).ok) return deny()
@@ -467,6 +471,10 @@ export function apply(ctx, config) {
           JSON.stringify({ ok: true, block_id: blockId, payload_sha256: payloadSha, bytes,
             next_action: '等待 Python 侧消费：tools/admin-apply.py --approval-ref ap-NNNN --actor human:<人名>（宿主不写账本）' }))
       })
+    }
+    if (/^\/admin\/api\/market\/?$/.test(path)) {
+      if (!adminGuard.authorized(req).ok) return deny()
+      return json(200, pluginMarket.snapshot())
     }
     if (/^\/admin\/api\/switch\/?$/.test(path)) {
       if (!adminGuard.authorized(req).ok) return deny()
