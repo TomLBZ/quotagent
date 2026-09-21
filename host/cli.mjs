@@ -154,6 +154,10 @@ const main = async () => {
     const { apply: brApply2, Config: brConfig2 } = await import('./modules/circuit-breaker.mjs')
     await ctx.plugin({ name: 'circuit-breaker', inject: [], Config: brConfig2,
       apply: (inner, cfg) => brApply2(inner, cfg) }, brConfig2.parse({}))
+    // 自进化流水（第五个自进化产出，T-245）
+    const { apply: jApply, Config: jConfig } = await import('./modules/evolve-journal.mjs')
+    await ctx.plugin({ name: 'evolve-journal', inject: [], Config: jConfig,
+      apply: (inner, cfg) => jApply(inner, cfg) }, jConfig.parse({}))
     // 运维视角（第四个自进化产出，T-243/T-244）：只组合上面几个来源
     const { apply: opsApply2, Config: opsConfig2 } = await import('./modules/ops-view.mjs')
     await ctx.plugin({ name: 'ops-view', inject: ['observability', 'breaker', 'evidenceSummary'], Config: opsConfig2,
@@ -167,7 +171,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -181,6 +185,7 @@ const main = async () => {
       views: String(args.views ?? 'contractor,supplier').split(',').map((item) => item.trim()).filter(Boolean),
       ledger_contractor: contractorLedger,
       ledger_supplier: String(args['ledger-supplier'] ?? ''),
+      ledger_evolve: String(args['ledger-evolve'] ?? join(REPO_ROOT, 'tmp', 'evolve', 'ledger.jsonl')),
     })
     // 注意：这里**不能**用 emit()（它写完就 process.exit）——UI 是常驻服务
     process.stdout.write(JSON.stringify({ ok: true, action: 'webui', profile: profileName, pid: process.pid,

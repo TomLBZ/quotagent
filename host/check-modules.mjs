@@ -149,6 +149,13 @@ const STUBS = {
       privacy: { entry_bodies_included: false, private_keys_included: false } }),
     summary: () => 'stub',
   },
+  evolveJournal: {
+    // fixture 的 stub：只满足"能归纳流水"；口径由 evolve-journal 模块自己的门验
+    summarize: () => ({ rows: 0, by_type: [], proposed: 0, shadowed: 0,
+      gated: { total: 0, passed: 0, rejected: 0, recent_rejections: [] }, promoted: 0, rolled_back: 0,
+      canary: { entered: 0, exited: 0 }, unknown_types: [], recent: [], last_event: null,
+      privacy: { entry_bodies_included: false } }),
+  },
   compare: { flagCount: () => 0 },
   bridge: { surface: () => ({}) },
 }

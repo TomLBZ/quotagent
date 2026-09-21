@@ -15,11 +15,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView']   // 每个都是独立插件（准入 / 观测）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal']   // 每个都是独立插件（准入 / 观测）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal']
 
 export const provides = ['webui']
 
@@ -32,6 +32,7 @@ export const Config = object({
   // 每个视角**读自己的账本**（结构性隔离：对方的账本根本不在本视角的读取路径上）
   ledger_contractor: string().default(''),
   ledger_supplier: string().default(''),
+  ledger_evolve: string().default(''),   // 自进化账本（运维视角读它的**归纳**，不出正文）
 })
 
 const html = (title, body, prefix) => `<!doctype html><html lang="zh"><head><meta charset="utf-8">
@@ -87,6 +88,12 @@ export function apply(ctx, config) {
   const history = ctx.priceHistory
   const evidence = ctx.evidenceSummary   // 账本证据面（第二个自进化产出，T-239）
   const ops = ctx.opsView               // 运维视角（第四个自进化产出，T-243）
+  const journal = ctx.evolveJournal     // 自进化流水（第五个自进化产出，T-245）
+  /** 自进化账本行的只读读取（读不到就当空：运维页不能因为账本还没生成而崩） */
+  const evolveRows = () => {
+    if (!config.ledger_evolve) return []
+    try { return openLedger(config.ledger_evolve).rows() } catch (err) { return [] }
+  }
   /**
    * 价格序列的输入：**原始行**的 `body.lines[]`，但只取非私域字段（`item_id` / `unit_price`）。
    * 为什么要用原始行：投影层只保留 `seq/type/summary/ts`，价格明细会被截掉（实测 groups=0）。
@@ -157,6 +164,13 @@ export function apply(ctx, config) {
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
           + `<tr><td>admitted=${g.admitted ?? 0} refused=${g.refused ?? 0} timeouts=${g.timeouts ?? 0} failed=${g.failed ?? 0}</td>`
           + `<td>allowed=${b.allowed ?? 0} refused=${b.refused ?? 0} opened=${b.opened ?? 0} closed=${b.closed ?? 0}</td></tr></table>`
+          + `<h3>自进化流水</h3><p>由自进化产出的插件 <code>evolve-journal</code> 归纳（只给计数，不出正文）</p>`
+          + (() => {
+            const ev = journal.summarize(evolveRows())
+            return `<p>提案 <b>${ev.proposed}</b> / 影子 <b>${ev.shadowed}</b> / 门 <b>${ev.gated.passed}</b> 过 `
+              + `<b>${ev.gated.rejected}</b> 拒 / 晋升 <b>${ev.promoted}</b> / 回滚 <b>${ev.rolled_back}</b> / `
+              + `canary 进 <b>${ev.canary.entered}</b> 出 <b>${ev.canary.exited}</b>；最近 <code>${ev.last_event ?? '—'}</code></p>`
+          })()
           + `<h3>各视角账本证据面（聚合）</h3>`
           + `<table><tr><th>视角</th><th>行数</th><th>类型数</th><th>关联数</th><th>带引用行</th><th>时间跨度</th></tr>${rowsHtml}</table>`,
           prefix))
@@ -167,6 +181,7 @@ export function apply(ctx, config) {
         .map((view) => [view, ops.snapshot({ rows: rowsFor(view) }).evidence]))
       return json(200, { view: 'ops', source: 'ops-view（自进化产出的插件）', summary: ops.summary({ rows: [] }),
         runtime: runtime.runtime, breaker: runtime.breaker, evidence_by_view: perView,
+        evolve_journal: journal.summarize(evolveRows()),
         note: '运维视角：不属于任何一方；只给聚合数字与状态，不给条目正文/私域键' })
     }
     const viewMatch = path.match(/^\/([a-z]+)\/?$/)

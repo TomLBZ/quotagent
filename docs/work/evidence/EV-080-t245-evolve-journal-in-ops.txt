@@ -1,0 +1,19 @@
+EV-080 T-245 第五个自进化产出（evolve-journal）接进运维视角：自进化流水可见
+生成时间 2026-09-21T09:57:10Z
+命令与原始输出（原样留档）
+
+[1] 线上真实进程回读（重启后；读的是**真实**自进化账本）
+$ curl -s http://127.0.0.1:8093/quotagent/api/ops → 200
+evolve_journal = {"rows": 30, "by_type": [{"type": "evolve/canary-exited", "count": 1}, {"type": "evolve/gated", "count": 7}, {"type": "evolve/promoted", "count": 6}, {"type": "evolve/proposed", "count": 6}, {"type": "evolve/rolled-back", "count": 1}, {"type": "evolve/shadowed", "count": 9}], "proposed": 6, "shadowed": 9, "gated": {"total": 7, "passed": 6, "rejected": 1, "recent_rejections": [{"verdict": "rejected", "reasons": 1}]}, "promoted": 6, "rolled_back": 1, "canary": {"entered": 0, "exited": 1}, "unknown_types": [], "recent": [{"type": "evolve/shadowed"}, {"type": "evolve/gated"}, {"type": "evolve/promoted"}], "last_event": "evolve/promoted", "privacy": {"entry_bodies_included": false}}
+
+[2] 公网：$ curl -s -o /dev/null -w '%{http_code}' https://novara.remoteblossom.com/quotagent/api/ops → 200
+
+[3] 门：verify.sh webui → 19/19（新增"自进化流水正控"）
+  断言用**临时自进化账本**喂真数据：提案1/门拒1/晋升1、last_event 以 evolve/ 开头，
+  且响应里没有正文（"正文不该外泄"）、没有私域键（cost_floor）、没有 `"body"` 键。
+$ tools/verify.sh evolve-journal → 7/7（分类正确/不输出正文/输入即事实/有界上限/未知事件如实登记/确定性/零残留）
+
+结论：canary 决策与自动回滚痕迹不再只藏在命令输出里 —— 运维页能直接回答
+"提过多少案、门拒过几次、晋升/回滚几次、canary 进/出几次、最近一次是什么"，
+且**只给计数不出正文**（对账本内容的聚合同样不能变成侧信道）。
+

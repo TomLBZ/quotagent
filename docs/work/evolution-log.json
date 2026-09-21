@@ -61,6 +61,21 @@
       "produced_by": "tools/evolve-module.mjs",
       "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
       "evidence": null
+    },
+    {
+      "name": "evolve-journal",
+      "proposal_id": "sha256:647e4ca5eab2b7db90595c5e37770c0066d3af7032fef3b9b0716fdf5c4f9ce8",
+      "artifact_hash": "sha256:a242c8ea8d79e5ff49bfc53e5072218d2747c4c96ec754401591aae6f4927586",
+      "bytes": 4154,
+      "approval_ref": "ap-0104",
+      "gate": "passed",
+      "fixture": {
+        "passed": 13,
+        "total": 13
+      },
+      "produced_by": "tools/evolve-module.mjs",
+      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+      "evidence": null
     }
   ]
 }

@@ -23,6 +23,10 @@ import { Config as historyConfig, apply as historyApply } from './modules/price-
 import { Config as evConfig2, apply as evApply2 } from './modules/evidence-summary.mjs'
 import { Config as brConfig3, apply as brApply3 } from './modules/circuit-breaker.mjs'
 import { Config as opsConfig3, apply as opsApply3 } from './modules/ops-view.mjs'
+import { Config as jConfig3, apply as jApply3 } from './modules/evolve-journal.mjs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 
 const facts = { checks: [] }
 let failures = 0
@@ -104,23 +108,32 @@ const mountObs = async (targetCtx) => {
   await wrap({ apply: evApply2, Config: evConfig2, inject: [] }, {}, 'evidenceSummary', 'evidence')
   await wrap({ apply: brApply3, Config: brConfig3, inject: [] }, {}, 'breaker', 'breaker')
   await wrap({ apply: opsApply3, Config: opsConfig3, inject: ['observability', 'breaker', 'evidenceSummary'] }, {}, 'opsView', 'ops')
+  await wrap({ apply: jApply3, Config: jConfig3, inject: [] }, {}, 'evolveJournal', 'journal')
 }
 await mountObs(ctx)
 
 const gfiber = await ctx.plugin(governorMount('governor#probe', gbox),
   governorConfig.parse({ capacity: 64, timeout_ms: 5000 }))
 
+// T-245：喂一个**临时自进化账本**，让运维页的自进化流水有真数据可归纳（同时验泄漏负控）
+const evolvePath = join(mkdtempSync(join(tmpdir(), 'wui-evolve-')), 'ledger.jsonl')
+writeFileSync(evolvePath, [
+  JSON.stringify({ type: 'evolve/proposed', body: { id: 'p-x', note: '正文不该外泄' } }),
+  JSON.stringify({ type: 'evolve/gated', body: { verdict: 'rejected', reasons: ['r1'], cost_floor: 777 } }),
+  JSON.stringify({ type: 'evolve/promoted', body: { approval_ref: 'ap-9' } }),
+].join('\n') + '\n', 'utf8')
+
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
     inner.provide = (service, value) => { if (service === 'webui') box.handle = value; return original(service, value) }
     await webuiApply(inner, config)
   },
-}, { port: 0, route_prefix: '/quotagent' })
+}, { port: 0, route_prefix: '/quotagent', ledger_evolve: evolvePath })
 
 const base = box.handle.url.replace(/\/$/, '')
 const get = async (path) => {
@@ -211,7 +224,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -279,6 +292,18 @@ check('运维视角正控：/ops/ 与 /api/ops 都 200，含运行期（governor
   && String(opsJson.source).includes('ops-view')
   && !/"body"\s*:/.test(opsApi.text) && !opsApi.text.includes('private:'),
   `page=${opsPage.status} api=${opsApi.status} perView=${Object.keys(opsJson.evidence_by_view ?? {}).join(',')}`)
+
+// 4g. T-245：运维视角里的"自进化流水"（第五个自进化产出归纳真账本，且不出正文）
+const evRes = await get('/api/ops')
+let evJson = {}
+try { evJson = JSON.parse(evRes.text) } catch (err) { evJson = {} }
+const jr = evJson.evolve_journal ?? {}
+check('自进化流水正控：/api/ops 含 evolve_journal，计数与喂入的账本一致（提案1/门拒1/晋升1），'
+  + '来源为自进化插件 evolve-journal，且**不出正文与私域键**',
+  evRes.status === 200 && jr.proposed === 1 && jr.gated?.rejected === 1 && jr.promoted === 1
+  && jr.gated?.total === 1 && String(jr.last_event).startsWith('evolve/')
+  && !evRes.text.includes('正文不该外泄') && !evRes.text.includes('cost_floor') && !/"body"\s*:/.test(evRes.text),
+  `status=${evRes.status} proposed=${jr.proposed} rejected=${jr.gated?.rejected} promoted=${jr.promoted} last=${jr.last_event}`)
 
 // 4. 未知视角
 const unknown = await get('/nonexistent/')
