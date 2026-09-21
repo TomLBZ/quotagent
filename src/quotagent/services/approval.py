@@ -52,9 +52,48 @@ class ApprovalService:
         self.actor = actor
         self._records: dict[str, dict] = {}
         self._order: list[str] = []
+        self.replayed = 0
+        if self.ledger is not None:
+            replay = self.replay()
+            self.replayed = replay["replayed"]
         self._counter = 0
 
     # --- 请求 -------------------------------------------------------------
+    def replay(self) -> dict:
+        """从账本重建批准记录（**账本是唯一事实源**）。
+
+        没有这一步，进程重启后 `granted()` 会一无所知——于是"人工批准过"的承诺动作在重启后
+        既无法核验也无法复现（与 `06` §7"重启后从账本重放本 realm 状态"矛盾）。
+        重放规则：`approval/requested` 建记录，其后同 id 的事件（granted/denied/reminded/escalated/aborted）
+        依次覆盖，最后一次写入即当前状态。
+        """
+        if self.ledger is None:
+            return {"replayed": 0, "note": "无账本，无法重放"}
+        seen: dict[str, dict] = {}
+        order: list[str] = []
+        for row in self.ledger.read():
+            if not str(row["type"]).startswith("approval/"):
+                continue
+            body = row["body"] or {}
+            approval_id = body.get("approval_id")
+            if not approval_id:
+                continue
+            if approval_id not in seen:
+                order.append(approval_id)
+            record = dict(body)
+            record.setdefault("status", "pending")
+            record.setdefault("decided_by", None)
+            record.setdefault("decided_at", None)
+            record.setdefault("comment", "")
+            record.setdefault("timeout_log", [])
+            record.setdefault("remind_count", 0)
+            seen[approval_id] = record
+        self._records = seen
+        self._order = order
+        self._counter = max([int(item.rsplit("-", 1)[-1]) for item in seen if item.rsplit("-", 1)[-1].isdigit()]
+                            or [0])
+        return {"replayed": len(seen), "order": list(order)}
+
     def request(self, scope: str, payload: dict, *, ref: str | None = None,
                 approvers: list[str] | None = None, reason: str = "",
                 timeout_policy: str = DEFAULT_TIMEOUT_POLICY, timeout_s: float = DEFAULT_TIMEOUT_S,

@@ -94,13 +94,25 @@ class KeyStore:
         return f"{self.algorithm}:{entry['key_id']}:{mac}"
 
     def verify(self, participant_id: str, payload: bytes, signature: str) -> bool:
-        if not isinstance(signature, str) or signature.count(":") != 2:
+        """验签。
+
+        签名形态：`<algo>:<key_id>:<mac>`。**不要用"冒号个数"判格式**——本项目的参与者 id
+        一律含冒号（`human:zhang` / `supplier:sup-A` / `contractor:con-B` / `bridge:<profile>`），
+        默认 key_id 为 `<participant>-k1`，于是签名里会出现 3 个以上冒号；
+        用个数判定会导致**所有真实 id 的签名都验不过**（而恰好不带冒号的 id 能过，测试很容易漏掉）。
+        改为：检查 algo 前缀 + `algo:key_id:` 前缀匹配，剩下的整段当 mac。
+        """
+        if not isinstance(signature, str):
             return False
-        algo, key_id, mac = signature.split(":", 2)
-        if algo != self.algorithm or not self.has(participant_id):
+        algo, sep, _ = signature.partition(":")
+        if not sep or algo != self.algorithm or not self.has(participant_id):
             return False
         entry = self.entry(participant_id)
-        if key_id != entry["key_id"]:
+        prefix = f"{algo}:{entry['key_id']}:"
+        if not signature.startswith(prefix):
+            return False
+        mac = signature[len(prefix):]
+        if not mac:
             return False
         expected = hmac.new(entry["secret"], payload, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, mac)

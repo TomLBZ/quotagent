@@ -257,4 +257,14 @@ def check_audit_004() -> list[Assertion]:
                          subprocess.run([str(REPO_ROOT / "tools" / "audit-verify.py"),
                                          str(root / "nope.json")], capture_output=True, text=True).returncode == 2,
                          "missing-file exit != 2"))
+    colon_signature = None
+    for who in ("contractor:con-B", "plain"):
+        ks = KeyStore()
+        ks.add(who, secret="shared-secret", kind="participant", realm=who)
+        sig = ks.sign(who, b"payload")
+        if not ks.verify(who, b"payload", sig):
+            colon_signature = who
+    out.append(Assertion("参与者 id 含冒号（本项目命名惯例 `human:`/`supplier:`/`contractor:`）时签名仍可验证",
+                         colon_signature is None,
+                         f"验签失败的 id={colon_signature}"))
     return out

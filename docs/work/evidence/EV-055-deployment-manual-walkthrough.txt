@@ -1,0 +1,51 @@
+EV-055 — 按《部署与操作手册》在干净副本里实跑（T-215b / S1.14）
+
+副本来源: git archive HEAD → /workspace/projects/quotagent/tmp/manual-check/quotagent
+环境: 无网络、不装第三方包；解释器由仓库内 tools/runtime.sh 解析
+
+说明: 手册第 1、2、3 节的每一步都在此副本里按顺序执行，下面是原始输出（截断单行长度）。
+
+=== 手册 §0 解释器解析 ===
+$ /workspace/projects/quotagent/tmp/manual-check/quotagent/tools/verify.sh smoke   （退出码 0）
+        "name": "仓库根可解析",
+        "ok": true,
+        "detail": "/workspace/projects/quotagent/tmp/manual-check/quotagent"
+      },
+      {
+        "name": "临时目录可写（仓库内优先）",
+        "ok": true,
+        "detail": "/workspace/projects/quotagent/tmp/manual-check/quotagent/tmp"
+      },
+      {
+        "name": "AC 注册表非空",
+        "ok": true,
+        "detail": "57 条"
+      },
+      {
+        "name": "仅标准库依赖",
+        "ok": true,
+        "detail": ""
+      }
+    ],
+    "evidence_refs": [],
+    "profile": "minimal-mock",
+    "version": "0.1.0"
+  }
+  [stderr] [PASS] quotagent runtime selftest (minimal-mock)
+
+=== 手册 §1 文档门 ===
+$ /workspace/projects/quotagent/tmp/manual-check/quotagent/tools/verify.sh docs   （退出码 0）
+  == quotagent 文档门 (AC-DESIGN-001/002/003) ==
+  扫描 75 个 markdown 文件，仓库根 /workspace/projects/quotagent/tmp/manual-check/quotagent
+  [ok]   ID 完整性: 324 个定义，1581 处引用，0 未解析
+  [ok]   占位符: 无
+  [ok]   预算: 76 个文件受检，最高占用 98%（docs/work/handover.md 1001/1024 B）
+  [ok]   FR↔AC 覆盖: 90 条 FR 均关联 AC，65 条 AC 无孤儿
+  RESULT: PASS
+
+=== 手册 §2 两个真进程走查 ===
+$ /workspace/venvs/py/bin/python3 /workspace/projects/quotagent/tmp/manual-check/quotagent/tools/g1-walkthrough.py   （退出码 2）
+  [stderr] /workspace/venvs/py/bin/python3: can't open file '/workspace/projects/quotagent/tmp/manual-check/quotagent/tools/g1-walkthrough.py': [Errno 2] No such file or directory
+
+=== 结论 ===
+手册步骤实跑: 2/3 通过；失败 ['手册 §2 两个真进程走查']

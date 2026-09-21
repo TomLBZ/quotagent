@@ -70,12 +70,22 @@ audit)
     shift
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-v-register.py" "$@"
     ;;
-  g0|g1|g2)
+  g1)
+    # 阶段门 G1 = MVP 判据（ADR-0014 §3）的可机检部分：
+    #   其余四道门 + 全量 AC + 两个真进程/共享目录的端到端走查（含审计包第三方独立验证）
+    for _gate in events ac-registry audit v; do
+      "$HERE/verify.sh" "$_gate" || exit 1
+    done
+    "$HERE/run.sh" -m quotagent.qa all || exit 1
+    "$QUOTAGENT_PY" "$ROOT/tools/g1-walkthrough.py" || exit 1
+    echo "[ok] 阶段门 G1：MVP 判据全部可机检项通过（逐条判定见上方走查报告）"
+    ;;
+  g0|g2)
     echo "阶段门 $1 尚未实现：先完成 roadmap 中该阶段的任务与 AC，再实现门脚本。" >&2
     exit 2
     ;;
   *)
-    echo "用法: tools/verify.sh docs|ac <AC-ID>|suite <name>|cordis|v|smoke|g0|g1|g2" >&2
+    echo "用法: tools/verify.sh docs|ac <AC-ID>|all|suite <name>|cordis|v|smoke|events|bridge|p0-no-node|ac-registry|audit|g0|g1|g2" >&2
     exit 2
     ;;
 esac

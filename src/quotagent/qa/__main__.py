@@ -262,6 +262,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_suite = sub.add_parser("suite", help="执行场景集")
     p_suite.add_argument("name")
     p_suite.set_defaults(func=_cmd_suite)
+    p_all = sub.add_parser("all", help="执行全部已注册 AC（阶段门用）")
+    p_all.set_defaults(func=_run_all)
     p_list = sub.add_parser("list", help="列出已注册的 AC")
     p_list.set_defaults(func=_cmd_list)
     p_metrics = sub.add_parser("metrics", help="采集 S1..S4 指标并生成基线报告")
@@ -270,6 +272,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_self = sub.add_parser("selftest", help="运行时自检")
     p_self.set_defaults(func=_cmd_selftest)
     return parser
+
+
+def _run_all(args) -> int:
+    """执行全部已注册 AC，逐条打印，任一失败即非零退出（供 `verify.sh g1` 之类的阶段门）。"""
+    from .registry import list_acs, run_ac
+    from . import REGISTRY  # noqa: F401  （导入即注册）
+
+    total = 0
+    failed: list[str] = []
+    for item in list_acs():
+        total += 1
+        report = run_ac(item["ac"])
+        ok = all(assertion.ok for assertion in report.assertions)
+        print(f"[{'ok' if ok else 'FAIL'}] {item['ac']} — {item['title'][:60]}"
+              f"（{sum(1 for a in report.assertions if a.ok)}/{len(report.assertions)} 断言）")
+        if not ok:
+            failed.append(item["ac"])
+    print("-" * 72)
+    print(f"全量 AC：{total - len(failed)}/{total} 通过" + (f"；失败 {failed}" if failed else ""))
+    return 0 if not failed else 1
 
 
 def main(argv: list[str] | None = None) -> int:
