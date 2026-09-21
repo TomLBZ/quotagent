@@ -81,6 +81,11 @@ class EventBus:
         "relay/retry": ("emit", True, ""),
         "relay/delivered": ("emit", True, ""),
         "relay/tamper-detected": ("emit", True, ""),
+        # 账本同步（三方协调，03 §4）
+        "sync/merged": ("emit", True, ""),
+        "sync/conflict": ("emit", True, ""),
+        "sync/suspended": ("emit", True, ""),
+        "sync/suggestion-raised": ("emit", True, ""),
         # §3 人工门与私域/成本相关（P0 S0.9–S0.10）
         "approval/requested": ("emit", True, ""),
         "approval/granted": ("emit", True, ""),

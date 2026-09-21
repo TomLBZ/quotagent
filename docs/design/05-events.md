@@ -81,7 +81,10 @@
 | `po/issued` | emit | ✔ | `ctx.award` → 履约 | 只能由 `AwardCommitment` 派生 |
 | `change/proposed` / `change/priced` / `change/approved` | serial | ✔ | 双侧 → 结算 | 定价必须引用原报价单价 |
 | `acceptance/recorded` / `invoice/matched` | emit | ✔ | 履约 → 结算 | 三方核对留痕 |
-| `sync/merged` / `sync/conflict` | emit | ✔ | `ctx.qep` | 三方协调结果；承诺字段冲突转人工 |
+| `sync/merged` | emit | ✔ | `ctx.sync` | 三方协调的合并结果（一致确认 / 权威方胜出 / 人工裁决） |
+| `sync/conflict` | emit | ✔ | `ctx.sync` | 冲突留痕（mine/theirs/base/authority/auto_resolution） |
+| `sync/suspended` | emit | ✔ | `ctx.sync` | 承诺字段或矩阵未覆盖字段的冲突 → 条目挂起待人工 |
+| `sync/suggestion-raised` | emit | ✔ | `ctx.sync` | 对非权威字段的本地修改转为建议（不外发，03 §4.3） |
 | `evidence/pack-exported` | emit | ✔ | `ctx.evidence` | 审计包（含 Merkle 根） |
 | `evolve/*` | serial | ✔ | `ctx.evolve` | 见 `07`；P0 用到 `evolve/proposed`（新增反例，ADR-0011） |
 

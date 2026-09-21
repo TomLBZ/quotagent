@@ -35,6 +35,16 @@
 - 不变量：依赖未就绪不得激活；`unmount` 后 `effects()` 为空且无残留定时器/订阅/外部通知。
 - 关联：FR-PLUGIN-001..003，AC-PLUGIN-001。
 
+### `ctx.sync` [P1]
+
+账本同步（`src/quotagent/services/sync.py`）：三方协调 `base/mine/theirs` + 字段权威方矩阵（`03` §4）。
+
+- 逐字段三值判定：`m==t` 确认、单侧改采纳、双改不一致为冲突；
+- 冲突按 §4.3 矩阵裁决（单价归供应商、条款归承包商、澄清问题归提问方…），落 `sync/conflict` + `sync/merged`；
+- **承诺字段冲突或矩阵未覆盖 → `pending_human` + 条目挂起**（`sync/suspended`），不自动合并；
+- 人工裁决需**双方各自一次 `human:*` 批准**才成立（单边批准不算，代签被拒）；
+- 对**非权威字段**的本地修改不外发，改为 `intent/suggestion`（数据主权，§4.3 规则）。
+
 ### `ctx.relay` [P1]
 
 中转服务（`src/quotagent/services/relay.py`）：**只做 opaque 字节转发**，不解析 body。

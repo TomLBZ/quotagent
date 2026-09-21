@@ -1,0 +1,29 @@
+EV-044 — 账本同步（T-203 / S1.3）：三方协调 + 字段权威方矩阵 + 冲突挂起转人工
+
+时间: 2026-09-21T04:19:50Z
+commit: 3266eee
+命令: qa ac AC-SYNC-001（退出码 0，15/15 断言通过）
+
+--- 断言 ---
+  [ok] 一致字段确认（m==t）：status 取共识值且不产生冲突 — status=open
+  [ok] 单侧修改直接采纳（m==b → 取对方值）：package.items 采用对方清单 — items=['L-001', 'L-002']
+  [ok] 冲突按权威方合并：单价冲突 → 供应商胜出（mine=90 vs theirs=85 取 85） — unit_price=85.0 conflict={'entry_id': 'q-0007', 'field': 'unit_price', 'base': 88.5, 'mine': 90.0, 'theirs': 85.0, 'authority': 'supplier', 'class': 'fact', 'auto_resolution': 'supplier-wins'}
+  [ok] 冲突按权威方合并：付款条款冲突 → 承包商胜出（mine=net45 vs theirs=net60 取 net45） — terms=net45 conflict={'entry_id': 'q-0007', 'field': 'payment.terms', 'base': 'net30', 'mine': 'net45', 'theirs': 'net60', 'authority': 'contractor', 'class': 'fact', 'auto_resolution': 'contractor-wins'}
+  [ok] 冲突留痕 kernel 事件：sync/conflict 含 mine/theirs/base/authority，sync/merged 含胜出值 — conflict=2 merged=3
+  [ok] 产出新的 base（revision 向量）且与合并结果一致（双方各存一份） — base_next={"package.items": ["L-001", "L-002"], "payment.terms": "net45", "status": "open", "unit_price": 85.0}
+  [ok] 承诺字段冲突**不自动合并**（merged 保持 base）且 resolution=pending_human — merged={'delivery.date': '2026-10-01'} pending=pending_human
+  [ok] 条目被挂起并可查（sync/suspended 留痕，含需要的裁决） — suspended=[{'entry_id': 'q-0008', 'field': 'delivery.date', 'base': '2026-10-01', 'mine': '2026-10-05', 'theirs': '2026-10-10', 'authority': 'supplier', 'class': 'commitment', 'auto_resolution': 'pending_human'
+  [ok] 矩阵未覆盖字段 → pending_human（reason=no-authority-rule，merged 保持 base） — pending={'entry_id': 'q-0009', 'field': 'custom.thing', 'base': 1, 'mine': 2, 'theirs': 3, 'authority': None, 'class': 'fact', 'auto_resolution': 'pending_human', 'reason': 'no-authority-rule'}
+  [ok] 单侧人类批准**不算成立**（仍挂起，避免单边伪造） — result={'resolved': False, 'reason': 'need-both-sides', 'approvals_seen': 1, 'suspended': 2}
+  [ok] 对方「批准」来自 agent 时同样不算（代签禁止，FR-APPROVE-001） — result={'resolved': False, 'reason': 'need-both-sides', 'approvals_seen': 1, 'suspended': 2}
+  [ok] 双方各一次 human:* 批准 → 裁决成立并解除挂起（sync/merged 标 auto=false） — result={"resolved": true, "merged": {"value": "2026-10-05", "approvals": [{"by": "human:zhang", "scope": "delivery", "at": "t1"}, {"by": "human:li", "scope": "delivery", "at": "t2"}], "resolved_at": "2026-09
+  [ok] 对非权威字段的本地修改 → 产出建议 intent/suggestion（不外发、不进 base） — suggestion={"type": "intent/suggestion", "class": "intent", "entry_id": "q-0007", "field": "unit_price", "value": 91.0, "reason": "成本上升", "authority": "supplier", "by": "con-B", "at": "2026-0
+  [ok] 对**本方权威字段**直接改即可，不需要建议（suggest 拒绝） — refused=True
+  [ok] 视角对调后同一冲突解出**同一结果**（矩阵是双方共识，不偏袒本地） — mirror={"package.items": ["L-001", "L-002"], "payment.terms": "net45", "status": "open", "unit_price": 85.0}
+
+--- 口径说明 ---
+· 冲突只在"双方都改、且改得不一致"时成立（单侧修改直接采纳，不叫冲突）；
+· 权威方矩阵是**双方共识**：AC 里把 mine/theirs 对调后，同一冲突在对方视角解出同一结果；
+· 承诺字段冲突**不自动合并**（merged 保持 base 值），条目挂起并落 sync/suspended 等待人工；
+· 人工裁决要双方各自一次 human:* 批准：单侧批准与 agent 代签都不成立（避免单边伪造）；
+· 对非权威字段的本地修改转为 intent/suggestion 且不进 base（数据主权与"想改对方的东西"并存）。

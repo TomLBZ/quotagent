@@ -3,11 +3,11 @@
   "updated_at": "2026-09-21",
   "phase": "P1-mvp",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-203",
-  "next_action": "批次 B6：T-203 三方协调（base/mine/theirs）+ 字段权威方矩阵 + 冲突上报（FR-QEP-007 / AC-SYNC-001）—— 非承诺字段按权威方合并、承诺字段一律挂起转人工；冲突落账并可裁决；实现落 services/sync.py（03 §4.2/§4.3 的算法与矩阵）。之后 T-204（澄清工单）等，按 16 批序推进",
-  "last_verified_command": "tools/verify.sh docs && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh v && 全量 41 条 AC && qa suite s1..s4",
-  "last_verified_result": "PASS（docs 门 76 文件/0 未解析；bridge 31 断言；cordis 18/18；p0-no-node 34 条；V 登记 12 条 open；41 条 AC 全绿；s1..s4 全绿）",
-  "last_verified_evidence": "docs/work/evidence/EV-043-relay-binding.txt",
+  "next_task": "T-204",
+  "next_action": "批次 B7：T-204 澄清工单 + 广播完整性 + 版本重开（FR-CLARIFY-001..003 / AC-CLARIFY-001..003）—— 广播名单缺任一在册投标人则工单不得关闭；RFQ 升版自动重开；答案草稿走 waterfall 拦截对方私域字段。实现落 services/clarify.py（或复用 rfq/intake 的既有单据模型）",
+  "last_verified_command": "tools/verify.sh docs && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh v && 全量 42 条 AC && qa suite s1..s4",
+  "last_verified_result": "PASS（docs 门 76 文件/0 未解析；bridge 31 断言；cordis 18/18；p0-no-node 34 条；V 登记 12 条 open；42 条 AC 全绿；s1..s4 全绿）",
+  "last_verified_evidence": "docs/work/evidence/EV-044-sync-three-way-merge.txt",
   "last_verified_commit": "1a70ac3",
   "blockers": [],
   "human_required": [
@@ -44,7 +44,8 @@
     "host": "host/（cordis 4.0.0-rc.10，tools/cordis.sh；verify.sh cordis）：profiles.mjs = 三个 profile（contractor-ops/supplier-bid/relay）组成数据；lib/config.mjs 用原生 fiber.update+internal/update 做可否决配置更新；cli.mjs = boot|status|config-update（stdout 一行 JSON）。桥接协议见 ADR-0013，宿主配置语义见 ADR-0015",
     "p1_plan": "docs/work/decisions.md（决策日志）+ docs/work/reviews/agent-review-p1-plan.txt（16 批依赖序）",
     "qep_order": "kernel/qep.py：per-sender expected seq + 挂起队列（held）+ relay/resend-request + relay/receipt 回执 + negotiate() 版本/特性协商；事件 kernel/qep-gap-detected|gap-filled|degraded|resent（已登记 05-events.md §2 与 kernel/events.py）",
-    "relay": "services/relay.py（RelayService：opaque spool 转发 + 自带 realm 账本 + 不可达排队/pump 重试 + 整包 sha256 校验拒投）；事件 relay/received|queued|retry|delivered|tamper-detected 已登记"
+    "relay": "services/relay.py（RelayService：opaque spool 转发 + 自带 realm 账本 + 不可达排队/pump 重试 + 整包 sha256 校验拒投）；事件 relay/received|queued|retry|delivered|tamper-detected 已登记",
+    "sync": "services/sync.py（SyncService：三方协调 reconcile() + 权威方矩阵 FIELD_AUTHORITY + 承诺字段挂起 resolve_human() 双方各一次 human 批准 + suggest() 产出 intent/suggestion）；事件 sync/merged|conflict|suspended|suggestion-raised 已登记"
   },
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态"
 }
