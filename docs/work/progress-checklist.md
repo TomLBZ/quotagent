@@ -78,6 +78,8 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-257a | FAQ 沉淀与复用（FR-CLARIFY-004）契约落档 + D-051（`docs/design/18-faq-contract.md`） | B54 | done | — |
 | T-258a | 邮件集成（无凭据部分）契约落档 + `AC-MAIL-001` + D-052（`docs/design/19-mail-contract.md`） | B56 | done | — |
 | T-260a | P2 新服务运维可见：快照契约 + `AC-PIPELINE-001`/`AC-UI-002` + D-053（`docs/design/20-…`） | B59 | done | — |
+| T-261a | 三域面板的"演示种子"标注：运维手册补节 + D-054（真流程种真事件、演员可识别、幂等） | B61 | done | — |
+| T-261 | UI 种子：`tools/ui-seed-pipeline.py`（真服务种三域事件）+ 接进 serve 启动流程 + 线上非 0 回读 | B62 | todo | — |
 | T-260 | 实现：`tools/refresh-ui-snapshots.py` + `pipeline-view`（第九个自进化产出）+ `/api/pipeline` + 门与端到端；线上与公网 200 | B60 | done | D-053 / EV-095 |
 | T-259 | 邮件**发信/收信**（需 SMTP/IMAP 凭据 + 人工决定收发对象）：接入传输实现 | B58 | blocked | 待人工提供凭据 |
 | T-258 | 邮件实现（无凭据部分）：`services/mail.py` + `AC-MAIL-001` 机检 + 事件两侧登记 + 矩阵更新 | B57 | done | D-052 / EV-094 |

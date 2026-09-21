@@ -194,3 +194,21 @@ docs/work/evolution-log.json      # 产出日志；tmp/evolve/ledger.jsonl 是�
 5. **报告类脚本输出被截断**：不要用 `process.exit()`（大输出会截断）；用**带回调写入、回调里退出**。
 6. **canary 探针"永远样本不足"**：探针键必须随索引变化（固定键会把所有探针送进同一条道）。
 7. **AC 里不要写"相对当下的绝对时刻"**：门会随墙上时间自己变红/变绿。
+
+## 三域运维面板（谈判 / FAQ / 邮件）
+
+- 路由：`/quotagent/api/pipeline`（运维道）；页面上是 `<prefix>/ops/` 的「三域流水」区块。
+- 数据来源（**分工**）：`tools/refresh-ui-snapshots.py` 从三个服务的 `replay()` **重建计数**，
+  写 `tmp/ui-shared/pipeline.json`（**只读账本**）；宿主插件 `pipeline-view` 只做只读聚合。
+  宿主**不**直连内核桥，也不自己算留存/谈判/FAQ 的判定。
+- **刷新时机**：`tools/webui-serve.py` 在 **g1 走查 seed 之后**以及**每次健康探测**时各刷一次
+  （走查会清空 `tmp/ui-shared/`，不补这一下面板会长期 `degraded`）。
+- `transport` 字段：本轮**没有发信能力**（无 SMTP/IMAP 实现），因此 `available` 恒为 `false`，
+  并在 `reason`/`next_action` 里写明原因；**账本里不存在 `mail/sent`**（该事件未声明）。
+
+### 面板数字是"演示种子"数据（重要）
+
+`tmp/ui-shared/` 是**演示/联调账本**，不是生产数据。其中的谈判/FAQ/邮件事件由
+`tools/ui-seed-pipeline.py` 用**真服务**跑出（写入者一律是 `human:ui-seed` / `agent:ui-seed`），
+目的：让面板能端到端展示真实数据流。**读取这些数字时请记住它们来自演示种子。**
+
