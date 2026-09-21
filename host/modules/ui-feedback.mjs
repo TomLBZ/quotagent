@@ -2,7 +2,7 @@
  * 进树模块：`ui-feedback`（WebUI 自适应闭环的**宿主侧一半**）。
  *
  * 用户要求（2026-09-21）：**用户反馈 → agent 产新版本 → 自动重载 → 页面提示"请刷新"**。
- * 本插件只做四件事，别的都不做：
+ * 本插件只做五件事，别的都不做：
  *
  *   ① `GET /<prefix>/<view>/feedback` —— SSR 页（一个 `<textarea>` + 一个提交按钮）；
  *   ② `POST /<prefix>/<view>/feedback` —— 宿主**只**往 `<ui_shared>/ui-feedback/` 落**一条 0600 待办件**
@@ -15,6 +15,11 @@
  *      `<form method=get>` 的"我已刷新"按钮，带上 `seen=rM` → 横幅消失）。版本号**只来自落盘事实**
  *      （`<ui_shared>/ui-feedback/versions.json`，由 Python 侧 `tools/ui-feedback-apply.py` 原子写），
  *      本插件**从不递增版本号**：读不到就当 `r0` 并诚实降级。
+ *   ⑤ **回执**：`GET /<prefix>/<view>/feedback?id=fb-<view>-<12hex>` —— 把「**我这条反馈现在到哪一步**」
+ *      渲染成服务端可判的事实（待办件还在目录里 = 已落盘、等 Python 侧消费；已移入 `applied/` = 已被消费，
+ *      能与 `versions.json#applied` 按 `source_prompt_digest` 对上就报新版本号，对不上就如实说
+ *      `applied-without-version-row`；查不到就给有名 reason）。**只读字节数与 sha256，正文一律不上页面**；
+ *      观察面的待办清单里每条都有指向它的链接（深链，不需要脚本）。
  *
  * 硬约束（本仓纪律）：
  *   · 页面 **0 行脚本 / 0 内联事件**：读用链接、写用 `<form method=post>`、翻页用 `<form method=get>`；
@@ -215,6 +220,102 @@ export function apply(ctx, config) {
     + `<a href="${prefix}/ops/ui-feedback/">反馈观察面</a>`
     + `<a href="${prefix}/start/">上手</a></nav>`
 
+  /**
+   * 单条反馈的**状态事实**（回执用）：待办件还在 `ui-feedback/` 里 ⇒ 尚未被消费；已移入
+   * `ui-feedback/applied/` ⇒ 已被 Python 侧消费。只读 `bytes`/`text_sha256`/`revision_at_submit`
+   * —— **正文一律不上页面**（`text` 字段读了但不渲染；页面里搜不到任何原话）。
+   */
+  const itemFacts = (id) => {
+    const places = [['pending', feedbackDir()], ['applied', join(feedbackDir(), APPLIED_DIR)]]
+    for (const [where, dir] of places) {
+      try {
+        const record = JSON.parse(readFileSync(join(dir, `${id}.json`), 'utf8'))
+        return {
+          where,
+          bytes: Number.isFinite(record?.bytes) ? record.bytes : -1,
+          text_sha256: String(record?.text_sha256 ?? ''),
+          revision_at_submit: String(record?.revision_at_submit ?? ''),
+        }
+      } catch (err) { /* 这一处没有这条：看下一处（两处都没有 → null，不猜） */ }
+    }
+    return null
+  }
+
+  /** 版本表里**由这条反馈产出**的那一行（按 `source_prompt_digest` 对上；对不上就是 null，不猜）。 */
+  const versionRowFor = (digest) => {
+    const rows = readState().versions?.applied
+    const want = String(digest ?? '').split(':').pop()
+    if (!Array.isArray(rows) || want === '') return null
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      const row = rows[index]
+      if (row && typeof row === 'object' && String(row.source_prompt_digest ?? '').split(':').pop() === want) {
+        return {
+          revision: String(row.revision ?? ''), prev_revision: String(row.prev_revision ?? ''),
+          applied_at: String(row.applied_at ?? ''),
+        }
+      }
+    }
+    return null
+  }
+
+  /**
+   * 回执块：「**我这条反馈现在到哪一步**」——从落盘事实派生（id 由提交面写进 URL；`?id=fb-…`）。
+   * 三种状态各自有名：`pending`（已落盘、等 Python 侧消费）/ `applied`（已消费；能与版本表对上就报新版本号）
+   * / `id-invalid`、`unknown`（查不到）、`applied-without-version-row`（消费了但对不上产出行 —— 不据此宣称有新版本）。
+   * 0 脚本、不写任何地方、正文不上页面。
+   */
+  const receiptBlock = (view, query) => {
+    const params = new URLSearchParams(String(query ?? '').replace(/^\?/, ''))
+    const id = String(params.get('id') ?? '').trim()
+    if (id === '') return ''
+    if (!ID_RE.test(id) || id.split('-')[1] !== view) {
+      return `<p data-ui-feedback="receipt" data-ui-feedback-receipt-state="id-invalid"><b>回执不可判</b>：`
+        + `id=<code>${esc(id.slice(0, 64))}</code> 不是本视图待办件的 id 形状（<code>fb-&lt;view&gt;-&lt;12 位 hex&gt;</code>）`
+        + ' ⇒ 不回显、不猜它是哪一条（本页只按你自己的视图回执）。</p>'
+    }
+    const state = readState()
+    const facts = itemFacts(id)
+    if (!facts) {
+      return `<p data-ui-feedback="receipt" data-ui-feedback-receipt-state="unknown"><b>这一条查不到</b>：`
+        + `id=<code>${esc(id)}</code> 既不在 <code>${FEEDBACK_DIR}/</code>，也不在 <code>${FEEDBACK_DIR}/${APPLIED_DIR}/</code>`
+        + '（<code>reason=id-not-in-pending-nor-applied</code>）。看 <a href="'
+        + `${prefix}/ops/ui-feedback/">反馈观察面</a>：以它列的事实为准，不猜这一条是否被清理过。</p>`
+    }
+    const factsLine = `字节 <code>${facts.bytes < 0 ? '（读不到）' : facts.bytes}</code>`
+      + `；正文 sha256 <code>${esc(facts.text_sha256.slice(0, 26))}…</code>`
+      + `；提交时看到的版本 <code>${esc(facts.revision_at_submit || REVISION_ZERO)}</code>（正文不上页面）`
+    if (facts.where === 'pending') {
+      return `<p data-ui-feedback="receipt" data-ui-feedback-receipt-state="pending"><b>已落盘、还在等消费</b>：`
+        + `待办件 <code>${FEEDBACK_DIR}/${esc(id)}.json</code>（**恰 0600**，含你的原话）。${factsLine}。`
+        + ' 这一步**不改版本号**：Python 侧消费后本视图版本号 +1，顶部才出「请刷新」。</p>'
+    }
+    const row = versionRowFor(facts.text_sha256)
+    if (row) {
+      return `<p data-ui-feedback="receipt" data-ui-feedback-receipt-state="applied"><b>已被消费并产出了新版本</b>：`
+        + `<code>${esc(row.prev_revision || REVISION_ZERO)} → ${esc(row.revision)}</code>`
+        + `${row.applied_at ? `（<code>${esc(row.applied_at)}</code>）` : ''}`
+        + `；待办件已移入 <code>${FEEDBACK_DIR}/${APPLIED_DIR}/</code>。${factsLine}。`
+        + ` 若本屏还是更低版本，请刷新页面（顶部横幅的「我已刷新」或直接刷新）。</p>`
+    }
+    return `<p data-ui-feedback="receipt" data-ui-feedback-receipt-state="applied-no-version-row"><b>已被消费</b>`
+      + `（待办件在 <code>${FEEDBACK_DIR}/${APPLIED_DIR}/</code>），但版本表里没有与它对应的产出行`
+      + `（<code>reason=applied-without-version-row</code>` + (state.degraded
+        ? `；本页**降级**：<code>${esc(state.reason ?? '')}</code> ⇒ 版本表读不到，无法判定`
+        : '：同一份正文重复提交，或版本表只留最近若干条') + '）—— 不据此宣称有新版本。</p>'
+  }
+
+  /** 本视图的闭环状态一行：待处理条数（按 id 里的视图名分）+ 最新已应用版本 vs 本屏版本。 */
+  const queueLine = (view) => {
+    const mine = pendingIds().filter((id) => id.split('-')[1] === view)
+    const last = latestOf()
+    return `<p data-ui-feedback="view-queue">本视图（<code>${esc(view)}</code>）待处理 `
+      + `<code data-ui-feedback-view-pending="${mine.length}">${mine.length}</code> 条；`
+      + `最新已应用版本 <code>${esc(last.revision)}</code>`
+      + `${last.view ? `（来自 ${esc(last.view)}）` : '（还没有任何已应用版本）'}`
+      + `；本屏版本 <code>${esc(revisionOf(view))}</code>。闭环两步：**提交**（只落 0600 待办件，不改版本号）→ `
+      + `**消费**（Python 侧产新版本，版本号才动）。见 <a href="${prefix}/ops/ui-feedback/">反馈观察面</a>。</p>`
+  }
+
   const feedbackPage = (view, query = '') => {
     const state = readState()
     const revision = scopeRevision(view)
@@ -227,12 +328,14 @@ export function apply(ctx, config) {
       + `<p>当前版本号：<code data-ui-revision-at="${esc(view)}">${esc(revision)}</code>`
       + `（只读事实，来自 <code>${FEEDBACK_DIR}/${VERSIONS_FILE}</code>；本插件**不递增**版本号）</p>`
       + (accepted ? '<p data-ui-feedback="accepted">已收到：待办件已落盘（0600），由 Python 侧消费后产出新版本。</p>' : '')
+      + receiptBlock(view, query)
       + '<p>把你在这一屏上遇到的问题**用自己的话**写下来。提交只做一件事：在 '
       + `<code>${esc(feedbackDir())}/</code> 落**一条 0600 待办件**（含你的原话正文与 sha256）——`
       + '宿主**不写账本、不改页面**；改这一屏由 agent 产新版本，落地后你会看到"请刷新"提示。</p>'
       + `<form method="post" action="${prefix}/${esc(view)}/feedback">`
-      + '<p><textarea name="text" rows="6" cols="72" placeholder="例如：报价表里看不到交期，得来回翻页"></textarea></p>'
+      + '<p><textarea name="text" rows="6" cols="72" required placeholder="例如：报价表里看不到交期，得来回翻页"></textarea></p>'
       + '<p><button type="submit">提交反馈</button></p></form>'
+      + queueLine(view)
       + (state.degraded
         ? `<p><b>降级</b>：<code>${esc(state.reason ?? '')}</code>（版本事实缺失 ⇒ 当前一律显示 `
           + `<code>${REVISION_ZERO}</code>，不猜）</p>` : '')
@@ -242,9 +345,13 @@ export function apply(ctx, config) {
 
   const opsPage = () => {
     const snap = snapshot()
+    // 深链：每条待办件都能从观察面点到「这条到哪一步」（回执在**本视图**的反馈页上；不需要脚本）
     const items = snap.queue.items.map((item) => `<tr><td><code>${esc(item.id)}</code></td>`
       + `<td>${esc(item.view)}</td><td>${item.bytes < 0 ? '（读不到）' : item.bytes}</td>`
-      + `<td><code>${esc(item.text_sha256).slice(0, 19)}…</code></td></tr>`).join('')
+      + `<td><code>${esc(item.text_sha256).slice(0, 19)}…</code></td>`
+      + (views.includes(item.view)
+        ? `<td><a data-ui-feedback="receipt-link" href="${prefix}/${esc(item.view)}/feedback?id=${esc(item.id)}">这条到哪一步</a></td>`
+        : '<td>（视图名不在配置里：不给链接）</td>') + '</tr>').join('')
     const last = snap.last_applied
     const viewRows = views.map((view) => `<tr><td>${esc(view)}</td>`
       + `<td><code>${esc(revisionOf(view))}</code></td></tr>`).join('')
@@ -276,7 +383,7 @@ export function apply(ctx, config) {
       + `${snap.latest.view ? `（来自 ${esc(snap.latest.view)}）` : '（还没有任何已应用版本）'}`
       + `；观察面自身版本：<code>${esc(snap.scope.ops)}</code>。</p>`
       + `<h3 id="pending">待处理清单（有界：最多 ${snap.queue.limit} 条；正文不出）</h3>`
-      + (items ? `<table data-ui-feedback="pending"><tr><th>待办件 id</th><th>视图</th><th>字节</th><th>正文 sha256（前 19）</th></tr>`
+      + (items ? `<table data-ui-feedback="pending"><tr><th>待办件 id</th><th>视图</th><th>字节</th><th>正文 sha256（前 19）</th><th>闭环</th></tr>`
         + `${items}</table>` : '<p data-ui-feedback="pending-none">当前没有待处理件。</p>')
       + '<p><small>本页 **0 行脚本、0 内联事件**；宿主不写账本、不取墙钟、不联网。</small></p>'
       + '</body></html>'

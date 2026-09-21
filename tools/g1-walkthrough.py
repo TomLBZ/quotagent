@@ -97,12 +97,24 @@ class Bridge:
 KEEP_SHARED = "--keep-shared" in sys.argv  # 给 WebUI 复读用；默认仍自清理
 
 
-def main() -> int:
-    if SHARED.exists():
-        shutil.rmtree(SHARED)
-    SHARED.mkdir(parents=True)
+def _reset_shared() -> None:
+    """只清**本走查自己的**两个 side 目录，共享目录里别的租户一概不动。
+
+    为什么不是整目录 `rmtree`（这是一个真实缺陷的修复）：WebUI 每次启动都会先跑一遍本走查
+    （`--keep-shared`，见 `tools/webui-serve.py`），而 `<shared>/ui-feedback/` 里放的是**用户原话**的
+    0600 待办件与版本状态（`versions.json`，由 Python 侧 `tools/ui-feedback-apply.py` 原子写）。
+    整目录清空会把用户反馈连版本状态一起删掉 —— 闭环就断在「重启即丢件」，丢的是用户输入。
+    本走查只往 `<shared>/<side>/` 写，所以只需要保证这两个目录是空的（确定性不受影响）。
+    """
+    SHARED.mkdir(parents=True, exist_ok=True)
     for side in SIDES:
+        if (SHARED / side).exists():
+            shutil.rmtree(SHARED / side)
         (SHARED / side).mkdir()
+
+
+def main() -> int:
+    _reset_shared()
     results: list[tuple[str, bool, str]] = []
 
     def check(name: str, ok: bool, detail: str = "") -> None:
@@ -127,7 +139,7 @@ def main() -> int:
           and (SHARED / "supplier" / "ledger.jsonl").exists()
           and (SHARED / "contractor" / "01-package.json").exists()
           and (SHARED / "supplier" / "05-quote.json").exists(),
-          f"共享目录条目 {len(list(SHARED.rglob('*.json')))} 个；"
+          f"共享目录条目 {sum(len(list((SHARED / side).rglob('*.json'))) for side in SIDES)} 个（只数本走查自己的两个 side 目录）；"
           f"contractor 账本 {contractor_steps[-1]['ledger_count']} 条 / "
           f"supplier 账本 {supplier_steps[-1]['ledger_count']} 条")
 
