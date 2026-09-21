@@ -54,3 +54,4 @@
 - **文档与代码各自声明同一组名字时，必须有双向机检**：`05-events.md` 与 `kernel/events.py` 曾出现同一事件两个名字（`confirm-requested` / `commit-requested`）与"通配声明掩盖族内改名"。运行时毫无症状，机检（名称+模式双向比对）是唯一拦截点；后续阶段的事件用「规划中」标记显式放行，而不是靠通配。
 - **对文件做字符串替换必须断言命中**：一次性脚本里 `t.replace(old, new)` 在 `old` 不存在时**静默不做事**，于是"打了补丁"的错觉会留到运行期才炸（本例：给 `__init__` 加字段的锚点根本不存在 → `AttributeError` 在另一处出现）。凡替换都要 `assert old in t`。
 - **改 `tools/verify.sh` 的 case 分支后必须立刻实跑该入口**：插入新分支时锚点若只取到分支标签，会把原分支的 `;;` 与函数体切开 → 整个脚本 `Syntax error`，**所有**入口都变成退出码 2（AC-RUNTIME-001/002 一类自带门的 AC 会连带变红）。插入后先 `sh -n tools/verify.sh` 再跑一次新老入口。
+- **并行 subagent 的坑**（tmp 唯一命名、契约先写死、AC 不可重复注册、破坏性代码要变异自证）见 [`pitfalls-parallel-agents.md`](pitfalls-parallel-agents.md)。
