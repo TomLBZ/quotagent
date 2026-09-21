@@ -173,3 +173,22 @@
   2. 若是 429：核对 `key` 是否按请求分桶、成功路径是否 `release`（`run()` 在成功时归还额度）；
   3. 若是 500：看 `handle()` 在 `await governor.run(...)` 包装下的异常路径（包装改变了返回语义，需确认 `handle` 的同步抛错仍被外层 catch 捕获）。
 - 影响面：本决定**不改变任何既有行为**（接线已回退）；`governor` 仍只在其自身门内被验证，**尚未在 UI 路径生效**。
+
+### D-026 追加证据（2026-09-21T09:09:04Z）：请求期 ctx 代理报错，下一步的假设已明确
+
+再次接线后跑检查器，**拿到了失败响应的原文**（这正是上一轮补的"安全求值 + 打印响应体"起作用）：
+`{"error":"internal-error","detail":"Error: cannot get property \"governor\" without inject"}`，
+全部 7 条失败都是**同一原因**（所有路由 500）。
+
+关键矛盾（下一步从这里切入）：`host/modules/webui.mjs` 里 `inject` 声明**确实**已含 `governor`
+（第 18/22 行），`const governor = ctx.governor` 也在 `apply` 顶部；但报错发生在**请求期**，
+且是 cordis 的 ctx 代理抛的（不是 `undefined.run` 那种 TypeError）。
+
+⇒ 假设一（优先验）：**探针/CLI 用的"包装挂载"把 `apply` 与 fiber 的 inject 解析错开**——
+生产路径是 `ctx.plugin(module, config)` 直接挂模块，而检查器与 CLI 走 `apply(inner, cfg)` 的包装。
+**下一步：先用"不加包装、直接 `ctx.plugin(webuiModule, config)`"的最小脚本复现**；若直接挂载通过，
+则问题在包装模式（需要给包装补 fiber 级 inject），而不是 `governor` 接线本身。
+假设二：`ctx` 被闭包跨 epoch 复用（`ledgerOf()` 里的 `ctx.ledgerView` 就是**请求期**读取，且它现在是通的），
+说明请求期读取本身可行——差异只在 `governor` 是新加的服务名，需确认包装 ctx 的 inject 列表确实生效。
+
+接线仍**已回退**（门红不留树）；`governor` 只在其自身门内被验证，尚未在 UI 路径生效。
