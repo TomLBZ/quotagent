@@ -1,0 +1,33 @@
+EV-091 T-255 谈判轮次/让步：设计决策 + 接口契约落档 + ADR-0019
+生成时间 2026-09-21T11:24:00Z
+
+[1] 背景
+需求覆盖矩阵里 `FR-NEGO-001`（谈判轮次）与 `FR-NEGO-002`（让步动作必须绑人工门）是【缺口】。
+做法与 T-252 相同：**先把边界与契约钉死，再实现**（破坏性/承诺类逻辑不接受"边写边想"）。
+
+[2] 交付（subagent 产出草案，父方核验后落档）
+· `docs/design/16-negotiation-design.md`（25544 B, sha256 f801421d2c6c85d7…）
+  —— 8 个设计问题逐条给"选定 / 被否决 / 代价"
+· `docs/design/17-negotiation-contract.md`（15311 B, sha256 5fcf0d91a741de38…）
+  —— 类与方法签名、Thread/Round/bounds/move 逐键形状、13 个异常（5 个复用既有不可改名）、
+     5 个事件与模式、1 个新增门 scope、文件清单与工作量、下轮动作序列
+· `docs/design/adr/0019-negotiation-rounds-and-concessions.md`（3059 B, sha256 d1f432504ef8c3a2…）
+
+[3] 设计要点（父方复核过的部分）
+· 一轮 = 一次**价格**让步提议；身份键 `(thread_id, attempt_no)`（被拒尝试也占号）；`correlation_id = thread_id`
+· 让步空间**只来自既有事实**：底线 = 既有成本模型 × (1 + `negotiate.min_margin_pct`/100)；区间取 `pricing.authorized_band.*`；
+  三个新键缺任一即拒（**不兜默认值**）；边界落 `negotiate/bounds-declared`（带 `policy_hash` + `cost_artifact_ref`）→ 可复算
+· **让步必过人工门**：仅一个新增 scope `negotiate.price-concession`，超时仍只有 remind/escalate/abort（**无自动批准**）
+· 越界/越限 = **拒绝**（不是"过门"），拒绝也落 `negotiate/round-rejected`（code/reason/next_action）
+· 本服务**不产生义务**（无 commitment、无 PO、无对外发报价）
+· 事件族 `negotiate/*`（`negotiate/round` 是既有「规划中」条目：**不改名、不改模式**）；
+  否决 `nego/*`（同族必须同前缀）
+
+[4] 落档时的机检（父方实跑）
+· `tools/verify.sh docs` → 除"EV-091 尚未写"外全绿（预算：设计 25544/28672 B；ADR 3059/8192 B）
+· 事件名核对：`negotiate/round` 在 `05-events.md` 已登记（规划中）；其余 4 个将在实现轮次两侧同批登记
+
+[5] 如实说明
+· 本轮**只做设计与契约**，没有任何实现代码；`FR-NEGO-001/002` 在覆盖矩阵里仍是【缺口】。
+· 设计与契约里的经验值/商务假设（如真实轮次幅度）标注为**未核实**，未当作事实、未写死。
+· 契约里点名的两处**仓库漂移**（`04-services-catalog.md` 的条款号与 `ctx.negotiate [P1]`）留待实现轮次一并修正。
