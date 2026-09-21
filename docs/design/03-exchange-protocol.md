@@ -125,6 +125,10 @@
 | 重发 | 发送方在未收到 `relay/receipt` 超过阈值后重发同一 `msg_id`（内容不变，哈希不变） |
 | 乱序到达 | 允许；但不允许"越过空洞的状态跃迁"（例如未收到 `rfq/amended` 就收到基于 rev=2 的报价 → 挂起） |
 | 投递 | 至少一次语义 + 幂等 = 实际一次；不做 exactly-once 假设 |
+| 回执 | 接收方应用成功后回 `relay/receipt{msg_id,seq,ack_by,at}`（**传输确认**，不承载业务语义）；发送方在未收到回执超过阈值后重发同一 `msg_id` |
+| 控制类报文 | `relay/receipt` 与 `relay/resend-request` 是**控制类**：不互相回执（否则无界乒乓），且不计入待回执集合 |
+
+> 实现口径：`capabilities()` 交换 `qep_versions[]`/`features[]`；协商结果取版本交集最大值；特性取交集，差异落 `kernel/qep-degraded`；`approval_chain_v2`/`signature_verify`/`version_binding` 缺失即**拒绝**（不可降级）。落账事件：`kernel/qep-gap-detected`、`kernel/qep-gap-filled`、`kernel/qep-degraded`、`kernel/qep-resent`（见 `05-events.md` §2）。
 
 ## 6. 版本协商
 

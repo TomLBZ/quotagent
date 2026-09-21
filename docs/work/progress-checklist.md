@@ -42,7 +42,8 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T | 阶段 | 内容 | FR | AC | status | evidence |
 |---|---|---|---|---|---|---|
 | T-201 | P1 | 双侧进程分离 + profiles | FR-PLUGIN-004 | AC-PLUGIN-003 | done | EV-039 |
-| T-202 | P1 | QEP relay/文件绑定 + receipt + 重发 + seq 空洞 | FR-QEP-003, FR-QEP-005, FR-QEP-006, FR-QEP-008, FR-INTEG-002 | AC-QEP-003, AC-INTEG-002 | todo | – |
+| T-202 | P1 | QEP 顺序/空洞/重发 + 版本协商（relay 绑定留 T-218） | FR-QEP-003, FR-QEP-005, FR-QEP-006, FR-QEP-008 | AC-QEP-003, AC-QEP-004 | doing | EV-042 |
+| T-218 | P1 | HTTP relay 绑定：opaque 转发 + 回执 + 不可达排队重试（S1.17） | FR-INTEG-002 | AC-INTEG-002 | todo | – |
 | T-203 | P1 | 三方协调 + 字段权威方 + 冲突上报 | FR-QEP-007 | AC-SYNC-001 | todo | – |
 | T-204 | P1 | 澄清工单 + 广播完整性 + 版本重开 | FR-CLARIFY-001..003 | AC-CLARIFY-001..003 | todo | – |
 | T-205 | P1 | 包版本变更与报价过期标记 | FR-NORM-004, FR-RFQ-003 | AC-COMPARE-001, AC-RFQ-002 | todo | – |

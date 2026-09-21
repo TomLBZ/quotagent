@@ -3,11 +3,11 @@
   "updated_at": "2026-09-21",
   "phase": "P1-mvp",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-202",
-  "next_action": "批次 B3：T-202 QEP 跨进程投递 + receipt + 重发 + seq 空洞 —— 先补桥的 FR/AC 与 docs/design/13-cordis-bridge.md，再实现 src/quotagent/bridge.py 与宿主侧装配；P1 执行顺序见 docs/work/decisions.md D-007 与 docs/work/reviews/agent-review-p1-plan.txt",
-  "last_verified_command": "tools/verify.sh docs && tools/verify.sh cordis && tools/verify.sh v && 全量 35 条 AC && qa suite s1..s4",
-  "last_verified_result": "PASS（docs 门 72 文件/0 未解析；cordis 冒烟 18/18；V 登记 12 条 open + planning_assumptions；35 条 AC 全绿；s1..s4 全绿）",
-  "last_verified_evidence": "docs/work/evidence/EV-039-AC-PLUGIN-003.txt",
+  "next_task": "T-218",
+  "next_action": "批次 B5b：T-218 relay 绑定（FR-INTEG-002 / AC-INTEG-002）—— relay 侧只做 opaque 字节转发（不解析 body；存整包 sha256 以检测途中被改），向发送方写回执；目标不可达时排队并重试；接收方验签失败即拒（kernel/qep-rejected）。之后继续 T-203（三方协调）/ T-204（澄清工单）等",
+  "last_verified_command": "tools/verify.sh docs && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh v && 全量 40 条 AC && qa suite s1..s4",
+  "last_verified_result": "PASS（docs 门 75 文件/0 未解析；bridge 31 断言；cordis 18/18；p0-no-node 34 条；V 登记 12 条 open；40 条 AC 全绿；s1..s4 全绿）",
+  "last_verified_evidence": "docs/work/evidence/EV-042-qep-order-and-version.txt",
   "last_verified_commit": "1a70ac3",
   "blockers": [],
   "human_required": [
@@ -42,7 +42,8 @@
     "counterexamples": "docs/work/scenarios/s4-counterexamples.json（只增不减）",
     "validation_kit": "docs/work/validation/（执行包 + register.json + templates）；tools/v-kit.sh 打包；tools/verify.sh v 校验",
     "host": "host/（cordis 4.0.0-rc.10，tools/cordis.sh；verify.sh cordis）：profiles.mjs = 三个 profile（contractor-ops/supplier-bid/relay）组成数据；lib/config.mjs 用原生 fiber.update+internal/update 做可否决配置更新；cli.mjs = boot|status|config-update（stdout 一行 JSON）。桥接协议见 ADR-0013，宿主配置语义见 ADR-0015",
-    "p1_plan": "docs/work/decisions.md（决策日志）+ docs/work/reviews/agent-review-p1-plan.txt（16 批依赖序）"
+    "p1_plan": "docs/work/decisions.md（决策日志）+ docs/work/reviews/agent-review-p1-plan.txt（16 批依赖序）",
+    "qep_order": "kernel/qep.py：per-sender expected seq + 挂起队列（held）+ relay/resend-request + relay/receipt 回执 + negotiate() 版本/特性协商；事件 kernel/qep-gap-detected|gap-filled|degraded|resent（已登记 05-events.md §2 与 kernel/events.py）"
   },
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态"
 }

@@ -20,6 +20,11 @@ from .canon import ZERO_HASH, canonical_bytes, digest
 from .ledger import Ledger, utc_now
 
 SUPPORTED_QEP_VERSIONS = ("1.0",)
+# 通信能力（03 §6）：`features` 可降级但**必须留痕**；下列三项**不可降级**（ADR-0006 §4）
+SUPPORTED_FEATURES = ("approval_chain_v2", "pack_deltas", "signature_verify", "version_binding")
+NON_DEGRADABLE_FEATURES = ("approval_chain_v2", "signature_verify", "version_binding")
+RECEIPT_TYPE = "relay/receipt"
+RESEND_REQUEST_TYPE = "relay/resend-request"
 SIGNATURE_ALGO = "hmac-sha256"  # P0（ADR-0008）
 CLASSES = ("fact", "intent", "commitment")
 REQUIRED_FIELDS = ("qep_version", "msg_id", "correlation_id", "seq", "prev_hash", "sent_at",
@@ -120,6 +125,8 @@ class QepEndpoint:
     def __init__(self, *, participant: str, kind: str, realm: str, keystore: KeyStore,
                  ledger: Ledger, transport: Any = None, events: Any = None,
                  supported: Iterable[str] = SUPPORTED_QEP_VERSIONS,
+                 features: Iterable[str] = SUPPORTED_FEATURES,
+                 receipts: bool = True, resend_after_s: float = 30.0,
                  agent_id: str | None = None) -> None:
         self.participant = participant
         self.kind = kind
@@ -129,7 +136,19 @@ class QepEndpoint:
         self.transport = transport
         self.events = events
         self.supported = tuple(supported)
+        self.features = tuple(features)
+        self.receipts_enabled = bool(receipts)
+        self.resend_after_s = float(resend_after_s)
         self.agent_id = agent_id or f"{kind}-agent@0.1.0"
+        # 顺序与空洞（03 §5）：每个发送方一个"期待 seq"，空洞未补齐前不得推进
+        self._expected_seq: dict[str, int] = {}
+        self.held: list[dict] = []
+        self.gap_requests: list[dict] = []
+        self.agreed_version: str | None = None
+        self.agreed_features: list[str] = []
+        self.receipts: dict[str, dict] = {}
+        self.resent: list[str] = []
+        self._sent_at: dict[str, float] = {}
         self._seen_msg_ids: set[str] = set()
         self._duplicate_attempts: dict[str, int] = {}
         self._sent: dict[str, dict] = {}
@@ -152,6 +171,46 @@ class QepEndpoint:
     @property
     def prev_hash(self) -> str:
         return self._prev_body_hash
+
+    # --- 能力与版本协商（03 §6） -------------------------------------------
+    def capabilities(self) -> dict:
+        return {"participant": self.participant, "kind": self.kind, "realm": self.realm,
+                "qep_versions": list(self.supported), "features": list(self.features)}
+
+    def negotiate(self, peer: dict) -> dict:
+        """取版本交集的最大值；为空即拒绝并落 `kernel/qep-rejected`（不静默降级）。
+        特性取交集，差异必须落 `kernel/qep-degraded`；**不可降级项缺失即拒绝**。"""
+        peer_versions = [str(item) for item in (peer.get("qep_versions") or [])]
+        common = sorted(set(self.supported) & set(peer_versions))
+        if not common:
+            self._reject("版本交集为空", errors=[f"本端 {list(self.supported)}", f"对端 {peer_versions}"],
+                         msg_id=None, code="version-intersection-empty")
+            return {"ok": False, "reason": "version-intersection-empty",
+                    "local_versions": list(self.supported), "peer_versions": peer_versions}
+        chosen = common[-1]
+        peer_features = {str(item) for item in (peer.get("features") or [])}
+        mine = set(self.features)
+        missing_mandatory = sorted(set(NON_DEGRADABLE_FEATURES) - (mine & peer_features))
+        if missing_mandatory:
+            entry = self._reject("不可降级特性缺失", errors=[f"缺失: {missing_mandatory}"],
+                                 code="non-degradable-feature-missing")
+            return {"ok": False, "reason": "non-degradable-feature-missing",
+                    "missing": missing_mandatory, "rejected": entry}
+        agreed = sorted(mine & peer_features)
+        degraded = sorted((mine | peer_features) - (mine & peer_features))
+        self.agreed_version, self.agreed_features = chosen, agreed
+        if degraded:
+            self.ledger.append(
+                "kernel/qep-degraded",
+                {"participant": self.participant, "peer": peer.get("participant"),
+                 "version": chosen, "features_agreed": agreed, "degraded": degraded,
+                 "non_degradable": list(NON_DEGRADABLE_FEATURES),
+                 "reason": "特性取交集（降级必须留痕；不可降级项已单独校验）"},
+                actor=self.participant)
+            if self.events is not None:
+                self.events.emit("kernel/qep-degraded", {"peer": peer.get("participant"), "degraded": degraded})
+        return {"ok": True, "version": chosen, "features": agreed, "degraded": degraded,
+                "peer": peer.get("participant")}
 
     # --- 信封 -------------------------------------------------------------
     def envelope(self, type: str, event_class: str, body: dict, *, refs: dict | None = None,
@@ -243,6 +302,7 @@ class QepEndpoint:
         self._outbox_seq = int(signed["seq"])
         self._prev_body_hash = signed["body_hash"]
         self._sent[signed["msg_id"]] = signed
+        self._sent_at[signed["msg_id"]] = time.time()
         return {"msg_id": signed["msg_id"], "path": path, "bytes": raw,
                 "envelope": signed, "ledger_ref": ref.as_dict(), "duplicate": ref.duplicate}
 
@@ -259,6 +319,12 @@ class QepEndpoint:
             raise QepError(f"未找到可重发的报文: {msg_id}")
         if self.transport is not None and envelope.get("recipients"):
             self.transport.write(envelope, to=envelope["recipients"][0])
+        self.ledger.append(
+            "kernel/qep-resent",
+            {"msg_id": msg_id, "seq": envelope.get("seq"), "body_hash": envelope.get("body_hash"),
+             "recipients": envelope.get("recipients"), "reason": "未收到回执或对端请求重发"},
+            correlation_id=envelope.get("correlation_id"), actor=self.participant,
+            refs={"msg_id": msg_id})
         return canonical_bytes(envelope)
 
     # --- 接收 -------------------------------------------------------------
@@ -297,6 +363,45 @@ class QepEndpoint:
             return {"duplicate": False, "received": False, "msg_id": msg_id,
                     "errors": report["errors"], "rejected": entry}
 
+        # --- 顺序检查（03 §5）：不跳号；空洞未补齐前不推进依赖该 seq 的跃迁 ---
+        sender = envelope["sender"]["participant_id"]
+        seq = int(envelope["seq"])
+        expected = self._expected_seq.get(sender, 1)
+        if seq > expected:
+            missing = list(range(expected, seq))
+            self.held.append({"envelope": envelope, "path": path, "raw": raw})
+            self.gap_requests.append({"from": sender, "expected": expected, "got": seq, "missing": missing})
+            ref = self.ledger.append(
+                "kernel/qep-gap-detected",
+                {"from": sender, "expected_seq": expected, "got_seq": seq, "missing": missing,
+                 "held": len(self.held), "rule": "不跳号：依赖缺失 seq 的跃迁一律挂起（FR-QEP-003）"},
+                correlation_id=envelope.get("correlation_id"), actor=self.participant,
+                refs={"msg_id": msg_id, "seq": seq})
+            requested = self.request_resend(sender, missing)
+            if self.events is not None:
+                self.events.emit("kernel/qep-gap-detected",
+                                 {"from": sender, "missing": missing, "requested": requested})
+            return {"duplicate": False, "received": False, "held": True, "msg_id": msg_id, "seq": seq,
+                    "expected_seq": expected, "missing": missing, "resend_requested": requested,
+                    "ledger_ref": ref.as_dict()}
+
+        applied = self._apply(envelope, path=path)
+        if not applied.get("ok", True):
+            return applied
+        # 先推进"期待 seq"，再排空挂起（否则挂起项永远等不到自己那一格）
+        if applied.get("received"):
+            self._expected_seq[sender] = max(expected, seq) + 1
+        drained = self._drain_held(sender)
+        receipt = self._send_receipt(envelope) if applied.get("received") else None
+        out = dict(applied)
+        out.update({"expected_seq": self._expected_seq[sender], "gap_filled": drained,
+                    "receipt": receipt})
+        return out
+
+    # --- 顺序与重发 ---------------------------------------------------------
+    def _apply(self, envelope: dict, *, path: Path | None) -> dict:
+        """把一条**顺序就绪**的报文落成事实（原 P0 的接收路径）。"""
+        msg_id = envelope["msg_id"]
         ref = self.ledger.append(
             envelope["type"], envelope["body"], correlation_id=envelope["correlation_id"],
             event_class=envelope["class"], actor=envelope["sender"]["participant_id"],
@@ -310,29 +415,139 @@ class QepEndpoint:
                 "kernel/qep-duplicate-dropped",
                 {"msg_id": msg_id, "type": envelope["type"], "body_hash": envelope["body_hash"],
                  "attempt": attempt, "reason": "账本去重键命中（同一事实的另一报文）"},
-                correlation_id=envelope["correlation_id"], actor=self.participant, refs={"msg_id": msg_id})
-            return {"duplicate": True, "received": False, "msg_id": msg_id,
+                correlation_id=envelope.get("correlation_id"), actor=self.participant, refs={"msg_id": msg_id})
+            return {"ok": True, "duplicate": True, "received": False, "msg_id": msg_id,
                     "reason": "账本去重命中", "dedup": "ledger", "ledger_ref": ref.as_dict()}
-
         self.ledger.append(
             "kernel/qep-received",
             {"msg_id": msg_id, "from": envelope["sender"]["participant_id"], "type": envelope["type"],
              "body_hash": envelope["body_hash"], "seq": envelope["seq"]},
             correlation_id=envelope["correlation_id"], actor=self.participant, refs={"msg_id": msg_id})
-        return {"duplicate": False, "received": True, "msg_id": msg_id, "type": envelope["type"],
-                "class": envelope["class"], "body": copy.deepcopy(envelope["body"]),
-                "ledger_ref": ref.as_dict()}
+        if envelope["type"] == RECEIPT_TYPE:
+            self.receipts[str(envelope["body"].get("msg_id"))] = dict(envelope["body"])
+        return {"duplicate": False, "received": True, "ok": True, "msg_id": msg_id,
+                "type": envelope["type"], "class": envelope["class"],
+                "body": copy.deepcopy(envelope["body"]), "ledger_ref": ref.as_dict()}
+
+    def _drain_held(self, sender: str) -> dict | None:
+        """补齐后把挂起的报文按 seq 顺序应用（不跳号）。"""
+        if not self.held:
+            return None
+        expected = self._expected_seq.get(sender, 1)
+        ready, rest = [], []
+        for item in self.held:
+            env = item["envelope"]
+            if env["sender"]["participant_id"] == sender and int(env["seq"]) == expected:
+                ready.append(item); expected += 1
+            else:
+                rest.append(item)
+        if not ready:
+            return None
+        self.held = rest
+        applied_ids = []
+        for item in ready:
+            result = self._apply(item["envelope"], path=item["path"])
+            if result.get("received"):
+                applied_ids.append(result["msg_id"])
+                self._send_receipt(item["envelope"])
+            self._expected_seq[sender] = int(item["envelope"]["seq"]) + 1
+        ref = self.ledger.append(
+            "kernel/qep-gap-filled",
+            {"from": sender, "applied": applied_ids, "expected_seq": self._expected_seq[sender],
+             "held_remaining": len(self.held), "rule": "补齐后按序应用（03 §5）"},
+            actor=self.participant)
+        if self.events is not None:
+            self.events.emit("kernel/qep-gap-filled", {"from": sender, "applied": applied_ids})
+        return {"applied": applied_ids, "held_remaining": len(self.held), "ledger_ref": ref.as_dict()}
+
+    def request_resend(self, peer: str, missing: list[int]) -> bool:
+        """向对端发出重发请求（`relay/resend-request`）；没有传输通道时只留痕。"""
+        if self.transport is None:
+            return False
+        body = {"from_participant": self.participant, "to_participant": peer,
+                "missing": list(missing), "from_seq": missing[0], "to_seq": missing[-1]}
+        envelope = self.sign(self.envelope(RESEND_REQUEST_TYPE, "intent", body,
+                                           recipients=[peer], refs={"package_id": None}))
+        self.transport.write(envelope, to=peer)
+        self.ledger.append(
+            "kernel/qep-sent",
+            {"envelope": envelope, "msg_id": envelope["msg_id"], "seq": envelope["seq"],
+             "body_hash": envelope["body_hash"],
+             "path": str(self.transport.final_path(envelope, to=peer)),
+             "recipients": [peer], "kind": "resend-request", "missing": list(missing)},
+            correlation_id=envelope["correlation_id"], actor=self.participant,
+            refs={"msg_id": envelope["msg_id"]})
+        self._outbox_seq = int(envelope["seq"])
+        self._prev_body_hash = envelope["body_hash"]
+        self._sent[envelope["msg_id"]] = envelope
+        self._sent_at[envelope["msg_id"]] = time.time()
+        return True
+
+    # 传输层语义的报文（回执与重发请求）不再互相回执，否则会形成无界乒乓
+    CONTROL_TYPES = (RECEIPT_TYPE, RESEND_REQUEST_TYPE)
+
+    def _send_receipt(self, envelope: dict) -> dict | None:
+        """回执：业务报文应用成功后向发送方确认（`relay/receipt`；只是传输确认，不解析业务语义）。"""
+        if not self.receipts_enabled or self.transport is None:
+            return None
+        if envelope.get("type") in self.CONTROL_TYPES:
+            return None
+        sender = envelope["sender"]["participant_id"]
+        body = {"msg_id": envelope["msg_id"], "seq": envelope["seq"], "ack_by": self.participant,
+                "at": utc_now()}
+        receipt = self.sign(self.envelope(RECEIPT_TYPE, "intent", body, recipients=[sender],
+                                          correlation_id=envelope.get("correlation_id")))
+        self.transport.write(receipt, to=sender)
+        self.ledger.append(
+            "kernel/qep-sent",
+            {"envelope": receipt, "msg_id": receipt["msg_id"], "seq": receipt["seq"],
+             "body_hash": receipt["body_hash"],
+             "path": str(self.transport.final_path(receipt, to=sender)),
+             "recipients": [sender], "kind": "receipt", "acks": envelope["msg_id"]},
+            correlation_id=receipt["correlation_id"], actor=self.participant,
+            refs={"msg_id": receipt["msg_id"], "acks": envelope["msg_id"]})
+        self._outbox_seq = int(receipt["seq"])
+        self._prev_body_hash = receipt["body_hash"]
+        self._sent[receipt["msg_id"]] = receipt
+        self._sent_at[receipt["msg_id"]] = time.time()
+        return {"msg_id": receipt["msg_id"], "acks": envelope["msg_id"], "to": sender}
+
+    def outstanding(self) -> list[dict]:
+        """已发送但未收到回执的报文（发送方据此重发，03 §5）。"""
+        out = []
+        for msg_id, envelope in self._sent.items():
+            if envelope.get("type") in self.CONTROL_TYPES:
+                continue
+            if msg_id not in self.receipts:
+                out.append({"msg_id": msg_id, "seq": envelope["seq"], "type": envelope.get("type"),
+                            "recipients": envelope.get("recipients")})
+        return sorted(out, key=lambda item: item["seq"])
+
+    def resend_unacked(self, *, now: float | None = None, threshold_s: float | None = None) -> list[str]:
+        """超过阈值仍未收到回执 → 重发同一 msg_id（内容不变，不产生第二条事实）。"""
+        limit = self.resend_after_s if threshold_s is None else float(threshold_s)
+        stamps = getattr(self, "_sent_at", {})
+        now = time.time() if now is None else now
+        resent = []
+        for item in self.outstanding():
+            sent_at = stamps.get(item["msg_id"])
+            if sent_at is None or now - sent_at < limit:
+                continue
+            self.resend(item["msg_id"])
+            resent.append(item["msg_id"])
+        self.resent.extend(resent)
+        return resent
 
     # --- 内部 -------------------------------------------------------------
     def _reject(self, reason: str, *, errors: list[str], msg_id: str | None = None,
-                path: Path | None = None) -> dict:
+                path: Path | None = None, code: str | None = None) -> dict:
         entry = {"reason": reason, "errors": list(errors), "msg_id": msg_id,
-                 "path": str(path) if path else None, "at": utc_now()}
+                 "path": str(path) if path else None, "at": utc_now(), "code": code}
         self.rejected_messages.append(entry)
         try:
             self.ledger.append("kernel/qep-rejected",
                                {"reason": reason, "errors": list(errors), "msg_id": msg_id,
-                                "from": None, "attempt": len(self.rejected_messages)},
+                                "from": None, "code": code, "attempt": len(self.rejected_messages)},
                                correlation_id=msg_id, actor=self.participant,
                                refs={"msg_id": msg_id} if msg_id else {})
         except Exception:  # noqa: BLE001 - 账本冻结等极端情况不掩盖原始拒绝

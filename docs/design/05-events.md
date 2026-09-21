@@ -34,6 +34,10 @@
 | `kernel/qep-rejected` | emit | durable | `ctx.qep` | 运维告警、审计 |
 | `kernel/qep-sent` / `kernel/qep-received` | emit | ✔ | `ctx.qep` | 重发与出站链恢复（`03` §7）、审计 |
 | `kernel/qep-duplicate-dropped` | emit | ✔ | `ctx.qep` | 幂等命中的可审计留痕（`03` §5） |
+| `kernel/qep-gap-detected` | emit | ✔ | `ctx.qep` | `seq` 空洞：挂起依赖该序号的跃迁并发出重发请求（`03` §5） |
+| `kernel/qep-gap-filled` | emit | ✔ | `ctx.qep` | 空洞补齐后按序应用（不跳号） |
+| `kernel/qep-degraded` | emit | ✔ | `ctx.qep` | 特性级降级留痕（批准链/版本绑定/签名不可降级，ADR-0006 §4） |
+| `kernel/qep-resent` | emit | ✔ | `ctx.qep` | 未收到回执或对端请求后重发同一 `msg_id`（内容不变） |
 | `kernel/bridge-degraded` | emit | ✔ | `ctx.bridge` | 宿主与内核的观测（特性级降级必须留痕，ADR-0013 §2） |
 | `kernel/bridge-rejected` | emit | ✔ | `ctx.bridge` | 承诺面调用/自我声明身份的拒绝留痕（ADR-0013 §3） |
 | `kernel/bridge-backpressure` | emit | ✔ | `ctx.bridge` | live 通知被丢弃时的留痕（ADR-0013 §5） |

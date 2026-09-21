@@ -4,14 +4,15 @@
 
 ## 现在在哪
 
-**P1 进行中**：T-201、T-216（桥最小闭环）、**T-217（桥的故障语义）done** —— SIGKILL 后链仍真且 durable
-零丢失、在途请求记 unknown、重启预算 3/30s 超限降只读（只关 fact/commit）、背压丢 live 必留痕且 durable
-可补齐、锚点异常→只读、无孤儿、启动失败不写账本（见 AC-INTEG-006 与 `13-cordis-bridge.md` §7）。
-`verify.sh bridge|p0-no-node` PASS；**38 条 AC 与 s1..s4 全绿**。
+**P1 进行中**：T-201（宿主 profile/配置否决）、T-216（桥最小闭环）、T-217（桥故障语义）done；
+**T-202 内核部分 done**（seq 空洞→挂起+重发请求、补齐后按序应用、回执不乒乓、版本交集/降级留痕，
+AC-QEP-003/004 全绿）。剩余：**T-218 = relay 绑定**（opaque 转发 + 排队重试，AC-INTEG-002）。
+`verify.sh docs|bridge|cordis|p0-no-node|v` PASS；**40 条 AC 与 s1..s4 全绿**。
 
 ## 下一步唯一动作
 
-**B5 = T-202**：QEP relay/receipt/重发/seq 空洞（AC-QEP-003/004、AC-INTEG-002）。见 state.json 的 `next_action`。
+**B5b = T-218**：relay 只转发不解析 body（篡改由接收方验签发现）、不可达时排队重试、回执闭环。
+拆解见 state.json 的 `next_action`。
 
 ## 不变量
 
