@@ -99,6 +99,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | P3-UX2 | 三份 UX 规格持久化进 `docs/work/plans/`（22 痛点 / 9 human / 20 FR 草案）`4e0f2cb` | B78 | done | — |
 | T-283 | P2 | 「审批等多久 / 变更单谁卡着」GUI 闭环：`gate-timeline` 插件（等待时长口径=事实 ts 差、不取墙钟、**不能批准**）+ 三路由（页面/JSON/催办 POST 只落 0600 待办件、账本零新增）+ `tools/gate-nudge.py`（唯一落账本者，落 `gate/nudged`）+ 围栏门 33/33（4 处变异自证）与真路由门 11/11 | FR-GATE-001 | AC-GATE-001 | done | EV-153 |
 | T-284 | P2 | 「变更单到底改了什么、多花多少钱」**逐行明细**：`gate-timeline` 规则 ⑤ + 两路由（`/<view>/changes/<id>/` 与 `/<view>/api/changes/<id>`，只读）+ 金额整数分逐行手算对账 / 缺依据的行不入小计 / 无可用行必降级 + 围栏门 22/22（4 处变异自证）与真路由门 9/9 | FR-GATE-002 | AC-GATE-002 | done | EV-154 |
+| T-284 | P2 | 「授权区间」：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁（`authority-band` 插件 + 两条路由 + 配置键进白名单可由 UI 改与 YAML 初始化）+ 围栏门 22/22（4 处变异自证）与真路由门 12/12 | FR-AUTH-001 | AC-AUTH-001 | done | EV-156 |
 | T-272 | 宿主侧 admin 门卫/视图插件 + 围栅门 18/18 + 端到端 12/12（subagent 产出，父方实跑） | B67 | done | EV-132 |
 | T-273 | admin 道接入 webui（路由/提权表单/CLI/e2e/profile/stubs/verify.sh）+ 本批 FR/AC 落表 | B67 | done | EV-132 |
 | T-273b | admin 道变异自证（统一拒绝体/投影/状态机/比较写法四处偷改必红；落表待实现） | B68 | todo | — |

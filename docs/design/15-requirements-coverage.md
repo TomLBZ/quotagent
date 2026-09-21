@@ -10,6 +10,7 @@
 |---|---|---|---|
 | FR-GATE-001 | host/modules/gate-timeline.mjs、tools/gate-nudge.py | 「审批等多久 / 变更单谁卡着」围栏门 33/33 + 真路由门 11/11（`verify.sh gates`）：**age 不随两个不同 `now` 入口变化**（不取墙钟）/ 空投影两列表为 0 / 插件不能批准 / 每条有 basis / 催办 POST 只落 0600 待办件且账本零新增 / 真跑 `gate-nudge.py` 落 `gate/nudged` 且 ops 计数 +1 / 幂等 duplicates / 两条拒绝路径 / 四道页面子导航入口 + 页面 0 内联脚本 | 直引 |
 | FR-GATE-002 | host/modules/gate-timeline.mjs、host/t283-change-detail-gate.mjs、tools/check-change-detail-route.py | 变更单**逐行明细**：围栏门 22/22 + 真路由门 9/9（`verify.sh change-detail`）：**逐行手算金额对账**（整数分；`delta = after − before`；`delta_pct` 整数分位 half-up）／缺依据的行**不入小计**（`basis_missing`）／无可用行 ⇒ degraded + 明细空 + 小计记 null／供应商侧哨兵逐字节一致 0 命中／未知 id 页面与 JSON 都 404 + next_action／只读（账本零新增）＋ 4 处单点变异全红 | 直引 |
+| FR-AUTH-001 | host/modules/authority-band.mjs、host/t284-authority-gate.mjs、tools/check-authority-route.py | 「授权区间」围栏门 22/22 + 真路由门 12/12（`verify.sh authority`）：**三例边界值手算对账**（恰等于限额 / 超一分 / 差一分）、**未配置不得编限额**（`required_role`/`next_role` 留空，`null` ≠ `0`）、**越界必出可复制升级命令**（真跑 `verify.sh help` 找门名）、插件**不能批准**（无审批类方法）、金额非法三类拒绝（code+next_action）、确定性、有界（`roles_omitted`/`truncated` 如实报）、私域哨兵 0 命中、零写面、四道页面子导航入口 + 页面 0 内联脚本；真 HTTP 含**改配置前后同一金额结论不同**（`--config-file` 临时配置；真 `config.yaml` 指纹不变）+ 4 处单点变异全红 | 直引 |
 | FR-ADV-001 | host/modules/advice-panel.mjs | 决策建议层围栏门 30/30 + 真路由门 14/14（`verify.sh advice`）；四道页面子导航入口 + 页面 0 内联脚本 | 直引 |
 | FR-APPROVE-001 | src/quotagent/services/approval.py | ApprovalService.request() | 直引 |
 | FR-APPROVE-002 | src/quotagent/services/approval.py | ApprovalService.require(scope, ref, approval | 直引 |
@@ -171,6 +172,7 @@
 | 插件 | 归属 FR/AC | 强度 |
 |---|---|---|
 | gate-timeline | FR-GATE-001（「审批等多久 / 变更单谁卡着」：等待时长口径 = 事实 ts 之差（不取墙钟）/ 卡点用队列里的真审批人 / 超时策略三种后果 / 每条变更单带账本事件–计数 basis / **不能批准**（无审批类方法 + `can_approve=false`）/ 催办只产 nudge 载荷；4 处单点变异自证）、FR-GATE-002（**变更单逐行明细**：`/<view>/changes/<id>/` 与 `/<view>/api/changes/<id>` 金额整数分逐行可对账 / 缺依据的行不入小计 / 无可用行必降级且明细空 / 私域列仅业主侧可见；4 处单点变异自证） | 强 |
+| authority-band | FR-AUTH-001（「授权区间」：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁；`authority.*` 白名单配置（人工专属键，YAML 可初始化）；三例边界手算对账；未配置 ⇒ `unconfigured` **不编限额**；越界 ⇒ 可复制升级命令且**不能批准**；4 处单点变异自证） | 强 |
 | advice-panel | FR-ADV-001（确定性规则建议层：`engine=rules` / 每条建议 `basis` 指向投影真键 / 空投影必 degraded 且建议数 0 / 有界 + `omitted` / 私域零泄漏；4 处单点变异自证） | 强 |
 | approval-digest | FR-UX-001 | 部分 |
 | user-plugin-manager | FR-USERPLUG-003、FR-USERPLUG-004、FR-USERPLUG-006、FR-USERPLUG-008（T-268 subagent 产出） | 强 |

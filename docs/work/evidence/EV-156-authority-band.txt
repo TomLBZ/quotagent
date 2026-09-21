@@ -1,0 +1,259 @@
+EV-156 —— 「授权区间」：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁
+（本批 T-284：FR-AUTH-001 + AC-AUTH-001；插件 host/modules/authority-band.mjs + 两条路由 + 配置键进白名单）
+
+一、命令与退出码（原始）
+  tools/verify.sh authority           → exit 0
+    · 围栏门 host/t284-authority-gate.mjs                     → 22/22，failures=0
+    · 真路由门 tools/check-authority-route.py                 → 12/12，failures=0
+  （逐条断言见 §二 / §三；本批工作时的 HEAD = f8eea5acb07e，未提交——父方收口）
+
+二、三个边界值的原始对账行（逐字；门自己手算，不拿插件输出当期望）
+  ①恰等于限额（buyer 限额 500000 分、金额 500000 分）手算：在区间内=true 越界 0 分 需 buyer 批 / 下一个能批的人 lead / 升级命令 无 ｜实得：在区间内=true 越界 0 分 需 buyer 批 / 下一个 lead / 升级命令 无 ｜一致
+  ②超一分（buyer 限额 500000 分、金额 500001 分）手算：在区间内=false 越界 1 分 需 lead 批 / 下一个能批的人 lead / 升级命令 有 ｜实得：在区间内=false 越界 1 分 需 lead 批 / 下一个 lead / 升级命令 有 ｜一致
+  ③差一分（buyer 限额 500000 分、金额 499999 分）手算：在区间内=true 越界 0 分 需 buyer 批 / 下一个能批的人 lead / 升级命令 无 ｜实得：在区间内=true 越界 0 分 需 buyer 批 / 下一个 lead / 升级命令 无 ｜一致
+  —— 「谁能批到多少」的原始对账行：
+  金额 500001 ⇒ 手算 ["lead/2000000/1499999","director/10000000/9499999"] ｜实得 ["lead/2000000/1499999","director/10000000/9499999"] ｜一致
+  金额 2000001 ⇒ 手算 ["director/10000000/7999999"] ｜实得 ["director/10000000/7999999"] ｜一致
+  金额 999999999999 ⇒ 手算 [] ｜实得 [] ｜一致
+  全表=["buyer","lead","director"]
+  超过所有限额 ⇒ within=0 required=（空） next=（空） 升级命令=有
+
+三、未配置时的原始输出（围栏门六类 + 真 HTTP）
+  角色没登记（agent）→band-unconfigured/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致
+  角色登记为 null（lead）→band-unconfigured/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致
+  配置快照缺失→config-missing/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致
+  配置快照不是对象→config-missing/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致
+  单位声明非 cents（yuan）→unit-unsupported/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致
+  没给角色→role-missing/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致
+  零限额对照：1 分 ⇒ unconfigured=false/越界 1 分、0 分 ⇒ 在区间内=true
+  真 HTTP（同一条 URL，配置被移走/还原）：
+  移走夹具 ⇒ unconfigured=True/reason=band-unconfigured/bands=[]/required=''/next=''；还原后与移走前逐字节一致=True（在区间内=False/越界 1 分）
+  真 HTTP（改配置前后同一金额结论不同）：
+  改前 500001 ⇒ 在区间内=False/越界 1；改后同金额 ⇒ 在区间内=True/越界 0；真配置 sha256 前=6cf43d027a61… 后=6cf43d027a61…（一致=True）
+
+四、真 /workspace/config.yaml 指纹（本批全程只读）
+  前：6cf43d027a61224491a51aa85ad2f245be6a3605887ee9f162a021c525612630
+  后：6cf43d027a61224491a51aa85ad2f245be6a3605887ee9f162a021c525612630
+  相等：True
+  sha256sum： 6cf43d027a61224491a51aa85ad2f245be6a3605887ee9f162a021c525612630  /workspace/config.yaml
+
+五、围栏门逐条断言（名称 + 关键 detail）
+  [ok  ] 1 契约正控：manifest 与常量齐备（`unit=cents` / 闭合的 `REASONS`/`REFUSAL_CODES`/`STATUSES`/`BLOCKED_BY_VALUES` / `REGISTERED_ROLES` 与 `host/lib/config-keys.mjs` 的 `authority.bands.*` **逐字一致** / 升级命令形状 / `ignored_now_inputs`）+ `checkOf` 是函数；只 import ../lib 白名单（或 node:）；源码里 0 个脚本字面量
+        问题键=无；越界 import=无；含脚本字面量=false；解析钩子=已装；登记角色（config-keys）=["buyer","director","lead"]；字节=30340
+  [ok  ] 2 挂载正控：`ctx.provide('authorityBand')` 拿得到句柄，服务面**恰 4 个键**（`check` / `config` / `meta` 三个只读方法 + `requests` 声明清单）且不含任何审批类方法；dispose 后 effect 归零
+        句柄键=check|config|meta|requests（期望 check|config|meta|requests）；requests=["check"]；effect 1 → 0
+  [ok  ] 3 **三例边界值逐条对账**（本门最核心的一条）：恰等于限额（500000/500000）与超一分（500001）、差一分（499999）三例的 `inside_band`/`over_by`/`required_role`/`next_role`/有无升级命令**全部等于手算值**；且三例的结论确实不同（不是一句"都对"混过去）
+        ①恰等于限额（buyer 限额 500000 分、金额 500000 分）手算：在区间内=true 越界 0 分 需 buyer 批 / 下一个能批的人 lead / 升级命令 无 ｜实得：在区间内=true 越界 0 分 需 buyer 批 / 下一个 lead / 升级命令 无 ｜一致；②超一分（buyer 限额 500000 分、金额 500001 分）手算：在区间内=false 越界 1 分 需 lead 批 / 下一个能批的人 lead / 升级命令 有 ｜实得：在区间内=false 越界 1 分 需 lead 批 / 下一个 lead / 升级命令 有 ｜一致；③差一分（buyer 限额 500000 分、金额 499999 分）手算：在区间内=true 越界 0 分 需 buyer 批 / 下一个能批的人 lead / 升级命令 无 ｜实得：在区间内=true 越界 0 分 需 buyer 批 / 下一个 lead / 升级命令 无 ｜一致
+  [ok  ] 4 **谁能批到多少**：`bands` 全表 3 条（按限额升序 buyer/lead/director = 500000/2000000/10000000）；`within` 覆盖列表逐条手算（金额 500001 ⇒ lead 剩 1499999、director 剩 9499999；2000001 ⇒ director 剩 7999999；超过所有限额 ⇒ **空表**且 `required_role`/`next_role` 都留空 —— 不编一个人名，但**仍然**给升级命令）
+        金额 500001 ⇒ 手算 ["lead/2000000/1499999","director/10000000/9499999"] ｜实得 ["lead/2000000/1499999","director/10000000/9499999"] ｜一致；金额 2000001 ⇒ 手算 ["director/10000000/7999999"] ｜实得 ["director/10000000/7999999"] ｜一致；金额 999999999999 ⇒ 手算 [] ｜实得 [] ｜一致；全表=["buyer","lead","director"]；超过所有限额 ⇒ within=0 required=（空） next=（空） 升级命令=有
+  [ok  ] 5 **未配置不得编限额**（硬负控）：角色没登记 / 限额为 `null` / 配置快照缺失 / 快照不是对象 / 单位声明非 `cents` / 没给角色 六类 ⇒ `unconfigured=true` + **有名** reason + `required_role`/`next_role` **都为空** + `inside_band=null` + **无升级命令**（不编结论、不编命令）；且 `null`（未配置）与 `0`（人明确登记"一分也不能批"）是**两件事**：0 分限额下 1 分 ⇒ 越界 1 分、0 分 ⇒ 在区间内
+        角色没登记（agent）→band-unconfigured/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；角色登记为 null（lead）→band-unconfigured/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；配置快照缺失→config-missing/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；配置快照不是对象→config-missing/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；单位声明非 cents（yuan）→unit-unsupported/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；没给角色→role-missing/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；零限额对照：1 分 ⇒ unconfigured=false/越界 1 分、0 分 ⇒ 在区间内=true
+  [ok  ] 6 金额非法**三类**拒绝（负数 / 非整数 / 超上限），每类给**具体 code** + 非空 `next_action` + **不给结论**（`inside_band=null`、无升级命令、`required_role`/`next_role` 空）；**非空转对照**：同批合法金额（整数串 / 0 分 / 恰等于 AMOUNT_MAX）照旧给结论
+        负数 -1 ⇒ amount-negative（期望 amount-negative）/next_action 40 字/inside=null｜一致；负数串 "-500" ⇒ amount-negative（期望 amount-negative）/next_action 40 字/inside=null｜一致；浮点 500000.5 ⇒ amount-not-an-integer（期望 amount-not-an-integer）/next_action 52 字/inside=null｜一致；小数串 "500000.5" ⇒ amount-not-an-integer（期望 amount-not-an-integer）/next_action 52 字/inside=null｜一致；科学计数 "5e5" ⇒ amount-not-an-integer（期望 amount-not-an-integer）/next_action 52 字/inside=null｜一致；非数字串 "abc" ⇒ amount-not-an-integer（期望 amount-not-an-integer）/next_action 52 字/inside=null｜一致；null ⇒ amount-missing（期望 amount-missing）/next_action 50 字/inside=null｜一致；空串 "" ⇒ amount-missing（期望 amount-missing）/next_action 50 字/inside=null｜一致；超上限 AMOUNT_MAX+1 ⇒ amount-out-of-range（期望 amount-out-of-range）/next_action 75 字/inside=null｜一致；整数串 "500000" ⇒ inside-band（期望 inside-band）；恰等于 AMOUNT_MAX ⇒ over-band（期望 over-band）；0 分 ⇒ inside-band（期望 inside-band）
+  [ok  ] 7 **越界必出升级命令、且命令真存在**：越界 ⇒ `escalate_cmd` 以 `tools/verify.sh <门名>` 开头，该门名**真的出现在** `tools/verify.sh help` 的输出里（本门真跑那个命令）；人工签署命令指向 `quotagent.g1side`（`src/quotagent/g1side.py` 文件真存在）；`blocked_by=human-gate-required`；**双向**：不越界时 `escalate_cmd` 与 `escalate_human_cmd` 都为空（不发无用命令）
+        门名=gates（help 里找到=true；help stderr=无）；越界命令="tools/verify.sh gates   # 升级第一步：看这条人工门卡在谁手里（只读，不改任何判定）"；人工签署="PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   # 人工签署（只在终端；宿主与插件都不能代签）"；g1side.py 存在=true；不越界时 esc=''
+  [ok  ] 8 **插件不能批准**（硬负控）：服务面里没有任何 `approve/decide/grant/submit/ack/allow/reject` 类方法（方法集恰 `check|config|meta`）、`meta.can_approve=false`、**每一条输出**都带 `can_approve=false` 与含「不能」字样的 `approval_note`、源码里 0 处审批方法定义
+        方法集=check|config|meta|requests；审批类命中=无；每条输出 can_approve=false=5/5；源码审批方法定义=无；meta.can_approve=false
+  [ok  ] 9 确定性负控：同输入两次**逐字节一致** / 键序打乱一致 / 配置键序逆序一致 / 跨实例一致 / 两个墙钟入口（载荷 `now` 与配置 `now`）给任何值输出都不变 / **冻结输入**不抛错（严格模式下任何对入参的写入都会抛 TypeError ⇒ 证明没偷偷改调用方的载荷）/ 输出里没有时间键
+        两次=true 键序=true 配置逆序=true 墙钟A=true 墙钟B=true 跨实例=true 冻结输入=true 长度=2559 含时间键=false
+  [ok  ] 10 有界与诚实：`max_roles` 夹取（在**同一份 11 条角色**的输入上：3 ⇒ 只读 3 条并**如实报** `roles_omitted=8`、0 ⇒ 下界 1 条、1000 ⇒ 上界 8 条）；默认 8 ⇒ 读 8 条 + `roles_omitted=3` + `truncated=true`（省略照实报，不静默丢）；读入的角色**确定性**（按键名字典序取前 N）；金额上限边界：恰等于 AMOUNT_MAX 可判（over-band）、AMOUNT_MAX+1 拒（`amount-out-of-range`）
+        max_roles=3 ⇒ 读 3（r00,r01,r02）/省略 8（truncated=true）；max_roles=0 ⇒ 读 1/省略 10；max_roles=1000 ⇒ 读 8/省略 3；默认 ⇒ 读 8/省略 3；AMOUNT_MAX=1000000000000 ⇒ over-band
+  [ok  ] 11 **私域哨兵零泄漏（两面）**：同一键集、不同私域值 ⇒ 输出**逐字节一致**（不是"藏起来"，是根本没读）；哨兵与私域键名 0 命中；坏角色名的 `authority.bands.*` 键（含哨兵）**读都不读**（不进区间表、不回显）；**非空转对照**：哨兵确实在输入里（命中 ≥3）
+        逐字节一致=true；哨兵命中=无；私域键名命中=无；输入对照=4 个哨兵；区间表=buyer|lead|director
+  [ok  ] 12 零写面负控：产物**零写面、不读账本、不联网、不调模型、不取墙钟**（无写/读文件、账本、墙钟、随机、网络、子进程、事件订阅、定时器）；`privacy` 四项如实申报；扫描器**非空转**（对照样本必须命中 ≥3）
+        产物命中=无；对照样本命中=openLedger,fetch(,setTimeout(；privacy={"private_keys_read":false,"model_calls":0,"network_calls":0,"clock_reads":0}
+  [ok  ] 13 宿主侧契约（静态）：两条新路由（`/<view>/authority/` 与 `/<view>/api/authority`）都在 webui 里、宿主用只读配置快照（`authorityConfigSnapshot`）驱动插件；**四道页面**子导航入口齐（`subNav` 与 `anchorNav` 两处声明 + 运维/系统管理两道各传两个入口标签）；`/start/` 上手页有「授权区间在哪里配」段；页面模板 **0 内联脚本 / 0 内联事件**（扫描器非空转）
+        路由=true 导航声明=3 入口标签=true 上手页段=true；webui 含脚本字面量=false 含内联事件=false
+  [ok  ] 14 **真 HTTP 正控**（in-process 挂真 `webui` + 真依赖模块 + **临时配置夹具**）：两视角页面/JSON **四条** URL 都 **200**；`/api/routes` 登记这四条新路由且 `auth=none`；页面/JSON 的结论与**手算一致**（500000 ⇒ 在区间内、越界 0；500001 ⇒ 越界 1 分、要求角色 lead、下一个 lead；499999 ⇒ 在区间内）；页面有口径/结论/区间表/「在哪里配」/子导航入口；**0 行脚本 / 0 内联事件**
+        status=200/200/200/200；路由=["GET /t284/contractor/authority/ none","GET /t284/contractor/api/authority none","GET /t284/supplier/authority/ none","GET /t284/supplier/api/authority none"]；500000 ⇒ inside=true/越界 0；500001 ⇒ inside=false/越界 1/需 lead/下一个 lead；499999 ⇒ inside=true；页面契约=true
+  [ok  ] 15 **真 HTTP 负控 + 改配置前后结论不同**：把**临时**配置夹具里的 buyer 限额从 500000 改成 500001 ⇒ **同一个金额 500001** 的结论从「越界」翻成「在区间内」（同一进程、同一 URL ⇒ 配置是真读的）；把夹具**移走**（配置读不到）⇒ 同一 URL 变成 `unconfigured=true` + `band-unconfigured` + `required_role`/`next_role` 空 + `bands` 空 + 页面出「未配置」块（**不编限额**）；把夹具逐字节还原 ⇒ 同一 URL 又回到「在区间内」（证明降级来自"配置读不到"，不是页面坏了）；响应 **0 行脚本 / 0 内联事件**；夹具里**确实**有私域哨兵而七份响应 0 命中；提权后 `/admin/` 子导航含 `data-authority-link`；未提权 `/admin/` 仍 **401 固定体**
+        夹具 sha 前=07e8425170c3… 改后=ad96be36e855…（变了=true）；改前 500001 ⇒ inside=false；改后同金额 ⇒ inside=true/越界 0；移走夹具 ⇒ unconfigured=true/reason=band-unconfigured/bands=0/required=''/next=''/页面未配置块=true；还原后 ⇒ inside=true/unconfigured=false；夹具哨兵=2 个/响应命中=无；私域键名命中=无；页面干净=true；admin 未提权=401/提权后=200 含入口=true
+  [ok  ] 16 变异基线：四条场景（三例边界值手算对账 / 未配置不得编限额 / 越界必出升级命令 / 金额非法三类拒绝）在**真产物**上全真（否则变异变红说明不了任何事：基线本来就是红的）
+        基线={"三例边界值手算对账":true,"未配置不得编限额":true,"越界必出升级命令":true,"金额非法三类拒绝":true}
+  [ok  ] 16 变异：变异1：角色没登记时**落回一个限额**（编一个：拿最高限额当他的区间）
+        必须红的是「未配置不得编限额」；实际红=未配置不得编限额；四条场景={"三例边界值手算对账":true,"未配置不得编限额":false,"越界必出升级命令":true,"金额非法三类拒绝":true}；字节已变=true
+  [ok  ] 16 变异：变异2：越界也不给升级命令（页面只报越界、不告诉人怎么办）
+        必须红的是「越界必出升级命令」；实际红=三例边界值手算对账,越界必出升级命令；四条场景={"三例边界值手算对账":false,"未配置不得编限额":true,"越界必出升级命令":false,"金额非法三类拒绝":true}；字节已变=true
+  [ok  ] 16 变异：变异3：金额不校验非整数（小数也拿去比区间）
+        必须红的是「金额非法三类拒绝」；实际红=金额非法三类拒绝；四条场景={"三例边界值手算对账":true,"未配置不得编限额":true,"越界必出升级命令":true,"金额非法三类拒绝":false}；字节已变=true
+  [ok  ] 16 变异：变异4：边界判定改成严格小于（恰等于限额被判成越界）
+        必须红的是「三例边界值手算对账」；实际红=三例边界值手算对账,未配置不得编限额,越界必出升级命令；四条场景={"三例边界值手算对账":false,"未配置不得编限额":false,"越界必出升级命令":false,"金额非法三类拒绝":true}；字节已变=true
+  [ok  ] 17 防假变异（自检）：找不到唯一锚点的"变异"必须被判定为**假变异**（返回 null），把锚点替换成它自己也不算变异 —— 否则"变异后门还绿"会被误读成"门很稳"
+        不存在的锚点→已判假变异；自我替换→已判假变异
+  [ok  ] 17 还原：本门全程**没有写过产品树** —— `host/modules/authority-band.mjs` 与 `host/modules/webui.mjs` 跑完之后与跑之前**逐字节一致**（变异只写在临时目录的副本里；夹具配置也只写在临时目录里）
+        authority-band sha256 前=c29afa79a2c0b503… 后=c29afa79a2c0b503…；webui 未变=true；变异小结=变异1：角色没登记时**落回一个限额**（编一个：拿最高限额当他的区间） → 红=未配置不得编限额；变异2：越界也不给升级命令（页面只报越界、不告诉人怎么办） → 红=三例边界值手算对账/越界必出升级命令；变异3：金额不校验非整数（小数也拿去比区间） → 红=金额非法三类拒绝；变异4：边界判定改成严格小于（恰等于限额被判成越界） → 红=三例边界值手算对账/未配置不得编限额/越界必出升级命令
+
+六、真路由门逐条断言（名称 + 关键 detail）
+  [ok  ] ① 夹具就绪：临时受管配置（`project:` 段里 buyer/lead/director 三档 + 单位/币种/兜底角色/升级说明）+ 两份**真哈希链**账本 + 哨兵写在**别的已登记键**上（非 `authority.*`）
+        账本链自洽=True；夹具哨兵=['AUTH-SENTINEL-8f31', '987654321']；真配置=/workspace/config.yaml sha256=6cf43d027a61…
+  [ok  ] ② 真进程就绪（`cli.mjs webui --config-file <临时夹具>` + `/api/health` 200；看区间**不需要**管理员身份）
+        port=37841 prefix=/qa pid=1322239 config_file=/workspace/projects/quotagent/tmp/authority-route/config.yaml
+  [ok  ] ③ 两视角区间页/JSON 四条都 **200**；`/api/routes` 登记四条新路由且 `auth=none`；页面是真页面（结论抓手 + 口径 + 区间表 + 越界升级块 + 「在哪里配」+ 道内子导航入口 + 回首页链接）
+        路由=['GET /qa/contractor/authority/ none', 'GET /qa/contractor/api/authority none', 'GET /qa/supplier/authority/ none', 'GET /qa/supplier/api/authority none']；status=[200, 200, 200, 200]；页面契约=True
+  [ok  ] ④ **三例边界值逐条对账**（本门最核心的一条）：恰等于限额（500000/500000）／超一分（500001）／差一分（499999）三例的 `inside_band`/`over_by`/`required_role`/`next_role`/有无升级命令/`within`（含 `remaining_cents`）**全部等于本脚本手算值**，且页面抓手与 JSON 同口径
+        ①恰等于限额（buyer 限额 500000 分、金额 500000 分）手算：在区间内=True 越界 0 分 需 buyer / 下一个 lead / 升级命令 无；实得：在区间内=True 越界 0 分 需 buyer / 下一个 lead / 命令 无；within=[('buyer', 500000, 0), ('lead', 2000000, 1500000), ('director', 10000000, 9500000)]（手算 [('buyer', 500000, 0), ('lead', 2000000, 1500000), ('director', 10000000, 9500000)]）；页面抓手一致=True ｜一致；②超一分（buyer 限额 500000 分、金额 500001 分）手算：在区间内=False 越界 1 分 需 lead / 下一个 lead / 升级命令 有；实得：在区间内=False 越界 1 分 需 lead / 下一个 lead / 命令 有；within=[('lead', 2000000, 1499999), ('director', 10000000, 9499999)]（手算 [('lead', 2000000, 1499999), ('director', 10000000, 9499999)]）；页面抓手一致=True ｜一致；③差一分（buyer 限额 500000 分、金额 499999 分）手算：在区间内=True 越界 0 分 需 buyer / 下一个 lead / 升级命令 无；实得：在区间内=Tru
+  [ok  ] ⑤ **未配置不得编限额**（真 HTTP）：把临时夹具移走（配置读不到）⇒ 同一 URL 变成 `unconfigured=true` + 有名 `reason=band-unconfigured` + `required_role`/`next_role` 空 + `bands` 空 + `inside_band=null` + 无升级命令 + 页面出「未配置」块；**逐字节还原**后同一 URL 又回到与移走前**逐字节一致**的结论（证明降级来自「配置读不到」，不是页面坏了）
+        移走夹具 ⇒ unconfigured=True/reason=band-unconfigured/bands=[]/required=''/next=''；还原后与移走前逐字节一致=True（在区间内=False/越界 1 分）
+  [ok  ] ⑥ **改配置前后同一金额结论不同**：临时夹具里 buyer 限额 500000 → 500001 ⇒ 同一个金额 500001 从「越界」翻成「在区间内」（同一进程、同一 URL ⇒ 配置是真读的）；**真 `/workspace/config.yaml` 前后 sha256 逐字一致**（本门只读它）
+        改前 500001 ⇒ 在区间内=False/越界 1；改后同金额 ⇒ 在区间内=True/越界 0；真配置 sha256 前=6cf43d027a61… 后=6cf43d027a61…（一致=True）
+  [ok  ] ⑦ 金额非法**三类**（负数 / 非整数 / 超上限）各自给**具体 code** + 非空 `next_action` + **不给结论**（`inside_band=null`、无升级命令、角色字段空）；**非空转对照**：同批合法金额（500000 分）照旧给结论（在区间内）
+        amount=-1 ⇒ code=amount-negative（期望 amount-negative）/inside_band=None/next_action 40 字｜一致；amount=500000.5 ⇒ code=amount-not-an-integer（期望 amount-not-an-integer）/inside_band=None/next_action 52 字｜一致；amount=1000000000001 ⇒ code=amount-out-of-range（期望 amount-out-of-range）/inside_band=None/next_action 75 字｜一致；对照 500000 ⇒ inside_band=True/code=''
+  [ok  ] ⑧ **越界必出升级命令、且命令真存在**：越界 ⇒ `escalate_cmd` 以 `tools/verify.sh <门名>` 开头，该门名**真的出现在** `tools/verify.sh help` 的输出里（本门真跑那个命令）；人工签署命令指向 `quotagent.g1side` 且 `src/quotagent/g1side.py` 真存在；`blocked_by=human-gate-required`
+        越界命令='tools/verify.sh gates   # 升级第一步：看这条人工门卡在谁手里（只读，不改任何判定）'（门名=gates 在 help 里=True）；人工签署='PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   # 人工签署（只在终端；宿主与插件都不能代签）'；g1side.py 存在=True；blocked_by=human-gate-required
+  [ok  ] ⑨ **私域哨兵零泄漏**：夹具配置里**确实**写着哨兵（非 `authority.*` 的已登记键），四份响应 + 未配置响应里哨兵与私域键名 **0 命中**（不是「藏起来」：宿主只把 `authority.*` 那些行交给插件，其它键连值都不读）
+        夹具哨兵=['AUTH-SENTINEL-8f31', '987654321']；响应命中=无；私域键名命中=无
+  [ok  ] ⑩ 区间路由是**只读**的：GET 前后两份夹具账本**逐字节不变**（账本零新增）；同一 URL 两次 GET **逐字节一致**（不随刷新漂移：不取墙钟、不读随机）
+        承包商账本未变=True；供应商账本未变=True；JSON 两次一致=True；页面两次一致=True
+  [ok  ] ⑪ 五份响应 **0 行 `<script>` / 0 内联事件**（扫描器**非空转**：对照样本必须命中）；承包商/供应商/运维**三个道**的真实页面子导航里都有 `data-authority-link` 入口（第四道 admin 的入口由围栏门 t284 在提权后验）
+        含脚本/内联事件=无；对照=True；三页入口=True
+  [ok  ] ⑫ 既有路由没被弄坏：两侧首页 200 / `/api/ops` 200 / `/api/health` 200 / 未提权 `/admin/` 仍 **401 固定体**（同形，无 oracle）
+        home=200/200 ops=200 health=200 admin=401 body='{"error":"unauthorized"}'
+
+七、围栏门原始一行 JSON（逐字节，便于复算）
+{"checks":[{"name":"1 契约正控：manifest 与常量齐备（`unit=cents` / 闭合的 `REASONS`/`REFUSAL_CODES`/`STATUSES`/`BLOCKED_BY_VALUES` / `REGISTERED_ROLES` 与 `host/lib/config-keys.mjs` 的 `authority.bands.*` **逐字一致** / 升级命令形状 / `ignored_now_inputs`）+ `checkOf` 是函数；只 import ../lib 白名单（或 node:）；源码里 0 个脚本字面量","ok":true,"detail":"问题键=无；越界 import=无；含脚本字面量=false；解析钩子=已装；登记角色（config-keys）=[\"buyer\",\"director\",\"lead\"]；字节=30340"},{"name":"2 挂载正控：`ctx.provide('authorityBand')` 拿得到句柄，服务面**恰 4 个键**（`check` / `config` / `meta` 三个只读方法 + `requests` 声明清单）且不含任何审批类方法；dispose 后 effect 归零","ok":true,"detail":"句柄键=check|config|meta|requests（期望 check|config|meta|requests）；requests=[\"check\"]；effect 1 → 0"},{"name":"3 **三例边界值逐条对账**（本门最核心的一条）：恰等于限额（500000/500000）与超一分（500001）、差一分（499999）三例的 `inside_band`/`over_by`/`required_role`/`next_role`/有无升级命令**全部等于手算值**；且三例的结论确实不同（不是一句\"都对\"混过去）","ok":true,"detail":"①恰等于限额（buyer 限额 500000 分、金额 500000 分）手算：在区间内=true 越界 0 分 需 buyer 批 / 下一个能批的人 lead / 升级命令 无 ｜实得：在区间内=true 越界 0 分 需 buyer 批 / 下一个 lead / 升级命令 无 ｜一致；②超一分（buyer 限额 500000 分、金额 500001 分）手算：在区间内=false 越界 1 分 需 lead 批 / 下一个能批的人 lead / 升级命令 有 ｜实得：在区间内=false 越界 1 分 需 lead 批 / 下一个 lead / 升级命令 有 ｜一致；③差一分（buyer 限额 500000 分、金额 499999 分）手算：在区间内=true 越界 0 分 需 buyer 批 / 下一个能批的人 lead / 升级命令 无 ｜实得：在区间内=true 越界 0 分 需 buyer 批 / 下一个 lead / 升级命令 无 ｜一致"},{"name":"4 **谁能批到多少**：`bands` 全表 3 条（按限额升序 buyer/lead/director = 500000/2000000/10000000）；`within` 覆盖列表逐条手算（金额 500001 ⇒ lead 剩 1499999、director 剩 9499999；2000001 ⇒ director 剩 7999999；超过所有限额 ⇒ **空表**且 `required_role`/`next_role` 都留空 —— 不编一个人名，但**仍然**给升级命令）","ok":true,"detail":"金额 500001 ⇒ 手算 [\"lead/2000000/1499999\",\"director/10000000/9499999\"] ｜实得 [\"lead/2000000/1499999\",\"director/10000000/9499999\"] ｜一致；金额 2000001 ⇒ 手算 [\"director/10000000/7999999\"] ｜实得 [\"director/10000000/7999999\"] ｜一致；金额 999999999999 ⇒ 手算 [] ｜实得 [] ｜一致；全表=[\"buyer\",\"lead\",\"director\"]；超过所有限额 ⇒ within=0 required=（空） next=（空） 升级命令=有"},{"name":"5 **未配置不得编限额**（硬负控）：角色没登记 / 限额为 `null` / 配置快照缺失 / 快照不是对象 / 单位声明非 `cents` / 没给角色 六类 ⇒ `unconfigured=true` + **有名** reason + `required_role`/`next_role` **都为空** + `inside_band=null` + **无升级命令**（不编结论、不编命令）；且 `null`（未配置）与 `0`（人明确登记\"一分也不能批\"）是**两件事**：0 分限额下 1 分 ⇒ 越界 1 分、0 分 ⇒ 在区间内","ok":true,"detail":"角色没登记（agent）→band-unconfigured/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；角色登记为 null（lead）→band-unconfigured/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；配置快照缺失→config-missing/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；配置快照不是对象→config-missing/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；单位声明非 cents（yuan）→unit-unsupported/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；没给角色→role-missing/unconfigured=true/required=''/next=''/inside=null/esc=''｜一致；零限额对照：1 分 ⇒ unconfigured=false/越界 1 分、0 分 ⇒ 在区间内=true"},{"name":"6 金额非法**三类**拒绝（负数 / 非整数 / 超上限），每类给**具体 code** + 非空 `next_action` + **不给结论**（`inside_band=null`、无升级命令、`required_role`/`next_role` 空）；**非空转对照**：同批合法金额（整数串 / 0 分 / 恰等于 AMOUNT_MAX）照旧给结论","ok":true,"detail":"负数 -1 ⇒ amount-negative（期望 amount-negative）/next_action 40 字/inside=null｜一致；负数串 \"-500\" ⇒ amount-negative（期望 amount-negative）/next_action 40 字/inside=null｜一致；浮点 500000.5 ⇒ amount-not-an-integer（期望 amount-not-an-integer）/next_action 52 字/inside=null｜一致；小数串 \"500000.5\" ⇒ amount-not-an-integer（期望 amount-not-an-integer）/next_action 52 字/inside=null｜一致；科学计数 \"5e5\" ⇒ amount-not-an-integer（期望 amount-not-an-integer）/next_action 52 字/inside=null｜一致；非数字串 \"abc\" ⇒ amount-not-an-integer（期望 amount-not-an-integer）/next_action 52 字/inside=null｜一致；null ⇒ amount-missing（期望 amount-missing）/next_action 50 字/inside=null｜一致；空串 \"\" ⇒ amount-missing（期望 amount-missing）/next_action 50 字/inside=null｜一致；超上限 AMOUNT_MAX+1 ⇒ amount-out-of-range（期望 amount-out-of-range）/next_action 75 字/inside=null｜一致；整数串 \"500000\" ⇒ inside-band（期望 inside-band）；恰等于 AMOUNT_MAX ⇒ over-band（期望 over-band）；0 分 ⇒ inside-band（期望 inside-band）"},{"name":"7 **越界必出升级命令、且命令真存在**：越界 ⇒ `escalate_cmd` 以 `tools/verify.sh <门名>` 开头，该门名**真的出现在** `tools/verify.sh help` 的输出里（本门真跑那个命令）；人工签署命令指向 `quotagent.g1side`（`src/quotagent/g1side.py` 文件真存在）；`blocked_by=human-gate-required`；**双向**：不越界时 `escalate_cmd` 与 `escalate_human_cmd` 都为空（不发无用命令）","ok":true,"detail":"门名=gates（help 里找到=true；help stderr=无）；越界命令=\"tools/verify.sh gates   # 升级第一步：看这条人工门卡在谁手里（只读，不改任何判定）\"；人工签署=\"PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   # 人工签署（只在终端；宿主与插件都不能代签）\"；g1side.py 存在=true；不越界时 esc=''"},{"name":"8 **插件不能批准**（硬负控）：服务面里没有任何 `approve/decide/grant/submit/ack/allow/reject` 类方法（方法集恰 `check|config|meta`）、`meta.can_approve=false`、**每一条输出**都带 `can_approve=false` 与含「不能」字样的 `approval_note`、源码里 0 处审批方法定义","ok":true,"detail":"方法集=check|config|meta|requests；审批类命中=无；每条输出 can_approve=false=5/5；源码审批方法定义=无；meta.can_approve=false"},{"name":"9 确定性负控：同输入两次**逐字节一致** / 键序打乱一致 / 配置键序逆序一致 / 跨实例一致 / 两个墙钟入口（载荷 `now` 与配置 `now`）给任何值输出都不变 / **冻结输入**不抛错（严格模式下任何对入参的写入都会抛 TypeError ⇒ 证明没偷偷改调用方的载荷）/ 输出里没有时间键","ok":true,"detail":"两次=true 键序=true 配置逆序=true 墙钟A=true 墙钟B=true 跨实例=true 冻结输入=true 长度=2559 含时间键=false"},{"name":"10 有界与诚实：`max_roles` 夹取（在**同一份 11 条角色**的输入上：3 ⇒ 只读 3 条并**如实报** `roles_omitted=8`、0 ⇒ 下界 1 条、1000 ⇒ 上界 8 条）；默认 8 ⇒ 读 8 条 + `roles_omitted=3` + `truncated=true`（省略照实报，不静默丢）；读入的角色**确定性**（按键名字典序取前 N）；金额上限边界：恰等于 AMOUNT_MAX 可判（over-band）、AMOUNT_MAX+1 拒（`amount-out-of-range`）","ok":true,"detail":"max_roles=3 ⇒ 读 3（r00,r01,r02）/省略 8（truncated=true）；max_roles=0 ⇒ 读 1/省略 10；max_roles=1000 ⇒ 读 8/省略 3；默认 ⇒ 读 8/省略 3；AMOUNT_MAX=1000000000000 ⇒ over-band"},{"name":"11 **私域哨兵零泄漏（两面）**：同一键集、不同私域值 ⇒ 输出**逐字节一致**（不是\"藏起来\"，是根本没读）；哨兵与私域键名 0 命中；坏角色名的 `authority.bands.*` 键（含哨兵）**读都不读**（不进区间表、不回显）；**非空转对照**：哨兵确实在输入里（命中 ≥3）","ok":true,"detail":"逐字节一致=true；哨兵命中=无；私域键名命中=无；输入对照=4 个哨兵；区间表=buyer|lead|director"},{"name":"12 零写面负控：产物**零写面、不读账本、不联网、不调模型、不取墙钟**（无写/读文件、账本、墙钟、随机、网络、子进程、事件订阅、定时器）；`privacy` 四项如实申报；扫描器**非空转**（对照样本必须命中 ≥3）","ok":true,"detail":"产物命中=无；对照样本命中=openLedger,fetch(,setTimeout(；privacy={\"private_keys_read\":false,\"model_calls\":0,\"network_calls\":0,\"clock_reads\":0}"},{"name":"13 宿主侧契约（静态）：两条新路由（`/<view>/authority/` 与 `/<view>/api/authority`）都在 webui 里、宿主用只读配置快照（`authorityConfigSnapshot`）驱动插件；**四道页面**子导航入口齐（`subNav` 与 `anchorNav` 两处声明 + 运维/系统管理两道各传两个入口标签）；`/start/` 上手页有「授权区间在哪里配」段；页面模板 **0 内联脚本 / 0 内联事件**（扫描器非空转）","ok":true,"detail":"路由=true 导航声明=3 入口标签=true 上手页段=true；webui 含脚本字面量=false 含内联事件=false"},{"name":"14 **真 HTTP 正控**（in-process 挂真 `webui` + 真依赖模块 + **临时配置夹具**）：两视角页面/JSON **四条** URL 都 **200**；`/api/routes` 登记这四条新路由且 `auth=none`；页面/JSON 的结论与**手算一致**（500000 ⇒ 在区间内、越界 0；500001 ⇒ 越界 1 分、要求角色 lead、下一个 lead；499999 ⇒ 在区间内）；页面有口径/结论/区间表/「在哪里配」/子导航入口；**0 行脚本 / 0 内联事件**","ok":true,"detail":"status=200/200/200/200；路由=[\"GET /t284/contractor/authority/ none\",\"GET /t284/contractor/api/authority none\",\"GET /t284/supplier/authority/ none\",\"GET /t284/supplier/api/authority none\"]；500000 ⇒ inside=true/越界 0；500001 ⇒ inside=false/越界 1/需 lead/下一个 lead；499999 ⇒ inside=true；页面契约=true"},{"name":"15 **真 HTTP 负控 + 改配置前后结论不同**：把**临时**配置夹具里的 buyer 限额从 500000 改成 500001 ⇒ **同一个金额 500001** 的结论从「越界」翻成「在区间内」（同一进程、同一 URL ⇒ 配置是真读的）；把夹具**移走**（配置读不到）⇒ 同一 URL 变成 `unconfigured=true` + `band-unconfigured` + `required_role`/`next_role` 空 + `bands` 空 + 页面出「未配置」块（**不编限额**）；把夹具逐字节还原 ⇒ 同一 URL 又回到「在区间内」（证明降级来自\"配置读不到\"，不是页面坏了）；响应 **0 行脚本 / 0 内联事件**；夹具里**确实**有私域哨兵而七份响应 0 命中；提权后 `/admin/` 子导航含 `data-authority-link`；未提权 `/admin/` 仍 **401 固定体**","ok":true,"detail":"夹具 sha 前=07e8425170c3… 改后=ad96be36e855…（变了=true）；改前 500001 ⇒ inside=false；改后同金额 ⇒ inside=true/越界 0；移走夹具 ⇒ unconfigured=true/reason=band-unconfigured/bands=0/required=''/next=''/页面未配置块=true；还原后 ⇒ inside=true/unconfigured=false；夹具哨兵=2 个/响应命中=无；私域键名命中=无；页面干净=true；admin 未提权=401/提权后=200 含入口=true"},{"name":"16 变异基线：四条场景（三例边界值手算对账 / 未配置不得编限额 / 越界必出升级命令 / 金额非法三类拒绝）在**真产物**上全真（否则变异变红说明不了任何事：基线本来就是红的）","ok":true,"detail":"基线={\"三例边界值手算对账\":true,\"未配置不得编限额\":true,\"越界必出升级命令\":true,\"金额非法三类拒绝\":true}"},{"name":"16 变异：变异1：角色没登记时**落回一个限额**（编一个：拿最高限额当他的区间）","ok":true,"detail":"必须红的是「未配置不得编限额」；实际红=未配置不得编限额；四条场景={\"三例边界值手算对账\":true,\"未配置不得编限额\":false,\"越界必出升级命令\":true,\"金额非法三类拒绝\":true}；字节已变=true"},{"name":"16 变异：变异2：越界也不给升级命令（页面只报越界、不告诉人怎么办）","ok":true,"detail":"必须红的是「越界必出升级命令」；实际红=三例边界值手算对账,越界必出升级命令；四条场景={\"三例边界值手算对账\":false,\"未配置不得编限额\":true,\"越界必出升级命令\":false,\"金额非法三类拒绝\":true}；字节已变=true"},{"name":"16 变异：变异3：金额不校验非整数（小数也拿去比区间）","ok":true,"detail":"必须红的是「金额非法三类拒绝」；实际红=金额非法三类拒绝；四条场景={\"三例边界值手算对账\":true,\"未配置不得编限额\":true,\"越界必出升级命令\":true,\"金额非法三类拒绝\":false}；字节已变=true"},{"name":"16 变异：变异4：边界判定改成严格小于（恰等于限额被判成越界）","ok":true,"detail":"必须红的是「三例边界值手算对账」；实际红=三例边界值手算对账,未配置不得编限额,越界必出升级命令；四条场景={\"三例边界值手算对账\":false,\"未配置不得编限额\":false,\"越界必出升级命令\":false,\"金额非法三类拒绝\":true}；字节已变=true"},{"name":"17 防假变异（自检）：找不到唯一锚点的\"变异\"必须被判定为**假变异**（返回 null），把锚点替换成它自己也不算变异 —— 否则\"变异后门还绿\"会被误读成\"门很稳\"","ok":true,"detail":"不存在的锚点→已判假变异；自我替换→已判假变异"},{"name":"17 还原：本门全程**没有写过产品树** —— `host/modules/authority-band.mjs` 与 `host/modules/webui.mjs` 跑完之后与跑之前**逐字节一致**（变异只写在临时目录的副本里；夹具配置也只写在临时目录里）","ok":true,"detail":"authority-band sha256 前=c29afa79a2c0b503… 后=c29afa79a2c0b503…；webui 未变=true；变异小结=变异1：角色没登记时**落回一个限额**（编一个：拿最高限额当他的区间） → 红=未配置不得编限额；变异2：越界也不给升级命令（页面只报越界、不告诉人怎么办） → 红=三例边界值手算对账/越界必出升级命令；变异3：金额不校验非整数（小数也拿去比区间） → 红=金额非法三类拒绝；变异4：边界判定改成严格小于（恰等于限额被判成越界） → 红=三例边界值手算对账/未配置不得编限额/越界必出升级命令"}],"passed":22,"total":22,"failures":0}
+
+八、真路由门原始 JSON（含 real_config_sha256_before/after）
+{
+ "checks": [
+  {
+   "name": "① 夹具就绪：临时受管配置（`project:` 段里 buyer/lead/director 三档 + 单位/币种/兜底角色/升级说明）+ 两份**真哈希链**账本 + 哨兵写在**别的已登记键**上（非 `authority.*`）",
+   "ok": true,
+   "detail": "账本链自洽=True；夹具哨兵=['AUTH-SENTINEL-8f31', '987654321']；真配置=/workspace/config.yaml sha256=6cf43d027a61…"
+  },
+  {
+   "name": "② 真进程就绪（`cli.mjs webui --config-file <临时夹具>` + `/api/health` 200；看区间**不需要**管理员身份）",
+   "ok": true,
+   "detail": "port=37841 prefix=/qa pid=1322239 config_file=/workspace/projects/quotagent/tmp/authority-route/config.yaml"
+  },
+  {
+   "name": "③ 两视角区间页/JSON 四条都 **200**；`/api/routes` 登记四条新路由且 `auth=none`；页面是真页面（结论抓手 + 口径 + 区间表 + 越界升级块 + 「在哪里配」+ 道内子导航入口 + 回首页链接）",
+   "ok": true,
+   "detail": "路由=['GET /qa/contractor/authority/ none', 'GET /qa/contractor/api/authority none', 'GET /qa/supplier/authority/ none', 'GET /qa/supplier/api/authority none']；status=[200, 200, 200, 200]；页面契约=True"
+  },
+  {
+   "name": "④ **三例边界值逐条对账**（本门最核心的一条）：恰等于限额（500000/500000）／超一分（500001）／差一分（499999）三例的 `inside_band`/`over_by`/`required_role`/`next_role`/有无升级命令/`within`（含 `remaining_cents`）**全部等于本脚本手算值**，且页面抓手与 JSON 同口径",
+   "ok": true,
+   "detail": "①恰等于限额（buyer 限额 500000 分、金额 500000 分）手算：在区间内=True 越界 0 分 需 buyer / 下一个 lead / 升级命令 无；实得：在区间内=True 越界 0 分 需 buyer / 下一个 lead / 命令 无；within=[('buyer', 500000, 0), ('lead', 2000000, 1500000), ('director', 10000000, 9500000)]（手算 [('buyer', 500000, 0), ('lead', 2000000, 1500000), ('director', 10000000, 9500000)]）；页面抓手一致=True ｜一致；②超一分（buyer 限额 500000 分、金额 500001 分）手算：在区间内=False 越界 1 分 需 lead / 下一个 lead / 升级命令 有；实得：在区间内=False 越界 1 分 需 lead / 下一个 lead / 命令 有；within=[('lead', 2000000, 1499999), ('director', 10000000, 9499999)]（手算 [('lead', 2000000, 1499999), ('director', 10000000, 9499999)]）；页面抓手一致=True ｜一致；③差一分（buyer 限额 500000 分、金额 499999 分）手算：在区间内=True 越界 0 分 需 buyer / 下一个 lead / 升级命令 无；实得：在区间内=True 越界 0 分 需 buyer / 下一个 lead / 命令 无；within=[('buyer', 500000, 1), ('lead', 2000000, 1500001), ('director', 10000000, 9500001)]（手算 [('buyer', 500000, 1), ('lead', 2000000, 1500001), ('director', 10000000, 9500001)]）；页面抓手一致=True ｜一致"
+  },
+  {
+   "name": "⑤ **未配置不得编限额**（真 HTTP）：把临时夹具移走（配置读不到）⇒ 同一 URL 变成 `unconfigured=true` + 有名 `reason=band-unconfigured` + `required_role`/`next_role` 空 + `bands` 空 + `inside_band=null` + 无升级命令 + 页面出「未配置」块；**逐字节还原**后同一 URL 又回到与移走前**逐字节一致**的结论（证明降级来自「配置读不到」，不是页面坏了）",
+   "ok": true,
+   "detail": "移走夹具 ⇒ unconfigured=True/reason=band-unconfigured/bands=[]/required=''/next=''；还原后与移走前逐字节一致=True（在区间内=False/越界 1 分）"
+  },
+  {
+   "name": "⑥ **改配置前后同一金额结论不同**：临时夹具里 buyer 限额 500000 → 500001 ⇒ 同一个金额 500001 从「越界」翻成「在区间内」（同一进程、同一 URL ⇒ 配置是真读的）；**真 `/workspace/config.yaml` 前后 sha256 逐字一致**（本门只读它）",
+   "ok": true,
+   "detail": "改前 500001 ⇒ 在区间内=False/越界 1；改后同金额 ⇒ 在区间内=True/越界 0；真配置 sha256 前=6cf43d027a61… 后=6cf43d027a61…（一致=True）"
+  },
+  {
+   "name": "⑦ 金额非法**三类**（负数 / 非整数 / 超上限）各自给**具体 code** + 非空 `next_action` + **不给结论**（`inside_band=null`、无升级命令、角色字段空）；**非空转对照**：同批合法金额（500000 分）照旧给结论（在区间内）",
+   "ok": true,
+   "detail": "amount=-1 ⇒ code=amount-negative（期望 amount-negative）/inside_band=None/next_action 40 字｜一致；amount=500000.5 ⇒ code=amount-not-an-integer（期望 amount-not-an-integer）/inside_band=None/next_action 52 字｜一致；amount=1000000000001 ⇒ code=amount-out-of-range（期望 amount-out-of-range）/inside_band=None/next_action 75 字｜一致；对照 500000 ⇒ inside_band=True/code=''"
+  },
+  {
+   "name": "⑧ **越界必出升级命令、且命令真存在**：越界 ⇒ `escalate_cmd` 以 `tools/verify.sh <门名>` 开头，该门名**真的出现在** `tools/verify.sh help` 的输出里（本门真跑那个命令）；人工签署命令指向 `quotagent.g1side` 且 `src/quotagent/g1side.py` 真存在；`blocked_by=human-gate-required`",
+   "ok": true,
+   "detail": "越界命令='tools/verify.sh gates   # 升级第一步：看这条人工门卡在谁手里（只读，不改任何判定）'（门名=gates 在 help 里=True）；人工签署='PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   # 人工签署（只在终端；宿主与插件都不能代签）'；g1side.py 存在=True；blocked_by=human-gate-required"
+  },
+  {
+   "name": "⑨ **私域哨兵零泄漏**：夹具配置里**确实**写着哨兵（非 `authority.*` 的已登记键），四份响应 + 未配置响应里哨兵与私域键名 **0 命中**（不是「藏起来」：宿主只把 `authority.*` 那些行交给插件，其它键连值都不读）",
+   "ok": true,
+   "detail": "夹具哨兵=['AUTH-SENTINEL-8f31', '987654321']；响应命中=无；私域键名命中=无"
+  },
+  {
+   "name": "⑩ 区间路由是**只读**的：GET 前后两份夹具账本**逐字节不变**（账本零新增）；同一 URL 两次 GET **逐字节一致**（不随刷新漂移：不取墙钟、不读随机）",
+   "ok": true,
+   "detail": "承包商账本未变=True；供应商账本未变=True；JSON 两次一致=True；页面两次一致=True"
+  },
+  {
+   "name": "⑪ 五份响应 **0 行 `<script>` / 0 内联事件**（扫描器**非空转**：对照样本必须命中）；承包商/供应商/运维**三个道**的真实页面子导航里都有 `data-authority-link` 入口（第四道 admin 的入口由围栏门 t284 在提权后验）",
+   "ok": true,
+   "detail": "含脚本/内联事件=无；对照=True；三页入口=True"
+  },
+  {
+   "name": "⑫ 既有路由没被弄坏：两侧首页 200 / `/api/ops` 200 / `/api/health` 200 / 未提权 `/admin/` 仍 **401 固定体**（同形，无 oracle）",
+   "ok": true,
+   "detail": "home=200/200 ops=200 health=200 admin=401 body='{\"error\":\"unauthorized\"}'"
+  }
+ ],
+ "passed": 12,
+ "total": 12,
+ "failures": 0,
+ "fixture_dir": "/workspace/projects/quotagent/tmp/authority-route",
+ "real_config_sha256_before": "6cf43d027a61224491a51aa85ad2f245be6a3605887ee9f162a021c525612630",
+ "real_config_sha256_after": "6cf43d027a61224491a51aa85ad2f245be6a3605887ee9f162a021c525612630",
+ "sentinel_used": "AUTH-SENTINEL-8f31"
+}
+
+
+九、其它门的原始输出（本批全跑；原始日志 tmp/authority-run.out）
+  tools/verify.sh wiring        rc=0
+        "failures": 0
+  tools/verify.sh modules       rc=0
+        fixture 断言：495/495 通过
+  tools/verify.sh webui         rc=0
+        RESULT: PASS（webui 门 51/51）
+        PASS（webui 门 51/51）
+  tools/verify.sh authority     rc=0
+        "failures": 0
+  tools/verify.sh config-route  rc=0
+        "failures": 0
+  tools/verify.sh gates         rc=0
+        "failures": 0
+  tools/verify.sh change-detail rc=0
+        "failures": 0
+  tools/verify.sh bid-heuristics rc=0
+        "failures": 0
+  tools/verify.sh ui-feedback   rc=0
+        "failures": 0
+  tools/verify.sh advice        rc=0
+        "failures": 0
+
+十、线上真回读（重启后：先 pgrep -af "cli.mjs webui" 看真 PID）
+  旧 PID 1296632（lstart Mon Sep 21 21:39:17 2026）→ kill → /workspace/bin/ws-gateway start quotagent
+  新 PID 1323749；/workspace/logs/quotagent.log 末段有新的启动横幅（ok:true action:webui pid:1323749）
+  GET /quotagent/api/health → 200
+  GET /quotagent/contractor/authority/?amount=500001&role=buyer → 200
+  GET /quotagent/supplier/authority/?amount=500001&role=buyer → 200
+  GET /quotagent/contractor/api/authority?amount=500001&role=buyer → 200
+  GET /quotagent/supplier/api/authority?amount=100000&role=lead → 200
+  真 /quotagent/api/routes 里的四条新路由（auth=none）：
+    /quotagent/contractor/authority/ · /quotagent/contractor/api/authority · 
+    /quotagent/supplier/authority/ · /quotagent/supplier/api/authority
+  四道页面子导航真回读：/quotagent/contractor/ = 1 处、/quotagent/supplier/ = 1 处、/quotagent/ops/ = 1 处
+    （第四道 /quotagent/admin/ 需提权 → 入口由围栏门 t284 在提权后验）；/quotagent/start/ 有 
+    「授权区间在哪里配（谁能批到多少）」段（4 处 authority.bands 文案）
+  真 /workspace/config.yaml 指纹（线上全程只读，前后逐字一致）：
+    before 6cf43d027a61224491a51aa85ad2f245be6a3605887ee9f162a021c525612630
+    after  6cf43d027a61224491a51aa85ad2f245be6a3605887ee9f162a021c525612630
+
+十一、线上未配置时的原始输出（真 HTTP；真 config.yaml 里没有 authority.* 登记）
+  {"view": "contractor", "role": "buyer", "amount": null, "unit": "cents", "status": "unconfigured", "inside_band": null, "within": [], "bands": [], "required_role": "", "next_role": "", "over_by": null, "escalate_cmd": "", "blocked_by": "authority-unconfigured", "unconfigured": true, "degraded": true, "reason": "band-unconfigured", "code": "band-unconfigured", "basis": ["config[authority.bands.buyer]", "config[authority.unit]", "payload.amount", "payload.config", "payload.role", "payload.view"], "engine": "rules", "can_approve": false, "counts": {"roles_configured": 0, "roles_omitted": 0, "foreign_config_keys": 0, "within": 0}}
+  notes: ["角色 buyer **没有**登记限额（config[authority.bands.buyer] 为 null 或缺省）⇒ unconfigured=true，`required_role`/`next_role` 留空 —— **不编一个限额**"]
+  next_action: 登记 `authority.bands.<角色>`（**整数分**）后重新派生：`/quotagent/admin/config/`（提权后）—— `authority.bands.<角色>` 是**人工专属键**（humanOnly：提交要带 `ap-NNNN` 人工引用），也可以直接写受管 YAML 的 `project:` 段；两种路径都只落待办件/落盘由 Python 侧 `tools/config-apply.py` 做。在未
+
+十二、本批**没有**验证的东西（诚实清单）
+  1. 线上那份真配置里**没有**登记任何 authority.* ⇒ 线上只看到 unconfigured 分支；
+     「已配置 ⇒ 越界/在区间内」的强证据只来自两道门的**临时夹具**（围栏门 + 真路由门的临时 YAML）；
+     没有在线上做过「配上区间再回读」的演练（真 config.yaml 按铁律不动）。
+  2. 浏览器观感未验：页面是 SSR 文本 + <form method=get>，我用 curl 读的是 HTML 源码；
+     没有在真浏览器里点过表单、没看过布局与可复制命令的选区体验（页面 0 内联脚本已机检）。
+  3. /quotagent/admin/ 提权后的那道子导航入口只在围栏门 t284 的 in-process 夹具里验过（门内用假 token），
+     没有在线上真提权读过。
+  4. 配置 UI 的端到端没有实跑：没单独走一遍「提权 → 干跑 → 提交 0600 待办件 → tools/config-apply.py 落盘
+     authority.bands.*」；只跑了 config-route 门（既有键的全链路绿，且读同一份 config-keys 白名单）。
+  5. 只登记了三档角色（buyer/lead/director）：加第四个角色必须先改 host/lib/config-keys.mjs（一行一键的白名单），
+     这一点没有做成可配置。
+  6. 未跑 verify.sh all / g1 / clean-copy（父方收口时跑）；按指令未 commit。
+
+十三、定稿后的复跑（authority 连续第二次 + 文档四道门；真 config.yaml 指纹仍不变）
+  tools/verify.sh authority  (rerun)  rc=0   ← 两半都再跑一次仍 22/22 + 12/12
+  tools/verify.sh docs       (rerun)  rc=0（PASS；最高占用 100% = docs/work/acceptance-criteria.md 32616/32768 B）
+  tools/verify.sh ac-registry(rerun)  rc=0（AC-AUTH-001 属 P2：未注册只报 info，不判红）
+  tools/verify.sh coverage   (rerun)  rc=0（8/8）
+  tools/verify.sh plugins    (rerun)  rc=0（4/4）
+  真 /workspace/config.yaml：6cf43d027a61224491a51aa85ad2f245be6a3605887ee9f162a021c525612630（与本批开始时逐字一致）
+
+十四、线上未配置输出的机读快照（同上，紧凑一行）
+  {"bands": [], "blocked_by": "authority-unconfigured", "can_approve": false, "code": "band-unconfigured", "counts": {"foreign_config_keys": 0, "roles_configured": 0, "roles_omitted": 0, "within": 0}, "degraded": true, "engine": "rules", "escalate_cmd": "", "inside_band": null, "next_role": "", "over_by": null, "reason": "band-unconfigured", "required_role": "", "status": "unconfigured", "unconfigured": true, "within": []}
+  结论：真配置里没有 authority.* 登记 ⇒ 线上诚实报 unconfigured（不编限额），并给出「到哪一行去登记」的 next_action。

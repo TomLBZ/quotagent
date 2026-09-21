@@ -13,6 +13,10 @@ export const SCHEMA = {
   'commitments.*': { humanOnly: true, note: '承诺类配置只能由人改（规则 3）' },
   'prices.authorized_band.*': { humanOnly: true, note: '授权区间是策略决定' },
   'pricing.authorized_band.*': { humanOnly: true, note: '授权区间是策略决定（越界即转人工门）' },
+  // 授权区间（`authority-band`：谁能批到多少）：**只能由人改**（策略决定）——
+  // 两段键（单位/币种/兜底角色/升级说明）与三段键（角色 → 限额）各一条模式，`*` 只匹配一个段。
+  'authority.*': { humanOnly: true, note: '授权区间的单位/币种/兜底角色/升级说明：只能由人改' },
+  'authority.bands.*': { humanOnly: true, note: '授权区间（角色 → 限额，整数分）：只能由人改（越界即转人工门）' },
   'pricing.markup_pct': { humanOnly: false, enum: null, note: '策略加价可由策略 patch 调整' },
   'compare.weights.*': { humanOnly: false, note: '排序权重来自策略 patch' },
   'norm.tolerance_bps': { humanOnly: false, note: '声明容差' },

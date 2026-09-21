@@ -18,11 +18,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环 / 决策建议 / 审批与变更时间线）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环 / 决策建议 / 审批与变更时间线 / 授权区间）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand']
 
 export const provides = ['webui']
 
@@ -104,18 +104,22 @@ const subNav = (prefix, view, current) => {
   links.push(`<a href="${prefix}/${view}/advice/" data-advice-link="1"${current === 'advice' ? ' aria-current="page"' : ''}>决策建议</a>`)
   // 审批等多久 / 变更单谁卡着（本批）：等待时长有口径、卡点有名字、下一步可复制（同样零内联脚本）
   links.push(`<a href="${prefix}/${view}/gates/" data-gates-link="1"${current === 'gates' ? ' aria-current="page"' : ''}>审批与变更</a>`)
+  // 授权区间（authority-band 插件）：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁（零内联脚本）
+  links.push(`<a href="${prefix}/${view}/authority/" data-authority-link="1"${current === 'authority' ? ' aria-current="page"' : ''}>授权区间</a>`)
   return `<nav data-subnav="${view}">${links.join(' ')}</nav>`
 }
 
 /** 页内锚点导航（ops / admin 两道；同样带 `data-subnav` 抓手）。
  *  `extras` 是比价口径入口（带 `data-heuristics-link`），`adviceExtras` 是决策建议入口
- *  （带 `data-advice-link`），`gateExtras` 是审批与变更入口（带 `data-gates-link`）——
- *  三种入口的抓手分开，免得门把其中一个当成另一个的证据。 */
-const anchorNav = (view, home, sections, extras = [], adviceExtras = [], gateExtras = []) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
+ *  （带 `data-advice-link`），`gateExtras` 是审批与变更入口（带 `data-gates-link`），
+ *  `authorityExtras` 是授权区间入口（带 `data-authority-link`）——
+ *  四种入口的抓手分开，免得门把其中一个当成另一个的证据。 */
+const anchorNav = (view, home, sections, extras = [], adviceExtras = [], gateExtras = [], authorityExtras = []) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
   .concat(sections.map(([id, label]) => `<a href="${home}#${id}">${label}</a>`))
   .concat(extras.map(([href, label]) => `<a href="${href}" data-heuristics-link="1">${label}</a>`))
   .concat(adviceExtras.map(([href, label]) => `<a href="${href}" data-advice-link="1">${label}</a>`))
   .concat(gateExtras.map(([href, label]) => `<a href="${href}" data-gates-link="1">${label}</a>`))
+  .concat(authorityExtras.map(([href, label]) => `<a href="${href}" data-authority-link="1">${label}</a>`))
   .join(' ')}</nav>`
 
 
@@ -155,6 +159,30 @@ function onboardingHtml(prefix, views) {
 <p>提权后打开 <a href="${prefix}/admin/config/">配置与凭据页</a>：三层（项目/插件/凭据）一屏，每键给
 <code>source</code>（default/file/env/runtime）与 <code>shadowed_by</code>；凭据页只显示「已配置/未配置 + 来源 + 必须的权限 + 指纹前 8 位 + 下一步」，
 **永不显示值**。页面上可以先"干跑"（零落盘零生效）再提交；提交只落一个 0600 待处理项，**由 Python 侧消费后才生效**。</p>
+<h2>授权区间在哪里配（谁能批到多少）</h2>
+<p><b>改哪里</b>：同一张 <a href="${prefix}/admin/config/">配置与凭据页</a> → 「项目」表里的这几行（都是 <b>人工专属键</b>：
+提交要带 <code>ap-NNNN</code> 人工引用，agent 改不动）：</p>
+<pre>authority.bands.&lt;角色&gt;   ← 这个角色**能批到多少**（**整数分**：500000 = 5000.00 元）；null = 未配置
+authority.unit            ← 计量单位声明（只认 cents：本系统不做元/分换算）
+authority.currency        ← 币种声明（只声明、不换算）
+authority.fallback_role   ← 超出所有角色区间时的升级兜底角色（**不**用来补一个限额）
+authority.escalation_note ← 越界升级时给办理人看的一句话（空 = 用标准文案）</pre>
+<p><b>也可以直接写 YAML</b>（受管段 <code>project:</code>，写法与上面逐字一致）——下面的片段可以直接抄进
+<code>/workspace/config.yaml</code>（**唯一落盘者是 <code>tools/config-apply.py</code>**，宿主只落 0600 待办件）：</p>
+<pre>project:
+  authority.unit: cents
+  authority.currency: CNY
+  authority.bands.buyer: 500000
+  authority.bands.lead: 2000000
+  authority.bands.director: 10000000
+  authority.fallback_role: director
+  authority.escalation_note: 越界请找业主代表走终端人工门</pre>
+<p><b>配完在哪看</b>：<a href="${prefix}/contractor/authority/">授权区间</a>（承包商道）与
+<a href="${prefix}/supplier/authority/">授权区间</a>（供应商道）—— 填一个金额（**整数分**）与角色，
+页面会告诉你「落在谁的区间里 / 越界多少 / 下一个能批的人是谁 / 升级命令怎么复制」。</p>
+<p><b>没配会怎样（诚实默认）</b>：页面**不会**给你编一个限额 —— 它报 <code>unconfigured</code> 并把
+<code>required_role</code>/<code>next_role</code> 留空，同时告诉你到哪一行去登记。另外：<b>越界一律走人工门</b>，
+该页**不能批准任何东西**（批准只在终端由 <code>human:*</code> 签）。</p>
 <p>需要凭据才能工作的功能（**在接上之前一律如实报未连接，不会假装健康**）：</p>
 <pre>· 邮件收发（SMTP/IMAP）：未配置 → mail 传输 available:false / reason=mail-transport-unavailable / next_action=配置凭据后接入
 · Jev 建议层：未配置 key → 面板里作为一条阻塞项出现（不是在日志里悄悄失败）</pre>
@@ -226,6 +254,7 @@ export function apply(ctx, config) {
   const bid = ctx.bidHeuristics              // 比价 heuristics（domain 插件，T-279）：只做算术，不读账本
   const advice = ctx.advicePanel             // 决策建议层（domain 插件，本批）：确定性规则派生，不读账本、不联网、不调模型
   const gates = ctx.gateTimeline             // 审批等多久 / 变更单谁卡着（domain 插件）：只吃白名单载荷，不读账本、不取墙钟
+  const authority = ctx.authorityBand        // 授权区间（domain 插件，本批）：只读配置快照（authority.* 键），不读账本、不取墙钟、**不能批准**
   const feedback = ctx.uiFeedback            // WebUI 反馈闭环（ui-feedback 插件）：版本事实只读 + 只落 0600 待办件
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
@@ -1059,6 +1088,147 @@ export function apply(ctx, config) {
   }
 
   // ==========================================================================================
+  // 授权区间（`authority-band` domain 插件，本批）：**谁能批到多少 / 越界怎么办 / 下一个能批的人是谁**
+  //   · 配置快照 = `config-view` 的**只读**总览里 `authority.*` 那些行（受管 YAML + env + runtime 合层；
+  //     宿主只读、不写文件、不写账本；快照里**别的键一个都不读**）。
+  //   · 金额一律**整数分**（`unit=cents`）：负数 / 非整数 / 超上限 ⇒ 具体 `code` + `next_action`（不折算、不四舍五入）。
+  //   · **未配置不得编限额**：`authority.bands.<角色>` 为 null 或没登记 ⇒ `unconfigured=true` +
+  //     `required_role`/`next_role` 都为空（不知道就是不知道，不落回默认值）。
+  //   · **越界必须走人工门**：越界时给**可直接复制**的升级命令；页面 **0 内联脚本**、
+  //     **本插件不能批准**（`can_approve=false`，批准只在终端由 `human:*` 签）。
+  // ==========================================================================================
+  /** 只读配置快照：只取 `authority.*` 键（其余键连值都不读）。读不到 → null（插件据此报 `config-missing`）。 */
+  const authorityConfigSnapshot = () => {
+    try {
+      const overview = configView.overview()
+      const out = {}
+      for (const row of overview.project || []) {
+        const key = String(row?.key ?? '')
+        if (!key.startsWith('authority.')) continue
+        out[key] = row?.value === undefined ? null : row.value
+      }
+      return out
+    } catch (err) {
+      return null            // 降级而不是猜：插件会报 config-missing
+    }
+  }
+  /** 驱动插件（纯函数）：参数只有金额（原样字符串，由插件判"是不是整数分"）+ 角色 + 只读配置快照。 */
+  const authorityRun = (view, url) => authority.check({
+    view,
+    role: url.searchParams.get('role') ?? '',
+    amount: url.searchParams.get('amount') ?? '',
+    config: authorityConfigSnapshot(),
+  })
+  /** JSON（机器可读；与页面同数据、同口径）。 */
+  const authorityJson = (view, url) => {
+    const run = authorityRun(view, url)
+    const meta = authority.meta()
+    return { service: 'authority-band', view,
+      source: 'authority-band（domain 插件：确定性规则；只读配置快照，不读账本、不写账本、不取墙钟、不调模型）',
+      route: `${prefix}/${view}/authority/?amount=<整数分>&role=<角色>`,
+      ...run,
+      meta: { engine: meta.engine, unit: meta.unit, registered_roles: meta.registered_roles,
+        statuses: meta.statuses, reasons: meta.reasons, refusal_codes: meta.refusal_codes,
+        band_prefix: meta.band_prefix, config_where: meta.config_where,
+        escalate_cmd: meta.escalate_cmd, escalate_human_cmd: meta.escalate_human_cmd,
+        bounds: meta.bounds, can_approve: meta.can_approve },
+      note: '`engine=rules`：本接口只把「这笔金额落在谁的区间里 / 越界多少 / 下一个能批的人是谁」算出来 —— '
+        + '**未配置时报 `unconfigured`（不编限额）**、**越界时给人工门命令（本插件不能批准、不能放行）**；'
+        + '配置来源：`authority.bands.<角色>` 等 `authority.*` 键（人工专属：改它们要带 `ap-NNNN` 引用）' }
+  }
+  /** 页面（SSR，**零内联脚本**：表单是 `<form method=get>`，命令在 `<pre>` 里可复制）。 */
+  const authorityHtml = (view, url) => {
+    const run = authorityRun(view, url)
+    const meta = authority.meta()
+    const amountText = run.amount === null ? '(不可用)' : String(run.amount)
+    const bandRows = run.bands.map((item) => {
+      const relation = run.amount === null ? '—'
+        : (item.limit_cents === run.amount ? '恰等于本次金额'
+          : (item.limit_cents > run.amount ? `还能批 ${item.limit_cents - run.amount} 分`
+            : `差 ${run.amount - item.limit_cents} 分`))
+      return `<tr data-authority-band="${esc(item.role)}" data-authority-band-limit="${esc(String(item.limit_cents))}">`
+        + `<td><code>${esc(item.role)}</code></td><td><b>${esc(String(item.limit_cents))}</b> 分</td>`
+        + `<td>${esc(relation)}</td></tr>`
+    }).join('')
+    const withinRows = run.within.map((item) => `<tr data-authority-within="${esc(item.role)}">`
+      + `<td><code>${esc(item.role)}</code></td><td>${esc(String(item.limit_cents))} 分</td>`
+      + `<td>${esc(String(item.remaining_cents))} 分</td></tr>`).join('')
+    const roleOptions = meta.registered_roles.map((role) => `<option value="${esc(role)}"></option>`).join('')
+    const headline = { 'inside-band': '在区间内（这笔落在你的限额里）',
+      'over-band': '越界（必须走人工门）', unconfigured: '未配置授权区间（不编限额）',
+      'input-rejected': '输入不可用（不给区间结论）' }[run.status] ?? run.status
+    return subNav(prefix, view, 'authority')
+      + `<p><a href="${prefix}/${view}/" data-authority-back="1">← 回本视角首页</a> · JSON：`
+      + `<code>${prefix}/${view}/api/authority</code></p>`
+      + `<p data-authority-engine="${esc(run.engine)}"><b>引擎：<code>engine=${esc(run.engine)}</code></b> —— `
+      + `${esc(run.engine_note)}。` + `配置快照只读 <code>authority.*</code> 键（宿主不读账本、不写任何东西、不取墙钟）。</p>`
+      + `<p data-authority-unit="cents"><b>金额口径</b>：${esc(run.money_note)}</p>`
+      + `<h3 id="check">填一个金额与角色（<b>金额是整数分</b>）</h3>`
+      + `<form method="get" action="${prefix}/${view}/authority/" data-authority-form="1">`
+      + `<label>金额（整数分）<input name="amount" size="14" inputmode="numeric" value="${esc(url.searchParams.get('amount') ?? '')}"></label> `
+      + `<label>角色 <input name="role" size="12" list="authority-role-options" value="${esc(url.searchParams.get('role') ?? '')}">`
+      + `<datalist id="authority-role-options">${roleOptions}</datalist></label> `
+      + `<button type="submit">算区间</button></form>`
+      + `<div data-authority="result" data-authority-status="${esc(run.status)}"`
+      + ` data-authority-inside="${run.inside_band === null ? 'null' : String(run.inside_band)}"`
+      + ` data-authority-amount="${esc(run.amount === null ? '' : String(run.amount))}"`
+      + ` data-authority-role="${esc(run.role)}"`
+      + ` data-authority-over-by="${run.over_by === null ? '' : esc(String(run.over_by))}"`
+      + ` data-authority-required-role="${esc(run.required_role)}" data-authority-next-role="${esc(run.next_role)}"`
+      + ` data-authority-unconfigured="${String(run.unconfigured)}" data-authority-can-approve="false"`
+      + ` data-authority-code="${esc(run.code)}" data-authority-reason="${esc(run.reason)}">`
+      + `<p><b>结论</b>：<code>${esc(run.status)}</code> —— ${esc(headline)}`
+      + `（金额 <b data-authority-amount-text="${esc(amountText)}">${esc(amountText)}</b> 分、角色 `
+      + `<code>${esc(run.role || '（未给）')}</code>）</p>`
+      + `<p><b>谁能批到多少</b>：覆盖本金额的角色列表见下面「覆盖本金额的角色」；`
+      + `<b>覆盖本金额的最低权限角色</b>（least privilege）：<code data-authority-required-role-text="1">${esc(run.required_role || '（没有：谁都不能批这笔）')}</code></p>`
+      + `<p><b>下一个能批的人是谁</b>：<code data-authority-next-role-text="1">${esc(run.next_role || '（没有更高的角色能批这笔）')}</code>`
+      + `（= 比当前角色限额更高、且**真的批得到**本金额的最小限额角色）</p>`
+      + (run.over_by === null ? '' : `<p><b>越界多少</b>：<code data-authority-over-by-text="1">${esc(String(run.over_by))}</code> 分`
+        + `（0 = 没越界；正数 = 超过你限额的分数）</p>`)
+      + `<p><b>被谁挡住</b>：<code>${esc(run.blocked_by || '（没被挡住）')}</code></p>`
+      + `</div>`
+      + (run.unconfigured
+        ? `<div class="degraded" data-authority-unconfigured-note="1"><b>${esc(run.reason)}</b> —— `
+          + `${esc(run.unconfigured_note)}</div>`
+        : '')
+      + (run.degraded
+        ? `<p class="degraded" data-authority-degraded="1"><b>没给出「在区间内」的结论</b>：`
+          + `<code>${esc(run.reason)}</code> —— ${esc(run.next_action)}</p>`
+        : '')
+      + (run.escalate_cmd === ''
+        ? `<p data-authority-escalate="none">不越界 ⇒ 不产生升级命令（本页不制造无用的动作）。</p>`
+        : `<div data-authority-escalate="1"><h3 id="escalate">越界 ⇒ 走人工门（复制下面两条命令）</h3>`
+          + `<pre data-authority-escalate-cmd="1">${esc(run.escalate_cmd)}</pre>`
+          + `<pre data-authority-escalate-human-cmd="1">${esc(run.escalate_human_cmd)}</pre>`
+          + `<p data-authority-approval-note="1">${esc(run.approval_note)}</p>`
+          + (run.escalation_note === '' ? ''
+            : `<p data-authority-escalation-note="1">配置里的升级说明（<code>authority.escalation_note</code>，`
+              + `来源 ${esc(run.escalation_note_source)}）：${esc(run.escalation_note)}</p>`) + `</div>`)
+      + `<h3 id="bands">已登记的授权区间（<b data-authority-band-count="${run.bands.length}">${run.bands.length}</b> 条）</h3>`
+      + (run.bands.length
+        ? `<table data-authority-bands="1"><tr><th>角色</th><th>限额（整数分）</th><th>相对本次金额</th></tr>${bandRows}</table>`
+        : '<p data-authority-bands="none">**一条都没有登记**（`authority.bands.*` 全是 null 或缺省）—— '
+          + '所以页面不会给任何「可以批」的结论。</p>')
+      + `<h3 id="within">覆盖本金额的角色（<b data-authority-within-count="${run.within.length}">${run.within.length}</b> 条）</h3>`
+      + (run.within.length
+        ? `<table data-authority-within-table="1"><tr><th>角色</th><th>限额（整数分）</th><th>还剩多少（分）</th></tr>${withinRows}</table>`
+        : '<p data-authority-within="none">没有任何角色的限额覆盖这笔金额 ⇒ 只能走人工门（或先改区间登记）。</p>')
+      + `<h3 id="where">这套区间在哪里配</h3><p data-authority-config-where="1">${run.config_where}；`
+      + `上手页也有一段说明：<a href="${prefix}/start/">${prefix}/start/</a></p>`
+      + (run.basis.length
+        ? `<ul data-authority="basis">${run.basis.map((token) => `<li><code>${esc(token)}</code></li>`).join('')}</ul>`
+        : '')
+      + (run.notes.length
+        ? `<ul data-authority="notes">${run.notes.map((text) => `<li>${esc(text)}</li>`).join('')}</ul>`
+        : '<p data-authority="notes">说明：无。</p>')
+      + `<p><small>**本页 0 行脚本、0 内联事件**；金额一律整数分（<code>unit=${esc(run.unit)}</code>）；`
+      + `被忽略的墙钟入口：<code>${esc(run.ignored_now_inputs.join(', '))}</code>；`
+      + `有界：角色表 ≤ ${esc(String(run.bounds.max_roles))} 条、金额 ≤ ${esc(String(run.bounds.amount_max))} 分。`
+      + `**本页不能批准、不能放行**（<code>can_approve=false</code>）—— 越界只出命令，签字在终端。</small></p>`
+  }
+
+  // ==========================================================================================
   // P0-3 道内子视图：全部只读 GET，交互只用 `<form method=get>` + `<a>`（0 JS / 0 内联事件）。
   // 数据**只**来自现有服务与注入参数（本视角账本投影 / approval-digest / evidence-summary），
   // 宿主不重算任何业务口径。筛选/排序/翻页必须**非空转**：同参数不同值 → 结果必须不同。
@@ -1451,7 +1621,8 @@ ${sortForm('events', '筛查事件')}
       + `<td>${esc(String(row.old_digest ?? '—').slice(0, 18))}</td><td>${esc(String(row.new_digest ?? '—').slice(0, 18))}</td>`
       + `<td>${esc(row.approval_ref ?? '—')}</td><td>${esc(row.fingerprint_first8 ?? '—')}</td></tr>`).join('')
     const degraded = data.degraded || creds.snapshot.available === false
-    return anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS)
+    return anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS, [], [], [],
+      [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])
       + `<p><a href="${prefix}/admin/">← 回系统管理</a> · <a href="${prefix}/start/">上手（token/配置放哪里？）</a> · `
       + `JSON：<code>${prefix}/admin/api/config</code> · <code>${prefix}/admin/api/credentials</code> · `
       + `<code>${prefix}/admin/api/config/audit</code></p>`
@@ -1603,6 +1774,13 @@ ${sortForm('events', '筛查事件')}
             { path: `${prefix}/${v}/gates/nudge`, method: 'POST', auth: 'none',
               what: `${v} 道的催办提交（**只落 0600 待办件**、账本零新增；202 + next_action；不改任何门的判定）` },
           ]),
+          // 授权区间（`authority-band` 插件）：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁（只读）
+          ...config.views.filter((v) => rules[v]).flatMap((v) => [
+            { path: `${prefix}/${v}/authority/`, method: 'GET', auth: 'none',
+              what: `${v} 道的授权区间页（金额=整数分 + 角色 → 在不在区间 / 越界多少 / 下一个能批的人是谁；越界给可复制的人工门命令）` },
+            { path: `${prefix}/${v}/api/authority`, method: 'GET', auth: 'none',
+              what: `${v} 道的授权区间 JSON（同参同口径；未配置 ⇒ unconfigured=true 且 required_role/next_role 为空，不编限额）` },
+          ]),
           { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
           // WebUI 反馈闭环（ui-feedback 插件）：SSR 表单页（**0 内联脚本**）+ 只落 0600 待办件 + 只读观察面
           ...config.views.flatMap((v) => [
@@ -1714,7 +1892,8 @@ ${sortForm('events', '筛查事件')}
           + anchorNav('ops', `${prefix}/ops/`, OPS_SECTIONS,
             [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
             [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']],
-            [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']])
+            [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']],
+            [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])
           + `<p>JSON：<code>${prefix}/api/ops</code></p>`
           + `<h3 id="runtime">运行期</h3><p>${ops.summary({ rows: [] })}</p>`
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
@@ -1881,6 +2060,20 @@ ${sortForm('events', '筛查事件')}
         html(`${config.page_title} · ${rules[viewHeuristicsPage[1]].title} · 比价口径`,
           heuristicsHtml(viewHeuristicsPage[1], url), prefix))
     }
+    // 授权区间（authority-band 插件，本批）：两条**只读** GET 路由
+    //   · `/<view>/authority/`：SSR 表单（金额整数分 + 角色）→ 结论（谁能批到多少 / 越界多少 / 下一个能批的人是谁）
+    //   · `/<view>/api/authority`：同参同口径的 JSON
+    //   两条都**不读账本、不写任何东西、不取墙钟**；越界时只给可复制的升级命令（**不能批准**）。
+    const viewAuthorityApi = path.match(/^\/([a-z]+)\/api\/authority\/?$/)
+    if (viewAuthorityApi && rules[viewAuthorityApi[1]]) {
+      return json(200, authorityJson(viewAuthorityApi[1], url))
+    }
+    const viewAuthorityPage = path.match(/^\/([a-z]+)\/authority\/?$/)
+    if (viewAuthorityPage && rules[viewAuthorityPage[1]]) {
+      return send(200, 'text/html; charset=utf-8',
+        html(`${config.page_title} · ${rules[viewAuthorityPage[1]].title} · 授权区间`,
+          authorityHtml(viewAuthorityPage[1], url), prefix))
+    }
     const viewApprovals = path.match(/^\/([a-z]+)\/api\/approvals\/?$/)
     if (viewApprovals && rules[viewApprovals[1]]) {
       const view = viewApprovals[1]
@@ -1937,7 +2130,8 @@ ${sortForm('events', '筛查事件')}
       return `${anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS,
         [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
         [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']],
-        [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']])}`
+        [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']],
+        [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])}`
         + `${data.degraded ? `<p>降级：<code>${data.reason ?? ''}</code> —— ${data.next_action ?? ''}</p>` : ''}`
         + `<h3 id="progress">进度与口径来源</h3>`
         + `<p>进度：阶段 <b>${data.progress?.phase ?? '—'}</b> · 下一步 <b>${data.progress?.next_task ?? '—'}</b>`

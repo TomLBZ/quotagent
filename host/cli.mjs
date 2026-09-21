@@ -198,6 +198,11 @@ const main = async () => {
     await ctx.plugin({ name: 'gate-timeline', inject: [], Config: gtConfig,
       apply: (inner, cfg) => gtApply(inner, { ...cfg, route_prefix: String(args.prefix ?? '/quotagent') }) },
       gtConfig.parse({}))
+    // 授权区间（本批）：只读配置快照的纯函数插件（不读账本、不取墙钟、**不能批准**）
+    const { apply: abApply, Config: abConfig } = await import('./modules/authority-band.mjs')
+    await ctx.plugin({ name: 'authority-band', inject: [], Config: abConfig,
+      apply: (inner, cfg) => abApply(inner, { ...cfg, route_prefix: String(args.prefix ?? '/quotagent') }) },
+      abConfig.parse({}))
 
     const { apply: mvApply, Config: mvConfig } = await import('./modules/mail-view.mjs')
     await ctx.plugin({ name: 'mail-view', inject: [], Config: mvConfig,
@@ -243,7 +248,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)

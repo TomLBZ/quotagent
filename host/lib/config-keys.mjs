@@ -28,6 +28,17 @@ export const PROJECT_KEYS = {
   'pricing.authorized_band.min_unit_price': { type: 'number', default: 80.0, note: '授权区间下沿（humanOnly）' },
   'pricing.authorized_band.max_unit_price': { type: 'number', default: 100.0, note: '授权区间上沿（humanOnly）' },
   'guard.abnormal_low_ratio': { type: 'number', default: 0.6, note: '异常低价护栏阈值（humanOnly）' },
+  // ── 授权区间（`authority-band` 插件：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁）────────────
+  // 口径：`authority.bands.<角色>` = 该角色**能批到多少**（整数分）；`default: null` = **未配置** ——
+  // 这正是插件的诚实默认：未知 ⇒ 报 `unconfigured`，**绝不**落回一个编出来的限额（null 与 0 是两件事：
+  // 0 = 人明确登记过"这个角色一分也不能批"）。币种/单位**只声明**、不换算。
+  'authority.unit': { type: 'string', default: 'cents', note: '授权区间的计量单位声明（只认 cents；别的值一律拒解释）' },
+  'authority.currency': { type: 'string', default: 'CNY', note: '授权区间的币种声明（只声明、不换算）' },
+  'authority.bands.buyer': { type: 'integer', default: null, note: '角色 buyer 的授权限额（整数分；null = 未配置）' },
+  'authority.bands.lead': { type: 'integer', default: null, note: '角色 lead 的授权限额（整数分；null = 未配置）' },
+  'authority.bands.director': { type: 'integer', default: null, note: '角色 director 的授权限额（整数分；null = 未配置）' },
+  'authority.fallback_role': { type: 'string', default: '', note: '超出所有角色区间时的升级兜底角色（空 = 未声明；**不**用来补一个限额）' },
+  'authority.escalation_note': { type: 'string', default: '', note: '越界升级时给办理人看的一句话（空 = 用插件的标准文案）' },
   'norm.tolerance_bps': { type: 'integer', default: 5, note: '归一化容差（bps）' },
   'transport.kind': { type: 'string', default: 'file-drop', note: '投递通道类型' },
   'transport.dir': { type: 'string', default: 'inbox', note: '投递目录（相对路径）' },

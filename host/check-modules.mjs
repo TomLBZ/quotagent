@@ -288,6 +288,31 @@ const STUBS = {
       degraded_reasons: [], bounds: { max_items: 20, expiry_soon_hours: 96, spread_points: 25 } }),
     config: () => ({ max_items: 20, expiry_soon_hours: 96, spread_points: 25 }),
   },
+  authorityBand: {
+    // fixture 的 stub：只满足"能算区间/能自述元数据"；边界手算、越界升级命令与 4 处变异由
+    // authority-band 自己的门验（t284）
+    check: () => ({ source: 'authority-band', engine: 'rules', engine_note: 'stub', view: '', role: '',
+      amount: null, unit: 'cents', money_note: 'stub', status: 'unconfigured', within: [], bands: [],
+      required_role: '', next_role: '', over_by: null, escalate_cmd: '', escalate_human_cmd: '',
+      inside_band: null, blocked_by: 'authority-unconfigured', unconfigured: true, basis: [],
+      degraded: true, reason: 'stub', code: 'stub', next_action: 'stub', escalation_note: '',
+      escalation_note_source: 'default', config_where: 'stub', unconfigured_note: 'stub',
+      approval_note: 'stub', can_approve: false, registered_roles: [],
+      counts: { roles_configured: 0, roles_omitted: 0, foreign_config_keys: 0, within: 0 },
+      bounds: { max_roles: 8, amount_max: 0, unit_limit: 16, note_limit: 240 }, truncated: false,
+      ignored_now_inputs: ['payload.now', 'config.now'], notes: [],
+      privacy: { private_keys_read: false, model_calls: 0, network_calls: 0, clock_reads: 0 } }),
+    meta: () => ({ engine: 'rules', engine_note: 'stub', unit: 'cents', money_note: 'stub',
+      supported_units: ['cents'], registered_roles: [], band_prefix: 'authority.bands.',
+      unit_key: 'authority.unit', currency_key: 'authority.currency',
+      fallback_role_key: 'authority.fallback_role', escalation_note_key: 'authority.escalation_note',
+      statuses: [], reasons: [], refusal_codes: [], blocked_by_values: [], sections: ['config'],
+      ignored_now_inputs: ['payload.now', 'config.now'], config_where: 'stub',
+      escalate_cmd: 'stub', escalate_human_cmd: 'stub', bounds: { max_roles: 8, amount_max: 0 },
+      can_approve: false, approval_note: 'stub' }),
+    config: () => ({ max_roles: 8, route_prefix: '/quotagent', unit: 'cents', amount_max: 0,
+      registered_roles: [] }),
+  },
 }
 
 /** 起一个带句柄的模块实例：句柄在插件自己的 ctx 里取（那里才有 inject 权限）。 */

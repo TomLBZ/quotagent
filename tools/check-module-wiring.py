@@ -43,6 +43,7 @@ PROVIDERS = {
     "uiFeedback": "ui-feedback",
     "advicePanel": "advice-panel",
     "gateTimeline": "gate-timeline",
+    "authorityBand": "authority-band",
 }
 
 

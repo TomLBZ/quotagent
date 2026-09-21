@@ -145,6 +145,18 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     "${QUOTAGENT_NODE:-node}" "$HERE/../host/t281-advice-gate.mjs" || exit 1
     exec "$QUOTAGENT_PY" "$HERE/check-advice-route.py" "$@"
     ;;
+  authority)
+    # 授权区间（本批：「谁能批到多少 / 越界怎么办 / 下一个能批的人是谁」——P-12「授权区间不可见」的原话）：
+    # ① 插件围栏门（22 条断言 + 4 处单点变异 + 还原字节一致；**三例边界值手算对账**（恰等于限额/超一分/差一分）/
+    #    **未配置不得编限额**（required_role 与 next_role 留空）/ 越界必出升级命令且命令真存在（真跑 verify.sh help）/
+    #    插件**不能批准**（服务面无审批类方法 + can_approve=false）/ 金额非法三类拒绝 / 确定性 / 有界 /
+    #    私域哨兵零泄漏 / 零写面 / 四道页面子导航入口 / 页面 0 内联脚本）② 真 HTTP 端到端（真进程真回读：
+    #    两视角页面与 JSON 200 / 边界三例与手算一致 / **改配置前后同一金额结论不同**（`--config-file` 临时配置，
+    #    真 /workspace/config.yaml 指纹前后一致）/ 未配置 ⇒ unconfigured 且角色字段空 / 升级命令真存在 /
+    #    私域哨兵 0 命中 / 只读⇒账本零新增 / 0 内联脚本）。两半都跑，任一失败即红。
+    "${QUOTAGENT_NODE:-node}" "$HERE/../host/t284-authority-gate.mjs" || exit 1
+    exec "$QUOTAGENT_PY" "$HERE/check-authority-route.py" "$@"
+    ;;
   gates)
     # 审批等多久 / 变更单到底是谁卡着（本批：「审批人等不到」+「变更单扯皮」两条 human problem）：
     # ① 插件围栏门（33 条断言 + 4 处单点变异 + 还原字节一致；**age 不随两个不同 now 入口变化** /
