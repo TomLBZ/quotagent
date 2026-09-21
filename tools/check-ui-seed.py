@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+REC_NEG = {"thread_id", "attempt_no", "status"}
+REC_FAQ = {"entry_id", "rfq_rev"}
 SEED = ROOT / "tools" / "ui-seed-pipeline.py"
 CHECKS: list[dict] = []
 
@@ -77,7 +79,13 @@ try:
     payload = json.loads(snap.read_text(encoding="utf-8"))
 except Exception:  # noqa: BLE001
     payload = {}
+# 真数据非空（D-040）：种子确实种了谈判轮次与 FAQ 条目 → 有界列表**必须非空**且只含白名单键
 views = payload.get("views") or {}
+for _vw, _slice in views.items():
+    _nrec = ((_slice.get("negotiate") or {}).get("recent")) or []
+    _frec = ((_slice.get("faq") or {}).get("recent")) or []
+    check(f"{_vw} 谈判 recent 真数据非空且键合规", len(_nrec) >= 1 and all(set(r) <= REC_NEG for r in _nrec), f"n={len(_nrec)}")
+    check(f"{_vw} FAQ recent 真数据非空且键合规", len(_frec) >= 1 and all(set(r) <= REC_FAQ for r in _frec), f"n={len(_frec)}")
 nonzero = all(
     max([v for v in ((views.get(vw) or {}).get(dom) or {}).values() if isinstance(v, int)] or [0]) > 0
     for vw in views for dom in ("negotiate", "faq", "mail"))

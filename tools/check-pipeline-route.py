@@ -104,6 +104,13 @@ try:
         check(f"③ 业务视角 {view}/api/negotiation 200 且含计数（反例：路由不匹配快照域键 → counts 缺失）",
               c_n == 200 and isinstance(n.get("counts"), dict) and isinstance(n.get("recent"), list),
               f"status={c_n} counts={json.dumps(n.get('counts'), ensure_ascii=False)[:80]}")
+        # 有界 + 键白名单（AC-PIPELINE-001 "有界"与"不出正文与私域"的机检）
+        n_keys = set()
+        for r in (n.get("recent") or []):
+            n_keys |= set(r)
+        check(f"③ {view} 谈判 recent 有界（≤5）且键白名单（thread_id/attempt_no/status）",
+              len(n.get("recent") or []) <= 5 and n_keys <= {"thread_id", "attempt_no", "status"},
+              f"n={len(n.get('recent') or [])} keys={sorted(n_keys)}")
         c_f, b_f = curl(f"http://127.0.0.1:{port}{prefix}/{view}/api/faq")
         f = {}
         try:
@@ -113,6 +120,12 @@ try:
         check(f"③ 业务视角 {view}/api/faq 200 且含计数（反例：同上）",
               c_f == 200 and isinstance(f.get("counts"), dict) and isinstance(f.get("recent"), list),
               f"status={c_f} counts={json.dumps(f.get('counts'), ensure_ascii=False)[:80]}")
+        f_keys = set()
+        for r in (f.get("recent") or []):
+            f_keys |= set(r)
+        check(f"③ {view} FAQ recent 有界（≤5）且键白名单（entry_id/rfq_rev）",
+              len(f.get("recent") or []) <= 5 and f_keys <= {"entry_id", "rfq_rev"},
+              f"n={len(f.get('recent') or [])} keys={sorted(f_keys)}")
         check(f"③ {view} 的两条业务视角响应不出正文与私域",
               '"body"' not in b_n + b_f and "private:" not in b_n + b_f, "")
 

@@ -16,3 +16,30 @@ EV-097 T-262 业务双方视角：谈判轮次与 FAQ 条目
 
 [3] 门
 （接线后补：42+ 入口全绿 / g1 / clean-copy / 线上真回读）
+
+[4] 快照侧落地（T-262，subagent 产出；父方自核）
+· tools/refresh-ui-snapshots.py 加 `RECENT_LIMIT=5` 与 `_recent_rows/_negotiate_recent/_faq_recent`：
+  negotiate.recent[]（thread_id/attempt_no/status）与 faq.recent[]（entry_id/rfq_rev），seq 倒序、至多 5 条、
+  缺失键写 null（不补默认值）；mail 域与既有字段语义一行未动
+· 父方**自己读真快照**（不采信自述）：
+  contractor.negotiate.recent = [{"attempt_no":1,"status":"conceded","thread_id":"nt-0001"}]
+  contractor.faq.recent       = [{"entry_id":"fq-0001","rfq_rev":1}]  （supplier 同形）
+
+[5] 门从"是数组"加强到"有界 + 键白名单 + 真数据非空"（D-034：参数存在 ≠ 机制生效）
+· verify.sh ui-seed：新增 4 条（两视角 × 两域）"recent 真数据非空且键合规" → 全绿
+· verify.sh pipeline-route：新增 4 条"有界（≤5）且键白名单" → 全绿
+（此前只断言 `Array.isArray` —— 一个恒真的空数组也能过，属弱断言）
+
+[6] 线上真回读（业务视角；重启后）
+$ curl /quotagent/contractor/api/negotiation → 200 counts={closed:1,open:0,rejected:1,rounds:1,threads:1}
+    recent=[{attempt_no:1,status:"conceded",thread_id:"nt-0001"}]
+$ curl /quotagent/contractor/api/faq → 200 counts={entries:1} recent=[{entry_id:"fq-0001",rfq_rev:1}]
+$ curl /quotagent/supplier/api/negotiation → 200（同形）
+$ 公网 /contractor/api/negotiation → 200 · 公网 /contractor/api/faq → 200
+$ 页面含「谈判轮次（本视角）」「FAQ（本视角）」两个区块
+
+[7] 我自己的流程过失（如实登记）
+· T-262a 提交时我用了 `git add -A`，把 subagent **在途**的写入器改动一起提交了 ——
+  提交信息里没提它（提交范围与信息不一致）。这也解释了当时 pipeline-route 的一次瞬时失败
+  （子代理正在改这个文件）。**教训：`git add -A` 会扫进别的 agent 在途的编辑；
+  多 agent 并行时应显式 `git add <我改的文件>`。**
