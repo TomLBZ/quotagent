@@ -6,6 +6,12 @@
 
 预算不在此脚本硬编码，而是从 docs/design/12-documentation-standard.md §1 的表格解析，
 避免两处真源漂移。
+
+AC 定义集合（口径，唯一真源就在本脚本的 AC_MAIN / AC_ARCHIVE_GLOB 两个常量）：
+  `docs/work/acceptance-criteria.md` **+ 同目录下所有 `acceptance-criteria-archive*.md`**。
+归档只改变"定义可以放在哪个文件里"，不改变任何断言语义：ID 必须存在于集合内、
+预算照查、FR↔AC 覆盖照查归档里的行（见 check_coverage）。归档**必须真的被读到**：
+某个归档 0 条 AC 定义行即判失败，杜绝"两边都是空集合"式的静默通过。
 """
 from __future__ import annotations
 
@@ -17,10 +23,13 @@ ROOT = Path(__file__).resolve().parent.parent
 SCAN_SUFFIX = ".md"
 
 # --- ID 定义源（一处一事实：每个 ID 前缀只有一个定义文件） --------------------
+# 例外且仅此一处：AC 的"定义文件"是一组 —— 主文件 + 同目录下的全部归档。
+AC_MAIN = "docs/work/acceptance-criteria.md"
+AC_ARCHIVE_GLOB = "acceptance-criteria-archive*.md"
 DEF_SOURCES = {
     "FR": "docs/work/functional-requirements.md",
     "V": "docs/work/functional-requirements.md",
-    "AC": "docs/work/acceptance-criteria.md",
+    "AC": AC_MAIN,
     "T": "docs/work/progress-checklist.md",
     "INV": "docs/design/04-services-catalog.md",
     "NFR": "docs/design/10-nonfunctional.md",
@@ -61,17 +70,50 @@ def md_files() -> list[Path]:
     return sorted(set(files))
 
 
+def ac_definition_files() -> tuple[list[Path], list[Path]]:
+    """AC 定义集合 = (全部文件, 其中的归档文件)。
+
+    集合构成：主文件恒在首位，其后是与主文件同目录、名字匹配 AC_ARCHIVE_GLOB 的每个文件。
+    调用方必须把归档真的读进来（read_text），并对"归档 0 条定义行"判失败 —— 见 collect_definitions。
+    """
+    main = ROOT / AC_MAIN
+    archives = sorted(p for p in main.parent.glob(AC_ARCHIVE_GLOB) if p.is_file())
+    return [main, *archives], archives
+
+
+def ac_ids_in(path: Path) -> set[str]:
+    text = path.read_text(encoding="utf-8")
+    return {m.group("id") for m in ROW_RE.finditer(text) if m.group("id").startswith("AC-")}
+
+
 def collect_definitions(rep: Report) -> set[str]:
     defined: set[str] = set()
+    ac_files, ac_archives = ac_definition_files()
     for prefix, rel in DEF_SOURCES.items():
-        path = ROOT / rel
-        if not path.exists():
-            rep.fail(f"定义文件缺失: {rel}")
-            continue
-        found = {m.group("id") for m in ROW_RE.finditer(path.read_text(encoding="utf-8"))
-                 if m.group("id").startswith(prefix + "-")}
+        paths = ac_files if prefix == "AC" else [ROOT / rel]
+        found: set[str] = set()
+        per_file: dict[str, int] = {}
+        for path in paths:
+            if not path.exists():
+                rep.fail(f"定义文件缺失: {rel}")
+                continue
+            ids = {m.group("id") for m in ROW_RE.finditer(path.read_text(encoding="utf-8"))
+                   if m.group("id").startswith(prefix + "-")}
+            per_file[str(path.relative_to(ROOT))] = len(ids)
+            found |= ids
         if not found:
             rep.fail(f"{rel} 中未找到任何 {prefix}- 定义行")
+        if prefix == "AC":
+            # 可观察证据 + 硬断言：归档必须真被读到（0 条定义行 = 空读 = 失败），
+            # 不许只靠"主文件与归档两边都是空集合"静默通过。
+            arch_rels = [str(p.relative_to(ROOT)) for p in ac_archives]
+            for relp in arch_rels:
+                if per_file.get(relp, 0) == 0:
+                    rep.fail(f"归档文件未被有效读取（0 条 AC- 定义行）: {relp}")
+            archived = set().union(*(ac_ids_in(p) for p in ac_archives)) if ac_archives else set()
+            rep.ok(f"AC 定义集合: 主文件 {AC_MAIN} 定义 {per_file.get(AC_MAIN, 0)} 条；"
+                   f"archives=[{', '.join(f'{r}:{per_file.get(r, 0)}' for r in arch_rels)}]"
+                   f"（归档文件共 {len(archived)} 条 AC 定义行，受同一套门校验）")
         defined |= found
     adr_dir = ROOT / ADR_DIR
     adr = {m.group(1) for p in sorted(adr_dir.glob("*.md"))
@@ -157,10 +199,13 @@ def check_budgets(rep: Report, budgets: dict[str, int]) -> None:
 
 def check_coverage(rep: Report) -> None:
     fr_path = ROOT / "docs/work/functional-requirements.md"
-    ac_path = ROOT / "docs/work/acceptance-criteria.md"
+    # AC 侧定义集合（主文件 + 归档）：归档不豁免覆盖检查 —— 搬进归档的 AC 行
+    # 与它还在主文件时受完全相同的"无孤儿"断言约束（范围扩大，语义不变）。
+    ac_files, ac_archives = ac_definition_files()
+    ac_files = [p for p in ac_files if p.exists()]
     fr_rows = [l for l in fr_path.read_text(encoding="utf-8").splitlines()
                if l.startswith("| FR-")]
-    ac_rows = [l for l in ac_path.read_text(encoding="utf-8").splitlines()
+    ac_rows = [l for p in ac_files for l in p.read_text(encoding="utf-8").splitlines()
                if l.startswith("| AC-")]
     fr_ids = [m.group(1) for l in fr_rows
               for m in [re.match(r"\|\s*(FR-[A-Z0-9-]*\d+)", l)] if m]
@@ -183,7 +228,8 @@ def check_coverage(rep: Report) -> None:
     if problems:
         rep.fail("FR↔AC 覆盖", problems)
     else:
-        rep.ok(f"FR↔AC 覆盖: {len(fr_ids)} 条 FR 均关联 AC，{len(ac_ids)} 条 AC 无孤儿")
+        rep.ok(f"FR↔AC 覆盖: {len(fr_ids)} 条 FR 均关联 AC，{len(ac_ids)} 条 AC 无孤儿"
+               f"（AC 定义文件 {len(ac_files)} 个：主文件 + {len(ac_archives)} 个归档）")
 
 
 def main() -> int:

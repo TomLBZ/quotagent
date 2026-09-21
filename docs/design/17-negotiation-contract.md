@@ -1,6 +1,6 @@
 # T-254 接口契约提案：`ctx.negotiate`（下轮实现照此写）
 
-- 对应需求：`FR-NEGO-001`、`FR-NEGO-002`（`docs/work/functional-requirements.md:132-133`）；验收标准 `AC-NEGO-001`（`docs/work/acceptance-criteria.md:108`，命令 `qa ac AC-NEGO-001`）。
+- 对应需求：`FR-NEGO-001`、`FR-NEGO-002`（`docs/work/functional-requirements.md:132-133`）；验收标准 `AC-NEGO-001`（`docs/work/acceptance-criteria.md:87`，命令 `qa ac AC-NEGO-001`）。
 - 设计依据：同目录 `t254-nego-design.md`（决策 D-N1..D-N5、机检点 15 条、P2 切片）。
 - 契约强度：标注 **不可改** 的名字是既有对象/既有异常，改名即破坏别的 AC；其余为本提案新定，实现时可微调，但必须同步改回本文件（否则等于两处真源）。
 

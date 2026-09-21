@@ -1,7 +1,7 @@
 # T-254 谈判设计决策记录：FR-NEGO-001 / FR-NEGO-002（只写 tmp/，本轮不写实现）
 
 - 范围：`FR-NEGO-001`（有限轮次谈判：轮次上限与让步上限来自策略 patch，`docs/work/functional-requirements.md:132`）与 `FR-NEGO-002`（任何价格让步必须人工批准，同文件 `:133`）在覆盖矩阵里是【缺口】（`docs/design/15-requirements-coverage.md:68-69`）。
-- 验收标准原文：`AC-NEGO-001`「轮次与让步上限生效；任何价格让步需要人工批准」（`docs/work/acceptance-criteria.md:108`），命令 `qa ac AC-NEGO-001`。
+- 验收标准原文：`AC-NEGO-001`「轮次与让步上限生效；任何价格让步需要人工批准」（`docs/work/acceptance-criteria.md:87`），命令 `qa ac AC-NEGO-001`。
 - 本文件只做决策与契约（接口契约见同目录 `t254-nego-contract.md`）；**未核实**的项在 §6 逐条列出，不当作事实。
 
 ## 0. 结论摘要（8 问各一句）
@@ -20,7 +20,7 @@
 | 事实 | 位置 |
 |---|---|
 | 需读两条 FR（could / must，均 P2） | `docs/work/functional-requirements.md:132-133` |
-| AC-NEGO-001 的原文与命令 | `docs/work/acceptance-criteria.md:108` |
+| AC-NEGO-001 的原文与命令 | `docs/work/acceptance-criteria.md:87` |
 | `ctx.negotiate` 的职责与 Definition | `docs/design/04-services-catalog.md:101-105` |
 | `negotiate/round` 已声明为 `serial` + durable，标"规划中" | `docs/design/05-events.md:95` |
 | 人工门：`scope` 必填、超时三选一、绝无自动批准、`require()` 绑 scope+ref | `src/quotagent/services/approval.py:97-140`、`:199-243`（`granted_by_timeout: 0`）、`:270-284` |

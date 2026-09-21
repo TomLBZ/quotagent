@@ -46,18 +46,12 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 |---|---|---|---|
 | AC-AUDIT-001 | P0 | 篡改任意一条历史事件后 `verify_chain()` 返回假；审计包独立验证失败 | `qa ac AC-AUDIT-001` |
 | AC-AUDIT-002 | P0 | 对随机抽样的 20 次模型调用，`rebuild(inputs) == observed_inputs` 全部相等 | `qa ac AC-AUDIT-002` |
-| AC-AUDIT-003 | P2 | 销毁策略生效后目标事件不可再读且销毁动作本身有账本事件 | `qa ac AC-AUDIT-003` |
-| AC-AUDIT-004 | P1 | 审计包带签名与包含证明，且能用独立入口（不接触原账本）验证：篡改任一字段即失败、错误密钥即失败、无签名包在 `--require-signature` 下失败并给出定位 | `qa ac AC-AUDIT-004`（入口 `tools/verify.sh audit`） |
 | AC-EVT-001 | P0 | 五模式各自的分发顺序与返回值符合 `../design/05-events.md` §1 的判据 | `qa ac AC-EVT-001` |
 | AC-EVT-002 | P0 | waterfall 监听器不调 `next()` 时下游不被执行；该短路在 `../design/05-events.md` §5 拦截点总表有登记，且默认事件表的每个 waterfall 事件都在表内 | `qa ac AC-EVT-002` |
 | AC-PLUGIN-001 | P0 | 装载后 `effects()` 非空；卸载后 `effects()` 为空且无残留定时器/订阅 | `qa ac AC-PLUGIN-001` |
 | AC-PLUGIN-002 | P0 | 使某依赖失活后，消费者转为非激活；恢复后自动重载且不迁移草稿 | `qa ac AC-PLUGIN-002` |
-| AC-PLUGIN-003 | P1 | 更新配置时否决者生效：配置未变、插件未重启 | `qa ac AC-PLUGIN-003` |
 | AC-QEP-001 | P0 | 信封构造后可验签；改动任一字段导致验签失败 | `qa ac AC-QEP-001` |
 | AC-QEP-002 | P0 | 同一报文投递 3 次只产生 1 条事实；重发不改变 `msg_id` 与 `body_hash` | `qa ac AC-QEP-002` |
-| AC-QEP-003 | P1 | 人为丢包造成 `seq` 空洞时，依赖该序号的跃迁被挂起并发出重发请求 | `qa ac AC-QEP-003` |
-| AC-QEP-004 | P1 | 版本交集为空时通信被拒绝且落 `kernel/qep-rejected`；特性降级有账本事件 | `qa ac AC-QEP-004` |
-| AC-SYNC-001 | P1 | 双方修改同一非承诺字段 → 按权威方合并；修改承诺字段 → 挂起转人工；两种情况均留痕 | `qa ac AC-SYNC-001` |
 
 ## 3. 归一化与比价
 
@@ -69,21 +63,14 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-COMPARE-001 | P0 | 报价 `rfq_rev` 与包版本不一致时该报价不进入排序，并产生 `rfq/version-mismatch` | `qa ac AC-COMPARE-001` |
 | AC-COMPARE-002 | P0 | 同输入两次排序结果完全一致；TCO 各分量可按策略 patch 复算 | `qa ac AC-COMPARE-002` |
 | AC-COMPARE-003 | P0 | `Evaluation` 中每个数值都有引用链；人为删掉一条引用后校验失败 | `qa ac AC-COMPARE-003` |
-| AC-COMPARE-004 | P1 | 导出的比较表与账本数据一致（逐行核对），含 Flag 与差异说明 | `qa ac AC-COMPARE-004` |
 
 ## 4. 澄清、审批与护栏
 
 | ID | 阶段 | 断言 | 命令 |
 |---|---|---|---|
 | AC-CLARIFY-001 | P0 | 工单必带 `rfq_rev` 与条目引用；无引用的工单被拒绝 | `qa ac AC-CLARIFY-001` |
-| AC-CLARIFY-002 | P1 | 答案广播名单缺少任一在册投标人 → 工单不得关闭（INV-006） | `qa ac AC-CLARIFY-002` |
-| AC-CLARIFY-003 | P1 | 包升版后相关工单自动重开，且旧答案标记为"针对旧版本" | `qa ac AC-CLARIFY-003` |
-| AC-CLARIFY-004 | P2 | FAQ 命中不影响回答的版本绑定（复用不得跨版本） | `qa ac AC-CLARIFY-004` |
 | AC-APPROVE-001 | P0 | 批准记录只能由人产生；尝试以 agent 身份签署被拒绝 | `qa ac AC-APPROVE-001` |
 | AC-APPROVE-002 | P0 | 无批准记录时：提交报价/授标承诺/发 PO 三条路径全部抛错（INV-005） | `qa ac AC-APPROVE-002` |
-| AC-APPROVE-003 | P1 | 待批期间 agent 可继续其他工作；超时策略三选一生效且**不存在自动批准** | `qa ac AC-APPROVE-003` |
-| AC-GUARD-001 | P0/P1 | 异常低价与漏项样本被标 Flag，且 Flag 不改变排序或状态（只标注） | `qa ac AC-GUARD-001` |
-| AC-GUARD-002 | P1 | 产能冲突与条款冲突样本被标 Flag 并提请人工 | `qa ac AC-GUARD-002` |
 | AC-GUARD-003 | P0 | S4 反例（注入/漏项/虚假产能/伪造批准）全部被拦且有账本留痕 | `qa ac AC-GUARD-003` |
 
 ## 5. 承包商侧与供应商侧
@@ -92,52 +79,19 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 |---|---|---|---|
 | AC-RFQ-001 | P0 | 清单条目缺计量规则或接口无唯一责任方 → 校验失败 | `qa ac AC-RFQ-001` |
 | AC-RFQ-002 | P0 | 已发布版本字段无法原地修改；`amend` 产生新版本与字段级 delta | `qa ac AC-RFQ-002` |
-| AC-RFQ-003 | P1 | 分发记录可回答"谁在何时收到哪个版本" | `qa ac AC-RFQ-003` |
-| AC-RFQ-004 | P1 | 包升版后基于旧版本的报价被标记为过期（`stale` + 旧/新版本号、可审计不清除），不进入排序（`compare` 输出里以 `quote_superseded` 显式排除），并产生重报请求 | `qa ac AC-RFQ-004` |
 | AC-INTAKE-001 | P0 | 抽取结果逐条带 `item_id`；无引用者进入 `[假设]` 待确认 | `qa ac AC-INTAKE-001` |
 | AC-INTAKE-002 | P0 | 缺项检测能覆盖人为删减的条目；疑问清单需人工确认后才外发 | `qa ac AC-INTAKE-002` |
 | AC-COST-001 | P0 | 成本构成可按要素分解且可解释；私域服务在对方 realm 取不到值（与 AC-TRUST-001 同测） | `qa ac AC-COST-001` |
 | AC-PRICE-001 | P0 | 定价产出为 Intent；越界（超授权区间）无条件请求批准；最终数字需人确认 | `qa ac AC-PRICE-001` |
-| AC-CAP-001 | P1 | `firm` 交期在有效期内不可由模型变更；冲突只提请人工 | `qa ac AC-CAP-001` |
 | AC-DEV-001 | P0 | 未标 `impact` 的偏差不参与 TCO；偏差类别与影响可查 | `qa ac AC-DEV-001` |
-| AC-TERMS-001 | P1 | 条款冲突被标注并提请人工，不静默取其一 | `qa ac AC-TERMS-001` |
-| AC-AWARD-001 | P0/P1 | 缺供应商确认或缺人工签署时，`commit` 抛错；意向可撤回且无义务 | `qa ac AC-AWARD-001` |
-| AC-AWARD-002 | P1 | PO 只能由承诺派生；手工构造 PO 被拒绝 | `qa ac AC-AWARD-002` |
-| AC-CHANGE-001 | P1 | 变更请求必须引用原报价条目与单价基准，缺引用即拒绝 | `qa ac AC-CHANGE-001` |
-| AC-CHANGE-002 | P1 | 变更差额可按原单价复算；未经批准的变更不影响任何金额 | `qa ac AC-CHANGE-002` |
 | AC-NEGO-001 | P2 | 轮次与让步上限生效；任何价格让步需要人工批准 | `qa ac AC-NEGO-001` |
 
 ## 6. 评测与自进化
 
 | ID | 阶段 | 断言 | 命令 |
 |---|---|---|---|
-| AC-EVAL-001 | P0/P1 | 同输入重放两次结果完全一致（确定性）；S1..S4 全绿 | `qa suite s1..s4` |
 | AC-EVAL-002 | P0 | 指标基线报告可生成，且人员可读；反例集只增不减（删除被拒绝） | `qa ac AC-EVAL-002` |
-| AC-EVOLVE-001 | P2 | 提案含全部必填字段；影子重放产出指标对比 | `qa ac AC-EVOLVE-001` |
-| AC-EVOLVE-002 | P2 | 门五条同时满足才放行；任一不满足则拒绝晋升 | `qa ac AC-EVOLVE-002` |
-| AC-EVOLVE-003 | P2 | 对 `kernel/*` 的 patch 被拒绝（INV-010）；canary 越界触发自动回滚且 effect 全回收 | `qa ac AC-EVOLVE-003` |
-| AC-EVOLVE-004 | P2 | 同类提案第三次失败后必须转人工（不再自动重试） | `qa ac AC-EVOLVE-004` |
 | AC-INTEG-001 | P0 | 文件投递为原子写（临时文件 + rename）；半写文件不被读取 | `qa ac AC-INTEG-001` |
-| AC-INTEG-002 | P1 | relay 不解析 body（对其注入篡改会被验签发现）；relay 不可达时排队重试 | `qa ac AC-INTEG-002` |
-| AC-INTEG-004 | P1 | 桥的协议与版本协商：内核首帧自述能力清单（与 Python 声明表一致）；只暴露 read/compute；版本不兼容→退出码 2 且账本零新增；降级留痕；确定性错误码 + `next_action`；stdout 只有协议帧 | `qa ac AC-INTEG-004`（入口 `tools/verify.sh bridge`） |
-| AC-INTEG-005 | P1 | 承诺面不可达（对抗性）：宿主调 commit 面被拒且落 `kernel/bridge-rejected`；宿主播报 `human:*` 被拒（身份由内核注入）；`fact` 面默认关闭；read/compute 仍可用 | `qa ac AC-INTEG-005` |
-| AC-INTEG-006 | P1 | 桥的故障语义：SIGKILL 后哈希链仍真且 durable 零丢失、重启留痕；在途请求记 unknown；重启预算 3/30s 超限降只读（只关 fact/commit）；背压丢 live 必留痕（计数 + 时间窗）且 durable 可补齐；锚点不在链中→`kernel/bridge-fault` + 只读；无孤儿；启动失败退出码 3 且账本零新增 | `qa ac AC-INTEG-006`（入口 `tools/verify.sh bridge`） |
-| AC-INTEG-003 | P2 | 邮件发送失败不落账为"已发送"（账实一致） | `qa ac AC-INTEG-003` |
-| AC-TRUST-001 | P0/P1 | 对方私域字段在本侧投影、模型输入、视图中三处均不存在（INV-008） | `qa ac AC-TRUST-001` |
-| AC-RUNTIME-003 | P2 | FR-RUNTIME-003：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（audit-hook 门 7/7） | 见 `evidence/EV-068` |
-| AC-RUNTIME-004 | P2 | FR-RUNTIME-004：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（budget-guard 门 10/10 + budget-route 门 5/5） | 见 `evidence/EV-085` |
-| AC-RUNTIME-005 | P2 | FR-RUNTIME-005：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（breaker 门 10/10 + breaker-route 门 4/4） | 见 `evidence/EV-077` |
-| AC-RUNTIME-006 | P2 | FR-RUNTIME-006：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（governor 门 9/9） | 见 `evidence/EV-067` |
-| AC-RUNTIME-007 | P2 | FR-RUNTIME-007：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（observability 门 6/6） | 见 `evidence/EV-071` |
-| AC-RUNTIME-008 | P2 | FR-RUNTIME-008：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（modules 门 248/248） | 见 `evidence/EV-038` |
-| AC-RUNTIME-009 | P2 | FR-RUNTIME-009：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（idempotency-guard 门 10/10 + idem-route 门 5/5） | 见 `evidence/EV-083` |
-| AC-EVIDENCE-003 | P2 | FR-EVIDENCE-006：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（evolve-module 追溯门 11/11 + webui 21/21） | 见 `evidence/EV-075` |
-| AC-EVOLVE-005 | P2 | FR-EVOLVE-007：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（evolve-journal 门 7/7） | 见 `evidence/EV-080` |
-| AC-PRICE-002 | P2 | FR-PRICE-003：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（evolve-module 追溯门 11/11 + webui 21/21） | 见 `evidence/EV-073` |
-| AC-RFQ-005 | P2 | FR-RFQ-007：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（modules 门 248/248） | 见 `evidence/EV-039` |
-| AC-EVAL-003 | P2 | FR-EVAL-005：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（supplier-scorecard 门 10/10 + webui 21/21） | 见 `evidence/EV-082` |
-| AC-RUNTIME-010 | P2 | FR-UX-004：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（ops-view 门 9/9 + webui 21/21） | 见 `evidence/EV-079` |
-| AC-PLUGIN-004 | P2 | FR-PLUGIN-004：上条 FR 的机检断言（由对应围栏门与端到端门覆盖） | `tools/verify.sh`（coverage 门 + plugins 门 + evolve-module 门） | 见 `evidence/EV-086` |
 | AC-AUDIT-005 | P2 | 留存**执行侧**：派生副本销毁真的发生、账本落 `evidence/retention-copy-purged`（body 只出 target/sha256/bytes，不得含被销毁内容）、读侧封存后不可再读、越界路径与缺人工门批准一律拒绝且目标仍在、重复执行幂等（AC-AUDIT-003 管计划侧，本条管执行侧，两者合起来覆盖 FR-EVIDENCE-004） | `qa ac AC-AUDIT-005` | 见 `evidence/EV-088` |
 | AC-NEGO-003 | P2 | 谈判轮次与让步（服务层）：正常链落 `negotiate/round`；越界/越限/越带宽被拒**且落**`negotiate/round-rejected`；缺人工门必拒且不落轮次；轮次上限从账本重建；`recompute` 逐字节可复现；同 `(thread_id, attempt_no)` 幂等或冲突；**不产生任何义务**；账本链仍真 | `qa ac AC-NEGO-003` | 见 `evidence/EV-092` |
 | AC-FAQ-001 | P2 | 澄清 FAQ 的沉淀与复用（`FR-CLARIFY-004` 的机检）：同版本命中返回条目；**跨版本一律 `hit=false` 且不返回任何条目内容**（复用不得跨版本，AC-CLARIFY-004 的正面）；命中是纯读（不改票单/不改状态）；非 `human:` 发布被拒且不落 `entry-published`；跨 realm 条目不可见；私域键不进条目；`replay()` 可从账本重建 | `qa ac AC-FAQ-001` | 见 `evidence/EV-093` |

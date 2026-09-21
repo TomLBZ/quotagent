@@ -1,0 +1,215 @@
+EV-149 AC 归档合法化 + 用它把预算压下来（门语义变化 + 反向验证）
+
+时间：2026-09-21（本机）  cwd：/workspace/projects/quotagent  跑门时基线 commit：141e05e（工作树含本批改动）
+入口：tools/verify.sh docs | ac-registry | coverage | p0-no-node | g1
+
+一、改了什么：让"归档"成为契约的一部分（语义不变或加强，无一处放宽）
+  1) tools/check-docs.py
+     - AC 的"定义文件"从**单个文件**改为**集合**：docs/work/acceptance-criteria.md
+       + 同目录 glob `acceptance-criteria-archive*.md`。口径写在脚本头 + 两个常量 AC_MAIN / AC_ARCHIVE_GLOB，
+       实现是 ac_definition_files()（主文件恒在首位，其后是所有匹配的归档）。
+     - **ID 完整性语义不变**（每个引用 ID 必须存在于集合内），只是查找范围扩大。
+     - **FR↔AC 覆盖（无孤儿）同步扩到集合**：搬进归档的 AC 行与它还在主文件时受**同一个**断言约束
+       （不扩这一处就等于给归档开豁免，故必须扩）。
+     - **新硬断言**：归档必须真被读到 —— 任一归档文件 0 条 AC 定义行即判 FAIL；
+       输出里可见 `archives=[<文件>:<AC 行数>, ...]`（可观察证据，不是空集合比对式的静默通过）。
+     - 预算规则不变：`docs/work/*.md` 32 KB，归档与新文件同样受检。
+  2) tools/check-ac-registry.py
+     - 同一集合（主文件 + 归档）判「**phase 恰为 P0** 的 AC 必须已在 `qa list` 注册」→ P0 行搬进归档后
+       不变量保持（负控 2a 证明：P0 行搬进归档仍绿；2b 证明：从归档拿掉那条 P0 行立刻红）。
+     - 新增两道守卫（只加强）：归档 0 条 AC 行 = FAIL；集合里 0 条 P0 = FAIL（拒绝假绿灯）。
+     - 输出里同样可见 archives=[...]。
+  3) docs/design/12-documentation-standard.md §2：AC 定义处一行写明"主文件 + 同目录归档 = 门的 AC 定义集合；
+     归档不豁免任何断言"，避免"一处一事实"出现文档与现实漂移。
+
+二、搬了什么：46 条（逐字整行，含证据引用）
+  选入规则（可复核）：phase **不为** `P0`，且由 git 引入时间 **≤ 2026-09-21T10:46:22Z**
+  （每个 AC 行的首次出现提交时间由 `git log --reverse -p -- docs/work/acceptance-criteria.md` 解析得到），
+  按引入时间升序、同批保持原文件行序。
+  留在主文件：**全部 P0 行（29 条）**（最保守）；`AC-NEGO-001`（`docs/design/17-negotiation-contract.md`
+  明文"不得修改"）；`AC-DESIGN-001..003`（文档门自身的判据、主文件 §1 散文逐条点名）。
+  逐字校验（Python 比对，非人眼）：46/46 行在 `git show HEAD:docs/work/acceptance-criteria.md` 里**逐字节存在且各出现 1 次**；
+  且"改后主文件 == HEAD 版删掉这 46 行"为 True。
+  尺寸：主文件 32760 → **25066 B**（24.5 KB；28 KB 目标线以下 3.5 KB，32 KB 硬预算以下 7.5 KB）
+        归档 **10109 B**（9.9 KB < 32 KB 预算）
+  条数：主文件 125 → **79** 条 AC 行；归档 **46** 条；合计仍 **125**（无丢行、无重复）
+  AC 定义总数（门报）：565 个定义、6112 处引用、0 未解析（引用 +2 来自归档头部的两处 ID 提及）
+  受影响的设计文档行号引用已同步：`docs/design/16-negotiation-design.md:4,:23` 与
+  `docs/design/17-negotiation-contract.md:3` 的 `acceptance-criteria.md:108` → `:87`（AC-NEGO-001 留主文件，行号因搬走其上方的行而前移）。
+
+三、门（真跑，原始输出）
+### 真实仓库 /workspace/projects/quotagent（改动后）—— tools/verify.sh docs
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描 267 个 markdown 文件，仓库根 /workspace/projects/quotagent
+[ok]   AC 定义集合: 主文件 docs/work/acceptance-criteria.md 定义 79 条；archives=[docs/work/acceptance-criteria-archive.md:46]（归档文件共 46 条 AC 定义行，受同一套门校验）
+[ok]   ID 完整性: 565 个定义，6112 处引用，0 未解析
+[ok]   占位符: 无
+[ok]   预算: 98 个文件受检，最高占用 100%（docs/work/handover.md 1023/1024 B）
+[ok]   FR↔AC 覆盖: 146 条 FR 均关联 AC，125 条 AC 无孤儿（AC 定义文件 2 个：主文件 + 1 个归档）
+RESULT: PASS
+exit=0
+
+### tools/verify.sh ac-registry
+[ok]   定义文件 2 个（主文件 1 + archives=[docs/work/acceptance-criteria-archive.md:46]，归档共 46 条 AC 行）
+[ok]   定义集合 125 条 AC（其中 P0 29 条），注册表 80 条
+[info] 尚未到期（P1/P2 等）未注册 45 条：AC-ADMIN-001(P2)、AC-ADMIN-002(P2)、AC-ADMIN-003(P2)、AC-ADMIN-007(P2)、AC-ADMIN-008(P2)、AC-ADMIN-009(P2)、AC-ADMIN-010(P2)、AC-CLARIFY-004(P2)…
+[ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查）
+exit=0
+
+### tools/verify.sh coverage
+{
+  "checks": [
+    {
+      "name": "矩阵文件存在",
+      "ok": true,
+      "detail": "docs/design/15-requirements-coverage.md"
+    },
+    {
+      "name": "矩阵对 FR 文档**双向全覆盖**（文档 146 条）",
+      "ok": true,
+      "detail": "缺 0 条[]；伪造 0 条[]"
+    },
+    {
+      "name": "矩阵对插件目录**双向全覆盖**（35 个插件）",
+      "ok": true,
+      "detail": "缺 0 个[]；伪造 0 个[]"
+    },
+    {
+      "name": "每条 FR 的承载体**在仓库里真实存在**（防矩阵瞎写）",
+      "ok": true,
+      "detail": "不存在的承载体 0 处：[]"
+    },
+    {
+      "name": "状态合法；【缺口】【存疑】**逐条登记**（不许悄悄留洞）",
+      "ok": true,
+      "detail": "问题 0 处：[]；登记表 5 条"
+    },
+    {
+      "name": "每个插件至少归属 1 条 FR 或 AC（'功能由插件提供'的落点）",
+      "ok": true,
+      "detail": "无归属插件 0 个：[]"
+    },
+    {
+      "name": "内建负控：三种篡改（假承载体/删 FR 行/删插件行）**都必须让门变红**",
+      "ok": true,
+      "detail": "承载体改成本不存在的文件→红; 删掉一条 FR 行→红; 删掉一条插件行→红"
+    }
+  ],
+  "passed": 7,
+  "total": 7,
+  "failures": 0
+}
+exit=0
+
+### tools/verify.sh p0-no-node
+P0 阶段 58 条 AC 在无 Node 环境下全绿（P0 不因引入宿主而失去可复跑性）
+exit=0
+
+### tools/verify.sh g1（含全量 AC）
+[ok] 判据2 **供应商侧**的报价提交同样过人工门（无批准即抛错，有批准才落账）
+        无批准时: ApprovalRequired: 动作 'quote.submit'（ref='qg-fresh'）缺少人工批准记录：；账本 3 条
+[ok] 判据2 commit 类调用被拒（commit-refused）且留痕于账本
+        code=commit-refused
+[ok] 判据2 经桥读账本：健康且哈希链自洽（`ledger.verify` 返回逐条报告）
+        healthy=True verify.checked=17
+[ok] 判据3 供应商可见产物不含承包商私域字段（且不是空转：产物确实有内容）
+        supplier 产物 613 字符；承包商比较表 1 行
+[ok] 判据4 S1..S4 场景集全绿
+        exit={'s1': 0, 's2': 0, 's3': 0, 's4': 0}
+[ok] 判据5 审计包可被第三方独立验证（只给包文件 + 验证方密钥）
+        RESULT: PASS
+[ok] 判据5 篡改任一条后独立验证失败（篡改必被发现）
+        RESULT: FAIL — 哈希链（包内自洽）: seq 1 的记录内容与 entry_hash/body_hash 不一致
+[ok] 判据5 全程可离线重放：两侧账本非空且哈希链自洽（空/缺失账本一律不算通过）
+        contractor: ledger.jsonl 条目 17，校验 17 条，ok=True；supplier: ledger.jsonl 条目 3，校验 3 条，ok=True
+[ok] 判据6 无 Node 环境时 P0 的 AC 与文档门仍全绿（可复跑性不退化）
+        p0-no-node=0 docs=0
+[ok] 判据2 桥可干净关闭（无孤儿、退出码 0）
+        exit=0
+------------------------------------------------------------------------
+阶段时间线：contractor#1(pid 1052568, 账本 2 条) → supplier#1(pid 1052569, 账本 0 条) → contractor#2(pid 1052570, 账本 4 条) → supplier#2(pid 1052571, 账本 3 条) → contractor#3(pid 1052572, 账本 8 条) → supplier#3(pid 1052573, 账本 3 条) → contractor#4(pid 1052574, 账本 16 条)
+结论：14/14 条通过
+[ok] 阶段门 G1：MVP 判据全部可机检项通过（逐条判定见上方走查报告）
+g1 rc=0
+
+四、反向验证（**在副本 /tmp/acwork/copy 上做**：整仓 `cp -a` 副本，主仓库全程未被试验改动；每次试验后从
+    pristine 备份还原，并报 sha256 一致）
+### 负控 1（副本 /tmp/acwork/copy）：从归档拿掉 1 条**非 P0** 行（AC-CLARIFY-004）
+$ tools/verify.sh docs
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描 267 个 markdown 文件，仓库根 /tmp/acwork/copy
+[ok]   AC 定义集合: 主文件 docs/work/acceptance-criteria.md 定义 79 条；archives=[docs/work/acceptance-criteria-archive.md:45]（归档文件共 45 条 AC 定义行，受同一套门校验）
+[FAIL] 未解析的 ID 引用 1 个（共 6110 处引用）
+       - AC-CLARIFY-004  ← docs/design/18-faq-contract.md, docs/work/acceptance-criteria.md, docs/work/decisions-archive.md, docs/work/functional-requirements.md, docs/work/progress-checklist.md, tmp/clean/docs/work/acceptance-criteria.md, tmp/clean/docs/work/functional-requirements.md, tmp/clean/docs/work/progress-checklist.md, tmp/manual-check/quotagent/docs/work/acceptance-criteria.md, tmp/manual-check/quotagent/docs/work/functional-requirements.md, tmp/manual-check/quotagent/docs/work/progress-checklist.md
+[ok]   占位符: 无
+[ok]   预算: 98 个文件受检，最高占用 100%（docs/work/handover.md 1023/1024 B）
+[ok]   FR↔AC 覆盖: 146 条 FR 均关联 AC，124 条 AC 无孤儿（AC 定义文件 2 个：主文件 + 1 个归档）
+RESULT: FAIL (1 项)
+exit=1
+
+### 还原：archive.pristine -> 工作树
+3fceca004dbc0bcf3147397e8cbe4dd74d2c63801b026bcbb01f01a9c3d7c4bd  /tmp/acwork/archive.pristine
+3fceca004dbc0bcf3147397e8cbe4dd74d2c63801b026bcbb01f01a9c3d7c4bd  docs/work/acceptance-criteria-archive.md
+$ tools/verify.sh docs
+[ok]   预算: 98 个文件受检，最高占用 100%（docs/work/handover.md 1023/1024 B）
+[ok]   FR↔AC 覆盖: 146 条 FR 均关联 AC，125 条 AC 无孤儿（AC 定义文件 2 个：主文件 + 1 个归档）
+RESULT: PASS
+
+### 负控 2a（副本）：把 1 条 **P0** 行（AC-NORM-002）从主文件**逐字搬进归档** → 不变量必须保持（绿）
+$ tools/verify.sh ac-registry
+[ok]   定义文件 2 个（主文件 1 + archives=[docs/work/acceptance-criteria-archive.md:47]，归档共 47 条 AC 行）
+[ok]   定义集合 125 条 AC（其中 P0 29 条），注册表 80 条
+[info] 尚未到期（P1/P2 等）未注册 45 条：AC-ADMIN-001(P2)、AC-ADMIN-002(P2)、AC-ADMIN-003(P2)、AC-ADMIN-007(P2)、AC-ADMIN-008(P2)、AC-ADMIN-009(P2)、AC-ADMIN-010(P2)、AC-CLARIFY-004(P2)…
+[ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查）
+exit=0
+
+$ tools/verify.sh docs
+[ok]   FR↔AC 覆盖: 146 条 FR 均关联 AC，125 条 AC 无孤儿（AC 定义文件 2 个：主文件 + 1 个归档）
+RESULT: PASS
+
+### 负控 2b（副本）：再**从归档里拿掉**那条 P0 行（AC-NORM-002）→ ac-registry 必须变红
+$ tools/verify.sh ac-registry
+[ok]   定义文件 2 个（主文件 1 + archives=[docs/work/acceptance-criteria-archive.md:46]，归档共 46 条 AC 行）
+[ok]   定义集合 124 条 AC（其中 P0 28 条），注册表 80 条
+[info] 尚未到期（P1/P2 等）未注册 45 条：AC-ADMIN-001(P2)、AC-ADMIN-002(P2)、AC-ADMIN-003(P2)、AC-ADMIN-007(P2)、AC-ADMIN-008(P2)、AC-ADMIN-009(P2)、AC-ADMIN-010(P2)、AC-CLARIFY-004(P2)…
+[FAIL] 注册表里有、定义集合里没有：['AC-NORM-002']
+exit=1
+
+### 还原：main.pristine + archive.pristine -> 工作树（逐字节）
+9ff861b045f2e53f867fdd60fb3c591150d2da7b6bfd3bede0b5b5369d3309d5  /tmp/acwork/main.pristine
+9ff861b045f2e53f867fdd60fb3c591150d2da7b6bfd3bede0b5b5369d3309d5  docs/work/acceptance-criteria.md
+3fceca004dbc0bcf3147397e8cbe4dd74d2c63801b026bcbb01f01a9c3d7c4bd  /tmp/acwork/archive.pristine
+3fceca004dbc0bcf3147397e8cbe4dd74d2c63801b026bcbb01f01a9c3d7c4bd  docs/work/acceptance-criteria-archive.md
+$ tools/verify.sh docs / ac-registry
+docs exit=0
+ac-registry exit=0
+
+### 负控 3（副本）：磁盘上存在一个 0 条 AC 行的归档 acceptance-criteria-archive-b.md → 两道门都必须红（不许静默通过）
+$ tools/verify.sh docs
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描 268 个 markdown 文件，仓库根 /tmp/acwork/copy
+[FAIL] 归档文件未被有效读取（0 条 AC- 定义行）: docs/work/acceptance-criteria-archive-b.md
+[ok]   AC 定义集合: 主文件 docs/work/acceptance-criteria.md 定义 79 条；archives=[docs/work/acceptance-criteria-archive-b.md:0, docs/work/acceptance-criteria-archive.md:46]（归档文件共 46 条 AC 定义行，受同一套门校验）
+[ok]   ID 完整性: 565 个定义，6112 处引用，0 未解析
+[ok]   占位符: 无
+[ok]   预算: 99 个文件受检，最高占用 100%（docs/work/handover.md 1023/1024 B）
+[ok]   FR↔AC 覆盖: 146 条 FR 均关联 AC，125 条 AC 无孤儿（AC 定义文件 3 个：主文件 + 2 个归档）
+RESULT: FAIL (1 项)
+docs exit=1
+
+$ tools/verify.sh ac-registry
+[FAIL] 归档文件未被有效读取（0 条 AC 行）：['docs/work/acceptance-criteria-archive-b.md']
+ac-registry exit=1
+
+五、未验证 / 未尽事项（如实列出）
+  1. **没有跑 `verify.sh all`**：`tools/verify.sh` 的 case 表里**不存在 `all` 入口**（`tools/verify.sh all`
+     会落用法分支，exit 2）。本轮实跑：docs / ac-registry / coverage / p0-no-node / g1（g1 内部 = events +
+     ac-registry + audit + v + 全量 AC 80/80 + 走查 14/14）。其余约 40 个门入口**本轮未重跑**。
+     影响面经 grep 确认：全仓只有 tools/check-docs.py、tools/check-ac-registry.py、tools/check-fr-coverage.py
+     引用 AC 文件路径，三者本轮都跑了；check-fr-coverage 里读 AC 文件的 `acs` 变量**不参与任何断言**（已确认）。
+  2. **没跑 clean-copy**：clean-copy 校验的是 HEAD 版干净副本，须在 commit 之后跑；本轮**未**跑。
+  3. 没跑 ui-mutate（不在本批范围）。
+  4. 反向验证只在**副本**上做了 3 例（非 P0 行移除 / P0 行搬入+移除 / 空归档文件）；**未**对全部 46 行逐行做移除试验。
+  5. 归档的 46 行在门之外的可发现性：`.agents/skills/quotagent-implement-task/SKILL.md` 仍写"在
+     `docs/work/acceptance-criteria.md` 里找 AC 的可执行命令"——本轮只保证门与契约，**未**改 skill 指引。
+  6. G0/G1 的人签署、V 项结论：与本批无关，仍待人工。
