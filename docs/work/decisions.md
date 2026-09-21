@@ -32,13 +32,6 @@
 | D-013 | 新增 `tools/check-ac-registry.py`（入口 `tools/verify.sh ac-registry`）：**phase 恰为 P0 的文档 AC 必须已有注册断言**，未到期（P1/P2/P0-P1）只报告不失败；反向捕获"注册了但文档没有"的孤儿 AC | 实测发现 `AC-CLARIFY-001` 在 `acceptance-criteria.md` 里标着 P0 却从未有断言（文档门只查文档，查不出这种漂移） | agent:arch | 若某 P0 AC 需要延后，须改文档 phase 或在 checklist 里写明理由 |
 | D-014 | 事件派发统一走 `EventBus.dispatch()`（按事件的 `@mode` 选分发器）；服务不得自行 `emit(bail 事件)` | 实测暴露：`compare` 用 emit 派发 bail 模式的 `rfq/version-mismatch`，一旦挂上事件总线就抛 `EventModeError` —— 而 AC-COMPARE-001 当时没挂总线，所以漏了；修法把「按模式派发」下沉到总线并**同时给 AC-COMPARE-001/AC-EVT-001 补断言**（覆盖漏洞与 bug 一起修） | agent:arch | 新增服务写事件前先查 `05-events.md` 的 @mode；AC 里凡涉及事件派发的路径都要挂总线 |
 
-## D-017 — RFQ 包体不进账本：跨进程靠"侧内操作日志"重放（2026-09-21）
-
-- 背景：`rfq/published` / `rfq/amended` 事件只带**哈希、条目数、截止时间**，不含包体；`RfqService` 的已发布快照只在内存里。于是"重启/换进程后从账本重放本 realm 状态"（`06` §7）对 RFQ 并不成立——跨阶段的两个真进程走查第一次跑就在 `amend` 处失败。
-- 现状处理：走查里承包商侧把自己做过的 `publish`/`amend` 记在**侧内操作日志**（`tmp/g1-shared/contractor/rfq-ops.json`）里，下一阶段按同一顺序重放（确定性，得到同样的 rev 与快照哈希）。这是**补齐**，不是兜底：日志是侧内产物，账本仍是事实源。
-- 记在这里的原因：这是 P1 的一处**已知限制**，必须显式可见；`04 §ctx.rfq` 的"不变量"只保证"已发布字段不可原地改"，不保证"包体可从账本重建"。
-- 后续（P2 候选）：把包体做成**内容寻址对象**并让 `rfq/*` 事件携带对象地址（而非只带哈希），这样侧与宿主都能从账本重建；或由宿主层的对象存储承担。改动面：`kernel/ledger.py` 的条目类型、`services/rfq.py`、`03` 的报文表——需要新 ADR。
-
 ## D-027 T-234 根因与收口：`governor` 的自引用（2026-09-21T09:11:03Z）
 
 **根因（已定位并修复）**：`host/modules/governor.mjs` 的方法内部用 `ctx.governor.admit/release` **自引用**。
@@ -308,7 +301,16 @@ FR/AC 归属**；`host/modules/` 与插件清单文档里**零个 FR 引用**。
 - 背景：roadmap S1.13 写「CSV/Excel」（FR-UX-003 同）。内核/服务层受"仅用标准库"约束，手写 xlsx（zip + OOXML）属于重复造轮子，引入 `openpyxl` 又会打破零依赖约束。
 - 裁决：P1 交付 **CSV**（stdlib `csv`，带 UTF-8 BOM 使 Excel 双击不乱码，列头稳定）；`.xlsx` 若确需，由**宿主层**（Node/cordis 侧，可正常用第三方库）承接，不在内核。
 - 后果：FR-UX-003 的"Excel"按"Excel 可直接打开的 CSV"满足；需求方若要原生 xlsx，走宿主层或另开 ADR。
+## D-050 T-256：谈判轮次落地（让步必过门、越界是拒绝、不产生义务）（2026-09-21T11:35:32Z）
+
+**实现**：`services/negotiation.py`（严格按 `docs/design/17-negotiation-contract.md`）+ `AC-NEGO-003` 机检。
+**要点**：让步空间只来自既有事实（成本模型底线 + pricing 授权带宽），策略键缺任一即拒、**不兜默认值**；
+让步必过 `negotiate.price-concession` 人工门（无自动批准）；越界/越限/越带宽是**拒绝**且落 `round-rejected`；
+轮次上限从**账本重建**；`recompute` 逐字节可复现；本服务**不产生任何义务**（无 commitment/PO/对外报价）。
+**纪律**：*承诺类逻辑先钉契约再实现*（T-252/T-255/T-256 三次都这么做，返工为 0）。
+
 ## 归档指针（正文已移入 `decisions-archive.md`，ID 仍在此处可索引）
+- D-017 —— 见 `decisions-archive.md`
 - D-021 —— 见 `decisions-archive.md`
 - D-044 —— 见 `decisions-archive.md`
 以下决策的完整记录已整段搬到 `decisions-archive.md`，内容未改、门未改；此处保留 ID 以便引用可解析。
@@ -330,3 +332,4 @@ FR/AC 归属**；`host/modules/` 与插件清单文档里**零个 FR 引用**。
 
 **纪律**：*破坏性代码的门必须自带变异自证*（本轮 5/5 处变异全红），且**契约先写死再并行实现**——
 否则两个 subagent 会在接口上互相返工。
+

@@ -65,8 +65,8 @@
 | FR-LEDGER-002 | src/quotagent/kernel/ledger.py | Ledger.project(view, from_seq, to_seq) | 直引 |
 | FR-LEDGER-003 | src/quotagent/kernel/ledger.py | Ledger.assert_healthy() | 直引 |
 | FR-LEDGER-004 | src/quotagent/kernel/ledger.py | Ledger._dedup_key() | 直引 |
-| FR-NEGO-001 | — | — | 缺口 |
-| FR-NEGO-002 | — | — | 缺口 |
+| FR-NEGO-001 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |
+| FR-NEGO-002 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |
 | FR-NORM-001 | src/quotagent/services/norm.py | NormService.normalize() | 映射 |
 | FR-NORM-002 | src/quotagent/services/norm.py | Rejection | 映射 |
 | FR-NORM-003 | src/quotagent/services/norm.py | NormService._stage_align() | 映射 |
@@ -145,6 +145,8 @@
 > 原注（T-252）：`FR-EVIDENCE-004` 已从【缺口】转为**部分实现** —— 判定器入库并有机检（`verify.sh retention`），
 > 但**执行侧**（删除派生副本、读侧封存）尚未实现；`AC-AUDIT-003` 因此**不标绿**，执行侧见清单 T-253。
 
+> 更新（T-256）：`FR-NEGO-001/002` 已落地（服务层 + 机检 `AC-NEGO-003`）。
+
 ## 3. 缺口与存疑登记
 
 > 门要求：状态为【缺口】【存疑】的 FR **必须**在本节逐条登记，且状态只能取 直引/映射/缺口/存疑。
@@ -153,8 +155,8 @@
 |---|---|---|---|
 | FR-CLARIFY-004 | 缺口 | — | P2 规划内未做（T-310） |
 | FR-EVIDENCE-004 | src/quotagent/services/retention.py、src/quotagent/services/retention_exec.py | 计划侧（AC-AUDIT-003）+ 执行侧（AC-AUDIT-005），两侧均有门 | 直引 |
-| FR-NEGO-001 | 缺口 | — | P2 规划内未做（T-309：谈判轮次） |
-| FR-NEGO-002 | 缺口 | — | P2 规划内未做（T-309：让步动作绑人工门） |
+| FR-NEGO-001 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |
+| FR-NEGO-002 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |
 | FR-INTEG-003 | 缺口 | — | P2 规划内未做（T-301：邮件集成） |
 
 ## 4. 本次新增的 P2 需求（12 件无归属插件 + 1 条总纲）

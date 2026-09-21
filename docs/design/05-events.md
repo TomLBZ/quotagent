@@ -92,7 +92,11 @@
 | `compare/rank-computed` | emit | ✔ | `ctx.compare` → 人/AwardAdvisor | 排序 + 引用链 |
 | `compare/flag-raised` | emit | ✔ | `ctx.guard` | Flag 从不由模型自行消解 |
 | `compare/table-exported` | emit | ✔ | `ctx.compare` → 评审 | 比较表导出留痕（行数/字节数/`evaluation_id`；导出内容与账本逐行一致） |
-| `negotiate/round` | serial | ✔ | `ctx.negotiate` → approval | 轮次与让步上限来自策略 patch（规划中（P2 谈判阶段）） |
+| `negotiate/round` | serial | ✔ | `ctx.negotiate` → approval | 轮次与让步上限来自策略 patch（实现（T-256）（P2 谈判阶段）） |
+| `negotiate/bounds-declared` | `emit` | 谈判边界声明（human 给的轮次上限/让步幅度/底线/带宽）——只追加不改旧行 | 与 `negotiate/round` 同族；落账不产生义务（ADR-0019） |
+| `negotiate/opened` | `emit` | 谈判线程开立（挂采购包版本、对手方、本方报价与其人确认报价单） | 与 `negotiate/round` 同族；落账不产生义务（ADR-0019） |
+| `negotiate/round-rejected` | `bail` | 让步被拒（code/reason/next_action）——拒绝也要落痕 | 与 `negotiate/round` 同族；落账不产生义务（ADR-0019） |
+| `negotiate/closed` | `emit` | 谈判关闭（outcome/决定人/轮次用量） | 与 `negotiate/round` 同族；落账不产生义务（ADR-0019） |
 | `award/intent-proposed` | emit | ✔ | `ctx.award` → 对方 | Intent，可撤回 |
 | `award/intent-withdrawn` | emit | ✔ | `ctx.award` | 意向撤回（可复：再次提出得新意向） |
 | `award/commit-requested` | serial | live | `ctx.award` → 人工门 | 需 `approval/granted` 才能推进（名称与事件表一致：`award/committed` 与 `commit-requested` 成对） |

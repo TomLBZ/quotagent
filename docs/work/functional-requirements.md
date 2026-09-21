@@ -129,8 +129,8 @@
 
 | ID | 需求 | 优先级 | 阶段 | 关联 AC |
 |---|---|---|---|---|
-| FR-NEGO-001 | 有限轮次谈判：轮次上限与让步上限来自策略 patch | could | P2 | AC-NEGO-001 |
-| FR-NEGO-002 | 任何价格让步必须人工批准 | must | P2 | AC-NEGO-001 |
+| FR-NEGO-001 | 有限轮次谈判：轮次上限与让步上限来自策略 patch | could | P2 | AC-NEGO-001 、AC-NEGO-003 |
+| FR-NEGO-002 | 任何价格让步必须人工批准 | must | P2 | AC-NEGO-001 、AC-NEGO-003 |
 | FR-EVAL-001 | 场景集（S1..S4）与断言执行 | must | P1 | AC-EVAL-001 |
 | FR-EVAL-002 | 离线重放确定性（同输入同输出） | must | P1 | AC-EVAL-001 |
 | FR-EVAL-003 | 指标采集与基线报告 | must | P0 | AC-EVAL-002 |

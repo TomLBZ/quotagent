@@ -149,6 +149,12 @@ class EventBus:
         "evidence/pack-exported": ("emit", True, ""),
         "evidence/retention-archived": ("emit", True, ""),
         "evidence/retention-copy-purged": ("emit", True, ""),
+        # negotiate/*（ADR-0019；无 waterfall）
+        "negotiate/bounds-declared": ("emit", True, ""),
+        "negotiate/opened": ("emit", True, ""),
+        "negotiate/round": ("serial", False, ""),
+        "negotiate/round-rejected": ("bail", True, ""),
+        "negotiate/closed": ("emit", True, ""),
         # §4 agent 侧（live）
         "agent/step-start": ("emit", False, ""),
         "agent/step-end": ("emit", False, ""),

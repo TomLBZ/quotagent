@@ -1,0 +1,55 @@
+EV-092 T-256 谈判轮次与让步（FR-NEGO-001/002）：服务 + 机检 + 事件两侧登记 + 矩阵转正
+生成时间 2026-09-21T11:35:47Z
+
+[1] 交付（两个 subagent 并行，deleg_7ec780c9，662s；规格 = 仓库内契约文档）
+· `src/quotagent/services/negotiation.py`（53622 B，sha256 5b5f97b2d33a3233…）
+  —— 严格按 `docs/design/17-negotiation-contract.md`：11 个契约方法、6 环 serial 判定链
+  （维度 → 轮次上限 → 幅度 → 底线 → 区间 → 门）、11 个异常、契约 §5 的 5 个事件
+· `src/quotagent/qa/checks_negotiation.py`（48773 B，sha256 2f0772da8c21afdf…）
+  —— `AC-NEGO-003`，**30 条断言**（要求 ≥15）
+· 事件两侧登记：`05-events.md` 4 新名 + `kernel/events.py` 5 条（emit/emit/serial/bail/emit；`round` 非 fact）
+
+[2] 父侧自己实跑（D-019：subagent 自述不算事实）
+$ tools/verify.sh negotiation → exit=0
+{"ac": "AC-NEGO-003", "exit": 0, "passed": 30, "total": 30, "failures": []}
+断言 30/30 通过
+$ 机检变异自证（`tmp/t256-mutate.py`，父侧重跑）：
+=== 变异自证汇总 ===
+基线：exit=0 断言 30/30 通过 → 绿
+M1 exit= 1 断言 25/30 变红断言 5 条：把门检查改成恒真（用伪造批准记录顶替 approval.require）
+M1b exit= 2 断言 0/1 变红断言 1 条：把整条判定链短接成恒真（不管批没批、越不越界都放行）
+M2 exit= 1 断言 28/30 变红断言 2 条：去掉幅度检查（超 max_concession_pct 也放行）
+M3 exit= 1 断言 24/30 变红断言 6 条：去掉 round-rejected 落痕（拒绝不留痕）
+M4 exit= 1 断言 27/30 变红断言 3 条：轮次上限改成常量 999（上限不生效、用量也不从账本数）
+M5 exit= 1 断言 25/30 变红断言 5 条：去掉同轮不同内容的冲突检查（静默追加第二条事实）
+M6 exit= 1 断言 27/30 变红断言 3 条：把轮次改成承诺类事件（让步直接产义务）
+[自证通过] 7 处单点变异全部真变红，基线 30/30 全绿。
+
+[3] 真实链条（实现方原始输出节选，父方核对过事件序列）
+账本：`4 negotiate/bounds-declared fact nt-0001` · `5 opened` · `6 bounds-declared` · `7 approval/requested nt-0001:a1`
+· `8 approval/granted` · `9 negotiate/round intent nt-0001` · `10 round-rejected` · … · `15 closed`；
+`chain_ok=true`、`commitments=[]`（**不产生义务**）、判定链挂在 `negotiate/round` 上。
+拒绝路径实测：`concession-below-floor`（79.9 < 底线 80.0）、`concession-out-of-band`（125 超出 [80,120]）、
+`RoundLimitExceeded`（第 3 次超过上限 2）、`ApprovalRequired`（门状态 none）。
+
+[4] 机检方抓到的两个**真缺陷**（协作的价值所在，已由实现方修掉）
+① `submit_round` 的 6 个 stage 写成 waterfall 签名 `(work, next_)` 却挂在 **serial** 事件上
+   （serial 是 `fn(*args)`，无处传 `next_`）→ 任何一轮都落不了地；
+② 修 ① 后又暴露：`_append` 对 `negotiate/round` 再派发会把轮次 body 当 `work` 重跑判定链
+   （`KeyError: item_id`）。现在 `_dispatch` 明确跳过 serial 的判定链。
+
+[5] 接入与门
+· `qa/__init__.py` 注册 `checks_negotiation`（注册表 → **60 条 AC**）
+· `tools/check-negotiation.py` + `verify.sh negotiation`（门总数 37）
+· `acceptance-criteria.md` 新增 `AC-NEGO-003`；`FR-NEGO-001/002` 的 AC 列补引用（AC-DESIGN-003 双向仍成立）
+· 覆盖矩阵：`FR-NEGO-001/002` 由【缺口】→【直引】（服务层 + 机检）
+· 修正设计轮次发现的漂移：`04-services-catalog.md` 的 `ctx.negotiate [P1]` → P2
+
+[6] 如实说明（不粉饰）
+· 未覆盖：跨方谈判报文、交期维度、ZOPA 与"上限具体数值"（设计 §4 明确留待后续）
+· `approval-denied`/`approval-aborted` 两个拒绝码与视图状态 `awaiting_approval` 是**实现方的契约读法**，
+  机检未覆盖（分歧已如实标注）
+· 多进程/并发未测；"重启后从账本重建用量"是**同进程第二实例 + 同一账本**模拟的
+· 机检的变异锚点与当前实现版本耦合：实现再改需重跑（锚点失配会诚实报"假变异"，不会假绿）
+
+结论：5 条【缺口】FR 的第 2 条落地 —— 谈判轮次全程可复算、可审计，**代理人不能自己越过人给的底线与带宽**。
