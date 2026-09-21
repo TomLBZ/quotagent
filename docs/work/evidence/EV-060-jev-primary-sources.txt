@@ -31,3 +31,21 @@ EV-060 模型 Jev 的一手来源核验（T-223）
 
 覆盖到结论：模型存在性、接口形状（state + 类型化 questions）、输出形状（choice/score/noul + confidence
 + probabilities）、上下文上限、无文本输出、输入定价 —— 均有上述一手页面支撑。
+
+[4] https://docs.typesafe.ai/models（本 agent 抓取，2026-09-21T08:32:20Z；补记：把两条从[二手]收紧为已核实）
+  · "Every model on this page is served by the same endpoint, `POST /v1/systemone`."
+  · "Jev 1.13 | `jev-1.13.0`"；"Price (per Btok / per Mtok) | $42 / $0.042"
+  · "Rate limits | 250,000 tokens per second / 1,200 requests per minute"
+  · "Input | Text only. String, JSON object, or array of text values. No image, audio, or video input."
+  · "The 64k budget covers the `state` plus all questions combined; the 32k budget applies to the `state`
+    plus the single longest question."  ← **修正**本报告原先"32k 上下文"的笼统口径
+  · "Jev is not fine-tuned or LoRA-adapted with customer data ... the same weights serve every account."
+  · 接口层：`GET /v1/models` 列出账号可用名；版本化 id（如 `jev-1.13.0`）由 `model` 字段接受。
+
+[5] https://docs.typesafe.ai/model-jaggedness/jev-1.13（本 agent 抓取，2026-09-21T08:32:20Z）—— 厂商**自己公布**的失败模式
+  · "Math and Numbers → Numeric representations: do the conversion in code and pass in either the computed
+    number or a named bucket. Keep the model for the part that is genuinely a judgment."
+  · "Math using score: do not use score outputs (e.g., expectations and probability) to compute the exact
+    magnitude of a number between two levels ... `jev-1.13`'s score levels are weak in numerical calibration."
+  · "Generation: when the answer space is bounded, turn extraction into a Choice over the options rather than
+    asking for the value itself. If you really need to generate text ... there are other models for that."

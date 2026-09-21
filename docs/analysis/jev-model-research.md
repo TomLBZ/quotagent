@@ -19,14 +19,20 @@ Jev 是 TypeSafe AI 发布的 “System One” 评估模型：输入一个 `stat
 | 输入形状 | `{ state, questions }`，每题带 `type` + `instructions` + `criteria` | 同上（两处示例一致） |
 | 输出形状 | `{ model, answers: { <问题>: { type, choice/score/noul, confidence, probabilities, legend } } }` | Cloudflare 页面示例（示例回包 `model: "jev-1.13.0"`） |
 | 问题类型 | `noul`（布尔概率）、`choice`（多选一 + 概率分布）、`score`（有序打分 + legend） | Cloudflare 页面 |
-| 上下文上限 | 32,000 tokens | Cloudflare 页面与 Vercel 页面一致 |
+| 统一端点 | `POST /v1/systemone`（`model` 字段选模型；另有 `GET /v1/models` 列出账号可用名） | `docs.typesafe.ai/models`（一手，本 agent 抓取） |
+| token 预算（**修正**） | **64k** 覆盖 `state` ＋ 全部问题；**32k** 覆盖 `state` ＋ **最长的那一道题** —— 不是笼统的「32k 上下文」 | `docs.typesafe.ai/models` |
+| 速率限制 | 250,000 tokens/s、1,200 req/min（厂商公布） | `docs.typesafe.ai/models` |
+| 输入模态 | **仅文本**（字符串 / JSON 对象 / 文本数组），无图像、音频、视频 | `docs.typesafe.ai/models` |
+| 定制方式 | 不用客户数据做微调/LoRA，同一套权重服务全部账号；领域适配靠请求里的 `state` 与每题的 `instructions`/`criteria` | `docs.typesafe.ai/models` |
 | 输出长度 | 0（不生成文本） | Vercel 页面 |
 | 定价（输入） | $0.042 / 1M input tokens；输出免费 | Vercel 页面 |
 | 一次请求可并行多题 | 是 | Vercel 页面描述 |
 
 两处网关对布尔类型命名不一致：Cloudflare 示例用 `type: "noul"`，Vercel 示例用 `type: "boolean"`。**接入时以各自网关文档为准**（本文不做统一）。
 
-厂商宣称（非一手核实的独立结论）：最高 200× 更快、400× 更低成本（`[二手]`，来自媒体报道与厂商公告，未独立复现）。厂商另有一页公开失败模式说明 `Jev 1.13 jaggedness`（`[二手]`，本次未逐条核实内容）。
+厂商宣称（非一手核实的独立结论）：最高 200× 更快、400× 更低成本（`[二手]`，来自媒体报道与厂商公告，未独立复现）。
+
+厂商**自己公布**的失败模式（`docs.typesafe.ai/model-jaggedness/jev-1.13`，本 agent 已抓取，属一手）：不要用 `score` 输出反算精确数值（其数值校准弱，只能拿期望值判阈值）；数值换算放到代码里做；答案空间有界时把抽取改成对候选集的 `choice`，而不是问它要具体值；要生成文本就用别的模型。这三条恰好正面支持本报告的定位：**判定/建议可以交给它，精确数值与文本必须留在内核侧**。
 
 ## 3. 强项 / 使用方式 / 局限
 
@@ -97,11 +103,11 @@ const result = await evaluate({ model: 'typesafe-ai/jev', state: '…',
 - 中文（CJK）语义判定的质量与稳定性 —— **未实测**。
 - 延迟数字：厂商与媒体称“亚秒级 / 最高 200× 更快”，但公开页面上另有一处写作 “3 to 329”（疑为毫秒笔误） —— **两个来源不一致，未实测**。
 - 参数规模、内部架构、训练数据 —— 厂商未公布。
-- 许可与商用条款原文、数据留存政策 —— 未逐条核实。
+- 许可与商用条款原文、数据留存政策 —— 未逐条核实（`docs.typesafe.ai/legal` 未抓取）。
 - 独立复现的 benchmark —— 未检索到可信第三方复现。
 
 ## 7. 参考链接
 
-一手：`https://developers.cloudflare.com/ai/models/typesafe/jev/`、`https://vercel.com/ai-gateway/models/jev`、`https://typesafe.ai/blog/introducing-system-one-models-and-jev`（本 agent 抓取失败，仅据检索摘要引用）。
+一手（本 agent 抓取）：`https://developers.cloudflare.com/ai/models/typesafe/jev/`、`https://vercel.com/ai-gateway/models/jev`、`https://docs.typesafe.ai/models`（端点/预算/速率/模态/定制方式）、`https://docs.typesafe.ai/model-jaggedness/jev-1.13`（厂商公开失败模式）。发布公告 `https://typesafe.ai/blog/introducing-system-one-models-and-jev` 抓取失败，仅据检索摘要引用（`[二手]`）。
 二手（媒体/第三方）：LangChain《Building a Harness with Jev》、DataCamp《System One Models vs Jev》、Flavio Copes《A deep dive into Jev》、The Register 2026-09-16、ETV Bharat 2026-09-21。
 证据：`docs/work/evidence/EV-060-jev-primary-sources.txt`（本 agent 抓取的一手页面原文节选）。
