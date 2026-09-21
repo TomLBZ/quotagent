@@ -149,6 +149,11 @@ const STUBS = {
       privacy: { entry_bodies_included: false, private_keys_included: false } }),
     summary: () => 'stub',
   },
+  supplierScorecard: {
+    // fixture 的 stub：只满足"能按供应商聚合"；口径由 supplier-scorecard 模块自己的门验
+    scorecard: () => [],
+    bySupplier: () => [],
+  },
   evolveJournal: {
     // fixture 的 stub：只满足"能归纳流水"；口径由 evolve-journal 模块自己的门验
     summarize: () => ({ rows: 0, by_type: [], proposed: 0, shadowed: 0,
@@ -361,10 +366,13 @@ const report = { kind: 'quotagent/modules', module_dir: relative(HERE, MODULE_DI
   checks, passed: checks.filter((item) => item.ok).length, total: checks.length,
   note: 'A1..A6 每条含负控（评审 C §6 / §7.1 第 5 条）' }
 
-console.log(JSON.stringify(report, null, 2))
 if (failures) {
   console.error(`[FAIL] module manifests/fixtures: ${failures} 项未通过`)
 } else {
   console.error(`[PASS] module manifests/fixtures（${report.passed}/${report.total}，${report.modules.length} 个模块）`)
 }
-process.exit(failures ? 1 : 0)
+// 退出方式（踩过两次，写清楚）：
+//   · 直接 process.exit() → 大报告（实测 54 KB）stdout 未刷完就被截断，调用方拿到坏 JSON；
+//   · 只设 process.exitCode  → 不会主动退出，一旦有句柄（如 fixture 里起的 server）没释放就会吊住进程。
+// 正解：**带回调写入，在回调里退出** —— 既保证刷完，也不被残留句柄拖住。
+process.stdout.write(JSON.stringify(report, null, 2) + '\n', () => process.exit(failures ? 1 : 0))

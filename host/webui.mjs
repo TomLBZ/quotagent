@@ -24,6 +24,7 @@ import { Config as evConfig2, apply as evApply2 } from './modules/evidence-summa
 import { Config as brConfig3, apply as brApply3 } from './modules/circuit-breaker.mjs'
 import { Config as opsConfig3, apply as opsApply3 } from './modules/ops-view.mjs'
 import { Config as jConfig3, apply as jApply3 } from './modules/evolve-journal.mjs'
+import { Config as scConfig3, apply as scApply3 } from './modules/supplier-scorecard.mjs'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -54,6 +55,12 @@ const RAW = [
 RAW.push({ seq: 999, type: 'quote/submitted', ts: '2026-09-21T00:00:00Z', realm: 'contractor:con-B',
   body: { quote_id: 'q-hist-1', lines: [{ item_id: 'L-001', unit_price: 11 }, { item_id: 'L-001', unit_price: 13 },
     { item_id: 'L-002', unit_price: 22 }] } })
+
+// 绩效记分卡用例：RAW 里再补一条带 `supplier_id` 的行（门必须喂真数据才验得出"真接上了"）
+RAW.push({ seq: 998, type: 'quote/submitted', ts: '2026-09-21T01:00:00Z', realm: 'contractor:con-B',
+  body: { quote_id: 'q-sc-1', supplier_id: 'sup-A',
+    lines: [{ item_id: 'L-009', unit_price: 88, lead_time_days: 5 },
+      { item_id: 'L-009', unit_price: 92, lead_time_days: 7 }] } })
 
 const ledgerStub = (rows) => ({
   path: '/tmp/stub-ledger.jsonl',
@@ -109,6 +116,7 @@ const mountObs = async (targetCtx) => {
   await wrap({ apply: brApply3, Config: brConfig3, inject: [] }, {}, 'breaker', 'breaker')
   await wrap({ apply: opsApply3, Config: opsConfig3, inject: ['observability', 'breaker', 'evidenceSummary'] }, {}, 'opsView', 'ops')
   await wrap({ apply: jApply3, Config: jConfig3, inject: [] }, {}, 'evolveJournal', 'journal')
+  await wrap({ apply: scApply3, Config: scConfig3, inject: [] }, {}, 'supplierScorecard', 'scorecard')
 }
 await mountObs(ctx)
 
@@ -126,7 +134,7 @@ writeFileSync(evolvePath, [
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -224,7 +232,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -304,6 +312,19 @@ check('自进化流水正控：/api/ops 含 evolve_journal，计数与喂入的�
   && jr.gated?.total === 1 && String(jr.last_event).startsWith('evolve/')
   && !evRes.text.includes('正文不该外泄') && !evRes.text.includes('cost_floor') && !/"body"\s*:/.test(evRes.text),
   `status=${evRes.status} proposed=${jr.proposed} rejected=${jr.gated?.rejected} promoted=${jr.promoted} last=${jr.last_event}`)
+
+// 4h. T-247：供应商绩效记分卡（subagent 产出）在双方视角可见，且不出正文/私域
+const sc1 = await get('/contractor/api/scorecard')
+let scJson = {}
+try { scJson = JSON.parse(sc1.text) } catch (err) { scJson = {} }
+const sc2 = await get('/supplier/api/scorecard')
+check('绩效记分卡正控：/contractor/api/scorecard 与 /supplier/api/scorecard 都 200，含按供应商聚合的绩效面，'
+  + '来源为 subagent 产出并晋升的 supplier-scorecard，且不出正文/私域',
+  sc1.status === 200 && sc2.status === 200 && Array.isArray(scJson.scorecard) && scJson.scorecard.length >= 1
+  && typeof scJson.scorecard[0].quote_count === 'number'
+  && String(scJson.source).includes('supplier-scorecard')
+  && !/"body"\s*:/.test(sc1.text) && !sc1.text.includes('private:') && !sc1.text.includes('cost_floor'),
+  `status=${sc1.status}/${sc2.status} groups=${scJson.groups}`)
 
 // 4. 未知视角
 const unknown = await get('/nonexistent/')

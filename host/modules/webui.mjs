@@ -15,11 +15,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal']   // 每个都是独立插件（准入 / 观测）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard']   // 每个都是独立插件（准入 / 观测）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard']
 
 export const provides = ['webui']
 
@@ -89,6 +89,7 @@ export function apply(ctx, config) {
   const evidence = ctx.evidenceSummary   // 账本证据面（第二个自进化产出，T-239）
   const ops = ctx.opsView               // 运维视角（第四个自进化产出，T-243）
   const journal = ctx.evolveJournal     // 自进化流水（第五个自进化产出，T-245）
+  const scorecard = ctx.supplierScorecard   // 供应商绩效记分卡（subagent 产出，T-247）
   /** 自进化账本行的只读读取（读不到就当空：运维页不能因为账本还没生成而崩） */
   const evolveRows = () => {
     if (!config.ledger_evolve) return []
@@ -204,6 +205,15 @@ export function apply(ctx, config) {
               + `共 <b>${s.rows}</b> 行 / <b>${s.types}</b> 种类型 / <b>${s.correlations}</b> 个关联 / `
               + `<b>${s.rows_with_refs}</b> 行带引用；时间跨度 <code>${span.first ?? '—'}</code> → <code>${span.last ?? '—'}</code></p>`
           })()
+          + (() => {
+            const sc = scorecard.bySupplier(ledgerOf(view).rows())
+            if (!sc.length) return '<h3>供应商绩效记分卡</h3><p>（本视角暂无可聚合的供应商行）</p>'
+            return `<h3>供应商绩效记分卡</h3><p>由 subagent 产出、经自进化流程晋升的插件 <code>supplier-scorecard</code> 计算</p>`
+              + `<table><tr><th>供应商</th><th>报价次数</th><th>最低</th><th>中位</th><th>最高</th><th>平均交期(天)</th><th>偏差标记</th></tr>${
+                sc.map((s) => `<tr><td>${s.supplier_id}</td><td>${s.quote_count}</td><td>${s.min_unit_price}</td>`
+                  + `<td>${s.median_unit_price}</td><td>${s.max_unit_price}</td><td>${s.avg_lead_time_days}</td>`
+                  + `<td>${s.deviation_count}</td></tr>`).join('')}</table>`
+          })()
           + `<h3>价格序列（按行项目）</h3><p>由自进化产出的插件 <code>price-history</code> 计算</p>`
           + (() => {
             const series = seriesView(view)
@@ -221,6 +231,16 @@ export function apply(ctx, config) {
       const summary = evidence.summarize(rowsFor(view))
       return json(200, { view, source: 'evidence-summary（自进化产出的插件）', summary,
         note: '账本证据面：按类型计数 / 关联数 / 带引用行数 / 时间跨度；只统计公开投影后的行' })
+    }
+    const viewScore = path.match(/^\/([a-z]+)\/api\/scorecard\/?$/)
+    if (viewScore && rules[viewScore[1]]) {
+      const view = viewScore[1]
+      // 与价格序列同因：投影层只留 seq/type/summary/ts，记分卡要的 supplier_id/单价会被截掉 →
+      // 所以喂**原始行**，但只输出聚合（门里断言响应不含正文与私域键）
+      const groups = scorecard.bySupplier(ledgerOf(view).rows())
+      return json(200, { view, source: 'supplier-scorecard（subagent 产出、经自进化流程晋升）',
+        groups: groups.length, scorecard: groups,
+        note: '按供应商聚合的绩效面（报价次数/价格分布/交期均值/偏差标记数）；输入只来自本视角的公开投影' })
     }
     const viewHistory = path.match(/^\/([a-z]+)\/api\/history\/?$/)
     if (viewHistory && rules[viewHistory[1]]) {
@@ -245,7 +265,7 @@ export function apply(ctx, config) {
         `<ul>${rows}</ul><ul><li><a href="${prefix}/ops/">运维视角</a>（系统整体：运行期中间件 + 各视角证据面聚合）</li></ul>`
         + '<p>本 UI 由 cordis 插件 <code>webui</code> 提供；每个视角读**自己的**账本，宿主不写账本。</p>', prefix))
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

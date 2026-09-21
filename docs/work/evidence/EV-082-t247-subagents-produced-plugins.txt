@@ -1,0 +1,55 @@
+EV-082 T-247 由 **subagents 生产**的两件插件，经同一条自进化流程晋升
+生成时间 2026-09-21T10:19:10Z
+命令与原始输出（原样留档）
+
+[1] 生产分工（用户指令："批准使用subsgents讨论、执行代替人工执行"、"可以用subagents制作…插件或者中间件"）
+$ 两个 subagent 并行（deleg_3aeb1aeb，340.8s / 2 个任务，28+27 次工具调用）
+  · subagent-A → 领域插件 supplier-scorecard（供应商绩效记分卡）+ 它自己写的围栏门
+  · subagent-B → 中间件 idempotency-guard（宿主层幂等守卫）+ 它自己写的围栏门
+  两者都只写 tmp/<产物>.mjs 与 host/<门>.mjs，**不动仓库其它文件**（我核验：git status 只多这两类文件）。
+
+[2] 父侧**自己核验**（subagent 自述不算事实，D-019）
+$ python3 tmp/t247_verify.py
+  · 语法：两个产物与两个门 `node --check` 全 0
+  · 纪律扫描（产物）：无 Date.now/定时器/写文件/事件订阅/随机（idempotency 的默认时钟为可注入实现，与 governor/breaker 同款）
+  · 门（**我实跑**）：supplier-scorecard 10/10、idempotency-guard 10/10
+  · 官方 fixture（**我实跑**，影子目录）：两者各 13/13
+  → 核验通过后才进入晋升。
+
+[3] 晋升（同一条自进化流程；approval_ref = ap-0105 / ap-0106）
+$ python3 tmp/t247_promote.py supplier-scorecard … ap-0105 EV-082 → 干跑五项门 passed → promote=promoted → 进树 fixture 13/13
+$ python3 tmp/t247_promote.py idempotency-guard … ap-0106 EV-082 → 同上
+产出日志条目：['price-history', 'evidence-summary', 'circuit-breaker', 'ops-view', 'evolve-journal', 'supplier-scorecard', 'idempotency-guard']
+账本尾部（H1：Python 侧写）：
+{"actor":"agent:t237","body":{"actor":"agent:t237","artifact_hash":"sha256:fb7acd47a2baa280c528f9adaba12335dd422dc2e71f4491a29f7db916d6243d","bytes":9990,"id":"sha256:73454ef54da0e295b1d7cd472d4f4946220655fb21ffb35fb2a643fe50dec484","name":"supplier-scorecard","target":"/workspace/projects/quotagent/host/modules/supplier-scorecard.mjs"},"body_hash":"sha256:ba5397a0a042538d1f72e8c4c314413612a7fafd9ea718afc5e4603997f91da1","class":"intent","correlation_id":"sha256:73454ef54da0e295b1d7cd472d4f4946220655fb21ffb35fb2a643fe50dec484","entry_hash":"sha256:83f52db5fa88a34a8cc31ca42ab2cb70803ad62fc2b31318859c72dd82b56d90","prev_hash":"sha256:0e839ab69d99953cbee0bf3bca264b1b7018fbca1935f5dff30b75a9353a98b4","realm":"contractor:con-B","refs":{},"seq":31,"ts":"2026-09-21T10:06:21Z","type":"evolve/proposed"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","hash":"sha256:fb7acd47a2baa280c528f9adaba12335dd422dc2e71f4491a29f7db916d6243d","id":"sha256:73454ef54da0e295b1d7cd472d4f4946220655fb21ffb35fb2a643fe50dec484","shadow_path":"/workspace/projects/quotagent/tmp/t237-shadow/modules/supplier-scorecard.mjs"},"body_hash":"sha256:20a174ff27d9459e44013b2cf1e12e3feb0311f4c4bc0c193dcb8c8be02c10fa","class":"intent","correlation_id":"sha256:73454ef54da0e295b1d7cd472d4f4946220655fb21ffb35fb2a643fe50dec484","entry_hash":"sha256:6a2767d1f556196c9684e168c0b7924cd2a1b83f5726d5d0ae001f4b4368730f","prev_hash":"sha256:83f52db5fa88a34a8cc31ca42ab2cb70803ad62fc2b31318859c72dd82b56d90","realm":"contractor:con-B","refs":{},"seq":32,"ts":"2026-09-21T10:06:21Z","type":"evolve/shadowed"}
+{"actor":"host:gate-runner","body":{"actor":"host:gate-runner","fixture":"13/13","id":"sha256:73454ef54da0e295b1d7cd472d4f4946220655fb21ffb35fb2a643fe50dec484","reasons":[],"verdict":"passed"},"body_hash":"sha256:c207683fd8107d14551f5665a5381f7c801a80d23835eea9d0750654fd84576d","class":"intent","correlation_id":"sha256:73454ef54da0e295b1d7cd472d4f4946220655fb21ffb35fb2a643fe50dec484","entry_hash":"sha256:64e786d8e5d8bd3581e373d45101154d06aaa0e18b2e098ff5a10d6322eb2db1","prev_hash":"sha256:6a2767d1f556196c9684e168c0b7924cd2a1b83f5726d5d0ae001f4b4368730f","realm":"contractor:con-B","refs":{},"seq":33,"ts":"2026-09-21T10:06:21Z","type":"evolve/gated"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","approval_ref":"ap-0105","artifact_hash":"sha256:fb7acd47a2baa280c528f9adaba12335dd422dc2e71f4491a29f7db916d6243d","id":"sha256:73454ef54da0e295b1d7cd472d4f4946220655fb21ffb35fb2a643fe50dec484","written_to":"host/modules/supplier-scorecard.mjs"},"body_hash":"sha256:2540be46483e60e43db7ce325aac72a61de080424b67f95dd91b0a797688eff6","class":"intent","correlation_id":"sha256:73454ef54da0e295b1d7cd472d4f4946220655fb21ffb35fb2a643fe50dec484","entry_hash":"sha256:473801f430bdcd88d232ae81b6ceae316b7ac44165bc89052320d5a3718ea9d9","prev_hash":"sha256:64e786d8e5d8bd3581e373d45101154d06aaa0e18b2e098ff5a10d6322eb2db1","realm":"contractor:con-B","refs":{},"seq":34,"ts":"2026-09-21T10:06:26Z","type":"evolve/promoted"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","artifact_hash":"sha256:6d9b9e450aa7a9fe4232960f41a413549f39295d9e2709571d565cba6898635a","bytes":16708,"id":"sha256:bf15a30e483c0a864ae807c97f4197e46e069f3443198e7dcd8a296b31895ee1","name":"idempotency-guard","target":"/workspace/projects/quotagent/host/modules/idempotency-guard.mjs"},"body_hash":"sha256:810247f035b221a787e99d879733f45a8d96c5012f1180fddafd9022914e25a1","class":"intent","correlation_id":"sha256:bf15a30e483c0a864ae807c97f4197e46e069f3443198e7dcd8a296b31895ee1","entry_hash":"sha256:51b43da1a46dba9e432a140c640ebeca41ecac1872c88a4f36975053d73704f4","prev_hash":"sha256:473801f430bdcd88d232ae81b6ceae316b7ac44165bc89052320d5a3718ea9d9","realm":"contractor:con-B","refs":{},"seq":35,"ts":"2026-09-21T10:06:34Z","type":"evolve/proposed"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","hash":"sha256:6d9b9e450aa7a9fe4232960f41a413549f39295d9e2709571d565cba6898635a","id":"sha256:bf15a30e483c0a864ae807c97f4197e46e069f3443198e7dcd8a296b31895ee1","shadow_path":"/workspace/projects/quotagent/tmp/t237-shadow/modules/idempotency-guard.mjs"},"body_hash":"sha256:fc9ada7658360d4d4c139af34d986349eadb01ea7b3824ccbf4e405c0bef224e","class":"intent","correlation_id":"sha256:bf15a30e483c0a864ae807c97f4197e46e069f3443198e7dcd8a296b31895ee1","entry_hash":"sha256:a55efa1cdf9f6ab97b2b9aae681d3d37d3565bcc1caadfb54f6705de6cd80e74","prev_hash":"sha256:51b43da1a46dba9e432a140c640ebeca41ecac1872c88a4f36975053d73704f4","realm":"contractor:con-B","refs":{},"seq":36,"ts":"2026-09-21T10:06:34Z","type":"evolve/shadowed"}
+{"actor":"host:gate-runner","body":{"actor":"host:gate-runner","fixture":"13/13","id":"sha256:bf15a30e483c0a864ae807c97f4197e46e069f3443198e7dcd8a296b31895ee1","reasons":[],"verdict":"passed"},"body_hash":"sha256:c38e57f9382c32f77a415639be405d1b94855e98a73a4b0dadc090aa6a6af919","class":"intent","correlation_id":"sha256:bf15a30e483c0a864ae807c97f4197e46e069f3443198e7dcd8a296b31895ee1","entry_hash":"sha256:74213d8a7d78b2a38ce3e22030dbe26481d97c8efee2985b324b1885b3b83347","prev_hash":"sha256:a55efa1cdf9f6ab97b2b9aae681d3d37d3565bcc1caadfb54f6705de6cd80e74","realm":"contractor:con-B","refs":{},"seq":37,"ts":"2026-09-21T10:06:34Z","type":"evolve/gated"}
+{"actor":"agent:t237","body":{"actor":"agent:t237","approval_ref":"ap-0106","artifact_hash":"sha256:6d9b9e450aa7a9fe4232960f41a413549f39295d9e2709571d565cba6898635a","id":"sha256:bf15a30e483c0a864ae807c97f4197e46e069f3443198e7dcd8a296b31895ee1","written_to":"host/modules/idempotency-guard.mjs"},"body_hash":"sha256:2046ae19690cc11f634d03f794d32db813162b7570e4aab9111588938f609e0e","class":"intent","correlation_id":"sha256:bf15a30e483c0a864ae807c97f4197e46e069f3443198e7dcd8a296b31895ee1","entry_hash":"sha256:bebd8f4b2975668780c5e6d0b6c44b0dad954ef75193c4464b3665f810ead328","prev_hash":"sha256:74213d8a7d78b2a38ce3e22030dbe26481d97c8efee2985b324b1885b3b83347","realm":"contractor:con-B","refs":{},"seq":38,"ts":"2026-09-21T10:06:40Z","type":"evolve/promoted"}
+
+[4] 门状态（实测）
+{'exit': 0, 'passed': 10, 'total': 10} supplier-scorecard（围栏门，人工维护的是"谁写门"的纪律：门由 subagent 写但**由父侧复核并纳入 verify.sh**）
+{'exit': 0, 'passed': 10, 'total': 10} idempotency-guard
+{'exit': 0, 'passed': None, 'total': None} webui（含新断言：绩效记分卡在**双方视角**可见且不出正文/私域）
+{'exit': 0, 'passed': None, 'total': None} modules（21 个模块）
+{'exit': 0, 'passed': 5, 'total': 5} wiring（接线机检）
+
+[5] 本轮抓到的一个**真 bug（基础设施级）**
+`host/check-modules.mjs` 末尾用 `process.exit()`：报告涨到 54 KB 后，**stdout 未刷完就被截断**
+→ 包装器 `tools/check-modules.py` 收到坏 JSON（`Unterminated string`）→ modules 门红。
+改为 `process.exitCode = …`（让 Node 自己刷完再退出）后恢复。教训：**大输出 + process.exit() = 输出截断**。
+
+[6] 接线状态（如实）
+· supplier-scorecard：**已接线**（WebUI 双方视角 `/<view>/api/scorecard` + 页面记分卡区块，门里喂真数据断言）
+· idempotency-guard：**尚未接线**（清单里**显式标注「未接线」**，并把它从 webui 角色装配列表移除；待 T-248 接进桥调用路径）
+  —— 宁可标注未接线，也不假装它已在用（"功能必须有归属"是本项目机检项）。
+
+[7] 顺带修掉的第二个真缺陷：**AC 自身的时间耦合**（`AC-APPROVE-003`）
+它把扫描时刻写死成 `sweep(now="2026-09-21T10:02:00Z")`，而待批项的 `requested_at` 取**真实时钟**：
+→ 真实时间还没到 10:02Z 时能过，一过就**必红**（本会话早些时候 g1 = 57/57，本轮就变成 56/57）。
+修法：以该项自己的 `requested_at` 为基准推算扫描时刻（`_plus(requested_at, 61)` 等），
+**断言数量/内容/强度一字未改** —— 这不是放宽 AC，而是消除"测试只在某个钟点前才成立"的缺陷。
+修后 `tools/verify.sh ac AC-APPROVE-003` = exit 0。

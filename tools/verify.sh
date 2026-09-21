@@ -82,6 +82,14 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-plugin-inventory.py" "$@"
     ;;
+  supplier-scorecard)
+    shift
+    exec node host/t247-scorecard-gate.mjs "$@"
+    ;;
+  idempotency-guard)
+    shift
+    exec node host/t247-idem-gate.mjs "$@"
+    ;;
   wiring)
     shift
     exec python3 tools/check-module-wiring.py "$@"

@@ -76,6 +76,36 @@
       "produced_by": "tools/evolve-module.mjs",
       "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
       "evidence": null
+    },
+    {
+      "name": "supplier-scorecard",
+      "proposal_id": "sha256:73454ef54da0e295b1d7cd472d4f4946220655fb21ffb35fb2a643fe50dec484",
+      "artifact_hash": "sha256:fb7acd47a2baa280c528f9adaba12335dd422dc2e71f4491a29f7db916d6243d",
+      "bytes": 9990,
+      "approval_ref": "ap-0105",
+      "gate": "passed",
+      "fixture": {
+        "passed": 13,
+        "total": 13
+      },
+      "produced_by": "tools/evolve-module.mjs",
+      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+      "evidence": null
+    },
+    {
+      "name": "idempotency-guard",
+      "proposal_id": "sha256:bf15a30e483c0a864ae807c97f4197e46e069f3443198e7dcd8a296b31895ee1",
+      "artifact_hash": "sha256:6d9b9e450aa7a9fe4232960f41a413549f39295d9e2709571d565cba6898635a",
+      "bytes": 16708,
+      "approval_ref": "ap-0106",
+      "gate": "passed",
+      "fixture": {
+        "passed": 13,
+        "total": 13
+      },
+      "produced_by": "tools/evolve-module.mjs",
+      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+      "evidence": null
     }
   ]
 }

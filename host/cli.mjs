@@ -154,6 +154,10 @@ const main = async () => {
     const { apply: brApply2, Config: brConfig2 } = await import('./modules/circuit-breaker.mjs')
     await ctx.plugin({ name: 'circuit-breaker', inject: [], Config: brConfig2,
       apply: (inner, cfg) => brApply2(inner, cfg) }, brConfig2.parse({}))
+    // 供应商绩效记分卡（subagent 产出，T-247）
+    const { apply: scApply, Config: scConfig } = await import('./modules/supplier-scorecard.mjs')
+    await ctx.plugin({ name: 'supplier-scorecard', inject: [], Config: scConfig,
+      apply: (inner, cfg) => scApply(inner, cfg) }, scConfig.parse({}))
     // 自进化流水（第五个自进化产出，T-245）
     const { apply: jApply, Config: jConfig } = await import('./modules/evolve-journal.mjs')
     await ctx.plugin({ name: 'evolve-journal', inject: [], Config: jConfig,
@@ -171,7 +175,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -197,6 +201,7 @@ const main = async () => {
            history_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/history`),
            evidence_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/evidence`),
            ops_routes: [`${String(args.prefix ?? '/quotagent')}/ops/`, `${String(args.prefix ?? '/quotagent')}/api/ops`],
+           scorecard_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/scorecard`),
            observability: obox.handle ? obox.handle.summary() : null,
            note: '每方视角读自己的账本（结构性隔离）+ 投影白名单（纵深防御）；宿主不写账本' }) + '\n')
     // 保活：直到收到信号（ws-gateway 以 SIGTERM 停服）

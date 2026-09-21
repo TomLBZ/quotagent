@@ -26,6 +26,8 @@
 | `host/modules/circuit-breaker.mjs` | 中间件：运行期**熔断**（连续失败达阈值 → 快速失败；冷却半开试探，失败立刻重开；假时钟可注入）——**第三个自进化产出、第一个中间件** | `breaker` | `contractor-ops`（`host/profiles.mjs`） | 只改本文件；产物由 `tools/evolve-module.mjs` 产出，哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh breaker` 围栏 |
 | `host/modules/ops-view.mjs` | **运维视角**：把 observability + breaker + evidenceSummary 编排成一个只读快照 + 人类可读摘要（只组合、不自算口径）——**第四个自进化产出** | `opsView` | `webui`（`host/profiles.mjs`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh ops-view` 围栏 |
 | `host/modules/evolve-journal.mjs` | **自进化流水**的只读归纳（提案/影子/门两态/晋升/回滚/canary 进出 + 最近事件；只给计数，不出正文）——**第五个自进化产出** | `evolveJournal` | `webui`（`host/profiles.mjs`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh evolve-journal` 围栏 |
+| `host/modules/supplier-scorecard.mjs` | 见产物头部注释（**由 subagent 产出、经同一条自进化流程晋升**） | 见模块 `provides` | `webui`（`host/profiles.mjs`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh supplier-scorecard` 围栏 |
+| `host/modules/idempotency-guard.mjs` | 见产物头部注释（**由 subagent 产出、经同一条自进化流程晋升**）；**未接线**（待 T-248 接进桥调用路径） | 见模块 `provides` | 未接线（显式标注，不假装接线） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh idempotency-guard` 围栏 |
 | `host/modules/webui.mjs` | 双方视角 WebUI（承包商/供应商两个路由；只读账本） | `webui` | `webui` | 只改本文件 + `host/lib/ledger-view.mjs`；接入见 `docs/work/deployment-manual.md` |
 
 目录即清单：新增功能 = 新增 `host/modules/<name>.mjs`（`host/modules/index.mjs` 自动发现），不必改中心清单；模块被哪个 profile 挂载仍写在 `host/profiles.mjs`（组成即数据，ADR-0015）。

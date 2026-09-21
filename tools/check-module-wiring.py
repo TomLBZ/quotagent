@@ -33,6 +33,7 @@ PROVIDERS = {
     "canary": "canary", "canary-dispatch": "bridge-canary", "webui": "webui", "observability": "observability",
     "priceHistory": "price-history", "evidenceSummary": "evidence-summary", "breaker": "circuit-breaker",
     "opsView": "ops-view", "evolveJournal": "evolve-journal",
+    "supplierScorecard": "supplier-scorecard", "idempotency": "idempotency-guard",
 }
 
 

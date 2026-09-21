@@ -3,7 +3,7 @@
   "updated_at": "2026-09-21T09:16:17Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-247：复核 T-224 凭据（仍缺）；继续不需要凭据的收口（候选：把 wiring 门扩展到\"新模块的装配点\"自动核对）",
+  "next_task": "T-248：把 idempotency-guard 接进桥调用路径（宿主层幂等）+ 端到端门",
   "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
   "last_verified_command": "tools/verify.sh g1",
   "last_verified_result": "PASS：57/57 AC + 14/14 MVP 判据 + 十一个入口（docs/events/invariants/evolution/modules/bridge/cordis/p0-no-node/ac-registry/audit/v）全绿；modules 36/36",
@@ -89,6 +89,7 @@
     "t244": "done：运维视角上线（EV-079 / D-039），三条视角道齐备",
     "t245": "done：第五个自进化产出 evolve-journal 接进运维视角（EV-080 / D-040）",
     "t224": "blocked：仍缺外部凭据（config.yaml 里无 jev/typesafe/cloudflare/vercel 任何痕迹）",
-    "t246": "done：接线机检 wiring 5/5（EV-081 / D-041），抓出并清除 2 个孤儿 stub"
+    "t246": "done：接线机检 wiring 5/5（EV-081 / D-041），抓出并清除 2 个孤儿 stub",
+    "t247": "done：subagents 产出 2 件插件（scorecard 已接线 / idem 未接线明示），并修 process.exit 截断（EV-082 / D-042）"
   }
 }

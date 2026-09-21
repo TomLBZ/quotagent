@@ -334,7 +334,17 @@ def check_approve_003() -> list[Assertion]:
                          and _require_ok(service, "change.approve", "chg-1") is False,
                          "require 语义不对"))
 
-    view = service.queue_view(now="2026-09-21T10:02:00Z")
+    # 让超时用例**与真实时钟无关**：以该项自己的 requested_at 为基准往后推。
+    # （原先写死 "2026-09-21T10:02:00Z"：只在真实时间还没到那个时刻时才通过 —— 属于测试自身的时间耦合缺陷。）
+    def _plus(iso: str, seconds: float) -> str:
+        from datetime import datetime, timedelta, timezone
+        base_dt = datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        return (base_dt + timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    _t_after_timeout = _plus(pending_item["requested_at"], 61)    # 越过 60s 超时窗口
+    _t_within_window = _plus(pending_item["requested_at"], 75)    # 同一窗口内再扫一次（显式 > timeout 但 < 已动作后的窗口）
+
+    view = service.queue_view(now=_t_after_timeout)
     first = view["items"][0]
     out.append(Assertion("队列视图每项含 FR-UX-001 四要素（动作/摘要/引用链/Flag）+ 置信度（可选）+ 超时策略",
                          view["pending"] == 2
@@ -346,7 +356,7 @@ def check_approve_003() -> list[Assertion]:
                          and first["waited_seconds"] > 0,
                          f"first={json.dumps(first, ensure_ascii=False)[:220]}"))
 
-    swept = service.sweep(now="2026-09-21T10:02:00Z")
+    swept = service.sweep(now=_t_after_timeout)
     by_id = {item["approval_id"]: item for item in swept["acted"]}
     out.append(Assertion("超时按各自策略生效：remind→仍待批（提醒）· abort→作废（需重新发起）",
                          set(by_id) == {pending_item["approval_id"], other["approval_id"]}
@@ -363,7 +373,7 @@ def check_approve_003() -> list[Assertion]:
                          [row["type"] for row in ledger.read() if row["type"].startswith("approval/")][-2:]
                          == ["approval/reminded", "approval/aborted"],
                          f"events={[row['type'] for row in ledger.read() if row['type'].startswith('approval/')]}"))
-    again = service.sweep(now="2026-09-21T10:02:30Z")
+    again = service.sweep(now=_t_within_window)
     out.append(Assertion("幂等：同一项在一次超时窗口内重复扫描不再重复动作",
                          again["acted"] == []
                          and [row["type"] for row in ledger.read()].count("approval/reminded") == 1,
@@ -372,13 +382,13 @@ def check_approve_003() -> list[Assertion]:
     escalated = service.request("award.commit", {"po": "p-0009"}, ref="p-0009",
                                 approvers=["human:zhang"], timeout_policy="escalate", timeout_s=30.0,
                                 escalate_to="human:boss")
-    service.sweep(now="2026-09-21T10:03:00Z")
+    service.sweep(now=_plus(escalated["requested_at"], 31))
     escalated_record = service.get(escalated["approval_id"])
     out.append(Assertion("`escalate` 超时后转给人类上级并继续等待（状态仍 pending，等待对象已变）",
                          escalated_record["status"] == "pending"
                          and escalated_record["approvers"] == ["human:boss"]
                          and escalated_record["escalated_at"]
-                         and service.queue_view(now="2026-09-21T10:03:10Z")["items"][-1]["waiting_on"] == ["human:boss"],
+                         and service.queue_view(now=_plus(escalated["requested_at"], 40))["items"][-1]["waiting_on"] == ["human:boss"],
                          f"record={json.dumps({k: escalated_record[k] for k in ('status','approvers','escalated_at')}, ensure_ascii=False)}"))
     out.append(Assertion("三种策略都不会越过人去批准：全程 `approval/granted` 为空、pending 项的 decided_by 皆为空",
                          ledger.read(type="approval/granted") == []
