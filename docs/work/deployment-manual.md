@@ -117,3 +117,80 @@ curl -s http://127.0.0.1:80/quotagent/api/status        # 经工作区网关（�
   `ws-gateway restart` 后服务起不来。命令：
   `python3 -c` 杀旧进程后 `/workspace/bin/ws-gateway start quotagent`（"already healthy" 不会重载代码），
   再 `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8093/quotagent/api/health` 回读。
+
+## P2 现状：三条视角道、桥路径中间件与门清单（T-249 更新）
+
+### 1. 三条视角道（同一个网关前缀，从现有 dashboard 可达）
+
+| 路由 | 谁看 | 看什么 |
+|---|---|---|
+| `/quotagent/contractor/` | 承包商 | **自己的账本**（投影白名单）：事件表 + 价格序列表 + 绩效记分卡 + 账本证据面 |
+| `/quotagent/supplier/` | 供应商 | **自己的账本**：同上；私域键（`cost_floor` 等）在源头拒收 |
+| `/quotagent/ops/` | 运维 | **不属于任何一方**：运行期中间件状态（governor/breaker/canary/audit）+ 各视角证据面聚合 + 自进化流水 |
+
+本机自检（服务起在 8093）：
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8093/quotagent/api/health
+curl -s http://127.0.0.1:8093/quotagent/contractor/api/scorecard | head -20
+curl -s http://127.0.0.1:8093/quotagent/api/ops | head -30
+```
+
+### 2. JSON 接口一览
+
+| 接口 | 内容 |
+|---|---|
+| `/quotagent/api/health` · `/api/status` | 存活 / 视角与账本健康（链自洽） |
+| `/quotagent/api/obs` | 运行期观测（governor 准入 / audit 留痕 / canary 分流） |
+| `/quotagent/api/ops` | 运维视角：`runtime` + `breaker` + `evidence_by_view`（按视角分别聚合）+ `evolve_journal` |
+| `/quotagent/<view>/api/events` | 该视角的事件（已投影，只含公开字段） |
+| `/quotagent/<view>/api/history` | 价格序列（按行项目：次数/最低/中位/最高/最新/趋势） |
+| `/quotagent/<view>/api/evidence` | 账本证据面（行数/类型数/关联数/带引用行数/时间跨度） |
+| `/quotagent/<view>/api/scorecard` | 供应商绩效记分卡（报价次数/价格分布/平均交期/偏差标记数） |
+
+### 3. 桥调用路径上的中间件（顺序写死）
+
+`idempotency-guard 判重 → circuit-breaker 准入 → 真调用 → breaker.record + idem.finish`
+
+```bash
+# 同一请求连发 3 次：只有第一次真的打下游，后两次复用结论
+node host/cli.mjs bridge --profile contractor-ops --method ledger.count --idem-probe 3
+# 6 个**不同**请求（params 带 probe 索引）：用来观察熔断/准入计数
+node host/cli.mjs bridge --profile contractor-ops --method ledger.count --repeat 6
+```
+
+**语义区别（不要混）**：`--repeat N` = N 个**不同**请求；`--idem-probe N` = **同一**请求 N 次。
+三个中间件分工：`governor` 管额度（放不放行/等多久/重试几次）、`breaker` 管连续失败就切断、
+`idempotency-guard` 管"同一件事是不是已经做过"。
+
+### 4. 门清单（`tools/verify.sh <门>`，全部 exit=0 才算绿）
+
+`docs` · `plugins` · `modules` · `wiring` · `governor` · `bridge-canary` · `canary` · `canary-route` ·
+`audit-hook` · `observability` · `breaker` · `breaker-route` · `idem-route` · `ops-view` · `evolve-journal` ·
+`evolve-module` · `supplier-scorecard` · `idempotency-guard` · `webui` · `cordis` · `events` · `invariants` ·
+`evolution` · `ac-registry` · `audit` · `v` · `p0-no-node` · `bridge` · `g1`（+ `clean-copy` 在干净副本里复跑关键门）
+
+### 5. 自进化的日常操作（新增/演进一个插件）
+
+```bash
+# 1) 写候选产物（cordis 插件，须含 name/apply/Config/fixture）+ 一份围栏门（人工维护）
+# 2) 干跑：提案 → 影子 → 真跑 fixture A1..A6 → 五项门
+tools/cordis.sh run ../tools/evolve-module.mjs --source-file tmp/<产物>.mjs --name <name> --dry-run --evidence-refs EV-083
+# 3) 带人工引用晋升（写入面仅 host/modules/）
+tools/cordis.sh run ../tools/evolve-module.mjs --source-file tmp/<产物>.mjs --name <name> --approval-ref ap-0xxx --evidence-refs EV-083
+# 4) 追溯与审计
+tools/verify.sh evolve-module     # 产出记录里的哈希必须与进树文件一致（偷改即红）
+docs/work/evolution-log.json      # 产出日志；tmp/evolve/ledger.jsonl 是账本（evolve/* 事件）
+```
+
+### 6. 排障（本仓库真实踩过的坑，按顺序查）
+
+1. **网关 `start/restart` 报 "already healthy" 不会换代码**：先杀掉 8093 上的进程再 `ws-gateway ensure quotagent`，
+   否则你会对着**旧进程**验证新功能。
+2. **插件起不来 / `cannot get property "x" without inject`**：挂载包装的 `inject` 必须**照抄模块声明的 inject**；
+   合成模块对象必须显式带 `inject` 字段（写 `inject: []` 会让模块取不到依赖）。
+3. **`inject` 里新增了依赖**：四处同步（模块自身 / `host/check-modules.mjs` 的 STUBS / 门 `host/webui.mjs` 两处挂载 /
+   `host/canary-dispatch.mjs` + `host/cli.mjs`），`tools/verify.sh wiring` 会机检。
+4. **自己构造"看起来像下游返回"的对象**：必须与桥帧**同形** `{n, p:{id, m, result, error}}`（同形契约）。
+5. **报告类脚本输出被截断**：不要用 `process.exit()`（大输出会截断）；用**带回调写入、回调里退出**。
+6. **canary 探针"永远样本不足"**：探针键必须随索引变化（固定键会把所有探针送进同一条道）。
+7. **AC 里不要写"相对当下的绝对时刻"**：门会随墙上时间自己变红/变绿。

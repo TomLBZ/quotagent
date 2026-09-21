@@ -1,0 +1,36 @@
+EV-084 T-249 把 P2 现状写进运维手册（三条视角道 / 接口 / 中间件接线 / 门清单 / 排障）
+生成时间 2026-09-21T10:25:55Z
+命令与原始输出（原样留档）
+
+[1] 缺口（为什么值得做）
+更新前 `docs/work/deployment-manual.md` 里 **完全没有** `ops/`、`scorecard`、`breaker`、`idempotency` 的内容
+（grep 计数 = 0）—— 也就是说 P2 做的三条视角道与两个中间件接线**只存在于对话里，对人不可达**。
+
+[2] 更新内容（手册现 12711 B，含真实命令）
+· 三条视角道（承包商 / 供应商 / 运维）各自看什么、为什么这么分；
+· 全部 JSON 接口一览（obs / ops / events / history / evidence / scorecard）；
+· 桥调用路径上的**中间件顺序**与两个旋钮的语义（`--repeat` = N 个不同请求；`--idem-probe` = 同一请求 N 次）；
+· 29 道门清单（`tools/verify.sh <门>`）；
+· **自进化的日常操作**（怎么产出并晋升一个插件、追溯与审计看哪里）；
+· 排障 7 条（全部是本仓库真实踩过的坑，按顺序查）。
+
+[3] 手册里的命令**真跑复核**（不是抄上去就算）
+$ curl -s http://127.0.0.1:8093/quotagent/api/ops → 200 | {
+  "view": "ops",
+  "source": "ops-view（自进化产出的插件）",
+  "summary": "governor: admitted=9 refused=0 timeouts=0 failed=0 | breaker: allowed=0 refused=0 opened=0 closed=0 | canary: phase=base base=0 cand=
+$ curl -s http://127.0.0.1:8093/quotagent/contractor/api/scorecard → 200 | {
+  "view": "contractor",
+  "source": "supplier-scorecard（subagent 产出、经自进化流程晋升）",
+  "groups": 0,
+  "scorecard": [],
+  "note": "按供应商聚合的绩效面（报价次数/价格分布/交期均值/偏差标记数）；输入只来自本视角的公开投影"
+}
+$ curl -s -o /dev/null -w '%{http_code}' https://novara.remoteblossom.com/quotagent/contractor/api/scorecard → 200
+$ node host/cli.mjs bridge --profile contractor-ops --method ledger.count --idem-probe 2
+  → ok=True | reused=1 | last=duplicate-done（与手册描述一致）
+
+[4] 顺带发现并处理
+· 线上进程仍是**旧代码**（`/api/scorecard` 一开始 404）→ 先杀进程再 `ws-gateway ensure`（这正是手册排障第 1 条）。
+· `docs/work/decisions.md` 预算已到 **100%**（32718/32768）→ 归档无引用的 D-033/D-034/D-037 腾出空间（现 27923 B）。
+
