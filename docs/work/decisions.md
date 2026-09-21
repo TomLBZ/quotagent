@@ -241,3 +241,25 @@
 新逻辑必须以「先声明、后用」为铁律——`const/let` 的 TDZ 与"用在声明之前"是本轮反复卡住的原因，
 且**只会在真跑时暴露**（`node --check` 是语法检查，抓不到 TDZ）。
 下一步：把 CLI 的 canary 段抽成**独立函数**（`runCanaryProbe(...)`），参数显式传入，从结构上消灭这类错误。
+
+## D-029 T-235 分两步走：编排 lib 已完成并测过，CLI 接线待做（2026-09-21T09:21:23Z）
+
+**已完成（入库）**：`host/lib/canary-run.mjs` —— canary 探针与自动回滚的**编排**，参数显式传入、结果显式返回：
+`runCanary({canary, dispatch, method, params, probeCount, approval_ref, proposal_id})`
+→ `{decision, exited, samples, last_result, last_lane}`。方向性照 `ADR-0017`：
+**进 canary 缺人工引用直接拒绝**（`CanaryApprovalRequired`），**退化自动回滚不需要批准**。
+
+机检（`verify.sh bridge-canary` **11/11**，新增 3 条）：
+1. 缺 `approval_ref` → 拒绝且**不进入** canary；
+2. 40 次探针 → 两侧都有样本（base/canary 均 > 0）→ 退化判定 → **自动回滚**（`automatic=true`、`approval_required=false`）；
+3. 候选不退化 → **不回滚**（推荐只是建议，仍停在 canary，不擅自扩大上线面）。
+
+**为什么这样拆**：`cli.mjs` 是一个巨大的 `main()`，本轮在同一处连续踩到 5 类低级错误
+（TDZ/声明顺序 ×4、`ctx.<自己>` 作用域 ×1）。把编排抽成 lib 后它可被单测；CLI 侧只剩**三行接线**。
+
+**待做（下一步，已定位到具体细节）**：
+1. CLI 的 canary 句柄必须**从插件自己的 ctx 捕获**（`ctx.canary` 从根 ctx 取不到 → `[canary-run] 需要 canary 服务`），
+   与 `webui` 的挂载包装同一手法；
+2. `bridge` 动作里 `canaryProbe = runCanary({...})`，取 `last_result` 作为本命令的输出帧；
+3. `CanaryApprovalRequired` → `emit(..., 2)`；
+4. 回滚时把 `evolve/canary-exited` 交 `tools/evolve-record.py` 落账 + 往 audit 流水记一条 `decision`。

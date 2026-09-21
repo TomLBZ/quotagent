@@ -71,7 +71,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-232 | 运行期中间件 `governor` 插件：可解释拒绝/背压、显式超时、有界重试（与 canary 互补） | B28 | done | EV-067 |
 | T-233 | 运行期审计钩子 `audit-hook` 插件：决策留痕（观测，不写账本）+ 去重/有界/零残留 | B29 | done | EV-068 |
 | T-234 | `governor` 接进 UI 真实 HTTP 路径：背压端到端（429+Retry-After）+ 三档映射单测（504/500） | B30 | done | EV-069 / D-027 |
-| T-235 | canary 自动回滚接到真实命令路径（探针 + 退化自动回滚 + 落账） | B31 | blocked | D-028（已过的部分与教训） |
+| T-235 | canary 探针与自动回滚：编排 lib 完成并测过（11/11）；**CLI 接线待做** | B31 | partial | D-028 / D-029 |
 | T-224 | Jev 建议层插件（`advisor`）：建议不入判定、低置信转人工、外部失败降级 | B23+ | todo | — |
 | T-222 | WebUI 插件（双方视角路由）+ 工作区接入（从现有 dashboard 可访问） | B20/B21 | done | EV-059 |
 | T-221 | P1 | 每个进树模块的 manifest（name/inject/Config/apply）+ fixture A1..A6 + ≥1 契约测试（§7.1 第 5 条） | FR-PLUGIN-001 | `verify.sh modules` 36/36（3 模块 × 12 项） | done | EV-058 |

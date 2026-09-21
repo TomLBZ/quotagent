@@ -16,6 +16,7 @@
 import { Context, EventsService } from 'cordis'
 import { apply as canaryApply, Config as canaryConfig } from './modules/canary.mjs'
 import { apply as bridgeCanaryApply, Config as bridgeCanaryConfig } from './modules/bridge-canary.mjs'
+import { runCanary, CanaryApprovalRequired } from './lib/canary-run.mjs'
 
 const facts = { checks: [] }
 let failures = 0
@@ -137,6 +138,39 @@ check('候选可替换且统计跟随（晋升产物即按此接口接进来）'
   afterSwap.candidate_name === 'cand-v2' && afterSwap.has_candidate === true,
   `candidate_name=${afterSwap.candidate_name}`)
 await live.dispose()
+
+// --- 9. runCanary 编排（T-235）：批准门 / 两侧采样 / 退化自动回滚 ---
+const live2 = await mountPair({ weight_bps: 5000, min_samples: 5 }, { name: 'bridge-call' })
+const flaky2 = (method, params) => {
+  if (params.probe % 2 === 0) throw new Error('candidate-degraded')
+  return { via: 'canary', method }
+}
+live2.box.dispatch.register({ base: baseTransport, candidate: flaky2, candidate_name: 'cand-v1' })
+let noApprovalRun = null
+try {
+  runCanary({ canary: live2.box.canary, dispatch: live2.box.dispatch, method: 'ledger.count', probeCount: 20 })
+} catch (err) { noApprovalRun = err }
+check('runCanary 负控：缺人工引用直接拒绝（canary-approval-required，且**不进入** canary）',
+  noApprovalRun instanceof CanaryApprovalRequired && live2.box.canary.state().phase === 'base',
+  `code=${noApprovalRun?.code} phase=${live2.box.canary.state().phase}`)
+
+const ran = runCanary({ canary: live2.box.canary, dispatch: live2.box.dispatch, method: 'ledger.count',
+  probeCount: 40, approval_ref: 'ap-0101', proposal_id: 'p-t235' })
+const lvStats = live2.box.canary.stats()
+check('runCanary 正控：探针一次性采样**两侧** + 退化判定 + **自动回滚**（安全动作免批准）',
+  ran.decision?.action === 'rollback' && ran.decision.automatic === true && ran.decision.approval_required === false
+  && lvStats.base.count > 0 && lvStats.canary.count > 0 && ran.exited?.phase === 'base' && ran.samples.fallbacks > 0,
+  `base=${lvStats.base.count} canary=${lvStats.canary.count} fallbacks=${ran.samples.fallbacks} `
+  + `decision=${ran.decision?.action} exited=${ran.exited?.phase}`)
+
+const live3 = await mountPair({ weight_bps: 5000, min_samples: 5 }, { name: 'bridge-call' })
+live3.box.dispatch.register({ base: baseTransport, candidate: baseTransport, candidate_name: 'cand-good' })
+const good = runCanary({ canary: live3.box.canary, dispatch: live3.box.dispatch, method: 'ledger.count',
+  probeCount: 20, approval_ref: 'ap-0102' })
+check('runCanary 负控：候选不退化时**不回滚**（推荐只是建议，不擅自扩大上线面）',
+  good.exited === null && ['promote', 'hold'].includes(good.decision?.action) && live3.box.canary.state().phase === 'canary',
+  `action=${good.decision?.action} exited=${good.exited} phase=${live3.box.canary.state().phase}`)
+await live2.dispose(); await live3.dispose()
 
 console.log(JSON.stringify(facts, null, 2))
 if (failures) {
