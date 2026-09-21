@@ -1,6 +1,6 @@
 # T-254 谈判设计决策记录：FR-NEGO-001 / FR-NEGO-002（只写 tmp/，本轮不写实现）
 
-- 范围：`FR-NEGO-001`（有限轮次谈判：轮次上限与让步上限来自策略 patch，`docs/work/functional-requirements.md:132`）与 `FR-NEGO-002`（任何价格让步必须人工批准，同文件 `:133`）在覆盖矩阵里是【缺口】（`docs/design/15-requirements-coverage.md:68-69`）。
+- 范围：`FR-NEGO-001`（有限轮次谈判：轮次上限与让步上限来自策略 patch，`docs/work/functional-requirements.md:101`）与 `FR-NEGO-002`（任何价格让步必须人工批准，同文件 `:102`）在覆盖矩阵里是【缺口】（`docs/design/15-requirements-coverage.md:68-69`）。
 - 验收标准原文：`AC-NEGO-001`「轮次与让步上限生效；任何价格让步需要人工批准」（`docs/work/acceptance-criteria.md:87`），命令 `qa ac AC-NEGO-001`。
 - 本文件只做决策与契约（接口契约见同目录 `t254-nego-contract.md`）；**未核实**的项在 §6 逐条列出，不当作事实。
 
@@ -19,7 +19,7 @@
 
 | 事实 | 位置 |
 |---|---|
-| 需读两条 FR（could / must，均 P2） | `docs/work/functional-requirements.md:132-133` |
+| 需读两条 FR（could / must，均 P2） | `docs/work/functional-requirements.md:101-102` |
 | AC-NEGO-001 的原文与命令 | `docs/work/acceptance-criteria.md:87` |
 | `ctx.negotiate` 的职责与 Definition | `docs/design/04-services-catalog.md:101-105` |
 | `negotiate/round` 已声明为 `serial` + durable，标"规划中" | `docs/design/05-events.md:95` |
@@ -216,7 +216,7 @@
 | 项 | 状态 |
 |---|---|
 | `docs/design/04-services-catalog.md:105` 引用的一条款号在 FR 文档里**没有定义行**（FR 文档只有 001/002 两条 NEGO） | 漂移，下一轮随服务目录更新一并修正（只改服务目录文字，不动 AC） |
-| `docs/design/04-services-catalog.md:101` 标 `ctx.negotiate [P1]`，而 FR 表标 **P2**（`functional-requirements.md:132-133`） | 漂移，以 FR 文档为准（P2） |
+| `docs/design/04-services-catalog.md:101` 标 `ctx.negotiate [P1]`，而 FR 表标 **P2**（`functional-requirements.md:101-102`） | 漂移，以 FR 文档为准（P2） |
 | `docs/design/02-domain-model.md` §4 命名表**没有** `negotiate/*` 行 | 缺口，下一轮补（05-events.md §0 规则 5） |
 | 真实商务中的谈判轮次/让步幅度经验值 | **未核实**（无现场数据）→ 因此不设默认值 |
 | `03-exchange-protocol.md` 是否有过"谈判报文"的历史讨论 | **未核实**（本轮按 `negotiate`、`nego`、`谈判`、`counter-offer` 检索无命中） |

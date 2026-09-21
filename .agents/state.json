@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-21T20:46:58Z",
+  "updated_at": "2026-09-21T21:49:06Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
   "next_task": "T-264 系统管理 UI（admin 道 + token 提权 + 视角切换 + agent 进度/阻塞面板）",
   "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
-  "last_verified_command": "tools/verify.sh docs | ac-registry | coverage | p0-no-node | storage | wiring | plugins | modules | g1（p0-no-node 另在 tmp/**/*.md churn + 整树副本门的并发下跑 1 次）",
-  "last_verified_result": "PASS：九道门全绿（docs：契约文档 98 个 / 0 未解析；ac-registry、coverage、wiring、plugins 4/4、modules 469/469、storage 均 exit 0；p0-no-node 59 条 AC 无 Node 全绿，且**在并发下**跑一次为「59 条全绿 + 无瞬时命中」；g1 exit 0：全量 AC 81/81 + 走查 14/14。另：文档门并发对照 12/12 绿（同条件旧门 11/12、churn 更快时 12/12 红））",
-  "last_verified_evidence": "docs/work/evidence/EV-152-docs-gate-contract-doc-scope.txt",
+  "last_verified_command": "tools/verify.sh docs | ac-registry | coverage | wiring | plugins | modules | g1（docs 另连跑 12 次；反向验证 3 例在整仓副本 /tmp/frwork/copy 上做）",
+  "last_verified_result": "PASS：七道门全绿（docs：契约文档 101 个 / 0 未解析；FR 定义集合 = 主文件 102 条 + 归档 47 条，`fr_archives=[docs/work/functional-requirements-archive.md:47]`，预算最高 99%（INDEX.md 8076/8192 B）；ac-registry、coverage（8/8，含新增的『FR 定义集合非空且归档被读到』守卫）、wiring、plugins、modules 均 exit 0；g1 exit 0）。docs 连续 12 次全绿（12/12），窗口内 docs/work/*.md 逐字节未变、无并发写入者。反向验证 3 例：归档抽 1 行→红、主文件抽 1 行→红（未解析 ID + AC-RUNTIME-003 孤儿两处）、真存在但 0 条 FR 行的归档→docs 与 coverage 双红；还原后 sha256 与 pristine 一致",
+  "last_verified_evidence": "docs/work/evidence/EV-155-fr-archive-gate.txt",
   "last_verified_commit": "b53a8f053439635e7da78769b572aebd46a49ff7",
   "blockers": [],
   "human_required": [
@@ -107,6 +107,7 @@
     "t258": "done：邮件集成无凭据部分（AC-MAIL-001 20/20、10/10 变异）；无 mail/sent 事件；发信登记 T-259=blocked",
     "t260": "done：三域（谈判/FAQ/邮件）运维道可见；pipeline-view 为第九件自进化产出（ap-0110）",
     "gate_flakes_gatefix": "done（EV-151 / D-071）：storage 门对无关写入者解耦（第 8 条收窄为本用例触及目标的白名单 + 新增第 19 条全局层断言；账本类只增不改 + 哨兵兜底；白名单外变化如实计数不判红；8 组合成样本非空转自证；负控与变异 1..4 均实测）；tools/verify.sh 的 p0-no-node 输出不丢（tmp/p0-no-node.<mktemp>/ + 失败原样回显 + 连续两次红才算真红）。p0-no-node 瞬时红的真因已量出：文档门 md_files() 扫 tmp/**（267 个 .md 里 166 个在 tmp/），与整树副本门 new_scratch TOCTOU → FileNotFoundError（16 次里 2 次）；文档门本轮未改，残留记为 D-071",
-    "gate_flakes_gatefix_step2": "done（EV-152 / D-071→resolved，D-072）：文档门扫描范围收窄为**契约文档集合**（SCAN_EXCLUDE_DIRS={.git,.venv,tmp,node_modules,__pycache__}，按相对仓库根的路径分量判定；扫描 267→98、引用 6128→2798，预算/覆盖口径不变）+ 新增 read_md()（契约文档在读窗口里消失**仍判红**，不跳过）；AC-RUNTIME-001 那条断言语义改为「跑完后门的契约文档集合不变」，并加『门自报扫描数==AC 独立测得数』与『集合仍含全部定义文件』（10→13 条断言，非空转已实测：跑 AC 期间移走真契约文档 → 断言红并给 diff）。并发 12/12 绿（同条件旧门 11/12 红、churn 更快时 12/12 红，崩溃帧停在 check_ids:134）；p0-no-node 并发 59/59 无瞬时命中"
+    "gate_flakes_gatefix_step2": "done（EV-152 / D-071→resolved，D-072）：文档门扫描范围收窄为**契约文档集合**（SCAN_EXCLUDE_DIRS={.git,.venv,tmp,node_modules,__pycache__}，按相对仓库根的路径分量判定；扫描 267→98、引用 6128→2798，预算/覆盖口径不变）+ 新增 read_md()（契约文档在读窗口里消失**仍判红**，不跳过）；AC-RUNTIME-001 那条断言语义改为「跑完后门的契约文档集合不变」，并加『门自报扫描数==AC 独立测得数』与『集合仍含全部定义文件』（10→13 条断言，非空转已实测：跑 AC 期间移走真契约文档 → 断言红并给 diff）。并发 12/12 绿（同条件旧门 11/12 红、churn 更快时 12/12 红，崩溃帧停在 check_ids:134）；p0-no-node 并发 59/59 无瞬时命中",
+    "docs_fr_archive": "done（EV-155）：FR 的定义文件从单文件改为**集合** = docs/work/functional-requirements.md + 同目录 functional-requirements-archive*.md（口径写进 tools/check-docs.py 头与常量 FR_MAIN/FR_ARCHIVE_GLOB，输出 fr_archives=[文件:FR 行数]）；ID 完整性与预算不变，FR↔AC 无孤儿检查**同步扩到集合**，新增硬断言『归档 0 条 FR 定义行 = FAIL』；tools/check-fr-coverage.py 用同一集合判覆盖矩阵双向全覆盖并加归档空读守卫；docs/design/12-documentation-standard.md §2 同步。搬行：阶段 != P0 且 git 引入时间 ≤ 2026-09-21T04:34:36Z 的 47 行（整行逐字）搬入新建 docs/work/functional-requirements-archive.md；FR-NEGO-001/002 留主文件（17-negotiation-contract 明文『FR 原文不动』，与 AC-NEGO-001 同类）；主文件 32583 → 27645 B、归档 7754 B；16/17-negotiation-*.md 行号 :132-133 → :101-102。handover 1015 → 796 B（细节压成指向 docs/work/ 与 evidence/ 的引用，未删任何事实源链接）。未复现的门间歇红（父方 5 次 2 红，当时 99.4%）记为 progress-checklist 的 DOC-BUDGET-FLAKE（待复核）"
   }
 }

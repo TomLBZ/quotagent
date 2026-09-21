@@ -7,6 +7,7 @@
 - ID：`FR-<域>-<NNN>`；优先级：`must`（不做则阶段不成立）· `should`（阶段内应做）· `could`（可延后）。
 - 阶段：P0 mock · P1 mvp demo · P2 product（定义见 `roadmap.md`）。
 - 每条需求都引用 `acceptance-criteria.md` 中的 AC；**AC 未定义的需求不得实现**（AGENTS.md 规则 6）。
+- 较早的一批**非 P0** 行（引入时间 ≤ 2026-09-21T04:34:36Z）在 `functional-requirements-archive.md`（同目录）；**归档仍受门校验**：主文件 + 同目录 `functional-requirements-archive*.md` = 门的 **FR 定义集合**。
 - 服务与事件细节见 `../design/04-services-catalog.md` 与 `../design/05-events.md`，本文件不重复定义。
 
 ## 1. 验证清单（V）：未验证的假设
@@ -43,15 +44,9 @@
 | FR-PLUGIN-001 | 插件装载/卸载，依赖未就绪不得激活 | must | P0 | AC-PLUGIN-001 |
 | FR-PLUGIN-002 | 依赖变化自动触发消费者重载/失活，不自动迁移草稿 | must | P0 | AC-PLUGIN-002 |
 | FR-PLUGIN-003 | 卸载后无残留订阅、定时器、外部通知 | must | P0 | AC-PLUGIN-001 |
-| FR-PLUGIN-004 | 配置更新先过可否决的更新事件，否决即不生效 | must | P1 | AC-PLUGIN-003、AC-PLUGIN-004 |
 | FR-QEP-001 | 构造/校验/签名/验签 QEP 信封 | must | P0 | AC-QEP-001 |
 | FR-QEP-002 | 承诺类报文缺人工批准即拒收 | must | P0 | AC-APPROVE-002 |
-| FR-QEP-003 | `seq` 空洞检测与重发请求；不跳号处理 | must | P1 | AC-QEP-003 |
 | FR-QEP-004 | 至少一次投递 + 幂等去重 | must | P0 | AC-QEP-002 |
-| FR-QEP-005 | 版本交集为空则拒绝通信并留痕（不静默降级） | must | P1 | AC-QEP-004 |
-| FR-QEP-006 | 特性级降级必须留痕，且批准链/版本绑定/签名不可降级 | must | P1 | AC-QEP-004 |
-| FR-QEP-007 | 三方协调（base/mine/theirs）+ 字段权威方 + 冲突上报 | must | P1 | AC-SYNC-001 |
-| FR-QEP-008 | 崩溃后未同步事件可安全重发，不产生重复事实 | must | P1 | AC-QEP-002 |
 
 ## 2.1 运行时与运行器（P0 S0.1）
 
@@ -69,22 +64,10 @@
 | FR-NORM-003 | 报价条目与询价清单条目对齐（含 `additional` 标记） | must | P0 | AC-NORM-003 |
 | FR-NORM-004 | 包版本与报价版本一致性门（不一致不得进比价） | must | P0 | AC-COMPARE-001 |
 | FR-CLARIFY-001 | 澄清工单绑定包版本与条目引用 | must | P0 | AC-CLARIFY-001 |
-| FR-CLARIFY-002 | 答案必须广播给全部在册投标人，否则不得关闭 | must | P1 | AC-CLARIFY-002 |
-| FR-CLARIFY-003 | 包版本变更时相关工单自动重开 | should | P1 | AC-CLARIFY-003 |
-| FR-CLARIFY-004 | FAQ 沉淀与复用（本 realm 内） | could | P2 | AC-CLARIFY-004、AC-FAQ-001 、AC-PIPELINE-001 |
 | FR-APPROVE-001 | 人工门：请求、批准、拒绝、代签禁止 | must | P0 | AC-APPROVE-001 |
 | FR-APPROVE-002 | 批准绑定 scope，不可跨动作复用 | must | P0 | AC-APPROVE-002 |
-| FR-APPROVE-003 | 待批队列不阻塞 agent 其他工作；超时策略三选一且无"自动批准" | must | P1 | AC-APPROVE-003 |
-| FR-GUARD-001 | 异常低价检测（对同包与历史） | must | P1 | AC-GUARD-001 |
 | FR-GUARD-002 | 漏项检测（清单对齐） | must | P0 | AC-GUARD-001 |
-| FR-GUARD-003 | 产能/交期可行性冲突检测 | should | P1 | AC-GUARD-002 |
-| FR-GUARD-004 | 条款冲突检测（付款/质保/罚则） | should | P1 | AC-GUARD-002 |
 | FR-GUARD-005 | 报价正文注入与私域泄露检测；护栏只产 Flag 不否决 | must | P0 | AC-GUARD-003 |
-| FR-EVIDENCE-001 | 审计包导出（事件切片 + Merkle 根 + 清单） | must | P1 | AC-AUDIT-001 |
-| FR-EVIDENCE-002 | 审计包独立验证（哈希链 + 签名） | must | P1 | AC-AUDIT-001 |
-| FR-EVIDENCE-003 | 模型输入重建校验（P4 的可机检实现） | must | P1 | AC-AUDIT-002 |
-| FR-EVIDENCE-004 | 留存期与销毁策略可配置，销毁动作留痕 | should | P2 | AC-AUDIT-003、AC-AUDIT-005 |
-| FR-EVIDENCE-005 | 审计包必须**签名**（导出方身份可验）并提供**包含证明**；验证方在**不接触原账本**的前提下可独立验证（缺字段/缺密钥不得静默通过） | must | P1 | AC-AUDIT-004 |
 
 ## 4. 承包商侧
 
@@ -93,20 +76,10 @@
 | FR-RFQ-001 | 创建采购包：范围、接口、计量规则、交付物、除外责任 | must | P0 | AC-RFQ-001 |
 | FR-RFQ-002 | 清单条目 CRUD 与校验（单位属计量规则表、必须有唯一接口责任方） | must | P0 | AC-RFQ-001 |
 | FR-RFQ-003 | 发布产生不可变版本；修改必须升版并给字段级 delta | must | P0 | AC-RFQ-002 |
-| FR-RFQ-004 | 分发记录：谁在何时收到哪个版本 | must | P1 | AC-RFQ-003 |
-| FR-RFQ-005 | 截止时间管理与超时提醒（澄清截止、报价截止） | should | P1 | AC-RFQ-003 |
-| FR-RFQ-006 | 包升版后，基于旧版本的报价必须被标记为**过期**（含旧/新版本号）且不得进入排序，并产生重报请求（提示对方基于新版本重报） | must | P1 | AC-RFQ-004 |
 | FR-COMPARE-001 | 归一化报价 → TCO 折算（价格/交期/付款条件/质保/偏差） | must | P0 | AC-COMPARE-002 |
 | FR-COMPARE-002 | 排序建议：权重来自策略 patch；同输入同输出 | must | P0 | AC-COMPARE-002 |
 | FR-COMPARE-003 | 每个数值必须有引用链（账本条目 + 清单条目） | must | P0 | AC-COMPARE-003 |
-| FR-COMPARE-004 | 生成可评审的比较表（含 Flag 与差异说明），可导出 | must | P1 | AC-COMPARE-004 |
-| FR-AWARD-001 | 授标意向（Intent）可撤回，可复；不产生义务 | must | P1 | AC-AWARD-001 |
 | FR-AWARD-002 | 供应商确认 + 承包商人工签署 → 承诺；缺一即抛错 | must | P0 | AC-AWARD-001 |
-| FR-AWARD-003 | PO 只能由承诺派生，不得手工另建 | must | P1 | AC-AWARD-002 |
-| FR-TERMS-001 | 条款库与默认条款应用 | should | P1 | AC-TERMS-001 |
-| FR-TERMS-002 | 条款冲突标注并提请人工，不得静默取其一 | must | P1 | AC-TERMS-001 |
-| FR-CHANGE-001 | 变更请求引用原报价条目与单价基准 | must | P1 | AC-CHANGE-001 |
-| FR-CHANGE-002 | 变更定价与差额重算；人工批准后生效 | must | P1 | AC-CHANGE-002 |
 
 ## 5. 供应商侧
 
@@ -117,13 +90,9 @@
 | FR-INTAKE-003 | 无引用的抽取结果标记为 `[假设]` 等待人工确认 | must | P0 | AC-INTAKE-002 |
 | FR-COST-001 | 成本构成按条目与成本要素（材料/人工/机具/管理/风险/税/财务） | must | P0 | AC-COST-001 |
 | FR-COST-002 | 成本模型为私域，永不出 realm | must | P0 | AC-TRUST-001 |
-| FR-COST-003 | 成本构成可解释（因子可追溯） | should | P1 | AC-COST-001 |
 | FR-PRICE-001 | 定价流水线产出 PriceProposal（Intent），越界即请求批准 | must | P0 | AC-PRICE-001 |
 | FR-PRICE-002 | 最终报价数字必须人工确定 | must | P0 | AC-PRICE-001 |
-| FR-CAP-001 | 交期可行性校验（产能日历 + 关键路径） | should | P1 | AC-CAP-001 |
-| FR-CAP-002 | `firm` 交期在报价有效期内不可由模型变更 | must | P1 | AC-CAP-001 |
 | FR-DEV-001 | 偏差捕捉（技术/商务/进度/范围）与影响量化 | must | P0 | AC-DEV-001 |
-| FR-DEV-002 | 替代方案建议（Intent，人工采纳） | could | P2 | AC-DEV-001 |
 
 ## 6. 协作与治理
 
@@ -131,23 +100,8 @@
 |---|---|---|---|---|
 | FR-NEGO-001 | 有限轮次谈判：轮次上限与让步上限来自策略 patch | could | P2 | AC-NEGO-001 、AC-NEGO-003 、AC-PIPELINE-001 |
 | FR-NEGO-002 | 任何价格让步必须人工批准 | must | P2 | AC-NEGO-001 、AC-NEGO-003 |
-| FR-EVAL-001 | 场景集（S1..S4）与断言执行 | must | P1 | AC-EVAL-001 |
-| FR-EVAL-002 | 离线重放确定性（同输入同输出） | must | P1 | AC-EVAL-001 |
 | FR-EVAL-003 | 指标采集与基线报告 | must | P0 | AC-EVAL-002 |
-| FR-EVAL-004 | 反例集只增不减，新增需人批 | must | P1 | AC-EVAL-002 |
-| FR-EVOLVE-001 | 提案结构（target/diff/rationale/expected_effect/risks/rollback_plan） | must | P2 | AC-EVOLVE-001 |
-| FR-EVOLVE-002 | 影子重放与指标对比 | must | P2 | AC-EVOLVE-001 |
-| FR-EVOLVE-003 | 评测门五条同时满足（含人工介入率不上升） | must | P2 | AC-EVOLVE-002 |
-| FR-EVOLVE-004 | 自改范围限制：内核不可 patch；自改附提案 ID | must | P2 | AC-EVOLVE-003 |
-| FR-EVOLVE-005 | canary 与自动回滚（卸载实现） | must | P2 | AC-EVOLVE-003 |
-| FR-EVOLVE-006 | 提案失败三次转人工 | should | P2 | AC-EVOLVE-004 |
 | FR-INTEG-001 | 文件投递绑定（原子写 + 命名约定） | must | P0 | AC-INTEG-001 |
-| FR-INTEG-002 | HTTP relay 绑定（只转发与存证） | should | P1 | AC-INTEG-002 |
-| FR-INTEG-004 | 宿主与内核经 stdio NDJSON 桥通信：能力清单由内核自述；版本不兼容即拒绝且账本零新增；`commit` 面永不暴露、调用留痕；身份不可自我声明；错误码固定且带可行动 `next_action` | must | P1 | AC-INTEG-004, AC-INTEG-005, AC-INTEG-006 |
-| FR-INTEG-003 | 邮件绑定（P2）；失败不得落账为"已发送" | could | P2 | AC-INTEG-003 | AC-MAIL-001 、AC-PIPELINE-001 |
-| FR-UX-001 | 人工门队列视图（动作、摘要、引用链、Flag） | must | P1 | AC-APPROVE-003 |
-| FR-UX-002 | 供应商视图不得暴露承包商私域字段 | must | P1 | AC-TRUST-001 |
-| FR-UX-003 | 比价表导出（CSV/Excel） | should | P1 | AC-COMPARE-004 |
 | FR-RUNTIME-003 | 提供宿主运行期决策留痕：按事件前缀订阅、有界环形流水、去重键与账本同形；**不写账本、不写文件** | must | P2 | AC-RUNTIME-003 |
 | FR-RUNTIME-004 | 提供运行期窗口成本预算准入：整数微元记账、窗口滚动、超预算拒绝**可解释**（区分"等窗口有用"与"等也没用"） | must | P2 | AC-RUNTIME-004 |
 | FR-RUNTIME-005 | 提供运行期熔断：连续失败达阈值即快速失败，冷却后半开有界试探，拒绝带状态与重试时间 | must | P2 | AC-RUNTIME-005 |

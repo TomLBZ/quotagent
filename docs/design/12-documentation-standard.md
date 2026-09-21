@@ -32,7 +32,7 @@
 
 | 前缀 | 含义 | 定义处 |
 |---|---|---|
-`FR-<域>-<NNN>` | 功能需求 | `docs/work/functional-requirements.md` |
+`FR-<域>-<NNN>` | 功能需求 | `docs/work/functional-requirements.md` + 同目录 `functional-requirements-archive*.md`（主文件 + 归档 = 门的 FR 定义集合；归档不豁免任何断言；`V-` 只认主文件） |
 `AC-<域>-<NNN>` | 验收标准（含可执行命令） | `docs/work/acceptance-criteria.md` + 同目录 `acceptance-criteria-archive*.md`（主文件 + 归档 = 门的 AC 定义集合；归档不豁免任何断言） |
 `T-<NNN>` | 实现任务 | `docs/work/progress-checklist.md` |
 `V-<NNN>` | 待现场验证的假设 | `docs/work/functional-requirements.md` §验证清单 |

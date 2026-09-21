@@ -1,7 +1,9 @@
 """check-fr-coverage —— 把「每个功能都由插件提供」变成机检（`tools/verify.sh coverage`）。
 
 读 `docs/design/15-requirements-coverage.md`（需求覆盖矩阵），断言：
-  A1 双向全覆盖：FR 文档里的每条 FR 在矩阵里都有一行，且矩阵里没有伪造的 FR ID；
+  A1 双向全覆盖：FR **定义集合**（`docs/work/functional-requirements.md` + 同目录
+     `functional-requirements-archive*.md`）里的每条 FR 在矩阵里都有一行，且矩阵里没有伪造的 FR ID；
+     另加守卫：集合非空、归档文件被读到（归档 0 条 FR 行 = 空读 = 失败，不许静默变绿）；
   A2 双向全覆盖：`host/modules/*.mjs` 里每个插件在矩阵里都有一行，反之亦然；
   A3 **承载体必须真实存在**（防"矩阵里写一个不存在的文件"）；
   A4 状态只能是 直引/映射/缺口/存疑；【缺口】【存疑】必须逐条列在矩阵的登记小节里（不许悄悄留洞）；
@@ -17,6 +19,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX = ROOT / 'docs/design/15-requirements-coverage.md'
+FR_MAIN = ROOT / 'docs/work/functional-requirements.md'
+FR_ARCHIVE_GLOB = 'functional-requirements-archive*.md'
 CHECKS: list[dict] = []
 
 
@@ -26,6 +30,20 @@ def check(name: str, ok: bool, detail: str = "") -> None:
 
 def read(p: Path) -> str:
     return p.read_text(encoding='utf-8', errors='ignore') if p.exists() else ''
+
+
+def fr_archive_files() -> list[Path]:
+    """FR 归档文件（与主文件同目录、名字匹配 glob 的每个文件）。"""
+    return sorted(p for p in FR_MAIN.parent.glob(FR_ARCHIVE_GLOB) if p.is_file())
+
+
+def fr_definition_text() -> str:
+    """FR **定义集合**的正文 = 主文件 + 同目录下所有 `functional-requirements-archive*.md`。
+
+    归档只改变"行写在哪"，**不改变判据**：搬进归档的 FR 行仍必须被覆盖矩阵逐条覆盖
+    （A1 双向：文档里缺一条红、矩阵里伪造一条红）。口径与 `tools/check-docs.py` 的 FR 定义集合一致。
+    """
+    return '\n'.join(read(p) for p in [FR_MAIN, *fr_archive_files()])
 
 
 def rows(section: str) -> list[list[str]]:
@@ -52,10 +70,21 @@ def section_of(text: str, title_kw: str) -> str:
 def evaluate(matrix_text: str, allow_debt: bool = True) -> list[dict]:
     """对给定矩阵文本求值，返回断言列表（供负控复用）。"""
     res: list[dict] = []
-    fr_doc = read(ROOT / 'docs/work/functional-requirements.md')
+    fr_doc = fr_definition_text()
     ac_doc = read(ROOT / 'docs/work/acceptance-criteria.md')
     frs = sorted(set(re.findall(r'FR-[A-Z]+-\d+', fr_doc)))
     acs = set(re.findall(r'AC-[A-Z]+-\d+', ac_doc))
+    # FR 的定义是**集合**（主文件 + 同目录归档）：归档不是豁免区 —— 搬进归档的 FR 行
+    # 仍必须被矩阵逐条覆盖（双向：缺一条红、伪造一条红）。这里另加"集合非空 + 归档被读到"的守卫，
+    # 否则"两边都没读到"会让 A1 静默变绿（缺 0、伪造 0）。
+    archives = fr_archive_files()
+    empty_archives = [str(p.relative_to(ROOT)) for p in archives
+                      if not re.search(r'^\| FR-', read(p), re.M)]
+    fr_rows = len(re.findall(r'^\| FR-', fr_doc, re.M))
+    res.append({"name": "FR 定义集合非空且归档被读到（主文件 + 同目录归档；归档 0 条 FR 行 = 空读）",
+                "ok": fr_rows > 0 and not empty_archives,
+                "detail": f"FR 行 {fr_rows} 条；归档 {[str(p.relative_to(ROOT)) for p in archives]}；"
+                          f"空读 {empty_archives}"})
     mods = sorted(p.stem for p in (ROOT / 'host/modules').glob('*.mjs') if p.stem != 'index')
 
     fr_sec = section_of(matrix_text, 'FR 覆盖')
@@ -67,7 +96,7 @@ def evaluate(matrix_text: str, allow_debt: bool = True) -> list[dict]:
     fr_ids = [r[0] for r in fr_rows if fr_rows and r and r[0].startswith('FR-')]
     missing = [f for f in frs if f not in fr_ids]
     fake = [i for i in fr_ids if i not in set(frs)]
-    res.append({"name": f"矩阵对 FR 文档**双向全覆盖**（文档 {len(frs)} 条）",
+    res.append({"name": f"矩阵对 FR 文档**双向全覆盖**（定义集合 = 主文件 + 归档，共 {len(frs)} 条）",
                 "ok": not missing and not fake,
                 "detail": f"缺 {len(missing)} 条{missing[:6]}；伪造 {len(fake)} 条{fake[:6]}"})
 

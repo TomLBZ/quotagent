@@ -1,0 +1,296 @@
+EV-155 FR 归档合法化 + 用归档把 FR 预算压下来（门语义变化 + handover 压缩 + 反向验证）
+时间：2026-09-21（本机）  cwd：/workspace/projects/quotagent
+跑门时基线 commit：a947c82（工作树含本批改动）
+入口：tools/verify.sh docs | ac-registry | coverage | g1 | wiring | plugins | modules
+
+一、改了什么：让「FR 归档」成为契约的一部分（语义不变或加强，无一处放宽）
+  1) tools/check-docs.py
+     - FR 的"定义文件"从**单个文件**改为**集合**：docs/work/functional-requirements.md
+       + 同目录 glob `functional-requirements-archive*.md`。口径写在脚本头 + 常量 FR_MAIN / FR_ARCHIVE_GLOB，
+       实现是通用的 id_definition_files(prefix)（主文件恒在首位，其后是所有匹配的归档；
+       AC 走的是同一函数，输出字符串逐字未变）。
+     - **ID 完整性语义不变**（每个引用 ID 必须存在于集合内），只是查找范围扩大。
+     - **FR↔AC 无孤儿检查同步扩到集合**（check_coverage 从"只读主文件"改为读主文件 + 全部归档）：
+       搬进归档的 FR 行与它还在主文件时受**同一个**断言约束（不扩这一处就等于给归档开豁免）。
+     - **新硬断言**：归档必须真被读到 —— 任一归档文件 0 条 FR 定义行即判 FAIL；
+       输出里可见 `fr_archives=[<文件>:<FR 行数>]`（可观察证据，不是空集合比对式的静默通过）。
+     - **V 不扩**：`V-` 行只认主文件 §1（口径比 FR 更窄，不放宽）。
+     - 预算规则不变：`docs/work/*.md` 32 KB，归档与新文件同样受检；扫描范围（D-072 契约文档集合）、
+       占位符、定义文件存在性判据均未动。
+  2) tools/check-fr-coverage.py（`verify.sh coverage`）
+     - A1 的"FR 文档"改为同一**集合**（主文件 + 同目录归档）：搬进归档的 FR 行仍必须被覆盖矩阵逐条覆盖
+       （不扩这一处，矩阵的"伪造 FR"方向会对归档行误判）。
+     - 新增守卫（只加强）：集合非空 + 每个归档必须真被读到（归档 0 条 FR 行 = 失败），
+       否则"两边都没读到"会让 A1 静默变绿（缺 0、伪造 0）。
+     - 其余断言（插件双向全覆盖、承载体真实存在、状态合法、债务登记、插件归属、内建三负控）未动。
+  3) docs/design/12-documentation-standard.md §2：FR 定义处一行写明"主文件 + 同目录归档 = 门的 FR 定义集合；
+     归档不豁免任何断言；`V-` 只认主文件"，与 AC 那行的写法对称，避免"一处一事实"漂移。
+
+二、搬了什么：47 条（逐字整行，含字段与引用）
+  选入规则（可复核）：主文件里 阶段 **不为 `P0`**、且由 git 引入时间 **≤ 2026-09-21T04:34:36Z**
+  （每条 FR 首次出现的提交时间由 `git log --reverse -p -- docs/work/functional-requirements.md` 解析），
+  按主文件原行序整行搬入，分节保留原节标题。
+  留在主文件：**全部 P0 行（102 条中的 P0 部分）+ V-001..V-012**；
+  `FR-NEGO-001`、`FR-NEGO-002` 留主文件 —— `docs/design/17-negotiation-contract.md:173` 明文
+  「`docs/work/functional-requirements.md`（FR 原文不动）」，与上一轮 `AC-NEGO-001` 的处理同类（最保守）。
+  逐字校验（Python 比对，非人眼）：47/47 行在 `HEAD:docs/work/functional-requirements.md` 里**逐字节存在且各出现 1 次**；
+  且"改后主文件 == HEAD 版删掉这 47 行 + 1 行指针"为 True。
+  节分布：§2 内核域 6 / §3 共享能力域 12 / §4 承包商侧 10 / §5 供应商侧 4 / §6 协作与治理 15。
+  尺寸：主文件 32583 → **27645 B**（86.9% → 84.4% of 32 KB；28 KB 目标线以下 1027 B）
+        归档 **7754 B**（7.6 KB < 32 KB 预算；新建 docs/work/functional-requirements-archive.md）
+  条数：主文件 149 → **102** 条 FR 行；归档 **47** 条；合计仍 **149**（无丢行、无重复）
+  行号引用同步：`docs/design/16-negotiation-design.md:3,:22,:219` 与 `docs/design/17-negotiation-contract.md:3`
+  的 `functional-requirements.md:132-133` → `:101-102`（FR-NEGO-001/002 留主文件，行号因搬走其上方的行而前移；
+  实测新行号 `grep -n FR-NEGO-00 docs/work/functional-requirements.md` = 101/102）。
+  搬完主文件无断行/空表头/孤立表头：每节剩余 FR 行数 = §2:13 / §2.1:2 / §3:9 / §4:7 / §5:8 / §6:63（§0/§1/§7 本就不是
+  FR 表所在节）；删掉的行都取自表体，表头与分隔行保留。
+
+三、handover 压缩：1015 → **796 B**（< 800 B 目标；预算 1024 B）
+  细节压成指向事实源的引用，**未删除任何指向事实源的链接**：保留/新增
+  `functional-requirements.md`、`functional-requirements-archive.md`、`progress-checklist.md`、
+  `docs/design/15-requirements-coverage.md`、`.agents/state.json`、`docs/work/evidence/`、`docs/work/roadmap.md`。
+  删掉的是上一轮的叙述性细节（gate-timeline/advice-panel 的收口描述、九道门清单），它们的事实源在
+  `docs/work/evidence/EV-153*.txt` / `EV-150*.txt` 与 `.agents/state.json`（指针未动）。
+
+四、反向验证（**关键**：三个实验都在**整仓副本** /tmp/frwork/copy 上做，用 `cp -a` 复制整棵树；
+   主仓库全程未被试验改动。每次试验后从 pristine 备份还原到工作树并报 sha256 一致）
+副本制作：`cp -a /workspace/projects/quotagent /tmp/frwork/copy`；
+pristine 备份：`cp docs/work/functional-requirements.md /tmp/frwork/main.pristine`、
+`cp docs/work/functional-requirements-archive.md /tmp/frwork/archive.pristine`。
+pristine sha256（与主仓库当前工作树一致）：
+  84a27bfca0c704edc502b0c8facd6b380e0d37690aa9c9cc1de33ff6e4631da4  docs/work/functional-requirements.md
+  2e780fe282500de1bb1bd6aaf95ae3b0cb370b914d4353dbaed172dd3aeaa3ca  docs/work/functional-requirements-archive.md
+
+### 原始输出（`bash /tmp/frwork/run_controls2.sh 2>&1 | tee /tmp/frwork/controls.txt`）
+=== 负控 0（副本）：pristine 基线 ===
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描范围: 契约文档 100 个 markdown 文件（已排除 .git/.venv/__pycache__/node_modules/tmp 下的 169 个临时/派生 .md），仓库根 /tmp/frwork/copy
+扫描读取: 成功 235 次读取，读窗口里消失 0 个契约文档（消失 ⇒ 判红，不跳过）
+[ok]   AC 定义集合: 主文件 docs/work/acceptance-criteria.md 定义 82 条；archives=[docs/work/acceptance-criteria-archive.md:46]（归档文件共 46 条 AC 定义行，受同一套门校验）
+[ok]   FR 定义集合: 主文件 docs/work/functional-requirements.md 定义 102 条；fr_archives=[docs/work/functional-requirements-archive.md:47]（归档文件共 47 条 FR 定义行，受同一套门校验）
+[ok]   ID 完整性: 580 个定义，2848 处引用，0 未解析
+[ok]   占位符: 无
+[ok]   预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B）
+[ok]   FR↔AC 覆盖: 149 条 FR 均关联 AC，128 条 AC 无孤儿（FR 定义文件 2 个：主文件 + 1 个归档；AC 定义文件 2 个：主文件 + 1 个归档）
+RESULT: PASS
+docs exit=0
+
+=== 负控 1（副本 /tmp/frwork/copy）：从**归档**拿掉 1 条 FR 行（FR-TERMS-001）===
+removed: | FR-TERMS-001 | 条款库与默认条款应用 | should | P1 | AC-TERMS-001 |
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描范围: 契约文档 100 个 markdown 文件（已排除 .git/.venv/__pycache__/node_modules/tmp 下的 169 个临时/派生 .md），仓库根 /tmp/frwork/copy
+扫描读取: 成功 235 次读取，读窗口里消失 0 个契约文档（消失 ⇒ 判红，不跳过）
+[ok]   AC 定义集合: 主文件 docs/work/acceptance-criteria.md 定义 82 条；archives=[docs/work/acceptance-criteria-archive.md:46]（归档文件共 46 条 AC 定义行，受同一套门校验）
+[ok]   FR 定义集合: 主文件 docs/work/functional-requirements.md 定义 102 条；fr_archives=[docs/work/functional-requirements-archive.md:46]（归档文件共 46 条 FR 定义行，受同一套门校验）
+[FAIL] 未解析的 ID 引用 1 个（共 2846 处引用）
+       - FR-TERMS-001  ← docs/design/04-services-catalog.md, docs/design/15-requirements-coverage.md, docs/work/progress-checklist.md
+[ok]   占位符: 无
+[ok]   预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B）
+[ok]   FR↔AC 覆盖: 148 条 FR 均关联 AC，128 条 AC 无孤儿（FR 定义文件 2 个：主文件 + 1 个归档；AC 定义文件 2 个：主文件 + 1 个归档）
+RESULT: FAIL (1 项)
+docs exit=1
+
+--- 还原：archive.pristine -> 工作树（sha256 必须相同）---
+2e780fe282500de1bb1bd6aaf95ae3b0cb370b914d4353dbaed172dd3aeaa3ca  /tmp/frwork/archive.pristine
+2e780fe282500de1bb1bd6aaf95ae3b0cb370b914d4353dbaed172dd3aeaa3ca  docs/work/functional-requirements-archive.md
+restored docs exit=0
+[ok]   FR↔AC 覆盖: 149 条 FR 均关联 AC，128 条 AC 无孤儿（FR 定义文件 2 个：主文件 + 1 个归档；AC 定义文件 2 个：主文件 + 1 个归档）
+RESULT: PASS
+
+=== 负控 2（副本）：从**主文件**拿掉 1 条 FR 行（FR-RUNTIME-003；主文件仍被读，不得因扩了集合而放松）===
+removed: | FR-RUNTIME-003 | 提供宿主运行期决策留痕：按事件前缀订阅、有界环形流水、去重键与账本同形；**不写账本、不写文件** |
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描范围: 契约文档 100 个 markdown 文件（已排除 .git/.venv/__pycache__/node_modules/tmp 下的 169 个临时/派生 .md），仓库根 /tmp/frwork/copy
+扫描读取: 成功 235 次读取，读窗口里消失 0 个契约文档（消失 ⇒ 判红，不跳过）
+[ok]   AC 定义集合: 主文件 docs/work/acceptance-criteria.md 定义 82 条；archives=[docs/work/acceptance-criteria-archive.md:46]（归档文件共 46 条 AC 定义行，受同一套门校验）
+[ok]   FR 定义集合: 主文件 docs/work/functional-requirements.md 定义 101 条；fr_archives=[docs/work/functional-requirements-archive.md:47]（归档文件共 47 条 FR 定义行，受同一套门校验）
+[FAIL] 未解析的 ID 引用 1 个（共 2846 处引用）
+       - FR-RUNTIME-003  ← docs/design/15-requirements-coverage.md, docs/work/acceptance-criteria-archive.md
+[ok]   占位符: 无
+[ok]   预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B）
+[FAIL] FR↔AC 覆盖
+       - AC 未被任何 FR 引用: AC-RUNTIME-003
+RESULT: FAIL (2 项)
+docs exit=1
+
+--- 还原：main.pristine -> 工作树（sha256 必须相同）---
+84a27bfca0c704edc502b0c8facd6b380e0d37690aa9c9cc1de33ff6e4631da4  /tmp/frwork/main.pristine
+84a27bfca0c704edc502b0c8facd6b380e0d37690aa9c9cc1de33ff6e4631da4  docs/work/functional-requirements.md
+restored docs exit=0
+[ok]   FR↔AC 覆盖: 149 条 FR 均关联 AC，128 条 AC 无孤儿（FR 定义文件 2 个：主文件 + 1 个归档；AC 定义文件 2 个：主文件 + 1 个归档）
+RESULT: PASS
+
+=== 负控 3（副本）：放一个**真存在但 0 条 FR 定义行**的归档 functional-requirements-archive-b.md ===
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描范围: 契约文档 101 个 markdown 文件（已排除 .git/.venv/__pycache__/node_modules/tmp 下的 169 个临时/派生 .md），仓库根 /tmp/frwork/copy
+扫描读取: 成功 240 次读取，读窗口里消失 0 个契约文档（消失 ⇒ 判红，不跳过）
+[ok]   AC 定义集合: 主文件 docs/work/acceptance-criteria.md 定义 82 条；archives=[docs/work/acceptance-criteria-archive.md:46]（归档文件共 46 条 AC 定义行，受同一套门校验）
+[FAIL] 归档文件未被有效读取（0 条 FR- 定义行）: docs/work/functional-requirements-archive-b.md
+[ok]   FR 定义集合: 主文件 docs/work/functional-requirements.md 定义 102 条；fr_archives=[docs/work/functional-requirements-archive-b.md:0, docs/work/functional-requirements-archive.md:47]（归档文件共 47 条 FR 定义行，受同一套门校验）
+[ok]   ID 完整性: 580 个定义，2848 处引用，0 未解析
+[ok]   占位符: 无
+[ok]   预算: 101 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B）
+[ok]   FR↔AC 覆盖: 149 条 FR 均关联 AC，128 条 AC 无孤儿（FR 定义文件 3 个：主文件 + 2 个归档；AC 定义文件 2 个：主文件 + 1 个归档）
+RESULT: FAIL (1 项)
+docs exit=1
+--- coverage 门也必须看见这件事 ---
+{
+  "checks": [
+    {
+      "name": "矩阵文件存在",
+      "ok": true,
+      "detail": "docs/design/15-requirements-coverage.md"
+    },
+    {
+      "name": "FR 定义集合非空且归档被读到（主文件 + 同目录归档；归档 0 条 FR 行 = 空读）",
+      "ok": false,
+      "detail": "FR 行 149 条；归档 ['docs/work/functional-requirements-archive-b.md', 'docs/work/functional-requirements-archive.md']；空读 ['docs/work/functional-requirements-archive-b.md']"
+    },
+    {
+      "name": "矩阵对 FR 文档**双向全覆盖**（定义集合 = 主文件 + 归档，共 149 条）",
+      "ok": true,
+      "detail": "缺 0 条[]；伪造 0 条[]"
+    },
+    {
+      "name": "矩阵对插件目录**双向全覆盖**（37 个插件）",
+      "ok": true,
+      "detail": "缺 0 个[]；伪造 0 个[]"
+    },
+    {
+      "name": "每条 FR 的承载体**在仓库里真实存在**（防矩阵瞎写）",
+      "ok": true,
+      "detail": "不存在的承载体 0 处：[]"
+    },
+    {
+      "name": "状态合法；【缺口】【存疑】**逐条登记**（不许悄悄留洞）",
+      "ok": true,
+      "detail": "问题 0 处：[]；登记表 5 条"
+    },
+    {
+      "name": "每个插件至少归属 1 条 FR 或 AC（'功能由插件提供'的落点）",
+      "ok": true,
+      "detail": "无归属插件 0 个：[]"
+    },
+    {
+      "name": "内建负控：三种篡改（假承载体/删 FR 行/删插件行）**都必须让门变红**",
+      "ok": true,
+      "detail": "承载体改成本不存在的文件→红; 删掉一条 FR 行→红; 删掉一条插件行→红"
+    }
+  ],
+  "passed": 7,
+  "total": 8,
+  "failures": 1
+}
+FAIL: FR 定义集合非空且归档被读到（主文件 + 同目录归档；归档 0 条 FR 行 = 空读） | FR 行 149 条；归档 ['docs/work/functional-requirements-archive-b.md', 'docs/work/functional-requirements-archive.md']；空读 ['docs/work/functional-requirements-archive-b.md']
+coverage exit=1
+
+after-removal docs exit=0
+after-removal coverage exit=0
+84a27bfca0c704edc502b0c8facd6b380e0d37690aa9c9cc1de33ff6e4631da4  docs/work/functional-requirements.md
+2e780fe282500de1bb1bd6aaf95ae3b0cb370b914d4353dbaed172dd3aeaa3ca  docs/work/functional-requirements-archive.md
+84a27bfca0c704edc502b0c8facd6b380e0d37690aa9c9cc1de33ff6e4631da4  docs/work/functional-requirements.md
+2e780fe282500de1bb1bd6aaf95ae3b0cb370b914d4353dbaed172dd3aeaa3ca  docs/work/functional-requirements-archive.md
+
+
+五、回归与 12 次连续运行（全部为**真跑**的原始输出）
+### 5.1 并发面：谁在写 docs/work/*.md / 谁在跑门
+### 0. 并发面：谁在写 docs/work/*.md / 谁在跑门（本批开始时）
+时间: 2026-09-21T21:49:09Z
+$ pgrep -af "verify.sh|check-docs|check-fr-coverage|run.sh -m quotagent|node host/cli"
+(无匹配进程)
+
+--- 12 次连续 docs 的窗口内：docs/work/*.md 的 sha256 前后一致（证明没有别的写入者）---
+27645 docs/work/functional-requirements.md
+ 7754 docs/work/functional-requirements-archive.md
+  796 docs/work/handover.md
+36195 total
+
+### 5.2 12 次连续 `tools/verify.sh docs`（要求：全部绿 + 报最高字节占用）
+### 1. 12 次连续 tools/verify.sh docs（父方要求：全部绿 + 报最高字节占用）
+run1 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+run2 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+run3 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+run4 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+run5 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+run6 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+run7 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+run8 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+run9 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+run10 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+run11 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+run12 exit=0 | 预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B） | FR集合行=1
+最高占用（12 次里的 max）:
+99%
+
+--- 12 次之后 docs/work/*.md 的 sha256 ---
+docs/work/*.md 在 12 次窗口内逐字节未变（无并发写入者）
+
+### 2. 12 次之后：谁在写 docs/work/*.md / 谁在跑门
+(无匹配进程)
+
+### 5.3 回归七门（`tools/verify.sh <门>`，逐门退出码取自脚本本身）
+docs exit=0
+ac-registry exit=0
+coverage exit=0
+wiring exit=0
+plugins exit=0
+modules exit=0
+g1 exit=0
+--- 各门末行 ---
+docs         RESULT: PASS
+ac-registry  [ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查）
+coverage     }
+wiring       }
+plugins      RESULT: PASS（插件清单门 4/4）
+modules      fixture 断言：482/482 通过；报告落 /workspace/projects/quotagent/tmp/modules-report.json
+g1           [ok] 阶段门 G1：MVP 判据全部可机检项通过（逐条判定见上方走查报告）
+
+关键行：
+  wiring   exit=0（JSON 报告，无 FAIL 行）
+  plugins  RESULT: PASS（插件清单门 4/4）
+  modules  fixture 断言：482/482 通过
+  g1       全量 AC：83/83 通过；走查结论：14/14 条通过
+
+### 5.4 docs 门完整输出（最终状态）
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描范围: 契约文档 100 个 markdown 文件（已排除 .git/.venv/__pycache__/node_modules/tmp 下的 169 个临时/派生 .md），仓库根 /workspace/projects/quotagent
+扫描读取: 成功 235 次读取，读窗口里消失 0 个契约文档（消失 ⇒ 判红，不跳过）
+[ok]   AC 定义集合: 主文件 docs/work/acceptance-criteria.md 定义 82 条；archives=[docs/work/acceptance-criteria-archive.md:46]（归档文件共 46 条 AC 定义行，受同一套门校验）
+[ok]   FR 定义集合: 主文件 docs/work/functional-requirements.md 定义 102 条；fr_archives=[docs/work/functional-requirements-archive.md:47]（归档文件共 47 条 FR 定义行，受同一套门校验）
+[ok]   ID 完整性: 580 个定义，2853 处引用，0 未解析
+[ok]   占位符: 无
+[ok]   预算: 100 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B）
+[ok]   FR↔AC 覆盖: 149 条 FR 均关联 AC，128 条 AC 无孤儿（FR 定义文件 2 个：主文件 + 1 个归档；AC 定义文件 2 个：主文件 + 1 个归档）
+RESULT: PASS
+
+### 5.5 ac-registry 门完整输出（ACG 集合与归档一并照查）
+[ok]   定义文件 2 个（主文件 1 + archives=[docs/work/acceptance-criteria-archive.md:46]，归档共 46 条 AC 行）
+[ok]   定义集合 128 条 AC（其中 P0 29 条），注册表 83 条
+[info] 尚未到期（P1/P2 等）未注册 45 条：AC-ADMIN-001(P2)、AC-ADMIN-002(P2)、AC-ADMIN-003(P2)、AC-ADMIN-007(P2)、AC-ADMIN-008(P2)、AC-ADMIN-009(P2)、AC-ADMIN-010(P2)、AC-CLARIFY-004(P2)…
+[ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查）
+
+### 5.6 coverage 门摘要
+  passed/total = 8/8（含新增守卫「FR 定义集合非空且归档被读到」：ok=true，detail='FR 行 149 条；归档 ['docs/work/functional-requirements-archive.md']；空读 []'）
+  完整 JSON 见 tmp（本文件只摘摘要）；负控 3 显示该守卫把 0 条 FR 行的归档判红（见 §四）
+
+六、未验证 / 未尽事项（如实列出）
+  1. **没跑 `verify.sh clean-copy`**：它校验 HEAD 版干净副本，须在 commit 之后跑；本轮提交前无法跑（提交后才跑的话，
+     结果会记在本批的后续追加提交里；若未记，则以「未跑」为准）。
+  2. **没跑 `verify.sh all` 之外的其余门入口**：`tools/verify.sh` 没有 `all` 之外的隐藏入口本轮全覆盖，
+     本轮实跑 = docs（12 次）/ ac-registry / coverage / wiring / plugins / modules / g1（g1 内部含 events +
+     ac-registry + audit + v + 全量 AC 83/83 + 走查 14/14）。其余约 40 个门入口本轮**未重跑**。
+  3. **反向验证只做了 3 例**（归档抽 1 行 / 主文件抽 1 行 / 0 条 FR 行的归档），**未**对全部 47 行逐行做移除试验；
+     也**未**做"把归档整个删掉"的试验（预期：FR 定义集合变 1 个文件、归档行全部变成未解析 ID ⇒ 红，属推断，未实测）。
+  4. **父方报告的间歇红本机未复现**：父方在别处实测同批连续 5 次里 2 次 `exit=1`（当时主文件 32583/32768 B = 99.4%）；
+     本轮同机 12 次连续**全绿**（搬行后 27645/32768 B = 84.4%），窗口内 `docs/work/*.md` 逐字节未变、`pgrep` 无并发写入者。
+     因此无法在该测量上给出因果（可能是当时的并发写入者/半写读，也可能是别处环境）。**本批未擅自改门**（避免一次改两件事），
+     已登记 `progress-checklist.md` 的 `DOC-BUDGET-FLAKE`（open/待复核），复现命令写在那里。
+  5. `.agents/sessions/README.md` 自称 budget 4 KB，实际 22714 B（**早于本批**的漂移；该文件不在文档门的预算表里）——
+     本批只追加 1 行（R30），**未**动历史行。
+  6. `docs/work/evidence/INDEX.md` 已 8076/8192 B（99%），**本批的 EV-155 索引行放进 `INDEX-P1.md`**（其表头口径是
+     "EV-039 起"）；注：EV-153/EV-154 被上一批放进了 `INDEX.md`（与该表头口径不一致）——已存在的事实，本批未改。
+  7. `AGENTS.md:11` 与 `docs/design/00-overview.md:80` 的文件清单仍只写 `functional-requirements.md`（未提归档）：
+     AGENTS.md 是铁律不得改；`00-overview.md` 的两行清单不在本批范围（归档在 `12-documentation-standard.md` §2 已明确）。
+  8. V-001..V-012 的现场结论与 G0/G1 人工签署：与本批无关，仍待人工。
+  9. 门之外的可发现性：`grep -rln functional-requirements .agents/` 无命中（本仓技能不引用 FR 文件），
+     故本批**未**改任何 `.agents/skills/*`。
