@@ -17,6 +17,12 @@ from ..kernel.events import EventBus
 from ..kernel.ledger import Ledger, utc_now
 
 REQUESTED_EVENT = "approval/requested"
+REMINDED_EVENT = "approval/reminded"
+ESCALATED_EVENT = "approval/escalated"
+ABORTED_EVENT = "approval/aborted"
+TIMEOUT_POLICIES = ("remind", "escalate", "abort")
+DEFAULT_TIMEOUT_POLICY = "remind"
+DEFAULT_TIMEOUT_S = 3600.0
 GRANTED_EVENT = "approval/granted"
 DENIED_EVENT = "approval/denied"
 HUMAN_PREFIX = "human:"
@@ -50,9 +56,17 @@ class ApprovalService:
 
     # --- 请求 -------------------------------------------------------------
     def request(self, scope: str, payload: dict, *, ref: str | None = None,
-                approvers: list[str] | None = None, reason: str = "") -> dict:
+                approvers: list[str] | None = None, reason: str = "",
+                timeout_policy: str = DEFAULT_TIMEOUT_POLICY, timeout_s: float = DEFAULT_TIMEOUT_S,
+                escalate_to: str | None = None, summary: str | None = None,
+                confidence: float | None = None, flags: list[str] | None = None) -> dict:
         if not scope:
             raise ApprovalError("批准请求必须声明 scope（批准范围）")
+        if timeout_policy not in TIMEOUT_POLICIES:
+            raise ApprovalError(f"超时策略必须是 {TIMEOUT_POLICIES} 之一，收到 {timeout_policy!r}"
+                                f"（不存在「超时自动批准」这一选项，06 §6）")
+        if timeout_policy == "escalate" and not str(escalate_to or "").startswith(HUMAN_PREFIX):
+            raise ApprovalError("escalate 必须给一个人类上级（escalate_to 需以 'human:' 开头）")
         self._counter += 1
         approval_id = f"ap-{self._counter:04d}"
         record = {
@@ -63,6 +77,17 @@ class ApprovalService:
             "payload_hash": digest(payload),
             "reason": reason,
             "approvers": list(approvers or []),
+            "summary": summary or _summarize(payload),
+            "flags": list(flags or []),
+            "confidence": confidence,
+            "timeout_policy": timeout_policy,
+            "timeout_s": float(timeout_s),
+            "escalate_to": escalate_to,
+            "last_action_at": utc_now(),
+            "remind_count": 0,
+            "escalated_at": None,
+            "aborted_at": None,
+            "timeout_log": [],
             "requested_by": self.actor,
             "requested_at": utc_now(),
             "status": "pending",
@@ -95,6 +120,88 @@ class ApprovalService:
         self._append(GRANTED_EVENT if decision == "granted" else DENIED_EVENT, record,
                      correlation_id=record["ref"] or approval_id)
         return dict(record)
+
+    # --- 人工门队列视图（FR-UX-001） ---------------------------------------
+    def queue_view(self, *, now: str | None = None, policy: str | None = None) -> dict:
+        """待批队列：动作（scope）、摘要、引用链、Flag、可选置信度、超时策略与已等待时长。"""
+        stamp = now or utc_now()
+        moment = _epoch(stamp)
+        items: list[dict] = []
+        for key in self._order:
+            record = self._records[key]
+            if record["status"] != "pending":
+                continue
+            if policy and record.get("timeout_policy") != policy:
+                continue
+            waited = moment - _epoch(record["requested_at"])
+            last = moment - _epoch(record.get("last_action_at") or record["requested_at"])
+            items.append({
+                "approval_id": record["approval_id"],
+                "action": record["scope"],
+                "summary": record.get("summary"),
+                "refs": [record["ref"]] if record.get("ref") else [],
+                "flags": list(record.get("flags") or []),
+                "model_confidence": record.get("confidence"),
+                "timeout_policy": record.get("timeout_policy", DEFAULT_TIMEOUT_POLICY),
+                "waiting_on": list(record.get("approvers") or []) or ([record["escalate_to"]]
+                                                                      if record.get("escalate_to") else []),
+                "requested_at": record["requested_at"],
+                "waited_seconds": round(waited, 3),
+                "since_last_action_seconds": round(last, 3),
+                "overdue": last >= float(record.get("timeout_s") or DEFAULT_TIMEOUT_S),
+                "remind_count": int(record.get("remind_count") or 0),
+            })
+        return {"generated_at": stamp, "pending": len(items), "items": items,
+                "policies": {name: sum(1 for item in items if item["timeout_policy"] == name)
+                             for name in TIMEOUT_POLICIES},
+                "note": "待批**不阻塞**其他工作；超时动作只有 remind/escalate/abort，不存在自动批准"}
+
+    # --- 超时扫描（FR-APPROVE-003） ---------------------------------------
+    def sweep(self, *, now: str | None = None) -> dict:
+        """对**已超时**的待批项执行其超时策略；永不产生 granted。"""
+        stamp = now or utc_now()
+        moment = _epoch(stamp)
+        acted: list[dict] = []
+        skipped: list[dict] = []
+        for key in list(self._order):
+            record = self._records[key]
+            if record["status"] != "pending":
+                continue
+            last = moment - _epoch(record.get("last_action_at") or record["requested_at"])
+            if last < float(record.get("timeout_s") or DEFAULT_TIMEOUT_S):
+                skipped.append({"approval_id": record["approval_id"], "reason": "not-overdue"})
+                continue
+            policy = record.get("timeout_policy", DEFAULT_TIMEOUT_POLICY)
+            if policy == "remind":
+                record["remind_count"] = int(record.get("remind_count") or 0) + 1
+                record["last_action_at"] = stamp
+                record["remind_at"] = stamp
+                body = {**record, "action": "remind", "policy": policy,
+                        "note": "提醒仍等待人类决定（不改变状态、不批准）"}
+                self._append(REMINDED_EVENT, body, correlation_id=record["ref"] or key)
+            elif policy == "escalate":
+                target = record.get("escalate_to")
+                record["approvers"] = [target] if target else record.get("approvers", [])
+                record["escalated_at"] = stamp
+                record["last_action_at"] = stamp
+                body = {**record, "action": "escalate", "policy": policy, "escalated_to": target,
+                        "note": "转上级继续等待人类决定（仍不批准）"}
+                self._append(ESCALATED_EVENT, body, correlation_id=record["ref"] or key)
+            elif policy == "abort":
+                record["status"] = "aborted"
+                record["aborted_at"] = stamp
+                record["last_action_at"] = stamp
+                body = {**record, "action": "abort", "policy": policy,
+                        "note": "作废本次意图（需重新发起）；不得解释为批准或拒绝"}
+                self._append(ABORTED_EVENT, body, correlation_id=record["ref"] or key)
+            else:
+                raise ApprovalError(f"未知超时策略: {policy!r}")
+            record.setdefault("timeout_log", []).append({"at": stamp, "policy": policy})
+            acted.append({"approval_id": record["approval_id"], "policy": policy,
+                          "status": record["status"]})
+        return {"at": stamp, "acted": acted, "skipped": skipped,
+                "granted_by_timeout": 0,
+                "note": "超时动作永不包含批准（06 §6：绝不允许超时自动批准）"}
 
     # --- 查询 -------------------------------------------------------------
     def get(self, approval_id: str) -> dict:
@@ -150,3 +257,27 @@ class ApprovalService:
         if self.events is not None:
             self.events.emit(event, {"approval_id": record["approval_id"], "scope": record["scope"],
                                      "status": record["status"]})
+
+
+def _summarize(payload: dict, *, limit: int = 120) -> str:
+    """payload 摘要（给人工看的一行）：键名与值截断，不展开私有结构。"""
+    parts = []
+    for key in sorted(payload or {}):
+        value = payload[key]
+        text = value if isinstance(value, (str, int, float, bool)) or value is None else f"<{type(value).__name__}>"
+        parts.append(f"{key}={str(text)[:32]}")
+    joined = ", ".join(parts)
+    return joined[:limit] + ("…" if len(joined) > limit else "")
+
+
+def _epoch(stamp: str) -> float:
+    """ISO 时间 → 秒（解析失败按 0，避免因畸形时间戳崩掉队列视图）。"""
+    from datetime import datetime, timezone
+    try:
+        text = str(stamp).replace("Z", "+00:00")
+        moment = datetime.fromisoformat(text)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        return moment.timestamp()
+    except Exception:  # noqa: BLE001
+        return 0.0

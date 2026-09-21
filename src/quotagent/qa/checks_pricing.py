@@ -12,6 +12,8 @@ from ..services.approval import (AgentCannotApprove, ApprovalRequired, ApprovalS
 from ..services.commitments import CommitmentError, CommitmentGate
 from ..services.costmodel import CostLibrary, CostModelService
 from ..services.pricing import PriceNotConfirmed, PricingService
+from ..services.approval import ApprovalService
+from ..services.compare import CompareService
 from .registry import Assertion, register
 
 # AC 侧独立声明的流水线阶段顺序（与被测实现的常量无关）
@@ -264,3 +266,122 @@ def ac_approve_002() -> list[Assertion]:
     out.append(Assertion("PO 不能手工另建（即便有批准，未知承诺 → 抛错，FR-AWARD-002 的 P0 子集）",
                          orphan is not None, f"error={orphan}"))
     return out
+
+
+@register("AC-APPROVE-003", "P1", "待批期间 agent 可继续其他工作；超时策略三选一生效且不存在自动批准；队列视图齐备",
+          "qa ac AC-APPROVE-003", evidence_refs=("EV-049",))
+def check_approve_003() -> list[Assertion]:
+    out: list[Assertion] = []
+    root = new_scratch("approve-003")
+    bus = EventBus()
+    bus.install_defaults()
+    ledger = Ledger(root / "con.jsonl", realm="contractor:con-B")
+    service = ApprovalService(ledger=ledger, events=bus)
+
+    policy_error = None
+    try:
+        service.request("quote.submit", {"quote_id": "q-x"}, timeout_policy="auto_approve")
+    except Exception as err:  # noqa: BLE001
+        policy_error = str(err)
+    out.append(Assertion("超时策略只能三选一（`remind`/`escalate`/`abort`）：非法策略被拒且说明无自动批准选项",
+                         policy_error is not None and "超时自动批准" in policy_error
+                         and "remind" in policy_error,
+                         f"error={policy_error}"))
+    escalate_error = None
+    try:
+        service.request("award.commit", {"po": "p-1"}, timeout_policy="escalate")
+    except Exception as err:  # noqa: BLE001
+        escalate_error = str(err)
+    out.append(Assertion("`escalate` 必须给人类上级（不许升级给 agent）",
+                         escalate_error is not None and "human:" in escalate_error,
+                         f"error={escalate_error}"))
+
+    pending_item = service.request(
+        "quote.submit", {"quote_id": "q-0007", "total_amount": 101000.0}, ref="q-0007",
+        approvers=["human:zhang"], timeout_policy="remind", timeout_s=60.0,
+        confidence=0.72, flags=["deviation:delivery"], reason="越出授权区间")
+    # 待批期间继续其他工作：另一个请求、账本追加、比价排序都不受影响
+    other = service.request("change.approve", {"change_id": "chg-1"}, ref="chg-1",
+                            approvers=["human:li"], timeout_policy="abort", timeout_s=60.0)
+    ledger.append("quote/submitted", {"quote_id": "q-0007"}, correlation_id="q-0007")
+    compare = CompareService(ledger=ledger, events=bus)
+    ranked = compare.rank({"package_id": "pkg-014", "rev": 1,
+                           "items": [{"item_id": "L-001", "qty": 100, "unit": "m"}]},
+                          [{"quote_id": "q-0007", "rfq_rev": 1,
+                            "lines": [{"item_id": "L-001", "unit_price": 88.5, "qty": 100}]}])
+    out.append(Assertion("**待批不阻塞**：待批期间可继续发请求、落账、比价（队列只是等待，不是闸门）",
+                         len(service.pending()) == 2 and bool(ranked.get("ranking"))
+                         and bool(other["approval_id"]),
+                         f"pending={len(service.pending())} ranked={len(ranked.get('ranking', []))}"))
+    out.append(Assertion("只有需要该批准的动作被挡（`require` 抛错），与它无关的动作照常",
+                         _require_blocked(service, "quote.submit", "q-0007")
+                         and _require_ok(service, "change.approve", "chg-1") is False,
+                         "require 语义不对"))
+
+    view = service.queue_view(now="2026-09-21T10:02:00Z")
+    first = view["items"][0]
+    out.append(Assertion("队列视图每项含 FR-UX-001 四要素（动作/摘要/引用链/Flag）+ 置信度（可选）+ 超时策略",
+                         view["pending"] == 2
+                         and first["action"] == "quote.submit"
+                         and first["summary"] and "q-0007" in first["summary"]
+                         and first["refs"] == ["q-0007"] and first["flags"] == ["deviation:delivery"]
+                         and first["model_confidence"] == 0.72
+                         and first["timeout_policy"] == "remind"
+                         and first["waited_seconds"] > 0,
+                         f"first={json.dumps(first, ensure_ascii=False)[:220]}"))
+
+    swept = service.sweep(now="2026-09-21T10:02:00Z")
+    by_id = {item["approval_id"]: item for item in swept["acted"]}
+    out.append(Assertion("超时按各自策略生效：remind→仍待批（提醒）· abort→作废（需重新发起）",
+                         set(by_id) == {pending_item["approval_id"], other["approval_id"]}
+                         and by_id[pending_item["approval_id"]]["status"] == "pending"
+                         and by_id[other["approval_id"]]["status"] == "aborted"
+                         and service.get(other["approval_id"])["aborted_at"],
+                         f"acted={json.dumps(swept['acted'], ensure_ascii=False)}"))
+    out.append(Assertion("**绝无自动批准**：超时后 `granted()` 仍为空，账本里没有任何 `approval/granted`",
+                         service.granted(scope="quote.submit", ref="q-0007") is None
+                         and ledger.read(type="approval/granted") == []
+                         and swept["granted_by_timeout"] == 0,
+                         f"granted_events={len(ledger.read(type='approval/granted'))}"))
+    out.append(Assertion("超时留痕：remind/abort 各自落账（不改状态的那条也留痕）",
+                         [row["type"] for row in ledger.read() if row["type"].startswith("approval/")][-2:]
+                         == ["approval/reminded", "approval/aborted"],
+                         f"events={[row['type'] for row in ledger.read() if row['type'].startswith('approval/')]}"))
+    again = service.sweep(now="2026-09-21T10:02:30Z")
+    out.append(Assertion("幂等：同一项在一次超时窗口内重复扫描不再重复动作",
+                         again["acted"] == []
+                         and [row["type"] for row in ledger.read()].count("approval/reminded") == 1,
+                         f"again={again['acted']} reminded={[row['type'] for row in ledger.read()].count('approval/reminded')}"))
+
+    escalated = service.request("award.commit", {"po": "p-0009"}, ref="p-0009",
+                                approvers=["human:zhang"], timeout_policy="escalate", timeout_s=30.0,
+                                escalate_to="human:boss")
+    service.sweep(now="2026-09-21T10:03:00Z")
+    escalated_record = service.get(escalated["approval_id"])
+    out.append(Assertion("`escalate` 超时后转给人类上级并继续等待（状态仍 pending，等待对象已变）",
+                         escalated_record["status"] == "pending"
+                         and escalated_record["approvers"] == ["human:boss"]
+                         and escalated_record["escalated_at"]
+                         and service.queue_view(now="2026-09-21T10:03:10Z")["items"][-1]["waiting_on"] == ["human:boss"],
+                         f"record={json.dumps({k: escalated_record[k] for k in ('status','approvers','escalated_at')}, ensure_ascii=False)}"))
+    out.append(Assertion("三种策略都不会越过人去批准：全程 `approval/granted` 为空、pending 项的 decided_by 皆为空",
+                         ledger.read(type="approval/granted") == []
+                         and all(item["decided_by"] is None for item in service.pending()),
+                         f"pending={len(service.pending())}"))
+    return out
+
+
+def _require_blocked(service, scope: str, ref: str) -> bool:
+    try:
+        service.require(scope=scope, ref=ref)
+        return False
+    except Exception:  # noqa: BLE001
+        return True
+
+
+def _require_ok(service, scope: str, ref: str) -> bool:
+    try:
+        service.require(scope=scope, ref=ref)
+        return True
+    except Exception:  # noqa: BLE001
+        return False

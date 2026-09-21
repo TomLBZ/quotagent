@@ -51,7 +51,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-207 | P1 | 产能日历与交期校验 + `firm` 交期不可由模型变更（S1.6） | FR-CAP-001, FR-CAP-002, FR-GUARD-003 | AC-CAP-001, AC-GUARD-002 | done | EV-047 |
 | T-208 | P1 | 审计包导出/验证 + 签名 + 包含证明 + 模型输入重建（S1.10） | FR-EVIDENCE-001..003, FR-EVIDENCE-005 | AC-AUDIT-001, AC-AUDIT-002, AC-AUDIT-004 | done | EV-048 |
 | T-209 | P1 | 场景集 S1..S4 + 反例集 | FR-EVAL-001, FR-EVAL-002, FR-EVAL-004 | AC-EVAL-001, AC-EVAL-002 | todo | – |
-| T-210 | P1 | 人工门队列视图 + 超时策略 | FR-APPROVE-003, FR-UX-001 | AC-APPROVE-003 | todo | – |
+| T-210 | P1 | 人工门队列视图 + 超时策略三选一（S1.12） | FR-APPROVE-003, FR-UX-001 | AC-APPROVE-003 | done | EV-049 |
 | T-211 | P1 | 条款库与冲突标注 | FR-TERMS-001, FR-TERMS-002, FR-GUARD-004 | AC-TERMS-001 | todo | – |
 | T-212 | P1 | 变更闭环 | FR-CHANGE-001, FR-CHANGE-002 | AC-CHANGE-001, AC-CHANGE-002 | todo | – |
 | T-213 | P1 | 授标与 PO 闭环 | FR-AWARD-001..003 | AC-AWARD-001, AC-AWARD-002 | todo | – |

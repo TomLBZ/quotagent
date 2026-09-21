@@ -70,7 +70,12 @@
 | `quote/price-drafted` | waterfall | live | `ctx.pricing` | 定价流水线：成本基线→市场参考→策略加价→风险准备金→授权区间检查 |
 | `quote/cost-built` | emit | ✔ | `ctx.costmodel` | 成本构成建立（账本只带私域工件哈希，明细不出 realm） |
 | `quote/deviation-captured` / `quote/deviation-quantified` | emit | ✔ | `ctx.deviation` | 偏差捕捉与影响量化（未标 impact 不进 TCO） |
-| `approval/requested` / `approval/granted` / `approval/denied` | emit | ✔ | `ctx.approval` | 人工门：请求、批准、拒绝（批准只能由人产生） |
+| `approval/requested` | emit | ✔ | `ctx.approval` | 人工门：请求（带动作/摘要/引用链/Flag/超时策略） |
+| `approval/granted` | emit | ✔ | `ctx.approval` | 人工门：批准（只能由人产生，绝无自动批准） |
+| `approval/denied` | emit | ✔ | `ctx.approval` | 人工门：拒绝 |
+| `approval/reminded` | emit | ✔ | `ctx.approval` | 超时策略 `remind`：仍等待人类决定（不改状态） |
+| `approval/escalated` | emit | ✔ | `ctx.approval` | 超时策略 `escalate`：转上级继续等待 |
+| `approval/aborted` | emit | ✔ | `ctx.approval` | 超时策略 `abort`：作废本次意图（需重新发起） |
 | `quote/guard-check` | bail | durable | `ctx.guard` → approval | 异常低价/漏项/产能/条款/注入检测 |
 | `quote/human-approved` | emit | ✔ | 人工 → qep | 批准记录（不可由 agent 产生） |
 | `quote/submitted` | emit | ✔ | `ctx.qep` → compare | 报价事实（含 `rfq_rev`） |

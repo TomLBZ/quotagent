@@ -86,6 +86,8 @@
 - Definition：`request(scope, payload, approvers) -> id` · `decide(id, by, decision, comment)` · `chain(ref) -> approvals[]`。
 - P0 实现：`src/quotagent/services/approval.py`（批准绑 scope+ref、只能由人产生、一次性）+ 承诺唯一出口 `src/quotagent/services/commitments.py`；语义见 ADR-0010。
 - 不变量：承诺类动作在无批准记录时**不可执行**；批准记录不可由 agent 产生。
+- P1（T-210）：`queue_view()` 给出人工门队列（动作 / payload 摘要 / 引用链 / Flag / 可选模型置信度 / 超时策略 / 已等待时长 / 是否过期）；`sweep()` 对**已过期**项执行其策略——`remind`（默认，仍待批并留痕）· `escalate`（转人类上级继续等待）· `abort`（作废本次意图，需重新发起）；
+- **绝无「超时自动批准」**：策略取值只有上述三种，非法策略直接拒绝；超时动作永不落 `approval/granted`；待批**不阻塞**其他工作（只有需要该批准的动作会被 `require()` 挡下）。
 - 关联：FR-APPROVE-001..004，AC-APPROVE-001/002。
 
 ### `ctx.guard` [P0]

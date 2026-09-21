@@ -1,0 +1,45 @@
+EV-049 — 人工门队列与超时策略（T-210 / S1.12）：待批不阻塞·三选一·绝无自动批准
+
+时间: 2026-09-21T04:36:08Z
+commit: 8d6e213
+命令: qa ac AC-APPROVE-003（新）/ AC-APPROVE-001 与 AC-APPROVE-002（回归）
+
+--- AC-APPROVE-003（退出码 0，11/11 断言）---
+  [ok] 超时策略只能三选一（`remind`/`escalate`/`abort`）：非法策略被拒且说明无自动批准选项 — error=超时策略必须是 ('remind', 'escalate', 'abort') 之一，收到 'auto_approve'（不存在「超时自动批准」这一选项，06 §6）
+  [ok] `escalate` 必须给人类上级（不许升级给 agent） — error=escalate 必须给一个人类上级（escalate_to 需以 'human:' 开头）
+  [ok] **待批不阻塞**：待批期间可继续发请求、落账、比价（队列只是等待，不是闸门） — pending=2 ranked=1
+  [ok] 只有需要该批准的动作被挡（`require` 抛错），与它无关的动作照常 — require 语义不对
+  [ok] 队列视图每项含 FR-UX-001 四要素（动作/摘要/引用链/Flag）+ 置信度（可选）+ 超时策略 — first={"approval_id": "ap-0001", "action": "quote.submit", "summary": "quote_id=q-0007, total_amount=101000.0", "refs": ["q-0007"], "flags": ["deviation:delivery"], "model_confidence": 0.72,
+  [ok] 超时按各自策略生效：remind→仍待批（提醒）· abort→作废（需重新发起） — acted=[{"approval_id": "ap-0001", "policy": "remind", "status": "pending"}, {"approval_id": "ap-0002", "policy": "abort", "status": "aborted"}]
+  [ok] **绝无自动批准**：超时后 `granted()` 仍为空，账本里没有任何 `approval/granted` — granted_events=0
+  [ok] 超时留痕：remind/abort 各自落账（不改状态的那条也留痕） — events=['approval/requested', 'approval/requested', 'approval/reminded', 'approval/aborted']
+  [ok] 幂等：同一项在一次超时窗口内重复扫描不再重复动作 — again=[] reminded=1
+  [ok] `escalate` 超时后转给人类上级并继续等待（状态仍 pending，等待对象已变） — record={"status": "pending", "approvers": ["human:boss"], "escalated_at": "2026-09-21T10:03:00Z"}
+  [ok] 三种策略都不会越过人去批准：全程 `approval/granted` 为空、pending 项的 decided_by 皆为空 — pending=2
+
+--- AC-APPROVE-001（退出码 0，7/7 断言）---
+  [ok] 批准请求可创建、可查、带 scope 与业务引用 — request={"approval_id": "ap-0001", "scope": "quote.submit", "ref": "q-0007", "payload": {"quote_id": "q-0007", "amount": 10100.4}, "payload_hash": "sha256:afffaa6c4fa495869c11b9ca46622f20586
+  [ok] agent 身份签署被拒绝，且记录仍为待批（不留半条批准） — error=批准记录只能由人产生（by 必须以 'human:' 开头），收到 'agent:price'；agent 不得代签，也不得自动批准（P8） status=pending
+  [ok] 人可以拒绝，拒绝也留痕（approval/denied） — status=denied
+  [ok] 人批准后记录带批准人与时间，并落账 approval/granted — granted={"approval_id": "ap-0002", "scope": "quote.submit", "ref": "q-0007-1", "payload": {"quote_id": "q-0007-1"}, "payload_hash": "sha256:735d514719d9dfbaa59476405de142f85fcee3a09ce0786a8c
+  [ok] 批准链按业务引用逐条查回（谁在何时批了什么），两个引用互不串台 — chain(q-0007)=[('ap-0001', 'denied')] chain(q-0007-1)=[('ap-0002', 'granted')]
+  [ok] 不存在的批准记录不可被签署（防伪造引用） — error=不存在的批准记录: ap-9999
+  [ok] 不存在任何绕过途径：批准必须经 request→decide（human），账本链完整 — requested=2 chain=True
+
+--- AC-APPROVE-002（退出码 0，8/8 断言）---
+  [ok] 无批准记录时三条对外承诺路径全部抛错（INV-005 / 规则 3） — errors={'submit_quote': "动作 'quote.submit'（ref='q-0007'）缺少人工批准记录：承诺类动作必须先经 ctx.approval 并由人批准（INV-005 / AGENTS.md 规则 3）", 'commit_award': "动作 'award.commit'（ref='ai-0001'）缺少人工批准记录：承诺类动作必须先经 
+  [ok] 三条路径失败时都不落账（没有既成事实） — submitted=0 committed=0 po=0
+  [ok] 伪造的批准引用被拒绝（批准必须落在账本里） — error=不存在的批准记录: ap-fake
+  [ok] 有批准后提交报价成功并落账 quote/submitted（门不是装饰） — submitted={'quote_id': 'q-0007', 'approval_id': 'ap-0001', 'approved_by': 'human:zhang', 'submitted_at': '2026-09-21T04:36:08Z', 'ledger_ref': {'seq': 4, 'entry_hash': 'sha256:b9be156af550ab
+  [ok] 批准绑定 scope：报价批准不能复用到授标承诺（FR-APPROVE-002） — error=批准 ap-0001 不适用于 scope='award.commit' ref='ai-0001'（当前: scope='quote.submit' ref='q-0007' status=granted）
+  [ok] 授标承诺缺供应商确认即抛错（缺一即不可承诺） — error=授标承诺需要供应商确认（award/confirmed）：意向可撤回，承诺不可凭空产生（FR-AWARD-002）
+  [ok] 有批准 + 供应商确认后授标承诺与 PO 依次成立（PO 由承诺派生） — award=aw-0001 po=po-0001
+  [ok] PO 不能手工另建（即便有批准，未知承诺 → 抛错，FR-AWARD-002 的 P0 子集） — error=PO 只能由 AwardCommitment 派生：'ai-9999' 不是本侧已成立的承诺（不得手工另建）
+
+--- 口径说明 ---
+· 超时策略只有三选一（`remind`/`escalate`/`abort`，06 §6）：传别的值直接拒绝，从入口上就没有"自动批准"这一项；
+· `escalate` 必须给 `human:*` 上级（不许升级给 agent）；升级后状态仍 pending，只是等待对象变了；
+· `abort` 作废意图但**不解释为批准或拒绝**（记录 `aborted_at`，需重新发起）；
+· 幂等：同一次超时窗口内重复 `sweep()` 不产生重复动作（`remind_count` 与留痕都只加一次）；
+· 待批不阻塞：待批期间可继续发请求、落账、比价；只有需要该批准的动作会被 `require()` 挡下；
+· 对抗性收尾：三种策略全程跑完，`approval/granted` 仍为空、pending 项的 `decided_by` 皆为空。

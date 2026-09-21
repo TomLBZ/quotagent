@@ -14,3 +14,4 @@
 | EV-046 | 报价过期与重报（AC-RFQ-004 10 断言）：升版后旧版本报价标 stale/superseded_by_rev、留痕 `quote/superseded`（可审计不清除）、不进排序且以 `quote_superseded` 显式列出、产生重报请求、链式升版与幂等；另含 AC-COMPARE-001（6 断言）与 AC-EVT-001（10 断言）的强化，修掉"挂总线时 bail 事件被 emit 派发"的真实缺陷 | AC-RFQ-004 / T-205 |
 | EV-047 | 护栏扩展与产能日历（AC-GUARD-002 6 断言 + AC-CAP-001 10 断言，另回归 AC-GUARD-001/003）：条款冲突覆盖付款/质保/罚则三族；产能风险双来源（声称超限 + 日历/关键路径）；两类 Flag 均 requires_human 且逐条落账；`firm` 交期有效期内模型不可改（人可改、过期可改、indicative 可改）；冲突只提请人工（不改交期不否决）；日历私域对外不带数值 | AC-GUARD-002 / AC-CAP-001 / T-206 / T-207 |
 | EV-048 | 审计包签名与包含证明（AC-AUDIT-004 12 断言）：包带 HMAC 签名与签名者、`manifest_hash` 绑定清单、包含证明（叶子+证明+根）、错误密钥失败、未提供密钥不静默通过、独立入口 `tools/audit-verify.py` 对未篡改/篡改/无签名/缺文件分别退出 0/1/1/2 | AC-AUDIT-004 / T-208 |
+| EV-049 | 人工门队列与超时（AC-APPROVE-003 11 断言）：队列视图含动作/摘要/引用链/Flag/置信度/超时策略/等待时长；非法策略被拒（无"自动批准"选项）；escalate 必须给 human 上级；待批不阻塞其他工作（只有该动作被 require 挡下）；remind 仍待批、abort 作废、escalate 转上级；全程 `approval/granted` 为空；重复扫描幂等 | AC-APPROVE-003 / T-210 |
