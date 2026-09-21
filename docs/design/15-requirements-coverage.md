@@ -115,6 +115,7 @@
 | FR-EVOLVE-007 | host/modules/evolve-journal.mjs | AC-EVOLVE-005（见 §4 的机检命令） | 映射 |
 | FR-PRICE-003 | host/modules/price-history.mjs | AC-PRICE-002（见 §4 的机检命令） | 映射 |
 | FR-RFQ-007 | host/modules/sourcing.mjs | AC-RFQ-005（见 §4 的机检命令） | 映射 |
+| FR-RFQ-008 | host/modules/rfq-deadline.mjs、tools/rfq-promise.py | 「来不及回 RFQ」围栏门 23/23 + 真路由门 11/11（`verify.sh rfq-deadline`）：**期限不随窗口变化**（两个墙钟入口各给两个不同值 ⇒ 输出逐字节一致；`remaining_seconds` == 手算 `due_ts − as_of`）／**同一包多条发布事实合成一行**（due 取事实 ts 最晚者、名册取并集 —— 真实账本里同一包发过两次也只列一行）／**没凭据不得假装能发**（`available=false` ⇒ `blocked_by` 写「无法代发」，输出里「已通知/已提醒/已发送」0 命中，`can_send=false`）／**名册白名单（非业主视角读都不读）**＋与 `sourcing.coverage()` 同一口径／空投影必降级且条目为空／有界＋`omitted` 如实报／私域哨兵带与不带逐字节一致／零写面；真 HTTP 含登记承诺 POST → **0600 待办件** → 真跑 `rfq-promise.py` 落 `rfq/promised`（body 恰 6 键）→ **计数 5 → 6 回读** → **承诺改变页面口径**；4 处单点变异全红 | 直引 |
 | FR-EVAL-005 | host/modules/supplier-scorecard.mjs | AC-EVAL-003（见 §4 的机检命令） | 映射 |
 | FR-UX-004 | host/modules/ops-view.mjs | AC-RUNTIME-010（见 §4 的机检命令） | 映射 |
 
@@ -173,6 +174,7 @@
 |---|---|---|
 | gate-timeline | FR-GATE-001（「审批等多久 / 变更单谁卡着」：等待时长口径 = 事实 ts 之差（不取墙钟）/ 卡点用队列里的真审批人 / 超时策略三种后果 / 每条变更单带账本事件–计数 basis / **不能批准**（无审批类方法 + `can_approve=false`）/ 催办只产 nudge 载荷；4 处单点变异自证）、FR-GATE-002（**变更单逐行明细**：`/<view>/changes/<id>/` 与 `/<view>/api/changes/<id>` 金额整数分逐行可对账 / 缺依据的行不入小计 / 无可用行必降级且明细空 / 私域列仅业主侧可见；4 处单点变异自证） | 强 |
 | authority-band | FR-AUTH-001（「授权区间」：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁；`authority.*` 白名单配置（人工专属键，YAML 可初始化）；三例边界手算对账；未配置 ⇒ `unconfigured` **不编限额**；越界 ⇒ 可复制升级命令且**不能批准**；4 处单点变异自证） | 强 |
+| rfq-deadline | FR-RFQ-008（「来不及回 RFQ：谁还没回 / 还差多久 / 催了没有」：`due_ts` 来自**事实行**（`rfq/published.quote_by` / `rfq/promised.due_at`，取事实 ts 最晚者）且 `remaining_seconds = due_ts − as_of` **不取墙钟**（两个墙钟入口读都不读 ⇒ 同一份快照逐字节一致）；**没凭据不得假装能发**（`available=false` ⇒ `blocked_by` 写「无法代发」+ `can_send=false`，输出里无任何「发过了」表述）；**竞标人名册是业主私域**（非业主视角对 `invited`/`quotes` 读都不读）；空投影必降级且条目为空；有界 + `omitted`；零写面；登记承诺只产 0600 待办件载荷、落账本归 `tools/rfq-promise.py`；4 处单点变异自证） | 强 |
 | advice-panel | FR-ADV-001（确定性规则建议层：`engine=rules` / 每条建议 `basis` 指向投影真键 / 空投影必 degraded 且建议数 0 / 有界 + `omitted` / 私域零泄漏；4 处单点变异自证） | 强 |
 | approval-digest | FR-UX-001 | 部分 |
 | user-plugin-manager | FR-USERPLUG-003、FR-USERPLUG-004、FR-USERPLUG-006、FR-USERPLUG-008（T-268 subagent 产出） | 强 |

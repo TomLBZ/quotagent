@@ -631,6 +631,7 @@ try {
   await mountReal('advice-panel.mjs', {}, 'advicePanel', 'advice-panel')
   await mountReal('gate-timeline.mjs', {}, 'gateTimeline', 'gate-timeline')
   await mountReal('authority-band.mjs', {}, 'authorityBand', 'authority-band')
+  await mountReal('rfq-deadline.mjs', {}, 'rfqDeadline', 'rfq-deadline')
   await mountReal('ui-feedback.mjs', { ui_shared: '' }, 'uiFeedback', 'ui-feedback')
   const projection = await import(pathToFileURL(join(HERE, 'modules', 'projection.mjs')).href)
   await httpCtx.plugin({ name: 'projection#t279', inject: [], Config: projection.Config,

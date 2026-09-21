@@ -18,11 +18,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环 / 决策建议 / 审批与变更时间线 / 授权区间）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环 / 决策建议 / 审批与变更时间线 / 授权区间 / RFQ 回文时限）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline']
 
 export const provides = ['webui']
 
@@ -106,21 +106,29 @@ const subNav = (prefix, view, current) => {
   links.push(`<a href="${prefix}/${view}/gates/" data-gates-link="1"${current === 'gates' ? ' aria-current="page"' : ''}>审批与变更</a>`)
   // 授权区间（authority-band 插件）：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁（零内联脚本）
   links.push(`<a href="${prefix}/${view}/authority/" data-authority-link="1"${current === 'authority' ? ' aria-current="page"' : ''}>授权区间</a>`)
+  // RFQ 回文时限（rfq-deadline 插件）：谁还没回 / 还差多久 / 为什么发不出去（零内联脚本）
+  links.push(`<a href="${prefix}/${view}/deadlines/" data-deadlines-link="1"${current === 'deadlines' ? ' aria-current="page"' : ''}>回文时限</a>`)
   return `<nav data-subnav="${view}">${links.join(' ')}</nav>`
 }
 
 /** 页内锚点导航（ops / admin 两道；同样带 `data-subnav` 抓手）。
  *  `extras` 是比价口径入口（带 `data-heuristics-link`），`adviceExtras` 是决策建议入口
  *  （带 `data-advice-link`），`gateExtras` 是审批与变更入口（带 `data-gates-link`），
- *  `authorityExtras` 是授权区间入口（带 `data-authority-link`）——
- *  四种入口的抓手分开，免得门把其中一个当成另一个的证据。 */
-const anchorNav = (view, home, sections, extras = [], adviceExtras = [], gateExtras = [], authorityExtras = []) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
+ *  `authorityExtras` 是授权区间入口（带 `data-authority-link`），`deadlineExtras` 是回文时限入口
+ *  （带 `data-deadlines-link`）——五种入口的抓手分开，免得门把其中一个当成另一个的证据。 */
+const anchorNav = (view, home, sections, extras = [], adviceExtras = [], gateExtras = [], authorityExtras = [],
+  deadlineExtras = []) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
   .concat(sections.map(([id, label]) => `<a href="${home}#${id}">${label}</a>`))
   .concat(extras.map(([href, label]) => `<a href="${href}" data-heuristics-link="1">${label}</a>`))
   .concat(adviceExtras.map(([href, label]) => `<a href="${href}" data-advice-link="1">${label}</a>`))
   .concat(gateExtras.map(([href, label]) => `<a href="${href}" data-gates-link="1">${label}</a>`))
   .concat(authorityExtras.map(([href, label]) => `<a href="${href}" data-authority-link="1">${label}</a>`))
+  .concat(deadlineExtras.map(([href, label]) => `<a href="${href}" data-deadlines-link="1">${label}</a>`))
   .join(' ')}</nav>`
+
+/** ops / admin 两道共用的「回文时限」入口（两道各传自己那一份；抓手是 `data-deadlines-link`）。 */
+const DEADLINE_EXTRAS = (prefix) => [[`${prefix}/contractor/deadlines/`, '回文时限（承包商）'],
+  [`${prefix}/supplier/deadlines/`, '回文时限（供应商）']]
 
 
 /** 上手页（**未提权也能看**）：三步上手 + 提权 token 放哪里 + 配置/凭据放哪里 + 四个视图能做什么。
@@ -255,6 +263,7 @@ export function apply(ctx, config) {
   const advice = ctx.advicePanel             // 决策建议层（domain 插件，本批）：确定性规则派生，不读账本、不联网、不调模型
   const gates = ctx.gateTimeline             // 审批等多久 / 变更单谁卡着（domain 插件）：只吃白名单载荷，不读账本、不取墙钟
   const authority = ctx.authorityBand        // 授权区间（domain 插件，本批）：只读配置快照（authority.* 键），不读账本、不取墙钟、**不能批准**
+  const deadline = ctx.rfqDeadline           // RFQ 回文时限（domain 插件，本批）：只吃白名单事实载荷，不读账本、不发信、不取墙钟、**不能代发**
   const feedback = ctx.uiFeedback            // WebUI 反馈闭环（ui-feedback 插件）：版本事实只读 + 只落 0600 待办件
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
@@ -1088,6 +1097,257 @@ export function apply(ctx, config) {
   }
 
   // ==========================================================================================
+  // RFQ 回文时限（`rfq-deadline` domain 插件，本批）—— **「来不及回 RFQ：谁还没回 / 还差多久 /
+  //   为什么发不出去」**（P-10「截止时间与催报没有入口」+ P-04「被迫回电脑前再算」的原话）：
+  //   · 本文件只做一件事：把**本视角自己的行**过滤成白名单载荷（键白名单读取；名册三列的私域口径
+  //     由插件声明 `meta.private_list_views`，宿主照抄），派生全在 `host/modules/rfq-deadline.mjs`
+  //     （不读账本、不写文件、**不取墙钟**、不发信、不调模型）。
+  //   · `as_of` = 本视角行里最大的 `ts`（**事实时刻**，不是墙钟）—— 剩余时长因此可复算、不随刷新漂移。
+  //   · 写面只有一处：`POST /<view>/deadlines/promise` 落**一条 0600 待办件**（含**发言人**、
+  //     **承诺回文时限**、RFQ id、原话的 sha256），**账本零新增**（H1）；唯一落账本者是
+  //     `tools/rfq-promise.py`（落 `rfq/promised`，body **不含正文与凭据**）。
+  //   · **本页一个字节都发不出去**：没有邮件凭据时报 `available=false` 与「无法代发」的事实，
+  //     不出现任何\"发过了\"的表述（`meta.can_send=false`）。
+  // ==========================================================================================
+  const DEADLINE_CAP = 64        // 喂给插件的每段条目上限（有界；三段各自截断，插件如实报 omitted）
+  /** 邮件通道事实：先认三域快照里 `mail.transport` 的声明（与 adviceChannels 同一口径），
+   *  没有声明才落到 Python 侧邮件快照的 smtp 读数；两处都没有 ⇒ **未声明 = 不可用**（不猜能发）。 */
+  const deadlineChannelOf = (view) => {
+    const declared = adviceChannels(view).find((item) => item.name === 'mail')
+    if (declared) {
+      return { kind: 'mail', configured: declared.available === true, connected: declared.available === true,
+        available: declared.available === true,
+        reason: declared.reason || (declared.available ? '' : 'transport-unavailable'),
+        next_action: declared.next_action || '',
+        source: '三域快照的 mail.transport 声明（Python 侧写，宿主只读）' }
+    }
+    const snap = mailSnapshot() || {}
+    const smtp = snap.smtp || {}
+    return { kind: 'smtp', configured: smtp.configured === true, connected: smtp.connected === true,
+      available: smtp.available === true,
+      reason: smtp.reason || (smtp.available === true ? '' : 'mail-transport-unavailable'),
+      next_action: smtp.next_action || '',
+      source: '邮件状态快照（Python 侧写，宿主只读）' }
+  }
+  /** 本视角的 RFQ 事实行（`rfq/published` + 分发事实 `rfq/distributed`）；名册只有业主侧才装配。 */
+  const deadlineRfqRows = (view) => {
+    const owner = (deadline.meta().private_list_views ?? []).includes(view)
+    const recipients = new Map()       // package_id → 分发事实里的收件人（「谁在何时收到哪个版本」）
+    const rows = []
+    let skipped = 0
+    const refOf = (body, row) => [body.package_id, body.rfq_id, row?.correlation_id]
+      .map((value) => (typeof value === 'string' ? value.trim() : '')).find((text) => text !== '')
+    for (const row of ledgerOf(view).rows()) {
+      const body = row && typeof row.body === 'object' && row.body !== null ? row.body : {}
+      if (hasPrivateKey(body, view)) { skipped += 1; continue }
+      const type = String(row?.type ?? '')
+      if (type === 'rfq/distributed') {
+        const ref = refOf(body, row)
+        if (!ref) continue
+        const list = Array.isArray(body.recipients) ? body.recipients : []
+        const bucket = recipients.get(ref) ?? new Set()
+        for (const who of list) { if (typeof who === 'string' && who.trim() !== '') bucket.add(who.trim()) }
+        recipients.set(ref, bucket)
+        continue
+      }
+      if (type !== 'rfq/published') continue
+      const ref = refOf(body, row)
+      if (!ref) continue
+      rows.push({ ref, rev: body.rev, ts: row?.ts, due_ts: body.quote_by, items: body.items,
+        title: typeof body.subject === 'string' ? body.subject : (typeof body.title === 'string' ? body.title : null),
+        declared: owner ? (body.invited ?? body.suppliers) : null })
+    }
+    // 发布行按包 id 字典序（确定性与入参顺序无关），名册 = 发布事实里的名单 ∪ 分发事实的收件人
+    return { rows: rows.sort((left, right) => (left.ref < right.ref ? -1 : (left.ref > right.ref ? 1 : 0)))
+      .map((item) => {
+        const extra = owner ? [...(recipients.get(item.ref) ?? new Set())] : []
+        const declared = Array.isArray(item.declared) ? item.declared
+          : (typeof item.declared === 'string' ? [item.declared] : [])
+        const invited = owner ? [...new Set([...declared, ...extra])].sort() : []
+        return { rfq_id: item.ref, rev: item.rev, ts: item.ts, due_ts: item.due_ts, items: item.items,
+          subject: item.title, invited }
+      }), skipped }
+  }
+  /** 本视角的报价事实行（只读归属键 + 供应商 + ts：**私域列读都不读**）。 */
+  const deadlineQuoteRows = (view) => {
+    const out = []
+    let skipped = 0
+    for (const row of ledgerOf(view).rows()) {
+      const body = row && typeof row.body === 'object' && row.body !== null ? row.body : {}
+      if (hasPrivateKey(body, view)) { skipped += 1; continue }
+      if (String(row?.type ?? '') !== 'quote/submitted') continue
+      out.push({ rfq_id: [body.package_id, body.rfq_id, row?.correlation_id]
+        .map((value) => (typeof value === 'string' ? value.trim() : '')).find((text) => text !== '') ?? null,
+        package_id: body.package_id, correlation_id: row?.correlation_id,
+        supplier: typeof body.supplier === 'string' ? body.supplier : null, actor: row?.actor, ts: row?.ts })
+    }
+    return { rows: out, skipped }
+  }
+  /** 本视角的承诺事实行（`rfq/promised`：**唯一落账本者** `tools/rfq-promise.py` 落的那种）。 */
+  const deadlinePromiseRows = (view) => {
+    const out = []
+    for (const row of ledgerOf(view).rows()) {
+      const body = row && typeof row.body === 'object' && row.body !== null ? row.body : {}
+      if (hasPrivateKey(body, view)) continue
+      if (String(row?.type ?? '') !== 'rfq/promised') continue
+      out.push({ rfq_id: [body.rfq_id, body.package_id, row?.correlation_id]
+        .map((value) => (typeof value === 'string' ? value.trim() : '')).find((text) => text !== '') ?? null,
+        due_at: body.due_at, ts: row?.ts, actor: body.actor })
+    }
+    return out
+  }
+  const deadlinePayload = (view) => {
+    const rfqs = deadlineRfqRows(view)
+    const quotes = deadlineQuoteRows(view)
+    return {
+      view,
+      // **事实时刻**：本视角投影里最大的 ts（没有可解析的 ts 就是 null ⇒ 插件拒绝给剩余时长，不猜时钟）
+      as_of: lastTsOf(ledgerOf(view).rows()),
+      channel: deadlineChannelOf(view),
+      rfqs: rfqs.rows.slice(0, DEADLINE_CAP),
+      quotes: quotes.rows.slice(0, DEADLINE_CAP),
+      promises: deadlinePromiseRows(view).slice(0, DEADLINE_CAP),
+    }
+  }
+  const deadlinesRun = (view) => deadline.status(deadlinePayload(view))
+  /** JSON（机器可读；与页面同数据、同口径；时限口径与\"发不出去\"的事实一起给）。 */
+  const deadlinesJson = (view) => {
+    const run = deadlinesRun(view)
+    const meta = deadline.meta()
+    return { view, service: 'rfq-deadline',
+      source: 'rfq-deadline（domain 插件：确定性规则；不读账本、不写账本、不取墙钟、不发信、不调模型）',
+      engine: run.engine, engine_note: run.engine_note, as_of: run.as_of,
+      as_of_basis: '本视角投影里最大的 ts（事实时刻，不是墙钟）',
+      due_clock: run.due_clock, due_basis_note: run.due_basis_note,
+      ignored_now_inputs: run.ignored_now_inputs, rfq_keys: run.rfq_keys,
+      rfqs: run.rfqs, counts: run.counts, bounds: run.bounds,
+      truncated: run.truncated, omitted: run.omitted, degraded: run.degraded, reason: run.reason,
+      channel: run.channel, can_send: run.can_send, no_send_note: run.no_send_note,
+      private_lists_visible: run.private_lists_visible, private_lists_note: run.private_lists_note,
+      roster_note: run.roster_note, notes: run.notes, privacy: run.privacy,
+      meta: { engine: meta.engine, due_clock: meta.due_clock, sections: meta.sections,
+        degraded_reasons: meta.degraded_reasons, severities: meta.severities, rfq_keys: meta.rfq_keys,
+        private_list_views: meta.private_list_views, promise_codes: meta.promise_codes,
+        promise_action: meta.promise_action, kind: meta.kind, schema: meta.schema, event: meta.event,
+        bounds: meta.bounds, can_send: meta.can_send, can_approve: meta.can_approve },
+      note: 'engine=rules：`due_ts` 来自**事实行**（`rfq/published.quote_by` 或 `rfq/promised.due_at`），'
+        + '`remaining_seconds = due_ts − as_of`（**不取墙钟**，同一份快照在任何时刻返回同一组数字）；'
+        + '`responded`/`silent` 只统计**本视角投影**里的 `quote/submitted` 事实，且只有业主侧（'
+        + `${[...meta.private_list_views].join('/')}）看得见名单（其余视角读都不读）；`
+        + '**本插件发不出任何东西**（`can_send=false`）：通道不可用时如实报「无法代发」，'
+        + '输出的任何字段里都不会出现任何"发过了"的事实表述；'
+        + '登记承诺只落 0600 待办件（宿主不写账本），落账本的是 `tools/rfq-promise.py`' }
+  }
+  /** 页面（SSR，**零内联脚本**：下一步是 `<pre><code>` 里的命令/路由，登记承诺用 `<form method=post>`）。 */
+  const deadlinesHtml = (view) => {
+    const run = deadlinesRun(view)
+    const rowOf = (item) => `<tr data-rfq-id="${esc(item.rfq_id)}" data-severity="${esc(item.severity)}"`
+      + ` data-remaining-seconds="${esc(String(item.remaining_seconds))}"`
+      + ` data-responded-count="${esc(String(item.responded.length))}"`
+      + ` data-silent-count="${esc(String(item.silent.length))}"`
+      + ` data-deadline-due-ts="${esc(String(item.due_ts))}">`
+      + `<td><b>${esc(item.subject)}</b><br><small>${esc(item.rfq_id)}</small></td>`
+      + `<td><code>${esc(String(item.due_ts))}</code><br><small>${esc(item.due_basis)}</small></td>`
+      + `<td>${esc(item.severity)}<br><small>剩余 <b>${esc(String(item.remaining_seconds))}</b> 秒</small></td>`
+      + `<td>已回 <b>${esc(String(item.responded.length))}</b>：<code>${esc(item.responded.join(' ') || '—')}</code><br>`
+      + `未回 <b>${esc(String(item.silent.length))}</b>：<code>${esc(item.silent.join(' ') || '—')}</code></td>`
+      + `<td>${esc(item.blocked_by)}</td>`
+      + `<td data-deadline-next-action="${esc(item.rfq_id)}"><pre>${esc(item.next_action)}</pre></td></tr>`
+    const header = '<tr><th>RFQ</th><th>回文时限（口径写在下面）</th><th>严重度 / 还剩多久</th>'
+      + '<th>名单（业主侧才看得见）</th><th>为什么发不出去</th><th>下一步（可复制）</th></tr>'
+    return subNav(prefix, view, 'deadlines')
+      + `<p><a href="${prefix}/${view}/">← 回 ${rules[view].title}</a> · JSON：<code>${prefix}/${view}/api/deadlines</code>`
+      + ` · <a href="${prefix}/${view}/deadlines/">重新派生</a>（本页每次都是现算的，没有缓存）</p>`
+      + `<p data-deadlines-engine="${esc(run.engine)}"><b>引擎：<code>engine=${esc(run.engine)}</code></b> —— `
+      + `${esc(run.engine_note)}（规则写在 <code>host/modules/rfq-deadline.mjs</code>；宿主不读账本、不写账本、不取墙钟）。</p>`
+      + `<p data-due-clock="${esc(run.due_clock)}" data-deadlines="due-basis"><b>「还剩多久」的口径</b>：`
+      + `${esc(run.due_basis_note)}；参照事实时刻 <code>as_of=${esc(run.as_of ?? '（本视角还没有可解析的事件 ts）')}</code>`
+      + `（= 本视角投影里最大的 <code>ts</code>，**不是墙钟**）；被忽略的墙钟入口：`
+      + `<code>${esc(run.ignored_now_inputs.join(', '))}</code>（给它们任何值，本页数字都不变）。</p>`
+      + `<p data-cannot-send="${run.can_send ? '0' : '1'}"><b>发不出去这件事也写在页面上</b>：`
+      + `邮件通道 <code>available=${esc(String(run.channel.available))}</code>`
+      + `${run.channel.reason ? `（<code>${esc(run.channel.reason)}</code>）` : ''} —— `
+      + `${run.channel.available
+        ? '凭据就位，但本插件**不发送任何东西**（只读投影）：要发信只能走已登记的邮件路由，且由 Python 侧的唯一发信者做'
+        : '**无法代发**任何催报/通知：本页只列名单与时限，不声称任何"发过了"的事实'}；`
+      + `通道事实来源：<code>${esc(run.channel.source)}</code>。</p>`
+      + (run.degraded
+        ? `<p class="degraded" data-deadlines-degraded="1"><b>降级（**不冒充健康、也不给你编条目**）</b>：`
+          + `<code>${esc(run.reason)}</code> —— RFQ 条目 <b>0</b> 条。`
+          + `${run.reason === 'no-usable-inputs' ? '本视角投影里还没有可供派生的 `rfq/*`、`quote/submitted` 事实行（不是页面坏了）。' : ''}`
+          + `${run.reason === 'no-signal' ? '数据齐了，但没有发布过的包 —— 这本身就是结论，不编一条兜底项。' : ''}`
+          + `</p>`
+        : '')
+      + `<h3 id="rfqs">还在收报价的 RFQ（<b data-deadline-count="${run.counts.rfq.shown}">${run.counts.rfq.shown}</b> 条）</h3>`
+      + `<p data-deadlines-roster-note="1">${esc(run.roster_note)}</p>`
+      + (run.rfqs.length
+        ? `<table data-deadlines="table">${header}${run.rfqs.map(rowOf).join('')}</table>`
+        : '<p data-deadlines="table-none">本视角投影里没有发布过的 RFQ（`rfq/published` 一行都没有）'
+          + `；生成口径下共有 <b>${run.counts.rfq.found}</b> 条。</p>`)
+      + `<p data-deadlines="counts">生成 <b>${run.counts.rfq.found}</b> 条 / 展示 <b>${run.counts.rfq.shown}</b> 条`
+      + `（上限 <code>max_items=${run.bounds.max_items}</code>）；截断 <b>${run.truncated}</b>`
+      + `（被丢 <b>${run.omitted}</b> 条，照实报）；严重度分布（生成口径）：`
+      + `已过 <b>${run.counts.by_severity.overdue}</b> / 不到 1 小时 <b>${run.counts.by_severity.critical}</b> / `
+      + `不到 24 小时 <b>${run.counts.by_severity.soon}</b> / 还早 <b>${run.counts.by_severity.scheduled}</b> / `
+      + `认不出时限 <b>${run.counts.by_severity['unknown-deadline']}</b>；`
+      + `名单合计：已邀请 <b>${run.counts.invited}</b> / 已回 <b>${run.counts.responded}</b> / 未回 <b>${run.counts.silent}</b>；`
+      + `归不到包的报价事实 <b>${run.counts.unattributed_quotes}</b> 条（照实报）</p>`
+      + `<p data-deadlines-private-note="1">${esc(run.private_lists_note)}</p>`
+      + (run.notes.length
+        ? `<ul data-deadlines="notes">${run.notes.map((text) => `<li>${esc(text)}</li>`).join('')}</ul>`
+        : '<p data-deadlines="notes">说明：无（本次每条输入都进了派生）</p>')
+      + `<h3 id="promise">登记承诺回文时限（**只落待办件、账本零新增**）</h3>`
+      + `<p>登记只做两件事：把**发言人**、**承诺回文时限**、**RFQ id** 与你写的原话（只留 sha256）`
+      + `落成一条 <b>0600 待办件</b>（宿主**不写账本、不发信**），由 <code>tools/rfq-promise.py</code> `
+      + `落一条 <code>${esc(deadline.meta().event)}</code>（只记"谁在什么时候为哪个包承诺了什么时限"）。`
+      + `登记**不是发信**、**不是批准**：账本里不会因此多出一条报价。</p>`
+      + `<form method="post" action="${prefix}/${esc(view)}/deadlines/promise">`
+      + `<p><label>RFQ id：<input name="id" size="18" placeholder="pkg-g1"></label> `
+      + `<label>发言人：<input name="by" size="20" placeholder="human:liangzi"></label> `
+      + `<label>承诺回文时限：<input name="due_at" size="22" placeholder="2026-09-26T00:00:00Z"></label></p>`
+      + `<p><textarea name="note" rows="3" cols="72" placeholder="例如：周五下班前一定把这版的报价回过去"></textarea></p>`
+      + `<p><button type="submit">登记承诺（只落待办件）</button></p></form>`
+      + `<p>等价命令行：<pre>curl -s -X POST ${prefix}/${esc(view)}/deadlines/promise -d 'id=pkg-g1' -d 'by=human:liangzi' -d 'due_at=2026-09-26T00:00:00Z' -d 'note=周五前回'</pre></p>`
+      + `<p><small>**浏览器的极限**：本插件**没有**发信 / 提醒 / 批准 / 提交这类方法（<code>can_send=false</code>、`
+      + `<code>can_approve=false</code>）：它只能告知\"还差谁回、还剩多久、为什么发不出去\"，`
+      + `并把你的承诺转交成一条待办件。本页 **0 行脚本、0 内联事件**。</small></p>`
+  }
+  /** 登记提交：插件只产载荷，**宿主只落一条 0600 待办件**（账本零新增；唯一落账本者是 Python 侧）。 */
+  const submitPromise = (view, form) => {
+    const out = deadline.promise(deadlinePayload(view), {
+      view,
+      rfq_id: String(form.get('id') ?? form.get('rfq_id') ?? '').trim(),
+      promise_by: String(form.get('by') ?? form.get('promise_by') ?? '').trim(),
+      due_at: String(form.get('due_at') ?? '').trim(),
+      note: form.get('note') ?? '',
+    })
+    if (!out.ok) return { ...out, file: '' }
+    const shared = String(config.ui_shared ?? '').trim()
+    if (shared === '') {
+      return { ...out, ok: false, code: 'pending-write-failed', file: '',
+        next_action: '宿主未配置 ui_shared：无法确定待办件目录，拒绝写任何地方' }
+    }
+    const dir = join(shared, 'rfq-promises')
+    try {
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+      try { chmodSync(dir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
+      const file = join(dir, `${out.id}.json`)
+      if (existsSync(file)) {
+        return { ...out, duplicate: true, file: `rfq-promises/${out.id}.json`,
+          next_action: `待办件已存在（同一份 RFQ + 发言人 + 时限 + 原话）：跑 tools/rfq-promise.py --now <ISO8601> 消费它（唯一落账本者）` }
+      }
+      const tmp = join(dir, `.${out.id}.${process.pid}.tmp`)
+      writeFileSync(tmp, JSON.stringify(out.record, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
+      chmodSync(tmp, 0o600)                      // 显式 chmod：不受 umask 影响（待办件必须**恰为** 0600）
+      renameSync(tmp, file)
+      return { ...out, duplicate: false, file: `rfq-promises/${out.id}.json` }
+    } catch (err) {
+      return { ...out, ok: false, code: 'pending-write-failed', file: '',
+        next_action: `待办件写失败（${String(err && err.code ? err.code : err).slice(0, 40)}）：先修目录权限再重提` }
+    }
+  }
+
+  // ==========================================================================================
   // 授权区间（`authority-band` domain 插件，本批）：**谁能批到多少 / 越界怎么办 / 下一个能批的人是谁**
   //   · 配置快照 = `config-view` 的**只读**总览里 `authority.*` 那些行（受管 YAML + env + runtime 合层；
   //     宿主只读、不写文件、不写账本；快照里**别的键一个都不读**）。
@@ -1622,7 +1882,8 @@ ${sortForm('events', '筛查事件')}
       + `<td>${esc(row.approval_ref ?? '—')}</td><td>${esc(row.fingerprint_first8 ?? '—')}</td></tr>`).join('')
     const degraded = data.degraded || creds.snapshot.available === false
     return anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS, [], [], [],
-      [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])
+      [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']],
+      DEADLINE_EXTRAS(prefix))
       + `<p><a href="${prefix}/admin/">← 回系统管理</a> · <a href="${prefix}/start/">上手（token/配置放哪里？）</a> · `
       + `JSON：<code>${prefix}/admin/api/config</code> · <code>${prefix}/admin/api/credentials</code> · `
       + `<code>${prefix}/admin/api/config/audit</code></p>`
@@ -1781,6 +2042,15 @@ ${sortForm('events', '筛查事件')}
             { path: `${prefix}/${v}/api/authority`, method: 'GET', auth: 'none',
               what: `${v} 道的授权区间 JSON（同参同口径；未配置 ⇒ unconfigured=true 且 required_role/next_role 为空，不编限额）` },
           ]),
+          // RFQ 回文时限（`rfq-deadline` 插件）：谁还没回 / 还差多久 / 为什么发不出去（只读 + 登记承诺只落 0600 待办件）
+          ...config.views.filter((v) => rules[v]).flatMap((v) => [
+            { path: `${prefix}/${v}/deadlines/`, method: 'GET', auth: 'none',
+              what: `${v} 道的 RFQ 回文时限页（due_ts 的口径 / 还剩多久 / 已回与未回名单（业主侧才看得见）/ 为什么发不出去 + 每条一行 next_action）` },
+            { path: `${prefix}/${v}/api/deadlines`, method: 'GET', auth: 'none',
+              what: `${v} 道的回文时限 JSON（同页同口径；empty ⇒ degraded+reason 且列表为空；can_send=false）` },
+            { path: `${prefix}/${v}/deadlines/promise`, method: 'POST', auth: 'none',
+              what: `${v} 道的登记承诺（承诺回文时限）：**只落 0600 待办件**、账本零新增；202 + next_action；登记不是发信` },
+          ]),
           { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
           // WebUI 反馈闭环（ui-feedback 插件）：SSR 表单页（**0 内联脚本**）+ 只落 0600 待办件 + 只读观察面
           ...config.views.flatMap((v) => [
@@ -1813,8 +2083,10 @@ ${sortForm('events', '筛查事件')}
           { path: `${prefix}/admin/api/config/audit`, method: 'GET', auth: 'admin-session', what: '配置变更审计（只读；来源 Python 侧账本）' },
           { path: `${prefix}/admin/api/credentials`, method: 'GET', auth: 'admin-session', what: '凭据状态（configured/source/required_mode/指纹前 8/next_action；**不出值**）' },
           { path: `${prefix}/admin/api/credentials/<name>`, method: 'POST', auth: 'admin-session', what: '提交/轮换凭据（只写不回显：响应只有 ok + next_action）' }],
-        write_surface: { browser_writable: [`${prefix}/admin/**`, `${prefix}/<view>/gates/nudge`],
-          note: '浏览器永远不能签的五个动作：批准 / 提交报价 / 定标 / 发 PO / 变更批准（人工门在终端）' },
+        write_surface: { browser_writable: [`${prefix}/admin/**`, `${prefix}/<view>/gates/nudge`,
+          `${prefix}/<view>/deadlines/promise`],
+          note: '浏览器永远不能签的五个动作：批准 / 提交报价 / 定标 / 发 PO / 变更批准（人工门在终端）；'
+            + '宿主也不发信（`rfq-deadline` 的 `can_send=false`）：登记承诺只落 0600 待办件' },
       })
     }
     // WebUI 反馈闭环（ui-feedback 插件）：反馈页（GET）/ 提交（POST，只落 0600 待办件、账本零新增）/ 观察面（只读）
@@ -1893,7 +2165,8 @@ ${sortForm('events', '筛查事件')}
             [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
             [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']],
             [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']],
-            [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])
+            [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']],
+            DEADLINE_EXTRAS(prefix))
           + `<p>JSON：<code>${prefix}/api/ops</code></p>`
           + `<h3 id="runtime">运行期</h3><p>${ops.summary({ rows: [] })}</p>`
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
@@ -2074,6 +2347,35 @@ ${sortForm('events', '筛查事件')}
         html(`${config.page_title} · ${rules[viewAuthorityPage[1]].title} · 授权区间`,
           authorityHtml(viewAuthorityPage[1], url), prefix))
     }
+    // RFQ 回文时限（rfq-deadline 插件，本批）：登记承诺 POST **只落 0600 待办件**（账本零新增、不发信）
+    //   · `/<view>/deadlines/promise`：登记\"承诺回文时限\"（发言人 + 时限 + RFQ id + 原话只留 sha256）
+    //   · `/<view>/deadlines/`：SSR 页面（每条一行 next_action，零内联脚本）
+    //   · `/<view>/api/deadlines`：同页同口径的 JSON
+    const viewDeadlinesPromise = path.match(/^\/([a-z]+)\/deadlines\/promise\/?$/)
+    if (viewDeadlinesPromise && rules[viewDeadlinesPromise[1]]) {
+      const view = viewDeadlinesPromise[1]
+      if (String(req.method) !== 'POST') {
+        return json(405, { service: 'rfq-deadline', view, ok: false, code: 'method-not-allowed',
+          next_action: '登记承诺用 POST（页面上的表单就是 POST；本路由没有 GET 形态）' })
+      }
+      return readBody((body) => {
+        const out = submitPromise(view, new URLSearchParams(body))
+        const code = out.ok ? 202
+          : (out.code === 'pending-write-failed' ? 500 : (out.code === 'rfq-not-found' ? 404 : 400))
+        return json(code, { service: 'rfq-deadline', view, ...out })
+      })
+    }
+    const viewDeadlinesApi = path.match(/^\/([a-z]+)\/api\/deadlines\/?$/)
+    if (viewDeadlinesApi && rules[viewDeadlinesApi[1]]) {
+      // JSON（只读）：回文时限的口径 / 还剩多久 / 名单（业主侧）/ 为什么发不出去；宿主不写任何东西
+      return json(200, deadlinesJson(viewDeadlinesApi[1]))
+    }
+    const viewDeadlinesPage = path.match(/^\/([a-z]+)\/deadlines\/?$/)
+    if (viewDeadlinesPage && rules[viewDeadlinesPage[1]]) {
+      return send(200, 'text/html; charset=utf-8',
+        html(`${config.page_title} · ${rules[viewDeadlinesPage[1]].title} · 回文时限`,
+          deadlinesHtml(viewDeadlinesPage[1]), prefix))
+    }
     const viewApprovals = path.match(/^\/([a-z]+)\/api\/approvals\/?$/)
     if (viewApprovals && rules[viewApprovals[1]]) {
       const view = viewApprovals[1]
@@ -2131,7 +2433,8 @@ ${sortForm('events', '筛查事件')}
         [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
         [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']],
         [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']],
-        [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])}`
+        [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']],
+        DEADLINE_EXTRAS(prefix))}`
         + `${data.degraded ? `<p>降级：<code>${data.reason ?? ''}</code> —— ${data.next_action ?? ''}</p>` : ''}`
         + `<h3 id="progress">进度与口径来源</h3>`
         + `<p>进度：阶段 <b>${data.progress?.phase ?? '—'}</b> · 下一步 <b>${data.progress?.next_task ?? '—'}</b>`

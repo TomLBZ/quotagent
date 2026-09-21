@@ -119,6 +119,7 @@ class EventBus:
         "rfq/distributed": ("emit", True, ""),
         "rfq/due-soon": ("emit", True, ""),
         "rfq/overdue": ("emit", True, ""),
+        "rfq/promised": ("emit", True, ""),
         "rfq/version-mismatch": ("bail", True, ""),
         "clarification/asked": ("emit", True, ""),
         "clarification/answer-drafted": ("waterfall", False,

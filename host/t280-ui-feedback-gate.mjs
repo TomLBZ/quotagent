@@ -359,6 +359,7 @@ try {
   await mountReal('advice-panel.mjs', {}, 'advicePanel', 'advice-panel')
   await mountReal('gate-timeline.mjs', {}, 'gateTimeline', 'gate-timeline')
   await mountReal('authority-band.mjs', {}, 'authorityBand', 'authority-band')
+  await mountReal('rfq-deadline.mjs', {}, 'rfqDeadline', 'rfq-deadline')
   await mountReal('ui-feedback.mjs', { route_prefix: '/t280', ui_shared: httpFx.dir,
     views: ['contractor', 'supplier'], pending_limit: 2 }, 'uiFeedback', 'ui-feedback')
   const projection = await import(pathToFileURL(join(HERE, 'modules', 'projection.mjs')).href)

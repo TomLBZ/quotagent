@@ -44,6 +44,7 @@ PROVIDERS = {
     "advicePanel": "advice-panel",
     "gateTimeline": "gate-timeline",
     "authorityBand": "authority-band",
+    "rfqDeadline": "rfq-deadline",
 }
 
 

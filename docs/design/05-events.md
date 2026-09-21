@@ -58,6 +58,7 @@
 | `rfq/distributed` | emit | ✔ | `ctx.rfq` → 对方 | 分发记录：谁在何时收到哪个版本（版本以快照哈希锚定） |
 | `rfq/due-soon` | emit | ✔ | `ctx.rfq` → 人工门 | 临近截止提醒（同一截止同一状态只提醒一次） |
 | `rfq/overdue` | emit | ✔ | `ctx.rfq` → 人工门 | 已过截止提醒（不自动顺延） |
+| `rfq/promised` | emit | ✔ | `tools/rfq-promise.py` → 双侧结算 | 有人**承诺了回文时限**（body 恰 6 键：`rfq_id`/`view`/`actor`/`due_at`/`promise_sha256`/`ok`）—— 只记"谁在什么时候为哪个包承诺了什么回文时限"，**不含正文与凭据**、**不发信**（登记承诺 ≠ 已通知） |
 | `rfq/version-mismatch` | bail | durable | `ctx.norm` → guard, approval | 首个失配即短路并挂起 |
 | `clarification/asked` | emit | ✔ | `ctx.clarify` → 对方 | 工单建立 |
 | `clarification/answer-drafted` | waterfall | live | agent → guard, 人工门 | guard 可拦截（如答案含对方私域信息） |

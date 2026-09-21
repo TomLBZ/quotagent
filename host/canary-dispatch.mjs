@@ -248,12 +248,16 @@ const e2e = async ({ weightBps, candidate }) => {
   const { apply: abApplyE2E, Config: abConfigE2E } = await import('./modules/authority-band.mjs')
   await ctx.plugin({ name: 'authority-band', inject: [], Config: abConfigE2E,
     apply: (inner, cfg) => abApplyE2E(inner, cfg) }, abConfigE2E.parse({}))
+  // RFQ 回文时限（rfq-deadline）：webui 的 inject 需要它（wiring 门 B2）；纯函数插件，无需夹具输入
+  const { apply: rdApplyE2E, Config: rdConfigE2E } = await import('./modules/rfq-deadline.mjs')
+  await ctx.plugin({ name: 'rfq-deadline', inject: [], Config: rdConfigE2E,
+    apply: (inner, cfg) => rdApplyE2E(inner, cfg) }, rdConfigE2E.parse({}))
   const { apply: mvApplyE2E, Config: mvConfigE2E } = await import('./modules/mail-view.mjs')
   await ctx.plugin({ name: 'mail-view', inject: [], Config: mvConfigE2E,
     apply: (inner, cfg) => mvApplyE2E(inner, { ...cfg, mail_state: '', ui_shared: '' }) }, mvConfigE2E.parse({}))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }

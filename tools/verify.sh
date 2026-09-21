@@ -177,6 +177,20 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     "${QUOTAGENT_NODE:-node}" "$HERE/../host/t283-change-detail-gate.mjs" || exit 1
     exec "$QUOTAGENT_PY" "$HERE/check-change-detail-route.py" "$@"
     ;;
+  rfq-deadline)
+    # RFQ 回文时限（本批：「来不及回 RFQ：谁还没回 / 还差多久 / 催了没有」——P-10「截止时间与催报
+    # 没有入口」+ P-04「被迫回电脑前再算、错过截止」的原话）：
+    # ① 插件围栏门（23 条断言 + 4 处单点变异 + 还原字节一致；**期限不随窗口变化**（两个墙钟入口各给
+    #    两个不同值 ⇒ 输出逐字节一致，remaining 与手算对账）/ **没凭据不得假装能发**（available=false ⇒
+    #    blocked_by 写「无法代发」，输出里"发过了"类表述 0 命中）/ 空输入 degraded + 条目空 /
+    #    确定性 / 有界 + omitted / 私域哨兵零泄漏 / **名册白名单（非业主视角读都不读）** / 零写面 /
+    #    四道页面子导航入口 / 页面模板 0 内联脚本）② 真 HTTP 端到端（真进程真回读：两视角页面与 JSON
+    #    200 / 剩余时长与手算一致 / 空投影降级且条目 0 / 登记承诺 POST 只落 0600 待办件且账本零新增 /
+    #    真跑 rfq-promise.py 落 rfq/promised（body 恰 6 键）且计数 +1 / **承诺真的改变页面口径** /
+    #    幂等 duplicates / 两条拒绝路径 / 私域哨兵 0 命中）。两半都跑，任一失败即红。
+    "${QUOTAGENT_NODE:-node}" "$HERE/../host/t285-rfq-deadline-gate.mjs" || exit 1
+    exec "$QUOTAGENT_PY" "$HERE/check-rfq-deadline-route.py" "$@"
+    ;;
   ui-feedback)
     # WebUI 反馈闭环（用户反馈 → agent 产新版本 → 自动重载 → 页面提示"请刷新"）：
     # ① 插件围栏门（28 条断言 + 4 处单点变异 + 还原字节一致）② 真 HTTP 端到端

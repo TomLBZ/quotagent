@@ -38,7 +38,7 @@
  *  11 配置契约负控：未知键/错误类型/非对象入参一律被拒；默认值 200/256（五个键都在）；越界夹取（1e9/0/-5/7.9/NaN）
  *  12 headline 正控：夹具下逐字一致（含三源计数/未装配/不一致提示）+ 字节 ≤ max_bytes
  *  13 真数据正控：真 `host/modules/` + 真 `docs/design/14-plugin-inventory.md`（另一主体维护的真源）
- *     → items 38 / counts 13-25-0-38-0/ 三源一致 / 与 `15-requirements-coverage.md` §2 的插件名集合**逐名一致**
+ *     → items 39 / counts 14-25-0-39-0/ 三源一致 / 与 `15-requirements-coverage.md` §2 的插件名集合**逐名一致**
  *  14 空集合守卫（一条都没跑 = 红）
  *
  * 变异模式（单点变异自证，自带防假变异）：`node host/t267-market-gate.mjs --mutate <1..4>`
@@ -280,7 +280,7 @@ const FIX_DIFFERENCES = ['仅目录有: eta', '仅清单有: delta', '仅用户�
 const FIX_HEADLINE = '插件市场 10 项（human 5/evolve 1/user-space 4）；未装配 5；三源不一致'
 
 /** 真数据手算表（真 `host/modules/` 26 个 .mjs − 非插件 index.mjs = 25 个插件；真清单 25 行，无缺无多）。 */
-const REAL_COUNTS = { 'human': 13, evolve: 25, user_space: 0, total: 38, unwired: 0 }
+const REAL_COUNTS = { 'human': 14, evolve: 25, user_space: 0, total: 39, unwired: 0 }
 
 /** 静态扫描（只扫候选源码；扫的是**产物**，不是本门）。只读被允许（FR-MARKET-002 的真源就是文件），
  *  写面/进程/网络/事件/随机/墙钟/定时器/账本一律不许出现。 */
@@ -787,7 +787,7 @@ try {
     .sort()
   const evolveNames = real.items.filter((item) => item.source === 'evolve').map((item) => item.name)
   const realOk = JSON.stringify(real.counts) === JSON.stringify(REAL_COUNTS)
-    && real.items.length === 38 && real.inconsistent === false && JSON.stringify(real.differences) === '[]'
+    && real.items.length === 39 && real.inconsistent === false && JSON.stringify(real.differences) === '[]'
     && real.truncated === false && real.clipped === 0 && real.degraded === false && real.reason === ''
     && !realNames.includes('index')                                   // 模块发现入口不是插件
     && real.items.every((item) => item.wired === true)
@@ -798,7 +798,7 @@ try {
     && real.items.find((item) => item.name === 'webui')?.source === 'human'
     && real.items.find((item) => item.name === 'pipeline-view')?.file === F(join(REAL_MODULES, 'pipeline-view.mjs'))
   check('13 真数据正控：真 `host/modules/` + 真 `docs/design/14-plugin-inventory.md`（另一主体维护的真源）'
-    + '→ items 38 / counts 13-25-0-38-0/ 三源一致 / 无截断；条目名集合与 `15-requirements-coverage.md` §2 '
+    + '→ items 39 / counts 14-25-0-39-0/ 三源一致 / 无截断；条目名集合与 `15-requirements-coverage.md` §2 '
     + '的插件归属表**逐名一致**（第二个鼻子）；`index.mjs` 不进条目；`supplier-scorecard` 的清单列写的是'
     + '"见模块 provides" → provides 照抄为 []（不猜）',
   realOk,

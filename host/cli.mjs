@@ -203,6 +203,11 @@ const main = async () => {
     await ctx.plugin({ name: 'authority-band', inject: [], Config: abConfig,
       apply: (inner, cfg) => abApply(inner, { ...cfg, route_prefix: String(args.prefix ?? '/quotagent') }) },
       abConfig.parse({}))
+    // RFQ 回文时限（本批）：只吃白名单事实载荷的纯函数插件（不读账本、不取墙钟、**不能代发**）
+    const { apply: rdApply, Config: rdConfig } = await import('./modules/rfq-deadline.mjs')
+    await ctx.plugin({ name: 'rfq-deadline', inject: [], Config: rdConfig,
+      apply: (inner, cfg) => rdApply(inner, { ...cfg, route_prefix: String(args.prefix ?? '/quotagent') }) },
+      rdConfig.parse({}))
 
     const { apply: mvApply, Config: mvConfig } = await import('./modules/mail-view.mjs')
     await ctx.plugin({ name: 'mail-view', inject: [], Config: mvConfig,
@@ -248,7 +253,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)

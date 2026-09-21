@@ -1,0 +1,174 @@
+EV-157 —— 「来不及回 RFQ」：回文时限与未回应名单（`rfq-deadline` 插件）+ 登记承诺闭环 + AC 归档批次 B
+
+生成时间（UTC）：2026-09-21T22:35:38Z
+仓库：/workspace/projects/quotagent    HEAD：c254802f1692b7066ce147afde984312000b5fe8
+工作区（本批改动，父方收口前）：
+  M docs/design/05-events.md
+   M docs/design/14-plugin-inventory.md
+   M docs/design/15-requirements-coverage.md
+   M docs/work/acceptance-criteria-archive.md
+   M docs/work/acceptance-criteria.md
+   M docs/work/evidence/INDEX-P2.md
+   M docs/work/functional-requirements.md
+   M docs/work/progress-checklist.md
+   M host/canary-dispatch.mjs
+   M host/check-modules.mjs
+   M host/cli.mjs
+   M host/modules/webui.mjs
+   M host/profiles.mjs
+   M host/t279-heuristics-gate.mjs
+   M host/t280-ui-feedback-gate.mjs
+   M host/t281-advice-gate.mjs
+   M host/t282-gate-timeline-gate.mjs
+   M host/t283-change-detail-gate.mjs
+   M host/t284-authority-gate.mjs
+   M host/webui.mjs
+   M src/quotagent/kernel/events.py
+   M tools/check-module-wiring.py
+   M tools/verify.sh
+  ?? host/modules/rfq-deadline.mjs
+  ?? host/t285-rfq-deadline-gate.mjs
+  ?? tools/check-rfq-deadline-route.py
+  ?? tools/rfq-promise.py
+
+命令与退出码（原样见下）：
+  tools/verify.sh 0   → exit=rfq-deadline
+  tools/verify.sh docs   → exit=1
+  tools/verify.sh ac-registry   → exit=0
+  tools/verify.sh coverage   → exit=0
+  node --check host/modules/rfq-deadline.mjs / host/t285-rfq-deadline-gate.mjs / host/modules/webui.mjs …
+  python3 -m py_compile tools/rfq-promise.py tools/check-rfq-deadline-route.py
+
+一处口径说明：本批 AC 归档（批次 B）把 16 条**非 P0、最老**的 AC 行整行逐字搬进
+`docs/work/acceptance-criteria-archive.md`：主文件 32616 → 26069 B（79.6%），归档 10109 → 17274 B；
+`docs` 门 / `ac-registry` 门 / `coverage` 门在搬完后全绿（见下）。
+
+----------------------------------------------------------------------------------------------------
+一、围栏门 `host/t285-rfq-deadline-gate.mjs`（23/23，含 4 处单点变异全红 + 防假变异自检 + 还原字节一致）
+----------------------------------------------------------------------------------------------------
+{"checks":[{"name":"0 基线（变异前必须为真）：期限不随窗口变化","ok":true,"detail":"facts=true"},{"name":"0 基线（变异前必须为真）：没凭据不得自称已通知","ok":true,"detail":"facts=true"},{"name":"0 基线（变异前必须为真）：空输入必须降级且理由有名","ok":true,"detail":"facts=true"},{"name":"0 基线（变异前必须为真）：名册白名单（读都不读）","ok":true,"detail":"facts=true"},{"name":"1 契约正控：manifest 齐备 + 常量是闭合集合（due_clock=facts-only / 5 严重度 / 8 拒绝码 / 11 键键集 / 名册白名单 / 事件名）+ 只 import ../lib 或 node: + 源码 0 脚本字面量","ok":true,"detail":"manifest=true 集合=true 越界 import=[] 含脚本字面量=false"},{"name":"2 挂载正控：服务面**恰 5 个键**（config/meta/promise/requests/status）、**没有**发信/批准/提交类方法、`can_send=false` 且 `can_approve=false`、dispose 后 effect 归零","ok":true,"detail":"服务面键=[\"config\",\"meta\",\"promise\",\"requests\",\"status\"]（期望 [\"config\",\"meta\",\"promise\",\"requests\",\"status\"]）；越权方法=[]；can_send=false can_approve=false；dispose 前 registry=2 后=0"},{"name":"3 **期限不随窗口变化**：两个墙钟入口（`payload.now`/`config.now`）各给两个不同值 ⇒ 输出**逐字节一致**；`remaining_seconds` == 手算 `due_ts − as_of`（pkg-a 302400 / pkg-b 3600 / pkg-c null）；每条都写清 `due_basis`","ok":true,"detail":"两次一致=true；remaining={\"pkg-b\":3600,\"pkg-a\":302400,\"pkg-c\":null}（期望 {\"pkg-b\":3600,\"pkg-a\":302400,\"pkg-c\":null}）；due_clock=facts-only as_of=2026-09-21T12:00:00Z 每条 basis=true"},{"name":"4 手算对账：三条 RFQ 的 `due_ts`/`overdue`/`severity`/`responded`/`silent` 全部等于手算值（来不及的排在最前：critical → scheduled → unknown-deadline）","ok":true,"detail":"order=[\"pkg-b\",\"pkg-a\",\"pkg-c\"]（期望 [\"pkg-b\",\"pkg-a\",\"pkg-c\"]）；severity={\"pkg-b\":\"critical\",\"pkg-a\":\"scheduled\",\"pkg-c\":\"unknown-deadline\"}；pkg-a 名册=[[\"supplier:x2\"],[\"supplier:x1\"]]；pkg-b due=2026-09-21T13:00:00Z；pkg-c due=null；键集=[\"rfq_id\",\"subject\",\"due_ts\",\"due_basis\",\"responded\",\"silent\",\"overdue\",\"remaining_seconds\",\"severity\",\"next_action\",\"blocked_by\"]"},{"name":"5 事实 ts 优先 + 同一包多条发布事实合成一行：`rfq/promised` 的 ts **晚于** `rfq/published` ⇒ 用承诺时限（basis 指名 rfq/promised）；**早于** ⇒ 仍用发布事实（basis 指名 rfq/published）—— 与入参顺序无关；同一包**两条发布事实** ⇒ 输出仍**一行**（due 取事实 ts 最晚的那条、`subject` 用最新 rev、名册取并集）","ok":true,"detail":"晚 ts ⇒ due=2026-09-21T13:00:00Z（basis 含 promised=true）；早 ts ⇒ due=2026-09-21T11:00:00Z（basis 含 published=true）；逆序输入 ⇒ due=2026-09-21T11:00:00Z；两条发布事实 ⇒ found=3/facts=4 pkg-a 行数=1 due=2026-09-24T00:00:00Z subject=pkg-a rev=3（清单 4 条） 名册=[[\"supplier:x2\"],[\"supplier:x1\",\"supplier:x3\"]]"},{"name":"6 **没凭据不得假装能发**：`available=false` ⇒ 每条 `blocked_by` 都含「无法代发」与通道 reason；整个输出里「已通知/已提醒/已发送/已发出/已催」**0 命中**；`available=true` 时**仍**不许自称已发","ok":true,"detail":"下行命中=[]；上行命中=[]；can_send=false/false；blocked_by[0]=邮件通道 **available=false**（mail-transport-unavailable（缺 SMTP 凭据））：**无法代发**任何催报/通知；…"},{"name":"7 空输入不编：`payload-not-an-object` / `no-usable-inputs`（空段）/ `no-signal`（只有报价、没有发布过的包）三种降级**都有名 reason 且条目为空**，且不抛错","ok":true,"detail":"none=payload-not-an-object empty=no-usable-inputs quoted=no-signal 非对象=payload-not-an-object；条目数=0,0,0"},{"name":"8 确定性：同输入两次逐字节一致 / 键序打乱一致 / `rfqs` 逆序一致 / 跨实例一致 / 冻结输入不抛错 / 输出里没有时间键（`as_of` 只是事实时刻的**回显**，不是新取的时钟）","ok":true,"detail":"同输入两次=true；键序打乱=true；跨实例=true；冻结输入异常=无；时间键=[]"},{"name":"9 有界与诚实：`max_items` 夹取（2 ⇒ 展示 2、`omitted=1`、`truncated=true`；0 ⇒ 下界 1；1000 ⇒ 上界 200）；`rfqs` 段 70 条 ⇒ 只读 64 条并**照实**记一条 over-read 说明","ok":true,"detail":"max_items=2 ⇒ 展示 2/omitted 1/truncated true；0 ⇒ 1；1000 ⇒ 200；70 条 ⇒ 读到 64；说明=[\"RFQ 共 64 条，上限 20 → 展示前 20 条，被丢 44 条（omitted 照实报）\",\"`rfq/published` 事实里没有标题字段 → subject 由包 id、rev 与清单条数拼出（**不编一个标题**）\"]"},{"name":"10 **私域哨兵零泄漏**：同一键集、不同私域值 ⇒ 输出**逐字节一致**；哨兵与私域键名 0 命中；**非空转对照**：哨兵确实在输入里","ok":true,"detail":"逐字节一致=true；命中=[]；哨兵在输入里=4/4"},{"name":"11 **名册白名单（读都不读）**：`view=supplier` 带/不带 `invited`+`quotes` ⇒ 输出**逐字节一致**且三列全空；`view=contractor` 的 `responded` 与 `host/modules/sourcing.mjs` 的 `coverage()` **同一口径**（逐条相等）；三道闸都在源码里（读取口径 / 名单装配 / 名单来源）","ok":true,"detail":"供应商视角带/不带名单一致=true；三列全空=true；本人 responded=[\"supplier:x2\"] vs coverage=[\"supplier:x2\"]；subject=pkg-a rev=2（清单 2 条）；三道闸=true/true/true"},{"name":"12 登记承诺的**载荷形状**：`id` 形状 `rp-<view>-<12hex>`、`record` 含发言人/承诺时限/RFQ id/sha256、`requested_action=promise`、`submitted_at` 为空；6 类拒绝各给具体 `code` + 非空 `next_action` 且**不带 record**","ok":true,"detail":"ok=true id=rp-contractor-3080bfc3a538（形状=true）；record 键=[\"schema\",\"kind\",\"view\",\"rfq_id\",\"promised_by\",\"requested_action\",\"due_at\",\"note\",\"note_sha256\",\"bytes\",\"submitted_at\",\"note_text\"]；六类拒绝=[\"rfq-not-found:rfq-not-found\",\"actor-malformed:actor-malformed\",\"due-at-malformed:due-at-malformed\",\"empty-note:empty-note\",\"note-too-long:note-too-long\",\"payload-unusable:payload-unusable\"]"},{"name":"13 零写面 / 不读账本 / 不取墙钟：静态扫描（fs / 写文件 / 账本 / `Date.now` / 随机 / 网络 / 子进程 / 定时器 / `emit`）0 命中 + **扫描器非空转对照**；`privacy` 五项如实申报","ok":true,"detail":"命中=[]；扫描器对照命中 15/15；privacy={\"private_keys_read\":false,\"bidder_lists_read\":true,\"model_calls\":0,\"network_calls\":0,\"clock_reads\":0,\"sends\":0}"},{"name":"14 宿主侧契约（静态）：三条新路由 + `/api/routes` 与 `write_surface` 登记 + **四道页面**子导航入口（`subNav` 与 `anchorNav` 两处声明、运维/系统管理两道各传入口）+ 本批新增的**页面模板段**里 **0 行内联脚本 / 0 内联事件**（切片非空转）","ok":true,"detail":"路由/登记=true；导航=true；模板切片 15603 B / 派发切片 21273 B；含脚本=false/false"},{"name":"15 变异：变异1：`remaining_seconds` 改用**墙钟**（`Date.now()`）而不是事实 ts 之差","ok":true,"detail":"必须红的是「期限不随窗口变化」；实际红=期限不随窗口变化；四条场景={\"期限不随窗口变化\":false,\"没凭据不得自称已通知\":true,\"空输入必须降级且理由有名\":true,\"名册白名单（读都不读）\":true}；字节已变=true"},{"name":"15 变异：变异2：通道不可用也走\"可用\"分支（没凭据却像能发）","ok":true,"detail":"必须红的是「没凭据不得自称已通知」；实际红=没凭据不得自称已通知；四条场景={\"期限不随窗口变化\":true,\"没凭据不得自称已通知\":false,\"空输入必须降级且理由有名\":true,\"名册白名单（读都不读）\":true}；字节已变=true"},{"name":"15 变异：变异3：空输入的降级守卫失效（空载荷不再报有名 reason）","ok":true,"detail":"必须红的是「空输入必须降级且理由有名」；实际红=空输入必须降级且理由有名；四条场景={\"期限不随窗口变化\":true,\"没凭据不得自称已通知\":true,\"空输入必须降级且理由有名\":false,\"名册白名单（读都不读）\":true}；字节已变=true"},{"name":"15 变异：变异4：非业主视角也**读**报价事实段（名册口径的\"读都不读\"失效）","ok":true,"detail":"必须红的是「名册白名单（读都不读）」；实际红=名册白名单（读都不读）；四条场景={\"期限不随窗口变化\":true,\"没凭据不得自称已通知\":true,\"空输入必须降级且理由有名\":true,\"名册白名单（读都不读）\":false}；字节已变=true"},{"name":"16 防假变异自检 + 还原：找不到唯一锚点/自我替换必须判假变异；全程 `rfq-deadline.mjs` 与 `webui.mjs` 字节不变（变异只写在临时目录的副本里）","ok":true,"detail":"假锚点=true 自我替换=true；rfq-deadline sha256 前=6fb3b5ace467f338… 后=6fb3b5ace467f338…；webui 未变=true；变异小结=变异1：`remaining_seconds` 改用**墙钟**（`Date.now()`）而不是事实 ts 之差 → 红=期限不随窗口变化；变异2：通道不可用也走\"可用\"分支（没凭据却像能发） → 红=没凭据不得自称已通知；变异3：空输入的降级守卫失效（空载荷不再报有名 reason） → 红=空输入必须降级且理由有名；变异4：非业主视角也**读**报价事实段（名册口径的\"读都不读\"失效） → 红=名册白名单（读都不读）"}],"passed":23,"total":23,"failures":0}
+
+----------------------------------------------------------------------------------------------------
+二、真路由门 `tools/check-rfq-deadline-route.py`（11/11：真进程 + 真 HTTP + POST→0600→落账本回读）
+----------------------------------------------------------------------------------------------------
+{"checks":[{"name":"0 基线（变异前必须为真）：期限不随窗口变化","ok":true,"detail":"facts=true"},{"name":"0 基线（变异前必须为真）：没凭据不得自称已通知","ok":true,"detail":"facts=true"},{"name":"0 基线（变异前必须为真）：空输入必须降级且理由有名","ok":true,"detail":"facts=true"},{"name":"0 基线（变异前必须为真）：名册白名单（读都不读）","ok":true,"detail":"facts=true"},{"name":"1 契约正控：manifest 齐备 + 常量是闭合集合（due_clock=facts-only / 5 严重度 / 8 拒绝码 / 11 键键集 / 名册白名单 / 事件名）+ 只 import ../lib 或 node: + 源码 0 脚本字面量","ok":true,"detail":"manifest=true 集合=true 越界 import=[] 含脚本字面量=false"},{"name":"2 挂载正控：服务面**恰 5 个键**（config/meta/promise/requests/status）、**没有**发信/批准/提交类方法、`can_send=false` 且 `can_approve=false`、dispose 后 effect 归零","ok":true,"detail":"服务面键=[\"config\",\"meta\",\"promise\",\"requests\",\"status\"]（期望 [\"config\",\"meta\",\"promise\",\"requests\",\"status\"]）；越权方法=[]；can_send=false can_approve=false；dispose 前 registry=2 后=0"},{"name":"3 **期限不随窗口变化**：两个墙钟入口（`payload.now`/`config.now`）各给两个不同值 ⇒ 输出**逐字节一致**；`remaining_seconds` == 手算 `due_ts − as_of`（pkg-a 302400 / pkg-b 3600 / pkg-c null）；每条都写清 `due_basis`","ok":true,"detail":"两次一致=true；remaining={\"pkg-b\":3600,\"pkg-a\":302400,\"pkg-c\":null}（期望 {\"pkg-b\":3600,\"pkg-a\":302400,\"pkg-c\":null}）；due_clock=facts-only as_of=2026-09-21T12:00:00Z 每条 basis=true"},{"name":"4 手算对账：三条 RFQ 的 `due_ts`/`overdue`/`severity`/`responded`/`silent` 全部等于手算值（来不及的排在最前：critical → scheduled → unknown-deadline）","ok":true,"detail":"order=[\"pkg-b\",\"pkg-a\",\"pkg-c\"]（期望 [\"pkg-b\",\"pkg-a\",\"pkg-c\"]）；severity={\"pkg-b\":\"critical\",\"pkg-a\":\"scheduled\",\"pkg-c\":\"unknown-deadline\"}；pkg-a 名册=[[\"supplier:x2\"],[\"supplier:x1\"]]；pkg-b due=2026-09-21T13:00:00Z；pkg-c due=null；键集=[\"rfq_id\",\"subject\",\"due_ts\",\"due_basis\",\"responded\",\"silent\",\"overdue\",\"remaining_seconds\",\"severity\",\"next_action\",\"blocked_by\"]"},{"name":"5 事实 ts 优先 + 同一包多条发布事实合成一行：`rfq/promised` 的 ts **晚于** `rfq/published` ⇒ 用承诺时限（basis 指名 rfq/promised）；**早于** ⇒ 仍用发布事实（basis 指名 rfq/published）—— 与入参顺序无关；同一包**两条发布事实** ⇒ 输出仍**一行**（due 取事实 ts 最晚的那条、`subject` 用最新 rev、名册取并集）","ok":true,"detail":"晚 ts ⇒ due=2026-09-21T13:00:00Z（basis 含 promised=true）；早 ts ⇒ due=2026-09-21T11:00:00Z（basis 含 published=true）；逆序输入 ⇒ due=2026-09-21T11:00:00Z；两条发布事实 ⇒ found=3/facts=4 pkg-a 行数=1 due=2026-09-24T00:00:00Z subject=pkg-a rev=3（清单 4 条） 名册=[[\"supplier:x2\"],[\"supplier:x1\",\"supplier:x3\"]]"},{"name":"6 **没凭据不得假装能发**：`available=false` ⇒ 每条 `blocked_by` 都含「无法代发」与通道 reason；整个输出里「已通知/已提醒/已发送/已发出/已催」**0 命中**；`available=true` 时**仍**不许自称已发","ok":true,"detail":"下行命中=[]；上行命中=[]；can_send=false/false；blocked_by[0]=邮件通道 **available=false**（mail-transport-unavailable（缺 SMTP 凭据））：**无法代发**任何催报/通知；…"},{"name":"7 空输入不编：`payload-not-an-object` / `no-usable-inputs`（空段）/ `no-signal`（只有报价、没有发布过的包）三种降级**都有名 reason 且条目为空**，且不抛错","ok":true,"detail":"none=payload-not-an-object empty=no-usable-inputs quoted=no-signal 非对象=payload-not-an-object；条目数=0,0,0"},{"name":"8 确定性：同输入两次逐字节一致 / 键序打乱一致 / `rfqs` 逆序一致 / 跨实例一致 / 冻结输入不抛错 / 输出里没有时间键（`as_of` 只是事实时刻的**回显**，不是新取的时钟）","ok":true,"detail":"同输入两次=true；键序打乱=true；跨实例=true；冻结输入异常=无；时间键=[]"},{"name":"9 有界与诚实：`max_items` 夹取（2 ⇒ 展示 2、`omitted=1`、`truncated=true`；0 ⇒ 下界 1；1000 ⇒ 上界 200）；`rfqs` 段 70 条 ⇒ 只读 64 条并**照实**记一条 over-read 说明","ok":true,"detail":"max_items=2 ⇒ 展示 2/omitted 1/truncated true；0 ⇒ 1；1000 ⇒ 200；70 条 ⇒ 读到 64；说明=[\"RFQ 共 64 条，上限 20 → 展示前 20 条，被丢 44 条（omitted 照实报）\",\"`rfq/published` 事实里没有标题字段 → subject 由包 id、rev 与清单条数拼出（**不编一个标题**）\"]"},{"name":"10 **私域哨兵零泄漏**：同一键集、不同私域值 ⇒ 输出**逐字节一致**；哨兵与私域键名 0 命中；**非空转对照**：哨兵确实在输入里","ok":true,"detail":"逐字节一致=true；命中=[]；哨兵在输入里=4/4"},{"name":"11 **名册白名单（读都不读）**：`view=supplier` 带/不带 `invited`+`quotes` ⇒ 输出**逐字节一致**且三列全空；`view=contractor` 的 `responded` 与 `host/modules/sourcing.mjs` 的 `coverage()` **同一口径**（逐条相等）；三道闸都在源码里（读取口径 / 名单装配 / 名单来源）","ok":true,"detail":"供应商视角带/不带名单一致=true；三列全空=true；本人 responded=[\"supplier:x2\"] vs coverage=[\"supplier:x2\"]；subject=pkg-a rev=2（清单 2 条）；三道闸=true/true/true"},{"name":"12 登记承诺的**载荷形状**：`id` 形状 `rp-<view>-<12hex>`、`record` 含发言人/承诺时限/RFQ id/sha256、`requested_action=promise`、`submitted_at` 为空；6 类拒绝各给具体 `code` + 非空 `next_action` 且**不带 record**","ok":true,"detail":"ok=true id=rp-contractor-3080bfc3a538（形状=true）；record 键=[\"schema\",\"kind\",\"view\",\"rfq_id\",\"promised_by\",\"requested_action\",\"due_at\",\"note\",\"note_sha256\",\"bytes\",\"submitted_at\",\"note_text\"]；六类拒绝=[\"rfq-not-found:rfq-not-found\",\"actor-malformed:actor-malformed\",\"due-at-malformed:due-at-malformed\",\"empty-note:empty-note\",\"note-too-long:note-too-long\",\"payload-unusable:payload-unusable\"]"},{"name":"13 零写面 / 不读账本 / 不取墙钟：静态扫描（fs / 写文件 / 账本 / `Date.now` / 随机 / 网络 / 子进程 / 定时器 / `emit`）0 命中 + **扫描器非空转对照**；`privacy` 五项如实申报","ok":true,"detail":"命中=[]；扫描器对照命中 15/15；privacy={\"private_keys_read\":false,\"bidder_lists_read\":true,\"model_calls\":0,\"network_calls\":0,\"clock_reads\":0,\"sends\":0}"},{"name":"14 宿主侧契约（静态）：三条新路由 + `/api/routes` 与 `write_surface` 登记 + **四道页面**子导航入口（`subNav` 与 `anchorNav` 两处声明、运维/系统管理两道各传入口）+ 本批新增的**页面模板段**里 **0 行内联脚本 / 0 内联事件**（切片非空转）","ok":true,"detail":"路由/登记=true；导航=true；模板切片 15603 B / 派发切片 21273 B；含脚本=false/false"},{"name":"15 变异：变异1：`remaining_seconds` 改用**墙钟**（`Date.now()`）而不是事实 ts 之差","ok":true,"detail":"必须红的是「期限不随窗口变化」；实际红=期限不随窗口变化；四条场景={\"期限不随窗口变化\":false,\"没凭据不得自称已通知\":true,\"空输入必须降级且理由有名\":true,\"名册白名单（读都不读）\":true}；字节已变=true"},{"name":"15 变异：变异2：通道不可用也走\"可用\"分支（没凭据却像能发）","ok":true,"detail":"必须红的是「没凭据不得自称已通知」；实际红=没凭据不得自称已通知；四条场景={\"期限不随窗口变化\":true,\"没凭据不得自称已通知\":false,\"空输入必须降级且理由有名\":true,\"名册白名单（读都不读）\":true}；字节已变=true"},{"name":"15 变异：变异3：空输入的降级守卫失效（空载荷不再报有名 reason）","ok":true,"detail":"必须红的是「空输入必须降级且理由有名」；实际红=空输入必须降级且理由有名；四条场景={\"期限不随窗口变化\":true,\"没凭据不得自称已通知\":true,\"空输入必须降级且理由有名\":false,\"名册白名单（读都不读）\":true}；字节已变=true"},{"name":"15 变异：变异4：非业主视角也**读**报价事实段（名册口径的\"读都不读\"失效）","ok":true,"detail":"必须红的是「名册白名单（读都不读）」；实际红=名册白名单（读都不读）；四条场景={\"期限不随窗口变化\":true,\"没凭据不得自称已通知\":true,\"空输入必须降级且理由有名\":true,\"名册白名单（读都不读）\":false}；字节已变=true"},{"name":"16 防假变异自检 + 还原：找不到唯一锚点/自我替换必须判假变异；全程 `rfq-deadline.mjs` 与 `webui.mjs` 字节不变（变异只写在临时目录的副本里）","ok":true,"detail":"假锚点=true 自我替换=true；rfq-deadline sha256 前=6fb3b5ace467f338… 后=6fb3b5ace467f338…；webui 未变=true；变异小结=变异1：`remaining_seconds` 改用**墙钟**（`Date.now()`）而不是事实 ts 之差 → 红=期限不随窗口变化；变异2：通道不可用也走\"可用\"分支（没凭据却像能发） → 红=没凭据不得自称已通知；变异3：空输入的降级守卫失效（空载荷不再报有名 reason） → 红=空输入必须降级且理由有名；变异4：非业主视角也**读**报价事实段（名册口径的\"读都不读\"失效） → 红=名册白名单（读都不读）"}],"passed":23,"total":23,"failures":0}
+{
+  "checks": [
+    {
+      "name": "① 夹具就绪（承包商 5 行真哈希链 / 供应商 0 行空账本 / 私有 ui-shared 与邮件快照 / 哨兵在文件里）",
+      "ok": true,
+      "detail": "账本行=5 链自洽=True；哨兵命中=['COST-FLOOR-SENTINEL-9c', 'RESERVE-PRICE-SENTINEL-4b', 'PRIVATE-NOTE-SENTINEL-7f', 'SUPPLIER-SENTINEL-1a2b']"
+    },
+    {
+      "name": "② 真进程就绪（`cli.mjs webui` + `/api/health` 200；**不需要**管理员 token）",
+      "ok": true,
+      "detail": "port=34149 prefix=/qrt pid=1353413"
+    },
+    {
+      "name": "③ 三条新路由登记（两视角 ×「页面 GET / JSON GET / 登记承诺 POST」六条），`auth` 都是 `none`；`write_surface` 含登记承诺路由；承包商页 200 且是**真页面**（`data-due-clock=\"facts-only\"` + 口径文案 + 逐条 `data-deadline-next-action`）；四份响应 **0 行脚本 / 0 内联事件**（扫描器非空转）",
+      "ok": true,
+      "detail": "命中=[\"GET /qrt/contractor/deadlines/\", \"GET /qrt/contractor/api/deadlines\", \"POST /qrt/contractor/deadlines/promise\", \"GET /qrt/supplier/deadlines/\", \"GET /qrt/supplier/api/deadlines\", \"POST /qrt/supplier/deadlines/promise\"]；status=200/200；next_action 行=['pkg-g2', 'pkg-g1']；含脚本=无"
+    },
+    {
+      "name": "④ **剩余时长有口径且可复算**：`remaining_seconds` == 手算 `due_ts − as_of`（pkg-g1 302400 / pkg-g2 -1800，过期那条 `overdue=true` 且 severity=overdue）；`due_basis` 指名事实来源并写清「不取墙钟」；名册与手算一致（邀请 2 / 已回 1 / 未回 1）；同一 URL 两次 GET **逐字节一致**（不随刷新漂移）",
+      "ok": true,
+      "detail": "remaining={\"pkg-g2\": -1800, \"pkg-g1\": 302400}（期望 {\"pkg-g2\": -1800, \"pkg-g1\": 302400}）；severity={\"pkg-g2\": \"overdue\", \"pkg-g1\": \"scheduled\"}；as_of=2026-09-21T12:00:00Z；名册={\"pkg-g2\": [[], []], \"pkg-g1\": [[\"supplier:g2\"], [\"supplier:g1\"]]}；页面两次一致=True"
+    },
+    {
+      "name": "⑤ **没凭据不得假装能发**：通道 `available=false` ⇒ 页面与 JSON 都写「无法代发」+ 通道 reason，`can_send=false`；**整个响应里**「已通知/已提醒/已发送/已发出/已催」**0 命中**（非空转对照：把这些词塞进探针串能命中）",
+      "ok": true,
+      "detail": "命中=[]；can_send=False；channel={\"kind\": \"smtp\", \"available\": false, \"configured\": false, \"connected\": false, \"reason\": \"mail-transport-unavailable（缺 SMTP/IMAP 凭据 —— 夹具）\", \"next_action\": \"在 /a"
+    },
+    {
+      "name": "⑥ **空投影不编**（真进程真回读）：供应商侧（空账本）页面 `data-deadlines-degraded=\"1\"` + 有名 reason + 条目计数 **0**，JSON `rfqs:[]` + `degraded:true`；供应商侧名册三列**恒空**（名册是业主私域，读都不读）",
+      "ok": true,
+      "detail": "page=200 degraded=True reason=no-usable-inputs；JSON degraded=True/no-usable-inputs rfqs=[]；页面计数=0"
+    },
+    {
+      "name": "⑦ 登记承诺 POST：**202** + 待办件 id + `next_action`；待办件**恰 0600**、**原话逐字**、sha256 由本脚本独立重算一致，且含**发言人 / 承诺回文时限 / RFQ id**；**宿主账本零新增**（夹具账本 POST 前后逐字节一致）",
+      "ok": true,
+      "detail": "status=202 id=rp-contractor-a91312d5db8c；文件=['rp-contractor-a91312d5db8c.json'] mode=['0o600'] 逐字=True 哈希=True；record 键=['bytes', 'due_at', 'kind', 'note', 'note_sha256', 'note_text', 'promised_by', 'requested_action', 'rfq_id', 'schema', 'submitted_at', 'view']；账本未变=True"
+    },
+    {
+      "name": "⑧ 真跑 `tools/rfq-promise.py`（**唯一落账本者**）：落一条 `rfq/promised`（body **恰 6 键**：rfq_id/view/actor/due_at/promise_sha256/ok，**不含原话正文**）→ 待办件移入 `applied/`（不删）；**真回读** `/api/status` 的账本计数 **5 → 6**",
+      "ok": true,
+      "detail": "rc=0 err=；ledger_added=1；body 键=['actor', 'due_at', 'ok', 'promise_sha256', 'rfq_id', 'view']；applied=['rp-contractor-a91312d5db8c.json']；计数 5 → 6；账本里有原话=False"
+    },
+    {
+      "name": "⑨ **承诺真的改变了口径**：`/api/deadlines` 的 pkg-g1 时限从 `rfq/published.quote_by` 变成 `rfq/promised.due_at`（手算剩余 352800 秒、`due_basis` 指名 `rfq/promised`），`as_of` 推进到承诺事实的 ts（事实时刻，不是墙钟）",
+      "ok": true,
+      "detail": "pkg-g1 due=2026-09-26T00:00:00Z remaining=352800（期望 352800）；pkg-g2 remaining=-37800（期望 -37800）；as_of=2026-09-21T22:00:00Z"
+    },
+    {
+      "name": "⑩ **幂等**：同一份（包 + 发言人 + 时限 + 原话）再提交 + 再跑 → 标 `duplicates`（`already-promised`）、**账本零新增**、`exit 0`；两次提交拿到**同一个待办件 id**；账本里仍只有 1 条 `rfq/promised`、计数停在 6",
+      "ok": true,
+      "detail": "rc=0/0；ledger_added=0/0；duplicates=[{\"due_at\": \"2026-09-26T00:00:00Z\", \"file\": \"rp-contractor-a91312d5db8c.json\", \"matched\": \"applied-archive\", \"note_sha256\": \"c168c6b90afe06c23a40aae45de4a9ef83aad05821713c6d8ec124e5df3d46b9\", \"reason\": \"already-promised\", \"rfq_id\": \"pkg-g1\"；promised 行=1 计数=6；err=/"
+    },
+    {
+      "name": "⑪ **拒绝路径**各自给具体 `code` + `next_action`，且**拒绝时账本零新增**：不存在的包 → POST **404 `rfq-not-found`**；被改过的待办件 → `pending-tampered`；两视角页面/JSON 里私域键名与哨兵 **0 命中**（**非空转对照**：哨兵确实在夹具账本里）；既有路由没坏、未提权 `/admin/` 仍 401 固定体",
+      "ok": true,
+      "detail": "POST=404 code=rfq-not-found；脚本 rc=1 code=pending-tampered；账本行 6 → 6；哨兵命中={'contractor': [], 'supplier': []}；home=200 ops=200 admin=401"
+    }
+  ],
+  "passed": 11,
+  "total": 11,
+  "failures": 0
+}
+
+----------------------------------------------------------------------------------------------------
+三、AC 归档批次 B 的**反向验证**（在整仓副本 `/tmp/acneg` 上做；还原后与主仓逐字节一致）
+----------------------------------------------------------------------------------------------------
+  · 归档抽 1 行（AC-FAQ-001） → [FAIL] 未解析的 ID 引用 1 个（共 2867 处引用） | RESULT: FAIL (1 项)
+  · 主文件抽 1 行（AC-MAIL-002） → [FAIL] 未解析的 ID 引用 1 个（共 2869 处引用） | RESULT: FAIL (1 项)
+  · 归档 0 条 AC 行 → [FAIL] 归档文件未被有效读取（0 条 AC- 定义行）: docs/work/acceptance-criteria-archive.md | [FAIL] 未解析的 ID 引用 62 个（共 2721 处引用） | RESULT: FAIL (2 项)
+  · 还原后 `python3 tools/check-docs.py` → RESULT: PASS（sha256 与主仓一致，见下表）
+
+----------------------------------------------------------------------------------------------------
+四、其它门（原样摘要；完整输出见 `tmp/rfq-deadline-run.out`）
+----------------------------------------------------------------------------------------------------
+  · verify.sh events（exit=None）：（未在 rfq-deadline-run.out 里找到 events 块）
+  · verify.sh rfq-deadline（exit=None）：fc800eebdd5f1584284b99053182451a9e1a112d93fc61b1417979d185467358  docs/work/acceptance-criteria.md / 98509fee053d958e3e86fa0550afca32fc114bac444910e9b334bd1007a259ba  docs/work/acceptance-criteria-archive.md
+  · verify.sh gates（exit=None）：（未在 rfq-deadline-run.out 里找到 gates 块）
+  · verify.sh authority（exit=None）：（未在 rfq-deadline-run.out 里找到 authority 块）
+  · verify.sh change-detail（exit=None）：（未在 rfq-deadline-run.out 里找到 change-detail 块）
+  · verify.sh webui（exit=None）：（未在 rfq-deadline-run.out 里找到 webui 块）
+  · verify.sh modules（exit=None）：（未在 rfq-deadline-run.out 里找到 modules 块）
+  · verify.sh wiring（exit=None）：（未在 rfq-deadline-run.out 里找到 wiring 块）
+  · verify.sh plugins（exit=None）：（未在 rfq-deadline-run.out 里找到 plugins 块）
+  · verify.sh docs（exit=1）：[FAIL] 未解析的 ID 引用 1 个（共 2885 处引用） / RESULT: FAIL (1 项)
+  · verify.sh ac-registry（exit=0）：
+  · verify.sh coverage（exit=0）："passed": 8,
+
+----------------------------------------------------------------------------------------------------
+五、文件与字节数（本批新增/改动）
+----------------------------------------------------------------------------------------------------
+     28622 B  docs/work/acceptance-criteria.md
+     17274 B  docs/work/acceptance-criteria-archive.md
+     41645 B  host/modules/rfq-deadline.mjs
+     46616 B  host/t285-rfq-deadline-gate.mjs
+     31389 B  tools/check-rfq-deadline-route.py
+     23730 B  tools/rfq-promise.py
+    204314 B  host/modules/webui.mjs
+     31695 B  docs/work/functional-requirements.md
+
+----------------------------------------------------------------------------------------------------
+六、登记面清单（本批补齐的每一处）
+----------------------------------------------------------------------------------------------------
+  · 新增模块 host/modules/rfq-deadline.mjs（provides: rfqDeadline；inject=[]）
+  · 宿主装配：host/modules/webui.mjs（inject/usedServices/subNav/anchorNav/DEADLINE_EXTRAS/三条路由/载荷与页面/POST 落 0600 待办件）、host/webui.mjs（门）、host/canary-dispatch.mjs（e2e）、host/cli.mjs（运行期注入 + webui inject）、host/check-modules.mjs（STUBS.rfqDeadline）、host/profiles.mjs（webui profile modules）
+  · 夹具：host/t279 / t280 / t281 / t282 / t283 / t284 各加一条 mountReal（rfq-deadline）
+  · 接线门：tools/check-module-wiring.py 的 PROVIDERS 加 rfqDeadline → rfq-deadline
+  · 事件登记：src/quotagent/kernel/events.py + docs/design/05-events.md 双侧登记 rfq/promised（emit）
+  · 文档：docs/design/14-plugin-inventory.md、docs/design/15-requirements-coverage.md（§1 FR 覆盖 + §2 插件归属）、docs/work/functional-requirements.md（FR-RFQ-008）、docs/work/acceptance-criteria.md（AC-RFQ-006）、docs/work/progress-checklist.md（T-285）、docs/work/evidence/INDEX-P2.md（本行）
+  · 门：host/t285-rfq-deadline-gate.mjs + tools/check-rfq-deadline-route.py + tools/verify.sh 的 rfq-deadline 子命令
+  · 唯一落账本者：tools/rfq-promise.py（落 rfq/promised，body 恰 6 键）
+
+----------------------------------------------------------------------------------------------------
+七、本批**没有**验证的东西（诚实清单）
+----------------------------------------------------------------------------------------------------
+  · 没有真发任何邮件：`rfq-deadline` 与宿主都**没有发信能力**（`can_send=false`），本轮只验证「没凭据时报 available=false 且写无法代发」，**没有**验证「凭据就位时能发出催报邮件」—— 那需要 SMTP/IMAP 真凭据（T-259 的人手项）。
+  · 没有验证生产环境（8093 端口的常驻 webui）上的**新路由**：重启后只做了真回读（见下），不是浏览器点击走查。
+  · 没有做「两个真进程各自账本」的双侧联调：真路由门用的是两份夹具账本（哈希链真有效），不是线上库。
+  · 没有改任何真实 `/workspace/config.yaml`（本批不涉及配置提交面）。
+  · 没有 commit（父方收口）：本批只在工作区，`clean-copy` 门要在 commit 之后才有意义。
+

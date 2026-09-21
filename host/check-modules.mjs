@@ -313,6 +313,36 @@ const STUBS = {
     config: () => ({ max_roles: 8, route_prefix: '/quotagent', unit: 'cents', amount_max: 0,
       registered_roles: [] }),
   },
+  rfqDeadline: {
+    // fixture 的 stub：只满足"能派生回文时限/能产登记承诺载荷"；口径（不取墙钟、没凭据不假装能发、
+    // 名册白名单）与 4 处变异由 rfq-deadline 自己的门验（t285）
+    status: () => ({ source: 'rfq-deadline', engine: 'rules', engine_note: 'stub', view: '', as_of: null,
+      due_clock: 'facts-only', due_basis_note: 'stub', ignored_now_inputs: ['payload.now', 'config.now'],
+      rfq_keys: [], rfqs: [], counts: { rfq: { found: 0, shown: 0, omitted: 0 },
+        facts: { rfqs: 0, quotes: 0, promises: 0 }, invited: 0, responded: 0, silent: 0,
+        unattributed_quotes: 0, by_severity: { overdue: 0, critical: 0, soon: 0, scheduled: 0,
+          'unknown-deadline': 0 }, shown: 0, omitted: 0 },
+      bounds: { max_items: 20, sections: ['rfqs', 'quotes', 'promises'], section_max: 64, list_max: 32,
+        note_max_bytes: 2048, critical_seconds: 3600, soon_seconds: 86400 },
+      truncated: false, omitted: 0, degraded: true, reason: 'stub',
+      channel: { kind: 'smtp', available: false, configured: false, connected: false,
+        reason: 'stub', next_action: '', source: 'stub' },
+      can_send: false, no_send_note: 'stub', private_lists_visible: false, private_lists_note: 'stub',
+      roster_note: 'stub', notes: [],
+      privacy: { private_keys_read: false, bidder_lists_read: false, model_calls: 0, network_calls: 0,
+        clock_reads: 0, sends: 0 } }),
+    promise: () => ({ ok: false, code: 'rfq-not-found', view: '', rfq_id: '', promise_by: '', due_at: '',
+      note_sha256: '', bytes: 0, id: '', record: null, next_action: 'stub' }),
+    meta: () => ({ engine: 'rules', engine_note: 'stub', due_clock: 'facts-only', due_basis_note: 'stub',
+      ignored_now_inputs: ['payload.now', 'config.now'], sections: ['rfqs', 'quotes', 'promises'],
+      degraded_reasons: [], severities: [], rfq_keys: [], private_list_views: ['contractor'],
+      promise_codes: [], promise_action: 'promise', kind: 'rfq-promise', schema: 1,
+      event: 'rfq/promised', no_send_note: 'stub',
+      bounds: { max_items: 20, section_max: 64, list_max: 32, note_max_bytes: 2048,
+        critical_seconds: 3600, soon_seconds: 86400 }, can_send: false, can_approve: false }),
+    config: () => ({ max_items: 20, route_prefix: '/quotagent', note_max_bytes: 2048,
+      due_clock: 'facts-only', critical_seconds: 3600, soon_seconds: 86400 }),
+  },
 }
 
 /** 起一个带句柄的模块实例：句柄在插件自己的 ctx 里取（那里才有 inject 权限）。 */

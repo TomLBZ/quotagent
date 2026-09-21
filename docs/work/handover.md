@@ -4,9 +4,10 @@
 
 ## 现在在哪
 
-**P2 进行中**。FR 定义 = `functional-requirements.md` + 同目录 `functional-requirements-archive.md`
-（门的 FR 定义集合；P0 行与 V 清单留主文件）。本批 EV-155：FR 集合化 + 47 条最老非 P0 行入归档。
-九道门全绿。
+**P2 进行中**。FR/AC 定义 = 主文件 + 同目录 `*-archive.md`（门的定义集合；P0 行留主文件）。
+本批 EV-157：AC 集合化批次 B（16 条最老非 P0 行入归档；主文件 32616→28622 B）
++ `rfq-deadline` 插件（回文时限口径 = 事实 ts 差、不取墙钟、**发不出信**）与门 `verify.sh rfq-deadline`。
+十二道门全绿。
 
 ## 下一步唯一动作
 
