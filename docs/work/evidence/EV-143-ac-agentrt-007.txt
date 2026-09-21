@@ -1,0 +1,65 @@
+EV-143 AC-AGENTRT-007 运行期插件独立装卸 / 卸载零残留 / 卸载后事实不丢
+
+命令：`tools/verify.sh ac AC-AGENTRT-007`（有/无 Node 都须全绿：ADR-0013 §8）
+
+[1] 有 Node
+```
+{
+  "ac": "AC-AGENTRT-007",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "① **卸载/不加载记忆插件也能重建项目记忆**（来源是账本，不是插件内存）：两次重放逐字节一致",
+      "ok": true,
+      "detail": "rc=0/0 bytes=976 items=3"
+    },
+    {
+      "name": "① 重放不改事实：账本字节零改动",
+      "ok": true,
+      "detail": "before=08e385908ccf after=08e385908ccf"
+    },
+    {
+      "name": "② 三件模块各自都有卸载/dispose 实现痕迹（且扫描器**非空转**：空文件命中 0）",
+      "ok": true,
+      "detail": "每件命中={'agent-context': 2, 'agent-memory': 2, 'agent-harness': 2} 空转对照=0"
+    },
+    {
+      "name": "③ 三件插件相互独立：`provides` 各自声明且互不重叠；`inject` 均为空数组",
+      "ok": true,
+      "detail": "provides={'agent-context': \"'agentContext'\", 'agent-memory': \"'agentMemory'\", 'agent-harness': \"'agentHarness'\"} inject={'agent-context': '', 'agent-memory': '', 'agent-harness': ''}"
+    },
+    {
+      "name": "④ 围栏门真跑（failures:0）+ 三件都登记了 `*-disposed` 留痕种类（卸载有痕）",
+      "ok": true,
+      "detail": "total=22 failures=0 disposed_kinds=3 rc=0"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-AGENTRT-007",
+  "phase": "P2",
+  "title": "运行期插件各自独立装卸、卸载零残留；卸载记忆插件后**事实不丢**（项目记忆仍可重建）",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+
+[2] 无 Node（降级而非变红）
+```
+': \"'agentMemory'\", 'agent-harness': \"'agentHarness'\"} inject={'agent-context': '', 'agent-memory': '', 'agent-harness': ''}"
+    },
+    {
+      "name": "④ 零残留（无 Node：**降级**为『三件都有 `*-disposed` 留痕种类』的静态断言；宿主语义由 `verify.sh agent-runtime` 守卫）",
+      "ok": true,
+      "detail": "disposed_kinds=3"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-AGENTRT-007",
+  "phase": "P2",
+  "title": "运行期插件各自独立装卸、卸载零残留；卸载记忆插件后**事实不丢**（项目记忆仍可重建）",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```

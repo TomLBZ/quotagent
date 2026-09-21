@@ -149,6 +149,7 @@
 | FR-USERPLUG-005 | tools/userplugin-record.py + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-005 | 直引 |
 | FR-USERPLUG-010 | tools/userplugin-elevate.py + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-010 | 直引 |
 | FR-AGENTRT-006 | host/modules/agent-context.mjs + host/modules/agent-memory.mjs + host/modules/agent-harness.mjs | 见 AC-AGENTRT-006 | 直引 |
+| FR-AGENTRT-007 | host/modules/agent-context.mjs + host/modules/agent-memory.mjs + host/modules/agent-harness.mjs | 见 AC-AGENTRT-007 | 直引 |
 | FR-AGENTRT-002 | tools/refresh-agent-memory.py + host/modules/agent-memory.mjs | 见 AC-AGENTRT-002 | 直引 |
 | FR-STORAGE-001 | tools/storage.py + host/modules/storage-view.mjs | 见 AC-STORAGE-001 | 直引 |
 | FR-STORAGE-004 | tools/storage.py | 见 AC-STORAGE-004 | 直引 |
