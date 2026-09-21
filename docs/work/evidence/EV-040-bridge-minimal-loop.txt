@@ -1,0 +1,112 @@
+EV-040 — 桥接协议最小闭环（T-216 / S1.15）：握手·版本协商·方法面·身份注入·错误码
+
+时间: 2026-09-21T04:02:08Z
+commit: 21f6bc0
+命令: tools/verify.sh bridge（= qa ac AC-INTEG-004 && qa ac AC-INTEG-005）
+AC-INTEG-004 退出码: 0（12/12 断言通过）
+AC-INTEG-005 退出码: 0（6/6 断言通过）
+
+--- AC-INTEG-004 断言（协议与版本协商）---
+  [ok] 内核首帧是 kernel/hello（能力自述先于一切请求） — 帧序=['kernel/hello', 'bridge.ready', 'result', 'result', 'bridge.bye']
+  [ok] hello 含 14 字段契约的全部字段（含 credit_window 与 max_frame_bytes） — 缺=[]
+  [ok] events[] 与 Python 侧声明表一致（唯一真源在 Python 侧） — hello=50 声明表=50 bridge 事件齐=True
+  [ok] 方法面只暴露 read/compute；承诺面在 methods_refused 里且不在 methods[] — methods=['events.declared', 'ledger.count', 'ledger.head', 'ledger.healthy', 'ledger.read', 'measures.convert', 'measures.factor'] refused=['qep.receive', 'qep.send', 'approval.decide', 'quote.submit'
+  [ok] 协商后进入 ready，read 与 compute 都可用 — 帧序=['kernel/hello', 'bridge.ready', 'result', 'result', 'bridge.bye'] 方法=['ledger.head', 'measures.factor']
+  [ok] stdout 只承载协议帧（每行都是 JSON 帧；日志走 stderr） — 帧数=5 退出码=0 stderr行=1
+  [ok] 直跑与经桥的 compute 结果一致（同输入同值：cm→m 因子 0.01） — result={'factor': 0.01, 'from': 'cm', 'to': 'm'}
+  [ok] 版本交集为空 → 退出码 2 且**账本零新增**（不静默降级，ADR-0006 §3） — 退出码=2 错误码=['version-mismatch'] 账本字节=0
+  [ok] 特性级降级落 kernel/bridge-degraded（含缺失项）且通信继续 — 账本类型=['kernel/bridge-degraded'] 帧序=['kernel/hello', 'bridge.ready', 'bridge.bye']
+  [ok] 未知方法/非法帧/帧版本错/超限帧都是确定性错误码且带 next_action — 错误码=['unknown-method', 'invalid-request', 'invalid-request', 'invalid-request']
+  [ok] 超限帧被拒（>8 MiB 不产生内存放大，直接断开） — 错误码=['unknown-method', 'invalid-request', 'invalid-request', 'invalid-request'] 末条消息=帧超过 8388608 B 上限
+  [ok] 宿主（cordis）按同一协议握手并调用 read 方法成功 — exit=0 payload={"ok": true, "action": "bridge", "phase": "call", "profile": "contractor-ops", "realm": "contractor:con-B", "ledger_path": "/workspace/projects/quotagent/tmp/ac/ac-integ-003-fx2kvley/ho
+
+--- AC-INTEG-005 断言（承诺面不可达，对抗性）---
+  [ok] 宿主调承诺面（approval.decide）被拒：commit-refused + next_action 指向交互式 CLI — error={"code": "commit-refused", "message": "approval.decide 属承诺面，永不暴露给宿主", "next_action": "承诺类与人工签署只走交互式 Python CLI（ADR-0013 §3）；宿主不得代签", "data": {"m": "approval.decide", "cls": "commit"}}
+  [ok] 拒绝留痕：kernel/bridge-rejected 入账（含 method/cls/注入身份） — bridge-rejected 条数=1 body={"action": "refused", "claimed_source": "", "cls": "commit", "injected_operator": "bridge:contractor-ops", "method": "approval.decide", "profile": "contractor-ops", "realm": 
+  [ok] 宿主播报 human 身份被拒（身份永不自我声明；权威身份由内核注入） — error={"code": "invalid-request", "message": "身份不能自我声明（claimed='human:zhang'）", "next_action": "检查帧：必须是一行 JSON（≤ 8 MiB）、字段名与类型符合 13-cordis-bridge.md §3", "data": {"claimed_source": "human:zhang", "inj
+  [ok] 自我声明的尝试也留痕（claimed_source 与 injected_operator 分别记录） — self-declared 条数=1
+  [ok] fact 面默认关闭：hello 声明 capabilities/intents_only，调用 qep.receive 被拒且说明需放宽 ADR — features=['ndjson-stdio', 'credit-window', 'commit-surface-closed', 'fact-surface-closed', 'identities-injected'] error={"id": 1, "code": "commit-refused", "message": "qep.receive 属 fact 面，P1 默认关闭（int
+  [ok] 承诺面关闭不影响 read/compute（拒绝不是全局关桥） — results=['ledger.count', 'measures.factor'] factor=100.0
+
+--- 原始旁证 1：宿主调承诺面（approval.decide）---
+{
+  "exit": 0,
+  "call_error": {
+    "code": "commit-refused",
+    "message": "approval.decide 属承诺面，永不暴露给宿主",
+    "next_action": "承诺类与人工签署只走交互式 Python CLI（ADR-0013 §3）；宿主不得代签",
+    "data": {
+      "m": "approval.decide",
+      "cls": "commit"
+    }
+  }
+}
+
+--- 原始旁证 2：宿主播报 human 身份（--claim human:zhang）---
+{
+  "exit": 0,
+  "call_error": {
+    "code": "invalid-request",
+    "message": "身份不能自我声明（claimed='human:zhang'）",
+    "next_action": "检查帧：必须是一行 JSON（≤ 8 MiB）、字段名与类型符合 13-cordis-bridge.md §3",
+    "data": {
+      "claimed_source": "human:zhang",
+      "injected_operator": "bridge:contractor-ops"
+    }
+  }
+}
+
+--- 原始旁证 3：accept_bridge 不兼容（宿主 --accept 2.0）---
+{
+  "exit": 0,
+  "phase": "handshake",
+  "kernel_exit_code": 2,
+  "error": {
+    "id": null,
+    "code": "version-mismatch",
+    "message": "accept_bridge=['2.0'] 与内核 1.0 无交集",
+    "next_action": "升级宿主或内核使 accept_bridge 与 min_supported 有交集（ADR-0006 §3）",
+    "data": {
+      "bridge_version": "1.0",
+      "min_supported": "1.0"
+    }
+  },
+  "ledger_bytes": 1278
+}
+
+--- 原始旁证 4：账本留痕（kernel/bridge-rejected，含注入身份与声称身份分别记录）---
+[
+  {
+    "seq": 1,
+    "type": "kernel/bridge-rejected",
+    "body": {
+      "action": "refused",
+      "claimed_source": "",
+      "cls": "commit",
+      "injected_operator": "bridge:contractor-ops",
+      "method": "approval.decide",
+      "profile": "contractor-ops",
+      "realm": "contractor:con-B",
+      "reason": "commit-refused"
+    }
+  },
+  {
+    "seq": 2,
+    "type": "kernel/bridge-rejected",
+    "body": {
+      "action": "refused",
+      "claimed_source": "human:zhang",
+      "injected_operator": "bridge:contractor-ops",
+      "method": "ledger.head",
+      "profile": "contractor-ops",
+      "realm": "contractor:con-B",
+      "reason": "self-declared-identity"
+    }
+  }
+]
+
+--- 说明 ---
+· 承诺面关闭是**内核侧强制**：宿主连方法名都调不通（commit-refused），且每次尝试都落账本；
+· 身份不可自我声明：宿主声称的 human:zhang 与内核注入的 bridge:contractor-ops 分别记录，权威身份取后者；
+· 版本不兼容时账本 0 字节：拒绝发生在任何写入之前（不静默降级，ADR-0006 §3）；
+· 本 EV 不含故障语义（SIGKILL/洪水/断连/背压）的结论，那些属 T-217。

@@ -66,6 +66,11 @@ class EventBus:
         "kernel/qep-sent": ("emit", True, ""),
         "kernel/qep-received": ("emit", True, ""),
         "kernel/qep-duplicate-dropped": ("emit", True, ""),
+        "kernel/bridge-degraded": ("emit", True, ""),
+        "kernel/bridge-rejected": ("emit", True, ""),
+        "kernel/bridge-backpressure": ("emit", True, ""),
+        "kernel/bridge-restarted": ("emit", True, ""),
+        "kernel/bridge-fault": ("emit", False, ""),
         # §3 人工门与私域/成本相关（P0 S0.9–S0.10）
         "approval/requested": ("emit", True, ""),
         "approval/granted": ("emit", True, ""),

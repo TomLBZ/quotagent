@@ -117,6 +117,8 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-EVOLVE-004 | P2 | 同类提案第三次失败后必须转人工（不再自动重试） | `qa ac AC-EVOLVE-004` |
 | AC-INTEG-001 | P0 | 文件投递为原子写（临时文件 + rename）；半写文件不被读取 | `qa ac AC-INTEG-001` |
 | AC-INTEG-002 | P1 | relay 不解析 body（对其注入篡改会被验签发现）；relay 不可达时排队重试 | `qa ac AC-INTEG-002` |
+| AC-INTEG-004 | P1 | 桥的协议与版本协商：内核首帧自述能力清单（与 Python 声明表一致）；只暴露 read/compute；版本不兼容→退出码 2 且账本零新增；降级留痕；确定性错误码 + `next_action`；stdout 只有协议帧 | `qa ac AC-INTEG-004`（入口 `tools/verify.sh bridge`） |
+| AC-INTEG-005 | P1 | 承诺面不可达（对抗性）：宿主调 commit 面被拒且落 `kernel/bridge-rejected`；宿主播报 `human:*` 被拒（身份由内核注入）；`fact` 面默认关闭；read/compute 仍可用 | `qa ac AC-INTEG-005` |
 | AC-INTEG-003 | P2 | 邮件发送失败不落账为"已发送"（账实一致） | `qa ac AC-INTEG-003` |
 | AC-TRUST-001 | P0/P1 | 对方私域字段在本侧投影、模型输入、视图中三处均不存在（INV-008） | `qa ac AC-TRUST-001` |
 

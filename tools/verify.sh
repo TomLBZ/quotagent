@@ -33,6 +33,10 @@ case "${1:-}" in
   cordis)
     exec "$HERE/cordis.sh" smoke
     ;;
+  bridge)
+    "$HERE/run.sh" -m quotagent.qa ac AC-INTEG-004 || exit 1
+    exec "$HERE/run.sh" -m quotagent.qa ac AC-INTEG-005
+    ;;
   v)
     shift
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-v-register.py" "$@"

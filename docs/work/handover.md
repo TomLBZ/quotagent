@@ -4,16 +4,15 @@
 
 ## 现在在哪
 
-**P1 进行中**：B2/T-201 done —— 宿主 profile = 组成数据（一 profile 一真进程/一 realm/一账本）；
-配置更新走 cordis 原生 `fiber.update`+`internal/update`：守卫不调 `next()` 即否决 → 配置不变、不重启
-（ADR-0015、`host/CONFIG.md`、EV-039）。宿主钉 `cordis@4.0.0-rc.10`（ADR-0012/0013），
-前提/MVP 判据 ADR-0014（V 项按指令假设通过，非结论）；顺序见 decisions.md D-007。
-`verify.sh docs|v|cordis` PASS；35 条 AC 与 s1..s4 全绿。
+**P1 进行中**：T-201（宿主 profile/配置否决）与 T-216（**桥接最小闭环**）done。桥 = stdio NDJSON v1：
+内核首帧自述能力清单、版本不兼容→退出码 2 且账本零新增、只开 read/compute、**commit 面永不暴露**
+（调用即拒 + 留痕）、身份由内核注入、`fact` 面默认关闭。见 ADR-0013/0015 与 `13-cordis-bridge.md`。
+`verify.sh docs|v|cordis|bridge` PASS；**37 条 AC 与 s1..s4 全绿**。
 
 ## 下一步唯一动作
 
-**B3 = T-202**：QEP 跨进程投递 + receipt + 重发 + seq 空洞（AC-QEP-003/AC-INTEG-002）。
-拆解与依赖见 `.agents/state.json` 的 `next_action`。
+**B4 = T-217**：桥的故障语义（SIGKILL/洪水/断连 + 背压 + 在途请求记 unknown），按 ADR-0013 §8 补 AC；
+之后 **B5 = T-202**（QEP relay/重发/seq 空洞）。拆解见 state.json 的 `next_action`。
 
 ## 不变量
 

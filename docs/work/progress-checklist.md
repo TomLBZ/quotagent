@@ -56,6 +56,8 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-213 | P1 | 授标与 PO 闭环 | FR-AWARD-001..003 | AC-AWARD-001, AC-AWARD-002 | todo | – |
 | T-214 | P1 | 比较表导出 | FR-COMPARE-004, FR-UX-003 | AC-COMPARE-004 | todo | – |
 | T-215 | P1 | 部署与操作手册 | FR-RFQ-004, FR-RFQ-005 | AC-RFQ-003 | todo | – |
+| T-216 | P1 | 桥接协议最小闭环（握手/版本协商/方法面/身份注入/错误码） | FR-INTEG-004 | AC-INTEG-004, AC-INTEG-005 | done | EV-040 |
+| T-217 | P1 | 桥的故障语义（SIGKILL/洪水/断连 + 背压 + 在途请求记 unknown） | FR-INTEG-004 | （AC 待登记，见 ADR-0013 §8） | todo | – |
 
 ## P2 product（见 `roadmap.md` §4）
 

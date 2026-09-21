@@ -34,6 +34,11 @@
 | `kernel/qep-rejected` | emit | durable | `ctx.qep` | 运维告警、审计 |
 | `kernel/qep-sent` / `kernel/qep-received` | emit | ✔ | `ctx.qep` | 重发与出站链恢复（`03` §7）、审计 |
 | `kernel/qep-duplicate-dropped` | emit | ✔ | `ctx.qep` | 幂等命中的可审计留痕（`03` §5） |
+| `kernel/bridge-degraded` | emit | ✔ | `ctx.bridge` | 宿主与内核的观测（特性级降级必须留痕，ADR-0013 §2） |
+| `kernel/bridge-rejected` | emit | ✔ | `ctx.bridge` | 承诺面调用/自我声明身份的拒绝留痕（ADR-0013 §3） |
+| `kernel/bridge-backpressure` | emit | ✔ | `ctx.bridge` | live 通知被丢弃时的留痕（ADR-0013 §5） |
+| `kernel/bridge-restarted` | emit | ✔ | `ctx.bridge` | 重启计数与锚点比对（ADR-0013 §6） |
+| `kernel/bridge-fault` | emit | live | `ctx.bridge` | 桥的运行期故障（断连/洪水/超时） |
 
 ## 3. 业务事件
 
