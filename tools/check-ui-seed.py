@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))  # 门里造夹具用真 Ledger（追加的是夹具事实，不是服务产出）
+RECENT_LIMIT = 5
 REC_NEG = {"thread_id", "attempt_no", "status"}
 REC_FAQ = {"entry_id", "rfq_rev"}
 SEED = ROOT / "tools" / "ui-seed-pipeline.py"
@@ -91,6 +93,51 @@ nonzero = all(
     for vw in views for dom in ("negotiate", "faq", "mail"))
 check("③ 快照里两视角三域计数**全部非 0**（反例：面板恒为 0 —— 空面板与坏面板看不出来）",
       rc3 == 0 and bool(views) and nonzero, f"rc={rc3} views={list(views)}")
+
+# ④ 有界与顺序（用**真账本 + 真写入器**验：7 条 → 只能出 5 条，且最新在前）
+# 说明：这里直接 append 造夹具行（不是在验服务，而是在验写入器的"有界与定序"），
+# 计数（rounds/entries）必须反映**全部**行，而 recent 只出 5 条 —— 两者不能混为一谈。
+from quotagent.kernel.ledger import Ledger  # noqa: E402
+
+NEG_TOTAL, FAQ_TOTAL = 7, 7
+led_neg = Ledger(scratch / "contractor" / "ledger.jsonl", realm="contractor:ui")
+for i in range(NEG_TOTAL):
+    led_neg.append("negotiate/round", {"thread_id": "nt-fixture", "attempt_no": i + 1,
+                                       "status": "conceded", "body": "SECRET-不应外泄",
+                                       "note": "private:不应外泄"}, correlation_id=f"fx-neg-{i}")
+led_faq = Ledger(scratch / "supplier" / "ledger.jsonl", realm="supplier:ui")
+for i in range(FAQ_TOTAL):
+    led_faq.append("faq/entry-published", {"entry_id": f"fq-fixture-{i + 1}", "rfq_rev": i + 1,
+                                            "subject": "SECRET-不应外泄"}, correlation_id=f"fx-faq-{i}")
+rc4, _p4, _log4 = run(str(ROOT / "tools" / "refresh-ui-snapshots.py"), "--shared-dir", str(scratch))
+snap4 = {}
+try:
+    snap4 = json.loads(snap.read_text(encoding="utf-8"))
+except Exception:  # noqa: BLE001
+    snap4 = {}
+neg4 = ((snap4.get("views") or {}).get("contractor") or {}).get("negotiate") or {}
+faq4 = ((snap4.get("views") or {}).get("supplier") or {}).get("faq") or {}
+nrec4, frec4 = neg4.get("recent") or [], faq4.get("recent") or []
+check(f"④ 有界：{NEG_TOTAL} 条谈判轮次 → recent 只出 {RECENT_LIMIT} 条（反例：把上限改成 50 → 红）",
+      rc4 == 0 and len(nrec4) == RECENT_LIMIT, f"rc={rc4} n={len(nrec4)}")
+check(f"④ 有界：{FAQ_TOTAL} 条 FAQ 条目 → recent 只出 {RECENT_LIMIT} 条（反例：同上 → 红）",
+      len(frec4) == RECENT_LIMIT, f"n={len(frec4)}")
+check("④ 定序：recent **最新在前**（尝试号 7,6,5,4,3 —— 反例：改成正序 → 红）",
+      [r.get("attempt_no") for r in nrec4] == list(range(NEG_TOTAL, NEG_TOTAL - RECENT_LIMIT, -1)),
+      f"attempt_no={[r.get('attempt_no') for r in nrec4]}")
+check("④ 定序：FAQ recent 最新在前（rev 7,6,5,4,3 —— 反例：同上 → 红）",
+      [r.get("rfq_rev") for r in frec4] == list(range(FAQ_TOTAL, FAQ_TOTAL - RECENT_LIMIT, -1)),
+      f"rfq_rev={[r.get('rfq_rev') for r in frec4]}")
+# 口径差异（刻意，已写进契约 §2 与 D-056）：`counts` 走**服务回放**（只统计被服务跟踪的对象），
+# `recent` 走**账本原始行** —— 两者计数不同是正常的（本门用夹具行放大这个差异）。
+check("④ 口径：counts 非零（服务回放口径）且 recent 有界（账本行口径）—— 两者不得相互冒充",
+      rc4 == 0 and int(neg4.get("rounds") or 0) >= 1 and len(nrec4) == RECENT_LIMIT,
+      f"rounds={neg4.get('rounds')} n={len(nrec4)}")
+check("④ 投影：夹具行里塞了正文与私域哨兵 → recent 里一个都不许出现（反例：原样透传 → 红）",
+      all(set(r) <= REC_NEG for r in nrec4) and all(set(r) <= REC_FAQ for r in frec4)
+      and "SECRET" not in json.dumps(nrec4, ensure_ascii=False) + json.dumps(frec4, ensure_ascii=False)
+      and "private:" not in json.dumps(nrec4, ensure_ascii=False) + json.dumps(frec4, ensure_ascii=False),
+      f"keys={sorted({k for r in nrec4 for k in r})}")
 
 actors = set()
 for p in scratch.rglob("*.jsonl"):

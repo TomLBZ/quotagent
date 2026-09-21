@@ -218,3 +218,10 @@ docs/work/evolution-log.json      # 产出日志；tmp/evolve/ledger.jsonl 是�
 - `/<view>/api/faq`：该视角的 FAQ 条目计数（含涉及版本）与最近条目（`entry_id@rev<N>`）。
 - 两者都**只读**快照切片（`tmp/ui-shared/pipeline.json`），**不出正文与私域键**；判定在 `services/*`。
 - 页面（`/<view>/`）上对应「谈判轮次（本视角）」与「FAQ（本视角）」两个区块。
+
+### 三域快照的两个口径（别混着读）
+
+- **计数**（`negotiate.threads/rounds/rejected`、`faq.entries`）：走**服务回放**，只统计被服务跟踪的对象 —— 权威口径。
+- **最近列表**（`negotiate.recent[]`、`faq.recent[]`）：走**账本原始行**，按 `seq` 倒序、至多 5 条 —— "最近发生了什么"。
+
+两者**可以不一致**（例如计数 1、列表 5 条）。**读法**：计数看规模，列表看动态；不要用列表长度推计数。
