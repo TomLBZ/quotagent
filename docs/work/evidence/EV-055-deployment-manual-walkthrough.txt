@@ -36,16 +36,66 @@ $ /workspace/projects/quotagent/tmp/manual-check/quotagent/tools/verify.sh smoke
 === 手册 §1 文档门 ===
 $ /workspace/projects/quotagent/tmp/manual-check/quotagent/tools/verify.sh docs   （退出码 0）
   == quotagent 文档门 (AC-DESIGN-001/002/003) ==
-  扫描 75 个 markdown 文件，仓库根 /workspace/projects/quotagent/tmp/manual-check/quotagent
-  [ok]   ID 完整性: 324 个定义，1581 处引用，0 未解析
+  扫描 76 个 markdown 文件，仓库根 /workspace/projects/quotagent/tmp/manual-check/quotagent
+  [ok]   ID 完整性: 325 个定义，1591 处引用，0 未解析
   [ok]   占位符: 无
-  [ok]   预算: 76 个文件受检，最高占用 98%（docs/work/handover.md 1001/1024 B）
+  [ok]   预算: 77 个文件受检，最高占用 96%（.agents/skills/quotagent-implement-task/references/pitfalls.md 7841/8192 B）
   [ok]   FR↔AC 覆盖: 90 条 FR 均关联 AC，65 条 AC 无孤儿
   RESULT: PASS
 
 === 手册 §2 两个真进程走查 ===
-$ /workspace/venvs/py/bin/python3 /workspace/projects/quotagent/tmp/manual-check/quotagent/tools/g1-walkthrough.py   （退出码 2）
-  [stderr] /workspace/venvs/py/bin/python3: can't open file '/workspace/projects/quotagent/tmp/manual-check/quotagent/tools/g1-walkthrough.py': [Errno 2] No such file or directory
+$ /workspace/venvs/py/bin/python3 /workspace/projects/quotagent/tmp/manual-check/quotagent/tools/g1-walkthrough.py   （退出码 0）
+          {"profile": "contractor-ops", "realm": "contractor:g1", "operator": "bridge:contractor-ops", "surfaces_open": ["read", "
+  [ok] 判据2 **供应商侧**的报价提交同样过人工门（无批准即抛错，有批准才落账）
+          无批准时: ApprovalRequired: 动作 'quote.submit'（ref='qg-fresh'）缺少人工批准记录：；账本 3 条
+  [ok] 判据2 commit 类调用被拒（commit-refused）且留痕于账本
+          code=commit-refused
+  [ok] 判据2 经桥读账本：健康且哈希链自洽（`ledger.verify` 返回逐条报告）
+          healthy=True verify.checked=17
+  [ok] 判据3 供应商可见产物不含承包商私域字段（且不是空转：产物确实有内容）
+          supplier 产物 613 字符；承包商比较表 1 行
+  [ok] 判据4 S1..S4 场景集全绿
+          exit={'s1': 0, 's2': 0, 's3': 0, 's4': 0}
+  [ok] 判据5 审计包可被第三方独立验证（只给包文件 + 验证方密钥）
+          RESULT: PASS
+  [ok] 判据5 篡改任一条后独立验证失败（篡改必被发现）
+          RESULT: FAIL — 哈希链（包内自洽）: seq 1 的记录内容与 entry_hash/body_hash 不一致
+  [ok] 判据5 全程可离线重放：两侧账本非空且哈希链自洽（空/缺失账本一律不算通过）
+          contractor: ledger.jsonl 条目 17，校验 17 条，ok=True；supplier: ledger.jsonl 条目 3，校验 3 条，ok=True
+  [ok] 判据6 无 Node 环境时 P0 的 AC 与文档门仍全绿（可复跑性不退化）
+          p0-no-node=0 docs=0
+  [ok] 判据2 桥可干净关闭（无孤儿、退出码 0）
+          exit=0
+  ------------------------------------------------------------------------
+  阶段时间线：contractor#1(pid 361773, 账本 2 条) → supplier#1(pid 361774, 账本 0 条) → contractor#2(pid 361775, 账本 4 条) → supplier#2(pid 361776, 账本 3 条) → contractor#3(pid 361777, 账本 8 条) → supplier#3(pid 361778, 
+  结论：14/14 条通过
+
+=== 手册 §3 聚合门（tools/verify.sh g1）===
+$ tools/verify.sh g1   （退出码 0）
+  结论进度: 0/12（open 表示待人工；agent 不得代填）
+  全量 AC：57/57 通过
+  结论：14/14 条通过
+  [ok] 阶段门 G1：MVP 判据全部可机检项通过（逐条判定见上方走查报告）
+
+=== MVP 判据逐条结论（ADR-0014 §3）===
+
+判据（原文）| 结论 | 依据
+1) 两个真人、两台机器上两个**真进程** + 共享目录，走完 发布→澄清广播→升版→报价→比价与 Flag→授标→变更→审计包独立验证 |
+   **可机检部分已证**；"两个真人 / 两台机器"的演示形态仍未做 | 走查在两个**真进程**（承包商侧/供应商侧，各有 realm 与账本）间交替推进 7 个阶段，只经共享目录交换；
+   八个动作全部跑通（见上方时间线）
+2) 任一承诺动作**在任一侧都无法绕过人工门** | 已证 | 桥上 commit 面（quote.submit/award.commit/po.issue/change.approve/approval.decide）
+   只声明不暴露，调用即 commit-refused 且留痕；供应商侧报价提交无批准即抛 ApprovalRequired、有批准才落账；AC-APPROVE-002
+3) 私域字段在对方的**投影 / 模型输入 / 视图**三处均不可见（含非空转负控） | 已证 | AC-TRUST-001（9 断言）；走查另验"供应商可见产物不含承包商私域字段，且产物非空"
+4) 全程**可离线重放**且第三方可**独立验证**审计包（篡改必失败） | 已证 | 两侧账本哈希链自洽（空/缺失不算通过）；tools/audit-verify.py 只给包文件 + 验证方密钥即 PASS，
+   改任一条即 FAIL；AC-AUDIT-001/002/004
+5) S1..S4 场景全绿、S4 反例全部被拦且留痕 | 已证 | qa suite s1..s4 退出码全 0（含 S4 反例集）；AC-GUARD-003
+6) 无 Node 环境时 P0 的 34 条 AC 与文档门仍全绿 | 已证 | verify.sh p0-no-node 与 verify.sh docs 在走查中实跑（退出码 0）
+
+**总门**：`tools/verify.sh g1` 退出码 0；全量 AC：57/57 通过。
+**仍未完成（按设计只能由人做）**：① `ADR-0014 §3` 的演示形态——两个真人在两台机器上按手册走一轮（本走查是
+同一台机器上的两个真进程 + 共享目录，已覆盖真实跨方语义但不等价于双机演示）；② G0/G1 签署；
+③ V-001..V-012 的真实结论（当前按用户 2026-09-21 指令以"假设通过"推进，登记在 register.json 的 planning_assumptions，
+标注 not_a_conclusion，校验器拒绝把假设当结论）。
 
 === 结论 ===
-手册步骤实跑: 2/3 通过；失败 ['手册 §2 两个真进程走查']
+手册步骤实跑: 3/3 通过（干净副本可用：裸解释器即可跑通，无需装包/联网）
