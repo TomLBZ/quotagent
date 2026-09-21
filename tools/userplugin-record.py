@@ -97,6 +97,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--now", required=True)
     ap.add_argument("--ns", default="")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--rollback", default="", help="回滚目标：`<ns>/<plugin>`（须与 --to-version 同时给）")
+    ap.add_argument("--to-version", default="", help="回滚到的版本号（必须在该插件的历史里出现过）")
     args = ap.parse_args(argv)
 
     if not args.now or not ISO_RE.match(args.now):
@@ -110,13 +112,25 @@ def main(argv: list[str] | None = None) -> int:
         return emit({"ok": False, "refused": [{"file": None, "reason": f"--user-space 不是目录：{user_space}"}],
                      "ledger_added": 0, "applied": [], "duplicates": []}, 2)
 
-    items, refused = read_requests(requests_dir, args.ns or None)
+    if bool(args.rollback) != bool(args.to_version):
+        return emit({"ok": False, "refused": [{"file": None, "reason": "--rollback 与 --to-version 必须同时给"}],
+                     "ledger_added": 0, "applied": [], "duplicates": []}, 2)
+
+    items, refused = ([], []) if args.rollback else read_requests(requests_dir, args.ns or None)
     ledger_path = Path(args.ledger)
     ledger = Ledger(ledger_path, realm="user-space")
-    seen = set()
-    for row in ledger.read(type="userplugin/created"):
+    seen = set()          # 已记录的 (ns, plugin, artifact_sha256)：幂等闸
+    history: dict[tuple[str, str], list[dict]] = {}   # (ns, plugin) → 版本历史（按 seq 升序）
+    for row in ledger.read():
+        typ = str(row.get("type"))
+        if typ not in ("userplugin/created", "userplugin/upgraded", "userplugin/rolled-back"):
+            continue
         body = row.get("body") or {}
-        seen.add((str(body.get("ns")), str(body.get("plugin")), str(body.get("artifact_sha256"))))
+        key = (str(body.get("ns")), str(body.get("plugin")))
+        seen.add((key[0], key[1], str(body.get("artifact_sha256"))))
+        history.setdefault(key, []).append({"seq": int(row.get("seq") or 0), "type": typ,
+                                            "version": str(body.get("version") or ""),
+                                            "artifact_sha256": str(body.get("artifact_sha256") or "")})
 
     applied, duplicates = [], []
     for item in items:
@@ -147,12 +161,73 @@ def main(argv: list[str] | None = None) -> int:
             if key in seen:
                 duplicates.append({"ns": item["ns"], "plugin": name, "artifact_sha256": ahash})
                 continue
-            body = {"ns": item["ns"], "plugin": name, "version": version,
-                    "source_prompt_digest": item["digest"], "artifact_sha256": ahash, "bytes": nbytes, "schema": 1}
+            prev = history.get((item["ns"], name)) or []
+            prev_hash = prev[-1]["artifact_sha256"] if prev else ""
+            if prev and prev[-1]["version"] == version:
+                # **同一个版本号不能对应两个不同产物**：要么递增版本号，要么内容没变（那就是 duplicates）
+                refused.append({"file": item["file"], "reason": f"版本号未递增（{version} 已存在且产物不同）："
+                                "请先递增 plugin.json 的 version"})
+                if not args.dry_run:
+                    ledger.append("userplugin/refused", {"ns": item["ns"], "plugin": name,
+                                                          "code": "version-not-bumped", "schema": 1},
+                                  correlation_id=f"up-refuse-{item['ns']}-{name}-version-not-bumped")
+                continue
+            if prev:
+                # **迭代**：同一插件换了一版（哈希不同）→ upgraded，并留下 prev 引用
+                body = {"ns": item["ns"], "plugin": name, "version": version,
+                        "prev_artifact_sha256": prev_hash, "artifact_sha256": ahash,
+                        "source_prompt_digest": item["digest"], "bytes": nbytes, "schema": 1}
+                event = "userplugin/upgraded"
+                correlation = f"up-upgraded-{item['ns']}-{name}-{ahash.split(':')[-1][:12]}"
+            else:
+                body = {"ns": item["ns"], "plugin": name, "version": version,
+                        "source_prompt_digest": item["digest"], "artifact_sha256": ahash, "bytes": nbytes, "schema": 1}
+                event = "userplugin/created"
+                correlation = f"up-created-{item['ns']}-{name}"
             if not args.dry_run:
-                ledger.append("userplugin/created", body, correlation_id=f"up-created-{item['ns']}-{name}")
+                ledger.append(event, body, correlation_id=correlation)
                 seen.add(key)
-            applied.append({"ns": item["ns"], "plugin": name, "event": "userplugin/created", "artifact_sha256": ahash})
+                history.setdefault((item["ns"], name), []).append(
+                    {"seq": 0, "type": event, "version": version, "artifact_sha256": ahash})
+            applied.append({"ns": item["ns"], "plugin": name, "event": event, "artifact_sha256": ahash,
+                            "prev_artifact_sha256": prev_hash})
+
+
+    # ---- 回滚（--rollback ns/plugin --to-version V）----
+    # 铁律：**只有当磁盘内容的哈希等于目标版本的哈希**时才登记 `rolled-back`（账本不记不真的事）。
+    rollback_result: dict | None = None
+    if args.rollback:
+        ns_name, _, plugin_name = args.rollback.partition("/")
+        pdir = user_space / ns_name / plugin_name
+        cur_hash, cur_bytes = artifact_hash(pdir) if pdir.is_dir() else ("", 0)
+        hist = history.get((ns_name, plugin_name)) or []
+        latest_hash = hist[-1]["artifact_sha256"] if hist else ""
+        target = next((h for h in reversed(hist) if h["version"] == args.to_version), None)
+        if not hist or not target:
+            have = sorted({h["version"] for h in hist})
+            rollback_result = {"ok": False, "code": "rollback-target-unknown",
+                               "next_action": f"历史版本里没有 {args.to_version}（有：{have}）"}
+        elif cur_hash == target["artifact_sha256"] and latest_hash == target["artifact_sha256"]:
+            rollback_result = {"ok": False, "code": "rollback-noop", "next_action": "当前已经是目标版本"}
+        elif cur_hash != target["artifact_sha256"] and cur_hash == latest_hash:
+            rollback_result = {"ok": False, "code": "rollback-content-not-restored",
+                               "next_action": f"先把 {args.to_version} 的产物写回目录（或让宿主从版本快照还原），再登记回滚"}
+        elif cur_hash != target["artifact_sha256"]:
+            rollback_result = {"ok": False, "code": "rollback-refused-modified",
+                               "next_action": "当前内容与最近记录、目标版本都不一致（绕过版本管理改过？）——先弄清改了什么"}
+        else:
+            body = {"ns": ns_name, "plugin": plugin_name, "version": args.to_version,
+                    "from_artifact_sha256": latest_hash, "artifact_sha256": cur_hash,
+                    "bytes": cur_bytes, "schema": 1}
+            if not args.dry_run:
+                ledger.append("userplugin/rolled-back", body,
+                              correlation_id=f"up-rollback-{ns_name}-{plugin_name}-{args.to_version}")
+            rollback_result = {"ok": True, "event": "userplugin/rolled-back", "to_version": args.to_version,
+                               "artifact_sha256": cur_hash}
+        if rollback_result and not rollback_result.get("ok") and not args.dry_run:
+            ledger.append("userplugin/refused", {"ns": ns_name, "plugin": plugin_name,
+                                                 "code": rollback_result["code"], "schema": 1},
+                          correlation_id=f"up-refuse-{ns_name}-{plugin_name}-{rollback_result['code']}")
 
     if not args.dry_run and applied:
         applied_dir = requests_dir / "applied"
@@ -165,9 +240,16 @@ def main(argv: list[str] | None = None) -> int:
             except OSError:
                 pass
 
-    return emit({"ok": not refused or bool(applied), "applied": applied, "duplicates": duplicates,
-                 "refused": refused, "ledger_added": 0 if args.dry_run else len(applied),
-                 "ledger_path": str(ledger_path), "dry_run": bool(args.dry_run)}, 0 if applied or duplicates else 1)
+    rollback_added = 1 if (rollback_result and rollback_result.get("ok") and not args.dry_run) else 0
+    if args.rollback:
+        ok = bool(rollback_result and rollback_result.get("ok"))
+    else:
+        ok = bool(applied) or bool(duplicates) or (not refused and not items)
+    return emit({"ok": ok, "applied": applied,
+                 "duplicates": duplicates, "refused": refused, "rollback": rollback_result,
+                 "ledger_added": (0 if args.dry_run else len(applied) + rollback_added),
+                 "ledger_path": str(ledger_path), "dry_run": bool(args.dry_run)},
+                0 if ok else 1)
 
 
 if __name__ == "__main__":

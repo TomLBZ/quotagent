@@ -1,0 +1,110 @@
+EV-138 AC-USERPLUG-005 用户空间插件迭代/回滚的内容语义
+
+命令：`tools/verify.sh ac AC-USERPLUG-005`（有 Node 与无 Node 两种环境都必须全绿：ADR-0013 §8）
+
+[1] 有 Node
+```
+{
+  "ac": "AC-USERPLUG-005",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "① 首版 → `userplugin/created`",
+      "ok": true,
+      "detail": "applied=['userplugin/created'] rc=0"
+    },
+    {
+      "name": "② 同版本不同产物 → 拒绝 `version-not-bumped`（同版本不能对应两个产物）",
+      "ok": true,
+      "detail": "applied=[] refused=['版本号未递增（1.0.0 已存在且产物不同）：请先递增 plugin.jso']"
+    },
+    {
+      "name": "③ 版本递增 → `userplugin/upgraded`（带 `prev_artifact_sha256`）",
+      "ok": true,
+      "detail": "upgraded=1 prev=True applied=['userplugin/upgraded']"
+    },
+    {
+      "name": "④ 目标版本还没写回就想登记回滚 → 拒绝 `rollback-content-not-restored`",
+      "ok": true,
+      "detail": "code=rollback-content-not-restored rolled-back=0"
+    },
+    {
+      "name": "⑤ **部分还原**（版本号没跟着回退）→ 仍拒绝 `rollback-refused-modified`",
+      "ok": true,
+      "detail": "code=rollback-refused-modified"
+    },
+    {
+      "name": "⑥ 整个版本目录写回 → `userplugin/rolled-back`（记的是磁盘上那份的哈希）",
+      "ok": true,
+      "detail": "rolled-back=1 recorded=sha256:caf99101fab1e ok=True"
+    },
+    {
+      "name": "⑦ 已是目标版本 → `rollback-noop`（不重复记账）",
+      "ok": true,
+      "detail": "code=rollback-noop rolled-back=1"
+    },
+    {
+      "name": "⑧ 历史里没有的版本 → `rollback-target-unknown`",
+      "ok": true,
+      "detail": "code=rollback-target-unknown"
+    },
+    {
+      "name": "⑨ 每条 `rolled-back` 的目标哈希都真实存在于版本历史（回滚只能回到真实存在过的版本）",
+      "ok": true,
+      "detail": "rolled-back=1 历史哈希=2"
+    },
+    {
+      "name": "⑩ 幂等：重复消费不新增账本行",
+      "ok": true,
+      "detail": "before=8 after=8 ok=True"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-USERPLUG-005",
+  "phase": "P2",
+  "title": "用户空间插件迭代/回滚的内容语义（版本、prev、不真不记）",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+
+[2] 无 Node（QUOTAGENT_NODE=/nonexistent/node）
+```
+de=rollback-refused-modified"
+    },
+    {
+      "name": "⑥ 整个版本目录写回 → `userplugin/rolled-back`（记的是磁盘上那份的哈希）",
+      "ok": true,
+      "detail": "rolled-back=1 recorded=sha256:caf99101fab1e ok=True"
+    },
+    {
+      "name": "⑦ 已是目标版本 → `rollback-noop`（不重复记账）",
+      "ok": true,
+      "detail": "code=rollback-noop rolled-back=1"
+    },
+    {
+      "name": "⑧ 历史里没有的版本 → `rollback-target-unknown`",
+      "ok": true,
+      "detail": "code=rollback-target-unknown"
+    },
+    {
+      "name": "⑨ 每条 `rolled-back` 的目标哈希都真实存在于版本历史（回滚只能回到真实存在过的版本）",
+      "ok": true,
+      "detail": "rolled-back=1 历史哈希=2"
+    },
+    {
+      "name": "⑩ 幂等：重复消费不新增账本行",
+      "ok": true,
+      "detail": "before=8 after=8 ok=True"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-USERPLUG-005",
+  "phase": "P2",
+  "title": "用户空间插件迭代/回滚的内容语义（版本、prev、不真不记）",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```

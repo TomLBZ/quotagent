@@ -188,6 +188,7 @@
 | FR-USERPLUG-011 | 未提权不可被他人加载（跨 ns → `user-plugin-not-elevated` 且未载入） | must | P2 | AC-USERPLUG-011 |
 | FR-USERPLUG-012 | 两个方向都封死：自进化 target→`user-space/` 拒；用户空间 target→`host/modules/` 拒 | must | P2 | AC-USERPLUG-012 |
 | FR-USERPLUG-001 | 自然语言需求 → 产出用户空间插件 → **完成即自动进列表**（无人工搬运）；真源 `user-space/<ns>/<plugin>/plugin.json`；落 `userplugin/created`（含 `source_prompt_digest` 与产物哈希），同哈希幂等 | must | P2 | AC-USERPLUG-001 |
+| FR-USERPLUG-005 | P2 | 用户空间插件的**迭代与回滚**：版本号递增才允许产物变更（同版本不能对应两个产物）；回滚只能回到历史里真实存在过的版本，且**只有磁盘内容已还原成该版本**时才登记 —— 账本不记不真的事 | AC-USERPLUG-005 |
 ## 7. 阶段分布（用于排期）
 
 | 阶段 | must 数 | 核心内容 |
