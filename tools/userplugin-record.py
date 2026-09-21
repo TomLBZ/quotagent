@@ -77,7 +77,12 @@ def read_requests(requests: Path, ns_filter: str | None) -> tuple[list[dict], li
         if ns_filter and ns != ns_filter:
             continue
         digest = sha256_text(str(data.get("description") or ""))
-        if data.get("description_sha256") and data["description_sha256"] != digest:
+        # 归一化再比对：宿主与 Python 两侧对"前缀"的写法可能不同（`sha256:<hex>` vs `<hex>`），
+        # 比对的是**同一个摘要**，不是同一个字面量。
+        def norm(v: object) -> str:
+            s = str(v or "").strip().lower()
+            return s.split(":", 1)[1] if s.startswith("sha256:") else s
+        if data.get("description_sha256") and norm(data["description_sha256"]) != norm(digest):
             refused.append({"file": p.name, "reason": "需求正文与其 sha256 不一致（自述不可信）"})
             continue
         items.append({"file": p.name, "path": p, "ns": ns, "digest": digest, "consumed": consumed})

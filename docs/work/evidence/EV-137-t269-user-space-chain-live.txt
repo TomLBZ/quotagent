@@ -1,0 +1,85 @@
+EV-137 T-269 用户空间插件完整链条（线上真回读）：提需求 → 产出自动进列表 → 落 created → 装载 → 卸载
+
+[1] 需求（用户原话，走 agent panel 入口）
+「承包商想按项目维度记录每次报价金额，并能看出趋势——哪个项目在涨、哪个在跌、涨跌多少。」
+
+[2] 产出（由 subagent **真做**，不是平台假装会写代码）
+`user-space/con-a/quote-trend/{plugin.json,index.mjs}`（1666 B / 11742 B）
+· 自包含：`inject=[]`、只注册 `con-a.quote-trend.{quoteTrend,observationLog}` 两个服务键、
+  数据只写自己的 `data/observations.jsonl`（append-only）、零第三方依赖、零子进程/网络/随机/定时器
+· 自证 **34/34**：真 `loadPlugin()` 下服务键恰为那两个；`record` 三次 + `trend` 得到
+  `{points:3, first:100, last:90, delta_minor:-10, direction:"down", pct_bp:-1000}`（-10.00%）；
+  8 例非法入参（空 project_id / 小数 / 字符串 / NaN 金额 / 非法日期）全拒且文件字节不变；
+  两次 `trend()` 逐字节一致；管理面 `list()` 已登记 → `load` → `unload`
+
+[3] 平台侧（唯一写账本者）
+`tools/userplugin-record.py` 落一条 `userplugin/created`：
+`{ns:"con-a", plugin:"quote-trend", version:"1.0.0", source_prompt_digest:"sha256:…",
+  artifact_sha256:"sha256:3769a758…", bytes:13408, schema:1}`
+—— **需求正文不入账本**（账本里搜不到"承包商想按项目维度"）
+
+[4] 线上真回读（admin 道，需会话）
+· `GET /admin/api/user-plugins` → 200 `counts={plugins:2, loaded:0, invalid:0}`、`degraded=false`；
+  `con-a/quote-trend@1.0.0` 与 `demo-ns/hello@1.0.0` 都**自动出现**（无人工搬运）
+· `POST …/load {ns:con-a, plugin:quote-trend}` → 200 `{ok:true, uid:"con-a.quote-trend#1", effects:2}`
+  （命名空间实例）；装载后列表 `loaded:1`
+· `POST …/unload` → 200 `{effects:0}`
+· 演示前后 `host/modules/**/*.mjs` + `src/**/*.py` 哈希不变；业务两侧账本零新增；公网未提权 401
+
+[5] 集成缺陷（门抓到的，已修）
+宿主 `user-plugin-manager.mjs` 的 `sha256()` 返回**裸 hex**，而 Python 侧写入器算的是 `sha256:<hex>` ——
+写入器把"自述摘要与正文不符"判为**拒绝**（`自述不可信`），于是 created 一开始**没落账本**。
+**这是门在尽责**：跨语言比对必须比的是**同一个摘要**，不是同一个字面量 → 已改为**归一化后比对**
+（两侧都接受可选的 `sha256:` 前缀）→ 复跑立即通过。登记 D-062。
+
+[6] 原始输出
+```
+就绪
+=== ① 提需求（用户原话，走 agent panel 入口）===
+request → 202
+{
+  "ok": true,
+  "request_id": "885a16a38d7ed23e",
+  "next_action": "等待 Python 侧消费并记录 userplugin/created（宿主不写账本）"
+}
+
+待办件:
+-rw------- 1 hermes 10000 327 Sep 21 14:34 tmp/ui-shared/user-plugin-requests/req-885a16a38d7ed23e.json
+=== ② 列表（插件已由 agent 产出；无人工搬运）===
+list → 200
+ counts= {"plugins": 2, "loaded": 0, "invalid": 0} degraded= False
+  ns= con-a [('quote-trend', '1.0.0', False)]
+  ns= demo-ns [('hello', '1.0.0', False)]
+=== ③ Python 侧落 created（唯一写账本者）===
+{"applied": [{"artifact_sha256": "sha256:3769a758a4ebbb6e2ab50501f92d71f8e48bfd30afa157b7214f23746bd44933", "event": "userplugin/created", "ns": "con-a", "plugin": "quote-trend"}], "dry_run": false, "duplicates": [], "ledger_added": 1, "ledger_path": "tmp/ui-shared/user-plugin/ledger.jsonl", "ok": true, "refused": []}
+ 账本行数 = 1
+   1 userplugin/created {"artifact_sha256": "sha256:3769a758a4ebbb6e2ab50501f92d71f8e48bfd30afa157b7214f23746bd44933", "bytes": 13408, "ns": "con-a", "plugin": "quote-trend", "schema": 1, "source_prompt_digest": "s
+ 账本含需求正文 = False （必须 False）
+=== ④ 装载（命名空间实例）===
+load → 200
+{
+  "ok": true,
+  "code": "",
+  "next_action": "",
+  "uid": "con-a.quote-trend#1",
+  "effects": 2
+}
+
+ 装载后 counts= {"plugins": 2, "loaded": 1, "invalid": 0}
+=== ⑤ 平台文件未被改动（演示前后）===
+bb9b23f0c1ccfd98cde68b4cd72f3eb7  -
+=== 产品需求/业务账本零新增 ===
+26746 tmp/ui-shared/contractor/ledger.jsonl
+15990 tmp/ui-shared/supplier/ledger.jsonl
+=== ⑥ 卸载 ===
+unload → 200
+{
+  "ok": true,
+  "code": "",
+  "next_action": "",
+  "uid": "con-a.quote-trend#1",
+  "effects": 0
+}
+
+公网未提权 → 401
+```
