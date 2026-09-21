@@ -1,0 +1,13 @@
+{
+  "name": "quotagent-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "quotagent P1 宿主层：直接依赖 cordis（组合/插件/事件），不重复造轮子（ADR-0012）",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cordis": "4.0.0-rc.10"
+  }
+}

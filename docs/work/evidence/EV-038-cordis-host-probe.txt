@@ -1,0 +1,136 @@
+EV-038 — cordis 依赖探针与宿主冒烟（ADR-0012 的直接依赖前提）
+
+时间: 2026-09-21T03:43:40Z
+命令: tools/cordis.sh install && tools/cordis.sh smoke（等价入口 tools/verify.sh cordis）
+commit: 5101bdc
+退出码: 0
+
+--- 安装（仓库内，只写 host/node_modules，gitignored）---
+npm registry 实测: dist-tags latest=4.0.0-rc.10 (2026-09-08T15:44:33Z), next=4.0.0-beta.5
+npm install: added 3 packages in 4s（cordis + cosmokit + @standard-schema/spec）
+
+--- 原始输出（冒烟，逐条断言）---
+[ok]   cordis 原生提供 5 个事件模式 — emit:function parallel:function serial:function bail:function waterfall:function
+[ok]   插件装载后 fiber 为 ACTIVE — state=2 uid=3
+[ok]   emit 送达监听器 — seen=[{"quote_id":"q-1"}]
+[ok]   订阅与 effect 都被登记为该 fiber 的 effect（订阅自动可回退） — effects=2
+[ok]   卸载后 fiber 为 DISPOSED — state=4
+[ok]   卸载后 effect 已释放 — released=1
+[ok]   卸载后 effect 列表清空（无残留） — effects=0
+[ok]   卸载后不再收到事件（无残留订阅） — seen=1
+[ok]   重新装载得到新 fiber（uid 递增，不迁移旧状态） — first=3 second=4
+[ok]   emit 忽略返回值
+[ok]   bail：跳过 false/undefined，首个其它值胜出
+[ok]   serial：顺序执行，遇首个非空值即返回
+[ok]   parallel：全部成功时正常返回（返回值为 void）
+[ok]   parallel：有失败时全部跑完并聚合抛错（AggregateError）
+[ok]   waterfall：可变载荷共享 + 不调 next() 即短路（下游不执行，返回值即最终值） — result="x-a-sc" ran=[1,2]
+[ok]   waterfall：无监听器时调用终结回调（**终结回调不接受参数**，载荷靠闭包） — result=only:z
+[ok]   waterfall：next() 调两次抛错（防止同一链被重复推进）
+[ok]   宿主事件模式与 P0 语义一致（AC-EVT-001/002 的替换基础） — failures=0
+{
+  "cordis_version": "4.0.0-rc.10",
+  "node": "v24.21.0",
+  "checks": [
+    {
+      "name": "cordis 原生提供 5 个事件模式",
+      "ok": true,
+      "detail": "emit:function parallel:function serial:function bail:function waterfall:function"
+    },
+    {
+      "name": "插件装载后 fiber 为 ACTIVE",
+      "ok": true,
+      "detail": "state=2 uid=3"
+    },
+    {
+      "name": "emit 送达监听器",
+      "ok": true,
+      "detail": "seen=[{\"quote_id\":\"q-1\"}]"
+    },
+    {
+      "name": "订阅与 effect 都被登记为该 fiber 的 effect（订阅自动可回退）",
+      "ok": true,
+      "detail": "effects=2"
+    },
+    {
+      "name": "卸载后 fiber 为 DISPOSED",
+      "ok": true,
+      "detail": "state=4"
+    },
+    {
+      "name": "卸载后 effect 已释放",
+      "ok": true,
+      "detail": "released=1"
+    },
+    {
+      "name": "卸载后 effect 列表清空（无残留）",
+      "ok": true,
+      "detail": "effects=0"
+    },
+    {
+      "name": "卸载后不再收到事件（无残留订阅）",
+      "ok": true,
+      "detail": "seen=1"
+    },
+    {
+      "name": "重新装载得到新 fiber（uid 递增，不迁移旧状态）",
+      "ok": true,
+      "detail": "first=3 second=4"
+    },
+    {
+      "name": "emit 忽略返回值",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "bail：跳过 false/undefined，首个其它值胜出",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "serial：顺序执行，遇首个非空值即返回",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "parallel：全部成功时正常返回（返回值为 void）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "parallel：有失败时全部跑完并聚合抛错（AggregateError）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "waterfall：可变载荷共享 + 不调 next() 即短路（下游不执行，返回值即最终值）",
+      "ok": true,
+      "detail": "result=\"x-a-sc\" ran=[1,2]"
+    },
+    {
+      "name": "waterfall：无监听器时调用终结回调（**终结回调不接受参数**，载荷靠闭包）",
+      "ok": true,
+      "detail": "result=only:z"
+    },
+    {
+      "name": "waterfall：next() 调两次抛错（防止同一链被重复推进）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "宿主事件模式与 P0 语义一致（AC-EVT-001/002 的替换基础）",
+      "ok": true,
+      "detail": "failures=0"
+    }
+  ]
+}
+
+--- 由源码 host/node_modules/cordis/lib/index.js 核对的真实约定 ---
+emit      : 全部调用，忽略返回值
+parallel  : Promise.allSettled；若有 rejected 则抛 AggregateError（全部跑完才抛）
+serial    : 顺序 await，遇首个 isBailed(v) 即返回（isBailed = v 非 null/false/undefined）
+bail      : 同步同上
+waterfall : 监听器 (...args, next)；值靠可变载荷传递（同链共享 args）；next() 不接受参数；
+            不调 next() 即短路并返回该监听器返回值；next() 两次抛错；终结回调无参调用
+effect    : ctx.events.on() 的订阅被登记为该 fiber 的 effect（register() 内包 fiber.effect）
+            → 卸载后 getEffects() 归零、订阅不再收到事件；重新装载得到新 fiber uid
