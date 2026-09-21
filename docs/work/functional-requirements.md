@@ -71,7 +71,7 @@
 | FR-CLARIFY-001 | 澄清工单绑定包版本与条目引用 | must | P0 | AC-CLARIFY-001 |
 | FR-CLARIFY-002 | 答案必须广播给全部在册投标人，否则不得关闭 | must | P1 | AC-CLARIFY-002 |
 | FR-CLARIFY-003 | 包版本变更时相关工单自动重开 | should | P1 | AC-CLARIFY-003 |
-| FR-CLARIFY-004 | FAQ 沉淀与复用（本 realm 内） | could | P2 | AC-CLARIFY-004 |
+| FR-CLARIFY-004 | FAQ 沉淀与复用（本 realm 内） | could | P2 | AC-CLARIFY-004、AC-FAQ-001 |
 | FR-APPROVE-001 | 人工门：请求、批准、拒绝、代签禁止 | must | P0 | AC-APPROVE-001 |
 | FR-APPROVE-002 | 批准绑定 scope，不可跨动作复用 | must | P0 | AC-APPROVE-002 |
 | FR-APPROVE-003 | 待批队列不阻塞 agent 其他工作；超时策略三选一且无"自动批准" | must | P1 | AC-APPROVE-003 |
