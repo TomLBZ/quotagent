@@ -71,6 +71,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-232 | 运行期中间件 `governor` 插件：可解释拒绝/背压、显式超时、有界重试（与 canary 互补） | B28 | done | EV-067 |
 | T-233 | 运行期审计钩子 `audit-hook` 插件：决策留痕（观测，不写账本）+ 去重/有界/零残留 | B29 | done | EV-068 |
 | T-234 | `governor` 接进 UI 真实 HTTP 路径：背压端到端（429+Retry-After）+ 三档映射单测（504/500） | B30 | done | EV-069 / D-027 |
+| T-240 | 第二个自进化产出（evidence-summary）接进 WebUI 双方视角 + 固化"新增依赖同步四处" | B36 | done | D-035 / EV-075 |
 | T-239 | 第二次自进化产出（evidence-summary）+ 同类失败护栏真的生效 + 追溯偷改负控 | B35 | done | D-034 / EV-074 |
 | T-238 | 自进化产出的 price-history 接进 WebUI 双方视角（/api/history + 页面价格序列表） | B34 | done | D-033 / EV-073 |
 | T-237 | 用自进化流程真实产出并晋升第一个进树插件（price-history）+ 可机检追溯链 | B33 | done | D-032 / EV-072 |

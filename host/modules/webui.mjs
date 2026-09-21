@@ -15,11 +15,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory']   // 每个都是独立插件（准入 / 观测）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary']   // 每个都是独立插件（准入 / 观测）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary']
 
 export const provides = ['webui']
 
@@ -85,6 +85,7 @@ export function apply(ctx, config) {
 
   const obs = ctx.observability   // 本地句柄（D-027：不按请求去 ctx 里查自己依赖的服务）
   const history = ctx.priceHistory
+  const evidence = ctx.evidenceSummary   // 账本证据面（第二个自进化产出，T-239）
   /**
    * 价格序列的输入：**原始行**的 `body.lines[]`，但只取非私域字段（`item_id` / `unit_price`）。
    * 为什么要用原始行：投影层只保留 `seq/type/summary/ts`，价格明细会被截掉（实测 groups=0）。
@@ -147,7 +148,14 @@ export function apply(ctx, config) {
         html(`${config.page_title} · ${rules[view].title}`,
           `<p>本视角只显示 <code>${rules[view].types.join(' ')}</code> 的事件；`
           + `供应商视角显式拒收私域键 <code>${rules.supplier.privateKeys.join(' ')}</code>。</p>`
-          + `<p>JSON：<code>${prefix}/${view}/api/events</code> · <code>${prefix}/${view}/api/history</code></p>`
+          + `<p>JSON：<code>${prefix}/${view}/api/events</code> · <code>${prefix}/${view}/api/history</code> · <code>${prefix}/${view}/api/evidence</code></p>`
+          + (() => {
+            const s = evidence.summarize(rows)
+            const span = s.span
+            return `<h3>账本证据面</h3><p>由自进化产出的插件 <code>evidence-summary</code> 计算：`
+              + `共 <b>${s.rows}</b> 行 / <b>${s.types}</b> 种类型 / <b>${s.correlations}</b> 个关联 / `
+              + `<b>${s.rows_with_refs}</b> 行带引用；时间跨度 <code>${span.first ?? '—'}</code> → <code>${span.last ?? '—'}</code></p>`
+          })()
           + `<h3>价格序列（按行项目）</h3><p>由自进化产出的插件 <code>price-history</code> 计算</p>`
           + (() => {
             const series = seriesView(view)
@@ -157,6 +165,14 @@ export function apply(ctx, config) {
                 + `<td>${item.median}</td><td>${item.max}</td><td>${item.latest}</td><td>${item.trend}</td></tr>`).join('')}</table>`
           })()
           + table, prefix))
+    }
+    const viewEvidence = path.match(/^\/([a-z]+)\/api\/evidence\/?$/)
+    if (viewEvidence && rules[viewEvidence[1]]) {
+      const view = viewEvidence[1]
+      // 证据面只统计**公开投影后的行**（type/ts/correlation_id/refs 都在白名单内），不出正文
+      const summary = evidence.summarize(rowsFor(view))
+      return json(200, { view, source: 'evidence-summary（自进化产出的插件）', summary,
+        note: '账本证据面：按类型计数 / 关联数 / 带引用行数 / 时间跨度；只统计公开投影后的行' })
     }
     const viewHistory = path.match(/^\/([a-z]+)\/api\/history\/?$/)
     if (viewHistory && rules[viewHistory[1]]) {
@@ -181,7 +197,7 @@ export function apply(ctx, config) {
         `<ul>${rows}</ul>`
         + '<p>本 UI 由 cordis 插件 <code>webui</code> 提供；每个视角读**自己的**账本，宿主不写账本。</p>', prefix))
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/<view>/api/history` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

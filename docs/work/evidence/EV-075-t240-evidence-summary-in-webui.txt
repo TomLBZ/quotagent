@@ -1,0 +1,111 @@
+EV-075 T-240 第二个自进化产出（evidence-summary）接进 WebUI 双方视角
+生成时间 2026-09-21T09:43:28Z
+命令与原始输出（原样留档）
+
+[1] 线上真实进程回读（重启后）
+$ curl -s http://127.0.0.1:8093/quotagent/contractor/api/evidence → 200
+{
+  "view": "contractor",
+  "source": "evidence-summary（自进化产出的插件）",
+  "summary": {
+    "rows": 16,
+    "types": 13,
+    "by_type": [
+      {
+        "type": "approval/granted",
+        "count": 2
+      },
+      {
+        "type": "approval/requested",
+        "count": 2
+      },
+      {
+        "type": "award/committed",
+        "count": 1
+      },
+      {
+        "type": "award/intent-proposed",
+        "count": 1
+      },
+      {
+        "type": "change/approved",
+        "count": 1
+      },
+      {
+        "type": "change/priced",
+        "count": 1
+      },
+      {
+        "type": "change/proposed",
+        "count": 1
+      },
+      {
+        "type": "compare/flag-raised",
+        "count": 1
+      },
+      {
+        "type": "compare/rank-computed",
+        "count": 1
+      },
+      {
+        "type": "compare/table-exported",
+        "count": 1
+      },
+      {
+        "type": "rfq/amended",
+        "count": 1
+      },
+      {
+        "type": "rfq/distributed",
+        "count": 2
+      },
+      {
+        "type": "rfq/published",
+        "count": 1
+      }
+    ],
+    "correlations": 3,
+    "rows_with_refs": 0,
+    "span": {
+      "count": 16,
+      "first": "2026-09-21T09:43:13Z",
+      "last": "2026-09-21T09:43:14Z"
+    }
+  },
+  "note": "账本证据面：按类型计数 / 关联数 / 带引用行数 / 时间跨度；只统计公开投影后的行"
+}
+$ curl -s http://127.0.0.1:8093/quotagent/supplier/api/evidence → 200
+{
+  "view": "supplier",
+  "source": "evidence-summary（自进化产出的插件）",
+  "summary": {
+    "rows": 1,
+    "types": 1,
+    "by_type": [
+      {
+        "type": "quote/submitted",
+        "count": 1
+      }
+    ],
+    "correlations": 1,
+    "rows_with_refs": 0,
+    "span": {
+      "count": 1,
+      "first": "2026-09-21T09:43:13Z",
+      "last": "2026-09-21T09:43:13Z"
+    }
+  },
+  "note": "账本证据面：按类型计数 / 关联数 / 带引用行数 / 时间跨度；只统计公开投影后的行"
+}
+
+[2] 公网（Cloudflare → 主机 NPM → ws-gateway → 插件）
+$ curl -s -o /dev/null -w '%{http_code}' https://novara.remoteblossom.com/quotagent/contractor/api/evidence
+200
+
+[3] 门：verify.sh webui → 17/17
+  新增断言要求：双方视角都 200、summary.rows ≥ 1、by_type 非空、span.first 是字符串、
+  source 指向 evidence-summary、响应里**没有条目正文**（正则 `"body":`）且无私域键。
+
+结论：第二个自进化产出的插件也**已经在用户可见路径上工作**；产出物的接口只输出聚合数字（不出正文），
+与 observability 的分工明确（那个看运行期内存状态，这个看落盘事实）。
+

@@ -3,7 +3,7 @@
   "updated_at": "2026-09-21T09:16:17Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-240：把 evidence-summary 接进 WebUI（账本证据面区块）或复核 T-224 凭据状态",
+  "next_task": "T-241：复核 T-224 凭据状态；或再扩展一个自进化产出（中间件方向）",
   "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
   "last_verified_command": "tools/verify.sh g1",
   "last_verified_result": "PASS：57/57 AC + 14/14 MVP 判据 + 十一个入口（docs/events/invariants/evolution/modules/bridge/cordis/p0-no-node/ac-registry/audit/v）全绿；modules 36/36",
@@ -81,6 +81,7 @@
     "t235": "done：canary 探针 + 退化自动回滚已接真实命令路径（EV-070 / D-030）",
     "t237": "done：自进化真实产出第一个进树插件 price-history（EV-072 / D-032）",
     "t238": "done：price-history 已接进 WebUI 双方视角（EV-073 / D-033）",
-    "t239": "done：第二次自进化产出 evidence-summary；护栏与追溯负控均实测（EV-074 / D-034）"
+    "t239": "done：第二次自进化产出 evidence-summary；护栏与追溯负控均实测（EV-074 / D-034）",
+    "t240": "done：evidence-summary 接进 WebUI 双方视角（EV-075 / D-035）"
   }
 }

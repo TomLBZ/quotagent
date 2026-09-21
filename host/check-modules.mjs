@@ -124,6 +124,12 @@ const STUBS = {
     forSupplier: () => ({ count: 0, min: null, median: null, max: null, latest: null, trend: 'unknown' }),
     bySupplier: () => [],
   },
+  evidenceSummary: {
+    // fixture 的 stub：只满足"能统计"；口径由 evidence-summary 模块自己的门验
+    summarize: () => ({ rows: 0, types: 0, by_type: [], correlations: 0, rows_with_refs: 0,
+      span: { count: 0, first: null, last: null } }),
+    byType: () => [],
+  },
   compare: { flagCount: () => 0 },
   bridge: { surface: () => ({}) },
 }

@@ -20,6 +20,7 @@ import { Config as auditConfig, apply as auditApply } from './modules/audit-hook
 import { Config as canaryConfig, apply as canaryApply } from './modules/canary.mjs'
 import { Config as obsConfig, apply as obsApply } from './modules/observability.mjs'
 import { Config as historyConfig, apply as historyApply } from './modules/price-history.mjs'
+import { Config as evConfig2, apply as evApply2 } from './modules/evidence-summary.mjs'
 
 const facts = { checks: [] }
 let failures = 0
@@ -98,6 +99,7 @@ const mountObs = async (targetCtx) => {
   await wrap({ apply: canaryApply, Config: canaryConfig }, { weight_bps: 0 }, 'canary', 'canary')
   await wrap({ apply: obsApply, Config: obsConfig, inject: ['governor', 'audit', 'canary'] }, {}, 'observability', 'obs')
   await wrap({ apply: historyApply, Config: historyConfig, inject: [] }, { key_field: 'supplier_id' }, 'priceHistory', 'history')
+  await wrap({ apply: evApply2, Config: evConfig2, inject: [] }, {}, 'evidenceSummary', 'evidence')
 }
 await mountObs(ctx)
 
@@ -107,7 +109,7 @@ const gfiber = await ctx.plugin(governorMount('governor#probe', gbox),
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -205,7 +207,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -245,6 +247,20 @@ check('价格序列正控：/contractor/api/history 与 /supplier/api/history �
   && String(histJson.source).includes('price-history')
   && !hist.text.includes('cost_floor') && !hist.text.includes('private:'),
   `status=${hist.status}/${supHist.status} groups=${histJson.groups} source=${String(histJson.source).slice(0, 40)}`)
+
+// 4e. T-240：账本证据面（第二个自进化产出）在双方视角都可见，且不出正文
+const ev1 = await get('/contractor/api/evidence')
+let ev1Json = {}
+try { ev1Json = JSON.parse(ev1.text) } catch (err) { ev1Json = {} }
+const ev2 = await get('/supplier/api/evidence')
+check('证据面正控：/contractor/api/evidence 与 /supplier/api/evidence 都 200，含行数/类型数/关联数/时间跨度，'
+  + '来源为自进化插件 evidence-summary，且不输出正文',
+  ev1.status === 200 && ev2.status === 200 && (ev1Json.summary?.rows ?? 0) >= 1
+  && Array.isArray(ev1Json.summary?.by_type) && ev1Json.summary.by_type.length >= 1
+  && typeof ev1Json.summary?.span?.first === 'string'
+  && String(ev1Json.source).includes('evidence-summary')
+  && !/"body"\s*:/.test(ev1.text) && !ev1.text.includes('private:'),
+  `status=${ev1.status}/${ev2.status} rows=${ev1Json.summary?.rows} types=${ev1Json.summary?.by_type?.length}`)
 
 // 4. 未知视角
 const unknown = await get('/nonexistent/')

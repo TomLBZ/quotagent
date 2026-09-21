@@ -12,3 +12,12 @@
 - **先写再读**：`Ledger` 在构造时加载文件，之后由别的实例写进去的记录它看不到——采集指标/校验前
   必须**在写入之后**再构造（或用新实例读）账本，否则指标 basis 全是 0。
 - **cordis 的 `inject` 不能写内建 mixin**：`inject: ['events']` 会让插件**永远停在 pending**（`apply` 根本不执行），而 `inject: []` 与 `inject: ['norm']` 都正常 —— `ctx.events` 是 mixin，不是可 inject 的服务。写进 inject 不会报错，只会"什么都不发生"。同理：provided service 要在**插件自己的 ctx** 里取（外部取抛 "without inject"），fixture 想拿句柄就包装 `ctx.provide` 抓。
+
+## 给宿主插件新增一个依赖：必须同步四处（T-236 → T-240 付了三次成本）
+
+1. 模块自身：`inject`、`usedServices`、以及**请求期用的本地句柄**（`const x = ctx.x`，见 D-027）。
+2. `host/check-modules.mjs` 的 STUBS 表：fixture 必须能 stub 每个被声明的依赖，否则 `verify.sh modules` 直接红。
+3. `host/webui.mjs`（门）的**两处**挂载（主 probe + brokenCtx），两处 `inject` 都要同步。
+4. `host/canary-dispatch.mjs` 的 e2e 挂载 + `host/cli.mjs` 的运行期挂载与输出（漏一处，对应门就红）。
+附带纪律：包装挂载必须**照抄模块声明的 inject**（写 `inject: []` 会让模块取不到依赖）；合成模块对象
+（`{apply, Config}`）必须**显式带 inject 字段**，否则 `mod.inject` 是 undefined、静默退回 `[]`（最危险）。
