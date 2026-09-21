@@ -1,0 +1,33 @@
+EV-062 A1 `builtin` 断言改双向 + 模块声明与用法对齐（T-228）
+生成时间：2026-09-21T08:34:56Z（UTC）
+
+背景（来自 subagent 交付时的契约口径反馈）：`host/modules/sourcing.mjs` 与 `norm`/`compare`/`webui` 都声明了
+`builtin = ['events']`，但源码里**从不引用事件**——因为 fixtures 的 A1 负控原先写成
+`!(inject||[]).includes('events') && (builtin||[]).includes('events')`，等于强制每个模块都声明 `events`。
+这与本仓"声明即事实"（D-015）冲突：manifest 在说谎。
+
+改：A1 拆成两条——① `inject` 与内建 mixin 集合无交集（原负控保留）；② **双向**：源码引用事件 ⟺ `builtin`
+声明 `events`（静态扫描，源文件即证据）。同时把四个不使用事件的模块的 `builtin` 改为 `[]`。
+
+[1] tools/verify.sh modules（fixture A1..A6）
+ · A6 — A6 无跨模块 import：不得出现指向别的模块目录的相对 import（只允许 ../lib/ 与包名）
+        imports=["node:http","../lib/std-schema.mjs","../lib/ledger-view.mjs"] 越界=[]
+[ok] __set__ · A3 — A3 模块集级：至少有一个模块暴露 const 键并拒绝翻转（否则 const 纪律无人覆盖）
+        const 键：compare.deterministic, kernel-bridge.credit_window, norm.enforce_tolerance, sourcing.deterministic, timeline.deterministic
+------------------------------------------------------------------------
+模块：7 个（compare, kernel-bridge, norm, sourcing, timeline, webui, __set__）；事件表 89 条（真源：Python 侧）
+fixture 断言：79/79 通过；报告落 /workspace/projects/quotagent/tmp/modules-report.json
+（exit=0）
+
+[2] tools/verify.sh plugins（功能归属）
+
+[ok]   P1 清单→目录：清单里的模块行都有对应文件（不得引用不存在的插件）
+        清单里多出=[]
+[ok]   P2 模块→装配：每个模块至少被一个 profile 引用，或在清单里显式标「未接线」
+        profile 引用=['approval', 'compare', 'config', 'cost', 'frozen', 'guard', 'kernel-bridge', 'norm', 'pricing', 'queue', 'sourcing', 'timeline', 'transport', 'webui']；未接线=[]（已显式标注=[]）
+[ok]   P3 Python 功能归属：每个 `services/*.py` 在清单里出现（功能有归属）
+        服务 23 个；未归属=[]
+RESULT: PASS（插件清单门 4/4）
+（exit=0）
+
+结论：断言不再逼模块在 manifest 里说谎；`kernel-bridge`/`timeline`（真用事件）仍声明，其余为 `[]`。

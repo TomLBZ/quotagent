@@ -10,7 +10,7 @@ export const name = 'norm'
 
 export const inject = []          // 无外部依赖（`events` 是内建 mixin，不进 inject）
 
-export const builtin = ['events']
+export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
 export const provides = ['norm']
 

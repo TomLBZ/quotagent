@@ -25,7 +25,7 @@ export const name = 'sourcing'
 export const inject = []
 
 // 内建 mixin 只走 builtin 声明，不进 inject（A1 负控按这一条断言）。
-export const builtin = ['events']
+export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
 // 对外只提供 `sourcing` 一个服务句柄（apply 里 `ctx.provide('sourcing', ...)`）。
 export const provides = ['sourcing']

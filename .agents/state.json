@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-21T08:25:47Z",
+  "updated_at": "2026-09-21T08:34:56Z",
   "phase": "P2-pluginization-and-advisor",
   "phase_source": "docs/work/roadmap.md §3",
   "next_task": "T-227",
@@ -67,6 +67,7 @@
     "T-222",
     "T-223",
     "T-225",
-    "T-226"
+    "T-226",
+    "T-228"
   ]
 }

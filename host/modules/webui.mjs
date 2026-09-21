@@ -17,7 +17,7 @@ export const name = 'webui'
 
 export const inject = ['ledgerView']        // 账本只读视图（生产由 host/lib/ledger-view.mjs 提供）
 
-export const builtin = ['events']
+export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
 export const usedServices = ['ledgerView']
 

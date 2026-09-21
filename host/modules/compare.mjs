@@ -9,7 +9,7 @@ export const name = 'compare'
 
 export const inject = ['norm']   // 只经 provided service 跨模块（`events` 是内建 mixin）
 
-export const builtin = ['events']
+export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
 export const provides = ['compare']
 

@@ -131,9 +131,18 @@ for (const file of readdirSync(MODULE_DIR)
   check(name, 'A1', 'A1 声明即事实：`usedServices` 与 `inject` 完全相等',
     JSON.stringify([...mod.usedServices].sort()) === JSON.stringify([...mod.inject].sort()),
     `used=${JSON.stringify(mod.usedServices)} inject=${JSON.stringify(mod.inject)}`)
-  check(name, 'A1', 'A1 负控：`inject` 不得写入 cordis 内建 mixin（`events`）——写进去插件会永远 pending（实测）',
-    !(mod.inject || []).includes('events') && (mod.builtin || []).includes('events'),
-    `inject=${JSON.stringify(mod.inject)} builtin=${JSON.stringify(mod.builtin)}`)
+  // A1 口径（2026-09-21 修正）：原先要求**每个**模块都把 events 写进 builtin —— 那是对不使用事件的
+  // 模块（norm/sourcing/webui…）的过度指定，等于逼它们在 manifest 里说谎（'声明即事实' D-015）。
+  // 现在双向断言：真的引用了事件就必须声明；没引用就不许声明（源文件即证据，静态扫描）。
+  const manifestSource = readFileSync(join(MODULE_DIR, file), 'utf-8')
+  const usesEvents = /ctx\.events|events\.(on|emit|parallel|serial|bail|waterfall)\s*\(/.test(manifestSource)
+  const declaresEvents = (mod.builtin || []).includes('events')
+  check(name, 'A1', 'A1 负控：`inject` 不得写入 cordis 内建 mixin（写进去插件会永远 pending，实测）',
+    !(mod.inject || []).some((item) => BUILTIN_MIXINS.includes(item)),
+    `inject=${JSON.stringify(mod.inject)} 内建=${JSON.stringify(BUILTIN_MIXINS)}`)
+  check(name, 'A1', 'A1 声明即事实（双向）：源码引用事件 ⟺ `builtin` 里声明 `events`',
+    usesEvents === declaresEvents,
+    `源码引用事件=${usesEvents} 声明=${declaresEvents} builtin=${JSON.stringify(mod.builtin)}`)
   const a1 = await mount(mod)
   check(name, 'A1', 'A1 正控：provided service 在插件内可取到（句柄非空）',
     a1.box.handle !== null && typeof a1.box.handle === 'object',
