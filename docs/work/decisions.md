@@ -154,3 +154,22 @@
   有界（容量可配，丢最旧并计数）；realm 白名单外一律不记（观测也不许越界）；dispose 即注销订阅（零残留）。
 - 接线：`cli.mjs bridge` 在启用 canary 时把这次决策记进 audit 并随命令输出回读（`audit.slice`）。
 - 记录：证据 `EV-068`。
+
+## D-026 未完成的接线：`governor` → UI 真实 HTTP 路径（T-234 现状，2026-09-21T09:07:06Z）
+
+**结论：T-234 未完成，已回退接线（门红不留树）。** 本文记录已核实的事实与剩余问题，供下一步从证据继续。
+
+- 目标：把 `governor` 接进 `webui` 的请求处理（背压 → 429 + `Retry-After`；超时 → 504），使限流/超时在 UI 真实路径上生效。
+- 已核实的事实（本轮实测）：
+  1. `governor` 插件本身没问题：`verify.sh governor` 9/9；在最小组合（`ledgerView` + `projection` + `governor` + `webui`，
+     有 wrapper 与无 wrapper 两种）里 `/api/status` 与 `/contractor/api/events` **都返回 200 且形状正确**。
+  2. 接线后 `verify.sh webui` 红，且症状会移动：先 `/api/status`，后 `/contractor/api/events`，
+     最终定位到**探针里 `webui#broken` 那个 ctx 没挂 `governor`** → 该 ctx 里 webui 注入不到 → 插件 pending → 拿不到句柄。
+     给它补挂载后，`webui` 门从"崩溃"变为可完整运行（**5/12**，即 7 条仍失败，尚未定位）。
+- 已定的纪律（本轮教训，继续适用）：**断言失败详情必须安全求值**——`Object.keys(undefined)` 会在断言为假时把
+  整个检查脚本崩掉、盖住真因。检查器已按此改（`host/webui.mjs`：`status`/`events` 两处诊断均改为安全访问并打印响应体）。
+- 剩余问题（下一步从这里开始，不要再盲改）：
+  1. 用改好的检查器跑一次，**打印 7 条失败各自的响应体**（现在能看到 `status=…body=…`），先确认是 429/504/500 还是形状问题；
+  2. 若是 429：核对 `key` 是否按请求分桶、成功路径是否 `release`（`run()` 在成功时归还额度）；
+  3. 若是 500：看 `handle()` 在 `await governor.run(...)` 包装下的异常路径（包装改变了返回语义，需确认 `handle` 的同步抛错仍被外层 catch 捕获）。
+- 影响面：本决定**不改变任何既有行为**（接线已回退）；`governor` 仍只在其自身门内被验证，**尚未在 UI 路径生效**。

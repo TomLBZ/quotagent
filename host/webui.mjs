@@ -87,9 +87,12 @@ check('WebUI 正控：`/api/health` 返回 ok（工作区服务契约）',
 const status = await get('/api/status')
 const statusJson = JSON.parse(status.text)
 check('WebUI 正控：`/api/status` 给出路由前缀、视角列表与**两侧账本各自**的健康性（链校验来自 Python 侧）',
-  status.status === 200 && statusJson.route_prefix === '/quotagent' && statusJson.routes.length === 2
-  && Object.values(statusJson.ledgers).every((item) => item.healthy === true),
-  `routes=${JSON.stringify(statusJson.routes)} ledgers=${JSON.stringify(Object.keys(statusJson.ledgers))}`)
+  status.status === 200 && statusJson.route_prefix === '/quotagent' && statusJson.routes?.length === 2
+  && Object.values(statusJson.ledgers ?? {}).every((item) => item.healthy === true),
+  // 失败详情必须**安全求值**：断言为假时也要能打印响应体。实测踩到：detail 里 `Object.keys(undefined)`
+  // 会在断言失败时把整个检查脚本崩掉，把真因（响应体）盖住——这正是本轮排查变慢的原因。
+  `status=${status.status} routes=${JSON.stringify(statusJson.routes)} `
+  + `ledgers=${JSON.stringify(Object.keys(statusJson.ledgers ?? {}))} body=${String(status.text).slice(0, 140)}`)
 
 // 2. 两个视角：不同路由、不同内容
 const contractor = await get('/contractor/')
@@ -98,12 +101,18 @@ check('WebUI 正控：双方视角各自可达且是**不同路由**（`/quotage
   contractor.status === 200 && supplier.status === 200
   && contractor.text.includes('承包商视角') && supplier.text.includes('供应商视角'),
   `contractor=${contractor.status} supplier=${supplier.status}`)
-const cJson = JSON.parse((await get('/contractor/api/events')).text)
-const sJson = JSON.parse((await get('/supplier/api/events')).text)
+const contractorApi = await get('/contractor/api/events')
+const supplierApi = await get('/supplier/api/events')
+const cJson = JSON.parse(contractorApi.text)
+const sJson = JSON.parse(supplierApi.text)
+if (!Array.isArray(cJson.events)) {
+  check('诊断：/contractor/api/events 响应体', false,
+    `status=${contractorApi.status} body=${String(contractorApi.text).slice(0, 200)}`)
+}
 check('WebUI 正控：两视角看到的事件集合不同（承包商含 compare/*，供应商不含）',
-  cJson.events.length > sJson.events.length
-  && cJson.events.some((item) => String(item.type).startsWith('compare/'))
-  && !sJson.events.some((item) => String(item.type).startsWith('compare/')),
+  (cJson.events ?? []).length > (sJson.events ?? []).length
+  && (cJson.events ?? []).some((item) => String(item.type).startsWith('compare/'))
+  && !(sJson.events ?? []).some((item) => String(item.type).startsWith('compare/')),
   `contractor=${cJson.count} 条 supplier=${sJson.count} 条`)
 
 // 3. 私域负控（含非空转对照）
