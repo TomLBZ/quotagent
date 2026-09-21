@@ -3,11 +3,11 @@
   "updated_at": "2026-09-21",
   "phase": "P1-mvp",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-211",
-  "next_action": "批次 B12：T-211 条款库与冲突标注（FR-TERMS-001/002、FR-GUARD-004 / AC-TERMS-001）—— 条款库（付款/质保/罚则等条款族的版本化条目）+ 冲突标注（不静默取其一）+ 提请人工；与已落地的 guard 三族条款冲突检测衔接，实现落 services/terms.py（新）",
-  "last_verified_command": "tools/verify.sh docs && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh ac-registry && tools/verify.sh audit && tools/verify.sh v && 全量 50 条 AC && qa suite s1..s4",
-  "last_verified_result": "PASS（docs 门 77 文件/0 未解析；bridge 31 断言；cordis 18/18；p0-no-node 34 条；ac-registry 50 条注册/P0 全注册；audit 12 断言；V 登记 12 条 open；50 条 AC 全绿；s1..s4 全绿）",
-  "last_verified_evidence": "docs/work/evidence/EV-049-approval-queue-and-timeout.txt",
+  "next_task": "T-212",
+  "next_action": "批次 B13：T-212 变更闭环与生效版本（FR-CHANGE-001/002 / AC-CHANGE-001/002）—— 变更请求（提出→影响评估→人工批准→生效）+ **生效版本**语义（变更前后各自绑定的版本、旧版本报价的失效与重报衔接（复用 quotes.on_amended））+ 变更期间的在途项处理；实现落 services/change.py（新）",
+  "last_verified_command": "tools/verify.sh docs && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh ac-registry && tools/verify.sh audit && tools/verify.sh v && 全量 51 条 AC && qa suite s1..s4",
+  "last_verified_result": "PASS（docs 门 76 文件/0 未解析，最高占用 handover 977/1024；bridge 31 断言；cordis 18/18；p0-no-node 34 条；ac-registry 51 条注册/P0 全注册；audit 12 断言；V 登记 12 条 open；51 条 AC 全绿；s1..s4 全绿）",
+  "last_verified_evidence": "docs/work/evidence/EV-050-terms-library-and-conflicts.txt",
   "last_verified_commit": "1a70ac3",
   "blockers": [],
   "human_required": [
@@ -50,7 +50,8 @@
     "quotes": "services/quotes.py（QuoteBook：register/on_amended/active/superseded/open_requote_requests/exclude_superseded；事件 quote/superseded）；compare.rank 支持 book= 显式排除过期报价；kernel/events.py 新增 EventBus.dispatch()（按 @mode 派发）",
     "capacity": "services/capacity.py（CapacityService：Calendar 产能日历（私域）/ commit / amend（firm+有效期内+模型 → 拒绝）/ feasibility（日历 + 里程碑关键路径）/ conflict_flags（share_safe 对外不带数值）；事件 capacity/committed|firm-change-refused|conflict）",
     "evidence": "kernel/evidence.py（export 带签名与清单绑定 / verify(keystore,require_signature) / inclusion_proof / verify_inclusion / sign_pack）；kernel/canon.py 增 merkle_proof|merkle_verify；入口 tools/audit-verify.py 与 tools/verify.sh audit",
-    "approval_queue": "services/approval.py：request(..., timeout_policy, timeout_s, escalate_to, summary, confidence, flags) / queue_view() / sweep()（remind|escalate|abort，永不 granted）；事件 approval/reminded|escalated|aborted 已登记"
+    "approval_queue": "services/approval.py：request(..., timeout_policy, timeout_s, escalate_to, summary, confidence, flags) / queue_view() / sweep()（remind|escalate|abort，永不 granted）；事件 approval/reminded|escalated|aborted 已登记",
+    "terms": "services/terms.py：TermLibrary（define/revise 版本化、library(as_of)、apply_defaults 只补缺失键并标 library-default、conflicts 四类状态、escalate 送人工门）；guard 的条款差异计算已下沉到本服务；事件 terms/defined|applied|conflict 已登记"
   },
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态"
 }

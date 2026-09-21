@@ -124,6 +124,7 @@
 - 职责：合同条款库与冲突检测（付款、质保、罚则、验收标准）。
 - Definition：`library(query)` · `conflicts(quote) -> Conflict[]` · `apply_defaults(package)`。
 - 不变量：条款冲突只能标注并提请人工，不得静默取其一。
+- P1（T-211）实现口径：条款族覆盖付款/质保/罚则/**验收标准**；`define/revise` **只追加版本**（旧版本保留，`as_of` 取当时生效版本），基线只允许 `human:*`/`bundle:*` 载入；`apply_defaults` **只补缺失键**且每条补入项标 `source=library-default`（不得冒充供应商承诺）；`conflicts()` 逐键并列 required/offered，`resolution` 恒为 `None`、不存在任何"胜出值"字段，并按 `mismatch`/`required_only`/`offered_only`/`unknown_key` 分类（未知键也提请人工）；`escalate()` 只把冲突送人工门。`ctx.guard` 的条款差异计算下沉到本服务（单一实现）。
 - 关联：FR-TERMS-001..002。
 
 ### `ctx.quotes` [P1]

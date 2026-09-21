@@ -16,6 +16,7 @@ from typing import ClassVar
 from typing import Any, Callable
 
 from ..kernel.events import EventBus
+from .terms import TermLibrary
 from ..kernel.ledger import Ledger, utc_now
 
 FLAG_EVENT = "compare/flag-raised"
@@ -39,6 +40,8 @@ class GuardService:
     ledger: Ledger | None = None
     events: EventBus | None = None
     actor: str = "agent:guard"
+    # 条款差异由条款库单点计算（B12/T-211）；空库时表现为"所有键都不在库中"，行为与纯包内比对一致。
+    terms: "TermLibrary | None" = None
     # 条款族：付款 / 质保 / 罚则（FR-GUARD-004）。逐族比对，逐项给出 required vs offered。
     TERM_FAMILIES: ClassVar[tuple[str, ...]] = ("payment_terms", "warranty_terms", "penalty_terms")
     rules: list[dict] = field(default_factory=list, init=False)
@@ -46,6 +49,8 @@ class GuardService:
     _rules: list = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
+        if self.terms is None:
+            self.terms = TermLibrary(ledger=self.ledger, events=self.events)
         for rule in (self._rule_missing_item, self._rule_abnormal_low, self._rule_capacity_risk,
                      self._rule_term_conflict, self._rule_external_term, self._rule_private_leak):
             self.register_rule({"name": rule.__name__.removeprefix("_rule_"), "fn": rule})
@@ -148,22 +153,29 @@ class GuardService:
         return out
 
     def _rule_term_conflict(self, target: dict) -> list[dict]:
+        """条款差异由条款库（`ctx.terms`）单点计算；本规则只做**族级聚合与 Flag**（FR-GUARD-004 三族）。"""
         package = target.get("package") or {}
         out = []
-        for family in self.TERM_FAMILIES:
-            required = package.get(family) or {}
-            if not required:
-                continue
-            for quote in target.get("quotes", []):
-                offered = quote.get(family) or quote.get(f"{family}_offered") or {}
-                diffs = {key: {"required": required.get(key), "offered": offered.get(key)}
-                         for key in set(required) | set(offered) if required.get(key) != offered.get(key)}
+        for quote in target.get("quotes", []):
+            items = self.terms.conflicts(package, quote, quote_id=quote.get("quote_id"))
+            by_family: dict[str, dict] = {}
+            for item in items:
+                if item["family"] not in self.TERM_FAMILIES:
+                    continue  # 验收条款等由条款库与人工门处理，本规则只管 FR-GUARD-004 的三族
+                by_family.setdefault(item["family"], {})[item["key"]] = {
+                    "required": item["required"], "offered": item["offered"],
+                    "status": item["status"]}
+            for family in self.TERM_FAMILIES:
+                if not (package.get(family) or {}):
+                    continue  # 包未声明该族的基线则不判冲突（FR-GUARD-004 只管"与包内要求不一致"）
+                diffs = by_family.get(family) or {}
                 if not diffs:
                     continue
                 label = {"payment_terms": "付款", "warranty_terms": "质保", "penalty_terms": "罚则"}[family]
                 out.append({"kind": "term_conflict", "severity": "medium", "target_ref": quote["quote_id"],
                             "detail": f"{label}条款与包内要求不一致: {sorted(diffs)}",
                             "requires_human": True, "family": family, "diffs": diffs,
+                            "resolution": None,
                             "evidence_refs": [f"quote:{quote['quote_id']}:{family}",
                                               f"package:{package.get('package_id')}#rev{package.get('rev')}:{family}"]})
         return out

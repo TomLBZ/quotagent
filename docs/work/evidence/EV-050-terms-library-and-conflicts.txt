@@ -1,0 +1,56 @@
+EV-050 — 条款库与冲突标注（T-211 / S1.11）：版本化 + 默认条款 + 冲突只标注不取值
+
+时间: 2026-09-21T04:40:53Z
+commit: c211570
+命令: qa ac AC-TERMS-001（新）/ AC-GUARD-002、AC-CAP-001（回归）
+
+--- AC-TERMS-001（新；退出码 0，13/13 断言）---
+  [ok] 版本化：`as_of` 取当时生效版本（3 月→45 天，9 月→30 天），旧版本保留不删 — march={'family': 'payment_terms', 'key': 'days', 'value': 45, 'version': 1, 'effective_from': '2026-01-01T00:00:00Z', 'source': 'bundle:industry-3pl', 'note': '基线'} now={'family': 'payment_t
+  [ok] 版本护栏：同版本重复载入被拒；未定义基线就修订被拒（修订只能基于既有版本） — dup=版本已存在: payment_terms/days v1（修订请用 revise） revise=未定义的条款不能修订: penalty_terms/cap_pct（先 define 基线）
+  [ok] 基线来源：`agent:*` 不能载入/修订条款基线（只有 human:/bundle: 可以） — error=条款基线只能由 human:/bundle: 载入，收到 source='agent:planner'（agent 不得单方面改写条款基线）
+  [ok] 默认条款只补**缺失键**：供应商已给的 days=60 不动，只补入 advance_pct 与质保月数 — applied=[('payment_terms', 'advance_pct'), ('warranty_terms', 'months')] days=60
+  [ok] 补入项显式标 `source=library-default`（默认条款不得冒充供应商承诺） — applied=[{"family": "payment_terms", "key": "advance_pct", "value": 0, "version": 1, "source": "library-default"}, {"family": "warranty_terms", "key": "months", "value"
+  [ok] 默认条款补入落账 `terms/applied`（模型可见 ⟺ 账本可见） — rows=1
+  [ok] 族名别名被识别：`payment_terms_offered` 按同一族比对（判为不一致，而非「单侧缺失」） — days=mismatch
+  [ok] 双方一致不报（质保 24=24）；库不认识且双方不一致的键报 `unknown_key` 并提请人工 — keys=[('payment_terms', 'advance_pct'), ('payment_terms', 'days'), ('penalty_terms', 'late_pct_per_week')]
+  [ok] **绝不静默取其一**：每条冲突 `resolution` 为 None、`requires_human` 为真，且条目里不存在任何「胜出值」字段（value/winner/chosen/merged） — keys=['detail', 'evidence_refs', 'family', 'key', 'kind', 'offered', 'quote_id', 'required', 'requires_human', 'resolution', 'severity', 'status']
+  [ok] 冲突提请人工门：`terms.resolve` 待批且 `approval/granted` 为空（不会自动裁定） — scope=terms.resolve flags=['term_conflict:payment_terms', 'term_conflict:payment_terms', 'term_conflict:penalty_terms']
+  [ok] 信息项（仅一侧给出）不产生批准请求：只有 `mismatch`/`unknown_key` 才送人工门 — 信息项产生了批准请求
+  [ok] 冲突逐条落账 `terms/conflict`，且带并列双方值（审计可复核；只数本次引用的报文体） — rows=3 conflicts=3
+  [ok] 护栏与条款库同一套差异口径（guard 的族级 Flag 键集合 == 库的冲突键集合） — guard=[('payment_terms', 'advance_pct'), ('payment_terms', 'days'), ('penalty_terms', 'late_pct_per_week')] library=[('payment_terms', 'advance_pct'), ('payment_terms', 'days'), ('penalty_te
+
+--- AC-GUARD-002（回归；退出码 0，6/6 断言）---
+  [ok] 条款冲突覆盖**付款/质保/罚则**三族，逐族逐项列出 required vs offered — families=['payment_terms', 'penalty_terms', 'warranty_terms'] flags=3
+  [ok] 产能冲突两条来源都标 Flag：声称超限（q-cap）与日历/关键路径结论（q-calendar） — refs=['q-calendar', 'q-cap']
+  [ok] 两类 Flag 都**提请人工**（requires_human=true，且带证据引用） — flags=[('term_conflict', True), ('term_conflict', True), ('term_conflict', True), ('capacity_risk', True), ('capacity_risk', True)]
+  [ok] Flag 逐条落账 compare/flag-raised（含 kind/severity/requires_human） — ledger_kinds=['capacity_risk', 'term_conflict'] rows=5
+  [ok] 护栏只标注：两类 Flag 存在时排序仍然产出（flag 与排序并存，不否决不改变状态） — ranking=['q-cap', 'q-terms', 'q-calendar']
+  [ok] 护栏接口没有否决口（check 只返回 Flag 列表，返回项里没有 decision/veto 字段） — flag_keys=['detail', 'detected_at', 'evidence_refs', 'flag_id', 'kind', 'package_id', 'realm', 'requires_human', 'severity', 'target_ref']
+
+--- AC-CAP-001（回归；退出码 0，10/10 断言）---
+  [ok] 建立 `firm` 承诺：交期由 lead_time 推导，且带有效期（有效期内不可变更的前提） — commitment={"commitment_id": "cm-0001", "quote_id": "q-0007", "package_id": "pkg-014", "binding": "firm", "lead_time_days": 10, "quantity": 100.0, "start_date": "2026-10-01", "delivery_date"
+  [ok] **模型**在有效期内改 `firm` 交期 → 被拒且留痕，承诺值不变 — refusal=`firm` 交期在报价有效期内不可由模型变更（FR-CAP-002） events=1 lead=10 rev=1
+  [ok] 拒绝事件带可行动的 next_action（不是只说「不能改」） — next_action=需要变更时由人在人工门批准后改动，或先让该承诺过期
+  [ok] **人**在有效期内改同一字段 → 允许（产生新 revision 并留痕） — amend={"commitment_id": "cm-0001", "revision": 2, "binding": "firm", "delivery_date": "2026-10-26", "by": "human:liao", "changes": ["lead_time_days"]}
+  [ok] 有效期过后模型可以改（有效期是「不可变更」的边界，不是无限期） — expired_amend={"commitment_id": "cm-0001", "revision": 3, "binding": "firm", "delivery_date": "2026-10-26", "by": "agent:price", "changes": ["quantity"]}
+  [ok] `indicative` 交期允许模型调整（binding 决定约束强度） — indicative={"commitment_id": "cm-0002", "revision": 2, "binding": "indicative", "delivery_date": "2026-10-08", "by": "agent:price", "changes": ["lead_time_days"]}
+  [ok] 产能日历 + 关键路径算出不可行 → 只提请人工（requires_human，不改交期、不否决） — feasibility={"commitment_id": "cm-0003", "quote_id": "q-0009", "package_id": "pkg-014", "binding": "firm", "window": ["2026-10-01", "2026-10-31"], "days": 31, "required": 400.0, "available":
+  [ok] 冲突事件写明「不自动改交期、不否决报价」（护栏不否决的落账口径） — note=只提请人工：不自动改交期、不否决报价（护栏不否决）
+  [ok] 里程碑阻塞逐条列出（关键路径，不是只看总量） — blockers=[{"milestone": "首批到货", "due": "2026-10-11", "required": 150.0, "available": 70.0, "gap": 80.0}]
+  [ok] 冲突可转成护栏 Flag；**对外形态不含日历数值**（产能日历是私域） — local=产能不可行：需要 400，日历可用 220（缺口 180；里程碑阻塞 1 处） safe=产能/交期不可行（缺口数值属本方私域，见 evidence_refs 指向的账本条目）；里程碑阻塞 1 处
+
+--- 口径说明 ---
+· 条款族覆盖付款/质保/罚则/验收标准；`define/revise` 只追加版本，`as_of` 取当时生效版本；
+· 基线来源仅允许 `human:*`/`bundle:*`（`agent:*` 被拒——agent 不得单方面改写承包商条款基线）；
+· `apply_defaults` 只补缺失键、绝不覆盖供应商已给值，补入项标 `source=library-default`（不冒充承诺）；
+· `conflicts()` 逐键并列 required/offered，`resolution` 恒为 None，且**条目里不存在任何胜出值字段**
+  （value/winner/chosen/merged 都查不到）——这是"不得静默取其一"的机检形式；
+· 分类：双方一致→无条目；单侧缺失→`required_only`/`offered_only`（信息项，不产生批准请求）；
+  双方不一致且库不认识该键→`unknown_key`（照样提请人工，不因库不认识就放行）；
+· 族名别名 `payment_terms_offered` 在条款库内单点识别（供应商侧既有写法）；
+· 冲突只经 `escalate()` 送人工门（`terms.resolve` 待批，`approval/granted` 全程为空）。
+
+--- 本批修的真实缺陷 ---
+· 条款库分类顺序错误：原实现把"库不认识该键"判在"双方值一致"之前，导致等值键被误报为冲突
+  （实测：护栏族级 Flag 由 6 涨到 9）。修正为 先判等值 → 再判单侧缺失 → 最后判未知键；
+· guard 的条款差异计算下沉到条款库（单一实现），并恢复"包未声明该族则不判冲突"的既有语义。

@@ -77,6 +77,9 @@
 | `approval/escalated` | emit | ✔ | `ctx.approval` | 超时策略 `escalate`：转上级继续等待 |
 | `approval/aborted` | emit | ✔ | `ctx.approval` | 超时策略 `abort`：作废本次意图（需重新发起） |
 | `quote/guard-check` | bail | durable | `ctx.guard` → approval | 异常低价/漏项/产能/条款/注入检测 |
+| `terms/defined` | emit | ✔ | `ctx.terms` | 条款基线载入/修订（版本化，只追加） |
+| `terms/applied` | emit | ✔ | `ctx.terms` | 默认条款补入缺失键（标 `library-default`） |
+| `terms/conflict` | emit | ✔ | `ctx.terms` | 条款冲突标注（并列双方值 + 提请人工，绝不自动选值） |
 | `quote/human-approved` | emit | ✔ | 人工 → qep | 批准记录（不可由 agent 产生） |
 | `quote/submitted` | emit | ✔ | `ctx.qep` → compare | 报价事实（含 `rfq_rev`） |
 | `quote/superseded` | emit | ✔ | `ctx.quotes` | 包升版后基于旧版本的报价标记过期并可重报（FR-RFQ-006） |
