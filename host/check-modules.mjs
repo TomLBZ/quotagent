@@ -156,8 +156,6 @@ const STUBS = {
       canary: { entered: 0, exited: 0 }, unknown_types: [], recent: [], last_event: null,
       privacy: { entry_bodies_included: false } }),
   },
-  compare: { flagCount: () => 0 },
-  bridge: { surface: () => ({}) },
 }
 
 /** 起一个带句柄的模块实例：句柄在插件自己的 ctx 里取（那里才有 inject 权限）。 */

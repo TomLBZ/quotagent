@@ -1,0 +1,46 @@
+EV-081 T-246 把"新增依赖要同步四处"的人肉清单变成机检（verify.sh wiring）
+生成时间 2026-09-21T09:58:53Z
+命令与原始输出（原样留档）
+
+[1] 新门：$ tools/verify.sh wiring → 5/5
+[
+  {
+    "name": "A. 每个被任何模块 inject 的服务，STUBS 表里都有 stub（fixture 才跑得起来）",
+    "ok": true,
+    "detail": "缺 stub：无"
+  },
+  {
+    "name": "B1. `webui` 的每个依赖在**门**（host/webui.mjs）里都有挂载",
+    "ok": true,
+    "detail": "门里缺：无（webui.inject=['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal']）"
+  },
+  {
+    "name": "B2. `webui` 的每个依赖在 **e2e**（host/canary-dispatch.mjs）里都有挂载",
+    "ok": true,
+    "detail": "e2e 里缺：无"
+  },
+  {
+    "name": "C. `webui` 的每个依赖在 CLI 的 webui 动作里都有提供者（否则线上起不来）",
+    "ok": true,
+    "detail": "CLI 里缺：无"
+  },
+  {
+    "name": "D. STUBS 表里没有**没人 inject** 的孤儿服务（历史残留应当清掉，避免'以为在用'）",
+    "ok": true,
+    "detail": "孤儿 stub：无"
+  }
+]
+
+它检查四项（只读，不改任何文件）：
+  A. 任何模块 `inject` 的服务，STUBS 表里都必须有 stub（否则 fixture 跑不起来）
+  B1. `webui` 的每个依赖在**门**（host/webui.mjs）里都有挂载
+  B2. `webui` 的每个依赖在 **e2e**（host/canary-dispatch.mjs）里都有挂载
+  C. `webui` 的每个依赖在 CLI 的 webui 动作里都有提供者（否则线上起不来）
+  D. 反向：STUBS 表里不许有**没人 inject** 的孤儿（历史残留应当清掉）
+
+[2] 这道门第一次运行就抓出真问题：`bridge` 与 `compare` 是**孤儿 stub**
+（没有任何模块 inject 它们 = 历史残留，会让人"以为在用"）→ 已清除，复跑全绿。
+
+结论：给 `webui` 新增依赖所需的"四处同步"从**记忆**变成**门**。以后任何人（或自进化产物）改插件接线，
+漏同步会被直接抓住并指出"缺哪个服务、缺在哪一处"——这是"每个功能模块可分别独立演进"的前提条件。
+
