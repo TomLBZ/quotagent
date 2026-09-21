@@ -180,6 +180,7 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-STORAGE-004 | P2 | 三种越权形态（`ns=../beta`、`ns=beta/../alpha`、`rel=../beta/x`）一律 `storage-outside-ns`，且越权尝试后哨兵与越权文件**在磁盘上不存在**（不是只返回错误）；存储写不产生账本行、账本字节零改动；往声明的事实路径写被拒 | `tools/verify.sh ac AC-STORAGE-004` | EV-142 |
 | AC-STORAGE-006 | P2 | 只读观察面（`snapshot`）两次输出逐字节一致（确定性）；**读前后存储树字节数不变**（读它不改状态）；输出里不出现日志正文与私域哨兵 | `tools/verify.sh ac AC-STORAGE-006` | EV-142 |
 | AC-UXWEB-001 | P2 | 模块导出 `SUBVIEWS`（子视图单点定义）；第一屏三块 `data-block` 锚点齐备且顺序正确；页面模板**无 `<script>`、无内联事件属性**且交互用 `<form method=get>`；`data-subnav` 与「上手」入口都在；空结果带 `data-empty`；子视图清单 8 条（HTTP 行为另由 `tools/verify.sh webui` 44/44 举证）| `tools/verify.sh ac AC-UXWEB-001` + `tools/verify.sh webui` | EV-144 |
+| AC-CONFIG-001 | P2 | 配置/凭据 UI：11 条路径未提权 **401 同形（唯一 body）**；带会话 `/admin/config/` 200 且**0 行 `<script>`**、`/admin/api/config` 200（三层 + 每键 source/shadowed_by/editable）；干跑预览**不落盘**（真 `/workspace/config.yaml` sha256 前后一致）；提交只落 **0600** 待处理项且账本零新增；`config-apply.py` 原子写 + 回滚 + 幂等；账本事件 body 与全部响应体里**凭据哨兵出现 0 次**；YAML 不支持的构造被拒且给 reason | `tools/verify.sh ac AC-CONFIG-001` + `tools/verify.sh config-route` | EV-145 |
 
 ## 7. 证据制度
 

@@ -134,6 +134,11 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec python3 tools/check-admin-route.py "$@"
     ;;
+  config-route)
+    # 配置与凭据（P0）：UI 化 + YAML 持久化 + 配置文件初始化的端到端门
+    shift
+    exec python3 tools/check-config-route.py "$@"
+    ;;
   ui-mutate)
     shift
     exec python3 tools/mutate-ui-views.py "$@"

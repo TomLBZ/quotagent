@@ -166,6 +166,19 @@ const main = async () => {
       apply: (inner, cfg) => pmApply(inner, { ...cfg,
         modules_dir: String(args['market-modules'] ?? ''), inventory: String(args['market-inventory'] ?? ''),
         user_space: String(args['market-user-space'] ?? '') }) })
+    // 配置与凭据（config-view，宿主侧）：只读总览 + 干跑 + 只落 0600 待处理项。
+    // 受管配置文件默认 `/workspace/config.yaml`（与上手页文案一致）；待处理目录默认取 admin_inbox 的兄弟目录。
+    const { apply: cvApply, Config: cvConfig } = await import('./modules/config-view.mjs')
+    const adminInboxArg = String(args['admin-inbox'] ?? process.env.QUOTAGENT_UI_ADMIN_INBOX ?? '')
+    await ctx.plugin({ name: 'config-view', inject: [], Config: cvConfig,
+      apply: (inner, cfg) => cvApply(inner, { ...cfg,
+        route_prefix: String(args.prefix ?? '/quotagent'),
+        config_file: String(args['config-file'] ?? process.env.QUOTAGENT_UI_CONFIG ?? '/workspace/config.yaml'),
+        config_inbox: String(args['config-inbox']
+          ?? (adminInboxArg ? adminInboxArg.replace(/admin-submissions$/, 'config-submissions') : '')),
+        config_status: String(args['config-status'] ?? process.env.QUOTAGENT_UI_CONFIG_STATUS ?? ''),
+        config_ledger: String(args['config-ledger'] ?? args['ledger-contractor'] ?? ''),
+        runtime_overrides: String(args['config-runtime-overrides'] ?? '') }) })
     const { apply: agApply, Config: agConfig } = await import('./modules/admin-guard.mjs')
     await ctx.plugin({ name: 'admin-guard', inject: [], Config: agConfig,
       apply: (inner, config) => agApply(inner, { ...config, token_env: 'QUOTAGENT_ADMIN_TOKEN', token_file: String(args['admin-token-file'] ?? '') }) })
@@ -201,7 +214,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)

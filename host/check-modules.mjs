@@ -171,6 +171,22 @@ const STUBS = {
     config: () => ({ admin_snapshot: '' }),
     needs: [],
   },
+  configView: {
+    // fixture 的 stub：只满足「能取三层总览/凭据视图」；口径由 config-view 自己的门验（verify.sh config-route）
+    config: () => ({ config_file: '', config_inbox: '', config_status: '', config_ledger: '' }),
+    overview: () => ({ degraded: true, reason: 'stub', project: [], plugin: [], credentials: [],
+      counts: { project: 0, plugins: 0, credentials: 0, pending: 0 }, runtime: { configured: false, keys: [] },
+      pending: { configured: false, count: 0 } }),
+    credentials: () => ({ rows: [], total: 0, snapshot: { available: false }, pending: { count: 0 } }),
+    audit: () => ({ degraded: true, reason: 'stub', rows: [], total: 0, omitted: 0 }),
+    preview: () => ({ accepted: true, vetoed_by: null, reasons: [], diff: [],
+      patch: { layer: 'project', target: '', fields: [] } }),
+    submitProject: () => ({ ok: true, code: 'accepted', payload_sha256: '0'.repeat(64), bytes: 2, next_action: 'stub' }),
+    submitPlugin: () => ({ ok: true, code: 'accepted', payload_sha256: '0'.repeat(64), bytes: 2, next_action: 'stub' }),
+    submitCredential: () => ({ ok: true, code: 'accepted', next_action: 'stub' }),
+    stats: () => ({ counters: {} }),
+    needs: [],
+  },
   retentionView: {
     // fixture 的 stub：只满足"能聚合留存计划"；口径由 retention-view 自己的门验
     snapshot: () => ({ counts: {}, action_mix: [], pending_approvals: 0, refused: 0, oldest: [],

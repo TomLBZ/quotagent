@@ -198,6 +198,8 @@
 | FR-STORAGE-006 | P2 | 存储提供**只读观察面**（容量/计数/失败次数）供自进化 `observe` 使用：有界、确定性、不出正文与私域键；**读它不改任何状态** | AC-STORAGE-006 |
 | FR-UXWEB-001 | P2 | **GUI 必须能做事，不是一篇纯文字**：承包商/供应商第一屏固定三块（待批事项 / 进行中 / 健康），其余下沉可展开区；每块里的动作是**可点的表单或链接**；页面**保持 0 行 `<script>` / 0 内联事件**（交互只用 `<form method=get>`，可机检） | AC-UXWEB-001 |
 | FR-UXWEB-002 | P2 | **子视图与真交互**：双方各自的事件流 / 报价 / 待批 / 证据（供应商侧为澄清）子视图，带 `limit/page/sort/q` 筛选排序翻页；参数越界**夹取并回显 applied**；分页不重叠不丢行；空结果**显式说明**（不许看起来像故障）；每页有道内子导航与「上手（token／配置放哪里）」入口 | AC-UXWEB-001 |
+| FR-CONFIG-001 | P2 | **插件/项目配置可 UI 更改并持久化**：宿主侧只读总览（每键 `source`(`default|file|env|runtime`) / `shadowed_by` / `editable`）+ **干跑预览**（零落盘零生效）；保存只落 **0600 待处理项**（宿主零写面），由 `tools/config-apply.py` **原子写** `/workspace/config.yaml`（临时文件 + rename，失败回滚）并落账本 `config/changed|refused`；支持 `--init` 从模板生成配置文件（即"支持配置文件初始化"） | AC-CONFIG-001 |
+| FR-CONFIG-002 | P2 | **凭据可 UI 提交且只写不回显**：状态视图只给 `configured` / `source` / `required_mode` / `fingerprint_first8` / `next_action`；提交与轮换**绝不回显值**；未提权对配置与凭据的 11 条路径一律 **401 同形**（无 oracle、不泄漏键名）；YAML 只实现**声明清楚的子集**，锚点/别名/多文档等一律拒并给 reason（不静默糊掉） | AC-CONFIG-001 |
 ## 7. 阶段分布（用于排期）
 
 | 阶段 | must 数 | 核心内容 |

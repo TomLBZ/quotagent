@@ -156,6 +156,8 @@
 | FR-STORAGE-006 | tools/storage.py + host/modules/storage-view.mjs | 见 AC-STORAGE-006 | 直引 |
 | FR-UXWEB-001 | host/modules/webui.mjs | 见 AC-UXWEB-001 | 直引 |
 | FR-UXWEB-002 | host/modules/webui.mjs | 见 AC-UXWEB-001 | 直引 |
+| FR-CONFIG-001 | host/modules/config-view.mjs + host/lib/config-ui.mjs + tools/config-apply.py | 见 AC-CONFIG-001 | 直引 |
+| FR-CONFIG-002 | tools/config-apply.py + host/lib/config-keys.mjs | 见 AC-CONFIG-001 | 直引 |
 
 ## 2. 插件归属
 
@@ -167,6 +169,7 @@
 | agent-memory | FR-AGENTRT-006（有界/降级）| 部分 |
 | agent-harness | FR-AGENTRT-006（有界/降级）| 部分 |
 | storage-view | FR-STORAGE-006 | 直引 |
+| config-view | FR-CONFIG-001 | 直引 |
 | plugin-market | FR-MARKET-001、FR-MARKET-002、FR-MARKET-003、FR-MARKET-004、FR-MARKET-005、FR-MARKET-006（T-267 subagent 产出） | 强 |
 | admin-guard | FR-ADMIN-002、FR-ADMIN-007、FR-ADMIN-008、FR-ADMIN-009、FR-ADMIN-010（T-272 subagent 产出） | 强 |
 | admin-view | FR-ADMIN-001、FR-ADMIN-003、FR-ADMIN-004（T-272 subagent 产出） | 强 |

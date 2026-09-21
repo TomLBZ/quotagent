@@ -1,0 +1,114 @@
+EV-145 AC-CONFIG-001 配置与凭据 UI + YAML 持久化
+
+[宿主门 config-route]
+```
+`config-apply.py` 退出码 2、refused.reason 含 `unsupported-yaml`、**目标文件字节零变化**、且被拒的变更各落 **1 行** `config/refused`（被拒也留痕，但拒绝理由只给原因码，不出值）",
+      "ok": true,
+      "detail": "锚点: reason=unsupported-yaml:anchor-or-alias 字节不变=True；块标量: reason=unsupported-yaml:block-scalar 字节不变=True；多文档: reason=unsupported-yaml:multi-document-mark 字节不变=True；制表符缩进: reason=unsupported-yaml:tab-indent 字节不变=True；重复键: reason=unsupported-yaml:duplicate-key:pricing.markup_pct 字节不变=True"
+    },
+    {
+      "name": "⑩ **YAML 子集的跨语言一致性**（`host/lib/config-ui.mjs` vs `tools/config-apply.py`）：同一份夹具（12 例，含 6 例可解析 + 6 例必须拒）两侧的**解析结果规范化 JSON 逐字节相等**（防漂移：宿主与写入者不许各理解一套）",
+      "ok": true,
+      "detail": "夹具=12 例；不一致=无；JS 可解析=6 Python 可解析=6"
+    },
+    {
+      "name": "⑩ 登记表默认值**不许与 `host/profiles.mjs` 漂移**（同一个键两处不同 = 页面显示的默认值是假的）：逐键比对同名叶子键的字面量，必须同值",
+      "ok": true,
+      "detail": "登记键=15 可比对=15 漂移=无"
+    },
+    {
+      "name": "⑪ `python3 -m py_compile tools/config-apply.py` 通过（标准库、无第三方依赖）",
+      "ok": true,
+      "detail": "exit=0 stderr="
+    }
+  ],
+  "passed": 22,
+  "total": 22,
+  "failures": 0,
+  "fixture_dir": "/workspace/projects/quotagent/tmp/t-config-route-p7338xy2",
+  "sentinel_used": "CFG-CRED-SENTINEL-8f31c2",
+  "real_config_sha256_before": "6cf43d027a61224491a51aa85ad2f245be6a3605887ee9f162a021c525612630",
+  "real_config_sha256_after": "6cf43d027a61224491a51aa85ad2f245be6a3605887ee9f162a021c525612630"
+}
+
+```
+
+[AC（有 Node）]
+```
+{
+  "ac": "AC-CONFIG-001",
+  "status": "unknown",
+  "assertions": [],
+  "evidence_refs": [],
+  "command": "qa ac AC-CONFIG-001",
+  "phase": "",
+  "title": "",
+  "first_failure": "未注册的 AC: AC-CONFIG-001（已注册: AC-ADMIN-004, AC-ADMIN-005, AC-ADMIN-006, AC-AGENTRT-002, AC-AGENTRT-006, AC-AGENTRT-007, AC-APPROVE-001, AC-APPROVE-002...）",
+  "exit_code": 2
+}
+
+```
+
+[AC（无 Node：降级）]
+```
+{
+  "ac": "AC-CONFIG-001",
+  "status": "unknown",
+  "assertions": [],
+  "evidence_refs": [],
+  "command": "qa ac AC-CONFIG-001",
+  "phase": "",
+  "title": "",
+  "first_failure": "未注册的 AC: AC-CONFIG-001（已注册: AC-ADMIN-004, AC-ADMIN-005, AC-ADMIN-006, AC-AGENTRT-002, AC-AGENTRT-006, AC-AGENTRT-007, AC-APPROVE-001, AC-APPROVE-002...）",
+  "exit_code": 2
+}
+
+```
+
+[父方真机复核]
+```
+=== ① 语法 ===
+  py ok tools/config-apply.py (55839 B)
+  py ok tools/check-config-route.py (44484 B)
+  js ok host/modules/config-view.mjs (16532 B)
+  js ok host/lib/config-ui.mjs (36022 B)
+  js ok host/lib/config-keys.mjs (4802 B)
+  js ok host/modules/webui.mjs (89308 B)
+  js ok host/webui.mjs (60518 B)
+  js ok host/cli.mjs (42525 B)
+  js ok host/profiles.mjs (3579 B)
+=== ② 真 config.yaml 指纹（复核前后必须一致）===
+  before = 6cf43d027a61224491a51aa8
+=== ③ 正确重启 ===
+961031 /workspace/runtime/node/current/bin/node /workspace/p
+  就绪（第 1 次，PID 962675）
+=== ④ 未提权：11 路必须 401 且 body 同形 ===
+  唯一 body 数 = 1 | 唯一状态码 = ['401'] | body = ['{"error":"unauthorized"}']
+  同形要求（1 个 body + 全 401）= True
+=== ⑤ 带会话：读 200 / 写 202 ===
+  /admin/config/        → 200（script=0）
+  /admin/api/config     → 200
+  三层键 = ['service', 'config_file', 'layers', 'project', 'plugin', 'credentials']
+  项目层条目 = 15
+  /admin/api/credentials → 200
+  preview(未知键) → 200
+=== ⑥ 哨兵：凭据值在响应体出现次数（必须 0）===
+  cfg.html           0
+  cfg.json           0
+  cred.json          0
+  prev.json          0
+=== ⑦ 真 config.yaml 指纹（复核后）===
+  after  = 6cf43d027a61224491a51aa8 | 一致 = True
+=== ⑧ 待处理项目录权限 ===
+=== ⑨ 门 ===
+  config-route  0
+  webui         0
+  admin-route   0
+  modules       0
+  wiring        0
+  plugins       0
+  coverage      1
+FAIL: 矩阵对插件目录**双向全覆盖**（32 个插件） | 缺 1 个['config-view']；伪造 0 个[]
+  docs          0
+
+```

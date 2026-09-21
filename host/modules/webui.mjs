@@ -18,11 +18,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView']
 
 export const provides = ['webui']
 
@@ -77,8 +77,8 @@ const LIMIT_CHOICES = [10, 20, 50, 200]
 /** ops / admin 两道的道内导航（本步不新增子路由，用**页内锚点**：一跳可达这件事本身保留）。 */
 const OPS_SECTIONS = [['runtime', '运行期'], ['pipeline', '三域流水'], ['retention', '留存计划'],
   ['evolve', '自进化'], ['evidence', '证据面']]
-const ADMIN_SECTIONS = [['blocks', '阻塞清单'], ['progress', '进度'], ['user-plugins', '用户空间插件'],
-  ['market', '插件市场']]
+const ADMIN_SECTIONS = [['blocks', '阻塞清单'], ['progress', '进度'], ['config', '配置与凭据'],
+  ['user-plugins', '用户空间插件'], ['market', '插件市场']]
 
 /** HTML 转义：页面全部由字符串拼装，任何来自账本/快照/参数表的字节都必须先过这里。 */
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -134,8 +134,13 @@ function onboardingHtml(prefix, views) {
 成功后 cookie 只对 <code>${prefix}/admin/**</code> 生效。</p>
 <h2>配置与凭据放哪里</h2>
 <pre>项目/插件配置（YAML）： /workspace/config.yaml          ← 字段名见 /quotagent/admin/api/config（提权后）
+                        · 只有 tools/config-apply.py 写它（原子写 + 回滚 + 只看受管段 project:/plugins:/credentials:）
+                        · 子集：顶层/嵌套映射 + 标量 + 简单列表 + 内联 {}/[]；锚点/多文档/块标量会被**拒**（不静默糊掉）
 管理员 token（凭据）：  /workspace/config/quotagent-admin-token（0600，路径可用 QUOTAGENT_ADMIN_TOKEN_FILE 覆盖）
 用户空间插件凭据：      作用域键 cred:&lt;ns&gt;/&lt;plugin&gt;:&lt;key&gt;（插件只能解析自己作用域内的键）</pre>
+<p>提权后打开 <a href="${prefix}/admin/config/">配置与凭据页</a>：三层（项目/插件/凭据）一屏，每键给
+<code>source</code>（default/file/env/runtime）与 <code>shadowed_by</code>；凭据页只显示「已配置/未配置 + 来源 + 必须的权限 + 指纹前 8 位 + 下一步」，
+**永不显示值**。页面上可以先"干跑"（零落盘零生效）再提交；提交只落一个 0600 待处理项，**由 Python 侧消费后才生效**。</p>
 <p>需要凭据才能工作的功能（**在接上之前一律如实报未连接，不会假装健康**）：</p>
 <pre>· 邮件收发（SMTP/IMAP）：未配置 → mail 传输 available:false / reason=mail-transport-unavailable / next_action=配置凭据后接入
 · Jev 建议层：未配置 key → 面板里作为一条阻塞项出现（不是在日志里悄悄失败）</pre>
@@ -202,6 +207,7 @@ export function apply(ctx, config) {
   const adminView = ctx.adminView           // 系统管理快照的只读聚合（同上）
   const pluginMarket = ctx.pluginMarket      // 插件列表/市场的只读聚合（subagent 产出，T-267）
   const userPlugins = ctx.userPluginManager  // 用户空间插件管理面（subagent 产出，T-268）
+  const configView = ctx.configView          // 配置与凭据的可视面 + 干跑 + 待处理项（本批新增模块）
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
   const pipelinePayload = () => {
@@ -578,6 +584,143 @@ ${sortForm('events', '筛查事件')}
       + pendingBlock + inProgressBlock + healthBlock
       + scoreHtml + domainHtml + priceHtml + rawHtml + elevateHtml, prefix)
   }
+  // ==========================================================================================
+  // 配置与凭据（P0 配置/凭据 UI 化）：**数据与判定在 `host/modules/config-view.mjs` 与 Python 侧
+  // `tools/config-apply.py`**；本文件只做路由与 HTML 渲染。
+  //   · 零 `<script>`、零内联事件：读 = `<form method=get>` + `<a>`，写 = `<form method=post>`；
+  //   · 凭据永不回显：页面/JSON 里都没有"值"字段；提交控件是 `type=password` 且**没有 `value` 属性**；
+  //   · 宿主只落 0600 待处理项（真落盘由 Python 侧做）：所以页面必须写清"提交 ≠ 生效"。
+  // ==========================================================================================
+  /** 表单值 → 标量（页面只能用字符串提交；强转规则写死在页面说明里，**权威判定仍在 Python 侧**）。 */
+  const coerceScalar = (raw) => {
+    const text = String(raw ?? '').trim()
+    if (text === 'true') return true
+    if (text === 'false') return false
+    if (/^-?\d+$/.test(text)) return Number(text)
+    if (/^-?\d*\.\d+$/.test(text)) return Number(text)
+    return text
+  }
+  const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+  /** 表单 / JSON 两种提交形状 → 一个 patch（JSON 是**带类型**的机器接口；表单是人工入口）。
+   *  `opts.layerHint/targetHint`：路由已经知道层与目标（`/credentials/<name>`、`/plugins/<ns>/<plugin>`）时用它们，
+   *  免得让调用方再在 body 里重复一遍（JSON 型 body 缺 target 时按 hint 补上）。 */
+  const patchOf = (body, contentType, opts = {}) => {
+    const { layerHint = null, targetHint = null } = opts
+    if (String(contentType ?? '').includes('json')) {
+      try {
+        const parsed = JSON.parse(String(body || '{}'))
+        if (!isPlainObject(parsed)) return null
+        if (targetHint) {
+          parsed.target = targetHint
+          parsed.layer = parsed.layer ?? layerHint ?? 'plugin'
+        }
+        return parsed
+      } catch (err) { return null }
+    }
+    const form = new URLSearchParams(String(body ?? ''))
+    const layer = layerHint ?? String(form.get('layer') ?? 'project')
+    if (layer === 'credential') {
+      return { layer, target: targetHint ?? String(form.get('name') ?? ''),
+        fields: { value: String(form.get('value') ?? '') } }
+    }
+    if (layer === 'plugin') {
+      const target = targetHint ?? `${String(form.get('ns') ?? '').trim()}/${String(form.get('plugin') ?? '').trim()}`
+      const field = String(form.get('field') ?? '').trim()
+      return { layer: 'plugin', target, fields: field === '' ? {} : { [field]: coerceScalar(form.get('value')) } }
+    }
+    const key = String(form.get('key') ?? '').trim()
+    const humanRef = String(form.get('human_approval_ref') ?? '').trim()
+    return { layer: 'project', target: 'project', fields: key === '' ? {} : { [key]: coerceScalar(form.get('value')) },
+      ...(humanRef === '' ? {} : { human_approval_ref: humanRef }) }
+  }
+  /** 配置与凭据一屏（三层总览 + 凭据状态 + 审计 + 干跑/提交表单；**只读渲染，不含任何凭据值**）。 */
+  const configPageHtml = () => {
+    const data = configView.overview()
+    const creds = configView.credentials()
+    const audit = configView.audit()
+    const keyRows = (data.project || []).map((row) => `<tr data-key="${esc(row.key)}"><td><code>${esc(row.key)}</code></td>`
+      + `<td>${esc(row.value === null || row.value === undefined ? '—' : String(row.value))}</td>`
+      + `<td>${esc(row.layer)}</td><td><b>${esc(row.source)}</b></td>`
+      + `<td>${esc(row.shadowed_by ?? '—')}</td><td>${esc(row.sources.join('+'))}</td>`
+      + `<td>${row.frozen ? '冻结（永拒）' : (row.human_only ? '人工专属（需 ap-NNNN）' : (row.editable ? '可改' : '只读'))}</td>`
+      + `<td>${esc(row.type)}</td></tr>`).join('')
+    const pluginRows = (data.plugin || []).flatMap((row) => row.keys.map((item) => `<tr data-plugin="${esc(row.target)}">`
+      + `<td><code>${esc(row.target)}</code></td><td><code>${esc(item.key)}</code></td>`
+      + `<td>${esc(item.value === null || item.value === undefined ? '—' : String(item.value))}</td>`
+      + `<td>${esc(item.source)}</td><td>${esc(item.shadowed_by ?? '—')}</td></tr>`)).join('')
+    const editableKeys = (data.project || []).filter((row) => row.editable).map((row) => row.key)
+    const humanKeys = (data.project || []).filter((row) => row.human_only && !row.frozen).map((row) => row.key)
+    const credRows = (creds.rows || []).map((row) => `<tr data-credential="${esc(row.name)}">`
+      + `<td><code>${esc(row.name)}</code></td><td><b>${row.configured ? '已配置' : '未配置'}</b></td>`
+      + `<td>${esc(row.source)}</td><td>${esc(row.required_mode)}</td>`
+      + `<td>${esc(row.fingerprint_first8 ?? '—')}</td><td>${esc(row.env || '—')}</td>`
+      + `<td>${esc(row.file || '—')}${row.file_mode ? `（${esc(row.file_mode)}）` : ''}</td>`
+      + `<td>${esc(row.next_action)}</td>`
+      + `<td><form method="post" action="${prefix}/admin/api/credentials/${encodeURIComponent(row.name)}">`
+      + `<input type="password" name="value" autocomplete="off" placeholder="只写不回显" size="12">`
+      + `<button type="submit">提交</button></form></td></tr>`).join('')
+    const auditRows = (audit.rows || []).map((row) => `<tr data-audit="${esc(row.seq)}"><td>${esc(row.seq)}</td>`
+      + `<td><code>${esc(row.type)}</code></td><td>${esc(row.ts ?? '')}</td><td>${esc(row.actor ?? '')}</td>`
+      + `<td>${esc(row.layer ?? '')}</td><td><code>${esc(row.target ?? '')}</code></td>`
+      + `<td><code>${esc(row.key_path ?? '')}</code></td>`
+      + `<td>${esc(String(row.old_digest ?? '—').slice(0, 18))}</td><td>${esc(String(row.new_digest ?? '—').slice(0, 18))}</td>`
+      + `<td>${esc(row.approval_ref ?? '—')}</td><td>${esc(row.fingerprint_first8 ?? '—')}</td></tr>`).join('')
+    const degraded = data.degraded || creds.snapshot.available === false
+    return anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS)
+      + `<p><a href="${prefix}/admin/">← 回系统管理</a> · <a href="${prefix}/start/">上手（token/配置放哪里？）</a> · `
+      + `JSON：<code>${prefix}/admin/api/config</code> · <code>${prefix}/admin/api/credentials</code> · `
+      + `<code>${prefix}/admin/api/config/audit</code></p>`
+      + (degraded ? `<p class="degraded" data-degraded="1">降级（**不冒充健康**）：配置层 <code>${esc(data.reason || '—')}</code>；`
+        + `凭据状态快照 <code>${esc(creds.snapshot.reason || '—')}</code> → ${esc(data.next_action || creds.snapshot.next_action)}</p>` : '')
+      + `<h3 id="config">① 三层配置总览（项目 / 插件 / 凭据）</h3>`
+      + `<p>受管配置文件：<code>${esc(data.config_file)}</code>（宿主**只读**，真落盘由 Python 侧 <code>tools/config-apply.py</code> 做）。`
+      + `每键给 <code>source</code>（default / file / env / runtime）与 <code>shadowed_by</code>（被本行压住的层）。`
+      + `凭据行**永不显示值**：只有"已配置/未配置 + 来源 + 必须的权限 + 指纹前 8 位 + 下一步"。</p>`
+      + `<p>层顺序（低 → 高）：default → file → env → runtime。运行期覆盖：`
+      + `${data.runtime.configured ? esc(data.runtime.keys.join(' ')) : '无（' + esc(data.runtime.reason) + '）'}；`
+      + `待处理项：<b>${data.pending.count}</b> 件${data.pending.configured ? '' : `（${esc(data.pending.reason)}）`}。</p>`
+      + `<table data-layer="project"><thead><tr><th>键</th><th>值</th><th>层</th><th>source</th><th>shadowed_by</th>`
+      + `<th>同现层</th><th>可否改</th><th>类型</th></tr></thead><tbody>${keyRows}</tbody></table>`
+      + `<h3 id="plugins">② 插件配置（键 = <code>&lt;ns&gt;/&lt;plugin&gt;</code>）</h3>`
+      + (pluginRows ? `<table data-layer="plugin"><thead><tr><th>插件</th><th>字段</th><th>值</th><th>source</th>`
+        + `<th>shadowed_by</th></tr></thead><tbody>${pluginRows}</tbody></table>` : '<p>（配置文件里暂无 <code>plugins:</code> 段内容）</p>')
+      + `<h3 id="credentials">③ 凭据（只写不回显）</h3>`
+      + `<p>任何响应体里凭据值出现次数 = 0；指纹前 8 位来自 Python 侧状态快照（宿主不读凭据值）。`
+      + `提交只落一个 0600 待处理项，**由 Python 侧消费后才生效**。</p>`
+      + `<table data-layer="credential"><thead><tr><th>名称</th><th>状态</th><th>来源</th><th>必须权限</th>`
+      + `<th>指纹前 8</th><th>env</th><th>文件（权限）</th><th>下一步</th><th>提交新值</th></tr></thead>`
+      + `<tbody>${credRows}</tbody></table>`
+      + `<h3 id="write">④ 改配置 / 干跑（dry-run）与提交</h3>`
+      + `<p>表单提交的值按标量强转（<code>true/false</code> → 布尔，整数/小数 → 数字，其余字符串）；`
+      + `权威判定在 Python 侧，同一套白名单（<code>host/lib/schema.mjs</code> + <code>host/lib/config-keys.mjs</code>）。</p>`
+      + `<form method="post" action="${prefix}/admin/api/config/preview"><b>干跑（零落盘零生效）</b>：`
+      + `<label>键 <select name="key">${editableKeys.map((key) => `<option value="${esc(key)}">${esc(key)}</option>`).join('')}</select></label> `
+      + `<label>值 <input name="value" size="14"></label> `
+      + `<label>人工引用（人工专属键用） <select name="human_approval_ref"><option value="">（无）</option>`
+      + `${humanKeys.map((key) => `<option value="ap-0000">ap-0000 / ${esc(key)}</option>`).join('')}</select></label> `
+      + `<button type="submit">干跑</button></form>`
+      + `<form method="post" action="${prefix}/admin/api/config/project"><b>提交项目配置</b>（只落 0600 待处理项）：`
+      + `<label>键 <input name="key" size="28" placeholder="pricing.markup_pct"></label> `
+      + `<label>值 <input name="value" size="14"></label> `
+      + `<label>人工引用 <input name="human_approval_ref" size="10" placeholder="ap-NNNN（人工专属键必填）"></label> `
+      + `<button type="submit">提交</button></form>`
+      + `<form method="post" action="${prefix}/admin/api/config/plugins"><b>提交插件配置</b>：`
+      + `<label>ns <input name="ns" size="10"></label> <label>plugin <input name="plugin" size="12"></label> `
+      + `<label>字段 <input name="field" size="14"></label> <label>值 <input name="value" size="12"></label> `
+      + `<button type="submit">提交</button></form>`
+      + `<h3 id="semantics">⑤ 改完怎么生效（别等踩坑）</h3>`
+      + `<p>项目配置 = 同进程 cordis 配置（热加载会**重启该插件 fiber**：接受即重置该模块的运行期状态）；`
+      + `插件配置 = **重载**实例（新 uid，草稿丢失）；凭据 = 落 0600 文件后触发 re-apply（env 供给的只能重起进程）。</p>`
+      + `<h3 id="audit">⑥ 变更审计（只读；来源：Python 侧账本）</h3>`
+      + (audit.degraded ? `<p>降级：<code>${esc(audit.reason)}</code> → ${esc(audit.next_action)}</p>`
+        : `<p>共 <b>${audit.total}</b> 行（显示 ${audit.rows.length} 行，省略 ${audit.omitted}）；`
+          + `账本行**不含值**（只有键名与新旧摘要）；被拒的变更各 1 行 <code>config/refused</code>。</p>`
+          + `<table data-layer="audit"><thead><tr><th>seq</th><th>类型</th><th>ts</th><th>actor</th><th>层</th>`
+          + `<th>target</th><th>键路径</th><th>旧摘要</th><th>新摘要</th><th>人工引用</th><th>指纹前 8</th>`
+          + `</tr></thead><tbody>${auditRows}</tbody></table>`)
+      + `<p><small>本页 **0 行 <code>&lt;script&gt;</code>、0 内联事件**：读用 GET 表单/链接，写用 POST 表单；`
+      + `宿主不写文件（除 0600 待处理项）、不写账本、不取墙钟。</small></p>`
+  }
   const handle = (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
     const path = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) || '/' : url.pathname
@@ -594,6 +737,12 @@ ${sortForm('events', '筛查事件')}
     }
     const json = (code, payload) => send(code, 'application/json; charset=utf-8',
       JSON.stringify(payload, null, 2) + '\n')
+    /** 配置/凭据提交的回执状态码：受理 202 / 被拒 409 / 未配 inbox 503 / 写失败 500（原因在 next_action 里）。 */
+    const configAnswer = (out) => {
+      const code = out?.ok ? 202
+        : (out?.code === 'inbox-unconfigured' ? 503 : (out?.code === 'inbox-write-failed' ? 500 : 409))
+      return json(code, out)
+    }
 
     if (path === '/api/routes') {
       // 路由表（**静态声明**，只列本模块真的在服务的路由；新增路由必须同步这里）
@@ -619,7 +768,16 @@ ${sortForm('events', '筛查事件')}
           { path: `${prefix}/admin/api/blocks/<block_id>/resolve`, method: 'POST', auth: 'admin-session', what: '提交解阻塞（只落 0600 待处理项，Python 侧消费）' },
           { path: `${prefix}/admin/api/market`, method: 'GET', auth: 'admin-session', what: '插件市场（只读）' },
           { path: `${prefix}/admin/api/user-plugins`, method: 'GET', auth: 'admin-session', what: '用户空间插件列表' },
-          { path: `${prefix}/admin/api/user-plugins/<load|unload|reload>`, method: 'POST', auth: 'admin-session', what: '装载/卸载/重载（命名空间实例）' }],
+          { path: `${prefix}/admin/api/user-plugins/<load|unload|reload>`, method: 'POST', auth: 'admin-session', what: '装载/卸载/重载（命名空间实例）' },
+          // 配置与凭据（P0）：页面 + 只读总览 + 干跑（零落盘）+ 只落待处理项 + 审计（只读）
+          { path: `${prefix}/admin/config/`, method: 'GET', auth: 'admin-session', what: '配置与凭据一屏（三层 source/shadowed_by + 凭据状态 + 干跑 + 审计）' },
+          { path: `${prefix}/admin/api/config`, method: 'GET', auth: 'admin-session', what: '三层配置总览 JSON（项目/插件/凭据；每键 source/shadowed_by/editable）' },
+          { path: `${prefix}/admin/api/config/preview`, method: 'POST', auth: 'admin-session', what: '干跑：白名单 + 类型 + 人工门 + diff（零落盘零生效）' },
+          { path: `${prefix}/admin/api/config/project`, method: 'POST', auth: 'admin-session', what: '提交项目配置（只落 0600 待处理项；202 + payload_sha256）' },
+          { path: `${prefix}/admin/api/config/plugins`, method: 'POST', auth: 'admin-session', what: '提交插件配置（target = <ns>/<plugin>；只落待处理项）' },
+          { path: `${prefix}/admin/api/config/audit`, method: 'GET', auth: 'admin-session', what: '配置变更审计（只读；来源 Python 侧账本）' },
+          { path: `${prefix}/admin/api/credentials`, method: 'GET', auth: 'admin-session', what: '凭据状态（configured/source/required_mode/指纹前 8/next_action；**不出值**）' },
+          { path: `${prefix}/admin/api/credentials/<name>`, method: 'POST', auth: 'admin-session', what: '提交/轮换凭据（只写不回显：响应只有 ok + next_action）' }],
         write_surface: { browser_writable: [`${prefix}/admin/**`],
           note: '浏览器永远不能签的五个动作：批准 / 提交报价 / 定标 / 发 PO / 变更批准（人工门在终端）' },
       })
@@ -819,6 +977,13 @@ ${sortForm('events', '筛查事件')}
         + `<p>阻塞 <b>${data.counts?.blocked ?? 0}</b> 条（口径：${data.counts?.source ?? '—'}）</p>`
         + `<table><thead><tr><th>block</th><th>kind</th><th>原因</th><th>需要你做的事</th><th>提交材料</th></tr></thead><tbody>${rows}</tbody></table>`
         + `<p>切换视角：${switchLinks}</p>`
+        + (() => { const c = configView.overview(); const cr = configView.credentials()
+          return `<h3 id="config">配置与凭据（一屏）</h3>`
+            + `<p>受管配置文件 <code>${esc(c.config_file)}</code>：项目键 <b>${c.counts.project}</b> / 插件 <b>${c.counts.plugins}</b>`
+            + ` / 凭据 <b>${c.counts.credentials}</b>（已配置 <b>${(cr.rows || []).filter((r) => r.configured).length}</b>）`
+            + ` · 待处理项 <b>${c.counts.pending}</b> 件${c.degraded ? ` · <b>降级</b>：${esc(c.reason)}` : ''}</p>`
+            + `<p><a href="${prefix}/admin/config/">打开配置与凭据页 →</a>`
+            + `（三层 source/shadowed_by、凭据状态与指纹前 8 位、干跑、变更审计；凭据只写不回显）</p>` })()
         + (() => { const u = userPlugins.list(); return `<h3 id="user-plugins">用户空间插件（管理面本身也是插件）</h3>`
             + `<p>命名空间 <b>${(u.namespaces || []).length}</b> 个 · 插件 <b>${u.counts?.plugins ?? 0}</b> · 已装载 <b>${u.counts?.loaded ?? 0}</b>${u.degraded ? ` · <b>降级</b>：${u.reason ?? ''}` : ''}</p>`
             + (u.namespaces || []).map((n) => `<p><code>${n.ns}</code>：` + (n.plugins || []).map((p) =>
@@ -940,6 +1105,68 @@ ${sortForm('events', '筛查事件')}
         return json(ok && key ? 202 : 409, ok ? { ok: true, elevation_id: key, payload } : (payload ?? { ok: false }))
       })
     }
+    // ---- 配置与凭据（P0）：页面 + JSON + 干跑 + 只落待处理项 ----
+    // 未提权一律 `deny()`（**与其它 admin 路由逐字节同形**：不给"这个子路由存在吗"这种可探测差异）。
+    if (/^\/admin\/config\/?$/.test(path)) {
+      if (!adminGuard.authorized(req).ok) return deny()
+      return send(200, 'text/html; charset=utf-8', configPageHtml())
+    }
+    if (/^\/admin\/api\/config\/?$/.test(path)) {
+      if (!adminGuard.authorized(req).ok) return deny()
+      return json(200, configView.overview())
+    }
+    if (/^\/admin\/api\/config\/audit\/?$/.test(path)) {
+      if (!adminGuard.authorized(req).ok) return deny()
+      return json(200, configView.audit())
+    }
+    if (/^\/admin\/api\/config\/preview\/?$/.test(path) && String(req.method) === 'POST') {
+      if (!adminGuard.authorized(req).ok) return deny()
+      return readBody((body) => {
+        const patch = patchOf(body, req.headers['content-type'])
+        if (!patch) return json(400, { error: 'bad-patch', hint: '提交 JSON（带类型）或表单（layer/key/value…）' })
+        return json(200, configView.preview(patch))    // 干跑：**零落盘零生效**
+      })
+    }
+    if (/^\/admin\/api\/config\/project\/?$/.test(path) && String(req.method) === 'POST') {
+      if (!adminGuard.authorized(req).ok) return deny()
+      return readBody((body) => {
+        const patch = patchOf(body, req.headers['content-type'])
+        if (!patch) return json(400, { error: 'bad-patch', hint: '提交 JSON（带类型）或表单（key/value）' })
+        return configAnswer(configView.submitProject({ fields: patch.fields ?? {},
+          human_approval_ref: String(patch.human_approval_ref ?? '') }))
+      })
+    }
+    const pluginConfigMatch = path.match(/^\/admin\/api\/config\/plugins(?:\/([^/]+)\/([^/]+))?\/?$/)
+    if (pluginConfigMatch && String(req.method) === 'POST') {
+      if (!adminGuard.authorized(req).ok) return deny()
+      const forced = pluginConfigMatch[1] && pluginConfigMatch[2]
+        ? `${decodeURIComponent(pluginConfigMatch[1])}/${decodeURIComponent(pluginConfigMatch[2])}` : null
+      return readBody((body) => {
+        const patch = patchOf(body, req.headers['content-type'], { layerHint: 'plugin', targetHint: forced })
+        if (!patch) return json(400, { error: 'bad-patch', hint: '提交 JSON（带类型）或表单（ns/plugin/field/value）' })
+        return configAnswer(configView.submitPlugin(String(patch.target ?? ''), { fields: patch.fields ?? {} }))
+      })
+    }
+    if (/^\/admin\/api\/credentials\/?$/.test(path)) {
+      if (!adminGuard.authorized(req).ok) return deny()
+      return json(200, configView.credentials())     // 每项 configured/source/required_mode/指纹前 8/next_action
+    }
+    const credentialMatch = path.match(/^\/admin\/api\/credentials\/([^/]+)\/?$/)
+    if (credentialMatch && String(req.method) === 'POST') {
+      if (!adminGuard.authorized(req).ok) return deny()
+      const name = decodeURIComponent(credentialMatch[1])
+      return readBody((body) => {
+        // 两种形状都收：表单 `value=<值>` 或 JSON `{value}` / `{fields:{value}}`（**都不回显**）
+        const patch = patchOf(body, req.headers['content-type'], { layerHint: 'credential', targetHint: name })
+        const value = patch?.fields?.value ?? patch?.value ?? ''
+        const out = configView.submitCredential(name, String(value))
+        // **只写不回显**：响应体里只有 ok 与 next_action（连提交摘要都不回）
+        const code = out.ok ? 202 : (out.code === 'inbox-unconfigured' ? 503 : (out.code === 'inbox-write-failed' ? 500 : 409))
+        return json(code, { ok: Boolean(out.ok), next_action: out.next_action })
+      })
+    }
+    if (/^\/admin\/(config|api\/(config|credentials))(\/|$)/.test(path)) return deny()   // 其余子路径：与未提权同形
+
     if (/^\/admin\/api\/switch\/?$/.test(path)) {
       if (!adminGuard.authorized(req).ok) return deny()
       const to = String(url.searchParams.get('to') ?? '')

@@ -40,6 +40,7 @@
 | `host/modules/agent-memory.mjs` | **agent 记忆四层由插件提供**：`session`（只在内存，任何 persist 一律拒）/ `project`（**只读**，是账本投影）/ `policy`（**只人类可写**）/ `cross_party`（只走协议，直接读另一侧即拒）—— **subagent 生产（T-275）** | `agentMemory` | `agent-runtime` profile | 只改本文件 |
 | `host/modules/agent-harness.mjs` | **agent harness 由插件提供**：有界确定性骨架 （`plan()`/`step()`，硬上限 max_steps/max_bytes）；每步产一条**宿主内存**决策日志（环缓冲，**不落盘、不落账本**），日志不得出现凭据 —— **subagent 生产（T-275）** | `agentHarness` | `agent-runtime` profile | 只改本文件 |
 | `host/modules/storage-view.mjs` | **存储的只读观察面（本身也是插件）**：每租户文件数/字节/表数/键数（来自 Python 侧快照）；有界、确定性、`degraded/reason`、按键白名单投影（不出正文与路径原文）—— **subagent 生产（T-277）** | `storageView` | `storage` profile | 只改本文件 |
+| `host/modules/config-view.mjs` | **配置与凭据的可视面 + 干跑 + 待处理项落盘**：三层（项目/插件/凭据）总览（每键 `source`(default\|file\|env\|runtime) / `shadowed_by` / `editable`）、`preview()` 干跑（白名单+类型+人工门+diff，**零落盘零生效**）、`submit*()` 只落 0600 待处理项（真落盘由 `tools/config-apply.py` 做）、`credentials()`（configured/source/required_mode/指纹前 8/next_action，**永不回显值**）、`audit()`（只读账本 `config/*`·`credential/*`，按键投影）—— **subagent 生产（P0 配置与凭据 UI 化）** | `configView` | `webui`（系统管理道 `/quotagent/admin/config/`） | 只改本文件 + `host/lib/config-ui.mjs`·`config-keys.mjs`（库层） |
 | `host/modules/webui.mjs` | 双方视角 WebUI（承包商/供应商两个路由；只读账本） | `webui` | `webui` | 只改本文件 + `host/lib/ledger-view.mjs`；接入见 `docs/work/deployment-manual.md` |
 
 目录即清单：新增功能 = 新增 `host/modules/<name>.mjs`（`host/modules/index.mjs` 自动发现），不必改中心清单；模块被哪个 profile 挂载仍写在 `host/profiles.mjs`（组成即数据，ADR-0015）。

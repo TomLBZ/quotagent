@@ -32,7 +32,8 @@ import { Config as agConfig3, apply as agApply3 } from './modules/admin-guard.mj
 import { Config as avConfig3, apply as avApply3 } from './modules/admin-view.mjs'
 import { Config as pmConfig3, apply as pmApply3 } from './modules/plugin-market.mjs'
 import { Config as upConfig3, apply as upApply3 } from './modules/user-plugin-manager.mjs'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { Config as cvConfig3, apply as cvApply3 } from './modules/config-view.mjs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -85,6 +86,27 @@ const ledgerStub = (rows) => ({
   rows: () => rows,
   verify: () => ({ ok: true, count: rows.length, head: 'sha256:' + 'a'.repeat(64) }),
 })
+
+// P0 配置与凭据（config-view）夹具：**临时**配置文件（受管段 + 非受管段；后者必须被原样保留）。
+// 门**绝不**碰真实 `/workspace/config.yaml`（那里有用户自己的配置）。
+const cvFixtureDir = mkdtempSync(join(tmpdir(), 'wui-config-'))
+const cvConfigPath = join(cvFixtureDir, 'config.yaml')
+const cvConfigRaw = [
+  '# 夹具：受管段（project/plugins）+ 非受管段（other）',
+  'project:',
+  '  pricing.markup_pct: 20',
+  '  transport.kind: relay',
+  'plugins:',
+  '  "demo/demo-plugin":',
+  '    markup_pct: 9',
+  'other:',
+  '  notes: 非受管段必须被原样保留',
+].join('\n') + '\n'
+writeFileSync(cvConfigPath, cvConfigRaw, 'utf8')
+// 真实配置文件（用户的）在本门全程必须**字节不变**：宿主配置面只读，门也不许动它
+const REAL_CONFIG_PATH = '/workspace/config.yaml'
+const realHash = (path) => createHash('sha256').update(readFileSync(path)).digest('hex')
+const realConfigBefore = existsSync(REAL_CONFIG_PATH) ? realHash(REAL_CONFIG_PATH) : null
 
 const ctx = new Context()
 await ctx.plugin(EventsService)
@@ -144,6 +166,11 @@ const mountObs = async (targetCtx) => {
     { modules_dir: process.cwd() + '/host/modules', inventory: process.cwd() + '/docs/design/14-plugin-inventory.md', user_space: '' },
     'pluginMarket', 'plugin-market')
   await wrap({ apply: agApply3, Config: agConfig3, inject: [] }, { token_env: 'QUOTAGENT_ADMIN_TOKEN' }, 'adminGuard', 'admin-guard')
+  // 配置与凭据（config-view）：文件指向夹具临时目录（**不读真文件**），inbox 也让夹具自己定
+  await wrap({ apply: cvApply3, Config: cvConfig3, inject: [] },
+    { config_file: cvConfigPath, config_inbox: join(cvFixtureDir, 'config-submissions'),
+      config_status: join(cvFixtureDir, 'config-status.json'), config_ledger: join(cvFixtureDir, 'config-ledger.jsonl') },
+    'configView', 'config-view')
 }
 await mountObs(ctx)
 
@@ -182,7 +209,7 @@ writeFileSync(pipeFixture, JSON.stringify({
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -280,7 +307,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -690,6 +717,88 @@ check('P0-2/E14 从现有 dashboard 到达**不变**：总览页仍含四道链�
     .every((view) => homePage.text.includes(`/quotagent/${view}/`)),
   `status=${homePage.status} 含运维视角=${homePage.text.includes('/quotagent/ops/')}`)
 
+// ---- P0 配置与凭据（E15–E18 形态）：未提权同形 / 页面 0 script / 干跑零落盘 / 提交只落 0600 待处理项 ----
+const CFG_READ = ['/admin/config/', '/admin/api/config', '/admin/api/credentials', '/admin/api/config/audit']
+const cfgUnauth = []
+for (const target of CFG_READ) {
+  const res = await fetch(`${base}${target}`)
+  cfgUnauth.push({ path: target, status: res.status, body: await res.text() })
+}
+for (const target of ['/admin/api/config/preview', '/admin/api/config/project',
+  '/admin/api/config/plugins', '/admin/api/credentials/mail_smtp']) {
+  const res = await fetch(`${base}${target}`, { method: 'POST', body: 'key=pricing.markup_pct&value=1' })
+  cfgUnauth.push({ path: target, status: res.status, body: await res.text() })
+}
+const cfgUnauthBody = '{"error":"unauthorized"}'
+check('P0-config/E15 配置与凭据的**四个读端点 + 四个写端点**未提权一律 401 且 body 逐字节等于固定体'
+  + '（同形：不区分"路由不存在/缺 token/未启用"，不给 oracle）',
+  cfgUnauth.every((item) => item.status === 401 && item.body === cfgUnauthBody),
+  cfgUnauth.map((item) => `${item.path}=${item.status}`).join(' ')
+  + `；body 去重=${[...new Set(cfgUnauth.map((item) => item.body))].length} 种`)
+
+const cfgPageRes = await fetch(`${base}/admin/config/`, { headers: { cookie: adminCookie } })
+const cfgPageText = await cfgPageRes.text()
+const cfgApiRes = await fetch(`${base}/admin/api/config`, { headers: { cookie: adminCookie } })
+const cfgApi = JSON.parse(await cfgApiRes.text())
+const cfgProjectRow = (cfgApi.project || []).find((row) => row.key === 'pricing.markup_pct') || {}
+const cfgCredRow = (cfgApi.credentials || []).find((row) => row.name === 'mail_smtp') || {}
+check('P0-config/E16 配置与凭据页（提权后）**200 且 0 行 `<script>` / 0 内联事件**；一屏含三层'
+  + '（`data-layer="project"` / `"plugin"` / `"credential"`）+ `source` / `shadowed_by` / `editable`；'
+  + 'JSON 总览里每键给 source/shadowed_by/editable，凭据行给 required_mode 与 next_action 且**没有值字段**',
+  cfgPageRes.status === 200 && !cfgPageText.includes('<script') && !INLINE_EVENT.test(cfgPageText)
+  && cfgPageText.includes('data-layer="project"') && cfgPageText.includes('data-layer="credential"')
+  && cfgApiRes.status === 200 && cfgApi.layers?.join(',') === 'project,plugin,credential'
+  && typeof cfgProjectRow.source === 'string' && ['default', 'file', 'env', 'runtime'].includes(cfgProjectRow.source)
+  && cfgProjectRow.shadowed_by !== undefined && typeof cfgProjectRow.editable === 'boolean'
+  && cfgCredRow.required_mode === '0600' && typeof cfgCredRow.next_action === 'string'
+  && cfgCredRow.next_action.length > 0 && cfgCredRow.value === undefined && cfgCredRow.value_present === false,
+  `page=${cfgPageRes.status} 长度=${cfgPageText.length}；JSON project 行 source=${cfgProjectRow.source} `
+  + `值=${cfgProjectRow.value} shadowed_by=${JSON.stringify(cfgProjectRow.shadowed_by)} editable=${cfgProjectRow.editable}；`
+  + `凭据 mail_smtp configured=${cfgCredRow.configured} required_mode=${cfgCredRow.required_mode} `
+  + `有 value 字段=${Object.prototype.hasOwnProperty.call(cfgCredRow, 'value')}`)
+
+// 干跑：白名单拒 + **夹具配置文件字节零变化**（零落盘）
+const cfgBefore = sha256(Buffer.from(cvConfigRaw))
+const previewBad = await fetch(`${base}/admin/api/config/preview`, { method: 'POST', headers: { cookie: adminCookie,
+  'content-type': 'application/json' }, body: JSON.stringify({ layer: 'project', target: 'project', fields: { 'nope.key': 1 } }) })
+const previewBadJson = JSON.parse(await previewBad.text())
+const previewFrozen = await fetch(`${base}/admin/api/config/preview`, { method: 'POST', headers: { cookie: adminCookie,
+  'content-type': 'application/json' }, body: JSON.stringify({ layer: 'project', target: 'project', fields: { 'kernel.x': 1 } }) })
+const previewFrozenJson = JSON.parse(await previewFrozen.text())
+const previewOk = await fetch(`${base}/admin/api/config/preview`, { method: 'POST', headers: { cookie: adminCookie,
+  'content-type': 'application/json' }, body: JSON.stringify({ layer: 'project', target: 'project', fields: { 'pricing.markup_pct': 12.5 } }) })
+const previewOkJson = JSON.parse(await previewOk.text())
+const cfgAfter = sha256(Buffer.from(cvConfigRaw))
+check('P0-config/E17 干跑（`preview`）**零落盘零生效**：未知键 → 拒（reasons 含 `unknown-key`）；`kernel.*` → 拒'
+  + '（`vetoed_by=frozen`）；合法键 → 出 diff（含 old/new 与两个摘要）；三种情况下**夹具配置文件字节零变化**'
+  + '（本门另有一条断言：真 `/workspace/config.yaml` 在本门全程字节不变）',
+  previewBad.status === 200 && previewBadJson.accepted === false
+  && (previewBadJson.reasons || []).some((item) => item.code === 'unknown-key')
+  && previewFrozenJson.vetoed_by === 'frozen'
+  && previewOkJson.accepted === true && (previewOkJson.diff || []).length === 1
+  && previewOkJson.diff[0].old !== undefined && previewOkJson.diff[0].new === 12.5
+  && previewOkJson.diff[0].new_digest !== previewOkJson.diff[0].old_digest
+  && cfgBefore === cfgAfter,
+  `unknown=${previewBad.status}/${previewBadJson.accepted} frozen=${previewFrozenJson.vetoed_by} `
+  + `ok=${previewOkJson.accepted}/diff=${(previewOkJson.diff || []).length} 文件字节不变=${cfgBefore === cfgAfter}`)
+
+// 提交：202 + payload_sha256 + next_action；只落 0600 待处理项（落在夹具 inbox，账本零新增在 config-route 门细验）
+const submitProject = await fetch(`${base}/admin/api/config/project`, { method: 'POST', headers: { cookie: adminCookie,
+  'content-type': 'application/json' }, body: JSON.stringify({ fields: { 'pricing.markup_pct': 12.5 } }) })
+const submitJson = JSON.parse(await submitProject.text())
+const cfgInboxDir = join(cvFixtureDir, 'config-submissions')
+const pendingFiles = existsSync(cfgInboxDir) ? readdirSync(cfgInboxDir).filter((name) => name.endsWith('.json')) : []
+const pendingModes = pendingFiles.map((name) => (statSync(join(cfgInboxDir, name)).mode & 0o777).toString(8))
+check('P0-config/E18 提交项目配置 → **202** + `payload_sha256`（64 位小写 hex）+ `next_action`（说明"宿主不写文件不写账本"）；'
+  + '宿主只落 **0600** 待处理项（目录 0700），且**干跑提到的键值不上盘**（配置文件字节仍不变）',
+  submitProject.status === 202 && typeof submitJson.payload_sha256 === 'string'
+  && /^[0-9a-f]{64}$/.test(submitJson.payload_sha256) && String(submitJson.next_action).includes('config-apply.py')
+  && pendingFiles.length === 1 && pendingModes.every((mode) => mode === '600')
+  && sha256(Buffer.from(cvConfigRaw)) === cfgAfter,
+  `status=${submitProject.status} payload_sha256=${String(submitJson.payload_sha256).slice(0, 16)}… `
+  + `待处理项=${pendingFiles.join(',')} 权限=${pendingModes.join(',')} 配置文件字节不变=${sha256(Buffer.from(cvConfigRaw)) === cfgAfter}`)
+
+
 // 4. 未知视角
 const unknown = await get('/nonexistent/')
 check('WebUI 负控：未知路径/视角返回 404 且带可用路径提示（不得静默空页面）',
@@ -733,6 +842,12 @@ check('T-234 正控：错误映射三档（背压→429+Retry-After / 超时→5
   && toRes.captured.status === 504 && JSON.parse(toRes.captured.body).error === 'timeout'
   && otherRes.captured.status === 500,
   `429=${bpRes.captured.status} retry-after=${bpRes.captured.headers?.['retry-after']} 504=${toRes.captured.status} 500=${otherRes.captured.status}`)
+
+// P0-config/E19 真配置文件在你的机器上**字节不变**（宿主只读 + 门自己也不动它）：这是"别把用户配置弄丢"的机检形态
+const realConfigAfter = existsSync(REAL_CONFIG_PATH) ? realHash(REAL_CONFIG_PATH) : null
+check('P0-config/E19 真实 `/workspace/config.yaml` 在本门全程**字节不变**（宿主配置面只读；门用夹具文件而不是它）',
+  realConfigAfter === realConfigBefore,
+  `before=${String(realConfigBefore).slice(0, 16)}… after=${String(realConfigAfter).slice(0, 16)}… 存在=${existsSync(REAL_CONFIG_PATH)}`)
 
 // 5. 零残留：dispose 后端口释放，可被重新监听
 const port = box.handle.port

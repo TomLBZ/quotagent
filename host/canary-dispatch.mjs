@@ -226,9 +226,14 @@ const e2e = async ({ weightBps, candidate }) => {
   const { apply: histApplyE2E, Config: histConfigE2E } = await import('./modules/price-history.mjs')
   await ctx.plugin({ name: 'price-history#e2e', inject: [], Config: histConfigE2E,
     apply: (inner, cfg) => histApplyE2E(inner, cfg) }, histConfigE2E.parse({ key_field: 'supplier_id' }))
+  // 配置与凭据（config-view）：webui 的 inject 需要它（wiring 门 B2）；e2e 里用**不存在的文件** → 视图降级
+  const { apply: cvApplyE2E, Config: cvConfigE2E } = await import('./modules/config-view.mjs')
+  await ctx.plugin({ name: 'config-view', inject: [], Config: cvConfigE2E,
+    apply: (inner, cfg) => cvApplyE2E(inner, { ...cfg, config_file: '', config_inbox: '', config_status: '',
+      config_ledger: '' }) }, cvConfigE2E.parse({}))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }

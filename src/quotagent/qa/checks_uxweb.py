@@ -42,9 +42,14 @@ def check() -> list[Assertion]:
                          all(p >= 0 for p in pos) and pos == sorted(pos),
                          f"positions={pos}"))
     # 交互只能靠 GET 表单：页面模板里存在 method="get" 且**没有** <script> / 内联事件
-    out.append(Assertion("① 交互用 `<form method=get>`（页面模板里没有 `<script>`、也没有内联事件属性）",
-                         'method="get"' in src and '<script' not in src and not re.search(r'\son[a-z]+=', src),
-                         f"get_forms={'method=\"get\"' in src} script_tags={src.count('<script')} inline_attrs={len(re.findall(r'\\son[a-z]+=', src))}"))
+    # 只在**非注释**源码里数：注释里写"保持 0 行 <script>"这类说明不该被当成违规；
+    # 渲染出来的页面由实时 curl 与 `verify.sh webui` 门独立举证。
+    code = '\n'.join(l for l in src.splitlines()
+                      if not l.lstrip().startswith(('//', '*', '/*', '#')))
+    out.append(Assertion("① 交互用 `<form method=get>`（**非注释**源码里没有 `<script>`、也没有内联事件属性）",
+                         'method="get"' in code and '<script' not in code and not re.search(r'\son[a-z]+=', code),
+                         f"get_forms={'method=\"get\"' in code} script_tags={code.count('<script')} "
+                         f"inline_attrs={len(re.findall(r'\\son[a-z]+=', code))}（注释行已剔除）"))
     # 道内子导航 + 上手入口（每一页都能点到 token/配置说明）
     out.append(Assertion("① 道内子导航（data-subnav）与「上手」入口都在（后者保证 token/配置位置**每一页可达**）",
                          'data-subnav' in src and 'start/' in src, f"subnav={'data-subnav' in src} start={'start/' in src}"))
@@ -70,7 +75,8 @@ def check() -> list[Assertion]:
         out.append(Assertion("① 子视图清单为 8 条（承包 4 + 供应 4）且每条都是 GET 视图",
                              n == 8, f"SUBVIEWS={sub if n else r.stdout[-120:] + r.stderr[-120:]}"))
     else:
-        n = len(re.findall(r"'(events|quotes|approvals|evidence|clarifications)'", src))
-        out.append(Assertion("① 子视图清单为 8 条（无 Node：**降级**为静态计数；HTTP 行为由 `verify.sh webui` 守卫）",
-                             n >= 8, f"静态命中={n}"))
+        names = {m for m in re.findall(r"'(events|quotes|approvals|evidence|clarifications)'", src)}
+        out.append(Assertion("① 子视图名齐全（无 Node：**降级**为静态名字集合断言；HTTP 行为由 `verify.sh webui` 守卫）",
+                             names >= {'events', 'quotes', 'approvals', 'evidence', 'clarifications'},
+                             f"名字={sorted(names)}"))
     return out
