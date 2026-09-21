@@ -207,9 +207,13 @@ def ac_plugin_003() -> list[Assertion]:
         return out
 
     code, help_payload, raw = _host(root, "help")
-    out.append(Assertion("宿主自描述：三个 profile（contractor-ops / supplier-bid / relay）+ cordis 版本",
+    # 断言口径（2026-09-21 修正）：要求**包含**三个既定 profile，而不是"恰好三个"。
+    # 原写法把 profile 全集写死，P2 新增 `webui`（视图台）后无辜变红；AC 的意图是"三台机器都在且能自描述"，
+    # 不是"永远不许有新 profile"。这是修过度指定，不是放宽业务要求。
+    _required_profiles = {"contractor-ops", "supplier-bid", "relay"}
+    out.append(Assertion("宿主自描述：含三个既定 profile（contractor-ops / supplier-bid / relay，允许更多）+ cordis 版本",
                          code == 0 and help_payload and
-                         sorted(help_payload.get("profiles", [])) == ["contractor-ops", "relay", "supplier-bid"]
+                         _required_profiles.issubset(set(help_payload.get("profiles", [])))
                          and help_payload.get("cordis_version", "").startswith("4.0.0-rc."),
                          f"exit={code} payload={json.dumps(help_payload, ensure_ascii=False)[:160]} "
                          f"raw={raw.strip()[:120]}"))
