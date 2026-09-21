@@ -316,7 +316,14 @@ export function apply(ctx, config) {
       const data = slice[DOMAIN_KEY[domain]] || null
       const out = { view, domain, source: '三域快照（Python 侧写，宿主只读；判定在 services/*）',
         degraded: !data, note: '只给计数与最近事件的 id/序号/状态；不出正文与私域键' }
-      if (data) { out.counts = Object.fromEntries(Object.entries(data).filter(([, v]) => typeof v === 'number')); out.recent = Array.isArray(data.recent) ? data.recent : [] }
+      if (data) {
+        out.counts = Object.fromEntries(Object.entries(data).filter(([, v]) => typeof v === 'number'))
+        // **按键投影**而不是原样透传：即使快照里混进正文/私域键，也不出这条路由
+        // （D-033/D-053 的"不出正文与私域"在宿主侧也要成立，不能只靠写入器规矩）
+        const RECENT_KEYS = { negotiation: ['thread_id', 'attempt_no', 'status'], faq: ['entry_id', 'rfq_rev'] }[domain]
+        out.recent = (Array.isArray(data.recent) ? data.recent : []).slice(0, 5)
+          .map((row) => Object.fromEntries(RECENT_KEYS.filter((k) => row && Object.prototype.hasOwnProperty.call(row, k)).map((k) => [k, row[k]])))
+      }
       return json(200, out)
     }
     if (/^\/api\/pipeline\/?$/.test(path)) {

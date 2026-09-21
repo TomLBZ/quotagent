@@ -142,6 +142,27 @@ writeFileSync(evolvePath, [
   JSON.stringify({ type: 'evolve/promoted', body: { approval_ref: 'ap-9' } }),
 ].join('\n') + '\n', 'utf8')
 
+// T-262：业务视角断言必须**自带夹具快照** —— 干净副本里没有 tmp/ 演示数据
+// （第一版靠真 `tmp/ui-shared/pipeline.json`，clean-copy 门立刻报 webui 23/25 红）
+const pipeFixtureDir = mkdtempSync(join(tmpdir(), 'wui-pipe-'))
+const pipeFixture = join(pipeFixtureDir, 'pipeline.json')
+const pipeRec = (n) => Array.from({ length: n }, (_, i) => ({
+  thread_id: `nt-000${i + 1}`, attempt_no: i + 1, status: 'conceded',
+  body: 'SECRET-BODY-不该外泄', drift: 'private:必须过滤',   // 哨兵：路由必须按键投影，不得原样透传
+}))
+const pipeFaqRec = (n) => Array.from({ length: n }, (_, i) => ({
+  entry_id: `fq-000${i + 1}`, rfq_rev: i + 1, subject: 'SECRET-SUBJECT', note: 'private:必须过滤',
+}))
+writeFileSync(pipeFixture, JSON.stringify({
+  generated_at: '2026-09-21T12:00:00Z',
+  totals: { threads: 2, rounds: 2, rejected: 2, entries: 2, queued: 2, refused: 2 },
+  views: Object.fromEntries(['contractor', 'supplier'].map((v) => [v, {
+    negotiate: { threads: 1, open: 0, closed: 1, rounds: 1, rejected: 1, recent: pipeRec(5) },
+    faq: { entries: 1, revs: [1], recent: pipeFaqRec(5) },
+    mail: { queued: 1, refused: 1, transport: { available: false, reason: 'mail-transport-unavailable', next_action: '配置 SMTP/IMAP 凭据后接入' } },
+  }])),
+}), 'utf8')
+
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
@@ -152,7 +173,7 @@ const fiber = await ctx.plugin({
     inner.provide = (service, value) => { if (service === 'webui') box.handle = value; return original(service, value) }
     await webuiApply(inner, config)
   },
-}, { port: 0, route_prefix: '/quotagent', ledger_evolve: evolvePath })
+}, { port: 0, route_prefix: '/quotagent', ledger_evolve: evolvePath, pipeline_snapshot: pipeFixture })
 
 const base = box.handle.url.replace(/\/$/, '')
 const get = async (path) => {
@@ -346,9 +367,20 @@ check('业务视角·谈判正控：双方 /<view>/api/negotiation 都 200，含
   nva.status === 200 && nvb.status === 200 && nvJson.counts && Array.isArray(nvJson.recent)
   && !/"body"\s*:/.test(nva.text) && !nva.text.includes('private:') && !nva.text.includes('reserve_price'),
   `status=${nva.status}/${nvb.status} counts=${JSON.stringify(nvJson.counts)} recent=${(nvJson.recent || []).length}`)
+// 夹具负控：快照里放了 SECRET/private: 哨兵，路由必须按键投影掉；且列表有界（夹具 5 条）
+check('业务视角·谈判投影：recent 按键投影（thread_id/attempt_no/status），哨兵 body/private 不得出现，且 ≤5 条',
+  !nvJson.recent?.some((r) => Object.keys(r).some((k) => !['thread_id', 'attempt_no', 'status'].includes(k)))
+  && (nvJson.recent || []).length > 0 && (nvJson.recent || []).length <= 5
+  && !nva.text.includes('SECRET-BODY') && !nva.text.includes('private:'),
+  `keys=${JSON.stringify((nvJson.recent || []).map((r) => Object.keys(r)))} n=${(nvJson.recent || []).length}`)
 const fqa = await get('/contractor/api/faq')
 let fqJson = {}
 try { fqJson = JSON.parse(fqa.text) } catch (err) { fqJson = {} }
+check('业务视角·FAQ 投影：recent 按键投影（entry_id/rfq_rev），subject/private 哨兵不得出现，且 ≤5 条',
+  !fqJson.recent?.some((r) => Object.keys(r).some((k) => !['entry_id', 'rfq_rev'].includes(k)))
+  && (fqJson.recent || []).length > 0 && (fqJson.recent || []).length <= 5
+  && !fqa.text.includes('SECRET-SUBJECT') && !fqa.text.includes('private:'),
+  `keys=${JSON.stringify((fqJson.recent || []).map((r) => Object.keys(r)))} n=${(fqJson.recent || []).length}`)
 check('业务视角·FAQ 正控：/<view>/api/faq 200，含条目计数与最近条目，且不出正文/私域',
   fqa.status === 200 && fqJson.counts && Array.isArray(fqJson.recent)
   && !/"body"\s*:/.test(fqa.text) && !fqa.text.includes('private:'),
