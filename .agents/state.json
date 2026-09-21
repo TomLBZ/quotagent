@@ -1,18 +1,18 @@
 {
   "schema": 1,
   "updated_at": "2026-09-12",
-  "phase": "P0-mock",
-  "phase_source": "docs/work/roadmap.md",
-  "next_task": "T-117",
-  "next_action": "（人工）按 docs/work/validation/README.md 的接手指令执行 V-001..V-012：tools/v-kit.sh V-00X 领材料 → 现场执行 → 证据存 docs/work/evidence/EV-<编号>-V-00X-*.txt → 填 register.json（decided_by=human:*）→ tools/verify.sh v → commit+push；12 条有结论后 T-117 标 done、G0 由人签",
-  "last_verified_command": "tools/verify.sh docs && tools/verify.sh v && tools/run.sh -m quotagent.qa suite s1..s4",
-  "last_verified_result": "PASS (34 条 AC + 场景集 s1..s4；V 登记表校验 PASS：12 条 V 全部 open、prepared=true、无越权结论)",
-  "last_verified_evidence": "docs/work/evidence/EV-036-V-002-kit-selfcheck.txt",
+  "phase": "P1-mvp",
+  "phase_source": "docs/work/roadmap.md §3",
+  "next_task": "T-201",
+  "next_action": "批次 B1（文档覆盖缺口）→ B2（T-201 双侧进程分离 + profiles，AC-PLUGIN-003）；P1 执行顺序见 docs/work/decisions.md D-007 与 docs/work/reviews/agent-review-p1-plan.txt",
+  "last_verified_command": "tools/verify.sh docs && tools/verify.sh cordis && tools/verify.sh v",
+  "last_verified_result": "PASS（docs 门 73 md/0 未解析；cordis 冒烟 18/18；V 登记表 12 条 open + planning_assumptions 标 not_a_conclusion；P0 34 条 AC 全绿）",
+  "last_verified_evidence": "docs/work/evidence/EV-038-cordis-host-probe.txt",
   "last_verified_commit": "22f8e8f34838b22739d8b01f2bc69c33903a67ca",
   "blockers": [],
   "human_required": [
-    "T-117 现场验证 V-001..V-012：备料已完成（docs/work/validation/ 的 12 份执行包 + register.json + tools/v-kit.sh + tools/verify.sh v）；需要人执行并签字，agent 不得代填结论",
-    "其中 V-002（供应商是否接受结构化报价）决定 P1 是否成立——最关键的一条，材料已按 3 家盲测定稿"
+    "T-117 现场验证 V-001..V-012：备料已完成；**P1 按用户指令以\"V 全部通过\"为前提推进**（planning_assumptions，非结论），V 的正式 conclusion 与 G0/G1 签署仍需人工",
+    "V-002（供应商是否接受结构化报价）决定 P1 目标是否成立——若真实结论相反，按 ADR-0014 Revisit 1/2 重定范围"
   ],
   "known_defects": [
     "D-001",
@@ -40,7 +40,9 @@
     "compare_guard_eval": "docs/design/adr/0011-p0-compare-guard-eval-semantics.md",
     "baseline_report": "docs/work/metrics-baseline.md（生成：tools/run.sh -m quotagent.qa metrics --out docs/work/metrics-baseline.md）",
     "counterexamples": "docs/work/scenarios/s4-counterexamples.json（只增不减）",
-    "validation_kit": "docs/work/validation/（执行包 + register.json + templates）；tools/v-kit.sh 打包；tools/verify.sh v 校验"
+    "validation_kit": "docs/work/validation/（执行包 + register.json + templates）；tools/v-kit.sh 打包；tools/verify.sh v 校验",
+    "host": "host/（cordis 4.0.0-rc.10，tools/cordis.sh；verify.sh cordis）；桥接协议见 ADR-0013",
+    "p1_plan": "docs/work/decisions.md（决策日志）+ docs/work/reviews/agent-review-p1-plan.txt（16 批依赖序）"
   },
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态"
 }

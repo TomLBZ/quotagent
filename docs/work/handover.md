@@ -4,21 +4,25 @@
 
 ## 现在在哪
 
-P0 mock：S0.1–S0.14 功能完成（34 条 AC 绿）；**S0.15（T-117）备料完成、结论待人工**。
-备料：`docs/work/validation/`（12 份执行包 + 模板 + `register.json`）。`verify.sh docs|v` 均 PASS；
-自检 EV-036/037；远端已回读（EV-003）。
+**P1 已开工**。宿主直接依赖 cordis 4.0.0-rc.10（ADR-0012；`host/`）；桥接见 ADR-0013；
+P1 前提与 MVP 判据见 ADR-0014（V 按指令"假设通过"，`register.json.planning_assumptions`
+标 not_a_conclusion，**V 的 status 保持 open**）。执行顺序 = 16 批（`decisions.md` D-007）。
 
-## 下一步唯一动作（人工）
+## 最后验证
 
-`tools/v-kit.sh V-00X` 领材料 → 现场执行 → 证据存 `docs/work/evidence/EV-<编号>-V-00X-*.txt` →
-填 `register.json`（`decided_by=human:*`）→ `tools/verify.sh v` → commit+push。
-详见 `docs/work/validation/README.md`；12 条有结论后 T-117 标 `done`，G0 由人签。
+`verify.sh docs|v|cordis` 均 PASS；P0 34 条 AC 仍全绿；远端 refs 已回读（EV-003）。
+
+## 下一步唯一动作
+
+**B1** 补文档覆盖缺口（FR-QEP-005/006→T-202、FR-COST-003→T-208、FR-UX-002→T-210、
+roadmap S1.2/S1.14、AC 契约表加 g1、新子目录预算行）→ **B2**（T-201 双侧进程分离 + profiles，
+AC-PLUGIN-003）。写冲突面同刻只允许一批持有。
 
 ## 不变量
 
-内核不可自改 · 承诺需人批 · 私域不出 realm · 不可归一即拒绝 · 未标 impact 不进 TCO ·
-护栏只标注 · 无引用即无效 · **V 结论不得由 agent 代填**。
+内核不可自改 · 账本唯一写者 · 承诺需人批且桥不暴露 commit 面 · 私域不出 realm ·
+不可归一即拒绝 · 护栏只标注 · 无引用即无效 · **V 结论/G0/G1 只能人签**。
 
 ## 阻塞
 
-T-117 待现场人工（D-002）；V-002 盲测决定 P1 是否成立。
+无。V 项真实结论仍待人工（不影响 P1 按假设推进）。
