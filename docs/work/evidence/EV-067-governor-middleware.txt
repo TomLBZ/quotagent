@@ -1,0 +1,34 @@
+EV-067 运行期中间件 `governor`（限流/背压 + 超时 + 有界重试，T-232）
+生成时间：2026-09-21T08:55:09Z（UTC）
+
+约束：用户 2026-09-21 指令"项目的每个功能都应被插件提供…可以用 subagents 制作一些 domain based 插件或者
+中间件满足一些具体业务逻辑"。以下为原始命令输出。
+
+[1] tools/verify.sh governor（9 条断言，含背压/超时/有界重试负控 + 假时钟确定性）
+[ok]   准入正控：额度足够时放行并扣减（remaining 递减）
+        ok1.remaining=1 ok2.remaining=0
+[ok]   准入负控：额度耗尽时**拒绝且可解释**（reason + retry_after_ms + next_action）
+        reason=credit-exhausted retry_after_ms=50
+[ok]   归还负控：release 幂等且**不超容量**（多还不会凭空造额度）
+        remaining 序列=1→2→2
+[ok]   背压负控：额度耗尽时 run() 抛 `backpressure`（不是静默排队，也不是静默成功）
+        code=backpressure detail="credit-exhausted"
+[ok]   超时正控：超时是**显式错误**（code=timeout），且超时后额度被归还（不永久泄漏）
+        code=timeout 归还后额度=4
+[ok]   重试正控：第一次超时、第二次成功 → attempts=2 且最终 ok；重试间隔走配置（确定性，无随机退避）
+        attempts=2 sleep=[3]
+[ok]   有界重试负控：请求重试次数超过硬上界 → **直接拒绝**（不许无界重试）
+        code=retry-limit-exceeded
+[ok]   负控：业务错误在重试用尽后**原样抛出**（不得被包装成成功，也不得无限重试）
+        error=business-failure retries=1
+[ok]   确定性：同一序列跑两次统计与结果一致（假时钟；判定不依赖真实时间）
+        [true,true,false,"backpressure",0]
+RESULT: PASS（governor 门 9/9）
+（exit=0）
+
+结论：
+- 准入与拒绝都可解释（`reason`/`retry_after_ms`/`next_action`），不返回裸 false；
+- 额度耗尽时 `run()` 抛 `backpressure`（不静默排队、不静默成功）；成功的 run 会归还额度；
+- 超时是**显式错误**（`code=timeout`），超时后额度归还；重试次数受硬上界约束（超限直接拒绝）；
+- 业务错误重试用尽后原样抛出（不被包装成成功）；
+- 用假时钟跑同一序列两次结果一致 → 判定不依赖真实时间（可复现）。
