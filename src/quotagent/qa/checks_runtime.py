@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,19 @@ IGNORE_DIRS = {".git", ".venv", "tmp", "__pycache__", "node_modules", ".mypy_cac
 IGNORE_FILES = {"USER-GOALS.md", ".env", "config.local.yaml"}
 IGNORE_SUFFIX = (".pyc", ".pyo", ".log")
 RUNTIME_ARTIFACTS = {".venv", "tmp", "__pycache__"}
+
+# 门（`tools/check-docs.py`）扫描范围的排除口径（D-072）：只排除**临时/派生目录**。
+# 与门内 SCAN_EXCLUDE_DIRS 同口径；契约文档（docs/**、.agents/**、host/**、根部的 .md）一个都不排除。
+GATE_SCOPE_EXCLUDE_DIRS = frozenset({".git", ".venv", "tmp", "node_modules", "__pycache__"})
+
+# 门自己的定义文件（一处一事实）：这些真契约文档必须始终留在门的扫描范围里 ——
+# 用来证明"收窄范围排除的只是临时/派生目录，不是契约文档"（断言非空转）。
+GATE_SCOPE_DEF_FILES = ("docs/work/acceptance-criteria.md",
+                        "docs/work/functional-requirements.md",
+                        "docs/work/progress-checklist.md",
+                        "docs/design/04-services-catalog.md",
+                        "docs/design/10-nonfunctional.md",
+                        "docs/design/12-documentation-standard.md")
 P0_ACS = ("AC-DESIGN-001", "AC-DESIGN-002", "AC-DESIGN-003",
           "AC-AUDIT-001", "AC-AUDIT-002", "AC-RUNTIME-001", "AC-RUNTIME-002")
 
@@ -48,13 +62,30 @@ def _rel_files(root: Path) -> set[str]:
 
 
 def _gate_scope_files() -> set[str]:
-    """门（`tools/check-docs.py`）扫描的集合：仓库内所有 .md，仅排除 .git。
+    """门（`tools/check-docs.py`）扫描的**契约文档集合**：仓库内所有 .md，但排除临时/派生目录。
 
-    本 AC 会复制整棵树，必须保证跑完之后这个集合与跑之前一致——否则"跑过 AC"就会改变门的结果，
-    门就不再是确定性的（本仓库不改门来迁就工具，只清理自己的临时产物）。
+    D-072 语义（承接 D-071 第 3 条"判据不得覆盖无关写入者"）：门扫的是契约文档 = 全仓 .md **减去**
+    `.git/ .venv/ tmp/ node_modules/ __pycache__/` 下的文件（与门内 `SCAN_EXCLUDE_DIRS` 同口径）。
+    本 AC 自己往 `tmp/ac/<rand>/clean/` 做的整树副本就属于 tmp/ —— 它**不在门的判据里**，所以
+    "跑过 AC 不改变门的结果"靠的是**范围定义本身**，而不是"碰巧把副本删干净了"。
+    换来的更强要求：**契约文档一个都不能少** —— 这个集合前后必须逐项一致，谁在跑 AC 时动了真契约
+    文档（增/删/改名）这条断言就红。门自报的扫描数与这个集合也会对账（见下方断言），
+    所以"口径只在 AC 侧成立、门侧其实扫了别的"这件事也会红 —— 断言不会空转。
     """
     root = repo_root()
-    return {str(p.relative_to(root)) for p in root.rglob("*.md") if ".git" not in p.parts}
+    scope: set[str] = set()
+    for p in root.rglob("*.md"):
+        rel = p.relative_to(root)
+        if GATE_SCOPE_EXCLUDE_DIRS.intersection(rel.parts):
+            continue
+        scope.add(str(rel))
+    return scope
+
+
+def _gate_reported_scope(stdout: str) -> int | None:
+    """从文档门输出里读它自报的契约文档数（`扫描范围: 契约文档 N 个 markdown 文件`）。"""
+    m = re.search(r"契约文档\s+(\d+)\s+个 markdown 文件", stdout or "")
+    return int(m.group(1)) if m else None
 
 
 def _clean_copy(dest: Path) -> int:
@@ -121,8 +152,10 @@ def ac_runtime_001() -> list[Assertion]:
                    else "/usr/local/bin:/usr/bin:/bin",
                    "QUOTAGENT_PY": interpreter, "PYTHONPATH": ""}
     proc = _run([interpreter or "python3", root / "tools" / "check-docs.py"], cwd=root, env=minimal_env)
+    gate_scope_count = _gate_reported_scope(proc.stdout)
     out.append(Assertion("最小环境（仅 PATH/QUOTAGENT_PY）下文档门可运行", proc.returncode == 0,
-                         f"exit={proc.returncode} {_tail(proc.stdout or proc.stderr)}"))
+                         f"exit={proc.returncode} 门自报契约文档={gate_scope_count} "
+                         f"{_tail(proc.stdout or proc.stderr)}"))
 
     scratch = new_scratch("runtime-001")
     copy = scratch / "clean"
@@ -178,10 +211,22 @@ def ac_runtime_001() -> list[Assertion]:
 
     shutil.rmtree(scratch, ignore_errors=True)
     scope_after = _gate_scope_files()
-    out.append(Assertion("跑完后门扫描范围不变（临时副本已清理，门保持确定性）",
+    # D-072 断言语义（比旧的「扫描范围不变」更精确）：门扫的是**契约文档集合**；临时副本
+    # （本 AC 的 tmp/ac/<rand>/clean/ 就是其一）按定义不在门判据里，而真契约文档一个都不能少。
+    out.append(Assertion("跑完后门扫描的**契约文档集合**不变（临时副本不在扫描范围内；真契约文档一个不少）",
                          scope_before == scope_after,
-                         f"before={len(scope_before)} after={len(scope_after)} "
+                         f"契约文档 before={len(scope_before)} after={len(scope_after)} "
                          f"diff={sorted(scope_before ^ scope_after)[:3]}"))
+    out.append(Assertion("门自报的扫描范围与契约文档集合一致（收窄口径在门侧真的生效 ⇒ 断言非空转）",
+                         gate_scope_count is not None and gate_scope_count == len(scope_before),
+                         f"门自报={gate_scope_count} AC 独立测得={len(scope_before)}"))
+    missing_defs = [rel for rel in GATE_SCOPE_DEF_FILES if rel not in scope_before]
+    out.append(Assertion("契约文档集合仍含门的全部定义文件（排除的只有临时/派生目录，不是契约文档）",
+                         not missing_defs,
+                         f"检查 {len(GATE_SCOPE_DEF_FILES)} 个定义文件，缺 {missing_defs}"))
+    out.append(Assertion("本 AC 的一次性副本已清理（只断言本用例自己创建的那个路径，不碰别人的并发目录）",
+                         not scratch.exists(),
+                         f"scratch={scratch} exists={scratch.exists()}"))
     return out
 
 

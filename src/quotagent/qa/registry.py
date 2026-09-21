@@ -106,7 +106,7 @@ def run_check(check: ACCheck) -> ACReport:
                                        detail=f"{type(exc).__name__}: {exc}")]
         return report
     finally:
-        # AC 自清理：一次性目录用完即删（否则会改变文档门的扫描范围）
+        # AC 自清理：一次性目录用完即删（D-072 起文档门不扫 tmp/，但一次性树不该留给别的门/轮次）
         cleanup_scratch()
     if not assertions:
         report.assertions = [Assertion(name="至少一条断言", ok=False, detail="该 AC 未产出任何断言")]

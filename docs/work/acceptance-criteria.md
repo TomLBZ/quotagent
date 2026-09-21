@@ -37,7 +37,7 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 
 | ID | 阶段 | 断言 | 命令 |
 |---|---|---|---|
-| AC-RUNTIME-001 | P0 | `src/` 只导入标准库；干净副本（不含 `.venv`/`tmp`）用裸解释器可跑 `tools/verify.sh docs` 与 CLI；`tools/bootstrap.sh` 幂等且运行产物只落 `.venv/`、`tmp/` | `qa ac AC-RUNTIME-001` |
+| AC-RUNTIME-001 | P0 | `src/` 只导入标准库；干净副本（不含 `.venv`/`tmp`）用裸解释器可跑 `tools/verify.sh docs` 与 CLI；`tools/bootstrap.sh` 幂等且运行产物只落 `.venv/`、`tmp/`；跑完后门的**契约文档集合**不变（临时副本不在门的扫描范围内 —— 真契约文档一个不少、临时副本不参与判定，见 D-072） | `qa ac AC-RUNTIME-001` |
 | AC-RUNTIME-002 | P0 | CLI 契约：`qa ac` 输出 `{ac, status, assertions[], evidence_refs[]}`；退出码 0/1/2；未知 AC 与未实现场景集返回 2（不伪装通过）；`qa list` 覆盖本批 AC | `qa ac AC-RUNTIME-002` |
 
 ## 2. 内核

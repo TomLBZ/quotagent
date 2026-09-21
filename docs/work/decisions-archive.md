@@ -349,3 +349,33 @@ FR/AC 归属**；`host/modules/` 与插件清单文档里**零个 FR 引用**。
 2. `host/check-modules.mjs` 的 **STUBS 表**（fixture 必须能 stub 模块声明的每个依赖，否则 modules 门直接红）；
 3. `host/webui.mjs` 的**两处挂载**（主 probe + brokenCtx）与它们的 `inject` 列表；
 4. `host/canary-dispatch.mjs` 的 e2e 挂载（它也要挂 webui，漏一处就红）+ `host/cli.mjs` 的运行期挂载与输出。
+
+## D-027 T-234 根因与收口：`governor` 的自引用（2026-09-21T09:11:03Z）
+
+**根因（已定位并修复）**：`host/modules/governor.mjs` 的方法内部用 `ctx.governor.admit/release` **自引用**。
+当模块以"包装挂载"（探针/CLI 为了抓句柄都用这个模式）被挂时，包装的 ctx 里**没有** `governor` 注入 →
+请求期访问该属性会被 cordis 的 ctx 代理拒绝，报 `cannot get property "governor" without inject`（全路由 500）。
+修法：**本地句柄自引用**（`const handle = {...}`，方法内用 `handle.admit/release`，最后 `ctx.provide('governor', handle)`），
+不再经由 ctx 查自己。修后 `verify.sh webui` **11/11**、`verify.sh governor` **9/9**。
+
+**纪律（本轮三次踩坑的共同形状）**：模块**不要靠 `ctx.<自己>` 取自己**——包装挂载/多实例场景下 ctx 里未必有自己；
+一律用本地常量引用。这条适用于所有进树模块。
+
+**已完成**：`governor` 已接进 UI 的真实 HTTP 路径（`webui` 注入 `governor`，请求经 `governor.run` 包装），
+`cli.mjs webui` 动作挂载 `governor`（`--capacity`/`--timeout-ms` 可调），线上服务重启后三路由 200。
+
+**未完成（如实登记）**：**429/504 的 HTTP 映射尚未端到端断言**。我在检查器里加过一条"额度耗尽 → 429 + Retry-After"
+的断言，但它实测返回 200（未确证原因），按"不确证不写绿"的纪律**撤掉了该断言**，并把本条留在 D-027。
+语义层（背压/超时/有界重试）由 `verify.sh governor` 9/9 覆盖；缺的是"UI 路径上的 HTTP 状态码映射"这一层。
+
+### D-027 收口（2026-09-21T09:16:17Z）：`governor` 已在 UI 真实路径生效，三档映射全部有断言
+
+**补充真因（"429 没触发"的原因）**：检查器占额度时用的 key 是 `webui:/api/health`，而**应用侧**的 key 是
+`webui:/quotagent/api/health`（`req.url` 带路由前缀）→ 落到**不同的桶**，所以额度没被占住、返回 200。
+修法：按 `stats().buckets` 里**实际的桶名**取 key（不硬编码前缀）。
+
+**最终状态（均已实测）**：
+- `verify.sh webui` **14/14**：含 ① 背压 **端到端**（额度耗尽 → 429 + `Retry-After`，且归还后恢复 200）；
+  ② 错误映射三档（背压→429 / 超时→504 / 其它→500）**单元级**断言（抽成纯函数 `sendGovernorError` 后可直测，不依赖慢请求）。
+- `governor` **9/9**、`modules` 144/144、docs/plugins/events 全绿；线上服务重启后三路由 200、公网 200。
+- 清单 T-234 → **done**。

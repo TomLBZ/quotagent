@@ -205,3 +205,32 @@
 2. `bridge` 动作里 `canaryProbe = runCanary({...})`，取 `last_result` 作为本命令的输出帧；
 3. `CanaryApprovalRequired` → `emit(..., 2)`；
 4. 回滚时把 `evolve/canary-exited` 交 `tools/evolve-record.py` 落账 + 往 audit 流水记一条 `decision`。
+
+## D-043 T-248：幂等守卫真正上线（桥调用路径）+ 同形契约再次踩坑（2026-09-21T10:22:44Z）
+
+**做了什么**：`idempotency-guard`（subagent 产出、T-247 晋升）接进 `cli.mjs bridge` 的真实调用路径：
+调用前 `begin()` 判重（`fresh`/`duplicate-inflight`/`duplicate-done`/`replay`）→ 重复的**不执行**、
+给出可解释结论并复用；调用后 `finish({ok, result_digest})` 落完成态。新增 `--idem-probe N`（同请求连发）便于验证。
+
+**硬证据（端到端门 5/5）**：同一请求连发 3 次 → `reused=2`、`last=duplicate-done`，
+而**熔断器的 `allowed` 计数 = 1** —— 也就是"**只打了一次下游**"（这是"没有重复执行"的可机检证据，不是自述）。
+失败请求连发 2 次 → 第二次判 `replay`（允许重试），**绝不是** `duplicate-done`（失败不得被复用成成功）。
+
+**分工（三个中间件各管一段，不重叠）**：`governor` 管**额度**（放不放行/等多久/重试几次）、
+`breaker` 管**连续失败就切断**、`idempotency-guard` 管**同一件事是不是已经做过**。
+
+**本轮又踩了一次"同形契约"（D-023 老坑）**：我自己造的"复用帧"写成 `{n, id, m, result}`，
+而桥帧形状是 `{n, p:{id,m,result,error}}` → 调用方读 `call.p.id` 直接 TypeError（实测 exit=3）。
+**教训**：只要是自己构造"看起来像下游返回"的对象，**先核对形状契约**，
+否则"为了不重复执行而造的替代返回"会变成新的故障源。
+
+### D-043 附：同一条路径上多个中间件的**语义干扰**（门抓到的）
+
+装上幂等层后，`breaker-route` 门立刻变红：它用 `--repeat 6` 表示"6 次独立调用"，
+而幂等层把"同方法 + 同参数"认作**同一请求** → 第 2 次起变为复用，`allowed` 从 6 掉到 1。
+这不是 bug，而是**语义定义不清**。现在写死：
+· `--repeat N` = N 个**不同**请求（params 带 `probe` 索引）；· `--idem-probe N` = **同一**请求 N 次。
+
+**纪律**：当多个中间件串在同一路径上（governor → breaker → idempotency → 调用），
+**每个旋钮的语义都要显式定义**，并且**要有门**去读它；否则一个中间件的正确行为会被另一个中间件的门
+误判成"回归"，最终导致有人为了"让门变绿"而关掉正确的那个中间件。

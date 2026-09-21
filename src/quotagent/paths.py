@@ -62,7 +62,9 @@ def new_scratch(prefix: str, root: Path | None = None) -> Path:
     """新建一个一次性目录（AC 执行用，绝对路径）。
 
     创建出来的目录会被登记，AC 运行结束由 `qa.registry` 统一清理（AGENTS.md：临时产物
-    只能落 `tmp/` 且**用完自己清理**——留下副本会改变文档门的扫描范围）。
+    只能落 `tmp/` 且**用完自己清理**）。D-072 起文档门**不扫** `tmp/`（临时副本不是契约文档，
+    见 `tools/check-docs.py` 的 SCAN_EXCLUDE_DIRS），所以这里不再需要靠清理来保住门的确定性；
+    清理仍是纪律：一次性树不该留给别的门/轮次。
     """
     base = scratch_root(root) / "ac"
     base.mkdir(parents=True, exist_ok=True)

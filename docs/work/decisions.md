@@ -32,36 +32,6 @@
 | D-013 | 新增 `tools/check-ac-registry.py`（入口 `tools/verify.sh ac-registry`）：**phase 恰为 P0 的文档 AC 必须已有注册断言**，未到期（P1/P2/P0-P1）只报告不失败；反向捕获"注册了但文档没有"的孤儿 AC | 实测发现 `AC-CLARIFY-001` 在 `acceptance-criteria.md` 里标着 P0 却从未有断言（文档门只查文档，查不出这种漂移） | agent:arch | 若某 P0 AC 需要延后，须改文档 phase 或在 checklist 里写明理由 |
 | D-014 | 事件派发统一走 `EventBus.dispatch()`（按事件的 `@mode` 选分发器）；服务不得自行 `emit(bail 事件)` | 实测暴露：`compare` 用 emit 派发 bail 模式的 `rfq/version-mismatch`，一旦挂上事件总线就抛 `EventModeError` —— 而 AC-COMPARE-001 当时没挂总线，所以漏了；修法把「按模式派发」下沉到总线并**同时给 AC-COMPARE-001/AC-EVT-001 补断言**（覆盖漏洞与 bug 一起修） | agent:arch | 新增服务写事件前先查 `05-events.md` 的 @mode；AC 里凡涉及事件派发的路径都要挂总线 |
 
-## D-027 T-234 根因与收口：`governor` 的自引用（2026-09-21T09:11:03Z）
-
-**根因（已定位并修复）**：`host/modules/governor.mjs` 的方法内部用 `ctx.governor.admit/release` **自引用**。
-当模块以"包装挂载"（探针/CLI 为了抓句柄都用这个模式）被挂时，包装的 ctx 里**没有** `governor` 注入 →
-请求期访问该属性会被 cordis 的 ctx 代理拒绝，报 `cannot get property "governor" without inject`（全路由 500）。
-修法：**本地句柄自引用**（`const handle = {...}`，方法内用 `handle.admit/release`，最后 `ctx.provide('governor', handle)`），
-不再经由 ctx 查自己。修后 `verify.sh webui` **11/11**、`verify.sh governor` **9/9**。
-
-**纪律（本轮三次踩坑的共同形状）**：模块**不要靠 `ctx.<自己>` 取自己**——包装挂载/多实例场景下 ctx 里未必有自己；
-一律用本地常量引用。这条适用于所有进树模块。
-
-**已完成**：`governor` 已接进 UI 的真实 HTTP 路径（`webui` 注入 `governor`，请求经 `governor.run` 包装），
-`cli.mjs webui` 动作挂载 `governor`（`--capacity`/`--timeout-ms` 可调），线上服务重启后三路由 200。
-
-**未完成（如实登记）**：**429/504 的 HTTP 映射尚未端到端断言**。我在检查器里加过一条"额度耗尽 → 429 + Retry-After"
-的断言，但它实测返回 200（未确证原因），按"不确证不写绿"的纪律**撤掉了该断言**，并把本条留在 D-027。
-语义层（背压/超时/有界重试）由 `verify.sh governor` 9/9 覆盖；缺的是"UI 路径上的 HTTP 状态码映射"这一层。
-
-### D-027 收口（2026-09-21T09:16:17Z）：`governor` 已在 UI 真实路径生效，三档映射全部有断言
-
-**补充真因（"429 没触发"的原因）**：检查器占额度时用的 key 是 `webui:/api/health`，而**应用侧**的 key 是
-`webui:/quotagent/api/health`（`req.url` 带路由前缀）→ 落到**不同的桶**，所以额度没被占住、返回 200。
-修法：按 `stats().buckets` 里**实际的桶名**取 key（不硬编码前缀）。
-
-**最终状态（均已实测）**：
-- `verify.sh webui` **14/14**：含 ① 背压 **端到端**（额度耗尽 → 429 + `Retry-After`，且归还后恢复 200）；
-  ② 错误映射三档（背压→429 / 超时→504 / 其它→500）**单元级**断言（抽成纯函数 `sendGovernorError` 后可直测，不依赖慢请求）。
-- `governor` **9/9**、`modules` 144/144、docs/plugins/events 全绿；线上服务重启后三路由 200、公网 200。
-- 清单 T-234 → **done**。
-
 ## D-042 T-247：让 subagents 生产插件（2 件）+ 抓到 process.exit() 截断 stdout 的真 bug（2026-09-21T10:19:10Z）
 
 **用户指令**："批准使用subsgents讨论、执行代替人工执行"、"可以用subagents制作…插件或者中间件"。
@@ -92,35 +62,6 @@
 要么注入假时钟，要么以数据自身的时刻为基准推算。否则门会随墙上时间自己变红/变绿，
 而"门自己会漂"比"门红"更危险（会让人怀疑门、进而绕过门）。
 
-## D-043 T-248：幂等守卫真正上线（桥调用路径）+ 同形契约再次踩坑（2026-09-21T10:22:44Z）
-
-**做了什么**：`idempotency-guard`（subagent 产出、T-247 晋升）接进 `cli.mjs bridge` 的真实调用路径：
-调用前 `begin()` 判重（`fresh`/`duplicate-inflight`/`duplicate-done`/`replay`）→ 重复的**不执行**、
-给出可解释结论并复用；调用后 `finish({ok, result_digest})` 落完成态。新增 `--idem-probe N`（同请求连发）便于验证。
-
-**硬证据（端到端门 5/5）**：同一请求连发 3 次 → `reused=2`、`last=duplicate-done`，
-而**熔断器的 `allowed` 计数 = 1** —— 也就是"**只打了一次下游**"（这是"没有重复执行"的可机检证据，不是自述）。
-失败请求连发 2 次 → 第二次判 `replay`（允许重试），**绝不是** `duplicate-done`（失败不得被复用成成功）。
-
-**分工（三个中间件各管一段，不重叠）**：`governor` 管**额度**（放不放行/等多久/重试几次）、
-`breaker` 管**连续失败就切断**、`idempotency-guard` 管**同一件事是不是已经做过**。
-
-**本轮又踩了一次"同形契约"（D-023 老坑）**：我自己造的"复用帧"写成 `{n, id, m, result}`，
-而桥帧形状是 `{n, p:{id,m,result,error}}` → 调用方读 `call.p.id` 直接 TypeError（实测 exit=3）。
-**教训**：只要是自己构造"看起来像下游返回"的对象，**先核对形状契约**，
-否则"为了不重复执行而造的替代返回"会变成新的故障源。
-
-### D-043 附：同一条路径上多个中间件的**语义干扰**（门抓到的）
-
-装上幂等层后，`breaker-route` 门立刻变红：它用 `--repeat 6` 表示"6 次独立调用"，
-而幂等层把"同方法 + 同参数"认作**同一请求** → 第 2 次起变为复用，`allowed` 从 6 掉到 1。
-这不是 bug，而是**语义定义不清**。现在写死：
-· `--repeat N` = N 个**不同**请求（params 带 `probe` 索引）；· `--idem-probe N` = **同一**请求 N 次。
-
-**纪律**：当多个中间件串在同一路径上（governor → breaker → idempotency → 调用），
-**每个旋钮的语义都要显式定义**，并且**要有门**去读它；否则一个中间件的正确行为会被另一个中间件的门
-误判成"回归"，最终导致有人为了"让门变绿"而关掉正确的那个中间件。
-
 ## D-016 — 比较表导出以 CSV 交付，`.xlsx` 不在 P1（2026-09-21）
 
 - 背景：roadmap S1.13 写「CSV/Excel」（FR-UX-003 同）。内核/服务层受"仅用标准库"约束，手写 xlsx（zip + OOXML）属于重复造轮子，引入 `openpyxl` 又会打破零依赖约束。
@@ -128,6 +69,8 @@
 - 后果：FR-UX-003 的"Excel"按"Excel 可直接打开的 CSV"满足；需求方若要原生 xlsx，走宿主层或另开 ADR。
 ## 归档指针（正文已移入 `decisions-archive.md`，ID 仍在此处可索引）
 - D-029 —— 见 `decisions-archive*.md`
+- D-043 —— 见 `decisions-archive-b.md`（本批为控制单文件预算移入；正文未改）
+- D-027 —— 见 `decisions-archive.md`（本批为控制单文件预算移入；正文未改）
 - D-045 —— 见 `decisions-archive*.md`
 - D-035 —— 见 `decisions-archive*.md`
 - D-036 —— 见 `decisions-archive.md`
@@ -332,4 +275,28 @@ Python 侧如实拒绝（`shadow-hash-mismatch`）。**拒绝是对的**（宁�
    **丢掉证据比判红更贵**。真因（量出来的）：文档门 `md_files()` 扫全仓 `.md`（含 `tmp/**`，267 个里 166 个
    在 tmp/），别的门做整树副本时 `read_text` 抛 `FileNotFoundError` → 文档门红 → 内嵌跑它的 AC 红。
    **未改文档门**（它把"tmp 副本也算扫描范围"当设计前提用），残留风险如实记入 EV-151 §三。
+   第 2 批（本批）**已落地**：文档门扫描范围收窄为"契约文档集合"+ 契约文档消失仍判红 —— 见 D-072 与 EV-152。
 
+## D-072 门的判据按"契约文档集合"定义：临时副本不进判据，契约文档读不到仍判红
+
+D-071 第 3 条（判据不得覆盖无关写入者）在**文档门**上的落地。旧 `md_files()` = `ROOT.rglob("*.md")`
+（只排 `.git`），把 `tmp/**` 的 166/267 个 .md 也算判据；而 `qa ac AC-RUNTIME-001`（整树副本到
+`tmp/ac/<rand>/clean/`）与 `clean-copy`（`tmp/clean-copy/`）就在扫描窗口里创建/删除这些文件。
+**量出来的**（EV-151 §三 + EV-152 §二）：同条件 12 次 `verify.sh docs`，旧门在 `tmp/**` .md churn 下
+**11/12 红**（churn 更快时 **12/12 红**）；新门 **12/12 绿**，12 次里"契约文档 98 个"恒定、被排除的临时
+.md 数在 170~178 间跳动（churn 真在窗口内）。崩溃帧明细见 EV-152 §二。
+**选 (a) 收窄扫描范围**（不选"读不到就跳过"），三条理由：
+1. 临时副本**不是契约文档** —— AC-RUNTIME-001 的"干净副本"口径（`checks_runtime.py` 的 IGNORE_DIRS）
+   本来就排除 `tmp/.venv/node_modules/__pycache__`；把副本算进判据 = 判据范围大于本用例的影响面。
+2. "读不到就跳过"让门**依赖别人的写入节律**，还把"临时副本消失"与"真契约文档被删"混为一谈 ——
+   后者必须红，跳过等于把缺陷当通过（放宽）。
+3. 跳过治不了半拷文件：副本写到一半读到**截断内容**（引用数/预算偏小），那是更隐的假绿。
+**边界（不放宽）**：契约文档在读窗口里消失**仍然判红**，只把裸 traceback 换成指名道姓的失败
+（`read_md` → `[FAIL] 契约文档在扫描窗口里消失（不跳过，判红）: <path>`，退出码仍 1）。实测：仪表化
+拉长读窗口后删 `docs/work/roadmap.md` → exit 1 且失败行指名该文件（同跑法不删 → exit 0）。
+**断言语义同步收紧为更精确的口径**：`AC-RUNTIME-001` 那条从"跑完后门扫描范围不变"（=全仓 .md 267）
+改为"跑完后门扫描的**契约文档集合**不变"，并新增"门自报扫描数 == AC 独立测得的契约文档数"与
+"集合仍含门的全部定义文件"。实测非空转：AC 跑期间移走 `USER-GOALS.md` 或 `metrics-baseline.md`
+→ 断言红并给出 `diff=[...]`。
+**代价**：`tmp/` 下若真有该检查的 markdown，门不再看它 —— 契约文档一律在 `docs/ .agents/ host/`
+与根部，`tmp/` 只放临时产物。范围写进 `12-documentation-standard.md` §1。
