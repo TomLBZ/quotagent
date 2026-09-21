@@ -200,6 +200,8 @@
 | FR-UXWEB-002 | P2 | **子视图与真交互**：双方各自的事件流 / 报价 / 待批 / 证据（供应商侧为澄清）子视图，带 `limit/page/sort/q` 筛选排序翻页；参数越界**夹取并回显 applied**；分页不重叠不丢行；空结果**显式说明**（不许看起来像故障）；每页有道内子导航与「上手（token／配置放哪里）」入口 | AC-UXWEB-001 |
 | FR-CONFIG-001 | P2 | **插件/项目配置可 UI 更改并持久化**：宿主侧只读总览（每键 `source`(`default|file|env|runtime`) / `shadowed_by` / `editable`）+ **干跑预览**（零落盘零生效）；保存只落 **0600 待处理项**（宿主零写面），由 `tools/config-apply.py` **原子写** `/workspace/config.yaml`（临时文件 + rename，失败回滚）并落账本 `config/changed|refused`；支持 `--init` 从模板生成配置文件（即"支持配置文件初始化"） | AC-CONFIG-001 |
 | FR-CONFIG-002 | P2 | **凭据可 UI 提交且只写不回显**：状态视图只给 `configured` / `source` / `required_mode` / `fingerprint_first8` / `next_action`；提交与轮换**绝不回显值**；未提权对配置与凭据的 11 条路径一律 **401 同形**（无 oracle、不泄漏键名）；YAML 只实现**声明清楚的子集**，锚点/别名/多文档等一律拒并给 reason（不静默糊掉） | AC-CONFIG-001 |
+| FR-MAIL-001 | P2 | **邮件收发由插件提供**（`services/mail_transport.py`，标准库 `smtplib`/`imaplib`）：SMTP 参数与 IMAP 参数从配置读（**环境变量优先于** `/workspace/config.yaml`）；**未配置必须如实报未连接**（`available:false` + reason + next_action，且给出与"连不上"**可区分**的 reason），配置了就真能收发；凭据不进日志/账本正文/异常消息 | AC-MAIL-001 |
+| FR-MAIL-002 | P2 | 邮件相关配置键**进白名单**（⇒ 既有配置 UI 可直接改并持久化到 YAML，不新增第二条写路径）；宿主侧只读视图 `host/modules/mail-view.mjs`（队列计数 / 最近结果与 reason / `available` / `next_action`，零写面）+ `GET /quotagent/ops/mail/`（0 行 `<script>`）与 `GET /quotagent/api/mail` | AC-MAIL-002 |
 ## 7. 阶段分布（用于排期）
 
 | 阶段 | must 数 | 核心内容 |

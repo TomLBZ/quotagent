@@ -193,6 +193,16 @@ const STUBS = {
       bounded: true, omitted: 0, degraded: true, source: 'retention-view' }),
     headline: () => '（stub）',
   },
+  mailView: {
+    // fixture 的 stub：只满足"能读邮件状态快照/做投影"；形状门与口径由 mail-view 自己的门验
+    read: () => ({ service: 'mail-view', degraded: true, reason: 'stub', counts: { queued: 0, refused: 0,
+      sent: 0, parsed: 0 }, smtp: { available: false, reason: 'stub' }, imap: { available: false, reason: 'stub' },
+      last_attempt: null, attempts: [], views: [], bounded: false }),
+    snapshot: () => ({ service: 'mail-view', degraded: true, reason: 'stub', counts: { queued: 0, refused: 0,
+      sent: 0, parsed: 0 }, views: [], attempts: [], omitted_views: 0, omitted_attempts: 0, bounded: false }),
+    headline: () => '（stub）',
+    stats: () => ({ mail_state: '', resolved_file: '' }),
+  },
   approvalDigest: {
     // fixture 的 stub：只满足"能归纳待批事项"；口径由 approval-digest 模块自己的门验
     digest: () => ({ rows: 0, total: 0, skipped: 0, by_action: [], by_age: [], by_confidence: {},

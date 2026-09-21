@@ -54,6 +54,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from quotagent.kernel.ledger import Ledger  # noqa: E402
 from quotagent.services.faq import ENTRY_PUBLISHED_EVENT, FaqService  # noqa: E402
 from quotagent.services.mail import MailService  # noqa: E402
+from quotagent.services.mail_transport import MailTransport  # noqa: E402
 from quotagent.services.negotiation import (  # noqa: E402
     BOUNDS_DECLARED_EVENT,
     CLOSED_EVENT,
@@ -253,7 +254,7 @@ def _faq_recent(rows: list) -> list[dict]:
 
 
 def _mail(ledger: Ledger | None) -> dict:
-    """邮件：已入队（同 `message_id` 去重）/ 被拒条数 + 传输能力三件（D-052：没有就说没有）。"""
+    """邮件：已入队（同 `message_id` 去重）/ 被拒条数 + 传输能力三件（没有就说没有）。"""
     service = MailService(realm=ALL_REALMS, ledger=ledger, events=None)
     replayed = service.replay()
     status = service.transport_status()
@@ -263,6 +264,72 @@ def _mail(ledger: Ledger | None) -> dict:
         "transport": {"available": bool(status.get("available")),
                       "reason": str(status.get("reason") or ""),
                       "next_action": str(status.get("next_action") or "")},
+    }
+
+
+#: 邮件域快照（`<shared>/mail.json`）读的四个计数键（键名即契约，`host/modules/mail-view.mjs` 同形）
+MAIL_COUNT_KEYS = ("queued", "refused", "sent", "parsed")
+
+
+def _mail_counts(ledger: Ledger | None) -> dict:
+    """每视角的四个计数：`mail/queued`（按 `message_id` 去重）/ `mail/refused` / `mail/sent` / `mail/parsed`。
+
+    只数**账本行**（事实源），不做任何判定；`sent` 是"真发出去了"的事实行（由 `mail_transport.send` 落）。
+    """
+    counts = {key: 0 for key in MAIL_COUNT_KEYS}
+    if ledger is None:
+        return counts
+    queued: set = set()
+    for row in ledger.read():
+        body = _body(row)
+        type_ = str(row.get("type") or "")
+        if type_ == "mail/queued":
+            message_id = str(body.get("message_id") or "")
+            if message_id and message_id not in queued:
+                queued.add(message_id)
+        elif type_ == "mail/refused":
+            counts["refused"] += 1
+        elif type_ == "mail/sent":
+            counts["sent"] += 1
+        elif type_ == "mail/parsed":
+            counts["parsed"] += 1
+    counts["queued"] = len(queued)
+    return counts
+
+
+def _mail_snapshot(shared: Path, selected: list, *, state_path: str = "", config_path: str = "") -> dict:
+    """邮件域状态快照（`<shared>/mail.json`）：**队列计数（账本事实）+ 传输真实状态（mail_transport）**。
+
+    纪律（与 pipeline.json 同一套）：
+      · 只有计数、布尔、来源名与**原因码**；**没有**任何凭据值，也没有邮件正文/主题/收件人；
+      · 不给"看起来可用"的值：`available` 由 `mail_transport.status()` 按**证据**给（配置齐但没试过 →
+        `mail-*-unprobed`；没配 → `mail-*-unconfigured`）；
+      · 判定全在 Python 侧（本工具只读账本、只读状态文件；宿主 `mail-view` 只读这个 JSON）。
+    """
+    views = {}
+    for view in VIEWS:
+        if view not in selected:
+            continue
+        views[view] = _mail_counts(_open(_ledger_path(shared, view)))
+    totals = {key: sum(item[key] for item in views.values()) for key in MAIL_COUNT_KEYS}
+    transport = MailTransport(**({"state_path": state_path} if state_path else {}),
+                             **({"config_path": config_path} if config_path else {}))
+    status = transport.status()
+    return {
+        "schema": 1,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "service": "mail",
+        "views": views,
+        "totals": totals,
+        "transport": {
+            "smtp": status["smtp"],
+            "imap": status["imap"],
+            "last_attempt": status.get("last_attempt"),
+            "attempts": list(status.get("attempts") or []),
+            "state": status.get("state"),
+            "note": "只有布尔/来源/计数/原因码与 message_id：不含任何凭据值、不含邮件正文",
+        },
+        "note": "队列计数来自 mail/* 账本行（事实源）；传输状态来自 services/mail_transport 的真实状态",
     }
 
 
@@ -283,7 +350,11 @@ def main(argv: list | None = None) -> int:
     parser.add_argument("--views", default=",".join(VIEWS),
                         help=f"逗号分隔的视角（默认 {'/'.join(VIEWS)}）")
     parser.add_argument("--shared-dir", default=str(DEFAULT_SHARED),
-                        help="共享目录：账本在 <shared-dir>/<view>/ledger.jsonl，快照写 <shared-dir>/pipeline.json")
+                        help="共享目录：账本在 <shared-dir>/<view>/ledger.jsonl，快照写 <shared-dir>/pipeline.json 与 <shared-dir>/mail.json")
+    parser.add_argument("--mail-state", dest="mail_state", default="",
+                        help="mail_transport 状态文件（可选；空 = 用环境变量 QUOTAGENT_MAIL_STATE 或默认落点）")
+    parser.add_argument("--mail-config", dest="mail_config", default="",
+                        help="配置文件落点（可选；空 = QUOTAGENT_MAIL_CONFIG 或 /workspace/config.yaml）")
     args = parser.parse_args(argv)
 
     selected = [item.strip() for item in str(args.views).split(",") if item.strip()]
@@ -309,6 +380,16 @@ def main(argv: list | None = None) -> int:
     tmp.write_text(blob, encoding="utf-8")
     tmp.replace(target)
 
+    # 邮件域状态快照（`<shared>/mail.json`）：宿主 `mail-view` 只读它（队列计数 + 传输真实状态）。
+    # 与 pipeline.json 同一套纪律：原子写、只有计数/布尔/原因码，**没有任何凭据值**。
+    mail_payload = _mail_snapshot(shared, selected, state_path=str(args.mail_state or ""),
+                                  config_path=str(args.mail_config or ""))
+    mail_blob = json.dumps(mail_payload, ensure_ascii=False, sort_keys=True, indent=1)
+    mail_target = shared / "mail.json"
+    mail_tmp = mail_target.with_suffix(".json.tmp")
+    mail_tmp.write_text(mail_blob, encoding="utf-8")
+    mail_tmp.replace(mail_target)
+
     summary = {view: {"negotiate": {"threads": body["negotiate"]["threads"],
                                     "open": body["negotiate"]["open"],
                                     "closed": body["negotiate"]["closed"],
@@ -321,6 +402,12 @@ def main(argv: list | None = None) -> int:
                                "transport_available": body["mail"]["transport"]["available"]}}
                for view, body in payload["views"].items()}
     print(json.dumps({"ok": True, "out": _display(target), "bytes": len(blob.encode("utf-8")),
+                      "mail_out": _display(mail_target), "mail_bytes": len(mail_blob.encode("utf-8")),
+                      "mail_totals": mail_payload["totals"],
+                      "mail_transport": {"smtp_available": mail_payload["transport"]["smtp"]["available"],
+                                         "smtp_reason": mail_payload["transport"]["smtp"]["reason"],
+                                         "imap_available": mail_payload["transport"]["imap"]["available"],
+                                         "imap_reason": mail_payload["transport"]["imap"]["reason"]},
                       "views": summary}, ensure_ascii=False, sort_keys=True))
     return 0
 

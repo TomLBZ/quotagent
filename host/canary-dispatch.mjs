@@ -231,9 +231,13 @@ const e2e = async ({ weightBps, candidate }) => {
   await ctx.plugin({ name: 'config-view', inject: [], Config: cvConfigE2E,
     apply: (inner, cfg) => cvApplyE2E(inner, { ...cfg, config_file: '', config_inbox: '', config_status: '',
       config_ledger: '' }) }, cvConfigE2E.parse({}))
+  // 邮件域（mail-view）：webui 的 inject 需要它；快照指向**不存在的文件** → 视图如实降级（不假装有数据）
+  const { apply: mvApplyE2E, Config: mvConfigE2E } = await import('./modules/mail-view.mjs')
+  await ctx.plugin({ name: 'mail-view', inject: [], Config: mvConfigE2E,
+    apply: (inner, cfg) => mvApplyE2E(inner, { ...cfg, mail_state: '', ui_shared: '' }) }, mvConfigE2E.parse({}))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }

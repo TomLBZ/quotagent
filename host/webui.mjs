@@ -33,6 +33,7 @@ import { Config as avConfig3, apply as avApply3 } from './modules/admin-view.mjs
 import { Config as pmConfig3, apply as pmApply3 } from './modules/plugin-market.mjs'
 import { Config as upConfig3, apply as upApply3 } from './modules/user-plugin-manager.mjs'
 import { Config as cvConfig3, apply as cvApply3 } from './modules/config-view.mjs'
+import { Config as mvConfig3, apply as mvApply3 } from './modules/mail-view.mjs'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
@@ -108,6 +109,38 @@ const REAL_CONFIG_PATH = '/workspace/config.yaml'
 const realHash = (path) => createHash('sha256').update(readFileSync(path)).digest('hex')
 const realConfigBefore = existsSync(REAL_CONFIG_PATH) ? realHash(REAL_CONFIG_PATH) : null
 
+// 邮件域（mail-view）夹具：**只读快照文件**。刻意塞进三类"不该出现"的东西做负控：
+//   ① 私域/正文标记（`private:` / `cost_model` / `signature`）→ 必须被洗成 (redacted)；
+//   ② 快照里多出来的键（`password` / `body`）→ 投影**读都不读**（键名白名单）；
+//   ③ 哨兵串 `MAIL-FIXTURE-LEAK-9f` → 响应体里出现次数必须为 0。
+const mailFixtureDir = mkdtempSync(join(tmpdir(), 'wui-mail-'))
+const mailFixture = join(mailFixtureDir, 'mail.json')
+const MAIL_LEAK = 'MAIL-FIXTURE-LEAK-9f'
+writeFileSync(mailFixture, JSON.stringify({
+  schema: 1,
+  generated_at: '2026-09-21T12:00:00Z',
+  service: 'mail',
+  totals: { queued: 3, refused: 2, sent: 1, parsed: 1 },
+  views: {
+    contractor: { queued: 2, refused: 2, sent: 1, parsed: 1, body: `${MAIL_LEAK}-body` },
+    supplier: { queued: 1, refused: 0, sent: 0, parsed: 0, subject: `${MAIL_LEAK}-subject` },
+  },
+  transport: {
+    smtp: { configured: true, connected: false, available: false,
+      reason: 'smtp-unreachable', next_action: '确认 mail.smtp.host / port 可达后重试',
+      password: `${MAIL_LEAK}-credential` },
+    imap: { configured: false, connected: false, available: false,
+      reason: 'mail-imap-unconfigured', next_action: '把 IMAP 接入点配置：mail.imap.host / port' },
+    last_attempt: { kind: 'send', service: 'smtp', ok: false, reason: 'smtp-unreachable',
+      next_action: `private:${MAIL_LEAK}-signature`, message_id: 'ml-0001' },
+    attempts: [
+      { kind: 'send', service: 'smtp', ok: false, reason: 'smtp-unreachable', next_action: '确认端口' },
+      { kind: 'fetch', service: 'imap', ok: true, reason: '', next_action: '' },
+    ],
+  },
+  note: `${MAIL_LEAK}-note`,
+}), 'utf8')
+
 const ctx = new Context()
 await ctx.plugin(EventsService)
 // 让 webui 能 inject 到 ledgerView：在**根 ctx** provide（fixture stub）
@@ -171,6 +204,9 @@ const mountObs = async (targetCtx) => {
     { config_file: cvConfigPath, config_inbox: join(cvFixtureDir, 'config-submissions'),
       config_status: join(cvFixtureDir, 'config-status.json'), config_ledger: join(cvFixtureDir, 'config-ledger.jsonl') },
     'configView', 'config-view')
+  // 邮件域（mail-view，本批新增）：快照指向夹具临时文件（**不读真快照**）→ 页面/JSON 有真数据可断言
+  await wrap({ apply: mvApply3, Config: mvConfig3, inject: [] },
+    { mail_state: mailFixture, ui_shared: mailFixtureDir }, 'mailView', 'mail')
 }
 await mountObs(ctx)
 
@@ -209,7 +245,7 @@ writeFileSync(pipeFixture, JSON.stringify({
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -307,7 +343,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -537,6 +573,38 @@ check('P0-3/E2b 八个新子路由**各返回 200**，页面里有**道内子导
 const subScripty = Object.entries(subPages).filter(([, res]) => res.text.includes('<script') || INLINE_EVENT.test(res.text))
 check('P0-3/E2c 子视图页面同样 **0 `<script>` / 0 内联事件属性**（新页面不得偷偷引入脚本）',
   subScripty.length === 0, `命中=${subScripty.map(([path]) => path).join(',') || '无'}`)
+
+// 4m（本批）：邮件域（SMTP/IMAP）的只读视图 —— 页面 + JSON 都真读 Python 侧快照
+const mailPage = await get('/ops/mail/')
+const mailApi = await get('/api/mail')
+let mailJson = {}
+try { mailJson = JSON.parse(mailApi.text) } catch (err) { mailJson = {} }
+const mailSnap = mailJson.mail || {}
+check('邮件域正控：`/ops/mail/` 200 且是**真页面**（道内导航 + 队列计数/通道表/尝试表），'
+  + '`/api/mail` 200 且给出 queue 计数 / available / reason / next_action 与最近一次尝试'
+  + '（数据来自 Python 侧快照；宿主只读文件、不联网、不发信）',
+  mailPage.status === 200 && mailApi.status === 200
+  && mailPage.text.includes('data-subnav="ops"') && mailPage.text.includes('data-mail="counts"')
+  && mailPage.text.includes('data-mail="transport"') && mailPage.text.includes('data-mail="attempts"')
+  && !mailPage.text.includes('<script') && !INLINE_EVENT.test(mailPage.text)
+  && mailSnap.degraded === false && mailSnap.counts?.sent === 1 && mailSnap.counts?.queued === 3
+  && mailSnap.smtp?.available === false && typeof mailSnap.smtp?.reason === 'string'
+  && mailSnap.smtp.reason.length > 0
+  && typeof mailSnap.smtp?.next_action === 'string' && mailSnap.smtp.next_action.length > 8
+  && mailSnap.last_attempt?.reason === 'smtp-unreachable'
+  && Array.isArray(mailSnap.attempts) && mailSnap.attempts.length >= 1
+  && !mailPage.text.includes('<script'),
+  `status=${mailPage.status}/${mailApi.status} counts=${JSON.stringify(mailSnap.counts)} `
+  + `smtp=${JSON.stringify(mailSnap.smtp)} last=${JSON.stringify(mailSnap.last_attempt)}`)
+
+check('邮件域**负控**（私域与凭据不出这条路由）：快照里刻意混进的 `password` 与 `body`/`subject` 键'
+  + '（键名白名单外）**读都不读**；带 `private:`/`signature` 的 next_action 被洗成 `(redacted)`；'
+  + '哨兵串在整个响应体里出现次数为 0（反例：原样透传快照 → 凭据/正文经运维页外泄）',
+  !mailPage.text.includes(MAIL_LEAK) && !mailApi.text.includes(MAIL_LEAK)
+  && !mailApi.text.includes('"password"') && !mailApi.text.includes('"body"')
+  && !mailApi.text.includes('private:') && mailApi.text.includes('(redacted)'),
+  `哨兵在页面=${mailPage.text.includes(MAIL_LEAK)} 在 JSON=${mailApi.text.includes(MAIL_LEAK)} `
+  + `JSON 含 password=${mailApi.text.includes('"password"')} 含 (redacted)=${mailApi.text.includes('(redacted)')}`)
 
 // E4：第一屏三块（contractor / supplier）
 const P02_BLOCKS = ['pending-approvals', 'in-progress', 'health']

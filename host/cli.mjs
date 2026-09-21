@@ -185,6 +185,13 @@ const main = async () => {
     const { apply: pvApply, Config: pvConfig } = await import('./modules/pipeline-view.mjs')
     await ctx.plugin({ name: 'pipeline-view', inject: [], Config: pvConfig,
       apply: (inner, cfg) => pvApply(inner, cfg) }, pvConfig.parse({}))
+    // 邮件域只读视图（本批新增）：读 Python 侧写的状态快照（**绝对路径**；空 = 未配置 → 视图降级）
+    const { apply: mvApply, Config: mvConfig } = await import('./modules/mail-view.mjs')
+    await ctx.plugin({ name: 'mail-view', inject: [], Config: mvConfig,
+      apply: (inner, cfg) => mvApply(inner, { ...cfg,
+        mail_state: String(args['mail-snapshot'] ?? process.env.QUOTAGENT_UI_MAIL ?? ''),
+        ui_shared: String(args['ui-shared'] ?? process.env.QUOTAGENT_UI_SHARED ?? 'tmp/ui-shared') }) },
+      mvConfig.parse({}))
     // 留存计划视图（subagent 产出，T-254）
     const { apply: rvApply, Config: rvConfig } = await import('./modules/retention-view.mjs')
     await ctx.plugin({ name: 'retention-view', inject: [], Config: rvConfig,
@@ -214,7 +221,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)

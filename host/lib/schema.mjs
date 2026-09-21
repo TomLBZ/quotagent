@@ -19,4 +19,10 @@ export const SCHEMA = {
   'guard.abnormal_low_ratio': { humanOnly: true, note: '护栏阈值由人定（P1 起）' },
   'profiles.*': { humanOnly: true, note: '改 profile = 改组成，只能由人' },
   'transport.*': { humanOnly: false, note: '投递绑定（共享目录/relay）' },
+  // 邮件接入点：**端点与凭据只能由人改**（与 `approval.*` 同类：它们决定"信发给谁/用谁的账号"）；
+  // 两个运行期旋钮（超时、一次取几封）不属人工专属。
+  'mail.smtp.*': { humanOnly: true, note: 'SMTP 接入点与账号（含凭据指针）：只能由人改' },
+  'mail.imap.*': { humanOnly: true, note: 'IMAP 接入点与账号（含凭据指针）：只能由人改' },
+  'mail.timeout_seconds': { humanOnly: false, note: '邮件连接超时（秒，运行期旋钮）' },
+  'mail.max_messages': { humanOnly: false, note: '一次收信最多取回几封（有界，运行期旋钮）' },
 }

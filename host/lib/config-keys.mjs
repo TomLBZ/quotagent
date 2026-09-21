@@ -31,6 +31,23 @@ export const PROJECT_KEYS = {
   'norm.tolerance_bps': { type: 'integer', default: 5, note: '归一化容差（bps）' },
   'transport.kind': { type: 'string', default: 'file-drop', note: '投递通道类型' },
   'transport.dir': { type: 'string', default: 'inbox', note: '投递目录（相对路径）' },
+  // ── 邮件接入点（凭据就位时才真收发；真源实现 src/quotagent/services/mail_transport.py）──────────
+  // 本文件**只登记键与默认层**，永不登记值；每个键的环境变量覆盖名由 envNameFor() 给出
+  // （本服务还额外认 QUOTAGENT_MAIL_SMTP_HOST 这类好记的写法，env 优先于本文件的 project 段）。
+  'mail.smtp.host': { type: 'string', default: '', note: 'SMTP 主机（env QUOTAGENT_MAIL_SMTP_HOST 优先）' },
+  'mail.smtp.port': { type: 'integer', default: 587, note: 'SMTP 端口（starttls 587 / ssl 465 / 明文 25）' },
+  'mail.smtp.from': { type: 'string', default: '', note: 'SMTP 信封发件人（必填：没有发件人不发信）' },
+  'mail.smtp.username': { type: 'string', default: '', note: 'SMTP 账号（留空 = 不做认证）' },
+  'mail.smtp.password': { type: 'string', default: '', note: 'SMTP 口令（**优先用 env QUOTAGENT_MAIL_SMTP_PASSWORD**；写进本文件即明文落盘）' },
+  'mail.smtp.security': { type: 'string', default: 'starttls', note: '握手方式：starttls / ssl / plain' },
+  'mail.imap.host': { type: 'string', default: '', note: 'IMAP 主机（env QUOTAGENT_MAIL_IMAP_HOST 优先）' },
+  'mail.imap.port': { type: 'integer', default: 993, note: 'IMAP 端口（ssl 993 / 明文 143）' },
+  'mail.imap.username': { type: 'string', default: '', note: 'IMAP 账号（留空 = 不做认证）' },
+  'mail.imap.password': { type: 'string', default: '', note: 'IMAP 口令（**优先用 env QUOTAGENT_MAIL_IMAP_PASSWORD**）' },
+  'mail.imap.mailbox': { type: 'string', default: 'INBOX', note: 'IMAP 邮箱名（SELECT/EXAMINE 的目标）' },
+  'mail.imap.security': { type: 'string', default: 'ssl', note: '握手方式：ssl / plain' },
+  'mail.timeout_seconds': { type: 'integer', default: 5, note: '邮件连接/交互超时（秒）' },
+  'mail.max_messages': { type: 'integer', default: 20, note: '一次收信最多取回几封（上限 50）' },
 }
 
 /**

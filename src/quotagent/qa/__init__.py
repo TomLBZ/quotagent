@@ -24,3 +24,4 @@ from . import checks_storage  # noqa: F401,E402  (AC-STORAGE-001/004：逃逸与
 from . import checks_agentrt_lifecycle  # noqa: F401,E402  (AC-AGENTRT-007：独立装卸/零残留)
 from . import checks_uxweb  # noqa: F401,E402  (AC-UXWEB-001：GUI 控制台化第一批)
 from . import checks_config  # noqa: F401,E402  (AC-CONFIG-001：配置/凭据 UI)
+from . import checks_mail_transport  # noqa: F401,E402  (AC-MAIL-001：邮件收发)

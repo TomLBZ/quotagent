@@ -203,8 +203,25 @@ docs/work/evolution-log.json      # 产出日志；tmp/evolve/ledger.jsonl 是�
   宿主**不**直连内核桥，也不自己算留存/谈判/FAQ 的判定。
 - **刷新时机**：`tools/webui-serve.py` 在 **g1 走查 seed 之后**以及**每次健康探测**时各刷一次
   （走查会清空 `tmp/ui-shared/`，不补这一下面板会长期 `degraded`）。
-- `transport` 字段：本轮**没有发信能力**（无 SMTP/IMAP 实现），因此 `available` 恒为 `false`，
-  并在 `reason`/`next_action` 里写明原因；**账本里不存在 `mail/sent`**（该事件未声明）。
+- `transport` 字段：由 `services/mail_transport.py` 的**真实状态**派生（`services/mail.py` 的 `transport`
+  就是它）。**没配凭据就是不可用**（`available:false` + `reason=mail-smtp-unconfigured`），
+  配齐但还没真发过是 `mail-smtp-unprobed`，连不上是 `smtp-unreachable` —— 三种情形**分得开**。
+
+## 邮件域（SMTP / IMAP）—— 真的收发于何时发生
+
+- **真收发只在 Python 侧**：`src/quotagent/services/mail_transport.py`（纯标准库 `smtplib`/`imaplib`）。
+  宿主（`host/**`）**不联网、不起子进程**，只读一份状态快照。
+- **路由**：`GET /quotagent/ops/mail/`（页面，**0 行 `<script>`**）与 `GET /quotagent/api/mail`（JSON）。
+  数据来源：`tools/refresh-ui-snapshots.py` 把「`mail/*` 账本计数」+「`mail_transport` 的真实状态」
+  写成 `tmp/ui-shared/mail.json`，宿主插件 `mail-view` 只做有界只读投影（坏快照 → `degraded` + 有名 reason）。
+- **配置键**（`host/lib/config-keys.mjs` + `host/lib/schema.mjs` 已登记，配置 UI 可直接改）：
+  `mail.smtp.host/port/from/username/password/security`、`mail.imap.host/port/username/password/mailbox/security`、
+  `mail.timeout_seconds`、`mail.max_messages`。端点与账号是**人工专属键**（改它们要带 `ap-NNNN` 人工引用）。
+- **优先级**：环境变量（`QUOTAGENT_MAIL_SMTP_HOST` … 或配置 UI 的通用覆盖名 `QUOTAGENT_CONFIG_MAIL__SMTP__HOST`）
+  **优先于** `/workspace/config.yaml` 的 `project` 段点分键；口令建议走环境变量（写进 YAML 等于明文落盘）。
+- **凭据永不出门**：口令/账号在账本、响应体、日志、状态快照里出现次数为 0（异常消息也洗过）；
+  收信有界（条数 + 单封返回体），被夹时如实报 `truncated`/`clipped`。
+- **证据**：`tools/verify.sh mail-transport`（回环假 SMTP/IMAP 真收发的原始行 + 哨兵计数）。
 
 ### 面板数字是"演示种子"数据（重要）
 
@@ -226,10 +243,10 @@ docs/work/evolution-log.json      # 产出日志；tmp/evolve/ledger.jsonl 是�
 
 两者**可以不一致**（例如计数 1、列表 5 条）。**读法**：计数看规模，列表看动态；不要用列表长度推计数。
 
-## 门清单（43 道，全部可用 `tools/verify.sh <名>` 单独跑）
+## 门清单（44 道，全部可用 `tools/verify.sh <名>` 单独跑）
 
 ```text
-ac-registry  approval-digest  audit-hook  breaker  breaker-route  bridge  bridge-canary  budget-guard  budget-route  canary  canary-route  clean-copy  cordis  coverage  docs  events  evolution  evolve-journal  evolve-module  faq  g1  governor  idem-route  idempotency-guard  invariants  mail  modules  negotiation  observability  ops-view  p0-no-node  pipeline-route  pipeline-view  plugins  retention  retention-view  smoke  supplier-scorecard  ui-mutate  ui-seed  v  webui  wiring
+ac-registry  approval-digest  audit-hook  breaker  breaker-route  bridge  bridge-canary  budget-guard  budget-route  canary  canary-route  clean-copy  cordis  coverage  docs  events  evolution  evolve-journal  evolve-module  faq  g1  governor  idem-route  idempotency-guard  invariants  mail  mail-transport  modules  negotiation  observability  ops-view  p0-no-node  pipeline-route  pipeline-view  plugins  retention  retention-view  smoke  supplier-scorecard  ui-mutate  ui-seed  v  webui  wiring
 ```
 
 - 一键全套：`tools/verify.sh all`（不含 `ui-mutate` —— 它要跑 4 次真门，约 4 分钟，变更视图/快照实现时手动跑）。

@@ -18,11 +18,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView']
 
 export const provides = ['webui']
 
@@ -75,7 +75,7 @@ const SORT_DEFAULT = SORTS[0]
 const LIMIT_CHOICES = [10, 20, 50, 200]
 
 /** ops / admin 两道的道内导航（本步不新增子路由，用**页内锚点**：一跳可达这件事本身保留）。 */
-const OPS_SECTIONS = [['runtime', '运行期'], ['pipeline', '三域流水'], ['retention', '留存计划'],
+const OPS_SECTIONS = [['runtime', '运行期'], ['pipeline', '三域流水'], ['mail', '邮件（SMTP/IMAP）'], ['retention', '留存计划'],
   ['evolve', '自进化'], ['evidence', '证据面']]
 const ADMIN_SECTIONS = [['blocks', '阻塞清单'], ['progress', '进度'], ['config', '配置与凭据'],
   ['user-plugins', '用户空间插件'], ['market', '插件市场']]
@@ -208,6 +208,7 @@ export function apply(ctx, config) {
   const pluginMarket = ctx.pluginMarket      // 插件列表/市场的只读聚合（subagent 产出，T-267）
   const userPlugins = ctx.userPluginManager  // 用户空间插件管理面（subagent 产出，T-268）
   const configView = ctx.configView          // 配置与凭据的可视面 + 干跑 + 待处理项（本批新增模块）
+  const mailView = ctx.mailView              // 邮件域（SMTP/IMAP）的只读运维视图（**本批新增模块**）
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
   const pipelinePayload = () => {
@@ -232,6 +233,58 @@ export function apply(ctx, config) {
       return null
     }
   }
+  /**
+   * 邮件状态：**读取与形状门都在 Python 侧产出的快照上**（`mail-view` 插件只读那一个文件）。
+   * 宿主不做任何"邮件通不通"的判断：`degraded` 时如实显示原因与下一步，不猜。
+   */
+  const mailSnapshot = () => mailView.read()
+  /** 邮件页（**0 行 `<script>`**：只读展示 + 一个指向 JSON 的链接；交互留给已登记的配置表单）。 */
+  const mailHtml = () => {
+    const snap = mailSnapshot()
+    const counts = snap.counts || {}
+    const rows = (snap.views || []).map((row) => `<tr><td>${esc(row.view)}</td><td>${row.queued}</td>`
+      + `<td>${row.refused}</td><td>${row.sent}</td><td>${row.parsed}</td></tr>`).join('')
+    const serviceRow = (name, value) => `<tr><td>${name}</td><td>${value.configured ? '已配置' : '未配置'}</td>`
+      + `<td>${value.connected ? '已连接' : '未连接'}</td><td>${value.available ? '可用' : '不可用'}</td>`
+      + `<td><code>${esc(value.reason || '—')}</code></td><td>${esc(value.next_action || '—')}</td></tr>`
+    const attempts = (snap.attempts || []).map((item) => `<tr><td>${esc(item.kind)}</td><td>${esc(item.service)}</td>`
+      + `<td>${item.ok ? '成功' : '失败'}</td><td><code>${esc(item.reason || '—')}</code></td>`
+      + `<td><code>${esc(item.message_id || '—')}</code></td></tr>`).join('')
+    const last = snap.last_attempt
+    return `<p>本视图**只读**：数据来自 Python 侧快照（<code>services/mail_transport</code> 的状态文件 + 
+<code>mail/*</code> 账本计数），由插件 <code>mail-view</code> 投影。宿主**不联网、不发信、不写账本**，也不显示任何凭据值。</p>`
+      + `<p>JSON：<code>${prefix}/api/mail</code></p>`
+      + (snap.degraded
+        ? `<p><b>降级</b>：<code>${esc(snap.reason)}</code> → ${esc(snap.next_action)}`
+          + `${snap.state_file ? `（快照文件：<code>${esc(snap.state_file)}</code>）` : ''}</p>`
+        : `<p>${esc(snap.headline || '')}</p>`)
+      + `<h3 id="counts">队列计数（Python 侧账本）</h3>`
+      + `<table data-mail="counts"><thead><tr><th>排队</th><th>被拒</th><th>已发</th><th>入站解析</th>`
+      + `<th>合计来源</th></tr></thead><tbody><tr><td>${counts.queued ?? 0}</td><td>${counts.refused ?? 0}</td>`
+      + `<td>${counts.sent ?? 0}</td><td>${counts.parsed ?? 0}</td><td>${esc(snap.totals_source || 'none')}</td>`
+      + `</tr></tbody></table>`
+      + `<h3 id="channel">传输通道（SMTP 发信 / IMAP 收信）</h3>`
+      + `<table data-mail="transport"><thead><tr><th>通道</th><th>配置</th><th>连接</th><th>可用</th><th>原因</th>`
+      + `<th>下一步</th></tr></thead><tbody>`
+      + serviceRow('SMTP', snap.smtp || {}) + serviceRow('IMAP', snap.imap || {})
+      + `</tbody></table>`
+      + `<p><small>"可用"只按**证据**给：配置齐了还不够，要有一次真实发送/收信成功（否则原因位写 
+<code>mail-smtp-unprobed</code>）；没配就是 <code>mail-smtp-unconfigured</code>，两者**不是**同一件事。</small></p>`
+      + `<h3 id="attempts">最近一次尝试与尝试记录</h3>`
+      + (last ? `<p>最近一次：<b>${esc(last.kind)}</b> / ${esc(last.service)} / ${last.ok ? '成功' : '失败'} `
+        + `（原因 <code>${esc(last.reason || '—')}</code>；消息 <code>${esc(last.message_id || '—')}</code>）</p>`
+        : `<p>还没有任何发送/收信尝试记录（Python 侧每次真尝试都会更新状态快照）。</p>`)
+      + (attempts
+        ? `<table data-mail="attempts"><thead><tr><th>动作</th><th>通道</th><th>结果</th><th>原因</th>`
+          + `<th>消息</th></tr></thead><tbody>${attempts}</tbody></table>`
+        : '')
+      + `<h3 id="views">按视角（账本计数）</h3>`
+      + (rows ? `<table data-mail="views"><thead><tr><th>视角</th><th>排队</th><th>被拒</th><th>已发</th>`
+        + `<th>入站解析</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>本份快照里没有视角计数。</p>')
+      + `<p><small>本页 **0 行 <code>&lt;script&gt;</code>、0 内联事件**：读用链接，改配置用已登记的 
+<code>${prefix}/admin/config/</code> 表单（宿主只落 0600 待处理项，由 Python 侧消费）。</small></p>`
+  }
+
   /**
    * 从账本行推导**当前仍待批**的事项：按 `approval_id` 取该项的**最后一条** `approval/*` 事件，
    * 若最后状态是 granted/aborted 就不算待批。只读、只用公开行（门里断言响应不含正文与私域键）。
@@ -650,6 +703,9 @@ ${sortForm('events', '筛查事件')}
       + `<td>${esc(item.source)}</td><td>${esc(item.shadowed_by ?? '—')}</td></tr>`)).join('')
     const editableKeys = (data.project || []).filter((row) => row.editable).map((row) => row.key)
     const humanKeys = (data.project || []).filter((row) => row.human_only && !row.frozen).map((row) => row.key)
+    // 干跑的键下拉 = **可编辑键 ∪ 人工专属键**（后者本来就靠同一表单里的「人工引用」字段放行；
+    // 只列可编辑键会让"人工专属但确实要改"的键（如 mail.smtp.host）在这张表单里选不到 —— 那不是纪律，是漏项）。
+    const selectableKeys = Array.from(new Set([...editableKeys, ...humanKeys]))
     const credRows = (creds.rows || []).map((row) => `<tr data-credential="${esc(row.name)}">`
       + `<td><code>${esc(row.name)}</code></td><td><b>${row.configured ? '已配置' : '未配置'}</b></td>`
       + `<td>${esc(row.source)}</td><td>${esc(row.required_mode)}</td>`
@@ -694,7 +750,7 @@ ${sortForm('events', '筛查事件')}
       + `<p>表单提交的值按标量强转（<code>true/false</code> → 布尔，整数/小数 → 数字，其余字符串）；`
       + `权威判定在 Python 侧，同一套白名单（<code>host/lib/schema.mjs</code> + <code>host/lib/config-keys.mjs</code>）。</p>`
       + `<form method="post" action="${prefix}/admin/api/config/preview"><b>干跑（零落盘零生效）</b>：`
-      + `<label>键 <select name="key">${editableKeys.map((key) => `<option value="${esc(key)}">${esc(key)}</option>`).join('')}</select></label> `
+      + `<label>键 <select name="key">${selectableKeys.map((key) => `<option value="${esc(key)}">${esc(key)}</option>`).join('')}</select></label> `
       + `<label>值 <input name="value" size="14"></label> `
       + `<label>人工引用（人工专属键用） <select name="human_approval_ref"><option value="">（无）</option>`
       + `${humanKeys.map((key) => `<option value="ap-0000">ap-0000 / ${esc(key)}</option>`).join('')}</select></label> `
@@ -756,6 +812,9 @@ ${sortForm('events', '筛查事件')}
           { path: `${prefix}/api/health`, method: 'GET', auth: 'none', what: '健康' },
           { path: `${prefix}/api/status`, method: 'GET', auth: 'none', what: '状态与账本校验' },
           { path: `${prefix}/api/obs`, method: 'GET', auth: 'none', what: '运行期观测（只读）' },
+          // 邮件域（SMTP/IMAP）：页面 + 只读 JSON；数据来自 Python 侧快照（宿主不联网、不发信）
+          { path: `${prefix}/ops/mail/`, method: 'GET', auth: 'none', what: '邮件域只读页（队列计数 / 最近一次尝试与 reason / available / next_action；零内联脚本）' },
+          { path: `${prefix}/api/mail`, method: 'GET', auth: 'none', what: '邮件域只读 JSON（来源 Python 侧快照；不含凭据值）' },
           { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
           // 道内子视图（P0-3）：只读 GET + `<form method=get>` 筛选/翻页/排序（无脚本）
           ...Object.entries(SUBVIEWS).flatMap(([view, subs]) => subs.map((sub) => ({
@@ -838,7 +897,10 @@ ${sortForm('events', '筛查事件')}
           + `<tr><td>admitted=${g.admitted ?? 0} refused=${g.refused ?? 0} timeouts=${g.timeouts ?? 0} failed=${g.failed ?? 0}</td>`
           + `<td>allowed=${b.allowed ?? 0} refused=${b.refused ?? 0} opened=${b.opened ?? 0} closed=${b.closed ?? 0}</td></tr></table>`
           + `<h3 id="pipeline">三域流水（谈判 / FAQ / 邮件）</h3><p>由 subagent 产出并晋升的插件 <code>pipeline-view</code> 聚合：<b>${pipeline.headline(pipelinePayload())}</b></p>`
-          + `<p>邮件：运输通道 <b>${(pipeline.snapshot(pipelinePayload()).transport || {}).available ? '可用' : '不可用'}</b>（本轮无凭据，故必须报不可用）</p>`
+          + `<p><a href="${prefix}/ops/mail/">邮件域（SMTP/IMAP）专页</a>：队列计数 / 最近一次真尝试的结果与 reason / `
+          + `available / next_action（数据来自 Python 侧快照；宿主只读，不联网不发信）。</p>`
+          + `<p>邮件（运输通道聚合）：运输通道 <b>${(pipeline.snapshot(pipelinePayload()).transport || {}).available ? '可用' : '不可用'}</b>`
+          + `——由 <code>pipeline-view</code> 从三域快照的通道声明归并；**未配置凭据时必须报不可用**（配置后由 <code>services/mail_transport</code> 的真实状态派生）</p>`
           + `<h3 id="retention">留存计划（只读）</h3><p>判定在 Python 侧（<code>services/retention.py</code>），由 subagent 产出并晋升的插件 <code>retention-view</code> 聚合：<b>${retention.headline(retentionPlanOf('contractor'))}</b></p>`
           + `<p>账本行永不销毁；销毁只作用于派生副本，不可重建物须过人工门（ADR-0018）</p>`
           + `<h3 id="evolve">自进化流水</h3><p>由自进化产出的插件 <code>evolve-journal</code> 归纳（只给计数，不出正文）</p>`
@@ -914,6 +976,22 @@ ${sortForm('events', '筛查事件')}
       return json(200, { source: 'retention-view（subagent 产出、经自进化流程晋升）+ services/retention.py（判定）',
         retention: snap, headline: retention.headline(plan),
         note: '留存计划是**判定**不是执行：账本行永不销毁；销毁只作用于派生副本且不可重建物须过人工门' })
+    }
+    if (/^\/api\/mail\/?$/.test(path)) {
+      // 邮件域只读 JSON：投影由 `mail-view` 插件做（形状门/白名单/夹取/降级都在那里），这里只放行
+      const snap = mailSnapshot()
+      return json(200, { source: snap.source, mail: snap,
+        note: '队列计数与最近一次尝试来自 Python 侧快照（mail_transport 状态文件 + mail/* 账本行）；'
+          + '宿主只读文件、不联网、不发信、不写账本，响应里**没有**任何凭据值（快照里也没有）' })
+    }
+    if (path === '/ops/mail' || path === '/ops/mail/') {
+      // 邮件页：**0 行 `<script>`**、0 内联事件（读用链接；改配置在已登记的 /admin/config/ 表单里）
+      return send(200, 'text/html; charset=utf-8',
+        html(`${config.page_title} · 邮件（SMTP / IMAP）`,
+          `<nav data-subnav="ops"><a href="${prefix}/ops/">运维首页</a>`
+          + `<a href="${prefix}/ops/mail/" aria-current="page">邮件（SMTP/IMAP）</a>`
+          + `<a href="${prefix}/api/mail">/api/mail</a></nav>`
+          + mailHtml()))
     }
     const viewApprovals = path.match(/^\/([a-z]+)\/api\/approvals\/?$/)
     if (viewApprovals && rules[viewApprovals[1]]) {
@@ -1173,7 +1251,7 @@ ${sortForm('events', '筛查事件')}
       if (!Object.prototype.hasOwnProperty.call(rules, to)) return json(400, { error: 'unknown-view', hint: Object.keys(rules).join(' / ') })
       return send(302, 'text/plain; charset=utf-8', '', { location: `${prefix}/${to}/` })
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

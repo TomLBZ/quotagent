@@ -59,7 +59,7 @@
 | FR-INTAKE-003 | src/quotagent/services/intake.py | ASSUMPTION_MARKER = "[假设]" | 映射 |
 | FR-INTEG-001 | src/quotagent/kernel/delivery.py | FileTransport.stage(envelope, to) | 直引 |
 | FR-INTEG-002 | src/quotagent/services/relay.py | RelayService.accept(message, to) | 直引 |
-| FR-INTEG-003 | src/quotagent/services/mail.py | MailService.compose/enqueue/parse（AC-MAIL-001）；**发信/收信待凭据** | 直引 |
+| FR-INTEG-003 | src/quotagent/services/mail.py、src/quotagent/services/mail_transport.py | MailService.compose/enqueue/parse（AC-MAIL-001）+ MailTransport.send/fetch_recent/probe（真收发，`tools/verify.sh mail-transport` 27 条） | 直引 |
 | FR-INTEG-004 | src/quotagent/bridge.py | BridgeKernel.hello() | 映射 |
 | FR-LEDGER-001 | src/quotagent/kernel/ledger.py | Ledger.append() | 直引 |
 | FR-LEDGER-002 | src/quotagent/kernel/ledger.py | Ledger.project(view, from_seq, to_seq) | 直引 |
@@ -158,6 +158,8 @@
 | FR-UXWEB-002 | host/modules/webui.mjs | 见 AC-UXWEB-001 | 直引 |
 | FR-CONFIG-001 | host/modules/config-view.mjs + host/lib/config-ui.mjs + tools/config-apply.py | 见 AC-CONFIG-001 | 直引 |
 | FR-CONFIG-002 | tools/config-apply.py + host/lib/config-keys.mjs | 见 AC-CONFIG-001 | 直引 |
+| FR-MAIL-001 | src/quotagent/services/mail_transport.py + src/quotagent/services/mail.py | 见 AC-MAIL-001 | 直引 |
+| FR-MAIL-002 | host/modules/mail-view.mjs + host/lib/config-keys.mjs | 见 AC-MAIL-002 | 直引 |
 
 ## 2. 插件归属
 
@@ -194,6 +196,7 @@
 | timeline | AC-RUNTIME-008（本次登记） | — |
 | pipeline-view | FR-UX-005、FR-NEGO-001、FR-CLARIFY-004、FR-INTEG-003（三域运维可见） | 强 |
 | retention-view | FR-EVIDENCE-004、FR-UX-004（本次登记） | 强 |
+| mail-view | FR-INTEG-003、FR-UX-005（邮件域只读视图：队列计数 / 最近一次尝试 / available / next_action；本次登记） | 强 |
 | webui | FR-UX-001、FR-UX-002、FR-INTEG-001 | 强 |
 
 > 更新（T-253）：`FR-EVIDENCE-004` **已完整落地（计划侧 + 执行侧）**，`AC-AUDIT-003`/`AC-AUDIT-005` 均有机检。
@@ -206,6 +209,12 @@
 
 > 更新（T-258）：`FR-INTEG-003` 拆两半 —— **无凭据部分已落地**（`services/mail.py` + `AC-MAIL-001`）；**发信/收信仍待 SMTP/IMAP 凭据**（登记为 T-259，属人工输入）。
 
+> 更新（本批）：`FR-INTEG-003` 的**发信/收信已落地**：`services/mail_transport.py`（SMTP/IMAP，纯标准库）
+> 在凭据就位时真收发、没凭据时**分得清**「没配 / 配了没试过 / 连不上」（不同 reason + next_action），
+> 凭据不进账本/响应/日志（`mail/sent` 是事实行，body 无凭据无正文），收信有界并报截断；
+> 运维道可见面为 `mail-view` 插件 + `GET /quotagent/ops/mail/`（0 行 `<script>`）与 `GET /quotagent/api/mail`。
+> 机检：`tools/verify.sh mail-transport`（27 条，含回环假 SMTP/IMAP 真收发与哨兵零泄漏）。
+
 ## 3. 缺口与存疑登记
 
 > 门要求：状态为【缺口】【存疑】的 FR **必须**在本节逐条登记，且状态只能取 直引/映射/缺口/存疑。
@@ -216,7 +225,7 @@
 | FR-EVIDENCE-004 | src/quotagent/services/retention.py、src/quotagent/services/retention_exec.py | 计划侧（AC-AUDIT-003）+ 执行侧（AC-AUDIT-005），两侧均有门 | 直引 |
 | FR-NEGO-001 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |
 | FR-NEGO-002 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |
-| FR-INTEG-003 | src/quotagent/services/mail.py | MailService.compose/enqueue/parse（AC-MAIL-001）；**发信/收信待凭据** | 直引 |
+| FR-INTEG-003 | src/quotagent/services/mail.py、src/quotagent/services/mail_transport.py | MailService.compose/enqueue/parse（AC-MAIL-001）+ MailTransport.send/fetch_recent/probe（真收发，`tools/verify.sh mail-transport` 27 条） | 直引 |
 
 ## 4. 本次新增的 P2 需求（12 件无归属插件 + 1 条总纲）
 

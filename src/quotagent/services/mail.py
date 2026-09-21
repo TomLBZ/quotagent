@@ -2,10 +2,19 @@
 
 本轮做：报文的**构造**（RFC 5322 字节）、**解析**（入站 → 结构化候选）、**幂等投递记录**（落账）、
 **可解释失败**（`reason` + `next_action`）。
-本轮**不做**真正收发：需要 SMTP/IMAP 凭据，而且"发给谁、发什么"是人的决定（D-052）。
-所以这里给的是一个**传输边界**：内置的 `NullTransport` **永远**返回
-`{"status": "unavailable", "reason": "mail-transport-unavailable", "next_action": "配置 SMTP/IMAP 凭据后接入"}`，
-**没有任何**"看起来发出去了"的返回值 —— 做不到的事在接口上显式拒绝，而不是在返回值里含糊过去。
+`deliver()` 仍**不做**真正收发：发出去这件事必须有账本事实行，而"已发出"事件（`mail/sent`）**故意
+没有**登记进内核事件表（AC-MAIL-001 第 2 号断言守着它，`SENT_UNDECLARED_REASON` 就是这条纪律）。
+所以 `deliver()` 给的是一个**传输边界**：做不到的事在接口上显式拒绝，而不是在返回值里含糊过去。
+
+【本批（凭据就位时真能收发）的边界在哪】
+**真收发在 `services/mail_transport`**（SMTP 发信 / IMAP 收信，纯标准库；`send()`/`fetch_recent()`/
+`probe()`）：它也是**唯一**碰网络的模块（mail.py 连 `smtplib` 都不 import —— AC-MAIL-001 第 4 号断言
+静态扫这一条，所以网络面必须住在另一个文件里）。
+本类持有的 `transport` 由 `mail_transport` 的**真实状态**派生（没配 → `available:false` +
+`reason=mail-smtp-unconfigured` + `next_action`；配置且真发过 → 真实 `last_result`），因此
+`transport_status()` 报的就是事实。`deliver()` 仍然是**拒绝面**（P2 语义不变）；
+要真发信请走 `MailTransport.send(...)`（它才落 `mail/sent`）。
+内置的 `NullTransport` 保留为"永远不可用"的对照实现（契约 §0 逐字）。
 
 八条不变量（契约 §1，逐条落在代码里）：
 
@@ -71,6 +80,7 @@ from typing import Any
 
 from ..kernel.canon import HASH_PREFIX, is_hash, nfc, sha256_hex
 from ..kernel.ledger import Ledger
+from .mail_transport import MailTransport
 
 __all__ = [
     "MailError", "HeaderInjectionRejected", "UnsupportedAttachment", "UnknownMessage",
@@ -640,7 +650,10 @@ class MailService:
         self.realm = str(realm or "")
         self.ledger = ledger
         self.events = events
-        self.transport = NullTransport() if transport is None else transport
+        # 传输**由 `services/mail_transport` 的真实状态派生**（本批）：没配 SMTP/IMAP → `status()` 如实给
+        # `available:false + reason(mail-smtp-unconfigured) + next_action`；配置且真发过 → 真实 last_result。
+        # 想固定成"永远不可用"（契约 §0 的对照面/测试夹具），显式传 `transport=NullTransport()`。
+        self.transport = MailTransport() if transport is None else transport
         self._index: dict[str, dict] = {}
         self._order: list[str] = []
         self._keys: dict[tuple, str] = {}

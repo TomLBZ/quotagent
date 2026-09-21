@@ -102,6 +102,11 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec python3 tools/check-mail.py "$@"
     ;;
+  mail-transport)
+    # 邮件的**真收发**门（本批）：未配置诚实拒绝 / 回环真发收 / 凭据零泄漏 / 有界读取 / 配置键落盘
+    shift
+    exec python3 tools/check-mail-transport.py "$@"
+    ;;
   faq)
     shift
     exec python3 tools/check-faq.py "$@"

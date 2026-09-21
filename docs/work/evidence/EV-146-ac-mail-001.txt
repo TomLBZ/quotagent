@@ -1,0 +1,42 @@
+EV-146 AC-MAIL-001 邮件由插件提供（凭据就位时真收发 / 没凭据诚实报未连接）
+
+[宿主门 mail-transport]
+```
+兵出现次数 0**（宿主读的就是这份文件，凭据不能随它出门）
+        rc=0 stdout={"bytes": 752, "mail_bytes": 2898, "mail_out": "/tmp/mail-transport-gate-64j9q5r0/mail.json", "mail_totals": {"parsed": 0, "queued": 0, "refused": 0, "sent": 1}, "mail_transport": {"imap_available": f snapshot 命中哨兵=0
+[ok]   G1 网络面住在另一个文件里（**边界不被绕过**）：`services/mail.py` 仍不 import smtplib/imaplib/poplib/socket/subprocess（AC-MAIL-001 第 4 号断言的口径原样成立）；`host/modules/mail-view.mjs` 的 import 说明符里没有网络/子进程模块（宿主只读文件）
+        mail.py imports=['__future__', 'base64', 'copy', 'email', 're', 'typing']；mail-view imports=['node:fs', 'node:path', '../lib/std-schema.mjs'] 命中=无
+[ok]   G2 状态快照与邮件域快照里**没有任何值字段**（`value`/`secret_value`/`plaintext`/`raw`/`body`/`text` 这类键名一个都没有）；配置声明面只允许 `source`/`present`/`secret` 三个键（键名与是否凭据可以有——值不可以）；且快照如实反映"真发过一封"（`smtp.available=true`、`sent=1`）
+        状态文件值字段=无 mail.json 值字段=无 声明面键=['present', 'secret', 'source'] totals={'parsed': 0, 'queued': 0, 'refused': 0, 'sent': 1}
+[ok]   G3 宿主视图（`mail-view`）对**坏快照**给有名的降级原因、对**未配置**也说 `mail-snapshot-unconfigured`、对**真快照**给出可读结论（队列已发 1 / SMTP 可用 / headline 非空 / 有界为假）；全程不抛异常
+        rc=0 {"broken": {"degraded": true, "reason": "mail-snapshot-unparsable", "next_action": "让 Python 侧跑 tools/refresh-ui-snapshots.py 写出 <shared>/mail.json"}, "missing": {"degraded": true, "reason": "mail-snapshot-unconfigured"}, "real": {"degraded stderr=
+[ok]   G4 `mail-view` 的模块 fixture A1..A6（含 A5 确定性：同输入两次输出字节一致）全绿，且报告里模块名就是 `mail-view`（不是空集合）
+        rc=0 13/13 modules=['mail-view']
+RESULT: PASS（mail-transport 门 27/27）
+{"gate": "mail-transport", "passed": 27, "total": 27, "failures": []}
+
+```
+
+[AC（有 Node）]
+```
+
+```
+
+[AC（无 Node：降级）]
+```
+
+```
+
+[父方真机复核]
+```
+=== ① 语法 ===
+  py ok ×3
+  js ok host/modules/mail-view.mjs
+  js ok host/modules/webui.mjs
+  js ok host/lib/config-keys.mjs
+  js ok host/profiles.mjs
+  js ok host/cli.mjs
+=== ② 重启（先看真 PID）===
+989577 /workspace/runtime/node/current/bin/node /w
+
+```

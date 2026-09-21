@@ -177,6 +177,8 @@ def main(argv: list[str]) -> int:
                 "QUOTAGENT_UI_RETENTION_PLAN", str(ROOT / "tmp" / "ui-shared" / "retention-plan.json")),
             "--pipeline-snapshot", os.environ.get(
                 "QUOTAGENT_UI_PIPELINE", str(ROOT / "tmp" / "ui-shared" / "pipeline.json")),
+            "--mail-snapshot", os.environ.get(
+                "QUOTAGENT_UI_MAIL", str(ROOT / "tmp" / "ui-shared" / "mail.json")),
             "--admin-snapshot", os.environ.get(
                 "QUOTAGENT_UI_ADMIN", str(ROOT / "tmp" / "ui-shared" / "admin.json")),
             "--admin-inbox", os.environ.get(
