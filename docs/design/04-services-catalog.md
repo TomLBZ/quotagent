@@ -127,6 +127,15 @@
 - P1（T-211）实现口径：条款族覆盖付款/质保/罚则/**验收标准**；`define/revise` **只追加版本**（旧版本保留，`as_of` 取当时生效版本），基线只允许 `human:*`/`bundle:*` 载入；`apply_defaults` **只补缺失键**且每条补入项标 `source=library-default`（不得冒充供应商承诺）；`conflicts()` 逐键并列 required/offered，`resolution` 恒为 `None`、不存在任何"胜出值"字段，并按 `mismatch`/`required_only`/`offered_only`/`unknown_key` 分类（未知键也提请人工）；`escalate()` 只把冲突送人工门。`ctx.guard` 的条款差异计算下沉到本服务（单一实现）。
 - 关联：FR-TERMS-001..002。
 
+### `ctx.change` [P1]
+
+- 职责：变更闭环——变更请求的**引用校验**、差额重算、人工批准后生效。
+- Definition：`propose(quote, deltas) -> change` · `recompute(change_id) -> delta` · `approve(change_id, approved_by)` · `effective_total(quote) -> amount`。
+- 不变量：变更必须引用**原报价条目**与**单价基准**，引用不可验证（条目不存在、基准指向别的条目、基准值与本报价不符）即拒绝并留 `change/rejected`；差额按**原报价单价**逐行复算；**未经人工批准的变更不影响任何金额**（只出现在 `pending_changes`）。
+- 实现：`src/quotagent/services/change.py`；事件 `change/proposed`（intent）· `change/priced` · `change/approved`（commitment：`delta_amount` + `approved_by`）· `change/rejected`（bail）。
+- 字段口径：`basis_unit_price_refs` 恒为**逐行基准引用的列表**（单行也是单元素列表），`basis_unit_price_ref` 为其中首元素（兼容 `03` 报文表的单数字段名）。
+- 关联：FR-CHANGE-001..002，AC-CHANGE-001/002。
+
 ### `ctx.quotes` [P1]
 
 报价生命周期台账（`src/quotagent/services/quotes.py`）：包升版后把基于旧版本的报价标记为**过期**。

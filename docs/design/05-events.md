@@ -93,7 +93,11 @@
 | `award/confirm-requested` | serial | live | `ctx.award` → 人工门 | 需 `approval/granted` 才能推进 |
 | `award/committed` | emit | ✔ | 人工签署 → po | 承诺，缺批准即抛错（INV-005） |
 | `po/issued` | emit | ✔ | `ctx.award` → 履约 | 只能由 `AwardCommitment` 派生 |
-| `change/proposed` / `change/priced` / `change/approved` | serial | ✔ | 双侧 → 结算 | 定价必须引用原报价单价 |
+| `change/proposed` | serial | ✔ | 双侧 → 结算 | 变更议题（`ref_quote_lines[]` + `delta` + `basis_unit_price_ref`） |
+| `change/priced` | serial | ✔ | 双侧 → 结算 | 差额按**原报价单价**复算（`delta_amount` + 逐行明细） |
+| ↳ 字段口径 | – | – | – | `basis_unit_price_refs` 恒为逐行基准引用**列表**（单行也是单元素），`basis_unit_price_ref` 为首元素；引用不可验证即 `change/rejected` |
+| `change/approved` | serial | ✔ | 双侧 → 结算 | 人工批准后生效（commitment：`delta_amount` + `approved_by`） |
+| `change/rejected` | bail | ✔ | 双侧 → 结算 | 缺引用或引用不可验证即拒绝（FR-CHANGE-001） |
 | `acceptance/recorded` / `invoice/matched` | emit | ✔ | 履约 → 结算 | 三方核对留痕 |
 | `sync/merged` | emit | ✔ | `ctx.sync` | 三方协调的合并结果（一致确认 / 权威方胜出 / 人工裁决） |
 | `sync/conflict` | emit | ✔ | `ctx.sync` | 冲突留痕（mine/theirs/base/authority/auto_resolution） |

@@ -25,7 +25,7 @@
                         └──────────────────────────────────────────────────────────────────────┘
 
   双侧共享语义（各自本地实现，协议保证等价）:
-  ctx.ledger 账本 · ctx.events 事件 · ctx.norm 归一化 · ctx.clarify 澄清 · ctx.negotiate 谈判
+  ctx.ledger 账本 · ctx.events 事件 · ctx.norm 归一化 · ctx.clarify 澄清 · ctx.negotiate 谈判 · ctx.change 变更闭环
   ctx.approval 人工门 · ctx.guard 护栏 · ctx.evidence 证据 · ctx.qep 协议 · ctx.eval 评测 · ctx.evolve 进化
 ```
 
