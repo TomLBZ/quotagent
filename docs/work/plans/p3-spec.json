@@ -127,21 +127,21 @@
    "requirement": "**写面只有 `user-space/<ns>/<plugin>/`**：写其它路径（`host/modules/`、`src/`、`tools/`、别人的 ns 目录、仓库外路径）一律拒绝（`user-space-outside-ns`），且**目标文件不得出现**；不得\"就近落盘\" | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（2 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-USERPLUG-003",
    "requirement": "**自动重载**：产物或清单变化即触发**该插件**重载（不重启进程、不影响其它插件）；重载得到**新 instance**（新 fiber uid），**不迁移旧内存状态**（沿用 ADR-0015「生效即重启」语义） | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-USERPLUG-004",
    "requirement": "**自动卸载零残留**：卸载后订阅/定时器/文件句柄/服务注册全部回收，且**不影响**其它用户空间插件与平台插件的既有运行 | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-USERPLUG-005",
@@ -155,28 +155,28 @@
    "requirement": "**隔离四件套**：①独立 instance（独立 `Context`/fiber 与独立 effect 列表）②独立命名空间（服务键 `<ns>.<plugin>.<service>`，**不得注册或覆盖平台已占用的服务名**，尤其 `approval`/`ledger*`/`kernel.*`）③独立文件根（挂载期绑定 `user-space/<ns>/<plugin>/`，解析后越界即拒）④独立凭据作用域（只解析 `cred:<ns>/<plugin>:*`） | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-USERPLUG-007",
    "requirement": "**四类反例必须被结构性拒绝**（不是靠文档纪律）：①写别人目录 ②跨 instance 共享可变状态 ③未提权插件被他人加载 ④**无凭据时自称\"已连接\"**。四类均拒绝并留痕（`userplugin/refused`，带 `code` 与 `next_action`） | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-USERPLUG-008",
    "requirement": "**管理本身也是插件**：新增 `host/modules/user-plugin-manager.mjs`（`provides: ['userPluginManager']`，动作 `list`/`load`/`unload`/`reload`/`elevate-request`）；**管理面卸载后已装载插件照常运行**（新装载被拒且拒绝不伪装成功） | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-USERPLUG-009",
    "requirement": "**不耦合进平台**：用户空间插件不得改内核/服务层，**不得改 `host/modules/` 里已晋升产物**（D-053：已晋升产物不改，要新行为就加新插件），只能通过已在 `14-plugin-inventory.md` 登记的服务面 `inject` 消费平台能力；未登记服务名即拒 | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-USERPLUG-010",
@@ -190,14 +190,14 @@
    "requirement": "**两个方向都封死**：用户空间路径不得写 `host/modules/`（`makeModuleProposal` 的 target 指向 `user-space/...` → `artifact-outside-write-surface`），用户空间装载路径不得写 `host/modules/`（→ `user-space-outside-ns`）；任一方向能通过即视为不满足 | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-USERPLUG-012",
    "requirement": "**未提权不可被他人加载**：跨 ns 加载未提权插件 → `user-plugin-not-elevated` 且目标未被载入（effects 仍为空）；提权后按普通进树插件被任意 profile 装配，并受 `wiring`/`modules`/`plugins` 三门的既有约束 | must",
    "priority": "P2",
    "stage": "见 `docs/work/plans/p3-acceptance-spec.json`（1 条）",
-   "landed": false
+   "landed": true
   },
   {
    "id": "FR-STORAGE-001",
@@ -578,7 +578,7 @@
    "command": "tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh invariants`（已存在）",
    "evidence_draft": "见 `evidence/EV-118`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-USERPLUG-003",
@@ -587,7 +587,7 @@
    "command": "tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh modules`（已存在，A1..A6 含 uid/零残留）",
    "evidence_draft": "见 `evidence/EV-119`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-USERPLUG-004",
@@ -596,7 +596,7 @@
    "command": "tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh modules`（已存在 248/248）",
    "evidence_draft": "见 `evidence/EV-119`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-USERPLUG-005",
@@ -614,7 +614,7 @@
    "command": "tools/verify.sh user-space`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-120`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-USERPLUG-007",
@@ -623,7 +623,7 @@
    "command": "tools/verify.sh user-space`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-121`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-USERPLUG-008",
@@ -632,7 +632,7 @@
    "command": "tools/verify.sh user-space`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-121`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-USERPLUG-009",
@@ -641,7 +641,7 @@
    "command": "tools/verify.sh evolve-module`（已存在，追溯）+ `tools/verify.sh wiring`（已存在）+ `tools/verify.sh clean-copy`（已存在）",
    "evidence_draft": "见 `evidence/EV-122`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-USERPLUG-010",
@@ -659,7 +659,7 @@
    "command": "tools/verify.sh user-space`（**需父方新建**）+ `tools/verify.sh wiring`（已存在）+ `tools/verify.sh modules`（已存在）",
    "evidence_draft": "见 `evidence/EV-123`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   },
   {
    "id": "AC-USERPLUG-012",
@@ -668,7 +668,7 @@
    "command": "tools/verify.sh evolution`（已存在）+ `tools/verify.sh user-space`（**需父方新建**）",
    "evidence_draft": "见 `evidence/EV-123`（**父方创建**）",
    "source_draft": "t265-fr-plugins.md.txt",
-   "landed": false
+   "landed": true
   }
  ]
 }

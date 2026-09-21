@@ -158,6 +158,9 @@ const main = async () => {
     const { apply: avApply, Config: avConfig } = await import('./modules/admin-view.mjs')
     await ctx.plugin({ name: 'admin-view', inject: [], Config: avConfig,
       apply: (inner, config) => avApply(inner, { ...config, admin_snapshot: String(args['admin-snapshot'] ?? process.env.QUOTAGENT_UI_ADMIN ?? '') }) })
+    const { apply: upApply, Config: upConfig } = await import('./modules/user-plugin-manager.mjs')
+    await ctx.plugin({ name: 'user-plugin-manager', inject: [], Config: upConfig,
+      apply: (inner, cfg) => upApply(inner, { ...cfg, root: String(args['user-space-root'] ?? '') }) })
     const { apply: pmApply, Config: pmConfig } = await import('./modules/plugin-market.mjs')
     await ctx.plugin({ name: 'plugin-market', inject: [], Config: pmConfig,
       apply: (inner, cfg) => pmApply(inner, { ...cfg,
@@ -198,7 +201,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)

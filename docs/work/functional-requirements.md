@@ -178,6 +178,15 @@
 | FR-MARKET-004 | 市场只读零副作用：不装载/不下载/不写文件/不起子进程/不写账本；"安装/提权"只产指向既有门的引用 | must | P2 | AC-MARKET-004 |
 | FR-MARKET-005 | 有界且确定性：条数上界、稳定排序、不含正文与私域键；超界截断并报被丢条数 | should | P2 | AC-MARKET-005 |
 | FR-MARKET-006 | 不可用不得伪装：degraded + reason + next_action，不得返回"看起来健康的零插件清单" | must | P2 | AC-MARKET-006 |
+| FR-USERPLUG-002 | 写面只有 `user-space/<ns>/<plugin>/`：写 `host/modules/`、`src/`、`tools/`、别人 ns、仓库外一律拒且目标不存在 | must | P2 | AC-USERPLUG-002、AC-USERPLUG-012 |
+| FR-USERPLUG-003 | 自动重载：产物/清单变化只重载该插件（pid 不变、新 uid），不迁移旧内存状态 | must | P2 | AC-USERPLUG-003 |
+| FR-USERPLUG-004 | 自动卸载零残留：effects 归零、不影响其它用户空间与平台插件 | must | P2 | AC-USERPLUG-004 |
+| FR-USERPLUG-006 | 隔离四件套：独立 instance / 独立服务命名空间（含保留名禁用）/ 独立文件根（挂载期绑定）/ 独立凭据作用域 | must | P2 | AC-USERPLUG-006 |
+| FR-USERPLUG-007 | 四类反例必须结构性拒绝并留痕（写别人目录 / 跨 instance 共享状态 / 未提权被他人加载 / 无凭据自称已连接） | must | P2 | AC-USERPLUG-007 |
+| FR-USERPLUG-008 | 管理本身也是插件（list/load/unload/reload/请求/提权请求）；卸载管理面后已装载插件照常运行，新装载被拒且不伪装成功 | must | P2 | AC-USERPLUG-008 |
+| FR-USERPLUG-009 | 不耦合进平台：不得改内核/服务层与已晋升产物，只能经已登记服务面 inject；未登记服务名即拒 | must | P2 | AC-USERPLUG-009 |
+| FR-USERPLUG-011 | 未提权不可被他人加载（跨 ns → `user-plugin-not-elevated` 且未载入） | must | P2 | AC-USERPLUG-011 |
+| FR-USERPLUG-012 | 两个方向都封死：自进化 target→`user-space/` 拒；用户空间 target→`host/modules/` 拒 | must | P2 | AC-USERPLUG-012 |
 ## 7. 阶段分布（用于排期）
 
 | 阶段 | must 数 | 核心内容 |

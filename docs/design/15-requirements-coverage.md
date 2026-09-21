@@ -135,11 +135,22 @@
 | FR-MARKET-005 | host/modules/plugin-market.mjs | 见 AC-MARKET-005 | 直引 |
 | FR-MARKET-006 | host/modules/plugin-market.mjs | 见 AC-MARKET-006 | 直引 |
 
+| FR-USERPLUG-002 | host/lib/user-space.mjs + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-002 | 直引 |
+| FR-USERPLUG-003 | host/lib/user-space.mjs + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-003 | 直引 |
+| FR-USERPLUG-004 | host/lib/user-space.mjs + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-004 | 直引 |
+| FR-USERPLUG-006 | host/lib/user-space.mjs + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-006 | 直引 |
+| FR-USERPLUG-007 | host/lib/user-space.mjs + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-007 | 直引 |
+| FR-USERPLUG-008 | host/lib/user-space.mjs + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-008 | 直引 |
+| FR-USERPLUG-009 | host/lib/user-space.mjs + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-009 | 直引 |
+| FR-USERPLUG-011 | host/lib/user-space.mjs + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-011 | 直引 |
+| FR-USERPLUG-012 | host/lib/user-space.mjs + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-012 | 直引 |
+
 ## 2. 插件归属
 
 | 插件 | 归属 FR/AC | 强度 |
 |---|---|---|
 | approval-digest | FR-UX-001 | 部分 |
+| user-plugin-manager | FR-USERPLUG-003、FR-USERPLUG-004、FR-USERPLUG-006、FR-USERPLUG-008（T-268 subagent 产出） | 强 |
 | plugin-market | FR-MARKET-001、FR-MARKET-002、FR-MARKET-003、FR-MARKET-004、FR-MARKET-005、FR-MARKET-006（T-267 subagent 产出） | 强 |
 | admin-guard | FR-ADMIN-002、FR-ADMIN-007、FR-ADMIN-008、FR-ADMIN-009、FR-ADMIN-010（T-272 subagent 产出） | 强 |
 | admin-view | FR-ADMIN-001、FR-ADMIN-003、FR-ADMIN-004（T-272 subagent 产出） | 强 |

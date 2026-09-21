@@ -1,0 +1,89 @@
+EV-135 T-268 用户空间插件：隔离内核 + 管理面插件 + 围栅门 + 线上演示
+
+[1] 交付（subagent 产出，父方实跑核验）
+· `host/lib/user-space.mjs`（37424 B，隔离内核）：`scan`（只读/有界/确定性；单个 manifest 非法不拖倒整次扫描）、
+  `namespaceKey`、`RESERVED_SERVICES`（12 个平台保留名）、`assertWriteSurface`（区分两方向与两类拒码）、
+  `credentialScope`/`resolveCredential`（只解析本 ns 前缀）、`loadPlugin`（**新 Context** 挂载、
+  绑定文件根、服务只注册在 `<ns>.<plugin>.<svc>`）、`reload`（先卸再装、不迁移内存状态）
+· `host/modules/user-plugin-manager.mjs`（17345 B，管理面**本身也是插件**）：
+  `list/load/unload/reload/requestCreate/elevateRequest/stats`；提权只产**待办载荷**（不写 `host/modules/`）
+· `host/t268-user-space-gate.mjs`（围栅门）**21/21**；4 处单点变异**全红**且还原字节一致
+  （①去保留名拦截 ②文件根越界不拒 ③跨 instance 共享可变对象 ④不可读报空列表冒充健康）
+· 真演示：`demo-ns.hello` 建→load（服务键 `demo-ns.hello.{bucket,status}`、effects=2）→reload（uid #1→#2、pid 不变、
+  草稿 null）→unload（effects=0）；`host/modules/**/*.mjs` + `src/**/*.py` **181 个文件逐文件 sha256 前后一致**
+
+[2] 父方接线（T-268b）
+`host/profiles.mjs` + `host/cli.mjs`（挂载 + `--user-space-root`）+ `host/webui.mjs`（围栅门挂载）+
+`host/canary-dispatch.mjs`（e2e）+ `host/check-modules.mjs`（STUBS）+ `tools/check-module-wiring.py`（映射）+
+`tools/verify.sh user-space` + 系统管理道四条路由（`/admin/api/user-plugins`、`LOAD|UNLOAD|RELOAD`、
+`REQUEST`（agent panel 入口）、`ELEVATE`）+ 面板区块 + 插件清单/矩阵登记 + `userplugin/*` 事件两侧登记
+
+[3] 线上真回读
+· `GET /admin/api/user-plugins` → 200：`counts={plugins:1, loaded:0, invalid:0}`、`degraded=false`、
+  `ns=[("demo-ns", [("hello","1.0.0")])]`
+· `POST …/load` → 200：`{ok:true, uid:"demo-ns.hello#1", effects:2}`（命名空间实例）；
+  随后的列表 `loaded:1`；`POST …/unload` → 200
+· `POST …/request`（agent panel 入口）→ 202 + `request_id`，宿主只在
+  `tmp/ui-shared/user-plugin-requests/` 落 **0600** 待办件（含需求正文与 sha256），**账本零新增**（H1）
+· 公网未提权 `user-plugins` → 401；平台文件前后哈希不变
+
+[4] 如实说明（未做/未验）
+· **本轮没有凭据下发通道**（设计 §5 未决）：管理面装载的插件一律 `available:false`，不会自称已连接
+· `userplugin/*` 事件**尚未写账本**：本批只登记事件名与语义；Python 侧写入者 `tools/userplugin-record.py`
+  与"提需求 → agent 产出 → 自动进列表"的 `created` 永久化属 T-268c
+· **迭代/回滚内容语义**（版本+哈希+prev、`rollback-refused-modified`）与**提权真写 `host/modules/`**
+  （人工门 + 影子哈希 + 补 `14` 登记行）属 T-267b2
+· "管理面卸载后事件仍派发"未直接断言（只断言实例 effects 仍 >0、`loaded` 仍为 1、列表快照仍可读）
+· 变异模式会就地写回 `host/lib/user-space.mjs` 再还原：与其它验证并发时，窗口内可能读到变异体
+
+[5] 线上演示原始输出
+```
+=== 建一个用户空间插件（演示用；真实流程由 agent 产出）===
+total 9
+-rwxrwxrwx 1 hermes 10000 697 Sep 21 14:26 index.mjs
+-rwxrwxrwx 1 hermes 10000 303 Sep 21 14:26 plugin.json
+=== 重启 + 线上演示 ===
+就绪
+--- 列表（未装载）---
+list → 200
+ counts= {"plugins": 1, "loaded": 0, "invalid": 0} degraded= False
+ ns= [('demo-ns', [('hello', '1.0.0')])]
+--- 装载 ---
+load → 200
+{
+  "ok": true,
+  "code": "",
+  "next_action": "",
+  "uid": "demo-ns.hello#1",
+  "effects": 2
+}
+
+--- 列表（已装载）---
+ counts= {"plugins": 1, "loaded": 1, "invalid": 0}
+ loaded= None
+--- 校验：平台文件未被改动（装载前后）===
+73c53fdaaa8ebf5500e48ec2b0210b4a  -
+--- 卸载 ---
+unload → 200
+{
+  "ok": true,
+  "code": "",
+  "next_action": "",
+  "uid": "demo-ns.hello#1",
+  "effects": 0
+}
+
+--- 提需求（agent panel 入口；宿主只落待办件）---
+request → 202
+{
+  "ok": true,
+  "request_id": "f2afc640f1663354",
+  "next_action": "等待 Python 侧消费并记录 userplugin/created（宿主不写账本）"
+}
+
+total 1
+-rw------- 1 hermes 10000 138 Sep 21 14:26 req-f2afc640f1663354.json
+待办件数= 1
+ 权限= 0o600 键= ['bytes', 'description_sha256', 'kind', 'ns']
+公网未提权 user-plugins → 401
+```

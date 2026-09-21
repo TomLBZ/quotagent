@@ -161,6 +161,15 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-MARKET-004 | P2 | 连读市场面前后 `host/modules/*.mjs` 与 `src/**/*.py` 逐字节与个数不变、无新文件、账本零新增、无子进程、四 profile config_digest 不变 | `tools/verify.sh plugin-market` + `clean-copy` + `invariants` | 见 `evidence/EV-134` |
 | AC-MARKET-005 | P2 | 同输入两次输出除时间键外逐字节一致；超上界即 `truncated:true` 并带被丢条数；正文与私域哨兵均不出现 | `tools/verify.sh plugin-market` + `webui` | 见 `evidence/EV-134` |
 | AC-MARKET-006 | P2 | 源不可读 → `degraded:true` + reason + next_action；与"真零插件"可区分；两种情形都不许报 ok:true 掩盖 | `tools/verify.sh plugin-market` | 见 `evidence/EV-134` |
+| AC-USERPLUG-002 | P2 | 写面负控四例：target = `host/modules/`、`src/`、别人 ns、仓库外 → 全部拒绝（码区分 `user-space-outside-ns` / `artifact-outside-write-surface`），**且四个目标位置事后都不存在该文件** | `tools/verify.sh user-space` | 见 `evidence/EV-135` |
+| AC-USERPLUG-003 | P2 | 重载：改产物后只有该插件重启（新 uid，pid 不变），不迁移旧内存状态（断言草稿为 null 而非旧值） | `tools/verify.sh user-space` | 见 `evidence/EV-135` |
+| AC-USERPLUG-004 | P2 | 卸载零残留：effects 归零、订阅不再收事件、句柄关闭；其它用户空间与平台插件的 effects 与行为逐项不变 | `tools/verify.sh user-space` | 见 `evidence/EV-135` |
+| AC-USERPLUG-006 | P2 | 隔离四件套：①两 ns 同名插件 uid 不同且可分别卸载 ②服务键命名空间化且注册平台保留名（如 `approval`）被拒 ③文件根绑定后 `..`/绝对路径/符号链接越界均拒 ④凭据只解析本 ns 前缀 | `tools/verify.sh user-space` | 见 `evidence/EV-135` |
+| AC-USERPLUG-007 | P2 | 四类反例结构性拒绝并留痕（`userplugin/refused` 带 code + next_action）：①写别人目录 ②跨 instance 共享可变状态 ③未提权插件被他人加载 ④**无凭据自称已连接** | `tools/verify.sh user-space` | 见 `evidence/EV-135` |
+| AC-USERPLUG-008 | P2 | 管理面本身是插件：卸载它之后**已装载的用户空间插件照常运行**（effects 仍 >0、列表快照仍可读），新装载被拒且不伪装成功 | `tools/verify.sh user-space` | 见 `evidence/EV-135` |
+| AC-USERPLUG-009 | P2 | 不耦合进平台：装载/卸载前后 `host/modules/**/*.mjs` 与 `src/**/*.py` 逐文件 sha256 不变；未登记服务名 inject 即拒 | `tools/verify.sh user-space` + `evolve-module` + `wiring` | 见 `evidence/EV-135` |
+| AC-USERPLUG-011 | P2 | 跨 ns 加载**未提权**插件 → `user-plugin-not-elevated` 且未载入（effects 仍空） | `tools/verify.sh user-space` | 见 `evidence/EV-135` |
+| AC-USERPLUG-012 | P2 | 两个方向都封死：自进化 target 指到 `user-space/` → `artifact-outside-write-surface`；用户空间装载 target 指到 `host/modules/` → `user-space-outside-ns` | `tools/verify.sh user-space` | 见 `evidence/EV-135` |
 
 ## 7. 证据制度
 

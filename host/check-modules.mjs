@@ -155,6 +155,10 @@ const STUBS = {
       degraded: true, omitted_views: 0, source: 'pipeline-view' }),
     headline: () => '（stub）',
   },
+  userPluginManager: {
+    config: () => ({ root: '' }),
+    needs: [],
+  },
   pluginMarket: {
     config: () => ({ modules_dir: 'host/modules', inventory: '', user_space: '' }),
     needs: [],

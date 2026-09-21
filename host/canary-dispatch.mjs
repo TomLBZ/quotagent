@@ -134,6 +134,9 @@ const e2e = async ({ weightBps, candidate }) => {
       inject: [], Config: avConfig2,
       apply: (inner, cfg) => avApply2(inner, { ...cfg, admin_snapshot: '' }),
     })
+    const { apply: upApply2, Config: upConfig2 } = await import('./modules/user-plugin-manager.mjs')
+    await ctx.plugin({ name: 'user-plugin-manager', inject: [], Config: upConfig2,
+      apply: (inner, cfg) => upApply2(inner, { ...cfg, root: '' }) })
     const { apply: pmApply2, Config: pmConfig2 } = await import('./modules/plugin-market.mjs')
     await ctx.plugin({ name: 'plugin-market', inject: [], Config: pmConfig2,
       apply: (inner, cfg) => pmApply2(inner, { ...cfg, modules_dir: 'host/modules', inventory: '', user_space: '' }) })
@@ -225,7 +228,7 @@ const e2e = async ({ weightBps, candidate }) => {
     apply: (inner, cfg) => histApplyE2E(inner, cfg) }, histConfigE2E.parse({ key_field: 'supplier_id' }))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }

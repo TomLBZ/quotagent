@@ -31,6 +31,7 @@ import { Config as pvConfig3, apply as pvApply3 } from './modules/pipeline-view.
 import { Config as agConfig3, apply as agApply3 } from './modules/admin-guard.mjs'
 import { Config as avConfig3, apply as avApply3 } from './modules/admin-view.mjs'
 import { Config as pmConfig3, apply as pmApply3 } from './modules/plugin-market.mjs'
+import { Config as upConfig3, apply as upApply3 } from './modules/user-plugin-manager.mjs'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -132,6 +133,7 @@ const mountObs = async (targetCtx) => {
   await wrap({ apply: rvApply3, Config: rvConfig3, inject: [] }, {}, 'retentionView', 'retention')
   await wrap({ apply: pvApply3, Config: pvConfig3, inject: [] }, {}, 'pipelineView', 'pipeline')
   await wrap({ apply: avApply3, Config: avConfig3, inject: [] }, {}, 'adminView', 'admin-view')
+  await wrap({ apply: upApply3, Config: upConfig3, inject: [] }, { root: process.cwd() + '/user-space' }, 'userPluginManager', 'user-plugin-manager')
   await wrap({ apply: pmApply3, Config: pmConfig3, inject: [] },
     { modules_dir: process.cwd() + '/host/modules', inventory: process.cwd() + '/docs/design/14-plugin-inventory.md', user_space: '' },
     'pluginMarket', 'plugin-market')
@@ -174,7 +176,7 @@ writeFileSync(pipeFixture, JSON.stringify({
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -272,7 +274,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)

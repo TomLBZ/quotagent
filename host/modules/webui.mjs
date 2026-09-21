@@ -18,11 +18,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager']
 
 export const provides = ['webui']
 
@@ -103,6 +103,7 @@ export function apply(ctx, config) {
   const adminGuard = ctx.adminGuard         // 管理员 token / 会话 / 冷却（subagent 产出，T-272）
   const adminView = ctx.adminView           // 系统管理快照的只读聚合（同上）
   const pluginMarket = ctx.pluginMarket      // 插件列表/市场的只读聚合（subagent 产出，T-267）
+  const userPlugins = ctx.userPluginManager  // 用户空间插件管理面（subagent 产出，T-268）
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
   const pipelinePayload = () => {
@@ -415,7 +416,16 @@ export function apply(ctx, config) {
         + `<p>阻塞 <b>${data.counts?.blocked ?? 0}</b> 条（口径：${data.counts?.source ?? '—'}）</p>`
         + `<table><thead><tr><th>block</th><th>kind</th><th>原因</th><th>需要你做的事</th><th>提交材料</th></tr></thead><tbody>${rows}</tbody></table>`
         + `<p>切换视角：${switchLinks}</p>`
-        + (() => { const m = pluginMarket.snapshot(); return `<h3>插件市场（只读）</h3>`
+        + (() => { const u = userPlugins.list(); return `<h3>用户空间插件（管理面本身也是插件）</h3>`
+            + `<p>命名空间 <b>${(u.namespaces || []).length}</b> 个 · 插件 <b>${u.counts?.plugins ?? 0}</b> · 已装载 <b>${u.counts?.loaded ?? 0}</b>${u.degraded ? ` · <b>降级</b>：${u.reason ?? ''}` : ''}</p>`
+            + (u.namespaces || []).map((n) => `<p><code>${n.ns}</code>：` + (n.plugins || []).map((p) =>
+                `<code>${p.name}@${p.version ?? '-'}</code> <form style="display:inline" method="post" action="${prefix}/admin/api/user-plugins/load">`
+                + `<input type="hidden" name="ns" value="${n.ns}"><input type="hidden" name="plugin" value="${p.name}">`
+                + `<button type="submit">装载</button></form>`).join(' ') + `</p>`).join('')
+            + `<p>向 agent 提需求（本平台侧只登记待办；产出与落账本由 agent / Python 侧完成）：</p>`
+            + `<form method="post" action="${prefix}/admin/api/user-plugins/request">`
+            + `<input name="ns" placeholder="命名空间" size="10"><input name="description" placeholder="你想让它做什么" size="40">`
+            + `<button type="submit">提需求</button></form>` })(),        + (() => { const m = pluginMarket.snapshot(); return `<h3>插件市场（只读）</h3>`
             + `<p>共 <b>${m.counts?.total ?? 0}</b> 项（人工 ${m.counts?.human ?? 0} / 自进化 ${m.counts?.evolve ?? 0} / 用户空间 ${m.counts?.user_space ?? 0}）；未装配 <b>${m.counts?.unwired ?? 0}</b>；三源一致 <b>${!m.inconsistent}</b></p>`
             + `<p>${(m.differences || []).map((d) => `<code>${d}</code>`).join(' · ') || '（无差异）'}</p>` })()
     }
@@ -475,6 +485,56 @@ export function apply(ctx, config) {
     if (/^\/admin\/api\/market\/?$/.test(path)) {
       if (!adminGuard.authorized(req).ok) return deny()
       return json(200, pluginMarket.snapshot())
+    }
+    // ---- 用户空间插件（管理面本身是插件 user-plugin-manager）：全部需会话；宿主只落待办件，不写账本 ----
+    // 同步/异步统一应答：管理面 load/unload/reload 可能返回 Promise（`out.ok` 在 Promise 上读不到）
+    const answer = (out, okCode = 200, badCode = 409) => {
+      const finish = (value) => {
+        const good = Boolean(value && (value.ok === undefined ? value.uid || value.effects !== undefined : value.ok))
+        return json(good ? okCode : badCode, value ?? { ok: false, code: 'no-result' })
+      }
+      return out && typeof out.then === 'function' ? out.then(finish).catch((err) => json(500, { error: 'manager-failed', detail: String(err).slice(0, 120) })) : finish(out)
+    }
+    const userReq = (dir) => (record) => {
+      try {
+        mkdirSync(dir, { recursive: true, mode: 0o700 })
+        try { chmodSync(dir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
+        const key = createHash('sha256').update(JSON.stringify(record)).digest('hex').slice(0, 16)
+        const tmp = `${dir}/.${key}.${process.pid}.tmp`
+        writeFileSync(tmp, JSON.stringify(record) + '\n', { mode: 0o600 })
+        try { chmodSync(tmp, 0o600) } catch (err) { /* 同上 */ }
+        renameSync(tmp, `${dir}/req-${key}.json`)
+        return key
+      } catch (err) { return null }
+    }
+    if (/^\/admin\/api\/user-plugins\/?$/.test(path)) {
+      if (!adminGuard.authorized(req).ok) return deny()
+      return json(200, userPlugins.list())
+    }
+    if (/^\/admin\/api\/user-plugins\/(load|unload|reload|request|elevate)\/?$/.test(path) && String(req.method) === 'POST') {
+      if (!adminGuard.authorized(req).ok) return deny()
+      const action = path.split('/')[4]
+      return readBody((body) => {
+        const form = new URLSearchParams(body)
+        const ns = String(form.get('ns') ?? '').trim()
+        const plugin = String(form.get('plugin') ?? '').trim()
+        if (action === 'load' || action === 'unload' || action === 'reload') {
+          return answer(userPlugins[action](ns, plugin))
+        }
+        if (action === 'request') {
+          const description = String(form.get('description') ?? '').trim()
+          if (description === '') return json(400, { error: 'no-description', hint: '描述你想让 agent 开发的插件功能' })
+          const payload = { ...(userPlugins.requestCreate({ ns, description }) || {}),
+            description: description.slice(0, 2000), requested_at: new Date().toISOString() }
+          const key = userReq(String(config.admin_inbox ?? '').replace(/admin-submissions$/, 'user-plugin-requests'))(payload ?? {})
+          return json(key ? 202 : 500, key ? { ok: true, request_id: key, next_action: '等待 Python 侧消费并记录 userplugin/created（宿主不写账本）' } : { error: 'request-write-failed' })
+        }
+        const approvalRef = String(form.get('approval_ref') ?? '').trim()
+        const payload = userPlugins.elevateRequest(ns, plugin, approvalRef)
+        const ok = payload && payload.ok !== false
+        const key = ok ? userReq(String(config.admin_inbox ?? '').replace(/admin-submissions$/, 'user-plugin-elevations'))(payload ?? {}) : null
+        return json(ok && key ? 202 : 409, ok ? { ok: true, elevation_id: key, payload } : (payload ?? { ok: false }))
+      })
     }
     if (/^\/admin\/api\/switch\/?$/.test(path)) {
       if (!adminGuard.authorized(req).ok) return deny()
