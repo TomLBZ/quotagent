@@ -12,5 +12,32 @@ EV-095 T-260 P2 新服务在运维道可见：快照契约 + 实现 + 端到端
 宿主直连内核桥拿数据（现有 UI 一律不持 supervisor）· 改 `ops-view` 塞进三域（它是已晋升产物，改会破坏追溯链）·
 快照带"最近一条正文字段"（运维看板不需要，且容易把私域带出来）
 
-[3] 实现证据
+[3] 实现证据（T-260）
+· `host/modules/pipeline-view.mjs`（17950 B，
+  sha256 25d56c92e97d4011…）
+  —— **第九个自进化产出**，晋升 `ap-0110`（dry-run fixture 13/13 → promoted → 进树 13/13）
+· 围栏门 `host/t260-pipeline-gate.mjs`：**父侧实跑 13/13**；子代理附 **5/5 处单点变异全红**
+  （有界夹取去掉 / 形状非法不降级 / 三档不一致也报 true / 合计改为重算 / 私域不清洗）
+· `tools/refresh-ui-snapshots.py`（12758 B，Python 侧快照写入器）
+· 机检 `AC-UI-002`（**父方撰写**，避免"写检查的人=写实现的人"）：形状/手算/**只读账本逐字节比对**/
+  哨兵/无多余时间键/确定性/原子写/静态无账本写入 → `qa ac AC-UI-002` 退出 0
+· 端到端门 `tools/check-pipeline-route.py` + `verify.sh pipeline-route`（真起 webui、真读快照、真断言）
+· 刷新钩子：`webui-serve.py` 的 seed 之后 + 探活时各刷一次（与留存计划同模式）
+· 事件无需新增（三域事件在各自批次已登记）
+
+[4] 线上真回读（先杀进程再 ensure）
+$ curl http://127.0.0.1:8093/quotagent/api/pipeline → 200
+  degraded=false，views=2，transport={available:false, reason:mail-transport-unavailable,
+  next_action:配置 SMTP/IMAP 凭据后接入}，totals={threads:0,rounds:0,rejected:0,entries:0,queued:0,refused:0}
+$ 公网 /api/pipeline → 200 ；公网 /quotagent/ops/ → 200
+**如实说明**：三域计数全为 0 —— 因为仓库真账本里没有 `negotiate/*`/`faq/*`/`mail/*` 行
+（这三个服务尚未在 UI 用的账本上被真正调用）。这是**数据的样子**，不是面板没接上。
+
+[5] 父方本轮自己犯的两个错（都当场修掉，写在这里免得下次重犯）
+① **我的 `AC-UI-002` 机检曾在一条路径上"空转假绿"**：写入器把结果写在 `<shared>/pipeline.json`，
+  而我按 `<shared>/ui-shared/pipeline.json` 找 → 断言读到空串仍判过。子代理指出后改成
+  **按写入器 stdout 报告的路径定位**，并加了一条"报告了路径却没写文件 → 红"。**假绿比红更危险。**
+② **改 `webui-serve.py` 时多插了一个 `]`** → `IndentationError` → 服务起不来、公网 502。
+   教训：改服务入口脚本后**先 `py_compile` 并通过了再重启**，并把"编译失败就停"写成 `|| { echo 停; exit 1; }`
+   （本轮第一次没写，脚本照旧往下跑，把服务留在了坏状态）。
 （待 T-260 实现轮次落地后追加：写入器与插件的哈希、门与端到端输出、线上 /api/pipeline 真回读。）

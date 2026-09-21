@@ -154,6 +154,10 @@ const main = async () => {
     const { apply: brApply2, Config: brConfig2 } = await import('./modules/circuit-breaker.mjs')
     await ctx.plugin({ name: 'circuit-breaker', inject: [], Config: brConfig2,
       apply: (inner, cfg) => brApply2(inner, cfg) }, brConfig2.parse({}))
+    // 三域运维快照视图（subagent 产出，T-260）
+    const { apply: pvApply, Config: pvConfig } = await import('./modules/pipeline-view.mjs')
+    await ctx.plugin({ name: 'pipeline-view', inject: [], Config: pvConfig,
+      apply: (inner, cfg) => pvApply(inner, cfg) }, pvConfig.parse({}))
     // 留存计划视图（subagent 产出，T-254）
     const { apply: rvApply, Config: rvConfig } = await import('./modules/retention-view.mjs')
     await ctx.plugin({ name: 'retention-view', inject: [], Config: rvConfig,
@@ -183,7 +187,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -196,6 +200,7 @@ const main = async () => {
       route_prefix: String(args.prefix ?? '/quotagent'),
       // 留存计划的**绝对路径**（生产 cwd≠仓库根）：由 webui-serve 传入；缺失时路由降级
       retention_plan: String(args['retention-plan'] ?? process.env.QUOTAGENT_UI_RETENTION_PLAN ?? ''),
+      pipeline_snapshot: String(args['pipeline-snapshot'] ?? process.env.QUOTAGENT_UI_PIPELINE ?? ''),
       views: String(args.views ?? 'contractor,supplier').split(',').map((item) => item.trim()).filter(Boolean),
       ledger_contractor: contractorLedger,
       ledger_supplier: String(args['ledger-supplier'] ?? ''),
@@ -214,6 +219,7 @@ const main = async () => {
            scorecard_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/scorecard`),
            approval_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/approvals`),
            retention_route: `${String(args.prefix ?? '/quotagent')}/api/retention`,
+           pipeline_route: `${String(args.prefix ?? '/quotagent')}/api/pipeline`,
            observability: obox.handle ? obox.handle.summary() : null,
            note: '每方视角读自己的账本（结构性隔离）+ 投影白名单（纵深防御）；宿主不写账本' }) + '\n')
     // 保活：直到收到信号（ws-gateway 以 SIGTERM 停服）

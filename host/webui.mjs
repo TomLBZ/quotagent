@@ -27,6 +27,7 @@ import { Config as jConfig3, apply as jApply3 } from './modules/evolve-journal.m
 import { Config as scConfig3, apply as scApply3 } from './modules/supplier-scorecard.mjs'
 import { Config as apConfig3, apply as apApply3 } from './modules/approval-digest.mjs'
 import { Config as rvConfig3, apply as rvApply3 } from './modules/retention-view.mjs'
+import { Config as pvConfig3, apply as pvApply3 } from './modules/pipeline-view.mjs'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -126,6 +127,7 @@ const mountObs = async (targetCtx) => {
   await wrap({ apply: scApply3, Config: scConfig3, inject: [] }, {}, 'supplierScorecard', 'scorecard')
   await wrap({ apply: apApply3, Config: apConfig3, inject: [] }, {}, 'approvalDigest', 'approvals')
   await wrap({ apply: rvApply3, Config: rvConfig3, inject: [] }, {}, 'retentionView', 'retention')
+  await wrap({ apply: pvApply3, Config: pvConfig3, inject: [] }, {}, 'pipelineView', 'pipeline')
 }
 await mountObs(ctx)
 
@@ -143,7 +145,7 @@ writeFileSync(evolvePath, [
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -241,7 +243,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -334,6 +336,18 @@ check('绩效记分卡正控：/contractor/api/scorecard 与 /supplier/api/score
   && String(scJson.source).includes('supplier-scorecard')
   && !/"body"\s*:/.test(sc1.text) && !sc1.text.includes('private:') && !sc1.text.includes('cost_floor'),
   `status=${sc1.status}/${sc2.status} groups=${scJson.groups}`)
+
+// 4k. T-260：谈判/FAQ/邮件三域在运维道可见（Python 写快照，宿主只读聚合）
+const pp = await get('/api/pipeline')
+let ppJson = {}
+try { ppJson = JSON.parse(pp.text) } catch (err) { ppJson = {} }
+check('三域流水正控：/api/pipeline 200，含谈判/FAQ/邮件三域计数与 transport 三件，且不出正文与私域',
+  pp.status === 200 && ppJson.pipeline && Array.isArray(ppJson.pipeline.views)
+  && typeof (ppJson.pipeline.transport || {}).available === 'boolean'
+  && typeof (ppJson.pipeline.transport || {}).reason === 'string'
+  && typeof (ppJson.pipeline.transport || {}).next_action === 'string'
+  && !/"body"\s*:/.test(pp.text) && !pp.text.includes('private:') && !pp.text.includes('reserve_price'),
+  `status=${pp.status} degraded=${ppJson.pipeline?.degraded} transport=${JSON.stringify(ppJson.pipeline?.transport || {})?.slice(0, 60)}`)
 
 // 4j. T-254：留存计划在运维视角可见（判定在 Python 侧；宿主只读落盘文件并交给 retention-view 聚合）
 const rt = await get('/api/retention')

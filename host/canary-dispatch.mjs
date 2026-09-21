@@ -178,6 +178,9 @@ const e2e = async ({ weightBps, candidate }) => {
   const { apply: obsApplyE2E, Config: obsConfigE2E } = await import('./modules/observability.mjs')
   await ctx.plugin({ name: 'observability#e2e', inject: ['governor', 'audit', 'canary'], Config: obsConfigE2E,
     apply: (inner, cfg) => obsApplyE2E(inner, cfg) }, obsConfigE2E.parse({}))
+  const { apply: pvApplyE2E, Config: pvConfigE2E } = await import('./modules/pipeline-view.mjs')
+  await ctx.plugin({ name: 'pipeline-view#e2e', inject: [], Config: pvConfigE2E,
+    apply: (inner, cfg) => pvApplyE2E(inner, cfg) }, pvConfigE2E.parse({}))
   const { apply: rvApplyE2E, Config: rvConfigE2E } = await import('./modules/retention-view.mjs')
   await ctx.plugin({ name: 'retention-view#e2e', inject: [], Config: rvConfigE2E,
     apply: (inner, cfg) => rvApplyE2E(inner, cfg) }, rvConfigE2E.parse({}))
@@ -204,7 +207,7 @@ const e2e = async ({ weightBps, candidate }) => {
     apply: (inner, cfg) => histApplyE2E(inner, cfg) }, histConfigE2E.parse({ key_field: 'supplier_id' }))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }

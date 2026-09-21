@@ -114,6 +114,8 @@
 | FR-EVAL-005 | host/modules/supplier-scorecard.mjs | AC-EVAL-003（见 §4 的机检命令） | 映射 |
 | FR-UX-004 | host/modules/ops-view.mjs | AC-RUNTIME-010（见 §4 的机检命令） | 映射 |
 
+| FR-UX-005 | tools/refresh-ui-snapshots.py、host/modules/pipeline-view.mjs | AC-UI-002 + AC-PIPELINE-001 | 直引 |
+
 ## 2. 插件归属
 
 | 插件 | 归属 FR/AC | 强度 |
@@ -138,6 +140,7 @@
 | sourcing | AC-RFQ-005（本次登记） | — |
 | supplier-scorecard | AC-EVAL-003（本次登记） | — |
 | timeline | AC-RUNTIME-008（本次登记） | — |
+| pipeline-view | FR-UX-005、FR-NEGO-001、FR-CLARIFY-004、FR-INTEG-003（三域运维可见） | 强 |
 | retention-view | FR-EVIDENCE-004、FR-UX-004（本次登记） | 强 |
 | webui | FR-UX-001、FR-UX-002、FR-INTEG-001 | 强 |
 

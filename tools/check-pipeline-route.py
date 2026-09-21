@@ -1,0 +1,110 @@
+"""check-pipeline-route —— 三域运维道端到端（`tools/verify.sh pipeline-route`，AC-PIPELINE-001）。
+
+真做四件事：
+  ① 用真写入器把快照写到 `tmp/ui-shared/pipeline.json`（Python 侧判定 → 宿主只读）；
+  ② 真起一个 `cli.mjs webui` 进程（随机空闲端口、私有前缀），只加载进树模块；
+  ③ `GET <prefix>/api/pipeline` 断言：200、含三域、`transport.available` 为布尔、
+     `transport.reason`/`next_action` 齐备、**`transport.available` 必须为 false**（本轮无发信能力，D-052）、
+     响应里不出现 `"body"`/`private:`/`reserve_price`；
+  ④ 断言同一次会话里 `/api/ops` 仍 200（没有把既有运维道弄坏）。
+"""
+from __future__ import annotations
+
+import json
+import os
+import socket
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+CHECKS: list[dict] = []
+
+
+def check(name: str, ok: bool, detail: str = "") -> None:
+    CHECKS.append({"name": name, "ok": bool(ok), "detail": detail})
+
+
+def free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+def curl(url: str, timeout: float = 10.0) -> tuple[int, str]:
+    proc = subprocess.run(["curl", "-s", "-m", str(timeout), "-w", "\\n%{http_code}", url],
+                          capture_output=True, text=True)
+    body, _, code = proc.stdout.rpartition("\n")
+    try:
+        return int(code.strip()), body
+    except ValueError:
+        return 0, body
+
+
+# ① 真刷新快照（写不了也不致命：路由会走降级路径，下面的断言会如实反映）
+snap = ROOT / "tmp" / "ui-shared" / "pipeline.json"
+refresh = subprocess.run([sys.executable, str(ROOT / "tools" / "refresh-ui-snapshots.py"),
+                          "--shared-dir", str(ROOT / "tmp" / "ui-shared")],
+                         cwd=str(ROOT), capture_output=True, text=True, timeout=300)
+check("① 快照刷新可运行（Python 侧写入器）", refresh.returncode == 0,
+      f"rc={refresh.returncode} {refresh.stdout.strip()[:120]}{refresh.stderr.strip()[-160:]}")
+
+# ② 真起服务
+port = free_port()
+prefix = "/q"
+env = dict(os.environ)
+proc = subprocess.Popen(["node", str(ROOT / "host" / "cli.mjs"), "webui", "--profile", "webui",
+                         "--port", str(port), "--host", "127.0.0.1", "--prefix", prefix,
+                         "--ledger-contractor", str(ROOT / "tmp" / "ui-shared" / "contractor" / "ledger.jsonl"),
+                         "--ledger-supplier", str(ROOT / "tmp" / "ui-shared" / "supplier" / "ledger.jsonl"),
+                         "--retention-plan", str(ROOT / "tmp" / "ui-shared" / "retention-plan.json"),
+                         "--pipeline-snapshot", str(snap)],
+                        cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+try:
+    up = False
+    for _ in range(30):
+        code, _b = curl(f"http://127.0.0.1:{port}{prefix}/api/health", timeout=3)
+        if code == 200:
+            up = True
+            break
+        time.sleep(1)
+    check("② webui 进程就绪（/api/health 200）", up, f"port={port}")
+
+    code, body = curl(f"http://127.0.0.1:{port}{prefix}/api/pipeline")
+    data = {}
+    try:
+        data = json.loads(body)
+    except Exception:  # noqa: BLE001
+        data = {}
+    pipe = data.get("pipeline") or {}
+    tr = pipe.get("transport") or {}
+    check("③ /api/pipeline 200 且含三域视图数组", code == 200 and isinstance(pipe.get("views"), list),
+          f"status={code} views={len(pipe.get('views') or [])}")
+    if pipe.get("views"):
+        v0 = pipe["views"][0]
+        check("③ 每个视角含 negotiate/faq/mail 三域", all(k in v0 for k in ("negotiate", "faq", "mail")),
+              json.dumps(v0, ensure_ascii=False)[:160])
+    check("③ transport 三件齐备（available/reason/next_action）",
+          isinstance(tr.get("available"), bool) and bool(tr.get("reason")) and bool(tr.get("next_action")),
+          json.dumps(tr, ensure_ascii=False)[:140])
+    check("③ **本轮无发信能力 → transport.available 必须为 false**（D-052：不许报看起来能发）",
+          tr.get("available") is False, f"available={tr.get('available')!r}")
+    check("③ 响应不出正文与私域（\"body\"/private:/reserve_price 均不出现）",
+          '"body"' not in body and "private:" not in body and "reserve_price" not in body, f"len={len(body)}")
+
+    code2, _ = curl(f"http://127.0.0.1:{port}{prefix}/api/ops")
+    check("④ 既有运维道未被弄坏（/api/ops 仍 200）", code2 == 200, f"status={code2}")
+finally:
+    proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+failed = [c for c in CHECKS if not c["ok"]]
+print(json.dumps({"checks": CHECKS, "passed": len(CHECKS) - len(failed), "total": len(CHECKS),
+                  "failures": len(failed)}, ensure_ascii=False, indent=2))
+for c in failed:
+    print("FAIL:", c["name"], "|", c["detail"])
+sys.exit(0 if not failed else 1)

@@ -23,6 +23,23 @@ ROOT = Path(__file__).resolve().parents[1]
 HEALTH_PATH = "/api/health"
 
 
+def refresh_pipeline_snapshot() -> None:
+    """刷新三域运维快照（谈判/FAQ/邮件）。与留存计划同一模式：**走查会清 `tmp/`，所以 seed 之后要补一次**，
+    探活时也刷一次，界面就不会长期停在 degraded。尽力而为，不影响探活结果。
+    """
+    script = ROOT / "tools" / "refresh-ui-snapshots.py"
+    if not script.exists():
+        return
+    try:
+        proc = subprocess.run([sys.executable, str(script), "--shared-dir", str(ROOT / "tmp" / "ui-shared")],
+                              capture_output=True, timeout=120, check=False)
+        if proc.returncode != 0:
+            print(f"[webui-serve] 三域快照刷新失败 rc={proc.returncode} "
+                  f"{(proc.stderr or b'').decode('utf-8', 'ignore')[-120:]}", file=sys.stderr, flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[webui-serve] 三域快照刷新异常（不影响探活）：{exc}", file=sys.stderr, flush=True)
+
+
 def refresh_retention_plan() -> None:
     """刷新留存计划（**钩子**）：判定在 Python 侧，这里是让它"保持新鲜"的时机。
 
@@ -55,6 +72,7 @@ def probe(port: int, path: str = HEALTH_PATH, timeout: float = 3.0) -> int:
     # 刷新钩子：`ws-gateway` 周期性探活 → 顺手重算一次留存计划（判定在 Python 侧）。
     # 为什么需要它：清 `tmp/` 的任务会把计划文件带走，界面会长期停在 degraded。
     refresh_retention_plan()
+    refresh_pipeline_snapshot()
     try:
         with socket.create_connection(("127.0.0.1", int(port)), timeout=timeout) as sock:
             sock.sendall(f"GET {path} HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n\r\n".encode())
@@ -84,9 +102,10 @@ def main(argv: list[str]) -> int:
         print(f"[webui-serve] 走查 seed rc={seeded.returncode} "
               f"{(seeded.stdout or '').strip().splitlines()[-1][:120] if seeded.stdout.strip() else ''}",
               file=sys.stderr, flush=True)
-    # seed 之后立即刷新一次留存计划：走查会清空 ui-shared/，
+    # seed 之后立即刷新留存计划与三域快照：走查会清空 ui-shared/，
     # 不补这一下，界面会一直停在 degraded 直到下一次探活。
     refresh_retention_plan()
+    refresh_pipeline_snapshot()
     args = [node_bin(), str(ROOT / "host" / "cli.mjs"), "webui", "--profile", "webui", "--port", str(port),
             "--host", os.environ.get("QUOTAGENT_WEBUI_HOST", "127.0.0.1"),
             "--prefix", os.environ.get("QUOTAGENT_WEBUI_PREFIX", "/quotagent"),
@@ -95,7 +114,9 @@ def main(argv: list[str]) -> int:
             "--ledger-supplier", os.environ.get(
                 "QUOTAGENT_UI_LEDGER_SUPPLIER", str(ROOT / "tmp" / "ui-shared" / "supplier" / "ledger.jsonl")),
             "--retention-plan", os.environ.get(
-                "QUOTAGENT_UI_RETENTION_PLAN", str(ROOT / "tmp" / "ui-shared" / "retention-plan.json"))]
+                "QUOTAGENT_UI_RETENTION_PLAN", str(ROOT / "tmp" / "ui-shared" / "retention-plan.json")),
+            "--pipeline-snapshot", os.environ.get(
+                "QUOTAGENT_UI_PIPELINE", str(ROOT / "tmp" / "ui-shared" / "pipeline.json"))]
     os.execv(args[0], args)  # 不留中间进程（工作区服务模型要求脚本自身就是服务）
     return 0
 

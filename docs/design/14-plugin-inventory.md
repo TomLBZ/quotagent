@@ -31,6 +31,7 @@
 | `host/modules/approval-digest.mjs` | 人工门**待批摘要**（总数/按动作/等待时长四桶/置信度分布/最久等待；只给计数与时长，不出正文）——**第六个自进化产出（subagent 生产）** | `approvalDigest` | `webui`（双方视角 `/api/approvals`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh approval-digest` 围栏 |
 | `host/modules/budget-guard.mjs` | 中间件：**窗口成本预算准入**（整数 µ 金额、窗口滚动、超预算拒绝可解释；`budget-exceeded`（等窗口有用）与 `cost-exceeds-budget`（等也没用）分开报）——**第七个自进化产出（subagent 生产）** | `budgetGuard` | `contractor-ops`（桥调用路径） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh budget-guard` + `budget-route` 围栏 |
 | `host/modules/retention-view.mjs` | 留存计划的**只读聚合视图**（计数/动作分布/待人工门/最久项/一行摘要；只组合不自算、不出正文与私域键、确定性、有界）——**第八个自进化产出（subagent 生产，T-254）** | `retentionView` | `webui`（运维视角 `/api/retention`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯 |
+| `host/modules/pipeline-view.mjs` | 三域运维快照的**只读聚合**（谈判/FAQ/邮件计数与最近事件；只组合不自算、降级优先、有界、确定性）——**第九个自进化产出（subagent 生产，T-260）** | `pipelineView` | `webui`（运维视角 `/api/pipeline`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯 |
 | `host/modules/webui.mjs` | 双方视角 WebUI（承包商/供应商两个路由；只读账本） | `webui` | `webui` | 只改本文件 + `host/lib/ledger-view.mjs`；接入见 `docs/work/deployment-manual.md` |
 
 目录即清单：新增功能 = 新增 `host/modules/<name>.mjs`（`host/modules/index.mjs` 自动发现），不必改中心清单；模块被哪个 profile 挂载仍写在 `host/profiles.mjs`（组成即数据，ADR-0015）。

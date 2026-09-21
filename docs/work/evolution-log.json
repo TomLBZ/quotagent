@@ -151,6 +151,21 @@
       "produced_by": "tools/evolve-module.mjs",
       "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
       "evidence": null
+    },
+    {
+      "name": "pipeline-view",
+      "proposal_id": "sha256:0b477523f8c09ca6adef1ce0fb79fa904e6907fe1e116af8a6c982abf323a059",
+      "artifact_hash": "sha256:25d56c92e97d4011f617a33d2fab36ba6165c3d66c2a74a6a9bbd38d27478bef",
+      "bytes": 17950,
+      "approval_ref": "ap-0110",
+      "gate": "passed",
+      "fixture": {
+        "passed": 13,
+        "total": 13
+      },
+      "produced_by": "tools/evolve-module.mjs",
+      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+      "evidence": null
     }
   ]
 }

@@ -35,7 +35,7 @@ PROVIDERS = {
     "opsView": "ops-view", "evolveJournal": "evolve-journal",
     "supplierScorecard": "supplier-scorecard", "idempotency": "idempotency-guard",
     "approvalDigest": "approval-digest", "budgetGuard": "budget-guard",
-    "retentionView": "retention-view",
+    "retentionView": "retention-view", "pipelineView": "pipeline-view",
 }
 
 

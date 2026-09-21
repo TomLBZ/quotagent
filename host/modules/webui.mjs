@@ -17,11 +17,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView']   // 每个都是独立插件（准入 / 观测 / 视图）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView']   // 每个都是独立插件（准入 / 观测 / 视图）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView']
 
 export const provides = ['webui']
 
@@ -36,6 +36,7 @@ export const Config = object({
   ledger_supplier: string().default(''),
   ledger_evolve: string().default(''),   // 自进化账本（运维视角读它的**归纳**，不出正文）
   retention_plan: string().default(''),  // 留存计划的**绝对路径**（生产 cwd≠仓库根，相对路径会读不到）
+  pipeline_snapshot: string().default(''),  // 三域快照的**绝对路径**（同上）
 })
 
 const html = (title, body, prefix) => `<!doctype html><html lang="zh"><head><meta charset="utf-8">
@@ -95,6 +96,14 @@ export function apply(ctx, config) {
   const scorecard = ctx.supplierScorecard   // 供应商绩效记分卡（subagent 产出，T-247）
   const approvals = ctx.approvalDigest      // 人工门待批摘要（subagent 产出，T-250）
   const retention = ctx.retentionView       // 留存计划的只读聚合（subagent 产出，T-254）
+  const pipeline = ctx.pipelineView         // 三域运维快照的只读聚合（subagent 产出，T-260）
+
+  /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
+  const pipelinePayload = () => {
+    const file = String(config.pipeline_snapshot ?? '') ||
+      join(String(config.ui_shared ?? 'tmp/ui-shared'), 'pipeline.json')
+    try { return JSON.parse(readFileSync(file, 'utf8')) } catch (err) { return null }
+  }
 
   /**
    * 留存计划：**判定在 Python 侧**（`services/retention.py`），由维护任务落到
@@ -205,6 +214,8 @@ export function apply(ctx, config) {
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
           + `<tr><td>admitted=${g.admitted ?? 0} refused=${g.refused ?? 0} timeouts=${g.timeouts ?? 0} failed=${g.failed ?? 0}</td>`
           + `<td>allowed=${b.allowed ?? 0} refused=${b.refused ?? 0} opened=${b.opened ?? 0} closed=${b.closed ?? 0}</td></tr></table>`
+          + `<h3>三域流水（谈判 / FAQ / 邮件）</h3><p>由 subagent 产出并晋升的插件 <code>pipeline-view</code> 聚合：<b>${pipeline.headline(pipelinePayload())}</b></p>`
+          + `<p>邮件：运输通道 <b>${(pipeline.snapshot(pipelinePayload()).transport || {}).available ? '可用' : '不可用'}</b>（本轮无凭据，故必须报不可用）</p>`
           + `<h3>留存计划（只读）</h3><p>判定在 Python 侧（<code>services/retention.py</code>），由 subagent 产出并晋升的插件 <code>retention-view</code> 聚合：<b>${retention.headline(retentionPlanOf('contractor'))}</b></p>`
           + `<p>账本行永不销毁；销毁只作用于派生副本，不可重建物须过人工门（ADR-0018）</p>`
           + `<h3>自进化流水</h3><p>由自进化产出的插件 <code>evolve-journal</code> 归纳（只给计数，不出正文）</p>`
@@ -284,6 +295,13 @@ export function apply(ctx, config) {
       return json(200, { view, source: 'evidence-summary（自进化产出的插件）', summary,
         note: '账本证据面：按类型计数 / 关联数 / 带引用行数 / 时间跨度；只统计公开投影后的行' })
     }
+    if (/^\/api\/pipeline\/?$/.test(path)) {
+      const payload = pipelinePayload()
+      const snap = pipeline.snapshot(payload)
+      return json(200, { source: 'pipeline-view（subagent 产出、经自进化流程晋升）+ 三域服务（Python 侧写快照）',
+        pipeline: snap, headline: pipeline.headline(payload),
+        note: '谈判/FAQ/邮件三域只给计数与最近事件 id；**本轮没有发信能力**，故 transport.available 恒为 false' })
+    }
     if (/^\/api\/retention\/?$/.test(path)) {
       const plan = retentionPlanOf('contractor') ?? retentionPlanOf('supplier')
       const snap = retention.snapshot(plan)
@@ -333,7 +351,7 @@ export function apply(ctx, config) {
         `<ul>${rows}</ul><ul><li><a href="${prefix}/ops/">运维视角</a>（系统整体：运行期中间件 + 各视角证据面聚合）</li></ul>`
         + '<p>本 UI 由 cordis 插件 <code>webui</code> 提供；每个视角读**自己的**账本，宿主不写账本。</p>', prefix))
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）
