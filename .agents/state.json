@@ -3,11 +3,11 @@
   "updated_at": "2026-09-21",
   "phase": "P1-mvp",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-215",
-  "next_action": "批次 B16（P1 收口）：T-215 部署与操作手册（FR-UX-004 / AC-UX-001）—— 一页能跑起来：手册步骤 + `tools/verify.sh g1` 门（MVP 判据见 ADR-0014）；写手册时要**按手册在干净目录实跑一遍**（用 tmp 目录模拟新环境），并把实跑输出作为证据；完成后核对 MVP 判据清单逐条给结论",
-  "last_verified_command": "tools/verify.sh docs && tools/verify.sh events && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh ac-registry && tools/verify.sh audit && tools/verify.sh v && 全量 56 条 AC && qa suite s1..s4",
-  "last_verified_result": "PASS（docs 门 77 文件/0 未解析；events 门一致；bridge 31 断言；cordis 18/18；p0-no-node 36 条；ac-registry 56 条注册；audit 12 断言；V 12 条 open；56 条 AC 全绿；s1..s4 全绿）",
-  "last_verified_evidence": "docs/work/evidence/EV-053-comparison-table-export.txt",
+  "next_task": "T-215b",
+  "next_action": "批次 B16b（P1 收口）：部署与操作手册（一页能跑起来）+ tools/verify.sh g1 聚合门 —— g1 逐条对应 ADR-0014 §3 的 MVP 判据（两个真进程+共享目录走完一轮；承诺动作双侧都无法绕过人工门；私域三处不可见含负控；离线重放 + 审计包独立验证；S1..S4 全绿且反例被拦；无 Node 时 P0 的 AC 与文档门仍绿）；手册必须按它自己在干净目录实跑一遍并留证据；完成后对照判据逐条给结论",
+  "last_verified_command": "tools/verify.sh docs && tools/verify.sh events && tools/verify.sh bridge && tools/verify.sh cordis && tools/verify.sh p0-no-node && tools/verify.sh ac-registry && tools/verify.sh audit && tools/verify.sh v && 全量 57 条 AC && qa suite s1..s4",
+  "last_verified_result": "PASS（docs 门 76 文件/0 未解析；events 门一致（88 声明 ↔ 85 登记）；bridge 31 断言；cordis 18/18；p0-no-node 34 条；ac-registry 57 条注册；audit 12 断言；V 12 条 open；57 条 AC 全绿；s1..s4 全绿）",
+  "last_verified_evidence": "docs/work/evidence/EV-054-rfq-distribution-and-deadlines.txt",
   "last_verified_commit": "1a70ac3",
   "blockers": [],
   "human_required": [
@@ -55,7 +55,8 @@
     "change": "services/change.py：ChangeService（propose 引用校验与拒绝码、recompute 可重放、approve 经人工门且仅 human:*、effective_total 只计已批准变更）；事件 change/proposed|priced|approved|rejected 已登记；ctx.change 已入 04/01",
     "award": "services/commitments.py：intent()/withdraw()（无义务、可复）、commit_award（意向状态 + 中标行快照）、issue_po（先判派生再判批准；行来源链 trace_mode=full|ref-only）、trace()；事件 award/intent-proposed|intent-withdrawn|committed、po/issued、evidence/pack-exported 已登记",
     "gates": "tools/verify.sh: docs|events|bridge|cordis|p0-no-node|ac-registry|audit|v （events 门 = tools/check-events.py，含双向负控）",
-    "export": "services/export.py：ExportService（comparison_rows 逐行含被排除行、to_csv 确定性 + BOM、export 落 compare/table-exported、verify 对 Evaluation 与账本双源逐行核对、_resolve 引用解析双源）；D-016 记 xlsx 取舍"
+    "export": "services/export.py：ExportService（comparison_rows 逐行含被排除行、to_csv 确定性 + BOM、export 落 compare/table-exported、verify 对 Evaluation 与账本双源逐行核对、_resolve 引用解析双源）；D-016 记 xlsx 取舍",
+    "rfq": "services/rfq.py：distribute/deliveries（分发记录，快照哈希锚定）、deadline_status/remind（截剩余小时、临近阈值可配、overdue|due-soon 幂等提醒、不顺延）；事件 rfq/distributed|due-soon|overdue 两侧登记；_record 辅助"
   },
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态"
 }

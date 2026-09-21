@@ -118,6 +118,7 @@
 - Definition：`create_package(spec) -> id` · `add_items(items)` · `publish() -> rev` · `amend(changes) -> rev` · `distribute(participants) -> envelopes`。
 - P0 实现：`src/quotagent/services/rfq.py`（rev 只增；`revision(rev)` 只读视图；`amend` 给字段级 delta）；语义见 ADR-0009。
 - 不变量：已发布版本的字段不可原地修改；`amend` 必须给出字段级 delta；已发布包必须有 `quote_by` 截止时间。
+- P1（T-215a）：`distribute(participants, rev)` 逐参与者留痕（`delivery_id`/`participant`/`rev`/`snapshot_hash`/`channel`/`sent_at`），版本以**快照哈希**锚定；`deliveries(rev, participant)` 回答「谁在何时收到哪个版本」（历史只增不清）；空名单/空标识/重复参与者/未发布版本一律拒绝。`deadline_status(now, soon_hours)` 给出各截止的剩余小时与临近/已过；`remind()` 按状态分流为 `rfq/due-soon` / `rfq/overdue`，**同一版本同一截止的同一状态只提醒一次**，且**绝不自动顺延截止**。
 - 关联：FR-RFQ-001..006，AC-RFQ-001..003。
 
 ### `ctx.terms` [P1]

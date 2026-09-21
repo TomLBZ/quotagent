@@ -109,6 +109,9 @@ class EventBus:
         # §3 业务事件（P0 用到/会落账的部分）
         "rfq/published": ("emit", True, ""),
         "rfq/amended": ("emit", True, ""),
+        "rfq/distributed": ("emit", True, ""),
+        "rfq/due-soon": ("emit", True, ""),
+        "rfq/overdue": ("emit", True, ""),
         "rfq/version-mismatch": ("bail", True, ""),
         "clarification/asked": ("emit", True, ""),
         "clarification/answer-drafted": ("waterfall", False,

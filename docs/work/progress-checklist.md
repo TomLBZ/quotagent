@@ -56,7 +56,8 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-212 | P1 | 变更闭环（S1.11 前置：变更与报价版本衔接） | FR-CHANGE-001, FR-CHANGE-002 | AC-CHANGE-001, AC-CHANGE-002 | done | EV-051 |
 | T-213 | P1 | 授标与 PO 闭环（含事件门机检） | FR-AWARD-001..003 | AC-AWARD-001, AC-AWARD-002 | done | EV-052 |
 | T-214 | P1 | 比较表导出（S1.13） | FR-COMPARE-004, FR-UX-003 | AC-COMPARE-004 | done | EV-053 |
-| T-215 | P1 | 部署与操作手册 | FR-RFQ-004, FR-RFQ-005 | AC-RFQ-003 | todo | – |
+| T-215a | P1 | 分发记录 + 截止时间与超时提醒（S1.14 前置） | FR-RFQ-004, FR-RFQ-005 | AC-RFQ-003 | done | EV-054 |
+| T-215b | P1 | 部署与操作手册（一页能跑起来）+ `verify.sh g1` 聚合门（MVP 判据见 ADR-0014 §3） | FR-RUNTIME-001 | AC-RUNTIME-001 | todo | – |
 | T-216 | P1 | 桥接协议最小闭环（握手/版本协商/方法面/身份注入/错误码） | FR-INTEG-004 | AC-INTEG-004, AC-INTEG-005 | done | EV-040 |
 | T-217 | P1 | 桥的故障语义（SIGKILL/断连 + 背压 + 在途请求记 unknown + 重启预算 + 锚点）（S1.16） | FR-INTEG-004 | AC-INTEG-006 | done | EV-041 |
 

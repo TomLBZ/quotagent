@@ -18,6 +18,11 @@ from .measures import MeasureBook, UnitTable
 
 PUBLISHED_EVENT = "rfq/published"
 AMENDED_EVENT = "rfq/amended"
+DISTRIBUTED_EVENT = "rfq/distributed"
+DUE_SOON_EVENT = "rfq/due-soon"
+OVERDUE_EVENT = "rfq/overdue"
+DEADLINE_KEYS = ("clarify_by", "quote_by", "delivery_by")
+DEFAULT_SOON_HOURS = 48
 
 
 class RfqError(RuntimeError):
@@ -88,6 +93,8 @@ class RfqService:
         self._hashes: dict[int, str] = {}
         self._texts: dict[int, str] = {}
         self._current_rev = 0
+        self._deliveries: list[dict] = []
+        self._reminded: set[tuple] = set()
 
     # --- 草稿 -------------------------------------------------------------
     def create_package(self, spec: dict) -> dict:
@@ -275,6 +282,92 @@ class RfqService:
         return {"rev": rev, "deltas": deltas, "hash": self._hashes[rev]}
 
     # --- 读取 -------------------------------------------------------------
+    # --- 分发记录（FR-RFQ-004：谁在何时收到哪个版本） ---------------------
+    def distribute(self, participants: list[str], *, rev: int | None = None,
+                   channel: str = "relay", now: str | None = None) -> dict:
+        """把某个已发布版本分发给参与者，并逐条留痕（可按版本/参与者查询）。"""
+        if not participants:
+            raise RfqError("分发必须有参与者（空名单视为错误，不得静默成功）")
+        seen: list[str] = []
+        for who in participants:
+            if not who or not str(who).strip():
+                raise RfqError("参与者标识不能为空")
+            if who in seen:
+                raise RfqError(f"参与者重复: {who!r}（重复分发请分开调用，便于留痕）")
+            seen.append(who)
+        target = self.current_rev() if rev is None else int(rev)
+        if target not in self._published:
+            raise RevisionNotFound(f"未发布的版本不能分发: rev{target}")
+        snapshot_hash = self.snapshot_hash(target)
+        record = self._published[target]
+        stamp = now or utc_now()
+        envelopes = []
+        for who in seen:
+            envelope = {"delivery_id": f"dl-{len(self._deliveries) + len(envelopes) + 1:04d}",
+                        "participant": who, "rev": target,
+                        "package_id": record.get("package_id"),
+                        "snapshot_hash": snapshot_hash, "channel": channel, "sent_at": stamp,
+                        "note": "分发记录：谁在何时收到哪个版本（版本以快照哈希锚定）"}
+            envelopes.append(envelope)
+        self._deliveries.extend(envelopes)
+        self._record(DISTRIBUTED_EVENT, {
+            "package_id": record.get("package_id"), "rev": target, "snapshot_hash": snapshot_hash,
+            "channel": channel, "sent_at": stamp,
+            "recipients": [item["participant"] for item in envelopes],
+            "envelopes": envelopes}, correlation_id=record.get("package_id"))
+        return {"rev": target, "snapshot_hash": snapshot_hash, "envelopes": envelopes,
+                "recipients": [item["participant"] for item in envelopes], "sent_at": stamp}
+
+    def deliveries(self, *, rev: int | None = None, participant: str | None = None) -> list[dict]:
+        """回答「谁在何时收到哪个版本」：按版本/参与者过滤（历史只增不改）。"""
+        return [item for item in self._deliveries
+                if (rev is None or item["rev"] == int(rev))
+                and (participant is None or item["participant"] == participant)]
+
+    # --- 截止时间与超时提醒（FR-RFQ-005） ---------------------------------
+    def deadline_status(self, *, rev: int | None = None, now: str | None = None,
+                        soon_hours: float = DEFAULT_SOON_HOURS) -> dict:
+        target = self.current_rev() if rev is None else int(rev)
+        if target not in self._published:
+            raise RevisionNotFound(f"未发布的版本没有截止时间: rev{target}")
+        deadlines = (self._published[target].get("deadlines") or {})
+        moment = _epoch(now or utc_now())
+        items = []
+        for key in DEADLINE_KEYS:
+            stamp = deadlines.get(key)
+            if not stamp:
+                continue
+            left = (_epoch(stamp) - moment) / 3600.0
+            items.append({"deadline": key, "due_at": stamp, "hours_left": round(left, 3),
+                          "due_soon": 0 <= left <= float(soon_hours), "overdue": left < 0})
+        return {"package_id": self._published[target].get("package_id"), "rev": target,
+                "checked_at": now or utc_now(), "soon_hours": float(soon_hours), "items": items,
+                "overdue": [item["deadline"] for item in items if item["overdue"]],
+                "due_soon": [item["deadline"] for item in items if item["due_soon"]]}
+
+    def remind(self, *, rev: int | None = None, now: str | None = None,
+               soon_hours: float = DEFAULT_SOON_HOURS) -> dict:
+        """超时提醒：临近落 `rfq/due-soon`、已过落 `rfq/overdue`；同一截止同一状态只提醒一次。"""
+        status = self.deadline_status(rev=rev, now=now, soon_hours=soon_hours)
+        fired = []
+        for item in status["items"]:
+            state = "overdue" if item["overdue"] else ("due-soon" if item["due_soon"] else None)
+            if state is None:
+                continue
+            key = (status["rev"], item["deadline"], state)
+            if key in self._reminded:
+                continue  # 幂等：同一版本同一截止的同一状态只提醒一次
+            self._reminded.add(key)
+            event = OVERDUE_EVENT if state == "overdue" else DUE_SOON_EVENT
+            body = {"package_id": status["package_id"], "rev": status["rev"],
+                    "deadline": item["deadline"], "due_at": item["due_at"],
+                    "hours_left": item["hours_left"], "checked_at": status["checked_at"],
+                    "note": ("已过截止" if state == "overdue" else "临近截止") + "提醒（同一状态只提醒一次）"}
+            self._record(event, body, correlation_id=status["package_id"])
+            fired.append({"event": event, **body})
+        return {"at": status["checked_at"], "rev": status["rev"], "fired": fired,
+                "reminder_count": len(fired), "status": status}
+
     def revision(self, rev: int) -> MappingProxyType:
         return _freeze(self._published_snapshot(rev))
 
@@ -313,6 +406,19 @@ class RfqService:
         return {"name": self.name, "inject": [], "provide": {self.name: self}, "setup": None}
 
     # --- 内部 -------------------------------------------------------------
+    def _record(self, event: str, body: dict, *, correlation_id: str | None,
+                event_class: str = "fact") -> None:
+        """统一的落账+派发（与 publish/amend 同形，供分发与提醒使用）。"""
+        if self.ledger is not None:
+            self.ledger.append(event, body, correlation_id=correlation_id, event_class=event_class,
+                               actor=self.actor, refs={"package_id": correlation_id})
+        if self.events is not None:
+            mode = self.events.mode_of(event)
+            if mode in (None, "emit"):
+                self.events.emit(event, body)
+            else:
+                self.events.dispatch(event, body)
+
     def _store(self, rev: int, snapshot: dict) -> None:
         self._published[rev] = copy.deepcopy(snapshot)
         self._texts[rev] = canonical_bytes(snapshot).decode("utf-8")
@@ -334,3 +440,15 @@ class RfqService:
             if item.get("item_id") == item_id:
                 return item
         return None
+
+
+def _epoch(stamp: str) -> float:
+    """ISO 时间 → 秒（解析失败按 0，不让畸形时间戳把截止判断炸掉）。"""
+    from datetime import datetime, timezone
+    try:
+        moment = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        return moment.timestamp()
+    except Exception:  # noqa: BLE001
+        return 0.0

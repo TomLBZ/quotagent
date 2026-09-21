@@ -1,0 +1,51 @@
+EV-054 — 分发记录与截止时间管理（T-215a / FR-RFQ-004、FR-RFQ-005 / AC-RFQ-003）
+
+时间: 2026-09-21T04:54:00Z
+commit: 7ea8cfc
+命令: qa ac AC-RFQ-003（新）；AC-RFQ-002、AC-RFQ-004（回归）；tools/verify.sh events
+
+--- AC-RFQ-003（新；退出码 0，10/10 断言）---
+  [ok] 分发逐参与者留痕：`rfq/distributed` 带参与者、版本、通道与发送时刻 — rev=1 recipients=['supplier:sup-A', 'supplier:sup-B']
+  [ok] 可回答「谁在何时收到哪个版本」：按版本 + 参与者过滤，逐条含 delivery_id/时刻/快照哈希 — query={'delivery_id': 'dl-0001', 'participant': 'supplier:sup-A', 'rev': 1, 'package_id': 'pkg-014', 'snapshot_hash': 'sha256:d0ba7ab04937c5b1cdb90be60ff5088b9da5114e5bbfca6ff0ab28eef9e4093c
+  [ok] 版本以**快照哈希**锚定：升版后再分发，哈希变化；两份记录并存（历史不清除） — rev1=2 rev2=1
+  [ok] 分发名单问题即拒绝：空名单 / 空标识 / 重复参与者 / 未发布版本（不得静默成功） — rejects={'empty': 'RfqError', 'blank': 'RfqError', 'duplicate': 'RfqError', 'unpublished': 'RevisionNotFound'}
+  [ok] 截止时间状态：给出剩余小时、是否临近与是否已过（已过 12h / 还剩 36h） — items=[('clarify_by', -12.0, False, True), ('quote_by', 36.0, True, False)]
+  [ok] 「临近」阈值可配：48h 窗口下报价截止临近，12h 窗口下不算临近（阈值不是硬编码语义） — soon_hours=12 → []
+  [ok] 提醒按状态分流：已过 → `rfq/overdue`，临近 → `rfq/due-soon`，各只针对对应截止 — fired=[('rfq/overdue', 'clarify_by'), ('rfq/due-soon', 'quote_by')]
+  [ok] 提醒幂等：同一版本同一截止的同一状态只提醒一次（重复扫描不刷屏） — again=0 rows=1/1
+  [ok] 报价截止过期后再提醒一次（状态变化视为新提醒）；截止时间本身**不被顺延** — later=[('rfq/overdue', 'quote_by')]
+  [ok] 提醒来自**已发布**版本：未发布的包没有截止时间（不会对草稿提醒） — 未发布版本产生了提醒
+
+--- AC-RFQ-002（回归；退出码 0，8/8 断言）---
+  [ok] 发布产生不可变版本 rev=1 且带内容哈希 — rev=1 hash=sha256:46531370a…
+  [ok] 已发布版本对消费者只读（原地写入抛错） — error='mappingproxy' object does not support item assignment
+  [ok] 通过 API 修改已发布版本被拒绝（改即 rev+1） — error=已发布版本 (rev=1) 的条目 L-001 的字段 'qty' 不可原地修改：必须 amend 产生新版本（rev=2），旧版本永久保留 hash_unchanged=True
+  [ok] amend 产生新版本 rev=2（旧版本永久保留） — rev=2 rev1_qty=120 rev2_qty=150
+  [ok] delta 是字段级的（逐字段 before/after），不是整包快照 — deltas=[{"item_id": "package", "field": "deadlines.clarify_by", "before": "2026-09-20T00:00:00Z", "after": "2026-09-22T00:00:00Z"}, {"item_id": "package", "field": "deadlines.quote_by", "bef
+  [ok] delta 的 before/after 与版本内容一致（可复核） — qty delta={'item_id': 'L-001', 'field': 'qty', 'before': 120, 'after': 150}
+  [ok] 缺 quote_by 截止时间的包不允许发布（已发布包必须有报价截止） — error=包定义校验失败，拒绝发布: 缺少 deadlines.quote_by（已发布包必须有报价截止时间）
+  [ok] 发布与修订分别落账（rfq/published, rfq/amended），且哈希链完整 — published=1 amended=1 chain_ok=True
+
+--- AC-RFQ-004（回归；退出码 0，10/10 断言）---
+  [ok] 报价必须绑定包版本（缺 rfq_rev 直接拒绝登记） — active=3
+  [ok] 未标记时排除原因仍是版本门 rfq_version_mismatch（与过期标记分层，不混淆） — excluded_codes=['rfq_version_mismatch']
+  [ok] 升版后基于旧版本的活动报价被标记过期（stale=true + superseded_by_rev=2 + status） — superseded=[{"quote_id": "q-rev1-a", "package_id": "pkg-014", "based_on_rev": 1, "superseded_by_rev": 2, "status": "superseded", "stale": true, "supplier": "sup-A", "requires_requote": true,
+  [ok] 基于新版本的报价不受影响（仍在活动集里） — active=['q-rev2-c']
+  [ok] 过期留痕 quote/superseded（含旧/新版本号与 reason，可审计不清除） — rows=['q-rev1-a', 'q-rev1-b']
+  [ok] 过期报价**不进入排序**，且以 quote_superseded 显式列出（含旧/新版本号与下一步） — ranking=['q-rev2-c'] excluded=[{"quote_id": "q-rev1-a", "code": "quote_superseded", "based_on_rev": 1, "superseded_by_rev": 2, "reason": "报价基于 rev1，已被 rev2 取代（不得静默比较）", "next_action": "请对方基于
+  [ok] 产生重报请求（含旧/新版本号、供应商与可行动 next_action） — requests=[{"quote_id": "q-rev1-a", "package_id": "pkg-014", "based_on_rev": 1, "superseded_by_rev": 2, "status": "superseded", "stale": true, "supplier": "sup-A", "requires_requote": true, "
+  [ok] 幂等：对同一升版重复调用不再标记（不产生第二条留痕，重报请求不翻倍） — again=[] rows=2
+  [ok] 继续升版把 rev2 的报价也标记过期（链式失效，不是只处理第一次升版） — superseded=['q-rev2-c'] active=[]
+  [ok] 过期是标记不是删除：过期报价仍可读（含原报价内容与审 trail） — superseded_count=3
+
+--- 事件门 ---
+退出码 0：新增 rfq/distributed / rfq/due-soon / rfq/overdue 三事件
+在 `kernel/events.py` 与 `05-events.md` 两侧同时登记（文档 88 声明 ↔ 事件表 85 登记，全一致）。
+
+--- 口径说明 ---
+· 分发记录逐参与者：delivery_id / participant / rev / snapshot_hash / channel / sent_at；
+· 版本以**快照哈希**锚定（sha256:前缀 + 64 hex），升版后哈希变化、两份记录并存（历史不清除）；
+· 名单问题即拒绝：空名单、空标识、重复参与者、未发布版本（不静默成功）；
+· 截止时间：剩余小时 + 临近阈值（soon_hours 可配）+ 是否已过；
+· 提醒按状态分流（overdue / due-soon），同一版本同一截止的同一状态只提醒一次（幂等）；
+· **绝不自动顺延截止**：过期只是提醒，截止时间本身不变。

@@ -55,6 +55,9 @@
 |---|---|---|---|---|
 | `rfq/published` | emit | ✔ | `ctx.rfq` → intake, ledger | 版本发布的唯一入口 |
 | `rfq/amended` | emit | ✔ | `ctx.rfq` → pricing, compare | 触发下游"基于过期版本"标记 |
+| `rfq/distributed` | emit | ✔ | `ctx.rfq` → 对方 | 分发记录：谁在何时收到哪个版本（版本以快照哈希锚定） |
+| `rfq/due-soon` | emit | ✔ | `ctx.rfq` → 人工门 | 临近截止提醒（同一截止同一状态只提醒一次） |
+| `rfq/overdue` | emit | ✔ | `ctx.rfq` → 人工门 | 已过截止提醒（不自动顺延） |
 | `rfq/version-mismatch` | bail | durable | `ctx.norm` → guard, approval | 首个失配即短路并挂起 |
 | `clarification/asked` | emit | ✔ | `ctx.clarify` → 对方 | 工单建立 |
 | `clarification/answer-drafted` | waterfall | live | agent → guard, 人工门 | guard 可拦截（如答案含对方私域信息） |
