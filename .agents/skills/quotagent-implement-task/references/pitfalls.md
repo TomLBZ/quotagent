@@ -1,8 +1,6 @@
-# quotagent 实现任务的常见陷阱（本仓库已踩过）
+# 实现陷阱（门/流程/文档）
 
-<!-- budget: 8 KB。SKILL.md 只留流程；踩坑清单放这里，按"一条一条"追加 -->
-
-## 常见陷阱（本项目已踩过或已知高危）
+> 运行时侧（宿主/桥/shell）的陷阱在 [`pitfalls-runtime.md`](pitfalls-runtime.md)。
 
 - **单价与数量的换算方向相反**：把"每 cm 的价格"换到基准单位 m 要乘**倒数因子**（×100），
   而数量用直接因子（12000 cm → 120 m）。写错不会报错，只会安静地算出一个小 4 个数量级的数字——
@@ -63,10 +61,7 @@
   红门被当成绿门直接提交（B7 实测：handover 1147 B 越界被提交并推送）。收尾固定写法：
   `tools/verify.sh docs > tmp/gate.out 2>&1; code=$?; [ $code -eq 0 ] && git add -A && git commit ... && git push`
   ——或先单独跑一次门看退出码，再决定提交。
-- **cordis 的注册/派发必须在插件 fiber 内**：在根 context 上 `events.on(...)` 或 `events.bail(...)` 会
-  `TypeError: Cannot read properties of null (reading '_hooks')`（根 fiber 为 null）。写宿主插件时，
-  监听器一律在 `apply(ctx)` 里注册。
-- **别自造 `internal/update`**：cordis 内置了配置更新链（`fiber.update()` → `waterfall(fiber,'internal/update',…)`，
-  链尾才落 `fiber.config` 并 `restart()`；监听器不调 `next()` 即短路=否决）。自造同名事件会与内置语义打架，
-  正确做法是只写规则、复用上游链路（ADR-0015）。
-- **`tools/*.sh` 是 POSIX sh**：`${@:2}`、`[[ ]]` 之类 bash 写法会 `Bad substitution`；传参用 `shift` + `"$@"`。
+- **别在中文断言串里嵌 ASCII 双引号**：`Assertion("…留下"已发送"的假象…")` 会让整个 checks 文件语法错，
+  症状是 `FAIL 执行异常 — SyntaxError`（本仓已踩两次）。中文里一律用「」『』或改写措辞。
+- **一次性脚本别复用变量名写不同文件**：`p = handover.md` 之后再 `p.write_text(json…)` 会把 state.json 写进
+  handover.md（门立刻报预算超限）。目标文件与路径变量一一对应，换文件就换变量名。
