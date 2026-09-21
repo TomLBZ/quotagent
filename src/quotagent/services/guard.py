@@ -12,6 +12,7 @@ Flag 形状（`02` §2.4 + ADR-0011 扩展 `private_leak`）：
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 from typing import Any, Callable
 
 from ..kernel.events import EventBus
@@ -38,6 +39,8 @@ class GuardService:
     ledger: Ledger | None = None
     events: EventBus | None = None
     actor: str = "agent:guard"
+    # 条款族：付款 / 质保 / 罚则（FR-GUARD-004）。逐族比对，逐项给出 required vs offered。
+    TERM_FAMILIES: ClassVar[tuple[str, ...]] = ("payment_terms", "warranty_terms", "penalty_terms")
     rules: list[dict] = field(default_factory=list, init=False)
     _counter: int = field(default=0, init=False)
     _rules: list = field(default_factory=list, init=False)
@@ -119,6 +122,7 @@ class GuardService:
         return out
 
     def _rule_capacity_risk(self, target: dict) -> list[dict]:
+        """产能风险两条来源：① 声称产能超过可验证上限；② 产能日历/关键路径算出的不可行结论（T-207）。"""
         package = target.get("package") or {}
         limit = ((package.get("capacity") or {}).get("max_tonnes_per_month"))
         out = []
@@ -126,25 +130,42 @@ class GuardService:
             claim = (quote.get("capacity") or {}).get("declared_tonnes_per_month")
             if limit is not None and claim is not None and float(claim) > float(limit):
                 out.append({"kind": "capacity_risk", "severity": "high", "target_ref": quote["quote_id"],
+                            "requires_human": True,
                             "detail": f"声称产能 {claim} t/月 超过本包可验证上限 {limit} t/月"
                                       f"（该声称记为 [假设]，不自动采信）",
                             "evidence_refs": [f"quote:{quote['quote_id']}:capacity",
                                               f"package:{package.get('package_id')}#rev{package.get('rev')}:capacity"]})
+        # 由产能服务（ctx.capacity）算出的日历/关键路径结论：只转 Flag，不改交期、不否决
+        for conflict in target.get("capacity_conflicts") or []:
+            out.append({"kind": "capacity_risk", "severity": "high",
+                        "target_ref": conflict.get("quote_id") or conflict.get("commitment_id"),
+                        "requires_human": True,
+                        "detail": f"产能/交期不可行：需要 {float(conflict.get('required', 0)):g}，"
+                                  f"日历可用 {float(conflict.get('available', 0)):g}"
+                                  f"（缺口 {float(conflict.get('shortfall', 0)):g}）",
+                        "evidence_refs": [f"commitment:{conflict.get('commitment_id')}:window",
+                                          "calendar:private"]})
         return out
 
     def _rule_term_conflict(self, target: dict) -> list[dict]:
         package = target.get("package") or {}
-        required = package.get("payment_terms") or {}
         out = []
-        for quote in target.get("quotes", []):
-            offered = quote.get("payment_terms_offered") or {}
-            diffs = {key: {"required": required.get(key), "offered": offered.get(key)}
-                     for key in set(required) | set(offered) if required.get(key) != offered.get(key)}
-            if diffs:
+        for family in self.TERM_FAMILIES:
+            required = package.get(family) or {}
+            if not required:
+                continue
+            for quote in target.get("quotes", []):
+                offered = quote.get(family) or quote.get(f"{family}_offered") or {}
+                diffs = {key: {"required": required.get(key), "offered": offered.get(key)}
+                         for key in set(required) | set(offered) if required.get(key) != offered.get(key)}
+                if not diffs:
+                    continue
+                label = {"payment_terms": "付款", "warranty_terms": "质保", "penalty_terms": "罚则"}[family]
                 out.append({"kind": "term_conflict", "severity": "medium", "target_ref": quote["quote_id"],
-                            "detail": f"付款条款与包内要求不一致: {sorted(diffs)}",
-                            "evidence_refs": [f"quote:{quote['quote_id']}:payment_terms_offered",
-                                              f"package:{package.get('package_id')}#rev{package.get('rev')}:payment_terms"]})
+                            "detail": f"{label}条款与包内要求不一致: {sorted(diffs)}",
+                            "requires_human": True, "family": family, "diffs": diffs,
+                            "evidence_refs": [f"quote:{quote['quote_id']}:{family}",
+                                              f"package:{package.get('package_id')}#rev{package.get('rev')}:{family}"]})
         return out
 
     def _rule_external_term(self, target: dict) -> list[dict]:

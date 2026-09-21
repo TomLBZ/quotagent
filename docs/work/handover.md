@@ -4,15 +4,14 @@
 
 ## 现在在哪
 
-**P1 进行中**：T-201、T-216、T-217、T-202、T-218、T-203、T-204 与 **T-205（报价过期与重报）done**：
-升版后旧报价标 `stale`/`superseded_by_rev` 并落 `quote/superseded`（不清除，可审计），`compare` 以
-`quote_superseded` **显式排除**，并产生带版本号的重报请求。本轮另修真实缺陷：bail 事件被 emit 派发
-（挂总线即崩）→ 统一走 `EventBus.dispatch()`（见 D-014 / EV-046）。
-`verify.sh docs|bridge|cordis|p0-no-node|ac-registry|v` 全绿；**46 条 AC 与 s1..s4 全绿**。
+**P1 进行中**：T-201、T-216、T-217、T-202、T-218、T-203、T-204、T-205 与 **T-206+T-207（护栏扩展 + 产能日历）done**：
+条款冲突覆盖付款/质保/罚则三族；产能风险两条来源（声称超限 + 日历/关键路径）；两类 Flag 均 `requires_human`
+且逐条落账；`firm` 交期有效期内模型改不动（人可改、过期可改、`indicative` 可改）；冲突只提请人工、不改交期不否决。
+`verify.sh docs|bridge|cordis|p0-no-node|ac-registry|v` 全绿；**48 条 AC 与 s1..s4 全绿**。
 
 ## 下一步唯一动作
 
-**B9 = T-206 + T-207**：护栏扩展（异常低价判定与 Flag）与产能日历/交期校验。见 state.json 的 `next_action`。
+**B10 = T-208**：审计包导出/验证 + 模型输入重建（AC-AUDIT-001 已绿，补 P1 的导出/验证闭环）。见 state.json。
 
 ## 不变量
 

@@ -47,8 +47,8 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-203 | P1 | 三方协调 + 字段权威方 + 冲突上报（S1.3） | FR-QEP-007 | AC-SYNC-001 | done | EV-044 |
 | T-204 | P1 | 澄清工单 + 广播完整性 + 版本重开（S1.4） | FR-CLARIFY-001..003 | AC-CLARIFY-001..003 | done | EV-045 |
 | T-205 | P1 | 包版本变更与报价过期标记（S1.5） | FR-NORM-004, FR-RFQ-003, FR-RFQ-006 | AC-COMPARE-001, AC-RFQ-002, AC-RFQ-004 | done | EV-046 |
-| T-206 | P1 | 护栏扩展：异常低价 | FR-GUARD-001 | AC-GUARD-001 | todo | – |
-| T-207 | P1 | 产能日历与交期校验 | FR-CAP-001, FR-CAP-002, FR-GUARD-003 | AC-CAP-001, AC-GUARD-002 | todo | – |
+| T-206 | P1 | 护栏扩展：条款冲突（付款/质保/罚则）与产能冲突双来源（S1.6） | FR-GUARD-001, FR-GUARD-004 | AC-GUARD-001, AC-GUARD-002 | done | EV-047 |
+| T-207 | P1 | 产能日历与交期校验 + `firm` 交期不可由模型变更（S1.6） | FR-CAP-001, FR-CAP-002, FR-GUARD-003 | AC-CAP-001, AC-GUARD-002 | done | EV-047 |
 | T-208 | P1 | 审计包导出/验证 + 模型输入重建 | FR-EVIDENCE-001..003 | AC-AUDIT-001, AC-AUDIT-002 | todo | – |
 | T-209 | P1 | 场景集 S1..S4 + 反例集 | FR-EVAL-001, FR-EVAL-002, FR-EVAL-004 | AC-EVAL-001, AC-EVAL-002 | todo | – |
 | T-210 | P1 | 人工门队列视图 + 超时策略 | FR-APPROVE-003, FR-UX-001 | AC-APPROVE-003 | todo | – |

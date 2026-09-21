@@ -1,0 +1,49 @@
+EV-047 — 护栏扩展与产能日历（T-206 + T-207 / S1.6）：条款三族·产能双来源·firm 交期不可由模型变更
+
+时间: 2026-09-21T04:29:22Z
+commit: 7f8e2b1
+命令: qa ac AC-GUARD-002（新）/ AC-CAP-001（新）/ AC-GUARD-001（回归）/ AC-GUARD-003（回归）
+
+--- AC-GUARD-002（退出码 0，6/6 断言）---
+  [ok] 条款冲突覆盖**付款/质保/罚则**三族，逐族逐项列出 required vs offered — families=['payment_terms', 'penalty_terms', 'warranty_terms'] flags=3
+  [ok] 产能冲突两条来源都标 Flag：声称超限（q-cap）与日历/关键路径结论（q-calendar） — refs=['q-calendar', 'q-cap']
+  [ok] 两类 Flag 都**提请人工**（requires_human=true，且带证据引用） — flags=[('term_conflict', True), ('term_conflict', True), ('term_conflict', True), ('capacity_risk', True), ('capacity_risk', True)]
+  [ok] Flag 逐条落账 compare/flag-raised（含 kind/severity/requires_human） — ledger_kinds=['capacity_risk', 'term_conflict'] rows=5
+  [ok] 护栏只标注：两类 Flag 存在时排序仍然产出（flag 与排序并存，不否决不改变状态） — ranking=['q-cap', 'q-terms', 'q-calendar']
+  [ok] 护栏接口没有否决口（check 只返回 Flag 列表，返回项里没有 decision/veto 字段） — flag_keys=['detail', 'detected_at', 'evidence_refs', 'flag_id', 'kind', 'package_id', 'realm', 'requires_human', 'severity', 'target_ref']
+
+--- AC-CAP-001（退出码 0，10/10 断言）---
+  [ok] 建立 `firm` 承诺：交期由 lead_time 推导，且带有效期（有效期内不可变更的前提） — commitment={"commitment_id": "cm-0001", "quote_id": "q-0007", "package_id": "pkg-014", "binding": "firm", "lead_time_days": 10, "quantity": 100.0, "start_date": "2026-10-01", "delivery_date":
+  [ok] **模型**在有效期内改 `firm` 交期 → 被拒且留痕，承诺值不变 — refusal=`firm` 交期在报价有效期内不可由模型变更（FR-CAP-002） events=1 lead=10 rev=1
+  [ok] 拒绝事件带可行动的 next_action（不是只说「不能改」） — next_action=需要变更时由人在人工门批准后改动，或先让该承诺过期
+  [ok] **人**在有效期内改同一字段 → 允许（产生新 revision 并留痕） — amend={"commitment_id": "cm-0001", "revision": 2, "binding": "firm", "delivery_date": "2026-10-26", "by": "human:liao", "changes": ["lead_time_days"]}
+  [ok] 有效期过后模型可以改（有效期是「不可变更」的边界，不是无限期） — expired_amend={"commitment_id": "cm-0001", "revision": 3, "binding": "firm", "delivery_date": "2026-10-26", "by": "agent:price", "changes": ["quantity"]}
+  [ok] `indicative` 交期允许模型调整（binding 决定约束强度） — indicative={"commitment_id": "cm-0002", "revision": 2, "binding": "indicative", "delivery_date": "2026-10-08", "by": "agent:price", "changes": ["lead_time_days"]}
+  [ok] 产能日历 + 关键路径算出不可行 → 只提请人工（requires_human，不改交期、不否决） — feasibility={"commitment_id": "cm-0003", "quote_id": "q-0009", "package_id": "pkg-014", "binding": "firm", "window": ["2026-10-01", "2026-10-31"], "days": 31, "required": 400.0, "available": 220.0, "s
+  [ok] 冲突事件写明「不自动改交期、不否决报价」（护栏不否决的落账口径） — note=只提请人工：不自动改交期、不否决报价（护栏不否决）
+  [ok] 里程碑阻塞逐条列出（关键路径，不是只看总量） — blockers=[{"milestone": "首批到货", "due": "2026-10-11", "required": 150.0, "available": 70.0, "gap": 80.0}]
+  [ok] 冲突可转成护栏 Flag；**对外形态不含日历数值**（产能日历是私域） — local=产能不可行：需要 400，日历可用 220（缺口 180；里程碑阻塞 1 处） safe=产能/交期不可行（缺口数值属本方私域，见 evidence_refs 指向的账本条目）；里程碑阻塞 1 处
+
+--- AC-GUARD-001（退出码 0，7/7 断言）---
+  [ok] 异常低价被标 Flag（低于同包中位价的 60%） — kinds=['abnormal_low', 'missing_item'] flags=[('abnormal_low', 'q-low'), ('missing_item', 'q-missing')]
+  [ok] 漏项被标 Flag（清单条目在报价中缺失） — missing=["清单条目在报价中缺失: ['L-002']"]
+  [ok] Flag 带 severity 与证据引用（可审计、可复核） — flags=[{"kind": "abnormal_low", "severity": "high"}, {"kind": "missing_item", "severity": "high"}]
+  [ok] Flag 不改变排序顺序（护栏不得否决） — without=['q-low', 'q-missing', 'q-mid'] with=['q-low', 'q-missing', 'q-mid']
+  [ok] Flag 不改变任何报价的状态（异常低价只是提请人看） — statuses=['ranked', 'ranked', 'ranked']
+  [ok] 护栏没有否决接口（check 只返回 Flag；Flag 与排序并存落账） — guard_api=['TERM_FAMILIES', 'actor', 'capacities', 'check', 'events', 'ledger', 'register_rule', 'rule_names', 'rules', 'screen_text']
+  [ok] Flag 逐条落账（compare/flag-raised），且落账内容与返回值一致 — events=2 kinds=['abnormal_low', 'missing_item']
+
+--- AC-GUARD-003（退出码 0，6/6 断言）---
+  [ok] 反例集随仓库入库（合成数据，非人工检查） — cases=['CX-INJECT-001', 'CX-MISSING-001', 'CX-CAPACITY-001', 'CX-APPROVAL-001']
+  [ok] S4 全部反例被拦（每个 case 都有拦截动作） — status=pass blocked={'CX-INJECT-001': True, 'CX-MISSING-001': True, 'CX-CAPACITY-001': True, 'CX-APPROVAL-001': True}
+  [ok] 注入文本不被当作指令执行（原文保留、只标注） — effect=annotated_external_term
+  [ok] 漏项 / 虚假产能 / 伪造批准各自被拦（不是同一条通用拒绝） — effects={'CX-INJECT-001': 'annotated_external_term', 'CX-MISSING-001': 'annotated_missing_item', 'CX-CAPACITY-001': 'annotated_capacity_risk', 'CX-APPROVAL-001': 'rejected_forged_approval'}
+  [ok] 每个反例都有账本留痕（事件类型 + 序号） — traces={"CX-INJECT-001": ["compare/flag-raised#5", "compare/flag-raised#6", "compare/flag-raised#7", "compare/flag-raised#8", "compare/flag-raised#9"], "CX-MISSING-001": ["compare/flag-raised#10"], "C
+  [ok] 反例集只增不减：重复加入被接受、删除被拒绝 — registry={'count': 4, 'attempted_remove_rejected': True}
+
+--- 口径说明 ---
+· 护栏**只标注不否决**：产能/条款冲突只产 Flag + requires_human，排序照常产出（Flag 与排序并存）；
+· 产能风险两条来源分开断言：声称产能超可验证上限（q-cap）与日历/关键路径不可行（q-calendar）；
+· `firm` 交期的边界是**有效期**：有效期内模型改不了（拒绝并留痕）、人可以改（新 revision）、过期后模型可改；
+· `indicative` 交期允许模型调整（binding 决定约束强度）；
+· 产能日历是**私域**：对外形态（share_safe）不带 400/220/180 这些数值，只留定性结论 + 私域引用。

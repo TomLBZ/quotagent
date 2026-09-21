@@ -65,3 +65,4 @@
   症状是 `FAIL 执行异常 — SyntaxError`（本仓已踩两次）。中文里一律用「」『』或改写措辞。
 - **一次性脚本别复用变量名写不同文件**：`p = handover.md` 之后再 `p.write_text(json…)` 会把 state.json 写进
   handover.md（门立刻报预算超限）。目标文件与路径变量一一对应，换文件就换变量名。
+- **改 `src/quotagent/qa/__init__.py` 的导入清单必须立刻跑 `verify.sh ac-registry`**：漏掉一个 `checks_*` 模块会**静默注销若干 AC**（本轮编辑掉 `checks_cost` → 注册表 46→44、P0 的 34 条变成 32 条），而单跑某条 AC 仍然是绿的，只有注册表级检查能发现。

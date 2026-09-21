@@ -90,6 +90,7 @@
 
 ### `ctx.guard` [P0]
 - 职责：护栏——异常低价、漏项、产能冲突、条款冲突、外部诱导文本（prompt injection）。
+- P1 扩展：条款冲突覆盖**付款/质保/罚则三族**（逐族列出 required vs offered）；产能风险有两条来源——① 声称产能超过可验证上限，② `ctx.capacity` 算出的日历/关键路径不可行结论（只转 Flag，不改交期）。
 - Definition：`check(target, ruleset) -> Flag[]` · `register_rule(rule) -> disposer`。
 - 不变量：`guard` 只能产出 Flag，**不得直接否决授标**（否决权在人）。
 - P0 实现：`src/quotagent/services/guard.py`（六类规则 + `register_rule -> disposer` + 每条 Flag 落账；无否决接口）；语义见 ADR-0011。

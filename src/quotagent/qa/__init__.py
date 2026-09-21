@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 # 导入即注册（顺序无关，注册表按键排序输出）
-from . import (checks_audit, checks_bridge, checks_clarify, checks_compare, checks_cost,  # noqa: F401
+from . import (checks_audit, checks_bridge, checks_capacity, checks_clarify,  # noqa: F401
+               checks_compare, checks_cost,
                checks_design, checks_deviation, checks_eval, checks_events, checks_guard, checks_intake, checks_norm,
                checks_plugin, checks_pricing, checks_qep, checks_quotes, checks_rfq, checks_runtime,
                checks_sync)

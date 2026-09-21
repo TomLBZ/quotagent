@@ -75,6 +75,9 @@
 | `quote/human-approved` | emit | ✔ | 人工 → qep | 批准记录（不可由 agent 产生） |
 | `quote/submitted` | emit | ✔ | `ctx.qep` → compare | 报价事实（含 `rfq_rev`） |
 | `quote/superseded` | emit | ✔ | `ctx.quotes` | 包升版后基于旧版本的报价标记过期并可重报（FR-RFQ-006） |
+| `capacity/committed` | emit | ✔ | `ctx.capacity` | 交期/产能承诺建立与修订（含 binding 与 revision） |
+| `capacity/firm-change-refused` | emit | ✔ | `ctx.capacity` | `firm` 交期在有效期内被模型改动 → 拒绝留痕 |
+| `capacity/conflict` | emit | ✔ | `ctx.capacity` | 产能/交期不可行 → 只提请人工（不否决、不改交期） |
 | `compare/rank-computed` | emit | ✔ | `ctx.compare` → 人/AwardAdvisor | 排序 + 引用链 |
 | `compare/flag-raised` | emit | ✔ | `ctx.guard` | Flag 从不由模型自行消解 |
 | `negotiate/round` | serial | ✔ | `ctx.negotiate` → approval | 轮次与让步上限来自策略 patch |
