@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
+from ..kernel.canon import canonical_bytes, digest
 from ..kernel.delivery import FileTransport
+from ..services.relay import RelayError, RelayService, sha256_of
 from ..kernel.events import EventBus
 from ..kernel.ledger import Ledger
 from ..kernel.qep import KeyStore, QepEndpoint
@@ -405,4 +408,130 @@ def ac_qep_004() -> list[Assertion]:
                          and len(after) == before + 1
                          and "signature_verify" in after[-1]["body"]["errors"][0],
                          f"result={missing} rejected+{len(after) - before}"))
+    return out
+
+
+@register("AC-INTEG-002", "P1", "relay 不解析 body（篡改由接收方验签发现）；字节透明；不可达排队重试；spool 被改即拒投；账本隔离",
+          "qa ac AC-INTEG-002", evidence_refs=("EV-043",))
+def ac_integ_002() -> list[Assertion]:
+    out: list[Assertion] = []
+    root, store, transport, bus, con, sup = _pair("integ-002")
+
+    # --- relay：只做 opaque 转发，自带账本 ---
+    spool = root / "relay-spool"
+    inbox_root = root / "mailbox"
+    relay = RelayService(ledger=Ledger(root / "relay.jsonl", realm="relay:r-1"),
+                         spool_root=spool, inbox_of=lambda to: None)
+    env = sup.envelope("quote/submitted", "fact",
+                       {"quote": {"quote_id": "q-1", "rfq_rev": 1,
+                                  "lines": [{"item_id": "L-001", "unit_price": 88.5, "qty": 120}]}},
+                       refs={"package_id": "pkg-014", "rfq_rev": 1}, recipients=["con-B"])
+    sent = sup.send(env)
+    raw = Path(sent["path"]).read_bytes()
+
+    # --- 1) 目标不可达 → 排队（不丢包）---
+    first = relay.accept(raw, to="con-B")
+    queued_entries = relay.ledger.read(type="relay/queued")
+    out.append(Assertion("目标不可达 → 排队（relay/queued，含原因），包留在 spool 不丢",
+                         first["delivered"] is False and first["queued"] is True
+                         and first["attempts"] == 1 and bool(queued_entries)
+                         and Path(first["blob"]).exists() and relay.pending(),
+                         f"outcome={ {k: first.get(k) for k in ('delivered', 'queued', 'attempts')} } "
+                         f"queued={len(queued_entries)} pending={len(relay.pending())}"))
+    accepted = relay.ledger.read(type="relay/received")
+    out.append(Assertion("relay 接收只记哈希与长度（parsed=false，不解析 body）",
+                         bool(accepted) and accepted[-1]["body"]["parsed"] is False
+                         and accepted[-1]["body"]["sha256"] == sha256_of(raw)
+                         and "body" not in accepted[-1]["body"],
+                         f"received={json.dumps(accepted[-1]['body'], ensure_ascii=False)[:200] if accepted else None}"))
+
+    # --- 2) 恢复可达 → pump 重试成功，字节原样 ---
+    relay.inbox_of = lambda to: inbox_root / to / "inbox" if to == "con-B" else None
+    pumped = relay.pump()
+    blob_files = sorted((inbox_root / "con-B" / "inbox").glob("*.blob"))
+    out.append(Assertion("恢复可达后 pump() 重试成功（relay/retry → relay/delivered，队列清空）",
+                         pumped["delivered"] == [first["name"]] and pumped["queue"] == 0
+                         and relay.ledger.read(type="relay/retry") and relay.ledger.read(type="relay/delivered"),
+                         f"pump={pumped}"))
+    out.append(Assertion("字节透明：投递文件与源包逐字节相同（sha256 相等）",
+                         len(blob_files) == 1 and sha256_of(blob_files[0].read_bytes()) == sha256_of(raw)
+                         and blob_files[0].read_bytes() == raw,
+                         f"files={[f.name for f in blob_files]}"))
+    relayed_bytes = blob_files[0].read_bytes()
+    received = con.receive(relayed_bytes)
+    out.append(Assertion("接收方正常解析（验签通过，事实落账）",
+                         received["received"] is True and received["type"] == "quote/submitted",
+                         f"result={{'received': {received.get('received')}, 'type': {received.get('type')}}}"))
+
+    # --- 3) 注入篡改：relay 照样转发，接收方验签发现 ---
+    forged = json.loads(raw)
+    forged["msg_id"] = "01J00000000000000000000042"          # 换 msg_id，避免被去重键先拦下
+    forged["body"]["quote"]["lines"][0]["unit_price"] = 1.0  # 改业务内容
+    forged["body_hash"] = digest(forged["body"])             # 连 body_hash 一起改：只剩签名能拦
+    forged_raw = canonical_bytes(forged)
+    second = relay.accept(forged_raw, to="con-B")
+    out.append(Assertion("relay 对篡改包**照常转发**（不解析 → 语义篡改在它这里不可见）",
+                         second["delivered"] is True
+                         and relay.ledger.read(type="relay/tamper-detected") == []
+                         and second["sha256"] == sha256_of(forged_raw),
+                         f"outcome={ {k: second.get(k) for k in ('delivered', 'sha256')} }"))
+    forged_file = (inbox_root / "con-B" / "inbox" / second["name"]).read_bytes()
+    rejected = con.receive(forged_file)
+    rejected_entries = con.ledger.read(type="kernel/qep-rejected")
+    out.append(Assertion("接收方**验签发现**篡改：拒收 + 落 kernel/qep-rejected，且不落事实",
+                         rejected["received"] is False
+                         and any("签名" in err for err in rejected.get("errors", []))
+                         and bool(rejected_entries)
+                         and len(con.ledger.read(type="quote/submitted")) == 1,
+                         f"errors={rejected.get('errors')} rejected={len(rejected_entries)} "
+                         f"facts={len(con.ledger.read(type='quote/submitted'))}"))
+
+    # --- 4) spool 被改 → relay 拒绝投递（不把坏包递出去）---
+    third = relay.accept(raw, to="con-B", deliver_now=False)
+    Path(third["blob"]).write_bytes(raw + b" ")
+    refused = None
+    try:
+        relay.deliver(third)
+    except RelayError as err:
+        refused = str(err)
+    out.append(Assertion("spool 字节被改 → relay 拒绝投递并落 relay/tamper-detected",
+                         refused is not None and bool(relay.ledger.read(type="relay/tamper-detected")),
+                         f"refused={refused}"))
+
+
+    # --- 5) 账本隔离：relay 事件只在自己的账本 ---
+    out.append(Assertion("账本隔离：relay 事件不写进参与方账本（各自 realm/账本）",
+                         relay.ledger.verify_chain()
+                         and not [r for r in con.ledger.read() if r["type"].startswith("relay/")]
+                         and not [r for r in sup.ledger.read() if r["type"].startswith("relay/")],
+                         f"relay={len(relay.ledger.read())} con_relay={[r['type'] for r in con.ledger.read() if r['type'].startswith('relay/')]}"))
+
+    # --- 6) 发送侧不可达：不落半条记录，修好后同信封重发即幂等 ---
+    # 构造：根目录可建，但把某个收件人的 inbox 占成**文件** → 投递时才失败（贴近真实不可达）
+    broken_root = root / "broken-mailbox"
+    broken = FileTransport(broken_root)
+    blocked = broken_root / "con-B"
+    blocked.mkdir(parents=True, exist_ok=True)
+    (blocked / "inbox").write_text("占位：不是目录", encoding="utf-8")
+    failing = QepEndpoint(participant="sup-A", kind="supplier", realm="supplier:sup-A", keystore=store,
+                          ledger=Ledger(root / "sup-broken.jsonl", realm="supplier:sup-A"),
+                          transport=broken, events=bus)
+    env2 = failing.envelope("quote/submitted", "fact", {"quote": {"quote_id": "q-2", "rfq_rev": 1}},
+                            refs={"package_id": "pkg-014", "rfq_rev": 1}, recipients=["con-B"])
+    error = None
+    try:
+        failing.send(env2)
+    except OSError as err:
+        error = f"{type(err).__name__}: {err}"
+    out.append(Assertion("传输不可达时 send() 失败**不落半条记录**（不得留下「已发送」的假象）",
+                         error is not None and failing.ledger.read(type="kernel/qep-sent") == [],
+                         f"error={error} sent={len(failing.ledger.read(type='kernel/qep-sent'))}"))
+    recovered = FileTransport(root / "mailbox-2")
+    failing.transport = recovered
+    again = failing.send(env2)
+    out.append(Assertion("恢复后同一信封重发成功，且只有一条 kernel/qep-sent（msg_id/seq 不变，幂等）",
+                         Path(again["path"]).exists()
+                         and len(failing.ledger.read(type="kernel/qep-sent")) == 1
+                         and again["msg_id"] == env2["msg_id"],
+                         f"sent={len(failing.ledger.read(type='kernel/qep-sent'))} msg_id_ok={again['msg_id'] == env2['msg_id']}"))
     return out

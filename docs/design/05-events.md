@@ -43,6 +43,11 @@
 | `kernel/bridge-backpressure` | emit | ✔ | `ctx.bridge` | live 通知被丢弃时的留痕（ADR-0013 §5） |
 | `kernel/bridge-restarted` | emit | ✔ | `ctx.bridge` | 重启计数与锚点比对（ADR-0013 §6） |
 | `kernel/bridge-fault` | emit | live | `ctx.bridge` | 桥的运行期故障（断连/洪水/超时） |
+| `relay/received` | emit | ✔ | `ctx.relay` | 中转收到整包（**不解析 body**，只记 sha256） |
+| `relay/queued` | emit | ✔ | `ctx.relay` | 目标不可达 → 排队等待重试（不丢包） |
+| `relay/retry` | emit | ✔ | `ctx.relay` | 排队项的一次重试尝试 |
+| `relay/delivered` | emit | ✔ | `ctx.relay` | 字节原样投递到目标收件箱 |
+| `relay/tamper-detected` | emit | ✔ | `ctx.relay` | spool 字节与接收时哈希不一致 → 拒绝投递 |
 
 ## 3. 业务事件
 

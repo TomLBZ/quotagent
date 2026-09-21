@@ -75,6 +75,12 @@ class EventBus:
         "kernel/bridge-backpressure": ("emit", True, ""),
         "kernel/bridge-restarted": ("emit", True, ""),
         "kernel/bridge-fault": ("emit", False, ""),
+        # relay（中转）：只做 opaque 转发，自己的 realm/账本
+        "relay/received": ("emit", True, ""),
+        "relay/queued": ("emit", True, ""),
+        "relay/retry": ("emit", True, ""),
+        "relay/delivered": ("emit", True, ""),
+        "relay/tamper-detected": ("emit", True, ""),
         # §3 人工门与私域/成本相关（P0 S0.9–S0.10）
         "approval/requested": ("emit", True, ""),
         "approval/granted": ("emit", True, ""),

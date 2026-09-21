@@ -35,6 +35,15 @@
 - 不变量：依赖未就绪不得激活；`unmount` 后 `effects()` 为空且无残留定时器/订阅/外部通知。
 - 关联：FR-PLUGIN-001..003，AC-PLUGIN-001。
 
+### `ctx.relay` [P1]
+
+中转服务（`src/quotagent/services/relay.py`）：**只做 opaque 字节转发**，不解析 body。
+
+- 有自己的 realm 与账本（`relay:r-1`），**不写任何参与者的账本**；
+- 接收只记整包 `sha256` 与长度（`relay/received`，`parsed: false`），投递前重算哈希；
+- 目标不可达 → 排队（`relay/queued`）→ `pump()` 重试（`relay/retry` → `relay/delivered`），不丢包；
+- spool 被改 → `relay/tamper-detected` 并**拒绝投递**；语义篡改由接收方验签发现（AC-INTEG-002）。
+
 ### `ctx.qep` [P0]
 - 职责：信封构造/校验/签名/验签、版本协商、幂等去重、重发。
 - Definition：`envelope(type, class, body, refs) -> Envelope` · `validate(env) -> Result` · `send(env)` · `receive(raw) -> Event`。

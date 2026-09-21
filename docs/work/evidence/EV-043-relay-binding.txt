@@ -1,0 +1,25 @@
+EV-043 — relay 绑定（T-218 / S1.17）：opaque 转发·篡改拒投·不可达排队重试·账本隔离
+
+时间: 2026-09-21T04:16:23Z
+commit: 1ea4d13
+命令: qa ac AC-INTEG-002（退出码 0，11/11 断言通过）
+
+--- 断言 ---
+  [ok] 目标不可达 → 排队（relay/queued，含原因），包留在 spool 不丢 — outcome={'delivered': False, 'queued': True, 'attempts': 1} queued=1 pending=1
+  [ok] relay 接收只记哈希与长度（parsed=false，不解析 body） — received={"to": "con-B", "sha256": "sha256:5a059b54a5c2fe6af8e40c5d600aa874bb9a7e919513c885845185cec09b93f8", "bytes": 759, "blob": "000001-5a059b54.blob", "parsed": false, "note": "relay 不解析 body（FR-INTEG-002
+  [ok] 恢复可达后 pump() 重试成功（relay/retry → relay/delivered，队列清空） — pump={'attempted': ['000001-5a059b54.blob'], 'delivered': ['000001-5a059b54.blob'], 'still_queued': [], 'queue': 0}
+  [ok] 字节透明：投递文件与源包逐字节相同（sha256 相等） — files=['000001-5a059b54.blob']
+  [ok] 接收方正常解析（验签通过，事实落账） — result={'received': True, 'type': quote/submitted}
+  [ok] relay 对篡改包**照常转发**（不解析 → 语义篡改在它这里不可见） — outcome={'delivered': True, 'sha256': 'sha256:79d5016224b378d65159df9c7ade63f270e79d2a7a06f1fe8324a1a6e8b0e407'}
+  [ok] 接收方**验签发现**篡改：拒收 + 落 kernel/qep-rejected，且不落事实 — errors=['签名验签失败（发送方未知或内容被改动）'] rejected=1 facts=1
+  [ok] spool 字节被改 → relay 拒绝投递并落 relay/tamper-detected — refused=spool 内容与接收时的哈希不一致，拒绝投递: 000003-5a059b54.blob
+  [ok] 账本隔离：relay 事件不写进参与方账本（各自 realm/账本） — relay=8 con_relay=[]
+  [ok] 传输不可达时 send() 失败**不落半条记录**（不得留下「已发送」的假象） — error=FileExistsError: [Errno 17] File exists: '/workspace/projects/quotagent/tmp/ac/integ-002-z61y9q83/broken-mailbox/con-B/inbox' sent=0
+  [ok] 恢复后同一信封重发成功，且只有一条 kernel/qep-sent（msg_id/seq 不变，幂等） — sent=1 msg_id_ok=True
+
+--- 口径说明 ---
+· "relay 不解析 body"：接收只记整包 sha256 与长度（`relay/received.parsed=false`），账本 body 里没有报文内容；
+· 两条互补断言：relay 对篡改包**照常转发**（它看不见语义），接收方**验签发现**并拒收留痕；
+· "不可达排队重试"两侧都覆盖：relay 侧（目标不可达 → relay/queued → pump → relay/delivered）与
+  发送侧（传输失败 send() 抛错且**不落半条记录**，恢复后同一信封重发仍只有一条 kernel/qep-sent）；
+· relay 与参与者账本隔离（relay 事件只在自己的 realm 账本里）。
