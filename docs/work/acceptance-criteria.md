@@ -144,6 +144,7 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-MAIL-001 | P2 | 邮件集成（无凭据部分）：`compose` 确定性且可被解析回来；头注入被拒**且不落账**；无传输实现时 `deliver()` 返回 `unavailable` + `reason` + `next_action` 并落 `mail/refused`，**账本无 `mail/sent`**；同键重复 `enqueue` 幂等；私域哨兵不进报文与账本；`text/*` 附件带 sha256、其它类型被拒；`parse` 纯函数且畸形输入不崩；跨 realm 候选不可见；`replay()` 可重建；不产生义务；账本链仍真 | `qa ac AC-MAIL-001` | 见 `evidence/EV-094` |
 | AC-PIPELINE-001 | P2 | 运维道可见 P2 新服务：`pipeline-view` 只组合不自算、降级优先、有界、确定性、零 I/O、不出正文与私域；`GET /api/pipeline` 200 且含谈判/FAQ/邮件三域，`transport.available=false`（本轮无发信能力只能这么报） | `tools/verify.sh pipeline-route` | 见 `evidence/EV-095` |
 | AC-UI-002 | P2 | 运维快照写入器（Python 侧）形状合规：两视角齐全、删不掉 `generated_at` 之外的时间键、无私域与正文、**只读账本（不新增行）**、同输入两次除 `generated_at` 外一致 | `qa ac AC-UI-002` | 见 `evidence/EV-095` |
+| AC-UI-003 | P2 | UI 演示种子（`tools/ui-seed-pipeline.py`）：用**真服务**种出三域事件且 `added>0`；**再跑幂等**（`added==0` 且账本逐字节不变）；快照里两视角三域计数**全部非 0**（面板不是空面板）；写入者一律 `human:ui-seed`/`agent:ui-seed`（不冒充业务主体） | `tools/verify.sh ui-seed` | 见 `evidence/EV-096` |
 
 ## 7. 证据制度
 

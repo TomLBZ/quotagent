@@ -1,0 +1,41 @@
+EV-096 T-261 UI 演示种子：让三域面板显示真数字（而不是空面板）
+（本文件由接线轮次写入；实现证据见下）
+
+[1] 实现（subagent 产出，父方核验）
+· tools/ui-seed-pipeline.py（33881 B，sha256 b91afc92…）—— 用**真服务**在 UI 账本上跑：
+  成本→定价→人确认报价（前置硬要求，否则 open_thread 抛 PriceNotConfirmed）
+  → 谈判 open_thread → declare_bounds(human) → request_concession → decide(granted)
+  → submit_round（落 negotiate/round）→ 故意越界（落 negotiate/round-rejected）→ close
+  → FAQ publish(human) + reuse 命中 → 邮件 compose/enqueue/deliver（unavailable + mail/refused）
+· CLI：--shared-dir / --now / --sides；stdout 恰一行 JSON；失败非 0 且 ok:false
+· 幂等：同批 id 不重开（第二次 added=0，账本逐字节不变）；时间参数化（不读墙钟）
+· 演员一律 human:ui-seed / agent:ui-seed（D-054 第 1 条）
+
+[2] 父方核验门 tools/check-ui-seed.py + verify.sh ui-seed（AC-UI-003）——**实跑 7/7**：
+① 空目录跑种子 added={contractor:17, supplier:17} 且三域都落了事件
+② 第二遍 added={0,0} 且账本逐字节不变（幂等）
+③ 快照两视角三域计数全部非 0（面板不是空面板）
+③ 写入者全为 *:ui-seed（无非法冒名）
+
+[3] 接线
+· tools/webui-serve.py 在 **g1 走查 seed 之后、快照刷新之前**跑种子
+  （环境变量 QUOTAGENT_WEBUI_SEED_PIPELINE=1 开启，默认开）
+· 运维手册已标注：面板数字来自演示种子（tmp/ui-shared 是演示账本）
+
+[4] 已知偏差（来自实现方的诚实清单）
+· 非空账本上跨目录的 id 稳定性未验证（谈判域是"检测+续做"而非内容去重）
+· 种子会往演示账本追加三行前置事实（quote/cost-built、price-proposed、human-approved）
+· 时钟钉扎靠替换 utc_now 绑定；服务若换时间来源，行级 ts 自检不会抓到
+
+[5] 线上真回读（接线后）
+（见本文件末尾追加：/api/pipeline 的三域计数应为非 0）
+
+[5] 线上真回读（2026-09-21T12:26:26Z，接线后）
+$ curl http://127.0.0.1:8093/quotagent/api/pipeline → 200
+  headline = 管道 · contractor: 谈判 1线程/1轮/拒 1 · FAQ 1条 · 邮件 排队 1/拒 1
+              | supplier: 谈判 1线程/1轮/拒 1 · FAQ 1条 · 邮件 排队 1/拒 1 · 通道不可用(mail-transport-unavailable)
+  totals = {threads:2, rounds:2, rejected:2, entries:2, queued:2, refused:2}
+$ 公网 /api/pipeline → 200
+· 种子脚本 sha256 b91afc92f568653b…（33881 B）
+
+结论：面板不再是空面板 —— 三域显示的是**用真服务跑出来的真事件**（演示账本，写入者 *:ui-seed）。

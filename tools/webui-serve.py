@@ -102,6 +102,14 @@ def main(argv: list[str]) -> int:
         print(f"[webui-serve] 走查 seed rc={seeded.returncode} "
               f"{(seeded.stdout or '').strip().splitlines()[-1][:120] if seeded.stdout.strip() else ''}",
               file=sys.stderr, flush=True)
+    # 三域演示种子：g1 走查只种报价/批准类事件，三域面板会是空的（空面板与坏面板看不出区别）。
+    # 用**真服务**种出谈判/FAQ/邮件事件；写入者一律 *:ui-seed，幂等（重复运行不撑大账本）。
+    if os.environ.get("QUOTAGENT_WEBUI_SEED_PIPELINE", "1") == "1":
+        seeded_pipe = subprocess.run([sys.executable, str(ROOT / "tools" / "ui-seed-pipeline.py"),
+                                      "--shared-dir", ui_shared],
+                                     cwd=str(ROOT), capture_output=True, text=True, timeout=300)
+        print(f"[webui-serve] 三域种子 rc={seeded_pipe.returncode} "
+              f"{(seeded_pipe.stdout or '').strip()[:160]}", file=sys.stderr, flush=True)
     # seed 之后立即刷新留存计划与三域快照：走查会清空 ui-shared/，
     # 不补这一下，界面会一直停在 degraded 直到下一次探活。
     refresh_retention_plan()
