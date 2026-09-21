@@ -1,0 +1,89 @@
+EV-141 AC-AGENTRT-002 记忆四层边界（项目=账本投影的可重建证明）
+
+命令：`tools/verify.sh ac AC-AGENTRT-002`（有/无 Node 都须全绿：ADR-0013 §8）
+
+[1] 真账本重放（只读、确定性）
+```
+{"bytes": 6245, "deterministic": true, "digest": "sha256:da54fb40faeb5e38899f2b6d839969afba031037f771212b58471773ae4be19f", "items": 11, "kinds": ["approval/granted", "award/committed", "change/approved", "clarification/answered", "faq/entry-published", "negotiate/closed", "quote/human-approved", "rfq/amended", "rfq/published"], "missing_citations": 0, "ok": true}
+```
+
+[2] AC（有 Node）
+```
+{
+  "ac": "AC-AGENTRT-002",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "① 项目记忆 = 账本重放：两次逐字节一致（确定性），且只挑闭集内的事件",
+      "ok": true,
+      "detail": "rc=0/0 bytes=1024 items=3 kinds=['approval/granted', 'quote/submitted', 'rfq/published']"
+    },
+    {
+      "name": "② **丢缓存不丢事实**：删掉快照重建后逐字节一致",
+      "ok": true,
+      "detail": "重建一致=True bytes=1024"
+    },
+    {
+      "name": "③ 每条项目记忆都带 `citations`（指回账本行）",
+      "ok": true,
+      "detail": "缺引用=0"
+    },
+    {
+      "name": "③ 重放是只读的：账本字节零改动（H1：宿主/工具都不得借重放写事实）",
+      "ok": true,
+      "detail": "before=5fb29043f7ba after=5fb29043f7ba"
+    },
+    {
+      "name": "④ 账本不可读 → 拒绝（`ledger-unreadable`，退出码非 0），不伪装成空投影",
+      "ok": true,
+      "detail": "rc=2 code=ledger-unreadable"
+    },
+    {
+      "name": "⑤ 会话层永不落盘（静态）：`agent-memory` 无任何写文件调用",
+      "ok": true,
+      "detail": "命中=[]"
+    },
+    {
+      "name": "⑤ 磁盘上检索不到会话哨兵（事件流只在内存；落账本由 Python 侧显式做）",
+      "ok": true,
+      "detail": "命中=[]（哨兵 agentrt-memo… 从未被写入磁盘）"
+    },
+    {
+      "name": "⑥ 策略只人写 / 跨方只走协议：围栏门真跑（四类反例全绿）",
+      "ok": true,
+      "detail": "total=22 failures=0 rc=0"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-AGENTRT-002",
+  "phase": "P2",
+  "title": "记忆四层边界：会话不落盘 / 项目=账本投影可重建 / 策略只人写 / 跨方只走协议",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+
+[3] AC（无 Node：降级而非变红）
+```
+
+    {
+      "name": "⑤ 磁盘上检索不到会话哨兵（事件流只在内存；落账本由 Python 侧显式做）",
+      "ok": true,
+      "detail": "命中=[]（哨兵 agentrt-memo… 从未被写入磁盘）"
+    },
+    {
+      "name": "⑥ 策略只人写 / 跨方只走协议（无 Node：**降级**为源码级断言；语义由 `verify.sh agent-runtime` 守卫）",
+      "ok": true,
+      "detail": "marks={'memory-policy-human-only': True, 'memory-cross-party-direct-read-refused': True, 'memory-protocol-envelope-invalid': True}"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-AGENTRT-002",
+  "phase": "P2",
+  "title": "记忆四层边界：会话不落盘 / 项目=账本投影可重建 / 策略只人写 / 跨方只走协议",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```

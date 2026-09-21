@@ -165,3 +165,43 @@
 
 接线仍**已回退**（门红不留树）；`governor` 只在其自身门内被验证，尚未在 UI 路径生效。
 
+## D-045 T-250：两件 subagent 产出上线（待批摘要 → 双方视角；预算守卫 → 桥路径）（2026-09-21T10:37:56Z）
+
+**产出与核验**：`approval-digest`（人工门**待批摘要**）与 `budget-guard`（**窗口成本预算准入**）由两个 subagent
+并行生产（只许写 `tmp/` 产物与 `host/<门>.mjs`）；父侧自己跑语法/纪律扫描/**两套门 10+10**/**官方 fixture 13+13**
+（D-019：subagent 自述不算事实）后才晋升（`ap-0107`/`ap-0108`）。两件都附**变异测试自证**（各 4 处变异全红）。
+
+**接线与硬证据**：
+· `budget-guard` → 桥调用路径，顺序写死 **idem 判重 → budget 计费 → breaker 准入 → 真调用**。
+  `verify.sh budget-route` 5/5：预算 2 / 每次 1 / 4 个请求 → 后两次被拒，**且只有 2 个请求打到下游**
+  （`breaker.allowed = 2`）—— 这是"被拒的请求没有浪费下游"的可机检证据。
+  拒绝理由区分 **`budget-exceeded`（等窗口有用）** 与 **`cost-exceeds-budget`（等也没用）**：
+  **拒绝要能指导下一步动作**，不是裸 `false`。
+· `approval-digest` → 双方视角 `/quotagent/<view>/api/approvals` + 页面"待批事项（人工门）"区块。
+  待批状态由账本行的**最后一条** `approval/*` 事件推导（granted/aborted 即不再待批），纯只读；
+  只输出计数与时长，**不出正文**（机检断言）。人工门是 P8 的核心纪律，此前**宿主侧完全看不到待批队列**。
+
+**四个中间件的分工（写死，互不重叠）**：`governor` 管**并发额度**、`breaker` 管**连续失败切断**、
+`idempotency-guard` 管**同一件事是否做过**、`budget-guard` 管**窗口内花了多少钱**。
+
+## D-029 T-235 分两步走：编排 lib 已完成并测过，CLI 接线待做（2026-09-21T09:21:23Z）
+
+**已完成（入库）**：`host/lib/canary-run.mjs` —— canary 探针与自动回滚的**编排**，参数显式传入、结果显式返回：
+`runCanary({canary, dispatch, method, params, probeCount, approval_ref, proposal_id})`
+→ `{decision, exited, samples, last_result, last_lane}`。方向性照 `ADR-0017`：
+**进 canary 缺人工引用直接拒绝**（`CanaryApprovalRequired`），**退化自动回滚不需要批准**。
+
+机检（`verify.sh bridge-canary` **11/11**，新增 3 条）：
+1. 缺 `approval_ref` → 拒绝且**不进入** canary；
+2. 40 次探针 → 两侧都有样本（base/canary 均 > 0）→ 退化判定 → **自动回滚**（`automatic=true`、`approval_required=false`）；
+3. 候选不退化 → **不回滚**（推荐只是建议，仍停在 canary，不擅自扩大上线面）。
+
+**为什么这样拆**：`cli.mjs` 是一个巨大的 `main()`，本轮在同一处连续踩到 5 类低级错误
+（TDZ/声明顺序 ×4、`ctx.<自己>` 作用域 ×1）。把编排抽成 lib 后它可被单测；CLI 侧只剩**三行接线**。
+
+**待做（下一步，已定位到具体细节）**：
+1. CLI 的 canary 句柄必须**从插件自己的 ctx 捕获**（`ctx.canary` 从根 ctx 取不到 → `[canary-run] 需要 canary 服务`），
+   与 `webui` 的挂载包装同一手法；
+2. `bridge` 动作里 `canaryProbe = runCanary({...})`，取 `last_result` 作为本命令的输出帧；
+3. `CanaryApprovalRequired` → `emit(..., 2)`；
+4. 回滚时把 `evolve/canary-exited` 交 `tools/evolve-record.py` 落账 + 往 audit 流水记一条 `decision`。

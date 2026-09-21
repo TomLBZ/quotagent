@@ -62,43 +62,6 @@
 - `governor` **9/9**、`modules` 144/144、docs/plugins/events 全绿；线上服务重启后三路由 200、公网 200。
 - 清单 T-234 → **done**。
 
-## D-029 T-235 分两步走：编排 lib 已完成并测过，CLI 接线待做（2026-09-21T09:21:23Z）
-
-**已完成（入库）**：`host/lib/canary-run.mjs` —— canary 探针与自动回滚的**编排**，参数显式传入、结果显式返回：
-`runCanary({canary, dispatch, method, params, probeCount, approval_ref, proposal_id})`
-→ `{decision, exited, samples, last_result, last_lane}`。方向性照 `ADR-0017`：
-**进 canary 缺人工引用直接拒绝**（`CanaryApprovalRequired`），**退化自动回滚不需要批准**。
-
-机检（`verify.sh bridge-canary` **11/11**，新增 3 条）：
-1. 缺 `approval_ref` → 拒绝且**不进入** canary；
-2. 40 次探针 → 两侧都有样本（base/canary 均 > 0）→ 退化判定 → **自动回滚**（`automatic=true`、`approval_required=false`）；
-3. 候选不退化 → **不回滚**（推荐只是建议，仍停在 canary，不擅自扩大上线面）。
-
-**为什么这样拆**：`cli.mjs` 是一个巨大的 `main()`，本轮在同一处连续踩到 5 类低级错误
-（TDZ/声明顺序 ×4、`ctx.<自己>` 作用域 ×1）。把编排抽成 lib 后它可被单测；CLI 侧只剩**三行接线**。
-
-**待做（下一步，已定位到具体细节）**：
-1. CLI 的 canary 句柄必须**从插件自己的 ctx 捕获**（`ctx.canary` 从根 ctx 取不到 → `[canary-run] 需要 canary 服务`），
-   与 `webui` 的挂载包装同一手法；
-2. `bridge` 动作里 `canaryProbe = runCanary({...})`，取 `last_result` 作为本命令的输出帧；
-3. `CanaryApprovalRequired` → `emit(..., 2)`；
-4. 回滚时把 `evolve/canary-exited` 交 `tools/evolve-record.py` 落账 + 往 audit 流水记一条 `decision`。
-
-## D-035 T-240：第二个自进化产出也接入 WebUI；固化"新增依赖要同步四处"（2026-09-21T09:43:28Z）
-
-**做了什么**：`evidence-summary`（T-239 由自进化产出的插件）现在在双方视角都可见：
-`/quotagent/<view>/api/evidence` + 页面上的"账本证据面"区块（行数 / 类型数 / 关联数 / 带引用行数 / 时间跨度）。
-输入只用**公开投影后的行**（type/ts/correlation_id/refs 都在白名单内），**不输出正文**（机检正则断言 `"body":` 不存在）。
-
-**分工写清（避免两个插件被做成重复轮子）**：`observability` 看的是**运行期内存状态**（准入/留痕/分流），
-`evidence-summary` 看的是**落盘事实**（账本内容）。两者都在 UI 上，但回答的是不同问题。
-
-**固化：给 `webui` 新增一个依赖，必须同步四处**（本项目已为此付过三次成本，本轮写进 pitfalls）：
-1. `host/modules/webui.mjs` 的 `inject` / `usedServices` / 请求期本地句柄（D-027：不按请求查 ctx）；
-2. `host/check-modules.mjs` 的 **STUBS 表**（fixture 必须能 stub 模块声明的每个依赖，否则 modules 门直接红）；
-3. `host/webui.mjs` 的**两处挂载**（主 probe + brokenCtx）与它们的 `inject` 列表；
-4. `host/canary-dispatch.mjs` 的 e2e 挂载（它也要挂 webui，漏一处就红）+ `host/cli.mjs` 的运行期挂载与输出。
-
 ## D-042 T-247：让 subagents 生产插件（2 件）+ 抓到 process.exit() 截断 stdout 的真 bug（2026-09-21T10:19:10Z）
 
 **用户指令**："批准使用subsgents讨论、执行代替人工执行"、"可以用subagents制作…插件或者中间件"。
@@ -158,31 +121,15 @@
 **每个旋钮的语义都要显式定义**，并且**要有门**去读它；否则一个中间件的正确行为会被另一个中间件的门
 误判成"回归"，最终导致有人为了"让门变绿"而关掉正确的那个中间件。
 
-## D-045 T-250：两件 subagent 产出上线（待批摘要 → 双方视角；预算守卫 → 桥路径）（2026-09-21T10:37:56Z）
-
-**产出与核验**：`approval-digest`（人工门**待批摘要**）与 `budget-guard`（**窗口成本预算准入**）由两个 subagent
-并行生产（只许写 `tmp/` 产物与 `host/<门>.mjs`）；父侧自己跑语法/纪律扫描/**两套门 10+10**/**官方 fixture 13+13**
-（D-019：subagent 自述不算事实）后才晋升（`ap-0107`/`ap-0108`）。两件都附**变异测试自证**（各 4 处变异全红）。
-
-**接线与硬证据**：
-· `budget-guard` → 桥调用路径，顺序写死 **idem 判重 → budget 计费 → breaker 准入 → 真调用**。
-  `verify.sh budget-route` 5/5：预算 2 / 每次 1 / 4 个请求 → 后两次被拒，**且只有 2 个请求打到下游**
-  （`breaker.allowed = 2`）—— 这是"被拒的请求没有浪费下游"的可机检证据。
-  拒绝理由区分 **`budget-exceeded`（等窗口有用）** 与 **`cost-exceeds-budget`（等也没用）**：
-  **拒绝要能指导下一步动作**，不是裸 `false`。
-· `approval-digest` → 双方视角 `/quotagent/<view>/api/approvals` + 页面"待批事项（人工门）"区块。
-  待批状态由账本行的**最后一条** `approval/*` 事件推导（granted/aborted 即不再待批），纯只读；
-  只输出计数与时长，**不出正文**（机检断言）。人工门是 P8 的核心纪律，此前**宿主侧完全看不到待批队列**。
-
-**四个中间件的分工（写死，互不重叠）**：`governor` 管**并发额度**、`breaker` 管**连续失败切断**、
-`idempotency-guard` 管**同一件事是否做过**、`budget-guard` 管**窗口内花了多少钱**。
-
 ## D-016 — 比较表导出以 CSV 交付，`.xlsx` 不在 P1（2026-09-21）
 
 - 背景：roadmap S1.13 写「CSV/Excel」（FR-UX-003 同）。内核/服务层受"仅用标准库"约束，手写 xlsx（zip + OOXML）属于重复造轮子，引入 `openpyxl` 又会打破零依赖约束。
 - 裁决：P1 交付 **CSV**（stdlib `csv`，带 UTF-8 BOM 使 Excel 双击不乱码，列头稳定）；`.xlsx` 若确需，由**宿主层**（Node/cordis 侧，可正常用第三方库）承接，不在内核。
 - 后果：FR-UX-003 的"Excel"按"Excel 可直接打开的 CSV"满足；需求方若要原生 xlsx，走宿主层或另开 ADR。
 ## 归档指针（正文已移入 `decisions-archive.md`，ID 仍在此处可索引）
+- D-029 —— 见 `decisions-archive*.md`
+- D-045 —— 见 `decisions-archive*.md`
+- D-035 —— 见 `decisions-archive*.md`
 - D-036 —— 见 `decisions-archive.md`
 - D-047 —— 见 `decisions-archive.md`
 - D-046 —— 见 `decisions-archive.md`
@@ -329,3 +276,15 @@ Python 侧如实拒绝（`shadow-hash-mismatch`）。**拒绝是对的**（宁�
 **纪律**：不为了让数字好看把它们标 done；留在 `p3-spec.json` 里（`landed:false`）当待办。
 **另**：三件模块在插件清单的接线列**显式写「未接线」**（门允许这条出口）——"宿主侧就绪但还没挂进 profile"是事实，
 比假装挂上强；挂 profile 属下一批。
+
+## D-067 投影的**闭集与口径**都要对着真数据核一遍；替换没生效不许报成功
+
+三件事（都在同一小时内被我自己的验证抓出来）：
+1. **闭集不能猜**：我第一版把"项目记忆"的事件闭集写成 `rfq/issued`/`approval/decided` 这类**我想当然的名字**，
+   而真账本里是 `rfq/published`/`approval/granted`/`award/committed`…… → 投影**恒为空** ✗。
+   空投影会让 AC 变成**空转绿灯**（最危险的一种绿）。纪律：写闭集前先 `Counter` 一遍真数据的 `type`。
+2. **realm 是前缀不是全等**：真行的 realm 形如 `contractor:con-B`，我用 `== realm` 过滤 → 11 条全被丢掉 ✗。
+   改为"相等或以 `<realm>:` 开头"。
+3. **替换要断言生效**：我的注册脚本 `s.replace(...)` 没命中（目标串少了行尾注释），却照样打印 `+ 注册` ✗ →
+   结果是"看起来加上了、其实没加"。纪律：**每次文本替换后 assert 命中**，否则报错退出（本次已对后续替换这么做）。
+**共同点**：都是"我以为"对上"真数据"时的失败 —— 与 D-065（哈希口径）同类。

@@ -334,3 +334,18 @@ FR/AC 归属**；`host/modules/` 与插件清单文档里**零个 FR 引用**。
 
 **本轮自身过失（写进记录）**：落档脚本因门输出 JSON **缺 `passed` 键**而崩，导致 EV/D 未随代码一起提交，
 而提交信息却声称已落档 → 已补齐并统一门输出形状。教训：**提交信息必须与实际内容一致**。
+
+## D-035 T-240：第二个自进化产出也接入 WebUI；固化"新增依赖要同步四处"（2026-09-21T09:43:28Z）
+
+**做了什么**：`evidence-summary`（T-239 由自进化产出的插件）现在在双方视角都可见：
+`/quotagent/<view>/api/evidence` + 页面上的"账本证据面"区块（行数 / 类型数 / 关联数 / 带引用行数 / 时间跨度）。
+输入只用**公开投影后的行**（type/ts/correlation_id/refs 都在白名单内），**不输出正文**（机检正则断言 `"body":` 不存在）。
+
+**分工写清（避免两个插件被做成重复轮子）**：`observability` 看的是**运行期内存状态**（准入/留痕/分流），
+`evidence-summary` 看的是**落盘事实**（账本内容）。两者都在 UI 上，但回答的是不同问题。
+
+**固化：给 `webui` 新增一个依赖，必须同步四处**（本项目已为此付过三次成本，本轮写进 pitfalls）：
+1. `host/modules/webui.mjs` 的 `inject` / `usedServices` / 请求期本地句柄（D-027：不按请求查 ctx）；
+2. `host/check-modules.mjs` 的 **STUBS 表**（fixture 必须能 stub 模块声明的每个依赖，否则 modules 门直接红）；
+3. `host/webui.mjs` 的**两处挂载**（主 probe + brokenCtx）与它们的 `inject` 列表；
+4. `host/canary-dispatch.mjs` 的 e2e 挂载（它也要挂 webui，漏一处就红）+ `host/cli.mjs` 的运行期挂载与输出。
