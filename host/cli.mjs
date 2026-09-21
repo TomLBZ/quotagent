@@ -125,7 +125,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection'],   // 投影是独立插件（host/modules/projection.mjs），必须一起注入
+      inject: ['ledgerView', 'projection', 'governor'],   // 投影是独立插件（host/modules/projection.mjs），必须一起注入
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
