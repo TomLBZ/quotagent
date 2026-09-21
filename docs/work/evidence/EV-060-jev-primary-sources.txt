@@ -1,0 +1,33 @@
+EV-060 模型 Jev 的一手来源核验（T-223）
+生成时间：2026-09-21T08:22:34Z（UTC）
+
+方法：本 agent 用抓取工具直接取一手页面（下同），复核 subagent 首轮检索结论。以下为抓取到的**原文节选**
+（URL + 抓取到的关键行，逐字），不是转述；厂商宣称与二手报道另标。
+
+[1] https://developers.cloudflare.com/ai/models/typesafe/jev/
+  · "Jev is TypeSafe's structured evaluation model. It evaluates one state against typed Noul, Choice, and
+    Score questions and returns calibrated answers with probabilities and confidence."
+  · "Context Window — 32,000 tokens"；模型 id "typesafe/jev"
+  · 用法：{ "state": "...", "questions": { "<name>": { "type": "noul|choice|score", "instructions": "...",
+    "criteria": ... } } }
+  · 示例回包：{ "model": "jev-1.13.0", "answers": { "is_urgent": { "type": "noul", "noul": 0.95 },
+    "department": { "type": "choice", "choice": "billing", "confidence": 0.8,
+    "probabilities": { "billing": 0.87, "sales": 0, "technical": 0.13 } },
+    "frustration": { "type": "score", "score": 1.04, "confidence": 0.94, "legend": ... } } }
+
+[2] https://vercel.com/ai-gateway/models/jev
+  · "Jev is TypeSafe AI's System One evaluation model for fast, structured decisions in software. It evaluates
+    shared state against typed questions and returns choices, scores, and boolean probabilities..."
+  · "Model ID: typesafe-ai/jev"；"Type: evaluation"；"Context window: 32,000"；"Maximum output tokens: 0"
+  · "Pricing: $0.042/1M input tokens"
+  · 示例：import { experimental_evaluate as evaluate } from 'ai' → evaluate({ model: 'typesafe-ai/jev',
+    state, questions: { refunded: { type: 'boolean', instructions: 'Was a refund issued?' } } })
+
+[3] 检索摘要（二手，未逐条抓取正文；仅用于交叉印证存在性）
+  · The Register 2026-09-16、ETV Bharat 2026-09-21、LangChain《Building a Harness with Jev》、
+    DataCamp、Flavio Copes、dev.to《How to Use Jev》 —— 均指向同一模型与发布方 TypeSafe AI。
+  · 厂商宣称"最高 200× 更快 / 400× 更低成本"为**厂商说法**，本次未独立复现；公开页面另有一处写
+    "3 to 329"（疑为毫秒笔误），与"亚秒级"说法不一致 → 报告中列为未核实。
+
+覆盖到结论：模型存在性、接口形状（state + 类型化 questions）、输出形状（choice/score/noul + confidence
++ probabilities）、上下文上限、无文本输出、输入定价 —— 均有上述一手页面支撑。
