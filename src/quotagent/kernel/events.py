@@ -159,6 +159,10 @@ class EventBus:
         "faq/entry-published": ("emit", True, ""),
         "faq/reuse-served": ("emit", True, ""),
         "faq/reuse-refused": ("emit", True, ""),
+        # mail/*（D-052；无 mail/sent）
+        "mail/queued": ("emit", True, ""),
+        "mail/refused": ("emit", True, ""),
+        "mail/parsed": ("emit", True, ""),
         # §4 agent 侧（live）
         "agent/step-start": ("emit", False, ""),
         "agent/step-end": ("emit", False, ""),

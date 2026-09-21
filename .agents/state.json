@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-21T12:10:00Z",
+  "updated_at": "2026-09-21T12:40:00Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-258：FR-INTEG-003 邮件集成（发信需凭据 → 先做报文构造/解析等不需凭据的部分）；T-224 仍待 Jev 凭据",
+  "next_task": "T-260：把\"每功能由插件提供\"扩到 P2 新服务（negotiation/faq/mail）的宿主侧视图（若需要）；T-224/T-259 待凭据",
   "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
   "last_verified_command": "tools/verify.sh all",
-  "last_verified_result": "PASS：38 个门入口全绿（faq 20/20、negotiation 30/30、retention 两侧、webui 22/22）+ g1 退出 0（61/61 AC）+ clean-copy 退出 0",
-  "last_verified_evidence": "docs/work/evidence/EV-093-t257-faq.txt",
+  "last_verified_result": "PASS：39 个门入口全绿（mail 20/20、faq 20/20、negotiation 30/30、retention 两侧、webui 22/22）+ g1 退出 0（62/62 AC）+ clean-copy 退出 0",
+  "last_verified_evidence": "docs/work/evidence/EV-094-t258-mail.txt",
   "last_verified_commit": "1a70ac3",
   "blockers": [],
   "human_required": [
@@ -100,6 +100,7 @@
     "t254a": "桥侧完成：retention.plan（compute，只读；执行永不进方法面）；EV-089",
     "t254": "done：留存计划在运维道可见（自进化产出 retention-view，ap-0109）；EV-089/090",
     "t254b": "刷新钩子已接（seed 后 + 探活时）；真回读发现并修：相对路径 / 走查清文件 / 我造的 NameError",
-    "t257": "done：FAQ 沉淀与复用落地（AC-FAQ-001 20/20、6/6 变异）；矩阵缺口 FR 只剩 FR-INTEG-003"
+    "t257": "done：FAQ 沉淀与复用落地（AC-FAQ-001 20/20、6/6 变异）；矩阵缺口 FR 只剩 FR-INTEG-003",
+    "t258": "done：邮件集成无凭据部分（AC-MAIL-001 20/20、10/10 变异）；无 mail/sent 事件；发信登记 T-259=blocked"
   }
 }

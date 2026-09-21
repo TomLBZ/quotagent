@@ -86,6 +86,10 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec node host/t247-scorecard-gate.mjs "$@"
     ;;
+  mail)
+    shift
+    exec python3 tools/check-mail.py "$@"
+    ;;
   faq)
     shift
     exec python3 tools/check-faq.py "$@"

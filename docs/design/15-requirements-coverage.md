@@ -59,7 +59,7 @@
 | FR-INTAKE-003 | src/quotagent/services/intake.py | ASSUMPTION_MARKER = "[假设]" | 映射 |
 | FR-INTEG-001 | src/quotagent/kernel/delivery.py | FileTransport.stage(envelope, to) | 直引 |
 | FR-INTEG-002 | src/quotagent/services/relay.py | RelayService.accept(message, to) | 直引 |
-| FR-INTEG-003 | — | — | 缺口 |
+| FR-INTEG-003 | src/quotagent/services/mail.py | MailService.compose/enqueue/parse（AC-MAIL-001）；**发信/收信待凭据** | 直引 |
 | FR-INTEG-004 | src/quotagent/bridge.py | BridgeKernel.hello() | 映射 |
 | FR-LEDGER-001 | src/quotagent/kernel/ledger.py | Ledger.append() | 直引 |
 | FR-LEDGER-002 | src/quotagent/kernel/ledger.py | Ledger.project(view, from_seq, to_seq) | 直引 |
@@ -149,6 +149,8 @@
 
 > 更新（T-257）：`FR-CLARIFY-004` 已落地（`services/faq.py` + `AC-FAQ-001`）。
 
+> 更新（T-258）：`FR-INTEG-003` 拆两半 —— **无凭据部分已落地**（`services/mail.py` + `AC-MAIL-001`）；**发信/收信仍待 SMTP/IMAP 凭据**（登记为 T-259，属人工输入）。
+
 ## 3. 缺口与存疑登记
 
 > 门要求：状态为【缺口】【存疑】的 FR **必须**在本节逐条登记，且状态只能取 直引/映射/缺口/存疑。
@@ -159,7 +161,7 @@
 | FR-EVIDENCE-004 | src/quotagent/services/retention.py、src/quotagent/services/retention_exec.py | 计划侧（AC-AUDIT-003）+ 执行侧（AC-AUDIT-005），两侧均有门 | 直引 |
 | FR-NEGO-001 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |
 | FR-NEGO-002 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |
-| FR-INTEG-003 | 缺口 | — | P2 规划内未做（T-301：邮件集成） |
+| FR-INTEG-003 | src/quotagent/services/mail.py | MailService.compose/enqueue/parse（AC-MAIL-001）；**发信/收信待凭据** | 直引 |
 
 ## 4. 本次新增的 P2 需求（12 件无归属插件 + 1 条总纲）
 

@@ -54,7 +54,7 @@
 | 层 | 归属 | 说明 |
 |---|---|---|
 | `src/quotagent/kernel/*.py` | 内核（账本唯一写入者、事件总线、插件宿主、QEP、交付） | 内核不可自改（ADR-0002）；`kernel.*` 冻结面 |
-| `src/quotagent/services/*.py` | 业务服务（measures/norm/rfq/intake/realm/approval/costmodel/pricing/commitments/deviation/compare/guard/evaldata/evalmetrics/scenarios/relay/sync/clarify/quotes/capacity/terms/change/export/retention/retention_exec/negotiation/**faq**）——`negotiation.py`（谈判轮次与让步，T-256）、`faq.py`（澄清 FAQ 沉淀与复用，T-257）——`retention.py`（留存与销毁判定器，T-252）当前只实现**判定**：其 AC-AUDIT-003 含"销毁生效后不可再读"，**执行侧未实现故该 AC 未标绿**，执行侧见清单 T-253 | 每个文件 = 一个功能单元；新增服务必须带 AC（`tools/verify.sh ac-registry`） |
+| `src/quotagent/services/*.py` | 业务服务（measures/norm/rfq/intake/realm/approval/costmodel/pricing/commitments/deviation/compare/guard/evaldata/evalmetrics/scenarios/relay/sync/clarify/quotes/capacity/terms/change/export/retention/retention_exec/negotiation/faq/**mail**）——`negotiation.py`（谈判轮次与让步，T-256）、`faq.py`（澄清 FAQ 沉淀与复用，T-257）、`mail.py`（邮件集成无凭据部分，T-258，**发信待凭据**）——`retention.py`（留存与销毁判定器，T-252）当前只实现**判定**：其 AC-AUDIT-003 含"销毁生效后不可再读"，**执行侧未实现故该 AC 未标绿**，执行侧见清单 T-253 | 每个文件 = 一个功能单元；新增服务必须带 AC（`tools/verify.sh ac-registry`） |
 | `src/quotagent/qa/checks_*.py` | 各 AC 的断言实现 | 改导入清单后必须立刻跑 `tools/verify.sh ac-registry` |
 | `src/quotagent/g1side.py`、`src/quotagent/bridge.py` | 走查单侧进程 / 内核桥端点 | 见 `docs/work/deployment-manual.md` |
 

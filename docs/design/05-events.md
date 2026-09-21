@@ -100,6 +100,9 @@
 | `faq/entry-published` | `emit` | FAQ 条目发布（human: 来源；带 package_id + rfq_rev 版本绑定） | 与 `faq/*` 同族；复用是读不是写（D-051） |
 | `faq/reuse-served` | `emit` | FAQ 复用命中（观测事件，不改任何状态） | 与 `faq/*` 同族；复用是读不是写（D-051） |
 | `faq/reuse-refused` | `emit` | FAQ 复用被拒（跨版本/未发布；带 reason + next_action） | 与 `faq/*` 同族；复用是读不是写（D-051） |
+| `mail/queued` | `emit` | 邮件入队（幂等；带 body_sha256 与 realm） | 与 `mail/*` 同族；**没有 `mail/sent`**（本轮无发信能力，D-052） |
+| `mail/refused` | `emit` | 投递被拒/不可用（无传输实现时必走这条；**没有 mail/sent**） | 与 `mail/*` 同族；**没有 `mail/sent`**（本轮无发信能力，D-052） |
+| `mail/parsed` | `emit` | 入站报文解析留痕（候选，不等于已受理） | 与 `mail/*` 同族；**没有 `mail/sent`**（本轮无发信能力，D-052） |
 | `award/intent-proposed` | emit | ✔ | `ctx.award` → 对方 | Intent，可撤回 |
 | `award/intent-withdrawn` | emit | ✔ | `ctx.award` | 意向撤回（可复：再次提出得新意向） |
 | `award/commit-requested` | serial | live | `ctx.award` → 人工门 | 需 `approval/granted` 才能推进（名称与事件表一致：`award/committed` 与 `commit-requested` 成对） |

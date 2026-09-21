@@ -13,5 +13,18 @@ EV-094 T-258 邮件集成（无凭据部分）：契约 + AC + 实现
 直接接 smtplib 发信（需凭据且收发是人的决定）· 静默清洗头里换行（掩盖注入）·
 把附件二进制写进账本 body（账本是事实源不是文件仓库）· 解析后自动受理为 RFQ（未经人确认不得成为事实）
 
-[3] 实现证据
+[3] 实现证据（T-258）
+· `src/quotagent/services/mail.py`（58079 B，
+  sha256 5d66f2ca3d09d109…）
+· `src/quotagent/qa/checks_mail.py`（67873 B，
+  sha256 6f4a00fe3c315e60…）→ `AC-MAIL-001`
+· 事件两侧登记：`05-events.md` + `kernel/events.py`（mail/queued、mail/refused、mail/parsed；**无 mail/sent**）
+· `tools/check-mail.py` + `verify.sh mail`；覆盖矩阵 `FR-INTEG-003` 拆两半（无凭据部分已落地）
+$ tools/verify.sh mail → exit=0
+{"ac": "AC-MAIL-001", "exit": 0, "passed": 20, "total": 20, "failures": []}
+断言 20/20 通过
+
+[4] 仍然做不到的事（登记为 T-259，属人工输入）
+真正发信/收信需要 SMTP/IMAP 凭据，且"发给谁/收谁的"是人的决定；
+`deliver()` 在没有传输实现时**只会**返回 unavailable + reason + next_action，并落 `mail/refused`。
 （待 T-258 实现轮次落地后追加：服务哈希、机检断言数与变异自证、事件两侧登记、矩阵转正。）
