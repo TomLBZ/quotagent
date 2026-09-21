@@ -173,6 +173,7 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-USERPLUG-001 | P2 | 提需求 → 产出用户空间插件 → **无人工搬运即出现在管理列表**（真 `scan()` 命中）；落一条 `userplugin/created`（body 含 `source_prompt_digest` 与 `artifact_sha256`，**不含需求正文**）；幂等（重跑标 duplicates、账本零新增、退出码 0）；manifest 非法 → `userplugin/refused`（code=manifest-invalid）且不落 created；待办件自述（description_sha256）与正文不符 → 拒绝且不因此创建账本文件  | `tools/verify.sh ac AC-USERPLUG-001` | 见 `evidence/EV-136` |
 | AC-USERPLUG-005 | P2 | 用户空间插件迭代/回滚：版本递增才落 `userplugin/upgraded`（带 `prev`）；回滚只有在**磁盘内容哈希 == 目标版本哈希**时才落 `userplugin/rolled-back`，否则 `version-not-bumped` / `rollback-content-not-restored` / `rollback-refused-modified` / `rollback-target-unknown` / `rollback-noop`；账本里不存在"不真"的回滚记录 | `tools/verify.sh ac AC-USERPLUG-005` | EV-138 |
 | AC-USERPLUG-010 | P2 | 提权（用户空间 → 系统级）：agent 发起 → `approval-ref-not-human`；引用形状错 → `approval-ref-malformed`；缺引用 → `elevate-needs-approval`；产物哈希与载荷不一致 → `shadow-hash-mismatch`；目标已存在 → `target-exists`（逐字节不覆盖）；清单 name 越界 → `target-name-mismatch`；人类 actor + 哈希一致 → **真写**并落 `userplugin/elevated`（含 `artifact_sha256`/`shadow_sha256`/`approval_ref`/`actor`）；六次拒绝全部零写账本 | `tools/verify.sh ac AC-USERPLUG-010` | EV-139 |
+| AC-AGENTRT-006 | P2 | 运行期插件三件（agent-context/agent-memory/agent-harness）**零写面/零外部副作用**（写文件/子进程/网络/随机/定时器逐类断言）；四层记忆名字与三类关键拒绝码齐全；**有界与降级契约**（`truncated`+`omitted`、`degraded`+`reason`+`next_action`、空上下文可区分）在源码与围栏门里都成立；围栏门真跑 `failures:0` 且断言 ≥22（四类反例 + 4 处变异自证）；无 Node 环境**降级而非变红** | `tools/verify.sh ac AC-AGENTRT-006` + `tools/verify.sh agent-runtime` | EV-140 |
 
 ## 7. 证据制度
 

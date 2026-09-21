@@ -36,6 +36,9 @@
 | `host/modules/admin-guard.mjs` | 系统管理道的**门卫**：token 校验（sha256 归一 + 恒定时间比较）、不透明会话（≥128 bit，非 token 派生）、失败五类**统一拒绝体**（无 oracle）、连续失败有界冷却（冷却内正确 token 也拒、结束不自动提权）、可注入假时钟 —— **subagent 生产（T-272）** | `adminGuard` | `webui`（系统管理道） | 只改本文件 |
 | `host/modules/admin-view.mjs` | 系统管理面板的**只读聚合**：阻塞（来自 Python 侧真源）与进度；降级优先、有界、确定性、按键白名单投影、不出正文与私域键 —— **subagent 生产（T-272）** | `adminView` | `webui`（`/quotagent/admin/`） | 只改本文件 |
 | `host/modules/pipeline-view.mjs` | 三域运维快照的**只读聚合**（谈判/FAQ/邮件计数与最近事件；只组合不自算、降级优先、有界、确定性）——**第九个自进化产出（subagent 生产，T-260）** | `pipelineView` | `webui`（运维视角 `/api/pipeline`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯 |
+| `host/modules/agent-context.mjs` | **agent 上下文装配由插件提供**：从**已登记的来源**有界装配 一次 agent 轮的上下文；私域/对手侧数据**明确拒绝**入上下文（有码有 `next_action`）；截断后 `counts` 仍是夹取前真值（数字不许悄悄变小）—— **subagent 生产（T-275）** | `agentContext` | `agent-runtime` profile | 只改本文件 |
+| `host/modules/agent-memory.mjs` | **agent 记忆四层由插件提供**：`session`（只在内存，任何 persist 一律拒）/ `project`（**只读**，是账本投影）/ `policy`（**只人类可写**）/ `cross_party`（只走协议，直接读另一侧即拒）—— **subagent 生产（T-275）** | `agentMemory` | `agent-runtime` profile | 只改本文件 |
+| `host/modules/agent-harness.mjs` | **agent harness 由插件提供**：有界确定性骨架 （`plan()`/`step()`，硬上限 max_steps/max_bytes）；每步产一条**宿主内存**决策日志（环缓冲，**不落盘、不落账本**），日志不得出现凭据 —— **subagent 生产（T-275）** | `agentHarness` | `agent-runtime` profile | 只改本文件 |
 | `host/modules/webui.mjs` | 双方视角 WebUI（承包商/供应商两个路由；只读账本） | `webui` | `webui` | 只改本文件 + `host/lib/ledger-view.mjs`；接入见 `docs/work/deployment-manual.md` |
 
 目录即清单：新增功能 = 新增 `host/modules/<name>.mjs`（`host/modules/index.mjs` 自动发现），不必改中心清单；模块被哪个 profile 挂载仍写在 `host/profiles.mjs`（组成即数据，ADR-0015）。

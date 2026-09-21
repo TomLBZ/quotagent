@@ -50,6 +50,15 @@ export const PROFILES = {
       transport: { kind: 'file-drop', dir: 'inbox' },
     },
   },
+  'agent-runtime': {
+    role: 'agent-runtime',
+    label: 'agent 运行期（上下文 / 记忆四层 / harness）',
+    realm: 'contractor:con-B',
+    ledger: 'ledger-contractor.jsonl',
+    modules: ['config', 'frozen', 'agent-context', 'agent-memory', 'agent-harness'],
+    sidecar: 'read-only',
+    config: {},
+  },
   relay: {
     role: 'relay',
     label: '中转（不解析 body）',

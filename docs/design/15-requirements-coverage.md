@@ -148,6 +148,7 @@
 | FR-USERPLUG-001 | tools/userplugin-record.py + host/lib/user-space.mjs（scan/列表） | 见 AC-USERPLUG-001 | 直引 |
 | FR-USERPLUG-005 | tools/userplugin-record.py + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-005 | 直引 |
 | FR-USERPLUG-010 | tools/userplugin-elevate.py + host/modules/user-plugin-manager.mjs | 见 AC-USERPLUG-010 | 直引 |
+| FR-AGENTRT-006 | host/modules/agent-context.mjs + host/modules/agent-memory.mjs + host/modules/agent-harness.mjs | 见 AC-AGENTRT-006 | 直引 |
 
 ## 2. 插件归属
 
@@ -155,6 +156,9 @@
 |---|---|---|
 | approval-digest | FR-UX-001 | 部分 |
 | user-plugin-manager | FR-USERPLUG-003、FR-USERPLUG-004、FR-USERPLUG-006、FR-USERPLUG-008（T-268 subagent 产出） | 强 |
+| agent-context | FR-AGENTRT-006（有界/降级）| 部分 |
+| agent-memory | FR-AGENTRT-006（有界/降级）| 部分 |
+| agent-harness | FR-AGENTRT-006（有界/降级）| 部分 |
 | plugin-market | FR-MARKET-001、FR-MARKET-002、FR-MARKET-003、FR-MARKET-004、FR-MARKET-005、FR-MARKET-006（T-267 subagent 产出） | 强 |
 | admin-guard | FR-ADMIN-002、FR-ADMIN-007、FR-ADMIN-008、FR-ADMIN-009、FR-ADMIN-010（T-272 subagent 产出） | 强 |
 | admin-view | FR-ADMIN-001、FR-ADMIN-003、FR-ADMIN-004（T-272 subagent 产出） | 强 |

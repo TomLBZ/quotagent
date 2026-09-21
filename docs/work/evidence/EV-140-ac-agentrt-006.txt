@@ -1,0 +1,91 @@
+EV-140 AC-AGENTRT-006 运行期插件（上下文 / 记忆四层 / harness）的有界与显式降级
+
+命令：`tools/verify.sh ac AC-AGENTRT-006` + `tools/verify.sh agent-runtime`
+
+[1] AC（有 Node）
+```
+: "命中=[]"
+    },
+    {
+      "name": "② 宿主模块零「网络」（\\bfetch\\(|node:http|node:net|https…）",
+      "ok": true,
+      "detail": "命中=[]"
+    },
+    {
+      "name": "② 宿主模块零「随机」（Math\\.random|crypto\\.randomBytes|r…）",
+      "ok": true,
+      "detail": "命中=[]"
+    },
+    {
+      "name": "② 宿主模块零「定时器」（setTimeout|setInterval|setImmediat…）",
+      "ok": true,
+      "detail": "命中=[]"
+    },
+    {
+      "name": "③ 四层记忆名字齐全（session / project / policy / cross_party）",
+      "ok": true,
+      "detail": "layers={\"'session'\": True, \"'project'\": True, \"'policy'\": True, \"'cross_party'\": True}"
+    },
+    {
+      "name": "③ 三类关键拒绝码齐全（会话落盘 / 策略只人写 / 私域与跨方不进上下文）",
+      "ok": true,
+      "detail": "codes={'memory-session-persist-refused': True, 'memory-policy-human-only': True, 'context-private-refused': True, 'context-cross-party-refused': True}"
+    },
+    {
+      "name": "④ 围栏门真跑：`failures:0` 且断言数 ≥22",
+      "ok": true,
+      "detail": "total=22 failures=0 rc=0 err=None"
+    },
+    {
+      "name": "⑤ 围栏门含四类反例与变异自证机制（不是空壳门）",
+      "ok": true,
+      "detail": "markers={'反例': True, '变异': True, 'restored': True, 'MUTATION': True}"
+    },
+    {
+      "name": "⑥ 有界/降级契约在模块源码里齐全（截断报数、degraded+reason+next_action、空上下文可区分）",
+      "ok": true,
+      "detail": "contract={'truncated': True, 'omitted/丢条数': True, 'degraded': True, 'reason': True, 'next_action': True, '空上下文区分（empty/empty-context）': True}"
+    },
+    {
+      "name": "⑦ 围栏门里有『截断/丢条数/上限』的断言（不是只测快乐路径）",
+      "ok": true,
+      "detail": "marks={'truncated': True, 'omitted': True, 'max_steps': True, 'maxSteps': True}"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-AGENTRT-006",
+  "phase": "P2",
+  "title": "运行期插件的有界与显式降级：截断必须报数、不可用必须 degraded+reason，空上下文不得报 ok:true",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+
+[2] AC（无 Node：降级而非变红）
+```
+ason+next_action、空上下文可区分）",
+      "ok": true,
+      "detail": "contract={'truncated': True, 'omitted/丢条数': True, 'degraded': True, 'reason': True, 'next_action': True, '空上下文区分（empty/empty-context）': True}"
+    },
+    {
+      "name": "⑦ 围栏门里有『截断/丢条数/上限』的断言（不是只测快乐路径）",
+      "ok": true,
+      "detail": "marks={'truncated': True, 'omitted': True, 'max_steps': True, 'maxSteps': True}"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-AGENTRT-006",
+  "phase": "P2",
+  "title": "运行期插件的有界与显式降级：截断必须报数、不可用必须 degraded+reason，空上下文不得报 ok:true",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+```
+
+[3] 宿主围栏门
+```
+null,null,null]；dispose 后=[\"context-disposed\",\"memory-disposed\",\"memory-session-persist-refused\",\"harness-disposed\",\"harness-disposed\"]"},{"name":"22 四类反例留痕汇总：①会话落盘被拒（`memory-session-persist-refused`）②策略由 agent 写入被拒（`memory-policy-human-only`）③私域/对手侧不进上下文（`context-private-refused` / `context-cross-party-refused`）④上限生效（`harness-max-steps-reached`）与凭据不进日志（`harness-credential-refused`）**各自都留下了** `agentrt/<层>-refused` 事件，且**每条都带 code 与 next_action**（留痕真源是内存事件流；落账本由 Python 侧做，H1）","ok":true,"detail":"留痕 92 条；六类覆盖=[\"memory-session-persist-refused\",\"memory-policy-human-only\",\"context-private-refused\",\"context-cross-party-refused\",\"harness-max-steps-reached\",\"harness-credential-refused\"]；带 code+next_action 的=43/92；事件种类=[\"agentrt/source-registered\",\"agentrt/context-refused\",\"agentrt/context-assembled\",\"agentrt/context-truncated\",\"agentrt/degraded\",\"agentrt/context-disposed\",\"agentrt/memory-written\",\"agentrt/memory-refused\",\"agentrt/memory-proposed\",\"agentrt/memory-rebuilt\",\"agentrt/memory-disposed\",\"agentrt/harness-planned\",\"agentrt/harness-refused\",\"agentrt/harness-step\",\"agentrt/harness-disposed\"]"}],"passed":22,"total":22,"failures":0}
+
+```

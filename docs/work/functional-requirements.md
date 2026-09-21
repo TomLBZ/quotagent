@@ -190,6 +190,7 @@
 | FR-USERPLUG-001 | 自然语言需求 → 产出用户空间插件 → **完成即自动进列表**（无人工搬运）；真源 `user-space/<ns>/<plugin>/plugin.json`；落 `userplugin/created`（含 `source_prompt_digest` 与产物哈希），同哈希幂等 | must | P2 | AC-USERPLUG-001 |
 | FR-USERPLUG-005 | P2 | 用户空间插件的**迭代与回滚**：版本号递增才允许产物变更（同版本不能对应两个产物）；回滚只能回到历史里真实存在过的版本，且**只有磁盘内容已还原成该版本**时才登记 —— 账本不记不真的事 | AC-USERPLUG-005 |
 | FR-USERPLUG-010 | P2 | 用户空间插件**提权**为系统级插件：管理面只产待办载荷（零写面）；真正写树由 `tools/userplugin-elevate.py` 执行 —— 必须**人类 actor** + `ap-NNNN` 人工门引用 + **影子哈希与现算产物哈希一致**（陈旧载荷/被改产物一律拒绝）；目标只能是 `<name>.mjs`，**已存在即拒绝（不覆盖）**，越界写面不可达 | AC-USERPLUG-010 |
+| FR-AGENTRT-006 | P2 | **有界 + 显式降级**（运行期插件）：上下文切片条数/记忆条目数/单条字节数上界必须声明；超界**截断并报被丢条数**（不得静默丢）；无法组装时 `degraded:true` + `reason` + `next_action`；**空上下文不得报 `ok:true`**（"确实没内容"与"没组装出来"必须可区分） | AC-AGENTRT-006 |
 ## 7. 阶段分布（用于排期）
 
 | 阶段 | must 数 | 核心内容 |
