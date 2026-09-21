@@ -47,9 +47,54 @@ const html = (title, body, prefix) => `<!doctype html><html lang="zh"><head><met
 code{background:#f3f3f3;padding:.1em .3em;border-radius:3px}table{border-collapse:collapse;width:100%}
 td,th{border:1px solid #ddd;padding:.35rem .5rem;text-align:left;font-size:13px}
 nav a{margin-right:1rem}</style></head><body><nav>
-<a href="${prefix}/">总览</a><a href="${prefix}/contractor/">承包商视角</a><a href="${prefix}/supplier/">供应商视角</a>
+<a href="${prefix}/">总览</a><a href="${prefix}/start/">上手（token／配置放哪里？）</a>
+<a href="${prefix}/contractor/">承包商视角</a><a href="${prefix}/supplier/">供应商视角</a>
 <a href="${prefix}/admin/">系统管理</a><a href="${prefix}/api/status">/api/status</a><a href="${prefix}/api/health">/api/health</a>
 </nav><h1>${title}</h1>${body}</body></html>`
+
+/** 上手页（**未提权也能看**）：三步上手 + 提权 token 放哪里 + 配置/凭据放哪里 + 四个视图能做什么。
+ *  只讲机制与命令，**不显示任何状态位/凭据值**（宿主零写面、零凭据）。 */
+function onboardingHtml(prefix, views) {
+  const rows = views.map((v) => {
+    const can = { contractor: '看本侧待办/事件/报价/待批摘要；准备批准材料（**批准本身在终端做人签**）',
+      supplier: '看本侧待办/事件/自己的报价；提交澄清与报价草稿（**提交与定标在终端做人签**）',
+      ops: '三域流水、留存计划、自进化日志、证据索引（只读）',
+      admin: '提权后：插件市场、用户空间插件装卸/迭代、阻塞提交、跨道切换（**写操作只落待处理项，由 Python 侧消费**）' }
+    return `<tr><td><code>${prefix}/${v}/</code></td><td>${can[v] ?? '（未登记）'}</td></tr>`
+  }).join('')
+  return `<h2>三步上手</h2>
+<ol>
+<li><b>先看今天要处理的</b>：<a href="${prefix}/contractor/">承包商视角</a> ·
+<a href="${prefix}/supplier/">供应商视角</a>（这两页各只有一个视图，不需要登录）。</li>
+<li><b>要以管理员身份操作时，先提权</b>：见下节「管理员 token 放哪里」。</li>
+<li><b>要改成自己的配置／接自己的凭据</b>：见下节「配置与凭据放哪里」。</li>
+</ol>
+<h2>管理员 token 放哪里</h2>
+<p>token **不在这个页面里**，也不在浏览器里；它只有两条来源（二选一，环境变量优先）：</p>
+<pre>① 环境变量：   QUOTAGENT_ADMIN_TOKEN=&lt;你的随机串&gt;   （Hermes 容器里可用 /workspace/config.yaml 或部署脚本注入）
+② 0600 文件：  /workspace/config/quotagent-admin-token   （可用 QUOTAGENT_ADMIN_TOKEN_FILE 覆盖路径）
+   生成示例：  head -c 32 /dev/urandom | base64 &gt; /workspace/config/quotagent-admin-token &amp;&amp; chmod 600 /workspace/config/quotagent-admin-token</pre>
+<p>文件权限**不是 0600 会被拒绝加载**（fail-closed）；两条链都没有 = 管理员功能未启用，
+系统管理面板会把这件事本身当成一条阻塞项报出来（「available:false」 + 「next_action」）。</p>
+<p>放好之后这样验证：<code>curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8093/quotagent/admin/</code>
+→ <code>401</code> = 未提权（正常，说明门卫在工作）；提权请在 <a href="${prefix}/contractor/">任一侧页面</a>下方的表单里粘贴 token，
+成功后 cookie 只对 <code>${prefix}/admin/**</code> 生效。</p>
+<h2>配置与凭据放哪里</h2>
+<pre>项目/插件配置（YAML）： /workspace/config.yaml          ← 字段名见 /quotagent/admin/api/config（提权后）
+管理员 token（凭据）：  /workspace/config/quotagent-admin-token（0600，路径可用 QUOTAGENT_ADMIN_TOKEN_FILE 覆盖）
+用户空间插件凭据：      作用域键 cred:&lt;ns&gt;/&lt;plugin&gt;:&lt;key&gt;（插件只能解析自己作用域内的键）</pre>
+<p>需要凭据才能工作的功能（**在接上之前一律如实报未连接，不会假装健康**）：</p>
+<pre>· 邮件收发（SMTP/IMAP）：未配置 → mail 传输 available:false / reason=mail-transport-unavailable / next_action=配置凭据后接入
+· Jev 建议层：未配置 key → 面板里作为一条阻塞项出现（不是在日志里悄悄失败）</pre>
+<p>阻塞项可以在 <a href="${prefix}/admin/">系统管理面板</a>里**直接提交解决**（提交只落一个 0600 待处理项，
+由 Python 侧消费并落账本 「admin/block-resolved」；宿主自己不写账本）。</p>
+<h2>四个视图各能做什么</h2>
+<table><tr><th>路由</th><th>能做什么</th></tr>${rows}</table>
+<p><small>机器可读的路由表：<a href="${prefix}/api/routes">${prefix}/api/routes</a>。
+需要人签的动作（批准、提交报价、定标、发 PO、变更批准）**永远只在终端**完成 —— 浏览器只帮你准备好材料，
+不会替你签。</small></p>`
+}
+
 
 export function apply(ctx, config) {
   const projection = ctx.projection            // 投影服务（真源在 host/modules/projection.mjs）
@@ -188,6 +233,43 @@ export function apply(ctx, config) {
     const json = (code, payload) => send(code, 'application/json; charset=utf-8',
       JSON.stringify(payload, null, 2) + '\n')
 
+    if (path === '/api/routes') {
+      // 路由表（**静态声明**，只列本模块真的在服务的路由；新增路由必须同步这里）
+      return json(200, {
+        service: 'quotagent-webui', route_prefix: prefix, source: 'host/modules/webui.mjs',
+        views: config.views,
+        routes: [
+          { path: `${prefix}/`, method: 'GET', auth: 'none', what: '总览（各视图健康与账本校验）' },
+          { path: `${prefix}/start/`, method: 'GET', auth: 'none', what: '上手：三步 + token/配置/凭据放哪里' },
+          ...config.views.map((v) => ({ path: `${prefix}/${v}/`, method: 'GET', auth: 'none', what: `${v} 视角首页` })),
+          { path: `${prefix}/api/health`, method: 'GET', auth: 'none', what: '健康' },
+          { path: `${prefix}/api/status`, method: 'GET', auth: 'none', what: '状态与账本校验' },
+          { path: `${prefix}/api/obs`, method: 'GET', auth: 'none', what: '运行期观测（只读）' },
+          { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
+          { path: `${prefix}/admin/api/session`, method: 'GET', auth: 'admin-session', what: '会话探测' },
+          { path: `${prefix}/admin/api/elevate`, method: 'POST', auth: 'token', what: '用管理员 token 换不透明会话（cookie 只对 admin 前缀生效）' },
+          { path: `${prefix}/admin/api/blocks`, method: 'GET', auth: 'admin-session', what: '阻塞与进度面板' },
+          { path: `${prefix}/admin/api/blocks/<block_id>/resolve`, method: 'POST', auth: 'admin-session', what: '提交解阻塞（只落 0600 待处理项，Python 侧消费）' },
+          { path: `${prefix}/admin/api/market`, method: 'GET', auth: 'admin-session', what: '插件市场（只读）' },
+          { path: `${prefix}/admin/api/user-plugins`, method: 'GET', auth: 'admin-session', what: '用户空间插件列表' },
+          { path: `${prefix}/admin/api/user-plugins/<load|unload|reload>`, method: 'POST', auth: 'admin-session', what: '装载/卸载/重载（命名空间实例）' }],
+        write_surface: { browser_writable: [`${prefix}/admin/**`],
+          note: '浏览器永远不能签的五个动作：批准 / 提交报价 / 定标 / 发 PO / 变更批准（人工门在终端）' },
+      })
+    }
+    if (path === '/start' || path === '/start/') {
+      // 上手页：**未提权也能看**（只讲机制与命令，不显示任何状态位与凭据值）
+      send(200, 'text/html; charset=utf-8',
+        '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
+        + '<title>quotagent 上手</title><style>body{font-family:system-ui,sans-serif;margin:1.5rem;max-width:60rem}'
+        + 'code,pre{background:#f3f3f3;padding:.1em .3em;border-radius:3px}pre{padding:.6rem;overflow:auto}'
+        + 'table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:.35rem .5rem;'
+        + 'text-align:left;font-size:13px}nav a{margin-right:1rem}</style></head><body>'
+        + `<nav><a href="${prefix}/">总览</a><a href="${prefix}/start/">上手</a>`
+        + `<a href="${prefix}/contractor/">承包商视角</a><a href="${prefix}/supplier/">供应商视角</a>`
+        + `<a href="${prefix}/admin/">系统管理</a></nav>`
+        + '<h1>quotagent 上手</h1>' + onboardingHtml(prefix, config.views) + '</body></html>')
+    }
     if (path === '/api/health') return json(200, { status: 'ok', service: 'quotagent-webui' })
     if (path === '/api/obs') {
       // 运行期观测（只读）：governor 准入 / audit 留痕 / canary 分流——双方视角都可见（不含私域）
