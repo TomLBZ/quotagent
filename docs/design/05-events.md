@@ -121,6 +121,15 @@
 | `evidence/pack-exported` | emit | ✔ | `ctx.evidence` | 审计包（含 Merkle 根） |
 | `evidence/retention-archived` | `emit` | 到期归档动作落痕（T-252；判定器只管计划，落痕由执行方做） | 逐条取证；body 只出计数与哈希，**不得复活已销毁数据** |
 | `admin/block-pending` | `emit` | 阻塞进入待处理（宿主已收到用户在 UI 内提交的解决材料）——由 Python 侧写者落痕（T-265） | 逐条取证；**凭据正文与私钥一律不进账本** |
+| `userplugin/created` | `emit` | 用户在 agent panel 提出需求后，一个用户空间插件被产出并登记（body 含 `source_prompt_digest` 与产物哈希；同哈希幂等） | 逐条取证；**凭据正文与私钥一律不进账本**（只出哈希与计数） |
+| `userplugin/loaded` | `emit` | 用户空间插件被装载（独立 Context/fiber；服务键 `&lt;ns&gt;.&lt;plugin&gt;.&lt;svc&gt;`） | 逐条取证；**凭据正文与私钥一律不进账本**（只出哈希与计数） |
+| `userplugin/reloaded` | `emit` | 用户空间插件被重载（新 uid、pid 不变、不迁移旧内存状态） | 逐条取证；**凭据正文与私钥一律不进账本**（只出哈希与计数） |
+| `userplugin/unloaded` | `emit` | 用户空间插件被卸载（effects 归零、零残留；不影响其它插件） | 逐条取证；**凭据正文与私钥一律不进账本**（只出哈希与计数） |
+| `userplugin/upgraded` | `emit` | 用户空间插件迭代到新版本（版本号 + 内容哈希 + `prev` 引用） | 逐条取证；**凭据正文与私钥一律不进账本**（只出哈希与计数） |
+| `userplugin/rolled-back` | `emit` | 回滚到旧版本（只撤自有内容；被改过则 `rollback-refused-modified`） | 逐条取证；**凭据正文与私钥一律不进账本**（只出哈希与计数） |
+| `userplugin/elevation-requested` | `emit` | 管理员请求把用户空间插件提为系统级（待人工门 + 影子哈希一致） | 逐条取证；**凭据正文与私钥一律不进账本**（只出哈希与计数） |
+| `userplugin/elevated` | `emit` | 提权完成：写入面仍是 `host/modules/`，并同步落 `evolve/promoted` | 逐条取证；**凭据正文与私钥一律不进账本**（只出哈希与计数） |
+| `userplugin/refused` | `emit` | 用户空间操作被拒（body 带 code 与 next_action；四类反例：写别人目录 / 跨 instance 共享状态 / 未提权被他人加载 / 无凭据自称已连接） | 逐条取证；**凭据正文与私钥一律不进账本**（只出哈希与计数） |
 | `admin/block-resolved` | `emit` | 阻塞已解除（带人工批准引用 `ap-NNNN`；body 只出 block_id/kind/resolution_sha256，**不含凭据正文**） | 逐条取证；**凭据正文与私钥一律不进账本** |
 | `admin/block-rejected` | `emit` | 阻塞解除被拒（人工门拒绝；同样不带凭据正文） | 逐条取证；**凭据正文与私钥一律不进账本** |
 | `admin/block-expired` | `emit` | 阻塞状态过期（只减权不增权，**不存在超时自动批准/自动解除**） | 逐条取证；**凭据正文与私钥一律不进账本** |
