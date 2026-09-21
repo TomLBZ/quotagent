@@ -1,0 +1,479 @@
+# P1 执行计划（mvp demo：S1.1–S1.14 / T-201..T-215）
+
+<!-- 位置：tmp/decisions/P1-plan.md（tmp/ 不入库，本文件不参与门签署）。
+本仓库的文档门扫描仓库内**全部** .md（`tools/check-docs.py` 的 `md_files()` 只排除 .git），
+所以本文件虽然不入库仍受门约束：只引用**已落库**的 ID，不写出尚未落库的编号（见 §0.3）。 -->
+
+## 0. 前提、来源与硬约束
+
+### 0.1 来源（本计划只由这些文件支撑）
+
+| 来源 | 用到的部分 |
+|---|---|
+| `docs/work/roadmap.md` | §3 P1 目标与 S1.1–S1.14、G1 门清单、§5 门的签署与失败处理、§6 风险登记册 |
+| `docs/work/progress-checklist.md` | P1 行 T-201..T-215（任务 / FR / AC / status） |
+| `docs/work/acceptance-criteria.md` | §0 运行器契约、全部 P1 行、§7 证据制度 |
+| `docs/work/functional-requirements.md` | 全部 P1 行（must 24 条）与 §1 验证清单 V-001..V-012 |
+| `docs/design/07-self-evolution.md` | §3 六步流水线、§6 人的介入点（P1 只承接"人工门/基线设定/冲突裁决"三项） |
+| `docs/design/10-nonfunctional.md` | §1 可靠性、§2 幂等、§3 性能预算、§4 可用性、§9 环境与依赖 |
+| `docs/design/01-architecture.md` | §4 依赖与激活、§6 部署形态（profiles）、§7 P1 目标链路 |
+| `docs/design/03-exchange-protocol.md` | §4 三方协调与字段权威方、§5 幂等/顺序/重发、§6 版本协商、§7 崩溃恢复 |
+| `docs/design/11-integration-map.md` | §1 每项接入的降级路径、§4 接缝优先级、§5 失败与降级行为 |
+| `docs/design/12-documentation-standard.md` | §1 预算表（新子目录必须补预算行）、§4 何时写 ADR |
+| `.agents/skills/quotagent-implement-task/SKILL.md` + `references/pitfalls.md` | 开工流程、完成判据、已踩过的坑 |
+| `host/README.md`、`tools/cordis.sh`、`host/smoke.mjs` | 并行落地的宿主层（cordis 4.0.0-rc.10）：能力、边界、入口 |
+| `docs/design/adr/0012-direct-cordis-dependency-as-host.md` | 宿主层决策：钉版本、真实约定（冒烟钉住的差异）、职责边界、桥接协议与回滚 |
+| `USER-GOALS.md` | §3 的 `/goal` 批块格式（本计划 §8 沿用同一格式） |
+
+### 0.2 规划假设（不是结论）
+
+- **V-001..V-012 假定全部通过**，仅用于排期与优先级。任何门签署、任何指标目标值**不得**引用本假设；
+  G1 需要 V-011 的**证据文件**（真实投递演练），而不是"假定通过"。
+- V-002 决定 P1 是否有意义（roadmap §3 与 §6 的 R-001）；若现场证伪，P1 改为"人工录入 + 系统校验"路径，
+  本计划的批次顺序不变，但 B8/B9 的输入从"供应商结构化报价"换为"人工录入表单"。
+- V-004（包平均 rev > 1）与 V-009（异常低价阈值分布）若不成立，只削减 B7/B8 的样本量与阈值来源，
+  不改门。
+
+### 0.3 未落库编号的处理（有实测证据的硬约束）
+
+门的 ID 完整性检查要求每个 `前缀-NNN` 引用都在定义文件中存在。实测：把一个尚未落库的 ADR 编号与一个
+尚未落库的证据编号写进 `tmp/` 下的 .md，`tools/verify.sh docs` 立刻 `FAIL`（ID 完整性）。因此本文件：
+
+1. 宿主层 ADR 编号（ADR-0012）曾经不可引用：它落库前，`host/README.md` 的引用让门变红（宿主批次以自己的提交补上定义行后恢复绿）。本文件现已直接引用它；这条规则对**每个**尚未落库的编号继续生效；
+2. 不写出 P1 的**新证据编号**，一律写作 `EV-<NNN>`（宿主批次已占用 EV-038，P1 从其之后连续分配）；
+3. 不写出**新增 AC 行/任务行**的编号，一律写作"新增一条 AC（编号在 B1 落库后引用）"。
+
+**规则**：任何"先写计划、后落 ID"的动作都必须在同一批里补齐定义行；门红不提交。
+
+### 0.4 P1 的机器判据（一条命令串）
+
+```sh
+tools/verify.sh docs && tools/verify.sh cordis && tools/verify.sh v \
+  && tools/run.sh -m quotagent.qa suite s1..s4 && tools/verify.sh g1
+```
+
+`tools/verify.sh g1` 现在返回 2（未实现）：实现它是 **B16** 的交付物之一；它不得被用作"通过"的替身。
+
+## 1. P1 的 MVP 完成定义（DoD）
+
+### 1.1 一句话
+
+**两个真人、两台机器（或两个容器）、两条命令各自起一侧进程，走完"发布 → 澄清广播 → 升版 → 报价 →
+比价与 Flag → 授标 → 变更 → 审计包独立验证"一轮；全程任一承诺动作在任一侧都无法绕过人工门，
+私域字段在对方三处（投影 / 模型输入 / 视图）都不可见，全过程可离线重放、可被第三方独立验证。**
+
+"最小"的边界：不做 UI（命令行为界面）、不做邮件/ERP、不做谈判、不做自进化（roadmap §3 "明确不做"）。
+
+### 1.2 演示环境（G1 的最低配置）
+
+| 项 | 取值 |
+|---|---|
+| 两侧进程 | `contractor-ops`（承包商）与 `supplier-bid`（供应商）各一个进程，两个账本目录（`QUOTAGENT_ROOT` + `QUOTAGENT_TMP` 各指独立目录） |
+| 投递 | 共享目录（最低门槛）；relay profile 可选；两者语义相同（ADR-0006） |
+| 第三方 | 一台只读机器：`tools/verify-pack.sh` 独立验证审计包 |
+| 离线 | 全程无网（NFR-REL-005 / `10` §9）；宿主层依赖一次安装后不再联网 |
+| 时长 | 30–40 分钟（含对抗性演示），支持中途停机后从交接三件套恢复 |
+
+### 1.3 演示剧幕（用户视角的端到端，8 幕）
+
+| 幕 | 谁做 | 命令（示例） | 观众看到什么 | 由谁保证 |
+|---|---|---|---|---|
+| 1 发布 | 采购 | `tools/run.sh -m quotagent.qa rfq publish --profile contractor-ops` | 一个 60 条目材料包 v1 发布；分发记录给出"谁在何时收到 v1" | AC-RFQ-003 |
+| 2 澄清广播 | 供应商提问 → 采购回答 | `qa clarify ask` / `qa clarify answer` | 只发给一家时工单**关不掉**；补全在册投标人名单后关闭 | AC-CLARIFY-002 |
+| 3 升版 | 采购 | `qa rfq amend --delta` | 包升 v2；基于 v1 的报价草稿被标"基于过期版本"，不进入排序；相关工单自动重开 | AC-RFQ-002 / AC-COMPARE-001 / AC-CLARIFY-003 |
+| 4 报价 | 供应商（成本模型私域 + 人工批准数字） | `qa quote submit` | 成本构成只在本侧可见；agent 定价只是建议，人改数字后批准；无批准记录则提交抛错 | AC-TRUST-001 / AC-PRICE-001 / AC-APPROVE-002 |
+| 5 比价 | 采购 | `qa compare rank` | 排序 + 每个数字的引用链；异常低价与漏项**只标注**（Flag 不改排序）；产能/条款冲突提请人工 | AC-COMPARE-002 / AC-GUARD-001 / AC-GUARD-002 / AC-CAP-001 / AC-TERMS-001 |
+| 6 授标与 PO | 采购 → 供应商确认 → 采购签署 | `qa award propose|confirm|commit` / `qa po issue` | 意向可撤回且无义务；缺供应商确认或缺人工签署 `commit` 抛错；PO 只能由承诺派生 | AC-AWARD-001 / AC-AWARD-002 |
+| 7 变更 | 供应商提 → 采购批 | `qa change propose|approve` | 变更必须引用原报价条目与单价基准；差额可复算；未批准的变更不影响任何金额 | AC-CHANGE-001 / AC-CHANGE-002 |
+| 8 审计与对抗 | 第三方 + 现场随手试破坏 | `tools/verify-pack.sh <pack>` | 审计包独立验证 PASS；改一条历史事件即 FAIL；抽样模型输入重建 100% 一致；把私域字段塞进出站记录被拒 | AC-AUDIT-001 / AC-AUDIT-002 |
+
+### 1.4 G1 门条目的可核对化（把 roadmap §3 的门清单改写成可执行断言）
+
+| 门项 | 可核对声明 | 命令 / 证据 |
+|---|---|---|
+| G1-1 双进程完整链路 | 两个进程（两台机器或两个容器）走完 §1.3 全链路，含**一次升版**与**一次澄清广播**；两侧 `verify_chain()` 均为真；两侧账本各自可重放且结果一致 | 两侧各自的 `qa suite` 输出 + `tools/run.sh -m quotagent.qa suite s1..s4` 的双进程模式（B15）；EV 原样留存 |
+| G1-2 承诺不可绕过（两侧对抗） | 在**任一侧**分别对"提交报价 / 授标承诺 / 发 PO"三条路径做"无批准即抛错"与"有批准即成功"；不存在自动批准路径（超时三选一） | `qa ac AC-APPROVE-002`、`qa ac AC-APPROVE-001`、`qa ac AC-APPROVE-003`（两侧各跑一次） |
+| G1-3 私域不可见（非空转） | 对方的成本明细/标底/内评在**对方投影、对方模型输入、对方视图**三处都不存在，且本侧仍能读到自己那一份；把私域字段塞进出站记录会被拒 | `qa ac AC-TRUST-001`（跨进程版，B12）；负控在断言里 |
+| G1-4 审计包可独立验证 | 第三方用独立验证器验证 PASS；篡改任一事件后 FAIL；模型输入重建一致率 100% | `tools/verify-pack.sh`、`qa ac AC-AUDIT-001`、`qa ac AC-AUDIT-002` |
+| G1-5 S1..S4 全绿 + 反例留痕 | 四场景（双进程）全绿；S4 反例（注入/漏项/虚假产能/伪造批准 + 新增异常低价/条款冲突/产能日历）全部被拦且留痕；反例集只增不减（删除被拒） | `qa suite s1..s4`、`qa ac AC-GUARD-003`、`qa ac AC-EVAL-001`、`qa ac AC-EVAL-002` |
+| G1-6 指标有基线对比 | 同一指标集合给出 P0 → P1 对比，**人工改写率不上升**（alignment with `07` §3 的门） | `qa metrics --out docs/work/metrics-p1.md`，与 `docs/work/metrics-baseline.md` 并列 |
+| G1-7 一次真实投递演练 | V-011 的结论为真且有证据文件与签署人（"假定通过"不算） | `docs/work/validation/register.json` 中 V-011 置为结论 + 证据文件 |
+| G1-8 门脚本与签署记录 | `tools/verify.sh g1` 退出码 0；签署记录落证据目录与 `progress-checklist.md`；门未过不得降门（降门需 ADR） | `tools/verify.sh g1`；签署证据 `EV-<NNN>-G1-signoff.txt` |
+| （附带）宿主层状态 | 宿主入口 `tools/verify.sh cordis` 绿 + 桥接 AC 绿；若未迁移完成，必须把"未迁移面清单"登记为已知缺陷 | `tools/verify.sh cordis`；桥接 AC（B3 落库） |
+
+### 1.5 P1 非目标（开工前重读，roadmap §3 + `docs/design/00-overview.md` §5）
+
+不做邮件/ERP、不做 Web 视图、不做谈判、不做 canary/自进化、不做多租户、不做支付与税务、不做资质征信。
+P2 的任务（T-301..T-309）在本阶段一行都不实现。
+
+## 2. 批次计划
+
+### 2.0 总览（批 = 一次提交 + push + 回读）
+
+| 批 | 任务 | FR | AC（本批主张） | 依赖 | 并行组 |
+|---|---|---|---|---|---|
+| B1 | 前置文档批（无新任务 ID） | – | AC-DESIGN-001..003（门保持绿） | 宿主批次落库其 ADR | 起手 |
+| B2 | T-201 双侧进程分离 + profiles | FR-PLUGIN-004 | AC-PLUGIN-003 | B1 | 关键路径 |
+| B3 | 宿主桥接最小闭环（宿主侧装配 + 桥接 AC） | FR-RUNTIME-001 的跨运行时扩展 | 新增一条 AC（AC-INTEG 家族扩展，编号 B1 落库后引用）+ `tools/verify.sh cordis` | B2 + ADR-0012（已 accepted） | 关键路径 |
+| B4 | T-202 QEP 跨进程绑定 + receipt + 重发 + seq 空洞 + 版本协商 + 分发记录 | FR-QEP-003, FR-QEP-005, FR-QEP-006, FR-QEP-008, FR-INTEG-002, FR-RFQ-004 | AC-QEP-003, AC-QEP-004, AC-INTEG-002, AC-RFQ-003（回归 AC-QEP-002） | B3 | 关键路径 |
+| B5 | T-203 三方协调 + 字段权威方 + 冲突上报挂起 | FR-QEP-007 | AC-SYNC-001 | B4 | 关键路径 |
+| B6 | T-204 澄清工单 + 广播完整性 + 升版自动重开 | FR-CLARIFY-002, FR-CLARIFY-003 | AC-CLARIFY-002, AC-CLARIFY-003（回归 AC-CLARIFY-001） | B5 | 关键路径 |
+| B7 | T-205 包升版与"基于过期版本"标记 | FR-NORM-004, FR-RFQ-003 | AC-COMPARE-001, AC-RFQ-002（回归 AC-CLARIFY-003） | B6 | 关键路径 |
+| B8 | T-206 + T-207 异常低价 / 产能日历与交期 | FR-GUARD-001, FR-GUARD-003, FR-CAP-001, FR-CAP-002 | AC-GUARD-001, AC-GUARD-002, AC-CAP-001 | B7 | ∥ B9 |
+| B9 | T-211 条款库与条款冲突标注 | FR-TERMS-001, FR-TERMS-002, FR-GUARD-004 | AC-TERMS-001, AC-GUARD-002 | B7 | ∥ B8 |
+| B10 | T-213 授标与 PO 闭环 | FR-AWARD-001, FR-AWARD-003 | AC-AWARD-001, AC-AWARD-002（回归 AC-APPROVE-002） | B8, B9 | 关键路径 |
+| B11 | T-212 变更闭环 | FR-CHANGE-001, FR-CHANGE-002 | AC-CHANGE-001, AC-CHANGE-002 | B10 | 关键路径 |
+| B12 | T-210 人工门队列视图 + 超时策略 | FR-APPROVE-003, FR-UX-001, FR-UX-002 | AC-APPROVE-003, AC-TRUST-001（跨进程版） | B7 | ∥ B13, B14 |
+| B13 | T-208 审计包导出/独立验证 + 模型输入重建 | FR-EVIDENCE-001..003, FR-COST-003 | AC-AUDIT-001, AC-AUDIT-002, AC-COST-001 | B7（内容完整需 B11） | ∥ B12, B14 |
+| B14 | T-214 比较表导出 | FR-COMPARE-004, FR-UX-003 | AC-COMPARE-004 | B7 | ∥ B12, B13 |
+| B15 | T-209 场景集 S1..S4（双进程）+ 反例集 | FR-EVAL-001, FR-EVAL-002, FR-EVAL-004 | AC-EVAL-001, AC-EVAL-002, AC-GUARD-003 | B2..B14 | 汇聚 |
+| B16 | T-215 手册 + g1 门脚本 + P1 指标对比 + G1 签核材料 | FR-RFQ-004（实现落 B4）, FR-RFQ-005 | AC-RFQ-003（复跑）+ 门脚本 | B15 | 收尾 |
+
+**B1 为什么排第一**：本仓库的硬规则是"AC 必须先存在于 `acceptance-criteria.md` 且可执行，再实现"。
+P1 有若干覆盖缺口与契约不一致，必须在写代码前补进文档（不改门、不降 AC，只补齐映射）：
+
+1. **FR-QEP-005 / FR-QEP-006（AC-QEP-004）没有任务行**：把它们并入 T-202（同属 qep 模块），
+   并在 `roadmap.md` §3 的 S1.2 单元格补"版本协商与特性降级"；
+2. **FR-COST-003（AC-COST-001 的可解释子集）没有任务行**：并入 T-208（证据与重建同批取证）；
+3. **FR-UX-002（AC-TRUST-001 的跨进程子集）没有任务行**：并入 T-210（视图与队列同批取证）；
+4. **FR-RFQ-004/005（AC-RFQ-003）的实现落在 B4**，T-215 保留"手册 + g1 门脚本"；
+5. `acceptance-criteria.md` §0 的运行器契约里把 `tools/verify.sh g1` 写进命令表（它已在 `tools/verify.sh`
+   的用法行里，但契约表要一致）；
+6. 若 B12/B16 新增文档子目录（如 `docs/work/ops/`），必须在 `12-documentation-standard.md` §1 补预算行
+   （pitfalls 已记录"新增文档子目录是门的盲区"）。
+
+B1 的产物只有文档与一条证据；门必须绿才提交。
+
+### 2.1 各批明细
+
+每批的固定动作（不再重复）：先跑 AC 看红 → 记原始输出 → 最小实现 → 跑绿 → 取证
+`tools/run.sh -m quotagent.qa ac <AC> --evidence EV-<NNN>` → 全量回归 → 更新三处状态 →
+`tools/verify.sh docs && git add -A && git commit … && git push` → `git ls-remote origin` 回读。
+回归命令统一为 `tools/verify.sh docs && tools/run.sh -m quotagent.qa suite s1..s4`（B15 之前场景集仍是
+单进程语义，作为回归基线；重放一律在新账本上跑，避免幂等去重把"重放"变成"重复投递"）。
+
+**B2 —— 双侧进程分离 + profiles**（T-201 / FR-PLUGIN-004 / AC-PLUGIN-003）
+
+- AC：`tools/run.sh -m quotagent.qa ac AC-PLUGIN-003 --evidence EV-<NNN>`；回归 `ac AC-PLUGIN-001`、`ac AC-PLUGIN-002`。
+- 改动：新增 `src/quotagent/profiles.py`（contractor-ops / supplier-bid / relay / evaluator / minimal-mock 的
+  声明式定义）；`src/quotagent/__init__.py`（`PROFILE` 由 profile 决定）；`src/quotagent/kernel/plugin.py`
+  （`kernel/config-updated` waterfall 的否决点：否决者生效、配置未变、插件不重启）；
+  `src/quotagent/paths.py`（按 profile 解析账本/工件目录，允许 `QUOTAGENT_ROOT`/`QUOTAGENT_TMP` 覆盖）；
+  `tools/run.sh`（`--profile` / `QUOTAGENT_PROFILE`）；`qa/checks_plugin.py`；`docs/design/01-architecture.md` §6。
+- 依赖：B1。
+- 停止条件：profiles 的映射需要改内核语义 → 停下写 ADR（不得碰内核实现业务）。
+- 演示：`qa profile list` → 三套 profile 与各自账本目录；`ac AC-PLUGIN-003` → 配置更新被否决者拦下。
+
+**B3 —— 宿主桥接最小闭环**（宿主侧装配 + 桥接 AC，落地 ADR-0012 的第 3 条）
+
+- AC：`tools/verify.sh cordis`（宿主冒烟，EV-038 已留原始输出）+ 新增一条 AC（AC-INTEG 家族扩展；
+  编号在 B1 落库后引用）。断言：宿主发起一次"请求澄清"的意图 → Python 侧落账（宿主经 `tools/run.sh` 的
+  stdout JSON 与 Python 交互，协议为一行一条 JSON 的请求/响应 + `{"v":<协议版本>,"id":...}` 版本握手）；
+  宿主**不能**直接写账本（负控：注入一条写请求必须被拒且留痕）；桥接失败与版本不兼容必须**显式报错**，
+  不得静默降级。
+- 改动：新增 `src/quotagent/bridge.py`（JSON 行协议 + 版本握手 + 只接受"意图/命令"，唯一写账本者是 Python）；
+  新增 `host/bridge.mjs`、`host/profiles.mjs`；`tools/cordis.sh`（`bridge` 子命令）；
+  新增 `qa/checks_bridge.py`；`docs/design/01-architecture.md` §2/§3。
+- 依赖：B2（profiles 是桥接的装配输入）+ ADR-0012（已 accepted；其 Revisit #3 规定：宿主接管事件编排
+  若与 AC-EVT-001/002 的语义冲突，以**账本事实**为准并另写 ADR，不得靠改 AC 通过）。
+- 语义差异必须按 ADR-0012 第 2 条处理：cordis 4 的 `waterfall` 靠**可变载荷**传值、`next()` 不接受参数，
+  与 P0 Python 版 `next(work)` 不同——桥接与移植按载荷语义写，差异钉进断言。
+- 停止条件：桥接需要宿主侧持有账本写入 → 拒绝，回到本批的边界声明（账本只在 Python 侧）。
+- 演示：`tools/verify.sh cordis` → 宿主五模式与卸载无残留；`ac <桥接 AC>` → 宿主意图在 Python 账本留痕，
+  且"宿主直接写账本"被拒。
+
+**B4 —— QEP 跨进程绑定 + receipt + 重发 + seq 空洞 + 版本协商 + 分发记录**（T-202）
+
+- AC：`ac AC-QEP-003`（空洞 → 挂起 + 请求重发）、`ac AC-QEP-004`（版本交集为空 → `kernel/qep-rejected`；
+  特性降级留痕）、`ac AC-INTEG-002`（relay 不解析 body；不可达时排队重试）、`ac AC-RFQ-003`
+  （分发记录）；回归 `ac AC-QEP-002`、`ac AC-INTEG-001`。
+- 改动：`src/quotagent/kernel/delivery.py`（relay/共享目录绑定、原子写、收据、指数退避重试）；
+  `src/quotagent/kernel/qep.py`（能力交换与版本交集、`seq` 空洞表、重发请求、`kernel/qep-sent` /
+  `kernel/qep-received` / `kernel/qep-duplicate-dropped` 落账）；新增 `src/quotagent/services/relay.py`
+  （relay profile：只转发与存证，不解析 body）；`src/quotagent/services/rfq.py`（分发记录：谁/何时/哪个版本）；
+  `qa/checks_qep.py`、新增 `qa/checks_integration.py`；`qa/__main__.py`（`serve` / `watch` / `relay` 子命令）。
+- 依赖：B3。
+- 停止条件：投递语义需要"至少一次 + 幂等"之外的东西（会破坏 AC-QEP-002）→ 停。
+- 演示：两个终端各起一侧；删掉一条报文文件 → 供应商侧显示"依赖该序号的跃迁挂起 + 已请求重发"；
+  重发到达后事实只入账一次；把协议版本改成不相容 → 显式拒绝并留痕，不静默降级。
+
+**B5 —— 三方协调 + 字段权威方 + 冲突上报与挂起**（T-203 / AC-SYNC-001）
+
+- AC：`ac AC-SYNC-001`（非承诺字段按权威方合并、承诺字段挂起转人工，两种情况都留痕）。
+- 改动：新增 `src/quotagent/services/sync.py`（`base/mine/theirs` 三方协调 + 字段权威方矩阵 +
+  `sync/merged` / `sync/conflict` 落账）；`services/realm.py`（权威方判定与 realm 归属）；
+  `kernel/qep.py`（同步报文类型）；新增 `qa/checks_sync.py`。
+- 依赖：B4。
+- 演示：两侧同时改同一非承诺字段 → 自动合并留痕；改承诺字段 → 两侧都进 `pending_human` 且停止推进。
+
+**B6 —— 澄清工单 + 广播完整性 + 版本变更自动重开**（T-204）
+
+- AC：`ac AC-CLARIFY-002`（名单缺任一在册投标人 → 工单不得关闭）、`ac AC-CLARIFY-003`
+  （升版后相关工单自动重开，旧答案标"针对旧版本"）；回归 `ac AC-CLARIFY-001`。
+- 改动：新增 `src/quotagent/services/clarify.py`（工单生命周期、在册投标人名册、广播名单校验、
+  `clarification/broadcast-incomplete` 短路）；`services/rfq.py`（升版钩子）；`kernel/qep.py`；
+  新增 `qa/checks_clarify.py`。
+- 依赖：B5。
+- 演示：只发给一家 → 工单关不掉（首条错误指向"缺哪家"）；补全名单 → 关闭。
+
+**B7 —— 包版本变更与"报价基于过期版本"标记**（T-205）
+
+- AC：`ac AC-COMPARE-001`（版本不一致的报价不进排序 + `rfq/version-mismatch`）、`ac AC-RFQ-002`
+  （已发布版本不可原地改；`amend` 产生新版本与字段级 delta）；回归 `ac AC-CLARIFY-003`。
+- 改动：`services/rfq.py`（`amend` → 新版本 + 字段级 delta + 分发记录）；`services/norm.py`（rfq_rev 一致性门）；
+  `services/compare.py`（排除过期版本并留痕）；`services/pricing.py`（草稿失活标记，不自动迁移）；
+  `qa/checks_compare.py`、`qa/checks_rfq.py`。
+- 依赖：B6（升版要能重开澄清工单）。
+- 演示：发布 v2 → 基于 v1 的草稿被标"基于过期版本"、不进入排序，逐条留痕。
+
+**B8 —— 护栏扩展一：异常低价 + 产能/交期**（T-206, T-207）
+
+- AC：`ac AC-GUARD-001`（异常低价与漏项被标 Flag，且 Flag 不改变排序或状态）、`ac AC-GUARD-002`
+  （产能冲突样本被标 Flag 并提请人工；条款侧由 B9 补齐）、`ac AC-CAP-001`
+  （`firm` 交期在有效期内不可由模型变更，冲突只提请人工）。
+- 改动：`services/guard.py`（异常低价规则 + 历史基线来源可追溯）；新增 `services/capacity.py`
+  （产能日历、交期校验、firm 交期不可变）；`docs/work/scenarios/s4-counterexamples.json`（追加反例，只增）；
+  `qa/checks_guard.py`、新增 `qa/checks_capacity.py`。
+- 依赖：B7（需要归一化后的多份报价与版本门）。
+- 演示：异常低价 + 虚假产能样本 → Flag 只标注、排序不变、提请人工；模型试图改 firm 交期 → 被拒。
+
+**B9 —— 护栏扩展二：条款库与条款冲突标注**（T-211）
+
+- AC：`ac AC-TERMS-001`（条款冲突被标注并提请人工，不静默取其一）；与 B8 共同满足 `ac AC-GUARD-002`。
+- 改动：新增 `src/quotagent/services/terms.py`（条款库：付款/质保/罚则的最小集 + 默认条款应用 +
+  冲突标注）；`qa/checks_terms.py`；`services/compare.py`（条款项进入差异说明）。
+- 依赖：B7。
+- 演示：两侧条款冲突 → 标注 + 提请人工；不选边、不改金额。
+
+**B10 —— 授标与 PO 闭环**（T-213）
+
+- AC：`ac AC-AWARD-001`（缺供应商确认或缺人工签署时 `commit` 抛错；意向可撤回且无义务）、
+  `ac AC-AWARD-002`（PO 只能由承诺派生，手工构造被拒）；回归 `ac AC-APPROVE-002`。
+- 改动：新增 `src/quotagent/services/award.py`（`award/intent` → `award/confirmed|declined` → 人工签署 →
+  `award/committed` → `po/issued`）；`services/commitments.py`（PO 派生校验）；`kernel/qep.py`（承诺类报文
+  缺批准即拒收）；新增 `qa/checks_award.py`。
+- 依赖：B8、B9（Flag 是评审输入）。
+- 停止条件：承诺路径出现任何旁路便利 → 停（INV-005）。
+- 演示：意向发出 → 撤回（无义务）→ 重新发出 → 供应商确认 → 人工签署 → 承诺 → PO 派生；手工建 PO 被拒。
+
+**B11 —— 变更闭环**（T-212）
+
+- AC：`ac AC-CHANGE-001`（必须引用原报价条目与单价基准，缺引用即拒绝）、`ac AC-CHANGE-002`
+  （差额可按原单价复算；未经批准的变更不影响任何金额）。
+- 改动：新增 `src/quotagent/services/change.py`（`change/proposed` → `change/priced` → 人工批准 →
+  `change/approved`；`basis_unit_price_ref` 强校验）；`services/commitments.py`（变更对承诺金额的影响）；
+  新增 `qa/checks_change.py`。
+- 依赖：B10（需要已成立的承诺才有变更对象）。
+- 演示：变更引用缺失 → 拒绝；补引用 → 差额复算结果与手算一致；未批准 → 金额不变。
+
+**B12 —— 人工门队列视图 + 超时策略**（T-210）
+
+- AC：`ac AC-APPROVE-003`（待批期间 agent 可继续其它工作；超时策略三选一生效且**不存在自动批准**）、
+  `ac AC-TRUST-001`（跨进程版：对方私域在投影/模型输入/视图三处都不存在，且本侧仍能读到；含负控）。
+- 改动：`services/approval.py`（队列快照：动作、摘要、引用链、Flag；超时策略三选一）；`services/realm.py`
+  （视图侧过滤）；`qa/__main__.py`（`queue` 子命令）；新增 `qa/checks_approval.py`；`qa/checks_cost.py`（P1 子集）。
+- 依赖：B7（B10/B11 之后演示更完整）。
+- 演示：`qa queue` → 待批准项（含引用链与 Flag）随时可查，agent 同时在跑别的活；超时到期走到策略分支，
+  全程无"自动批准"。
+
+**B13 —— 审计包导出/独立验证 + 模型输入重建**（T-208）
+
+- AC：`ac AC-AUDIT-001`（篡改任一历史事件后链校验为假、审计包独立验证失败）、`ac AC-AUDIT-002`
+  （抽样模型输入重建一致）、`ac AC-COST-001`（可解释性子集）。
+- 改动：`src/quotagent/kernel/evidence.py`（事件切片 + Merkle 根 + 清单 + 独立验证器）；
+  新增 `tools/verify-pack.sh`（第三方只读入口，需要 Python 与仓库副本，不需要私域数据）；
+  `qa/checks_audit.py`、`qa/checks_cost.py`。
+- 依赖：B7（机制），内容完整需 B11。
+- 演示：导出 → 第三方验证 PASS；改一条事件 → FAIL；抽样 20 次重建一致。
+
+**B14 —— 比较表导出**（T-214 / AC-COMPARE-004）
+
+- AC：`ac AC-COMPARE-004`（导出的比较表与账本数据逐行一致，含 Flag 与差异说明）。
+- 改动：`services/compare.py`（导出器，内容寻址、无墙钟时间）；`qa/__main__.py`（`export` 子命令）；
+  `qa/checks_compare.py`。
+- 依赖：B7。
+- 演示：`qa export --format csv` → 打开文件逐行对照账本（含 Flag 与差异说明）。
+
+**B15 —— 场景集 S1..S4（双进程）+ 反例集**（T-209）
+
+- AC：`tools/run.sh -m quotagent.qa suite s1 .. s4`（双进程模式，同输入重放两次结果一致 →
+  AC-EVAL-001）、`ac AC-EVAL-002`（基线报告可生成；反例集只增不减，删除被拒）、`ac AC-GUARD-003`
+  （S4 反例全部被拦且留痕）。
+- 改动：`services/scenarios.py`（双进程驱动：两个 `QUOTAGENT_ROOT` + 共享投递目录；每次新账本）；
+  `services/evaldata.py`（反例集追加语义）；`docs/work/scenarios/s4-counterexamples.json`；
+  `qa/checks_eval.py`；`qa/__main__.py`（`suite --processes 2`）。
+- 依赖：B2..B14。
+- 停止条件：场景要"为通过而放宽断言" → 停；改为补反例（只增不减）。
+- 演示：一条命令跑完四场景，现场看到"两侧进程各自的账本 + 同一 digest"。
+
+**B16 —— 手册 + g1 门脚本 + 指标对比 + G1 签核材料**（T-215）
+
+- AC：`ac AC-RFQ-003`（复跑，含截止时间与提醒）、`tools/verify.sh g1` 退出码 0。
+- 改动：新增 `docs/work/operations.md`（一页手册：两台机器上的 5 条命令、分发记录读法、队列与超时策略、
+  relay 降级、宿主 `install/smoke`、故障恢复顺序）；新增 `src/quotagent/qa/gates.py` + `tools/verify.sh g1`；
+  `docs/work/metrics-p1.md`（P0 → P1 对比）；`docs/work/evidence/INDEX.md`；
+  `progress-checklist.md`/`handover.md`/`.agents/state.json`；若新增子目录 → 补 `12` §1 预算行。
+- 依赖：B15。
+- 附带核对：ADR-0012 的四条 Revisit conditions（正式版升级、桥接延迟预算、事件编排语义冲突、自进化 patch 机制）逐条给出当前结论。
+- 演示：`tools/verify.sh g1` 返回 0；`qa metrics --out docs/work/metrics-p1.md` 给出基线对比；
+  一位未参与的人照手册在干净机器上跑通 S1（G1-8 的隐含检验）。
+
+## 3. 并行与串行
+
+**严格串行（关键路径）**：B1 → B2 → B3 → B4 → B5 → B6 → B7 →（B8 ∥ B9）→ B10 → B11 → B15 → B16。
+
+| 为什么必须串行 | 说明 |
+|---|---|
+| B1 先于一切 | AC 必须先落库（docs-first）；且 `12` §1 与 `tools/verify.sh` 是并行批次的写热点 |
+| B2 先于 B3 | 桥接需要 profiles 作为装配输入 |
+| B3 先于 B4 | 跨进程投递要挂在装配层上（谁起进程、谁持有投递目录） |
+| B4 → B5 → B6 → B7 | 同一批内核文件（`kernel/qep.py`、`services/rfq.py`）连续修改，改完才轮到下一批；版本门（B7）依赖澄清重开（B6） |
+| B8/B9 先于 B10 | 授标评审要读 Flag（护栏）与条款冲突 |
+| B10 先于 B11 | 没有承诺就没有变更对象 |
+| B15 最后汇聚 | 双进程场景集只有在前面的能力都能跨进程走通后才有意义 |
+
+**可并行工作流（独立文件、独立 AC、独立 EV 编号）**
+
+| 工作流 | 批次 | 可并行的条件 |
+|---|---|---|
+| W-A 跨方同步与协议 | B4–B7 | 与 W-B/W-C 并行时不得改 `kernel/qep.py`、`services/rfq.py` |
+| W-B 护栏与条款 | B8 ∥ B9 | 两侧各自文件（`services/guard.py`+`capacity.py` 与 `services/terms.py`），只在 `s4-counterexamples.json` 有写冲突 → 谁先提交谁追加 |
+| W-C 证据与输出 | B12 ∥ B13 ∥ B14 | B13 在 B11 之后跑最终取证；B12 只动 `services/approval.py`+`realm.py`；B14 只动 `services/compare.py` 的导出器 |
+| W-D 宿主层 | B3 之后的宿主侧工作 | 与 W-A 并行；宿主侧不得新增账本写入路径（R-P1-02） |
+
+**写冲突面（同一时刻只允许一批持有）**：`kernel/qep.py`、`services/rfq.py`、`tools/verify.sh`、
+`docs/design/12-documentation-standard.md` §1、`docs/work/progress-checklist.md`、`handover.md`、
+`.agents/state.json`、`docs/work/evidence/INDEX.md`。
+
+## 4. 演示脚本（随批次生长）
+
+| 批后 | 命令 | 观众看到什么 |
+|---|---|---|
+| B2 | `qa profile list`、`ac AC-PLUGIN-003` | 三套 profile 与各自账本目录；配置更新被否决者拦下（配置未变、插件不重启） |
+| B3 | `tools/verify.sh cordis`、`ac <桥接 AC>` | 宿主五模式 + 卸载无残留；宿主意图在 Python 侧落账，宿主直写账本被拒 |
+| B4 | 两侧 `serve`/`watch`，人为丢一条报文 | 依赖该序号的跃迁挂起 + 重发请求；重发不产生第二条事实；版本不相容显式拒绝 |
+| B5 | 两侧同时改同一字段 | 非承诺字段按权威方合并；承诺字段两侧 `pending_human` 挂起 |
+| B6 | `qa clarify ask` → `answer`（先缺名单、后补全） | 名单不全时工单关不掉；补全后关闭 |
+| B7 | `qa rfq amend` | 包升 v2；基于 v1 的草稿被标"基于过期版本"、不进入排序 |
+| B8 | `qa compare rank --with-guards` | 异常低价/漏项/产能冲突**只标注**（排序不变）；firm 交期不可被模型改 |
+| B9 | 同上（条款样本） | 条款冲突被标注并提请人工，不静默取其一 |
+| B10 | `qa award propose|confirm|commit`、`qa po issue` | 意向可撤回；缺确认或缺签署即抛错；PO 只能由承诺派生 |
+| B11 | `qa change propose|approve` | 引用缺失即拒绝；差额复算与手算一致；未批准不影响金额 |
+| B12 | `qa queue` | 待批队列（动作/摘要/引用链/Flag）；超时三选一；无自动批准 |
+| B13 | `tools/verify-pack.sh <pack>` | 独立验证 PASS；改一条事件即 FAIL；重建一致率 100% |
+| B14 | `qa export --format csv` | 比较表逐行与账本一致（含 Flag 与差异说明） |
+| B15 | `qa suite s1..s4`（双进程） | 四场景全绿 + 两侧账本各自可重放 + S4 反例全部被拦留痕 |
+| B16 | `tools/verify.sh g1`、`qa metrics --out docs/work/metrics-p1.md` | 门脚本退出 0；P0 → P1 指标对比；手册在干净机器上可照抄 |
+
+## 5. 风险登记册
+
+### 5.1 双运行时（Python 内核 + cordis 宿主）——把系统切成两个运行时的头号风险
+
+| ID | 风险 | 影响 | 对策 | 触发信号 |
+|---|---|---|---|---|
+| R-P1-01 | 语义双实现漂移（事件五模式 / effect 回收 / 配置否决在两侧各有一套，行为不一致；已知第一处差异是 `waterfall` 传值语义：cordis 用可变载荷且 `next()` 无参，P0 Python 版 `next(work)`） | 同一断言在两侧结论不同，门失去意义 | 组合与生命周期**只**由宿主（cordis）实现，Python 侧不再扩展 plugin/events（ADR-0002 内核冻结）；差异按 ADR-0012 第 2 条钉进 `host/smoke.mjs` 与桥接 AC；对照测试：同一夹具两侧结论必须一致；冲突以账本事实为准并另写 ADR（ADR-0012 Revisit #3），不得改 AC | 对照结论分歧；`tools/verify.sh cordis` 与桥接 AC 不能同时绿 |
+| R-P1-02 | 账本双写（宿主侧直接写账本文件） | 哈希链/审计证据失效，账实不符 | 桥接协议只接受"意图/命令"，账本写入只发生在 Python 侧；桥接 AC 含负控（注入写请求必须被拒且留痕） | 宿主进程打开 ledger 文件 |
+| R-P1-03 | RC 依赖（cordis 预发布版本）API 变更 | 宿主层随时可能崩，回归不稳 | `host/package.json` 钉确切版本 + lock 入库；升级单独 commit 且先跑冒烟；无网可跑 | `tools/verify.sh cordis` 偶发失败 |
+| R-P1-04 | 第二台机器没有 Node / 不在工作区工具链里 | G1 的双机演练被环境卡住 | `QUOTAGENT_NODE` 覆盖 + 工作区 node 兜底（`tools/cordis.sh` 已实现）；一台机器只跑 Python 侧也算通过双进程；手册写明降级 | 演练机上 `node` 不存在 |
+| R-P1-05 | 确定性污染（宿主侧墙钟/异步顺序进入账本或派生数据） | 重放不一致，AC-EVAL-001 永远红 | 派生数据内容寻址（ADR-0011）；桥接消息带版本 + 序号；账本事件不使用宿主侧时间戳排序；重放在新账本上跑 | 两次重放 digest 不同 |
+| R-P1-06 | 证据归属（宿主侧行为没有 Python AC 能证明） | G1 无法签署（"没证据的 AC 不得标 passed"） | 宿主行为一律作为"被测进程"由 Python runner 驱动；`tools/verify.sh cordis` 作为独立门入口；G1 前两个入口都要绿 | 某项能力只有手工截图 |
+| R-P1-07 | 半迁移（一部分能力在宿主、一部分在 Python，真源说不清） | 后续批次互相踩，缺陷无法定位 | 分配表入 ADR（宿主：组合/生命周期/配置/视图；Python：账本/业务/AC）；G1 前输出"未迁移面清单"并登记为缺陷；禁止静默半迁移 | 同一能力两处都有实现 |
+
+### 5.2 双进程 / 双账本分离
+
+| ID | 风险 | 影响 | 对策 | 触发信号 |
+|---|---|---|---|---|
+| R-P1-08 | split-brain：同一字段双方各写各的 | 两份账本永久分歧，恢复不可能 | 字段权威方矩阵 + `sync/conflict`；承诺字段一律 `pending_human` 且双方各自一条人工记录才算成立（ADR-0003） | 同一条目两侧值不同且无 `sync/*` 事件 |
+| R-P1-09 | 幂等/序号失效（重发造成第二条事实，或越过 `seq` 空洞推进） | 事实重复或错序，审计重建失败 | `(msg_id)` 与 `(correlation_id, type, body_hash)` 双去重 + 空洞不跳号（FR-QEP-003）；回归 AC-QEP-002；重放必须在新账本 | 同一 `msg_id` 出现两条事实 |
+| R-P1-10 | 时钟不可信（两台机器时间偏差） | 顺序判断错误 | 定序只用 `seq` + `prev_hash`；`sent_at` 仅用于展示与重发窗口；超窗请求重发而非静默 | 两侧 `seq` 顺序与时间顺序矛盾 |
+| R-P1-11 | 私域跨进程泄露（成本明细/标底经出站报文或共享目录泄露） | 违反 AGENTS.md 规则 4，P1 失去意义 | 三处过滤点（投影/模型输入/视图）+ 负控（把私域字段塞进出站必须被拒）；relay 不解析 body（AC-INTEG-002） | 对方侧出现私域字段 |
+| R-P1-12 | 人工门被另一侧绕过（伪造对方批准） | 承诺可被伪造，治理失效 | 承诺冲突需双方各自一条 `human:*` 记录；AC-APPROVE-001/002 在双侧各跑；无自动批准（AC-APPROVE-003） | 单侧记录即可推进承诺 |
+| R-P1-13 | 并发写冲突（两个 agent 同时改同一批文件；宿主批次已改 `tools/verify.sh`、`12` §1，并已提交 ADR-0012 与 EV-038） | 门红、提交互相覆盖 | 写冲突面同一时刻只允许一批持有（§3）；门绿才提交（`tools/verify.sh docs && git add…` 串联短路）；未落库编号不在任何 .md 写出（**实测发生过**：宿主 ADR 落库前 `host/README.md` 的引用让门红，随后由宿主批次自己的提交恢复绿） | `tools/verify.sh docs` FAIL 且失败项指向他人文件 |
+| R-P1-14 | 崩溃恢复不可靠（一侧在报文半途崩溃） | 事实丢失或重复 | 账本重放 + `inbox/` 补入 + 未同步事件重发（同一 `msg_id`）；NFR-REL-001/002 的检验放在 B15/B16 | 重启后状态与重放结果不一致 |
+| R-P1-15 | 共享目录语义差异（网络盘 rename 不原子、半写被读到） | 解析半截报文 | 临时文件 + rename（AC-INTEG-001 回归）+ 半写不读；relay 不可达时排队退避；手册写明支持的目录类型 | 出现解析失败的报文 |
+| R-P1-16 | 两台机器部署差异（解释器/路径/权限） | 现场演不动 | `tools/bootstrap.sh` 幂等；`QUOTAGENT_ROOT`/`QUOTAGENT_TMP` 覆盖；手册的 5 条命令必须在干净机器照抄可跑 | 目标机器上 `tools/verify.sh smoke` 非绿 |
+
+### 5.3 范围、时间与证据
+
+| ID | 风险 | 影响 | 对策 |
+|---|---|---|---|
+| R-P1-17 | 范围蔓延（做成 ERP / Web / 谈判） | 交付延期 | §1.5 非目标清单每批开工前重读；P2 任务一行不做 |
+| R-P1-18 | 为了让门变绿而放松 AC | 阶段结论不可信 | 门不得降（降门需 ADR）；门红先修文档与证据；AC 变更也要留 EV |
+| R-P1-19 | 证据通胀（EV 文件多但没写回 checklist） | 门签署时对不上账 | 每个 AC 的 EV 编号写回 `progress-checklist.md` 对应行；`INDEX.md` 同步 |
+| R-P1-20 | 规模假设不成立（条目/事件量超出） | 比价超预算，演示卡顿 | NFR-PERF-001..003 在 B16 用"200 条目 × 5 报价"计时并与 `metrics-baseline.md` 对照；不达标优先"拒绝并告警"，不降精度 |
+| R-P1-21 | 人才/threshold 依赖（异常低价阈值、TCO 权重需要人给） | B8 卡住 | 阈值来自策略 patch，人设定基线；先用 `[假设]` 值并标注来源，V-009 结论回来后替换（不改 AC 强度） |
+
+## 6. 削减清单（时间不够时的砍法）
+
+**砍的顺序（自上而下，砍一层仍可在 §1.3 的剧幕上演示）**
+
+| 顺序 | 砍什么 | 砍到哪一层还能演示 | 受影响的 AC 如何交代 |
+|---|---|---|---|
+| C1 | HTTP relay（只保留共享目录投递） | 双进程 + 共享目录（`11` §1 已声明 relay 为可选） | AC-INTEG-002 保留"不解析 body"与"不可达排队重试"的本地目录版；relay 的具体传输登记为未覆盖面 |
+| C2 | 宿主层的视图与中间件（只保留装配 + profiles + 配置否决 + 桥接） | 宿主入口仍绿，演示仍走 Python CLI | 桥接 AC 照跑；宿主侧的视图类能力登记为未迁移面（R-P1-07） |
+| C3 | 条款库的规模化（只保留付款/质保/罚则三条核心条款，不做行业模板层） | 条款冲突标注与提请人工仍可见 | AC-TERMS-001 强度不变，样本数减少 |
+| C4 | 比较表的 xlsx（只做 CSV） | 导出与逐行核对仍可做 | AC-COMPARE-004 断言的是"与账本一致"，格式不影响 |
+| C5 | 产能关键路径（保留 firm 交期不可变 + 简单日历冲突） | 产能冲突 Flag 与"提请人工"仍可见 | AC-CAP-001 的强断言（firm 不可变）保留；关键路径计算登记为未实现 |
+| C6 | 超时提醒的自动化（保留三选一策略 + "无自动批准" + 队列视图） | 超时策略分支仍可演示 | AC-APPROVE-003 的"无自动批准"必须保留 |
+| C7 | 队列视图的交互（只做只读快照 + 过滤） | 待批项可见、引用链与 Flag 可查 | AC-APPROVE-003 / FR-UX-001 的可读性要求保留 |
+| C8 | S2/S3 的规模维度（缩到 20 条目，S1 全量、S4 全部反例不动） | 四场景仍全绿 | AC-EVAL-001 的"全绿 + 确定性"保留 |
+
+**绝不许假（任何情况下都不得降级或伪造）**
+
+1. 人工批准记录（不得代签、不得自动批准、不得"临时旁路"）；
+2. 私域边界（三处过滤 + 负控；不得用"删掉一切都看不见"蒙过）；
+3. 账本哈希链与审计包**独立**验证（篡改必须失败）；
+4. 归一化的拒绝语义（不得加兜底默认值、"先算出来再说"）；
+5. 重放确定性（同输入同输出；必须在新账本上跑）；
+6. `seq` 空洞的挂起语义（不得跳号推进）；
+7. 反例集只增不减（不得删改旧用例；新增需人批）；
+8. **两个真进程**（不得用"同进程里两个对象"冒充双侧演示）；
+9. 现场结论与门签署（V 项、G1 只能由人签字；agent 不得预填）；
+10. EV 证据的**原始输出**（不得用人工摘要替代命令输出；每份含时间/命令/commit/退出码）。
+
+## 7. 每批的指标与证据
+
+| 批 | 证据（原始输出） | 与指标的关系 |
+|---|---|---|
+| B1 | `EV-<NNN>-AC-DESIGN-001.txt`（门输出） | 无 |
+| B2 | `EV-<NNN>-AC-PLUGIN-003.txt` | 无 |
+| B3 | `tools/verify.sh cordis` 输出（宿主冒烟已有 EV-038）、桥接 AC 证据（EV-038 之后） | 端到端时延/失败率（宿主入口） |
+| B4 | AC-QEP-003、AC-QEP-004、AC-INTEG-002、AC-RFQ-003 四份 + 回归 AC-QEP-002 | 端到端时延/失败率（投递成功/重发次数） |
+| B5 | AC-SYNC-001 | 口径一致率（合并/冲突比例） |
+| B6 | AC-CLARIFY-002、AC-CLARIFY-003 | 澄清轮次 |
+| B7 | AC-COMPARE-001、AC-RFQ-002 | 报价可比率（过期报价被排除的比例） |
+| B8 | AC-GUARD-001、AC-GUARD-002、AC-CAP-001 | 异常检出率/误报率 |
+| B9 | AC-TERMS-001、AC-GUARD-002 | 异常检出率/误报率（条款类） |
+| B10 | AC-AWARD-001、AC-AWARD-002 | 人工改写率（授标链路的人工动作次数） |
+| B11 | AC-CHANGE-001、AC-CHANGE-002 | 人工改写率（变更差额被人工修改的比例） |
+| B12 | AC-APPROVE-003、AC-TRUST-001 | 人工改写率；三处过滤的负控结果 |
+| B13 | AC-AUDIT-001、AC-AUDIT-002、AC-COST-001 | 重建一致率（抽样 20 次） |
+| B14 | AC-COMPARE-004 | 比价耗时（导出前后的一致性核对） |
+| B15 | `qa suite s1..s4` 双进程输出、AC-EVAL-001/002、AC-GUARD-003 | 重放确定性、端到端时延/失败率、反例拦截数 |
+| B16 | `tools/verify.sh g1` 输出、`docs/work/metrics-p1.md`、G1 签署证据 | 全部九项指标（与 `metrics-baseline.md` 并列，人工改写率不得上升） |
+
+**指标纪律**：P1 只做**对比**，不设目标值；目标值由人在 G1 前写入项目 patch。
+反例集与 `s4-counterexamples.json` 的每次追加都要有对应 EV。
+
+## 8. 批次启动模板（`/goal` 粘贴块）
+
+沿用 `USER-GOALS.md` §3 的格式（行首 `字段: 值` 会被解析成完成契约）。把 `<...>` 替换为 §2.1 的内容：
+
+```
+/goal quotagent P1-B<N>：<任务清单>（<roadmap 步骤>）
+outcome: progress-checklist 中 <T 列表> 置为 done，且 docs/work/evidence/ 内有 <AC 列表> 的原始命令输出
+verify: cd /workspace/projects/quotagent && tools/verify.sh docs && tools/verify.sh cordis
+constraints: 遵守 AGENTS.md；一切注册返回 disposer 且卸载后无残留；对外承诺必须经 approval 门、不得加旁路；私域不出 realm；归一化不可行即拒绝、不得兜底；护栏只标注不改排序；确定性重放（新账本上跑）；不得改文档门或放宽 AC；不得改已 accepted 的 ADR（要改就新写一条）；一轮一批：更新 progress-checklist + handover + .agents/state.json 后 commit → push → git ls-remote 回读
+boundaries: 只动 /workspace/projects/quotagent 内的文件；不碰 P2 范围（邮件/ERP、Web 视图、多租户、谈判、自进化）；宿主侧不得新增账本写入路径
+stop when: 需要人类决策（阈值/口径/预算取舍、V 项结论、门签署），或同一 AC 连续两轮修不绿——停下并把问题写进 handover.md 的 blockers
+起手顺序：handover.md → .agents/state.json → progress-checklist.md → tools/verify.sh docs（绿了才动手）；本批 AC 先跑成红再实现。
+```
+
+**每批的 DoD**（与 SKILL.md 一致，缺一不可）：
+
+1. AC 命令在干净环境重跑仍绿；
+2. 证据文件存在且含原始输出（时间/命令/commit/退出码）；
+3. 回归无新增失败（`tools/verify.sh docs` + `suite s1..s4`）；
+4. 三处状态文件（`progress-checklist.md` / `handover.md` / `.agents/state.json`）一致；
+5. 已 push 且 `git ls-remote origin` 回读确认；
+6. `progress-checklist.md` 该行的 FR/AC 列与真实实现一致（本批若补了映射，一并改）。

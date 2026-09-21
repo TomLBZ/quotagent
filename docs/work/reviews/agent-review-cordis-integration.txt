@@ -1,0 +1,235 @@
+# ADR-0012 直接依赖 cordis（4.0.0-rc.10）作为组合与生命周期宿主，Python 内核以 NDJSON 桥作为进程外服务
+
+Status: proposed
+
+<!-- 本文件当前位于 gitignored 的 tmp/decisions/（起草位）。正式入库位置、步骤与预算拆分见 §入库前置；入库前它不构成对仓库其他文档的约束。 -->
+
+## Problem
+
+用户指令（本仓库外来的直接指令，逐字立场）：**直接依赖当前最新的 cordis，不重复造轮子；自进化上线后，每个功能模块必须能作为 cordis 插件/中间件独立演化**。这与 ADR-0001 的"借鉴设计而不引入其代码（不 vendor）"条款正面冲突，必须成文裁决（`AGENTS.md` 规则 8：内核边界与实现栈选择必须写 ADR）。
+
+ADR-0001 本身给出的重估条件已被触发。其 Revisit conditions §1 写的是"Cordis 发布稳定版且其 loader/include 语义被正式文档固定后，可重新评估 vendor 的收益"；实测（`npm view @cordisjs/plugin-loader version peerDependencies`）声明式条目树已经作为官方包发布：`@cordisjs/plugin-loader@1.0.0-rc.7`，peer 要求 `cordis: ^4.0.0-rc.10`（另有 `@cordisjs/plugin-cli@1.1.2` peer `cordis ^4.0.0-rc.5`、`@cordisjs/plugin-hmr@1.1.0` peer `cordis ^4.0.0-rc.10`）。也就是说"组成即数据"这一层不必再自研，可用上游实现。
+
+但 P0 是**已完成且有证据**的资产，不能推倒：本次实测 34 条已注册 AC 全部通过（命令与计数见 §Decision 1）、`tools/verify.sh docs` 文档门有独立的 ID/预算/覆盖检查；账本字节格式（ADR-0007）、QEP 签名与文件绑定（ADR-0008）、归一化容差与不可变版本（ADR-0009）、人工门与 realm 过滤（ADR-0010）、TCO 口径与引用链（ADR-0011）都是冻结语义，ADR-0002 又冻结了内核命名空间。任何集成方案必须先证明"P0 行为不回归"。
+
+于是需要回答四个问题：(1) 宿主边界画在哪（谁拥有组成、生命周期、事件分发）；(2) 两侧怎么通信（传输、消息 schema、版本协商、错误与背压、启动与关闭、崩溃恢复）；(3) P1 的哪些模块成为 cordis 插件、哪些留在 Python；(4) 迁移与回滚路径是什么。
+
+## Decision
+
+### 0. 与已落库 ADR-0012 的关系（差异清单，需人工裁决项已标出）
+
+`docs/design/adr/0012-direct-cordis-dependency-as-host.md`（commit 33881f6，Status accepted）已经钉死三件事，本记录**不重复**：依赖与版本（`host/package.json` 锁 `4.0.0-rc.10`）、cordis 真实约定（`host/smoke.mjs` 18 条断言 / EV-038）、职责边界与"一行一条 JSON + `{v,id}` 版本握手"的桥接方向。本记录的增量是它留白的两块：**桥协议的字段级规格**与 **P1 模块归属分解 + 迁移/回滚细则**。两文关系与需裁决的差异如下：
+
+| 事项 | 已落库 ADR-0012 / 同期草案 | 本记录的细化或差异 | 处理 |
+|---|---|---|---|
+| 桥接进程形态 | ADR-0012 §3：host 经 `tools/run.sh`（stdout JSON）交互 | 入口仍用 `tools/run.sh`（复用 ADR-0007 §2 的解释器解析契约），但 Python 侧是**常驻子进程**（管道 + 在途请求队列 + stderr 订阅），与 `tmp/decisions/module-evolution-on-cordis.md` §2.2 的 `kernel-bridge` 契约一致 | 方向一致，需人工在后续 ADR 里确认"常驻"这一句（不改 ADR-0012 正文） |
+| 写面 | 同期草案：`intents_only: true`（宿主只发意图/命令） | 本记录定义四级 `cls`，其中 `fact` 面在"已登记 fact 事件名 + 必带 `source` 标记"前提下允许宿主调用 | **P1 先按更保守的 `intents_only` 落地**；放宽需后续 ADR 记录（`fact` 面的必要性见 §Decision 3.3） |
+| 承诺面 | ADR-0012 §3：Python 侧是唯一写账本者；桥接失败显式报错 | 升为**方法级 `cls=commit` 不暴露 + 调用即落 `kernel/bridge-rejected`**，并配对抗性 AC（桥-3） | 方向一致，强度更高，建议直接采纳 |
+| 事件登记 | ADR-0012 未涉及 | 本记录登记 5 个 `kernel/bridge-*` 事件（4 durable + 1 live）与规则 R5（事件表单一真源在 Python，桥只分发 `hello` 清单里的事件名） | 需人工同步 `05-events.md` / `02-domain-model.md` |
+| 编号与落地位置 | ADR-0012 已被占用 | 本记录不能与它共号：应落为**下一条 ADR（编号 0013）**或 `docs/design/13-cordis-bridge.md` 设计页 | 见 §入库前置 |
+
+### 1. 依赖面与 supersede 声明（含本次实测证据）
+
+**ADR-0001 的"不 vendor cordis 源码 / 借鉴设计而不引入其代码"这一条款被本 ADR 取代（superseded by ADR-0012）**；ADR-0001 的另三条纪律（副作用可回退、依赖声明式协调、组成即数据）**语义不变**，只是实现从自研改为直接依赖上游。ADR-0007 的"Python 仅标准库"**不被取代**：它约束的是 `src/` 里的 Python 实现；本 ADR 新增的是一条**并列的、可缺省的** Node 工具链（缺失即降级回 P0 形态，见 §Decision 3.10 与 §Decision 7）。
+
+依赖对象与精确版本（本人实测，非二手）：
+
+| 检查 | 命令（`PATH=/workspace/runtime/node/current/bin:$PATH`） | 实测结果 |
+|---|---|---|
+| 最新版本 | `npm view cordis version` | `4.0.0-rc.10` |
+| 发行标签 | `npm view cordis dist-tags --json` | `{"next":"4.0.0-beta.5","latest":"4.0.0-rc.10"}`——注意 `next` 指向**更旧**的 beta，故任何脚本都不得用 `next`/`@next` |
+| 发布时间 | `npm view cordis time --json` | `4.0.0-rc.10` = `2026-09-08T15:44:33.779Z`（`modified` `2026-09-08T15:44:34.123Z`） |
+| 版本序列 | `npm view cordis versions --json` | 共 166 个版本，最高即 `4.0.0-rc.10`；其后无更新（截至 2026-09-21 本次检查） |
+| 元数据 | `curl -s https://registry.npmjs.org/cordis`（解析 dist-tags/license/repository/dependencies） | `license: MIT`；`repository: git+https://github.com/cordiverse/cordis.git`（`directory: packages/core`）；`dependencies: {cosmokit: ^1.8.1, @standard-schema/spec: ^1.1.0}`；`main/types: lib/index.js / lib/index.d.ts`；`engines` 未声明 |
+| 包内容与校验和 | `npm pack cordis@4.0.0-rc.10 --dry-run` | 13 个文件、package 17.2 kB、unpacked 69.6 kB；`shasum cdc1b3398c2d9378afda6d4c4098edbf286f9f34`；`integrity sha512-xG90nPNQxR272[...]N1HZvkNBiABnw==` |
+| 可安装性 | `npm i cordis@4.0.0-rc.10`（Node v24.21.0 / npm 11.19.0，装在仓库 `tmp/` 内的探针目录，用后已删） | 成功（added 3 packages）；运行时导出实测为 `Context CordisError DisposableList EventsService Fiber FiberState Inject Logger LoggerLevel LoggerService RegistryService Service ValidationError buildOuterStack composeError createError createCallable defaultFormatters getPropertyDescriptor getTraceable isBailed isConstructor isObject joinPrototype resolveConfig symbols withProps` |
+| 五模式命名 | 读 `node_modules/cordis/lib/events.d.ts:8` | `export type DispatchMode = 'emit' \| 'parallel' \| 'serial' \| 'bail' \| 'waterfall'`——与 `05-events.md` §0/§1 的五个模式**逐字同名** |
+| 枚举/类型 | `node_modules/cordis/lib/fiber.d.ts` / `registry.d.ts` / `service.d.ts` | `FiberState = {PENDING, LOADING, ACTIVE, FAILED, DISPOSED, UNLOADING}`；`ctx.plugin(plugin, config) -> Fiber & PromiseLike<Fiber>`、`ctx.inject(deps, cb) -> Fiber`；插件声明面 `{name, Config, inject, provide, intercept}`；`Service` 带 `resolveConfig` 与 `symbols.filter` 覆盖层 |
+| 依赖树与落点 | `host/package.json`（已存在的宿主骨架） | 钉死 `"cordis": "4.0.0-rc.10"`（**无 `^`**），`host/package-lock.json` 入库；`node_modules` 只落 `host/node_modules`（`.gitignore` 已含 `node_modules/`）；npm 缓存实测在 `/workspace/runtime/cache/npm`（安装不写仓库外） |
+
+版本纪律（可机检）：**精确锁定 `4.0.0-rc.10`**；不引 `@cordisjs/core`（那是 3.x 包名，latest `3.18.1`）；不使用 `next` 标签；不把 cordis 源码拷进仓库（依赖走 npm，不 vendor 代码）；升级 = 改 `host/package.json` + `npm install` + `tools/verify.sh cordis` + 桥的四条 AC（§Decision 3.10）+ P0 全量 AC，独立 commit。
+
+### 2. 集成架构（唯一推荐方案）：cordis 宿主拥有组成与生命周期，Python 内核作为被监督的常驻子进程
+
+**一句话**：Node/TS 侧的 cordis 宿主（`host/`）是**唯一的组合与生命周期所有者**——它装配插件、协调依赖激活、持有定时器与外部 I/O；Python 侧的 P0 内核以**常驻子进程**（"kernel sidecar"）形态继续作为**唯一账本写者与语义权威**，两侧用 **stdio 上的 NDJSON JSON-RPC（bridge v1）** 通信。
+
+拓扑与阶段（进程数即为爆炸半径）：
+
+| profile | cordis 宿主（Node） | Python 子进程 | 阶段 | 说明 |
+|---|---|---|---|---|
+| `minimal-mock` | **不启动** | 单进程双侧 | P0（已实现） | P0 形态原样保留：无 Node 也能跑全部 34 条 AC |
+| `contractor-ops` | 宿主 + profile 条目树 | 1 个（realm `contractor`） | P1 | 组合在宿主，事实在内核 |
+| `supplier-bid` | 宿主 + profile 条目树 | 1 个（realm `supplier:*`） | P1 | 私域不出子进程边界 |
+| `relay` | 宿主（无业务插件） | 1 个（kernel + qep + evidence） | P1/P2 | relay 只搬字节，不解析 body（`AC-INTEG-002`） |
+| `evaluator` | 宿主 + 评跑插件 | 1 个（账本只读） | P1 | 影子重放只读账本（`ctx.eval` 不变量） |
+| `evolve` | evaluator + 进化插件 | 1 个（账本只读） | P2 | 可写面仍是条目/patch（`07` §2） |
+
+五条边界规则（后文所有分解与协议设计都由它们推出）：
+
+- **R1 语义冻结面留在 Python**：被 ADR-0007/0008/0009/0010/0011 固定的语义（账本字节、哈希链与去重键、信封签名与文件绑定、归一化容差、人工门与 realm 过滤、TCO 口径与引用链）与承诺出口，一律不迁；迁移等于改语义，必须另写 ADR。
+- **R2 生命周期与装配面放在 cordis**：组成装配、配置分层（profiles/patch）、监督与重启、定时器、外部 I/O 适配器、视图与导出——即"应当能独立装卸、热替换、按依赖激活"的那部分——做成 cordis 插件。判据是三条问句：该模块失败是否应当只影响自己（隔离）？是否需要按配置层差异化（patch）？是否需要在线替换（hmr）？
+- **R3 钱与引用只在 Python 算**：任何产生金额、比率、排名或账本引用的计算留在 Python；TS 侧不得做算术、不得产出 `citations`（`12` §3 规则 1"一处一事实"；ADR-0011 §3 引用链是硬约束）。
+- **R4 账本唯一写者在 Python**：宿主没有账本写权限，也没有直接写 `ledger.jsonl` 的 API；所有事实只能经 `ledger.append`（ADR-0007 §5 的 `(correlation_id, type, body_hash)` 去重键）。
+- **R5 事件表唯一真源在 Python**：事件名、`@mode`、durable/live 由 `05-events.md`（与 `02-domain-model.md` §4 命名表）登记；桥只分发 `hello` 清单里已登记的事件名，宿主不得发明事件类型（`05` §0 规则 1 与规则 5）。
+
+### 3. 桥协议（bridge v1，逐条可实现）
+
+3.1 **传输与帧**。宿主用 `child_process.spawn(root + '/tools/run.sh', ['-m','quotagent.bridge','--serve','--realm',realm,'--ledger',path], {stdio:['pipe','pipe','pipe']})` 启动**常驻**内核子进程（入口复用 `tools/run.sh` 的解释器解析契约，ADR-0007 §2；Python 侧实现落 `src/quotagent/bridge.py`，对齐全仓 P1 计划的批次 B3）；协议走 stdin/stdout，**stderr 只放日志**。帧 = 一行一个 JSON 对象（NDJSON，UTF-8，`\n` 分隔，无缩进、无内嵌换行），单帧上限 8 MiB（超出即 `invalid-request` 并断开连接，避免内存放大；报价体量的分片策略留待后续 ADR）。**stdout 只承载协议帧**：Python 侧进入桥模式时把 `sys.stdout` 换成协议写通道，日志/`print` 一律改走 stderr——这条是 AC 断言（"stdout 每一行都是合法 JSON"）。备选绑定（P2，不在本 ADR 决定内）：AF_UNIX socket，同一帧格式；不选 HTTP 端口（见 Alternatives rejected）。
+
+3.2 **消息 schema（三种 + 一种钩子）**。
+
+| 种类 | 方向 | 形状 | 备注 |
+|---|---|---|---|
+| 请求 | 宿主 → 内核 | `{"v":1,"id":<uint>,"m":"<ns>.<verb>","p":{...},"corr":"<id>|null","deadline_ms":<int>}` | `id` 单调、`deadline_ms` 必填（无默认，防止无限等待） |
+| 响应 | 内核 → 宿主 | 成功 `{"v":1,"id":..,"ok":true,"r":{...}}`；失败 `{"v":1,"id":..,"ok":false,"e":{"code":"<枚举>","msg":"..","detail":{..},"ledger_ref":"sha256:..|null"}}` | 每个请求必有恰好一条响应 |
+| 通知 | 内核 → 宿主 | `{"v":1,"n":"evt.<type>","p":{"mode":"emit\|parallel\|serial\|bail\|waterfall","durable":<bool>,"seq":<int\|null>,"data":{...}}}` | 宿主按 `mode` 调 cordis 同名分发方法（`ctx.events.emit/parallel/serial/bail/waterfall`），未登记事件名即丢弃并记宿主诊断 |
+| 钩子 | 内核 → 宿主 → 内核 | 请求 `{"n":"hook.requested","p":{"hook":"kernel/config-updated","args":{...},"hook_token":"<uuid>"}}`，宿主回 `{"m":"hook.resolved","p":{"hook_token":"..","action":"pass\|short-circuit\|rewrite","value":{...}}}` | 跨界 waterfall 专用；内核必须用本侧校验器复核返回值，不满足不变量即拒收并落账（§Decision 3.9） |
+
+3.3 **方法面分级**（桥的"权限清单"）。`hello` 清单里逐方法标注 `cls`，宿主只能调用存在且 `cls ≠ commit` 的方法：
+
+| cls | 含义 | 示例（来自 `04-services-catalog.md` 的 `ctx.*` 方法） | 允许宿主调用 |
+|---|---|---|---|
+| `read` | 只读查询 | `ledger.read` · `ledger.project` · `ledger.verify_chain` · `qep.validate` | 是 |
+| `compute` | 纯函数/派生（无对外副作用，可重发，NFR-IDEM-002） | `norm.normalize` · `compare.rank` · `compare.tco` · `compare.recompute` · `guard.check` · `evidence.export` | 是 |
+| `fact` | 追加事实（必须带 `source` 标记，`11` §2 规则 2；幂等靠去重键） | `ledger.append`（限已登记的 fact 事件名） · `qep.receive` · `qep.send` | **P1 默认关**（按同期草案的 `intents_only: true` 更保守落地，见 §Decision 0）；放宽需后续 ADR 说明其必要性 |
+| `commit` | 产生/推进承诺 | `approval.decide` · `quote.submit` · `award.commit` · `po.issue` · `change.approve` · 任何 `class=commitment` 的 `ledger.append` | **不暴露，一律拒** |
+
+人工签署只走**交互式 Python CLI**（无桥路径）：宿主可以渲染人工门队列（`NFR-UX-001/002`），但"批准"这一步由宿主**交接**给人所在的终端会话，不由宿主代发。于是"模型可达路径上不存在承诺出口"从代码约定变成结构性事实（`AC-APPROVE-001/002`、INV-005、P8）。
+
+3.4 **版本协商**。内核启动后发第一帧 `{"v":1,"n":"kernel/hello","p":{...}}`，内容：`bridge:{version:1,min_supported:1}` · `kernel:{name,version}` · `qep_versions[]` · `features[]` · `events[]`（`{name,mode,durable}`）· `methods[]`（`{m,cls}`）· `ledger:{path,head:"sha256:..",seq:N,healthy:true|false}` · `realms[]`。宿主回 `{"v":1,"id":0,"m":"bridge.init","p":{"accept_bridge":[1],"profile":"..","want_events":[..],"want_methods":[..]}}`；内核核对 `accept_bridge ∩ {1}`，**交集为空即以退出码 2 终止**，不降级（与 ADR-0006 §3、`NFR-COMPAT-001` 同构：不兼容即拒绝）。主机版本比对规则：`bridge.version` 主版本必须相等，次版本可由内核向后兼容字段。特性级降级（`want_*` 不在清单）必须落账 `kernel/bridge-degraded`（含缺失项与原因），**永不允许静默降级**；且批准链、版本绑定、签名校验三项**不可降级**（沿用 ADR-0006 §4 的三项不可降级清单）。账本锚点：宿主把 `ledger.head/seq` 与上一轮记录的锚点比对，不一致时先要求 `ledger.verify_chain`；失败即进入**只读**（拒绝 `fact`/`commit` 面调用，保留 `read`/`compute`），对应 ADR-0007 §6 的停发语义。
+
+3.5 **错误模型**（每类错误都必须有确定行为，不允许"忽略"）：
+
+| code | 触发 | 宿主行为 |
+|---|---|---|
+| `invalid-request` | 帧非法/超 8 MiB/字段未知 | 记诊断并回错误；不回退猜测 |
+| `unknown-method` | 方法不在 `hello` 清单 | 抛给调用插件；该 fiber 失败（cordis 隔离，不影响宿主与其他插件） |
+| `commit-refused` | 调用 `cls=commit` 方法 | 硬错误、不重试，落 `kernel/bridge-rejected`；人工门不受影响 |
+| `version-mismatch` | 协商失败 | 启动期：宿主退出 2；运行期：标记内核不可用 |
+| `ledger-unhealthy` | 哈希链校验失败 | 只读降级 + 告警（`NFR-COMP-002` 精神：重建失败即合规缺陷） |
+| `deadline-exceeded` | 超 `deadline_ms` | 结果记为 `unknown`（§Decision 3.8），**不得当成功** |
+| `backpressure` | 信用窗口耗尽 | 先补齐 durable 增量再继续（§Decision 3.6） |
+| `kernel-crashed` | 子进程非零退出/连接断开 | §Decision 3.8 的重启路径 |
+
+3.6 **背压与流控**。`hello` 带 `credit_window`（默认 256）；宿主每消费 N 条通知回 `{"n":"bridge.credit","p":{"n":N}}`。窗口耗尽时内核停止推通知并把无法推的 `durable` 事件退化为"待补齐"（**不丢**：它们已在账本里），live 通知可直接丢弃但必须落 `kernel/bridge-backpressure`（含丢弃计数与时间窗）。宿主补齐用 `ledger.read {from_seq: last_acked+1}`。这条设计直接建立在 `05-events.md` §0 规则 2 的 durable/live 分野上：**durable 不可丢、live 可丢且必须有留痕**。同一连接上请求/响应优先于通知（内核先写响应再写通知），避免事件洪水把一次 `compare.rank` 拖过预算（`NFR-PERF-001`）。
+
+3.7 **启动与关闭**。启动顺序由 cordis 的依赖声明驱动（不手写编排）：`new Context()` → 装载 profile 条目树 → `plugin-kernel`（`provide: ['kernel']`，`inject: []`）拉起子进程 → 等 `hello`（默认 5000 ms，超时退出码 3）→ 校验 `healthy` 与账本锚点 → 发 `bridge.init` → 其余插件因 `inject: ['kernel']` 依次激活（`01-architecture.md` §4 的依赖驱动激活在宿主侧由 cordis 原生提供）。**启动失败不写账本**（半启动不留痕）。关闭：宿主发 `bridge.shutdown {reason}` → 内核 flush+fsync 账本 → 退出 0；宿主等 3000 ms，超时 SIGTERM，再 1000 ms 后 SIGKILL；宿主必须确认 `child.exitCode !== null` 才退出（不留孤儿）。cordis 逆序 dispose 各 fiber 的 effect（订阅/定时器/watcher 全回收，INV-002、`NFR-REL-004`）。启动与关闭都必须可重复执行（`bridge.init` 幂等，返回同一 `session_id`）。
+
+3.8 **崩溃恢复（"未知即未知"）**。在途请求在连接断开时一律标记 `unknown` 抛给调用方，宿主**不得当成功**、不得自动补写成功（对齐 `AC-INTEG-003` 的账实一致精神与 `NFR-REL-001`）。可安全重发的三类：`ledger.append`（重发同一请求体，靠 ADR-0007 §5 去重键幂等）· `compute` 面（声明为纯函数，`NFR-IDEM-002`）· `qep.send`（重发保持 `msg_id` 与内容不变，ADR-0006 §5）。重启策略：`plugin-kernel` 内部按 `3 次 / 30 s` 预算重启（cordis 定时器 effect，可撤销），每次重启落 `kernel/bridge-restarted`（含 attempt、原因、上次 head）；超预算即进入 `degraded: read-only` 并把告警推给人门队列（`NFR-UX-001`）。恢复后补齐：新 session 的 `hello` 带新 head，宿主比对最后一次 ack 的 `seq`，用 `ledger.read` 补 durable 事件，然后重放未确认请求。**不恢复内存草稿**（`07` §5 规则 3）。
+
+3.9 **跨界 waterfall 的适配（实测差异，必须显式处理）**。`host/smoke.mjs` 实测 cordis 的 waterfall 语义：监听器签名 `(payload, next)`、**`next()` 不接受参数**、值传递靠共享的**可变载荷**、不调 `next()` 即短路且该监听器返回值即最终值、`next()` 调两次抛错、终结回调无参调用。P0 的 Python 版是 `next(work)`（值随参数传递）。因此跨界 waterfall 需要一层适配：内核把载荷作为可变对象交给宿主，宿主按 cordis 语义跑链，回传最终值，内核侧再用**本侧校验器**复核（不变量不能被外部改写绕过）。边界规则：**只有"返回值可被内核独立校验"的 waterfall 允许跨界**。P1 只放行 `kernel/config-updated`（配置否决者，对齐 `AC-PLUGIN-003`/INV-010）；`quote/normalize`、`quote/price-drafted`、`clarification/answer-drafted`、`agent/*` 继续留在 Python 进程内（载荷是账本语义对象，跨界收益低、风险高）。后续若需更多跨界中间件，逐条补 ADR 说明可校验性，本 ADR 不批量放行。
+
+3.10 **桥自己的验收（AC-INTEG 家族新增四条，编号 004..007，登记后生效；命令 `tools/verify.sh bridge`，前置 `tools/verify.sh cordis` 冒烟通过）**。四条断言（编号未登记前不得以 `AC-*` 形式引用，否则文档门的 ID 完整性检查失败）：
+
+| 条目 | 名称 | 断言（可执行，退出码 0/1） |
+|---|---|---|
+| 桥-1 | 协议与模式一致性 | (a) 宿主与内核 `bridge.version` 主版本不一致时宿主**退出码 2 且账本零新增**；(b) 五个 `@mode` 按 `mode` 分发，`bail` 首个真值胜出、`waterfall` 短路与取值符合 `05-events.md` §1 判据（同一组探针事件，两侧逐条比对）；(c) stdout 每一行都是合法 JSON 帧（无日志混入） |
+| 桥-2 | 崩溃/背压/幂等 | 注入三类故障（子进程 SIGKILL、通知洪水超信用窗口、响应前断连）后断言：(a) `verify_chain()` 仍为真、已 ack 的 durable 事实零丢失（`NFR-REL-001`）；(b) live 通知可丢但必有 `kernel/bridge-backpressure`；(c) 未确认请求重发不产生第二条事实（去重键生效，`ledger.read` 计数不变） |
+| 桥-3 | 承诺面不可达（对抗性） | 以宿主会话身份调用内核 `hello` 清单里全部 `cls=commit` 方法名：全部 `commit-refused` 且各落一条 `kernel/bridge-rejected`；并断言经桥路径无法构造出 `class=commitment` 的账本条目（INV-005、`AC-APPROVE-002` 在桥路径下仍成立） |
+| 桥-4 | 语义等价（不回归） | 同一场景（S1..S4 之一）分别"直跑 Python"与"经宿主桥驱动"各跑一次：`digest` 字节一致（`AC-EVAL-001` 的确定性口径）、`Evaluation` 引用链一致（`AC-COMPARE-004` 口径） |
+
+另需扩展 `AC-RUNTIME-001` 的断言：**在无 Node 的干净副本上 `tools/verify.sh docs` 与全部 P0 相位 AC 仍全绿**。这条是回滚成立的前提，也是本 ADR 与 ADR-0007 §2 动机的兼容点（宁可显式拒绝服务，也不让门静默不执行）。
+
+### 4. P1 模块分解：哪些成为 cordis 插件，哪些留在 Python
+
+判据即 §Decision 2 的 R1–R5；表中"归属"只在两处：**cordis 插件（TS/JS）** 或 **Python 服务（内核/服务进程）**。
+
+| P1 模块（T） | 归属 | 落点 | 边界判据 |
+|---|---|---|---|
+| 桥本体 `plugin-kernel`（P1 新增条目） | cordis 插件 | `host/packages/plugin-kernel/` | R2：子进程监督、握手、背压、重启预算都是生命周期问题；R4：它不含账本写逻辑 |
+| 进程分离与 profiles（T-201） | cordis 插件 | `host/packages/plugin-profile/` + `host/profiles/*.yaml` | R2：组成即数据（`01-architecture.md` §5 的四层 patch），热替换面；`FR-PLUGIN-004` |
+| QEP 传输绑定：文件投递 watcher / HTTP relay（T-202 的绑定半） | cordis 插件（**字节透明**） | `plugin-qep-fsdrop` / `plugin-qep-relay` | R2 外部 I/O 与 watcher；relay 不解析 body 是 `AC-INTEG-002` 的硬要求，字节透明让该断言可测 |
+| QEP 信封、签名、验签、幂等、seq 空洞判定（T-202 的语义半） | Python 服务 | 现有 `src/quotagent/kernel/qep.py` | R1：ADR-0006/0008 冻结的跨方契约；`AC-QEP-003`/`AC-QEP-004` 语义不可搬 |
+| 三方协调 + 字段权威方 + 冲突上报（T-203） | Python 服务 | `services/sync.py`（新增） | R1：ADR-0003 的字段权威方矩阵与承诺冲突挂起是账本语义（`AC-SYNC-001`） |
+| 澄清工单、广播完整性、版本自动重开（T-204） | Python 服务 | `services/clarify.py`（新增） | R1：INV-006 与 `AC-CLARIFY-002` 是账本侧断言；重开判定依赖包版本语义 |
+| 包版本变更与"报价基于过期版本"标记（T-205） | Python 服务 | 现有 rfq/norm/compare | R1：ADR-0009/0011（`AC-COMPARE-001`） |
+| 护栏规则：异常低价 / 漏项 / 注入（T-206） | Python 服务 | 现有 `services/guard.py` + `register_rule -> disposer` | R1：ADR-0011 §5"只能标注"与每条 Flag 落账；宿主只允许改**阈值配置 patch**（`07` §2 可写面），不改规则语义 |
+| 产能日历与交期承诺校验（T-207） | Python 服务 | `services/capacity.py`（新增） | R1：交期承诺是报价字段（`03` §4.3 供应商权威），与报价同域；`AC-CAP-001` |
+| 审计包导出与独立验证（T-208） | Python 服务（构造/验证）+ cordis 插件（分发） | 现有 `kernel/evidence.py` + `plugin-evidence-deliver` | R1：Merkle/链/签名在 Python（ADR-0007 §7、ADR-0008）；分发是 I/O → R2 |
+| 场景集与反例集（T-209） | 两侧分工：断言与 `digest` = Python；执行器/证据/矩阵 = cordis 插件 | `plugin-ac-runner`（调用 `tools/verify.sh`） | R3/R4：确定性判据必须在 Python（`AC-EVAL-001`）；进程编排与取证属 R2 |
+| 人工门队列视图与超时策略（T-210） | cordis 插件（队列/提醒） + Python（批准判定，仅交互式 CLI） | `plugin-approval-queue` | R1 + §Decision 3.3：桥不暴露 `commit` 面；超时只做升级与提醒，**不存在自动批准**（`FR-APPROVE-003`、`AC-APPROVE-003`） |
+| 条款库与冲突标注（T-211） | Python 服务 | `services/terms.py`（新增） | R1：冲突只能标注并提请人工（`04` §3，`AC-TERMS-001`），与 guard 同域 |
+| 变更闭环（T-212） | Python 服务 | `services/change.py`（新增） | R3：引用原单价复算 = 金额 + 引用链（`AC-CHANGE-001/002`） |
+| 授标与 PO 闭环（T-213） | Python 服务 | 现有 award 路径 + `services/commitments.py` | R1/§Decision 3.3：承诺唯一出口（INV-005、`AC-AWARD-002`） |
+| 比较表导出 CSV/Excel（T-214） | cordis 插件 | `plugin-export-table` | R3：纯重排与格式化，数值与 `citations` 全部来自 Python；`AC-COMPARE-004` 逐行核对 |
+| 部署与操作手册（T-215） | cordis 插件 + shell 工具 | `tools/cordis.sh`（已有）+ `host/profiles/*` | R2：运行入口在仓内工具链，`QUOTAGENT_NODE` 缺失即降级 |
+| 自进化流水线装配（P2 T-305 的前置） | cordis 插件（配置/patch 条目）+ Python（评测与影子重放） | `plugin-evolve-config` + 现有 `ctx.eval` 面 | R1/R2：可写面是条目与 patch（`01` §5、`07` §2）；内核语义不可自改（`AC-EVOLVE-003`） |
+
+不在表内的既有一律不动：账本、事件分发、QEP 内核、归一化、比价、定价、成本、偏差、批准、承诺、realm 过滤、AC 运行器与文档门全部留在 Python（`src/`）。
+
+### 5. 迁移路径（每轮一批，每轮过门）
+
+- **M0（前置，已完成）**：P0 全绿基线留证——本次实测 `tools/run.sh -m quotagent.qa list` 注册 34 条 AC，逐条执行 **34/34 通过**（29 条 `P0` + 2 条 `P0/P1` + 3 条设计期），结果存 `tmp/bridge-baseline.json`（tmp 已 gitignore）；`tools/verify.sh docs` 文档门按 AC-DESIGN-001/002/003 检查 ID/预算/覆盖。起草期间该门曾因 `host/README.md` 引用尚未定义的 `ADR-0012` 而红，同批次的 `docs/design/adr/0012-direct-cordis-dependency-as-host.md` 落库后已转绿（实测 `RESULT: PASS`，73 个 markdown 文件、0 未解析引用）——这也验证了文档门对"引用先于定义"的判据有效。
+- **M1（桥骨架，不改行为）**：新增 `src/quotagent/bridge.py`（`--serve` 常驻模式，stdio NDJSON 主循环，**仅标准库**；P1 先只挂 `read`/`compute` 与"意图/命令"面，按 §Decision 0 的更保守口径）与 `host/packages/plugin-kernel/`；登记桥-1/桥-3；扩展 `AC-RUNTIME-001` 的无 Node 断言。门：P0 34 条 AC 与文档门全绿 + 桥-1/桥-3 绿。
+- **M2（进程分离，T-201）**：profile 装配搬到 cordis 条目树，Python 侧加 `--realm`；`minimal-mock` 的纯 Python 入口保留。门：同一场景"直跑"与"经桥"`digest` 一致（桥-4）。
+- **M3（P1 模块逐条迁移/新增，T-202..T-215）**：按 §Decision 4 的表，一轮一条模块 + 其已登记 AC；每轮只动一个模块（`AGENTS.md` 规则 7）。
+- **M4（退役自研微内核）**：当且仅当宿主侧的装载/激活/卸载与 `kernel/plugin.py` 在桥-1/桥-2/桥-4 下连续两轮等价后，才把 `kernel/plugin.py` 降级为"P0 形态下的实现"并在文档中标注；内核命名空间本身（ADR-0002 的冻结面清单）**不因本 ADR 变更**，变更须另写 ADR。
+- **退役规则（双实现并存一轮）**：被迁移模块的 Python 实现必须保留，直到该模块对应 AC 在桥路径下连续两轮全绿且无回退；任何"先删后补"不允许。
+
+### 6. 回滚路径
+
+1. **单模块回滚**：卸载该 cordis 插件（`fiber.dispose()` 回收 effect，配置层切回 Python 路径的条目）即回到迁移前行为；不需要改代码，不需要改账本。
+2. **全桥回滚**：删 `host/profiles/*` 里的 `kernel-bridge` 条目 → 系统回到 P0 单进程 Python 形态（`minimal-mock`）；`tools/verify.sh docs` 与 P0 34 条 AC 在无 Node 的机器上必须仍然全绿（扩展后的 `AC-RUNTIME-001` 断言）。
+3. **依赖回滚**：`host/package-lock.json` 回退到上一版 lockfile 即回到上一版 cordis（`npm ci` 精确复原）；离线复跑用首次安装后落在 `/workspace/runtime/cache/npm` 的缓存（`npm ci --offline`），因此**不把 tarball 拷进仓库**（避免"以缓存之名 vendor"）。
+4. **账本不可回滚、也不必回滚**：回滚只改组成与装配，不触碰 `ledger.jsonl` 的任何字节；旧账本永远可读（`NFR-COMPAT-003`），桥的 `read` 面本身就能在新旧形态下重建投影。
+5. **应急闸门**：内核侧带 `--bridge-off` 启动参数（只读/单进程模式），在桥出现不可诊断故障时人工用一条命令回到 Python 路径；该参数只由人使用，不暴露给宿主（宿主不得自行降级为"绕过内核"）。
+
+### 7. P0 不回归断言（本 ADR 的硬约束）
+
+1. **34 条 AC 必须继续全绿**：本次实测基线为 34/34 通过；每次桥或宿主改动后必须重跑全量并在 `docs/work/evidence/` 追加证据（`AGENTS.md` 规则 6），没有证据不得标 passed。
+2. **文档门必须继续绿**：`tools/verify.sh docs`（AC-DESIGN-001/002/003：ID 完整性、预算、FR↔AC 覆盖）。注意其扫描范围是 `ROOT.rglob("*.md")`（实测 `tools/check-docs.py` 第 57 行），因此 **gitignored 的 `tmp/` 也在扫描范围内**——这是本文件起草位置的一个已知代价（见 §入库前置）。
+3. **无 Node 也完整可跑**：P0 的 `minimal-mock` 形态、全部 P0 相位 AC 与文档门不得依赖 Node（扩展后的 `AC-RUNTIME-001`）；这条同时是"现场机器无包管理器/无网络"（ADR-0007 §2 的原始动机）的兼容断言。
+4. **不可绕过人工门**：桥面不暴露承诺方法（§Decision 3.3），并有对抗性 AC（桥-3）。
+5. **不确定性必须显式**：超时/断连的请求记为 `unknown`，不得当成功（§Decision 3.8）。
+
+### 8. 入库前置（人工动作清单，本 ADR 自身不做）
+
+1. **编号**：ADR-0012 已被 `docs/design/adr/0012-direct-cordis-dependency-as-host.md` 占用（accepted，commit 33881f6）。本记录落为**下一条 ADR（编号 0013）**——`docs/design/adr/0013-cordis-bridge-protocol.md`，并在 `docs/design/adr/README.md` 索引表加行；备选（若评审认为协议细节属设计而非决策）落 `docs/design/13-cordis-bridge.md`，由 ADR-0012 §3 引用。
+2. **补一条已缺的标注**：实测 `docs/design/adr/0001-adopt-cordis-context-paradigm.md` 头行仍是 `Status: accepted`，而 `adr/README.md` 的格式规则要求"修改已 accepted 的决策 = 新写一条并在旧条目头行标注 `Status: superseded by ADR-NNNN`"；应补 `Status: superseded by ADR-0012`（只改状态行，Problem/Decision 正文原样保留）。
+3. **预算与拆分**：`docs/design/adr/*.md` 受 8 KB 预算（`12-documentation-standard.md` §1），本记录远超；按 §1 的处理顺序拆分——§Decision 3 的字段级协议细节进设计页（`docs/design/*.md` 28 KB 预算），ADR 只留 Problem / Decision 要点 / Consequences / Alternatives / Revisit。
+4. 同步三处既有表述：`01-architecture.md` §8（"我们不 vendor Cordis"一段）、`04-services-catalog.md` §1（`ctx.plugin` 的 Provider 由自研改为 cordis 宿主）、`10-nonfunctional.md` §9（环境与依赖：新增 Node 工具链的可缺省性）。
+5. 登记新增事件类型到 `05-events.md` §2 与 `02-domain-model.md` §4：`kernel/bridge-degraded`、`kernel/bridge-rejected`、`kernel/bridge-backpressure`、`kernel/bridge-restarted`（emit/durable）、`kernel/bridge-fault`（emit/live）——内核命名空间事件增删必须走 ADR，本 ADR 即依据。
+6. **登记桥的 4 条 AC**：`docs/work/acceptance-criteria.md` 的 AC-INTEG 家族续号（现有 001=P0、002=P1、003=P2，故新增自 004 起），**并同时被至少一条 FR 引用**（扩展 `FR-RUNTIME-001` 或新增一条 FR，编号待登记）——否则 `AC-DESIGN-003` 的 FR↔AC 覆盖检查会红；命令入口加进 `tools/verify.sh`（新子命令 `bridge`，与既有 `cordis` 子命令并列）；用真实命令输出落 `docs/work/evidence/`。
+7. 完成后重跑 `tools/verify.sh docs` 与全量 AC，两者皆绿才 push，并按 `AGENTS.md` 规则 7 读回远端 refs。
+
+## Consequences
+
+**正向**
+
+- 五个事件模式、effect/disposer 回收、依赖驱动激活、配置分层从"自研"变成"上游实现"：`05-events.md` §0 规则 3 与 `04-services-catalog.md` §1 的不变量由 cordis 原生提供，且模式名逐字一致（实测 `DispatchMode`），减少了"我们自己的语义与上游漂移"这一整类缺陷。
+- 用户指令的落地形态明确：每个 P1 模块都是一个可独立装卸的 cordis 插件，自进化（`07`）的可写面"条目/patch"与 cordis 的组成即数据天然对齐，副作用回退由 `fiber.dispose()` 保证。
+- 人工门从"代码约定"升级为"结构性事实"：桥按 `cls` 分级且不暴露承诺面（§Decision 3.3），配合对抗性 AC（桥-3）。
+- P0 资产零回归：Python 内核与 34 条 AC 原样保留，桥可整体回滚（§Decision 6），无 Node 环境仍可完整跑门与 AC。
+- 生态可用：`@cordisjs/plugin-loader@1.0.0-rc.7`、`plugin-cli@1.1.2`、`plugin-hmr@1.1.0` 已发布且 peer 对齐 4.0.0-rc 线，装配层不必再自研。
+
+**负向**
+
+- 仓库从单工具链变为双工具链（Python 标准库 + Node 24/ npm 11 与 `host/node_modules`），与 ADR-0007 §2"任何有 Python 的机器都能复跑"的动机部分对立；对策是限定 Node 只对 P1 面必需，并把"无 Node 仍全绿"写成断言。
+- 依赖的是**预发布版本**（`4.0.0-rc.10`；上游 README 自述 API 未稳定；实测 `next` 标签还指向更旧的 `4.0.0-beta.5`），升级存在破坏性风险；只能靠精确锁版本 + 桥（唯一耦合面）+ 全量 AC 来吸收。
+- 桥是新的故障面：握手失败、背压、半确认请求、子进程重启、双份生命周期语义的过渡期，都需要新的运维概念与人工门告警。
+- 跨界中间件能力受限：只有"返回值可被 Python 独立校验"的 waterfall 能跨界（P1 仅 `kernel/config-updated`），因此部分"中间件化"收益要等到后续 ADR 逐条放行。
+- live 事件的通知是"至少一次 + 信用窗口"，可丢弃且有留痕；观测面必须理解 durable/live 分野，否则会把"丢了几条 live 通知"误判为账本缺失。
+- 自研内核代码不会立刻消失（`kernel/plugin.py` 在 P0 形态下仍是唯一实现），存在一段时间内"两份生命周期语义并存"的维护成本。
+
+## Alternatives rejected
+
+| 方案 | 否决理由 |
+|---|---|
+| 全量移植到 TS（cordis 原生，删掉 Python 内核） | 与 ADR-0002 的内核冻结和 ADR-0007/0008/0009/0010/0011 的字节级语义冲突：账本哈希公式、去重键、签名与文件绑定都要重写，34 条 P0 AC 及其证据全部作废（违反"P0 不回归"）；且一旦移植失败无法回退到已验证的形态 |
+| 保留自研插件宿主（`kernel/plugin.py` 作为唯一宿主） | 与用户指令正面冲突；自研件拿不到 loader/hmr/生态，ADR-0001 已把"跟随成本 + 自建成本"记成负向，重复造轮子会在自进化阶段加倍偿还 |
+| 把 Python 嵌进 Node（内嵌解释器 / 原生 addon / 每请求 `spawn`） | 需要宿主编译链与安装（违反"不装到 /workspace 外"与 ADR-0007 §2 的零安装动机）；解释器与崩溃域和宿主耦合；每次 `spawn` 会毁掉账本单一写者与内存投影语义，且 5 ms/事件的追加预算（`NFR-PERF-002`）不可能保住 |
+| 只做文件投递、不设 RPC 桥（复用 QEP 通道当内部通信） | 文件投递是**跨方**协议（ADR-0006），没有请求/应答语义，无法表达"宿主卸载插件 → 内核侧 effect 一并回收"的生命周期耦合；长期还会诱导把业务逻辑复制到 TS（违反 R3） |
+| 桥走 HTTP（loopback 端口） | 现场机器的端口/防火墙/证书不可控，违反 `11-integration-map.md` §1"每项接入必须有降级路径"；stdio 无端口、无额外认证面、进程死亡即连接断开，崩溃语义更简单。保留为 P2 备选绑定（同帧格式，需另写 ADR） |
+| Python 作父进程、Node 作子进程 | 组成与生命周期应由 cordis 拥有（组成即数据、热替换、依赖激活都在宿主侧）；父进程反向会导致"宿主不能重启内核"，并容易留下不受管的进程树 |
+| 在 TS 侧复制金额/TCO/引用链计算 | 两处真相必然漂移（`12` §3 规则 1）；金额必须与账本引用绑定（ADR-0011 §3），TS 无法产出合法 `citations`，等于把审计能力搬出内核 |
+| 桥暴露全部 `ctx.*` 方法（含 `approval.decide` / `award.commit`） | 等于给模型可达路径开一个承诺出口，直接违反 INV-005、`AC-APPROVE-002` 与 P8；人工门必须只在人的交互式终端路径上成立 |
+| 立刻把 P0 内核整体替换为 cordis 的 Fiber/Registry 语义（含账本） | 账本不是"插件生命周期"问题而是字节格式问题（ADR-0007）；把已取证的实现换掉只会引入与审计无关的风险，收益为负 |
+
+## Revisit conditions
+
+1. `cordis` 正式发布 `4.0.0`（非 rc）后：重新评估是否改用语义化范围（如 `^4.0.0`）；任何版本升级都必须过 `tools/verify.sh cordis`、桥的 4 条 AC 与 P0 全量 AC，并独立 commit。
+2. `@cordisjs/plugin-loader`（实测 `1.0.0-rc.7`，peer `cordis ^4.0.0-rc.10`）进入正式版后：把自研的 profile 装配换成官方 loader，使"组成即数据"完全交给上游；若其 include/patch 的三方协调语义与 ADR-0003 的字段权威方冲突，保持 ADR-0003 优先（跨方冲突不用"文件赢"）。
+3. 若 P1 实测显示桥引入的往返开销使 `NFR-PERF-001`（归一化 + 比价 ≤ 30 s / 200 条目 × 5 报价）或 `NFR-PERF-002`（追加 ≤ 5 ms/事件）不可达：重新划分边界（把同一流程的多次跨界调用合并为一次"批处理请求"，或把该流程整体留在 Python），并在 `10-nonfunctional.md` §3 记修订依据。
+4. 若现场验证表明现场机器**只有 Python**（`10-nonfunctional.md` §9 的假设被证伪）：本 ADR 的 P1 强制面失效，桥降级为开发期可选工具，`minimal-mock` 形态升为交付形态（需另写 ADR 说明）。
+5. 若出现"对方也要跑同一套可审计插件"的需求（跨方共享宿主）：重新评估桥与"直接依赖同一运行时"的边界，并在 ADR-0003 的跨方框架下处理签名与批准链（本 ADR 只覆盖单方进程内的宿主/内核边界）。
+6. 若桥落地后连续两轮出现"同一语义在两侧各写一遍"的漂移缺陷（规则 R1/R3 被违反）：把该模块的 TS 实现强制退役，并追加一条机检（例如 AC 层的"TS 侧不得出现金额字面量与算术"扫描）。

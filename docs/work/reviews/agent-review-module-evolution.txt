@@ -1,0 +1,273 @@
+# 模块在 cordis 上的演化边界（P1 设计决策）
+
+Status: proposal。本文件是 `tmp/decisions/` 下的决策记录（非 `docs/` 体例；并入设计文档时须按 `docs/design/12-documentation-standard.md` 的预算与 ID 规则拆分）。
+集成面（宿主形态、桥接协议、升级策略）见已落库的 ADR-0012（`docs/design/adr/0012-direct-cordis-dependency-as-host.md`），批次排期见 `tmp/decisions/P1-plan.md`（B1..B16）；本文件只回答一件事：**每个功能模块的插件边界、不变量归属、演化门、隔离测试与 P1 最小交付物**。
+与 P1 计划的关系：B1..B16 仍是 P1 的主定义；本文件 §7.1 的 8 条是其中**宿主层/演化面**的子集（对应 P1 计划的 B3 与 W-D 工作流），不另立 P1 范围。
+
+## 0 结论摘要
+
+1. `host/`（cordis 组合层）与 `src/`（Python 事实层）分工固定：**组合/生命周期/事件编排在 host，业务事实与账本裁决在 Python**。模块 = cordis 插件（loader 条目），Python 服务 = 该插件当前绑定的 Provider 实现（桥接或未来的 TS 重写）。
+2. 14 个模块的 provides/inject/Config/disposer 按 §3 的表固化；跨模块只允许两种通道：**provided service** 与 **05 声明表里的事件**（cordis `reflect` 层面强制：取未 `inject` 的服务直接抛错，已实测）。
+3. 07 §7 的五条对应关系在 cordis 4.0.0-rc.10 上全部成立，且"改配置先过否决点"是 **fiber 级可挂 hook**（`fiber.ctx.on('internal/update', …)`，实测可短路且不重跑 apply），不需要自建。
+4. 但有 10 条不变量（§4.2 的 H1..H10）**必须由 host 强制**，不能信任插件：账本唯一写入口、事件声明表与 Fact/Intent/Commitment 分类、承诺出口唯一化、realm 投影、冻结面否决、卸载残留审计、草稿 epoch 失效、反作弊门、装配归属裁决、const 键白名单。
+5. "每个模块独立演化"必须是可证伪的：靠 §6 的 fixture（stub 依赖 + 零残留 + inject 白名单 + 负控）与 contract 测试（与 `qa` 同形报告）来证明，而不是靠文档承诺。
+6. P1 最小交付物是 §7.1 的 8 条勾选项；canary 自动晋升、真实多方路由、Python→TS 重写、HMR 一律推迟到 P2。
+
+## 1 事实基础（可复现）
+
+| 事实 | 值 | 来源 |
+|---|---|---|
+| cordis latest | `4.0.0-rc.10`（2026-09-08T15:44:34Z 发布） | `npm view cordis version dist-tags time.modified` |
+| cordis 可选 peer | `@cordisjs/plugin-loader` 1.0.0-rc.7 · `@cordisjs/plugin-include` 1.1.0 · `@cordisjs/plugin-hmr` 1.1.0 | `npm view <pkg> version dist-tags` |
+| 运行时 | node v24.21.0 / npm 11.19.0（`/workspace/runtime/node/current/bin`） | `node -v && npm -v` |
+| 已落地 | `host/package.json` 钉 `4.0.0-rc.10`；`tools/cordis.sh install\|smoke\|run`；`tools/verify.sh cordis` | 仓库内现状（`host/README.md`） |
+
+**实测行为**（探针直接 `import` `host/node_modules/cordis`，rc.10）：
+
+| 探针 | 观察到的输出 | 对设计的含义 |
+|---|---|---|
+| 在未 `inject` 的插件里取 `ctx.ledger` | `Error: cannot get property "ledger" without inject` | 服务边界是运行时不变量，不是约定（可作 inject 白名单正/负控） |
+| 卸载 provider（consumer `inject:['svc']`） | consumer 被自动失活，`getEffects()` 归 0，`ctx.get('svc')` 变 undefined，disposer 逆序执行 | epoch 收敛与"卸载即回收"是原生行为（INV-002 / AC-PLUGIN-002 的 host 侧对应） |
+| `f.ctx.on('internal/update', hook)` 内返回 falsy 不调 `next()` | `f.update({v:2})` 被短路：`config` 仍为 `{v:1}`、`apply` 未重跑；`disposer()` 后 `update({v:3})` 正常生效 | 否决点可挂在**目标 fiber** 上；挂错位置（父 ctx）会静默失效 → 必须有负控 |
+| `Config`（StandardSchemaV1）校验失败 | `ValidationError: invalid config: - n must be number`；合法 config 作为第二参数传入 `apply` | 模块 config schema 可机检；const 键白名单有原生基础 |
+| `await ctx.plugin(p)` / `await fiber.dispose()` | fiber 状态与 effect 可读；卸载后 effect 为空 | 残留审计的数据源在 host 侧 |
+
+**cordis 不覆盖的部分**（诚实清单，`docs/analysis/cordis-architecture.md` §6）：跨进程/跨组织语义、安全沙箱（`isolate` 是命名空间语义）、账本、承诺治理、"disposer 是否真清干净"。这四项正是 §4.2 必须 host 强制的原因。
+
+## 2 统一插件契约
+
+### 2.1 条目形态与装配
+
+```yaml
+# host/profiles/contractor-ops.yaml（示意）
+- id: kernel-bridge
+  plugin: ./modules/kernel-bridge/index.mjs
+  config: { protocol: 1, python_exe: auto, ledger_path: var/ledger.jsonl, realm: "contractor:con-B" }
+- id: norm
+  plugin: ./modules/norm/index.mjs
+  config: { profile: default, rules: [] }
+- id: compare
+  plugin: ./modules/compare/index.mjs
+  config: { weights: { price: 0.5, delivery: 0.2, risk: 0.15, terms: 0.1, deviation: 0.05 } }
+```
+
+- 分层 patch 对齐 `docs/design/01-architecture.md` §5：`industry → org → project → package → session`，越具体者优先；每条 patch 按 `id` 定位条目、按键定位 config 键。
+- **有意偏离**：跨方冲突不适用 cordis `include/journal` 的"文件赢"（ADR-0003 的字段权威方矩阵），host 的 reconciler 对标记为 `cross_party: true` 的字段禁用文件赢并转人工。
+- 冻结条目（`id` 前缀 `kernel-*`、`approval`、`commitments`）由 host 的 patch 过滤器在 `reconcile` 之前拒绝，且在这些 fiber 上安装 `internal/update` 否决 hook。
+
+### 2.2 契约条款（每个模块必须满足，可机检）
+
+| 条款 | 内容 | 机检点 |
+|---|---|---|
+| B1 | 只经 provided service 与 05 声明表事件跨界；不得相对 import 另一个模块的实现 | inject 白名单（`cannot get property ... without inject`）+ 静态 import 检查 |
+| B2 | 一切注册走 `ctx.effect/on/once/set_interval/provide`，交出 disposer | 卸载后 `getEffects()` 为空 + host 资源计数器回基线 |
+| B3 | 事件必须来自声明表（名字 + `@mode` + class + durable） | host 事件包装层白名单（未知名字/错模式/错 class 一律拒） |
+| B4 | config 只走 `Config` schema；`const` 键不可被 patch 覆盖；未知键拒绝 | schema 校验 + patch 过滤器 |
+| B5 | 一个模块一个 entry id，可多实例（不同 `isolate`/realm） | loader 条目树 id diff |
+| B6 | 副作用资源清单（定时器/监听/socket/子进程/文件句柄/端口/模型客户端）必须在 disposer 释放 | fixture 的资源计数器差分 |
+| B7 | 账本写入唯一入口 `ctx.ledger.append`；模块不得直接写账本文件 | 文件写入白名单 + 只经 bridge 的 append |
+| B8 | 模型可见 ⇒ 账本可见（`AGENTS.md` 规则 2） | 新增模型输入必须伴随新事件类型（评审 + 回归） |
+| B9 | 不得读别的模块的私有状态（只读自己的 `ctx.state`/config） | 依赖只在 inject 中声明 |
+| B10 | 拆/合模块的判据：该模块能用 stub 依赖独立跑通它的 contract 测试 | §6.1 fixture |
+
+### 2.3 模块骨架（每个模块目录一个 `index.mjs`）
+
+```js
+export const name = 'norm'
+export const inject = ['ledger']                 // 服务依赖（epoch 由此驱动）
+export const Config = normSchema                 // StandardSchemaV1
+export function apply(ctx, config) {
+  ctx.on('quote/normalize', middleware)           // 自动登记为 effect
+  const disposeRule = ctx.ledger.onAppend(tap)    // 同样登记为 effect
+  ctx.provide('norm', { normalize, diff, rejectCodes })  // provide 自身也是 effect
+}
+```
+
+## 3 每模块边界表
+
+**总表**（"跨界载荷"= 该模块进出边界的唯一形状；"disposer"= 卸载时必须释放的东西；"可写面"= 07 §2 的演化等级）
+
+| 模块（entry id） | provides（Definition 面） | inject | 跨界载荷（in → out） | disposer 必须释放 | 可写面 |
+|---|---|---|---|---|---|
+| `kernel-bridge` | `ledger`（append/read/project/verify_chain）、`qep`（envelope/validate/send/receive） | 无（信任根边缘，不得依赖任何模块） | host→Python **意图/命令**（每行一条 JSON，带 `{v,id}` 握手字段）；Python→host `{id,ref,seq,body_hash,rejection}`。宿主**不得**发写账本请求（负控：注入写请求必须被拒且留痕） | 桥接通道、Python 子进程与管道、在飞请求队列、stderr 订阅、排空中的意图队列（不产生任何账本写入） | 不可自改（仅运行参数可 patch） |
+| `norm` | `norm`（`normalize`/`diff`/拒绝码表） | `ledger` | `Quote`+`BidPackage` → `Normalized{rfq_rev,fx_ref,tax_basis,rule_refs[],tolerance_source}` 或 `Rejection{code,field,next_action}` | 规则条目、`quote/normalize` 中间件、换算/容差缓存、规则目录 watch | 规则可 patch（门通过即可） |
+| `rfq-intake` | `rfq`（create/add/publish/amend/distribute）、`intake`（ingest/missing/questions） | `ledger`、`qep`、`approval` | 包/清单 rev 与字段级 delta（出）；对方包与清单（进）→ 逐条带 `source_ref` 的抽取 + `[假设]` 队列 + 疑问 | 分发重试定时器、rev 只读视图缓存、抽取缓存、疑问队列、解析临时产物 | 提示词与抽取规则可 patch；`require_item_ref` 等 const 不可 |
+| `costmodel` | `cost`（`build`/`unit_cost`/`explain`） | `ledger`、`norm`、`fx`（可选强依赖） | 私域明细（不出 realm）→ `CostModel{items[{item_id,total_band?,factors_hash,explain_ref}],body_hash}` | 私域存储句柄、临时工件、哈希映射缓存、外部库连接 | 成本因子模型可新增（需人工批准） |
+| `pricing` | `pricing`（`price`/`deviate`） | `ledger`、`norm`、`cost`、`rfq`、`approval`、`fx` | `QuoteDraft`+`policy` → `PriceProposal{items[{item_id,unit_price,basis}],policy_ref,deviations[]}`（Intent） | `quote/price-drafted` 中间件、策略 patch 订阅、基线缓存 | 权重只在区间内提案；`final_number_by` 等 const 不可 |
+| `approval` | `approval`（`request`/`decide`/`chain`） | `ledger` | `ApprovalRequest{scope{kind,ref,realm,amount?},payload_hash,approvers[]}` → `ApprovalRecord{id,by,decision,at,signature}`（只能人产生） | 超时定时器、待决队列、一次性引用集合 | 不可自改（人工门存在性） |
+| `commitments` | `commitments`（`commit`/`issue_po`） | `ledger`、`approval`、`qep` | `{kind,ref,approval_ref}` → `Commitment{kind,ref,approved_by,approved_at,signature,payload_hash}` | 出站签名 effect、签名客户端/密钥句柄、重试定时器 | 不可自改（承诺出口唯一） |
+| `deviation` | `deviation`（`capture`/`impact`/`alternative`） | `ledger`、`norm` | 条目与包 → `Deviation{kind,impact{price,time,risk}}`（未量化不进 TCO） | `quote/deviation-*` 发布、捕捉缓存、量化表 | 提示词与量化规则可 patch |
+| `compare` | `compare`（`rank`/`tco`/`cite`） | `ledger`、`norm`、`guard`、`deviation` | 包+报价+权重 → `Evaluation{rank[],citations[]}`（数值必带引用） | `compare/rank-computed` 发布、评分缓存、导出句柄（CSV/Excel） | 权重与折现率在区间内；`require_citations` 等 const 不可 |
+| `guard` | `guard`（`check`/`register_rule`） | `ledger`、`norm` | 目标对象 → `Flag{kind,severity,evidence_refs[],threshold_ref}`（只标注，无否决接口） | 逐条规则的 disposer、五个 waterfall 中间件、`quote/guard-check` 监听 | 规则可新增（门通过）；阈值只能人批 |
+| `eval-metrics` | `eval`（`run`/`replay`/`diff`）、`metrics`（九项指标） | `ledger`（只读） | 账本切片+套件 → `Report`/`MetricDelta`（来源必须是账本事实） | 只读投影订阅、重放用的临时账本副本与运行目录、导出句柄 | 用例只增；门槛值由人设定 |
+| `scenarios` | `scenarios`（`list`/`run`/`replay`） | `ledger`、`norm`、`pricing`、`intake`、`compare`、`guard` | 场景集 id → 步骤事件序列 + 断言结果（每次新建账本） | 临时账本与运行目录（幂等清理）、步骤发布、合成数据缓存 | 场景数据可补充（不属于自改面） |
+| `qep-transport` | `qepTransport`（`bind`/`send`/`receive`/`retry`） | `ledger`、`qep` | `Envelope`（签名、版本化、传输无关）↔ 文件/HTTP/邮件绑定 | 目录 watcher、重发定时器、HTTP 连接池与端口、seq 空洞索引、socket 文件 | 绑定与重试参数可 patch；`qep_version` 等 const 不可 |
+| `ui-queue` | `queue`（只读投影 + 人工动作入口） | `ledger`、`approval` | `QueueItem{ref,scope,payload_hash,evidence_refs[],deadline}` → 人工动作（approve/deny/escalate） | 监听端口、路由、渲染/轮询定时器、队列缓存 | 视图与页面参数可 patch；`read_only_projection`、`redact` 等 const 不可 |
+
+**其余已规划模块**（同构，先给要点，P1/P2 落地时按同表补全）：
+
+| 模块 | provides | inject | config 要点 | disposer 要点 |
+|---|---|---|---|---|
+| `clarify` | `clarify` | `ledger`、`qep`、`approval` | `{broadcast_required: const, auto_reopen_on_rev_change: const}` | 工单订阅、广播回执重试定时器 |
+| `terms` | `terms` | `ledger` | `{library_ref, conflict_action:'flag-only' const}` | 条款库缓存与订阅 |
+| `negotiate` | `negotiate` | `ledger`、`approval`、`pricing` | `{max_rounds, max_concession_pct, price_concession_needs_approval: const}` | 轮次定时器、让步策略订阅 |
+| `capacity` | `capacity` | `ledger` | `{calendar_ref, firm_binding:'human-only' const}` | 日历订阅、slot 预留的 disposer（`reserve -> disposer`） |
+| `award` | `award` | `ledger`、`compare`、`approval`、`commitments`、`qep` | `{po_derivation:'award_only' const, confirmed_required: const}` | 确认请求定时器、意向撤回 effect |
+| `evidence` | `evidence` | `ledger` | `{merkle:'sha256', retention_days, destructive_requires_approval const}` | 导出临时文件、包句柄、留存策略定时器 |
+| `model-gateway` | `model` | `ledger` | `{provider, model, temperature, max_tokens, redact_before_send: const, record_refs: const}` | HTTP 连接池、重试定时器、`kernel/model-call` 发布 |
+
+**config schema 明细（非显然项）**
+
+- `kernel-bridge`：`{ v: 1 (const), python_entry: 'tools/run.sh', profile: 'contractor-ops'|'supplier-bid'|'relay'|'evaluator', root, tmp, realm: 'contractor:*'|'supplier:*', timeout_ms: 5000, intents_only: true (const), fsync: true (const) }`。协议版本（`v`）不匹配必须**拒绝启动**（沿用 ADR-0012 §3 的握手字段与 `docs/design/10-nonfunctional.md` §1 的停发语义，不静默降级）；`intents_only` 表达"宿主只发意图/命令，账本写入只发生在 Python 侧"（P1 计划的 R-P1-02）。
+- `approval`：`{ matrix: [{scope_kind, approvers: ['human:*'], quorum}], ttl_s, on_timeout: 'escalate'|'hold', by_default: 'human-only' (const), once: true (const), no_agent_approver: true (const) }`。
+- `commitments`：`{ kinds: ['quote.submit','award.commit','po.issue','change.approve','price.concession'], require_approval: true (const), po_derivation: 'award_only' (const) }`。
+- `guard`：`{ rules: [{id, kind: 'low-price'|'missing-item'|'capacity'|'terms'|'injection', threshold, severity}], threshold_patch: 'org.guard' (const), no_veto: true (const) }`。
+- `eval-metrics`：`{ suites: [{id, cases: [...], append_only: true (const)}], metrics: [{id, source: 'ledger' (const enum), derivation: 'count'|'ratio'|'duration'}], thresholds: {human_intervention_rate: '<=baseline', determinism: 'byte-equal', cost_delta_pct, latency_delta_pct}, red_team: {append_only: true (const)} }`。`source` 的枚举里**不存在** `model-self-report`。
+- `qep-transport`：`{ bindings: ['file-drop'|'http-relay'|'mail-bridge'], file_drop: {dir, atomic: 'tmp+rename' (const)}, http_relay: {url, retry: {max, backoff_ms}}, qep_version: '1.0' (const), on_incompatible: 'reject' (const), dedupe_key: '(msg_id,body_hash)' (const) }`。
+- `ui-queue`：`{ view: 'cli'|'http', bind: '127.0.0.1:0', page_size, redact: ['private.*'] (const), read_only_projection: true (const), actions: ['approve','deny','escalate'] }`。人工动作只调 `approval.decide`，且调用方身份由带外通道确认（模型不可代签）。
+- `scenarios`：`{ sets: ['s1'..'s4'], data_dir, fresh_ledger_per_run: true (const), deterministic: true (const) }`。每次运行新建账本（否则幂等去重会把重放变成重复投递）。
+
+## 4 不变量 → cordis 原语映射
+
+### 4.1 映射表
+
+| 不变量 | cordis 原语 | 原语是否足够 | host 需要补什么 |
+|---|---|---|---|
+| 注册可回退、卸载无残留（INV-002 / AC-PLUGIN-001） | `fiber.effect` + disposer 逆序 + `getEffects()` | 部分：框架只保证 disposer 被调用，不保证清得干净（analysis §6.3） | 卸载后的残留审计：`getEffects()` 为空 **且** timer/listener/socket/child/fd 计数器回基线（host 侧断言） |
+| 依赖变化重载、不迁移草稿（AC-PLUGIN-002、`docs/design/01-architecture.md` §4） | epoch `_refresh`/`_setEpoch`/`_reload`、新 `fiber.uid` | 否（草稿不是 cordis 状态） | host 持有 draft store，键为 `uid:activation_epoch`；epoch 变化即 drop 并发出可审计事件 |
+| 账本追加不可改、哈希链完整（INV-001） | 无 | 否 | 唯一写入口经 `kernel-bridge` 到 Python `Ledger.append`；host 不提供第二个 append 通道；启动与每次 append 后 `verify_chain()` |
+| Fact / Intent / Commitment 三类语义 | 无（事件无类型系统） | 否 | host 维护 05 的声明表（名字→class+`@mode`+durable）并在事件包装层校验；class 与生产者角色不匹配即拒 |
+| Commitment 必有 approvals（INV-005） | 无 | 否 | 承诺唯一出口 `commitments.commit`，host 在出口校验 `approval_ref`（存在、`by='human:*'`、scope 匹配、一次性）；生产者身份由 host 注入，模型不可自报 |
+| 私域不出 realm（INV-008） | `isolate()`（命名空间） | **否**（08 §2 明示不是安全边界） | 进程/路径分离 + 出站与进模型两处投影器 + 跨 realm 出口唯一（`qep-transport`）；必须带非空转负控 |
+| 人工门存在性与批准要求 | 无 | 否 | `approval`/`commitments`/`ui-queue` 条目的存在性由 host 冻结；在这些 fiber 上装 `internal/update` 否决 hook（实测机制） |
+| 内核命名空间不可 patch（INV-010 / AC-EVOLVE-003） | `internal/update` waterfall 否决 | 是（否决点原生存在） | host 主动安装 hook + loader patch 过滤器在 reconcile 前拒绝 `kernel-*` 条目与 const 键；负控证明它真会红 |
+| 重放确定性（INV-007 / AC-EVAL-001） | 无 | 否 | 影子重放跑在**新账本副本**上；派生结果内容寻址（无墙钟/自增序号）；门里的确定性检查 |
+| 归一化不可行即拒绝、无兜底（INV-009 / AC-NORM-002） | `Config` schema 可表达"必须为空/必须为真" | 部分 | schema const（`fallback_defaults` 必须为空、`reject_on_missing` 必须为真）+ patch 过滤器拒翻转 const + 反例集 |
+
+### 4.2 必须由 host 强制（不能信任插件）的清单
+
+| ID | host 强制项 | 机检形状 |
+|---|---|---|
+| H1 | 账本唯一写入口 + 哈希链校验（INV-001）：宿主只发意图/命令，写入只发生在 Python 侧 | 宿主直写账本必须失败且留痕（负控）；`verify_chain()` 每次 append 后为真 |
+| H2 | 事件声明表与 class 匹配（Fact/Intent/Commitment） | 未声明事件名 / 错 `@mode` / class 与生产者不符 → 拒绝并落审计事件 |
+| H3 | 承诺出口唯一化 + 批准校验（INV-005） | 无 `approval_ref`、或 `by` 非 `human:*`、或 scope 不匹配 → 抛错（三条路径正负控） |
+| H4 | 出站与模型上下文两处 realm 投影（INV-008） | 出站含 `Private-*` → 拒绝 + 落事件；同时断言"本侧仍能读到自己那份"（非空转对照） |
+| H5 | 冻结面：`kernel-*` 条目不可 patch + 冻结 fiber 上的 `internal/update` 否决 hook（INV-010） | 伪造 patch 必须被拒；hook 装错位置时负控必须变红 |
+| H6 | 卸载残留审计（INV-002） | effect 数为 0 **且** 资源计数器差分全 0 |
+| H7 | 草稿 store 的 epoch 失效（不自动迁移） | 依赖失活→恢复后，旧草稿不可读且进程内无残留引用 |
+| H8 | 反作弊门（§5.2 六条） | 门槛四条硬条件 + 来源/只增/确定性检查，全部由 gate runner（host 侧）计算，不由提案模块自评 |
+| H9 | 装配归属与冲突裁决 | patch index 归属可查；`cross_party` 字段禁用"文件赢"，冲突转人工并留痕 |
+| H10 | const 键与枚举白名单 | 翻转 const 键、未知键、枚举外的 `source`（如模型自评）一律拒 |
+
+判定规则：**插件可以决定"怎么算"，不能决定"什么算事实"**。凡涉及事实归属、身份、唯一出口、边界与门槛的计算，一律在 H 清单内。
+
+## 5 演化门（07 §3 六步 × cordis 机制）
+
+### 5.1 六步的 cordis 落地
+
+| 步 | 动作 | cordis 机制 | 产物 / 落账 |
+|---|---|---|---|
+| 1 观察 | 从账本投影与评测报告提取信号：护栏触发率、人工改写率、澄清轮次、比价耗时、被拒输出比例、影子重放差异、被否提案类型 | `evaluator` profile 的只读投影（独立 ctx/isolate，只读账本） | `evolve/observed`（durable，含窗口与信号值） |
+| 2 提案 | `Proposal{id=内容哈希, target(可写面条目), diff, rationale, expected_effect{metric,direction,magnitude}, risks[], rollback_plan, evidence_refs[]}` | `include` patch + journal（patch index 记录"哪个键归谁"） | `evolve/proposed` |
+| 3 影子 | 同一批历史输入跑改动前后两套逻辑，输出 `MetricDelta` | `isolate('shadow:'+proposal_id)` 的独立 realm 内 mount 提案后的条目树；**复制账本到新文件**（否则幂等去重把重放变成重复投递） | `evolve/shadowed`（含 delta 与账本副本 ref） |
+| 4 门 | 五条门槛 AND：目标指标不退化、INV-001..010 全绿、反例集全绿、成本/延迟不超预算、**人工介入率不上升** | host 的 gate runner（独立 fiber，不依赖提案模块） | `evolve/gated`（verdict + 每条理由） |
+| 5 canary | 先在单标段/单供应商/单一报价类型上生效 | 同一模块的两个 entry（baseline 与 canary，不同 `id`/`isolate`）+ host 路由选择器；canary fiber 可单独 dispose | `evolve/canary-started` |
+| 6 晋升/回滚 | 达标→全量；越界→自动回滚 | 晋升：journal 折进 base include 文件；回滚：`await canaryFiber.dispose()`（effect 逆序回收）+ journal 撤回 | `evolve/promoted` / `evolve/rolled-back` |
+| — | 越界即阻断的底层机制 | `fiber.ctx.on('internal/update', veto)`（实测：返回 falsy 即短路，config 不变、apply 不重跑） | `kernel/config-updated` 的否决记录 |
+
+**两个实测坑（写进 host 测试，否则门会静默失效）**：
+1. 否决 hook 必须挂在**目标 fiber** 的 `ctx` 上（`fiber.ctx.on(...)`）；挂在父 ctx 上不会触发（探针实证）。
+2. cordis 的 waterfall `next()` 不接受参数，值传递靠可变载荷（`host/smoke.mjs` 已记录该差异）；照 Python 侧 `next(work)` 的习惯写会丢改动。
+
+### 5.2 反作弊（07 §4）→ 机检
+
+| 风险 | 机检 | 不通过时 |
+|---|---|---|
+| 优化了指标而非业务 | 每个上报指标必须带账本引用（citations ≥ 1），且 `source` 只能是账本事实枚举 | 拒绝该指标，proposal 不进门 |
+| 用"多问人"换正确率 | 门里显式比较改动前后的人工介入率（`approval/requested` + `agent/escalate` 计数 / 事件总数） | 介入率上升即越界 → 自动回滚 |
+| 削弱护栏 | 阈值不在可写面（schema const + patch 过滤器）；反例集包含历史护栏触发样本，重放必须仍然触发 | 任一样本不再触发 → 越界 |
+| 改动使重放不再确定 | 确定性硬门：同一输入两次重放字节级一致（新账本、无墙钟/序号） | 不确定即失败 |
+| 提案例被反复重试直到通过 | 提案必须附过去 N 次同类提案的结果；第 3 次同类失败由 host 强制转人工 | 计数达阈值 → 停线并升级 |
+| 改评测用例提高通过率 | 用例只增：diff 必须纯新增；删除/修改既有用例 → 硬失败；新增用例需人工批准 | 硬失败 |
+
+### 5.3 回滚与归属
+
+- 回滚 = 卸载 effect（`dispose`），**不依赖人工删文件**；每个提案自带 `rollback_plan`，且计划必须写成"卸载哪个 entry / 撤回哪个 patch 键"。
+- 归属：patch index 记录每个键的所有者（文件 / 某 patch / 运行时插入）；回滚只撤提案自己拥有的键，不覆盖文件或人工 patch 的键。
+- 每次晋升/回滚都落 `evolve/*` 事件，`docs/work/progress-checklist.md` 记录提案 ID（对齐 ADR-0005 的配套要求）。
+
+## 6 单模块隔离测试
+
+### 6.1 fixture（每个模块必须有）
+
+`host/test/fixture.mjs`：用 stub 依赖（内存账本 `{append,read,project,verify_chain}`、cordis 原生 `events`、假 `approval`/`qep`）mount 被测模块，断言：
+
+| 断言 | 内容 | 反例（必须变红） |
+|---|---|---|
+| A1 inject 白名单 | 未在 `inject` 声明的服务在插件内取用必须抛错；manifest 声明的依赖 = 实际取用集合 | 偷用别人的服务 → 抛错而非静默可用 |
+| A2 零残留 | dispose 前后 effect 数为 0 且 timer/listener/socket/child/fd 计数器差分全 0 | 不释放定时器/socket → 差分非 0 |
+| A3 config 负控 | 非法 config → `ValidationError`；未知键、翻转 const 键 → 拒 | 把 `require_approval` 改成 false → 拒 |
+| A4 事件声明 | emit 未声明事件名 / 错 `@mode` → 拒 | 新增事件不登记 → 拒 |
+| A5 确定性 | 同一 fixture 同输入跑两次，输出字节级一致 | 引入墙钟/自增序号 → 红 |
+| A6 无跨模块 import | 模块目录内不得出现指向其他模块目录的相对 import（静态检查 + ESM 解析） | 直接 `import '../norm/index.mjs'` → 红 |
+
+### 6.2 contract 测试（与仓库 AC 同形）
+
+- 形状与 `src/quotagent/qa/registry.py` 一致：注册项（id、阶段、标题、命令）、断言列表（name/ok/detail）、报告 JSON（`{module, check, status, assertions[], evidence_refs[]}`）、退出码 0/1/2（未知项返回 2，不伪装通过）。
+- 命名与登记：宿主/模块级契约走 `AC-INTEG-*` 家族（该家族已在 `docs/work/acceptance-criteria.md` 定义）；**新增 AC ID 必须在定义文件出现并被一条 FR 引用**，否则文档门（AC-DESIGN-001/003）会红——这是新 ID 的登记规则，不是可选项。
+- 驱动方式：沿用 P1 计划的 R-P1-06——宿主侧模块测试由 **Python runner 驱动**（把 host 进程当"被测进程"），这样宿主行为也有 AC 证据，不接受手工截图或人工摘要。
+- 命令面：`tools/verify.sh module <name>`（P1 新增 target，形态与 `tools/verify.sh ac <AC-ID>` 一致，自带证据落盘到 `docs/work/evidence/`）；该 target 的落库批次是 P1 计划的 B3，落库前先以 `qa ac <ID>` 形态注册。
+- 每条 contract 测试必须满足：**只用 stub 依赖即可跑**（不拉真实对方进程/外部系统）、**确定性**、**能给出首个失败断言的具体差异**。
+
+### 6.3 "每个模块独立演化"的可证伪判据
+
+| ID | 判据 | 做法 |
+|---|---|---|
+| EVO-ISO-1 | 除被测模块外其余模块全部缺失，该模块 contract 测试仍全绿 | fixture 只 mount 一个模块 + stubs |
+| EVO-ISO-2 | 替换某模块的实现后，只需重跑该模块的 contract 测试 + 全套 INV，其他模块的 contract 测试不需要改动 | 两个实现（baseline/candidate）交替 mount，断言对方测试不变 |
+| EVO-ISO-3 | 一次演化只改一个模块目录 + 该条目的 include 文件 | `git diff --name-only` 落在允许集合内，越界即红 |
+| EVO-ISO-4 | 卸载该模块后系统其余部分仍能启动：缺依赖的消费者转为失活并报"能力不可用"，而不是崩溃 | 卸载后启动 profile，断言其余模块 ACTIVE、消费者非 ACTIVE 且给出可读原因 |
+
+这四条把"独立演化"从愿望变成可证伪断言：任何一条红，说明模块边界没划对（通常是 §2.2 的 B1/B9 被破）。
+
+## 7 P1 最小交付物
+
+### 7.1 P1 必须存在（可勾选、可机检）
+
+| # | 断言 | 检查方式 |
+|---|---|---|
+| 1 | `host/` 依赖钉 `cordis@4.0.0-rc.10`，`node_modules` 在仓库内（gitignored），`package-lock.json` 入库 | `cat host/package.json`；`tools/cordis.sh smoke` 退出码 0 |
+| 2 | `tools/verify.sh cordis` 在验证入口内且绿 | `tools/verify.sh cordis` |
+| 3 | 条目树 + 分层 patch：至少 3 个 entry（`kernel-bridge` + `norm` + 一个消费者如 `compare`）；宿主侧最小装配清单以 P1 计划 B3 为准，`host/profiles/minimal-mock.yaml` 一键启动 | 启动脚本退出码 0，条目列表可打印 |
+| 4 | Python 内核零改动：`src/quotagent/kernel/*` 与现有 P0 AC 全部保持绿；桥接闭环（宿主意图 → Python 落账；宿主直写账本被拒）有 AC 证据（`AC-INTEG-*` 家族扩展，落库批次 B3） | 回归套件（不新增失败）；协议版本不匹配必须拒绝启动（负控：`v: 2` 必须红） |
+| 5 | 每个进树模块都有 manifest（name/inject/Config/apply）+ fixture 的 A1..A6 + 至少 1 条 contract 测试（stub 下可跑，由 Python runner 驱动取证） | 逐模块一条命令 |
+| 6 | 强制项 H1/H2/H3/H5/H6 落地且每条带负控（伪造 patch、绕过批准、未声明事件、卸载残留都必须变红） | `tools/verify.sh invariants`（P1 新增 target） |
+| 7 | 演化门的机检骨架存在：proposal 记录类型 + patch/journal 归属 + shadow 挂载（隔离 realm + 新账本副本）+ gate runner + 回滚（dispose 实现）；**P1 不允许自动晋升**（`promote` 必带人工 `approval_ref`） | 灰度只在单标段生效的演示；无人工批准的 promote 必须被拒 |
+| 8 | 文档与接手不退化：新 AC/新条目按 12 登记（文档门绿）；`handover.md`/`.agents/state.json`/`progress-checklist.md` 三处同轮一致 | `tools/verify.sh docs`；三处文件互读 |
+
+### 7.2 可推迟到 P2
+
+| 项 | 理由 |
+|---|---|
+| canary 的真实多方路由与观察窗口自动化、自动晋升/自动回滚阈值 | P1 只有 S1..S4 场景集，样本不足 |
+| shadow 需要的历史账本规模 | P1 账本规模小，先证明机制再谈统计意义 |
+| 把 Python 服务逐个重写为 TS 插件 | P1 用桥接即可；重写是 P2 的"换 Provider"动作 |
+| HMR（`@cordisjs/plugin-hmr` 1.1.0）与 include/journal 的自动落盘三方协调 | P1 只做 patch + journal 归属与手写回滚 |
+| `@cordisjs/plugin-loader` / `plugin-include` 的引入（先用仓库内最小加载器） | 少一个预发布依赖；形态由集成 ADR 定 |
+| 多租户/多参与方 isolate 规模化、邮件/ERP 接入、审计包销毁策略 | 属 P2 运营面 |
+
+### 7.3 门 G1 的增量
+
+在 `docs/work/roadmap.md` 的 G1 清单上追加三条（不替换原有条目）：条目树与 profile 可一键启动；模块 contract 测试与 H1/H2/H3/H5/H6 强制项全绿且各有负控；`tools/verify.sh cordis` 与 `docs` 同时绿。
+
+## 8 风险与未决
+
+| # | 风险 | 影响 | 缓解 |
+|---|---|---|---|
+| R1 | cordis 是预发布（rc.10，自述 API 未稳定；`loader` README 无文档） | 升级可能破坏组合层 | 钉确切版本 + lockfile 入库 + 适配层收敛到 `host/bridge.mjs` 与 `host/loader.mjs` + `smoke` 作升级门 + 升级单独 commit |
+| R2 | 双运行时语义漂移（Python 侧与 host 侧的声明表/拒绝码各写一份） | 同一事件名两侧语义不同，证据链不可比 | 声明表单一真源（Python 侧导出 JSON，host 启动时读，不一致即拒启）；契约测试覆盖两侧 |
+| R3 | 边界不严 →"独立演化"变口号 | ESM 相对 import 绕开 inject；`isolate` 不是安全边界；多一个账本写入口就是历史改写 | H1/H3 唯一出口 + A6 静态检查 + 反例测试 + EVO-ISO-1..4 |
+| R4 | 门槛误设（过松漏检 / 过严无进展） | 自进化放行坏改动或长期停滞 | 门槛值进项目 patch 由人设定，越界事件留痕，定期校准（ADR-0005 已声明该负向） |
+| R5 | P1 被宿主层吃掉时间 | G1（双侧真实分离）推迟 | P1 只要求 3 个 entry + H1/H2/H3/H5/H6 + 门骨架，其余全部 §7.2 |
+
+未决（需集成 ADR 或现场验证定）：加载器自研 vs 引入 `@cordisjs/plugin-loader`（ADR-0012 只钉了"Host 侧装配"这一职责，未钉实现）；宿主侧视图/中间件是否在 P1 落地（P1 计划的 C2 已声明可砍）；人工身份与签名密钥的对接方式（H3 的 `by` 来源）；跨方冲突 reconciler 的实现位置（host 侧还是 Python 侧裁决）。桥接传输已由 ADR-0012 §3 定为"一行一条 JSON + 版本握手"，不再作为未决项。
