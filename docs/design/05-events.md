@@ -88,6 +88,7 @@
 | `capacity/conflict` | emit | ✔ | `ctx.capacity` | 产能/交期不可行 → 只提请人工（不否决、不改交期） |
 | `compare/rank-computed` | emit | ✔ | `ctx.compare` → 人/AwardAdvisor | 排序 + 引用链 |
 | `compare/flag-raised` | emit | ✔ | `ctx.guard` | Flag 从不由模型自行消解 |
+| `compare/table-exported` | emit | ✔ | `ctx.compare` → 评审 | 比较表导出留痕（行数/字节数/`evaluation_id`；导出内容与账本逐行一致） |
 | `negotiate/round` | serial | ✔ | `ctx.negotiate` → approval | 轮次与让步上限来自策略 patch（规划中（P2 谈判阶段）） |
 | `award/intent-proposed` | emit | ✔ | `ctx.award` → 对方 | Intent，可撤回 |
 | `award/intent-withdrawn` | emit | ✔ | `ctx.award` | 意向撤回（可复：再次提出得新意向） |

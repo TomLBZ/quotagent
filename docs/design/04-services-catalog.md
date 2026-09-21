@@ -150,6 +150,7 @@
 - Definition：`rank(package, quotes, weights) -> Evaluation` · `tco(quote) -> breakdown` · `cite(evaluation) -> ledger_refs[]`。
 - 不变量：`Evaluation` 中每个数值必须有 `citations`；同输入同输出（可重放）；版本不一致的报价不得参与排序。
 - P0 实现：`src/quotagent/services/compare.py`（五项金额化分量 + 极差归一评分 + `verify_citations` + `recompute`）；语义见 ADR-0011。
+- P1（T-214）：`services/export.py` 生成可评审比较表——**逐行**（每个参与排序的报价一行；每个被排除的报价也一行，带 `code`/`reason`/`next_action`）；每行含 Flag、差异说明与引用链；`verify()` 与 `Evaluation` **及账本**（`compare/rank-computed`）逐行核对；导出确定性（同输入字节一致，无时间戳/自增）；CSV 带 BOM（Excel 可直接打开）。`compare/table-exported` 留痕。
 - 关联：FR-COMPARE-001..006，AC-COMPARE-001..004。
 
 ### `ctx.award` [P0]

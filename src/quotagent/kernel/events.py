@@ -131,6 +131,7 @@ class EventBus:
         "capacity/conflict": ("emit", True, ""),
         "compare/rank-computed": ("emit", True, ""),
         "compare/flag-raised": ("emit", True, ""),
+        "compare/table-exported": ("emit", True, ""),
         "award/intent-proposed": ("emit", True, ""),
         "award/intent-withdrawn": ("emit", True, ""),
         "award/commit-requested": ("serial", False, ""),

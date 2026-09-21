@@ -85,6 +85,9 @@ class CompareService:
                     "reason": f"报价基于 rev{quote.get('rfq_rev')}，包当前 rev{package.get('rev')}",
                     "next_action": f"请对方基于 rev{package.get('rev')} 重报，或把包回退到 "
                                    f"rev{quote.get('rfq_rev')}（不得静默比较）",
+                    # 排除也要有据可查：报价本体 + 包版本字段（外发比较表由此可逐行复核）
+                    "citations": sorted({f"quote:{quote['quote_id']}",
+                                         f"package:{package.get('package_id')}#rev{package.get('rev')}:version"}),
                 })
                 self._append(MISMATCH_EVENT, {
                     "quote_id": quote["quote_id"], "quote_rev": quote.get("rfq_rev"),
@@ -143,9 +146,13 @@ class CompareService:
         allowed_days = (delivery_by - quote_by).days if (quote_by and delivery_by) else None
 
         price = float(quote.get("total_amount") or 0.0)
-        price_cites = [f"{quote_ref}:total_amount",
-                       f"ledger:{self._last_seq('quote/normalized') or 0}",
-                       f"{package_ref}:items"]
+        # 账本引用只在**确实存在**该条目时给出：`ledger:0` 是指向不存在条目的悬空引用
+        # （seq 从 1 开始），会骗过"有没有引用"的粗检（AC-COMPARE-004 的严格解析抓到）。
+        ledger_seq = (self._last_seq("quote/normalized") or self._last_seq("quote/submitted")
+                      or self._last_seq("quote/revised"))
+        price_cites = [f"{quote_ref}:total_amount", f"{package_ref}:items"]
+        if ledger_seq:
+            price_cites.append(f"ledger:{ledger_seq}")
 
         over_days = max(0, float(quote.get("lead_time_days") or 0) - (allowed_days or 0))
         delivery = over_days * float(policy["time_cost_per_day"])

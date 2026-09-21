@@ -1,0 +1,62 @@
+EV-053 — 比较表导出与账本逐行一致（T-214 / FR-COMPARE-004、FR-UX-003 / S1.13）
+
+时间: 2026-09-21T04:50:24Z
+commit: f1d56ff
+命令: qa ac AC-COMPARE-004（新）；AC-COMPARE-001/002/003、AC-RFQ-004（回归）
+
+--- AC-COMPARE-004（新；退出码 0，13/13 断言）---
+  [ok] **逐行**：参与排序的报价每个一行（rank 从 1 连续），被排除的报价也各占一行（不静默消失） — ranked=2 excluded=['q-old']
+  [ok] 被排除行给出可行动信息：`code`/`reason`/`next_action` 齐全（版本不一致） — excluded=rfq_version_mismatch reason=报价基于 rev1，包当前 rev2
+  [ok] 与 `Evaluation` 逐行一致：分数、TCO、五项分量逐字段相等 — report={'ok': True, 'rows_checked': 3, 'first_mismatch': None}
+  [ok] **与账本逐行一致**：导出行分数 == `compare/rank-computed` 的 scores，排名顺序与排除清单也一致 — export={'q-a': 0.0, 'q-b': 15.0} ledger={'q-a': 0.0, 'q-b': 15.0}
+  [ok] 篡改一行分数 → 核对失败并**定位到该行**（逐行核对不是口号） — first_mismatch=第 1 行与 Evaluation 不一致: q-a
+  [ok] 篡改引用 → 核对失败（引用必须能在账本/包里解析） — first_mismatch=引用无法解析: [('q-a', 'quote:q-not-exist')]
+  [ok] 含 Flag 与差异说明：q-b 行带 `abnormal_low|deviation` 与差异文案，q-a 行为空 — q-b flags=abnormal_low|deviation note=交期比包内要求晚 4 天|报价单价低于成本下限 8%
+  [ok] 每行带引用链（**含被排除行**：排除必须有据，且全部可解析） — citations=['package:pkg-014#rev2:deadlines|package:pkg-014#r', 'package:pkg-014#rev2:deadlines|package:pkg-014#r', 'package:pkg-014#rev2:version|quote:q-old']
+  [ok] 确定性：同输入两次导出**字节一致**（无时间戳、无自增序号） — len=1310
+  [ok] CSV 可读回：列头稳定（含 row_type/score/flags/citations/code/next_action），数据行数 = 3 — header=['row_type', 'rank', 'quote_id', 'score', 'tco_total', 'price']… rows=3
+  [ok] Excel 可直接打开：文件以 UTF-8 BOM 开头（双击不乱码） — bom='\ufeff'
+  [ok] 导出留痕 `compare/table-exported`（evaluation_id / 行数 / 字节数） — rows=3
+  [ok] `.xlsx` 的取舍已登记在案（D-016：P1 以 CSV 交付，xlsx 走宿主层） — decisions.md 缺 D-016
+
+--- AC-COMPARE-003（回归；退出码 0，5/5 断言）---
+  [ok] 每个数值都有一个引用（数量对得上） — numbers=14 citations=24
+  [ok] 引用指向真实来源（账本条目 / 清单条目 / 报价字段 / 策略） — prefixes=['package', 'policy', 'quote']
+  [ok] 正常 Evaluation 通过引用校验（含排序建议与分量） — verify_citations 返回 None（通过）
+  [ok] 人为删掉一条引用 → 校验失败并指出位置（无引用即无效） — original_citations=['package:pkg-0007#rev2:items', 'quote:q-b:total_amount'] error=ranking[0].components.price (quote_id=q-b) 缺少引用链：无引用即无效（FR-COMPARE-003）
+  [ok] 排序建议本身也必须带引用链（删掉即失败） — error=ranking[q-b] 缺少引用链：排序建议本身必须可追溯（FR-COMPARE-003）
+
+--- AC-COMPARE-002（回归；退出码 0，6/6 断言）---
+  [ok] 同输入两次排序结果完全一致（字节级） — first=['q-b', 'q-a'] second=['q-b', 'q-a']
+  [ok] 排序不是恒等顺序（判据真的在起作用） — ranking=['q-b', 'q-a']
+  [ok] TCO 分量与手算一致（交期 8000 / 质保 12000 / 融资 3478.356164） — delivery=8000.0 warranty=12000.0 payment=3479.6712328767126
+  [ok] TCO 合计 = 价格 + 各调整分量（手算 415479.671233） — tco_total=415479.6712328767
+  [ok] 换权重只改分数，不改分量（策略 patch 可复算） — alt_ranking=['q-a', 'q-b']
+  [ok] 复算：用旧分量的数值 + 新权重能重现新排序的分数 — recomputed={'q-b': 60.0, 'q-a': 20.0} alt=[('q-a', 20.0), ('q-b', 60.0)]
+
+--- AC-RFQ-004（回归；退出码 0，10/10 断言）---
+  [ok] 报价必须绑定包版本（缺 rfq_rev 直接拒绝登记） — active=3
+  [ok] 未标记时排除原因仍是版本门 rfq_version_mismatch（与过期标记分层，不混淆） — excluded_codes=['rfq_version_mismatch']
+  [ok] 升版后基于旧版本的活动报价被标记过期（stale=true + superseded_by_rev=2 + status） — superseded=[{"quote_id": "q-rev1-a", "package_id": "pkg-014", "based_on_rev": 1, "superseded_by_rev": 2, "status": "superseded", "stale": true, "supplier": "sup-A", "requires_requote": true,
+  [ok] 基于新版本的报价不受影响（仍在活动集里） — active=['q-rev2-c']
+  [ok] 过期留痕 quote/superseded（含旧/新版本号与 reason，可审计不清除） — rows=['q-rev1-a', 'q-rev1-b']
+  [ok] 过期报价**不进入排序**，且以 quote_superseded 显式列出（含旧/新版本号与下一步） — ranking=['q-rev2-c'] excluded=[{"quote_id": "q-rev1-a", "code": "quote_superseded", "based_on_rev": 1, "superseded_by_rev": 2, "reason": "报价基于 rev1，已被 rev2 取代（不得静默比较）", "next_action": "请对方基于
+  [ok] 产生重报请求（含旧/新版本号、供应商与可行动 next_action） — requests=[{"quote_id": "q-rev1-a", "package_id": "pkg-014", "based_on_rev": 1, "superseded_by_rev": 2, "status": "superseded", "stale": true, "supplier": "sup-A", "requires_requote": true, "
+  [ok] 幂等：对同一升版重复调用不再标记（不产生第二条留痕，重报请求不翻倍） — again=[] rows=2
+  [ok] 继续升版把 rev2 的报价也标记过期（链式失效，不是只处理第一次升版） — superseded=['q-rev2-c'] active=[]
+  [ok] 过期是标记不是删除：过期报价仍可读（含原报价内容与审 trail） — superseded_count=3
+
+--- 口径说明 ---
+· 「与账本一致」是**真的比对账本**：`verify()` 把导出行与 `compare/rank-computed` 条目的 scores / ranking /
+  excluded 逐行相等；篡改一行分数即失败并定位到行（不是只跟自己算过的结果比）。
+· 「逐行」= 每个参与排序的报价一行 + **每个被排除的报价也一行**（带 code/reason/next_action，不静默消失）；
+· 引用解析是**双源**：`quote:`/`package:` 指向输入文档（可在账本条目或本次 Evaluation 的输入清单里确认），
+  `ledger:`/`deviation:` 只能来自账本；未登记 kind 与指向比较之外的对象一律不可解析；
+· 确定性：同输入两次导出字节一致（无时间戳、无自增）；CSV 带 UTF-8 BOM（Excel 双击不乱码）；
+· `.xlsx` 的取舍记 D-016：内核/服务层零依赖约束下不倒造 xlsx，需要时由宿主层承接。
+
+--- 本批修的真实缺陷（由导出的严格引用解析抓到）---
+· `compare.tco()` 的报价行曾用 `f"ledger:{self._last_seq(...) or 0}"` 生成引用：没有任何 `quote/normalized`
+  条目时得到 **`ledger:0`**——指向不存在条目的**悬空引用**（账本 seq 从 1 开始）。粗检"有没有引用"看不出来，
+  严格解析当场失败。已改为「只有确实存在该条目时才给 `ledger:<seq>`」。
+· 被排除行原先没有引用：已补「报价本体 + 包版本字段」引用，使"排除"同样可逐行复核。
