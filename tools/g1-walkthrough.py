@@ -27,7 +27,19 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SHARED = ROOT / 'tmp' / 'g1-shared'
+def _shared_dir() -> Path:
+    """共享目录：默认 tmp/g1-shared；可用 `--shared-dir <path>` 指定。
+
+    为什么要能指定：`verify.sh g1` 每次都会**自清理并重建**这个目录（临时产物纪律），
+    于是任何长期读者（例如 WebUI）都会被跟着清空。UI 因此用自己的 `tmp/ui-shared`。
+    """
+    argv = sys.argv
+    if '--shared-dir' in argv:
+        return Path(argv[argv.index('--shared-dir') + 1]).resolve()
+    return ROOT / 'tmp' / 'g1-shared'
+
+
+SHARED = _shared_dir()
 SIDES = ("contractor", "supplier")
 
 

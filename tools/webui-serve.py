@@ -55,7 +55,9 @@ def main(argv: list[str]) -> int:
     # 先跑一遍走查（keep-shared）产生**真实**两侧账本，UI 展示的就是 g1 MVP 门产出的数据。
     # 走查失败**不阻塞** UI 启动（账本缺失时 UI 会自报 unhealthy），但原因写进日志。
     if os.environ.get("QUOTAGENT_WEBUI_SEED", "1") == "1":
-        seeded = subprocess.run([sys.executable, str(ROOT / "tools" / "g1-walkthrough.py"), "--keep-shared"],
+        ui_shared = str(ROOT / "tmp" / "ui-shared")
+        seeded = subprocess.run([sys.executable, str(ROOT / "tools" / "g1-walkthrough.py"),
+                                 "--keep-shared", "--shared-dir", ui_shared],
                                 cwd=str(ROOT), capture_output=True, text=True, timeout=300)
         print(f"[webui-serve] 走查 seed rc={seeded.returncode} "
               f"{(seeded.stdout or '').strip().splitlines()[-1][:120] if seeded.stdout.strip() else ''}",
@@ -64,9 +66,9 @@ def main(argv: list[str]) -> int:
             "--host", os.environ.get("QUOTAGENT_WEBUI_HOST", "127.0.0.1"),
             "--prefix", os.environ.get("QUOTAGENT_WEBUI_PREFIX", "/quotagent"),
             "--ledger-contractor", os.environ.get(
-                "QUOTAGENT_UI_LEDGER_CONTRACTOR", str(ROOT / "tmp" / "g1-shared" / "contractor" / "ledger.jsonl")),
+                "QUOTAGENT_UI_LEDGER_CONTRACTOR", str(ROOT / "tmp" / "ui-shared" / "contractor" / "ledger.jsonl")),
             "--ledger-supplier", os.environ.get(
-                "QUOTAGENT_UI_LEDGER_SUPPLIER", str(ROOT / "tmp" / "g1-shared" / "supplier" / "ledger.jsonl"))]
+                "QUOTAGENT_UI_LEDGER_SUPPLIER", str(ROOT / "tmp" / "ui-shared" / "supplier" / "ledger.jsonl"))]
     os.execv(args[0], args)  # 不留中间进程（工作区服务模型要求脚本自身就是服务）
     return 0
 
