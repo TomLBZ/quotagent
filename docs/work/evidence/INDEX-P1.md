@@ -35,3 +35,4 @@
 | EV-059 | WebUI 插件 + 工作区路由接入（双方视角） | T-222 | P2 |
 | EV-057 | 演化门骨架（`verify.sh evolution` 15/15 含负控）（详情见 EV 文件本体） | T-220 / 评审 C §7.1 第 7 条 |
 | EV-058 | 进树模块 manifest + fixture A1..A6（`verify.sh modules` 36/36，含负控）：inject 白名单/零残留/config 负控/事件声明/确定性/无跨模块 import；含"inject 写内建 mixin 会永 pending"的实测发现；并复核 `g1` 门 | T-221 / 评审 C §7.1 第 5 条 |
+| EV-150 | AI agent 决策建议层（`advice-panel`，确定性规则、`engine=rules`）：围栏门 30/30（含 4 处单点变异全部变红 + 防假变异自检 + 产品树字节还原）+ 真 HTTP 端到端 14/14（两个真进程：有数据的一件 + 空投影的一件）；空投影必须 `degraded+reason` 且建议数 0、两视角建议确实不同、私域哨兵 0 次、十道门全绿（详情见 EV 文件本体） | AC-ADV-001 | P2 |

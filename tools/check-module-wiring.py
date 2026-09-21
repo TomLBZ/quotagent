@@ -41,6 +41,7 @@ PROVIDERS = {
     "mailView": "mail-view",
     "bidHeuristics": "bid-heuristics",
     "uiFeedback": "ui-feedback",
+    "advicePanel": "advice-panel",
 }
 
 

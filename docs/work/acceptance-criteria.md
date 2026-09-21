@@ -139,6 +139,8 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-UXWEB-001 | P2 | 模块导出 `SUBVIEWS`（子视图单点定义）；第一屏三块 `data-block` 锚点齐备且顺序正确；页面模板**无 `<script>`、无内联事件属性**且交互用 `<form method=get>`；`data-subnav` 与「上手」入口都在；空结果带 `data-empty`；子视图清单 8 条（HTTP 行为另由 `tools/verify.sh webui` 44/44 举证）| `tools/verify.sh ac AC-UXWEB-001` + `tools/verify.sh webui` | EV-144 |
 | AC-CONFIG-001 | P2 | 配置/凭据 UI：11 条路径未提权 **401 同形（唯一 body）**；带会话 `/admin/config/` 200 且**0 行 `<script>`**、`/admin/api/config` 200（三层 + 每键 source/shadowed_by/editable）；干跑预览**不落盘**（真 `/workspace/config.yaml` sha256 前后一致）；提交只落 **0600** 待处理项且账本零新增；`config-apply.py` 原子写 + 回滚 + 幂等；账本事件 body 与全部响应体里**凭据哨兵出现 0 次**；YAML 不支持的构造被拒且给 reason | `tools/verify.sh ac AC-CONFIG-001` + `tools/verify.sh config-route` | EV-145 |
 
+| AC-ADV-001 | P2 | **决策建议层的确定性、溯源与诚实**：`advise(payload)` 对同一份白名单载荷**两次逐字节一致**（且与入参键序/条目顺序无关、跨实例一致、输出无时间键）；每条建议 `basis` **非空**且每个 token 都解析回载荷真键（`as_of` 或 `<段>[<id>].<键>`，四种篡改必须判假）；输出恒带 `engine="rules"` + 「不含模型推测」文案 + `privacy`（model_calls=0 / network_calls=0 / private_keys_read=false）；**空投影 → `degraded:true` + 有名 reason + `items:[]`**（「载荷不能用」与「数据齐但无可建议项」两个 reason 可区分，且**不抛错**）；有界（`max_items` 夹取 + `shown + omitted = generated`）；私域哨兵 0 命中且**带哨兵与不带哨兵逐字节一致**；围栏门真跑 `failures:0`、断言 ≥14，含 **4 处单点变异全部变红**（有界 / 空数据守卫 / basis 断链 / engine 篡改）与防假变异自检、跑完产品树字节不变；真 HTTP：两视角页面与 JSON 200、四道页面子导航含入口、页面 **0 行 `<script>` / 0 内联事件**、**两视角建议不同**、同一 URL 两次逐字节一致 | `tools/verify.sh ac AC-ADV-001` + `tools/verify.sh advice`（围栏门 + 真路由门） | 见 `evidence/EV-150` |
+
 ## 7. 证据制度
 
 1. 每条 AC 执行后，原始输出存 `docs/work/evidence/EV-<NNN>-<AC-ID>.txt`（追加头部：时间、

@@ -246,6 +246,18 @@ const STUBS = {
       canary: { entered: 0, exited: 0 }, unknown_types: [], recent: [], last_event: null,
       privacy: { entry_bodies_included: false } }),
   },
+  advicePanel: {
+    // fixture 的 stub：只满足"能派生建议/能自述引擎"；规则口径与 4 处变异由 advice-panel 自己的门验（t281）
+    advise: () => ({ source: 'advice-panel', engine: 'rules', engine_note: 'stub', view: '', as_of: null,
+      items: [], counts: { generated: 0, shown: 0, omitted: 0, by_severity: { high: 0, medium: 0, low: 0 },
+        inputs: { deadlines: 0, gates: 0, ranking_rows: 0, channels: 0 } },
+      absent: [], notes: [], rules: [], bounds: { max_items: 20, expiry_soon_hours: 96, spread_points: 25 },
+      truncated: false, omitted: 0, bounded: false, degraded: true, reason: 'stub',
+      privacy: { private_keys_read: false, model_calls: 0, network_calls: 0 } }),
+    meta: () => ({ engine: 'rules', engine_note: 'stub', rules: [], severities: [], sections: [],
+      degraded_reasons: [], bounds: { max_items: 20, expiry_soon_hours: 96, spread_points: 25 } }),
+    config: () => ({ max_items: 20, expiry_soon_hours: 96, spread_points: 25 }),
+  },
 }
 
 /** 起一个带句柄的模块实例：句柄在插件自己的 ctx 里取（那里才有 inject 权限）。 */

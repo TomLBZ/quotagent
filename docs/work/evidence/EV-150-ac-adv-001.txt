@@ -1,0 +1,204 @@
+EV-150  AC-ADV-001：AI agent 决策建议层（`advice-panel`）—— 围栏门 30/30 + 真路由门 14/14 + 十道门全绿
+
+时间：2026-09-21（UTC）  cwd：/workspace/projects/quotagent  基线 commit：ca62da6（工作树含本批改动）
+入口：tools/verify.sh advice | webui | modules | wiring | plugins | coverage | docs | ac-registry | canary-route | bid-heuristics
+完整原始输出（每一道门的全文，含未截断的 JSON）：`tmp/advice-run.out`
+重跑：`source /workspace/bin/activate.sh && tools/verify.sh advice`（先围栏门 `host/t281-advice-gate.mjs`，后真 HTTP 端到端 `tools/check-advice-route.py`）
+
+一、静态检查（node --check / py_compile）
+=== node --check（全部新/改 mjs） ===
+OK host/modules/advice-panel.mjs
+OK host/modules/webui.mjs
+OK host/t281-advice-gate.mjs
+OK host/webui.mjs
+OK host/cli.mjs
+OK host/canary-dispatch.mjs
+OK host/check-modules.mjs
+OK host/t279-heuristics-gate.mjs
+OK host/t280-ui-feedback-gate.mjs
+OK host/profiles.mjs
+
+二、重启（`pgrep -af "cli.mjs webui"` 看真 PID → kill → `/workspace/bin/ws-gateway ensure quotagent`；新 PID 回读）
+=== 重启：pid 回读 ===
+2026-09-21T20:10:10Z
+PID=1066242 /workspace/runtime/node/current/bin/node --profile webui --port 8093 --host
+
+三、线上四条路由真回读（curl，前缀 /quotagent）
+=== 四条线上路由真回读（curl） ===
+GET /quotagent/contractor/advice/ -> 200 (5654 B)
+GET /quotagent/contractor/api/advice -> 200 (3999 B)
+GET /quotagent/supplier/advice/ -> 200 (5815 B)
+GET /quotagent/supplier/api/advice -> 200 (4183 B)
+
+--- 承包商侧 api/advice（原始）---
+{
+  "view": "contractor",
+  "source": "advice-panel（domain 插件：确定性规则；不读账本、不写账本、不联网、不调模型）",
+  "engine": "rules",
+  "engine_note": "本页建议由确定性规则从投影/快照派生，不含模型推测",
+  "as_of": "2026-09-21T20:09:49Z",
+  "items": [
+    {
+      "id": "spread:L-001",
+      "rule": "spread",
+      "severity": "high",
+      "title": "比价区间异常：L-001 组内得分极差 100 分",
+      "why": "行项目「L-001」内 2 个候选中最高 q-ui-seed=100、最低 qg-fresh=0，极差 100 ≥ 阈值 25 —— 区间可能不可比或存在异常项（得分是 bid-heuristics 同口径的**无量纲**贡献点，越高越前）",
+      "basis": [
+        "ranking[q-ui-seed].score",
+        "ranking[qg-fresh].score"
+      ],
+      "next_action": "/quotagent/contractor/heuristics/   # 用「比价口径」页调权重看每项贡献分解（无量纲）",
+      "blocked_by": ""
+    },
+    {
+      "id": "channel:mail",
+      "rule": "channel",
+      "severity": "high",
+      "title": "通道「mail」未连接",
+      "why": "通道「mail」的声明是 available=false（reason=mail-smtp-unconfigured） —— 本页**不假装能发**：这个事实来自 Python 侧服务的真实状态，不是本页推断的",
+      "basis": [
+        "channels[mail].available",
+        "channels[mail].reason"
+      
+--- 供应商侧 api/advice（原始）---
+{
+  "view": "supplier",
+  "source": "advice-panel（domain 插件：确定性规则；不读账本、不写账本、不联网、不调模型）",
+  "engine": "rules",
+  "engine_note": "本页建议由确定性规则从投影/快照派生，不含模型推测",
+  "as_of": "2026-09-21T20:09:48Z",
+  "items": [
+    {
+      "id": "spread:L-001",
+      "rule": "spread",
+      "severity": "high",
+      "title": "比价区间异常：L-001 组内得分极差 100 分",
+      "why": "行项目「L-001」内 2 个候选中最高 q-ui-seed=100、最低 qg-fresh=0，极差 100 ≥ 阈值 25 —— 区间可能不可比或存在异常项（得分是 bid-heuristics 同口径的**无量纲**贡献点，越高越前）",
+      "basis": [
+        "ranking[q-ui-seed].score",
+        "ranking[qg-fresh].score"
+      ],
+      "next_action": "/quotagent/supplier/heuristics/   # 用「比价口径」页调权重看每项贡献分解（无量纲）",
+      "blocked_by": ""
+    },
+    {
+      "id": "channel:mail",
+      "rule": "channel",
+      "severity": "high",
+      "title": "通道「mail」未连接",
+      "why": "通道「mail」的声明是 available=false（reason=mail-smtp-unconfigured） —— 本页**不假装能发**：这个事实来自 Python 侧服务的真实状态，不是本页推断的",
+      "basis": [
+        "channels[mail].available",
+        "channels[mail].reason"
+      ],
+
+四、**两视角建议确实不同**（同一份代码、同一套规则，输入不同则建议不同；原始对比行）
+=== 两视角建议确实不同（原始对比行）===
+contractor: engine=rules as_of=2026-09-21T20:09:49Z degraded=False reason=None items=['spread:L-001', 'channel:mail', 'expiry:pkg-g1'] absent=['gates']
+supplier: engine=rules as_of=2026-09-21T20:09:48Z degraded=False reason=None items=['spread:L-001', 'channel:mail', 'rank-up:qg-fresh'] absent=['deadlines', 'gates']
+contractor ids != supplier ids : True
+contractor rules != supplier rules : True
+
+五、**空数据实例**（真进程 + 0 行账本 + 无快照）→ 页面 `data-degraded="1"`、建议数 0、JSON `items: 0`
+=== 空数据实例（真进程 pid=1067029 port=43999，空账本 0 行 + 无快照）→ 页面降级且建议数 0（原始）===
+GET /qaadv0/contractor/advice/ -> 200 | data-degraded="1">降级（**不冒充健康、也不给你编建议**）：<code>no-usable-inputs</code>
+ | 建议数 <b>0</b> 条
+GET /qaadv0/contractor/api/advice -> engine=rules degraded=True reason=no-usable-inputs items=0 counts={'generated': 0, 'shown': 0, 'omitted': 0, 'by_severity': {'high': 0, 'medium': 0, 'low': 0}}
+GET /qaadv0/supplier/advice/ -> 200 | data-degraded="1">降级（**不冒充健康、也不给你编建议**）：<code>no-usable-inputs</code>
+ | 建议数 <b>0</b> 条
+GET /qaadv0/supplier/api/advice -> engine=rules degraded=True reason=no-usable-inputs items=0 counts={'generated': 0, 'shown': 0, 'omitted': 0, 'by_severity': {'high': 0, 'medium': 0, 'low': 0}}
+
+=== 门：advice / webui / modules / wiring / plugins / coverage / docs / ac-registry / canary-route / bid-heuristics ===
+
+六、十道门（干净一轮的退出码 + 关键计数行）
+=== 十道门复跑（干净一轮：退出码 + 各自的关键计数行）===
+tools/verify.sh advice          -> exit=0  passed=30 total=30 failures=0 all_ok=True
+tools/verify.sh webui           -> exit=0  RESULT: PASS（webui 门 51/51）
+tools/verify.sh modules         -> exit=0  counts=469/469
+tools/verify.sh wiring          -> exit=0  }
+tools/verify.sh plugins         -> exit=0  RESULT: PASS（插件清单门 4/4）
+tools/verify.sh coverage        -> exit=0  }
+tools/verify.sh docs            -> exit=0  RESULT: PASS
+tools/verify.sh ac-registry     -> exit=0  [ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查）
+tools/verify.sh canary-route    -> exit=0  RESULT: PASS（canary-route 门 8/8）
+tools/verify.sh bid-heuristics  -> exit=0  passed=32 total=32 failures=0 all_ok=True
+
+七、围栏门逐条断言（`host/t281-advice-gate.mjs`，30 条；含 4 处单点变异各自必须变红 + 防假变异自检 + 产品树字节还原）
+     [ok  ] 1 契约正控：manifest 齐备（name/inject/builtin/usedServices/provides=[advicePanel]/Config/apply/fixture/ENGINE/ENGINE_NOTE/五条规则/闭合的降级原因），且只 import ../lib 白名单，源码里 0 个脚本字面量
+     [ok  ] 2 挂载正控：cordis 挂载后 provide 拦截拿得到句柄（advise/meta/config），dispose 后 effect 归零
+     [ok  ] 3 诚实分层正控：输出与句柄自述都写死 `engine="rules"`，`engine_note` 与模块导出常量逐字一致（含"不含模型推测"），`privacy` 三项如实申报（0 次模型调用 / 0 次网络 / 未读私域键）
+     [ok  ] 4 每条建议形状正控：键集固定（id/rule/severity/title/why/basis/next_action/blocked_by）、severity 是闭集之一、title/why/next_action 非空、rule 在规则表里、id 唯一
+     [ok  ] 5 **basis 可溯源**正控：每条建议的 basis 非空，且每个 token 都解析回载荷里的**真键**（`as_of` 或 `<段>[<id>].<键>`）；**非空转对照**：不存在的 ref / 不存在的键 / 坏形状 / 空 basis 四种篡改都必须判假（否则"可溯源"是橡皮图章）
+     [ok  ] 6 五条规则全覆盖正控：综合载荷触发 5 个规则，且**手算**的 id 顺序、严重度、规则归属逐项对齐（排序口径：严重度降序 → 规则顺序 → id 字典序；算式见门顶部注释）
+     [ok  ] 7 截止规则正控（**手算**小时差）：已过期 → high 且 why 里给出"逾期约 36 小时"；临近（+36h ≤ 96h）→ medium；远期（+842h）**不报**；阈值调到 1h → 只剩已过期那条（非空转对照）；**缺 `as_of` 时一条都不派生**并留下说明
+     [ok  ] 8 比价区间异常正控：**按行项目分组**算极差（L-001 手算 90−30=60 ≥ 25 且 ≥ 2×25=50 → high；L-002 的 10 分 < 阈值 → **不报**）；非空转对照：阈值 40 → 同一条降为 medium（60 < 80）；阈值 100 → 该条消失
+     [ok  ] 9 人工门正控：commit scope（quote.submit）→ high，其它 scope → medium；每条 next_action 都指向**真 CLI**（`src/quotagent/g1side.py` 的分阶段命令或 `tools/g1-walkthrough.py`）；未知 scope 走回落命令；`blocked_by` 必须写明"浏览器不能代签"
+     [ok  ] 10 通道缺口正控：`available:false` → high；`next_action` **逐字节照抄**通道声明里的真值（不假装能发）；`blocked_by` 填真 reason；非空转对照：`available:true` → 该条必须消失（此时整份载荷无可建议项 → degraded）
+     [ok  ] 11 供应商侧提升排名正控：复用 heuristics 的贡献分解（focus/potential/hint），只给无量纲贡献点；next_action 是带 `?w_<focus>=1` 的**真路由**；**非空转对照**：同一批 ranking 在承包商视角不产生 rank-up 条
+     [ok  ] 12 **空数据不编建议**（硬负控）：空投影 / 非对象 / 坏形状 / 缺关键字段一律 `degraded:true` + **有名** reason + `items` 长度 0，且不抛错；"载荷不能用"（no-usable-inputs）与"数据齐但无可建议项"（no-signal）是**两个不同**的 reason（不许含糊成一条）
+     [ok  ] 13 确定性负控：同输入两次逐字节一致 / **键序打乱**一致 / **条目顺序打乱**一致 / 跨实例一致 / 输出里没有时间字段（`as_of` 是入参事实的回显，不是本层取的时钟）
+     [ok  ] 14 私域哨兵负控：加在四段条目上的私域键（`reserve_price`/`cost_model`/`private:*`/`bidders_private`/`authorized_band`）**读都不读** → 带哨兵与不带哨兵输出**逐字节一致**、哨兵 0 命中；**非空转对照**：同一批哨兵在输入里确实存在
+     [ok  ] 15 有界负控：`max_items` 夹取生效（0 → 下界 1；1000 → 上界 200；非数字 → 回落 20）；截断如实报 `omitted`/`truncated`；`shown + omitted === generated`；`by_severity` 之和 === generated（截断只影响展示，不改口径）
+     [ok  ] 16 零写面负控：产物**零写面、不读账本、不联网、不调模型**（无写/读文件、账本、墙钟、随机、网络、子进程、事件订阅）且扫描器**非空转**（对照样本必须命中 ≥3）
+     [ok  ] 17 负控：配置不得静默放行（未知键 / 错类型 / 非对象入参一律被拒；空配置给出默认值；`deterministic` 是 const 键，翻转即拒）；阈值经夹取后进输出 `bounds`
+     [ok  ] 18 正控：fixture 纯读取（连跑两次逐字节一致、不改变句柄行为），且**冻结输入**不抛错（ESM 严格模式下任何对入参的写入都会抛 TypeError → 证明没偷偷改调用方的载荷）
+     [ok  ] 19 真 HTTP 正控：`/t281/<view>/advice/` 与 `/<view>/api/advice` 两视角各自 200；`/api/routes` 登记了页面与 JSON 两条路由且 `auth=none`；页面含道内子导航与「决策建议」入口、`data-engine="rules"`与"不含模型推测"那句、建议条带 `data-advice-id`/`data-basis`；JSON 契约齐备（engine/items/counts/bounds/absent/notes/degraded/reason）
+     [ok  ] 19b 真 HTTP 负控：两视角的**页面与 JSON 都 0 行脚本 / 0 内联事件**（零 JS 是机检事实：交互只有链接，下一步是 `<pre><code>` 里可复制的命令/路由），且扫描器非空转
+     [ok  ] 20 真 HTTP 正控：**两视角的建议确实不同** —— 承包商侧出真建议（≥4 条、`degraded:false`），供应商侧**空投影** → 页面 `data-degraded="1"` + `no-usable-inputs`、JSON `items:[]` + `degraded:true`（"没数据"绝不冒充"没有建议"）
+     [ok  ] 21 真 HTTP 正控 + 负控：**四道页面**（承包商/供应商/运维/系统管理）的子导航里都有「决策建议」入口，第四道是提权后的真面板；两视角 advice 页/JSON 里私域键名与哨兵 **0 命中**（这类键连读都不读），**非空转对照**：同一批哨兵确实写在夹具账本文件里
+     [ok  ] 21b 真 HTTP 负控：既有路由没被弄坏（承包商首页 200），且本门**不涉未提权的 admin**（未带 cookie 的 `/admin/` 仍是 401 固定体）
+     [ok  ] 22 变异前基线：四条场景（有界/空数据不编/basis 可溯源/engine=rules）在**真产物**上全真（否则变异变红就说明不了任何事：基线本来就是红的）
+     [ok  ] 23 变异：变异1：去掉建议条数上限（不再截断）
+     [ok  ] 23 变异：变异2：空数据守卫失效（没数据也返回"健康"空表）
+     [ok  ] 23 变异：变异3：截止类建议不再带 basis（溯源断链）
+     [ok  ] 23 变异：变异4：引擎自述被改成 model（把规则冒充模型推测）
+     [ok  ] 24 防假变异（自检）：找不到唯一锚点的"变异"必须被判定为**假变异**（返回 null），把锚点替换成它自己也不算变异 —— 否则"变异后门还绿"会被误读成"门很稳"
+     [ok  ] 25 还原：本门全程**没有写过产品树** —— `host/modules/advice-panel.mjs` 与 `host/modules/webui.mjs` 跑完之后与跑之前**逐字节一致**（变异只写在临时目录的副本里）
+
+     （门输出：passed=30 total=30 failures=0）
+
+八、真 HTTP 端到端逐条断言（`tools/check-advice-route.py`，14 条；两个真进程：一件有数据、一件空投影）
+     [ok  ] ① 夹具就绪（承包商 5 行含哨兵 / 供应商 3 行 / 空账本 0 行 / 一份通道快照；两份账本分别给两个视角读，形状与部署一致）
+     [ok  ] ② 真进程就绪（`cli.mjs webui` + `/api/health` 200；**不需要**管理员 token）
+     [ok  ] ③ `/api/routes` 登记了两视角 ×（页面 + JSON）四条新路由，且 `auth` 都是 `none`（不需要管理员身份就能看建议）
+     [ok  ] ③ 两视角 advice 页各自 **200 且是真页面**（道内子导航含「决策建议」入口、`data-engine=\"rules\"` + 「不含模型推测」那句、建议表 `data-advice=\"items\"`）
+     [ok  ] ③ `/<view>/api/advice` 双方各自 200 且契约齐备（engine/engine_note/items/counts/bounds/absent/notes/truncated/omitted/degraded/reason/privacy），且**有真数据**（`degraded:false`）
+     [ok  ] ④ **两视角建议确实不同**（同一份代码、同一套规则，输入不同则建议不同）：页面体不同、id 列表不同、JSON 的 rule 集合也不同（承包商侧有截止/比价极差，供应商侧没有；两边都有的规则必须真的一样）
+     [ok  ] ⑤ 每条建议都带**非空 `basis`**，且每个 token 都是 `as_of` 或 `<段>[<id>].<键>` 形状（指向投影里的真键，不是「看起来像引用」的串）
+     [ok  ] ⑥ 每条 `next_action` 都能照着做（不是空话）：人工门 → **真 CLI**（`python3 -m quotagent.g1side ...`）、比价/排名 → 本前缀下的**真路由**、凭据缺口 → **逐字节照抄**通道声明里的 next_action（不假装能发，`blocked_by` 填真 reason）
+     [ok  ] ⑦ 私域哨兵 **0 次**：**两视角**的 advice 页与 JSON 里都搜不到承包商私域键与哨兵串（这类键连读都不读 → 排名/建议都不可能反推出标底）；**非空转对照**：同一批哨兵确实写在夹具账本文件里
+     [ok  ] ⑧ 新页面/JSON **0 行脚本 / 0 内联事件**（零 JS 是机检事实：交互只有链接，下一步是 `<pre><code>` 里可复制的命令/路由），扫描器非空转
+     [ok  ] ⑨ 确定性（HTTP 层）：同一 URL 两次 GET **响应体逐字节一致**（页面与 JSON 都试）——本层不取墙钟、不用随机数，同一份投影必然给同一组建议
+     [ok  ] ⑩ 既有路由没被弄坏（`/api/ops`、`/contractor/heuristics/`、`/contractor/` 都 200），且本门全程**不涉未提权的 admin**（`/admin/` 仍 401 固定体）
+     [ok  ] ⑪ **空投影必须降级且建议数为 0**（真进程真回读）：两视角页面都出 `data-degraded=\"1\"` + 有名 reason 、JSON `items:[]` + `degraded:true`，且页面上写着「建议数 0」—— 没数据就**不编建议**
+     [ok  ] ⑫ 宿主**零写面**（跑完两个真进程之后夹具账本/快照逐字节不变、目录没有多出/少掉任何文件；宿主不写账本、不落待处理项）
+
+     （门输出：passed=14/14 failures=0）
+
+九、结论
+  1. 建议层的五条规则（截止临近/已过期 · 比价区间异常 · 等待人工门 · 凭据缺口阻塞 · 供应商侧提升排名）
+     全部由**确定性规则**从投影/快照派生：`engine=rules` + 「不含模型推测」文案写死在输出与页面上；
+     每条建议的 `basis` 都能解析回载荷里的真键（门里含四种篡改对照）。
+  2. **没有可分的数据就不给建议**：空投影/坏形状 → `degraded:true` + 有名 reason + `items:[]`；
+     「载荷不能用」（no-usable-inputs）与「数据齐但无可建议项」（no-signal）是两个不同的 reason。
+  3. 两视角建议**确实不同**（同一套规则，输入不同则结论不同）：承包商侧出「截止已过期 + 比价极差」，
+     供应商侧出「提升排名（focus=price）」；两边都有的规则（通道缺口）逐字一致。
+  4. 私域零泄漏：两视角 advice 页/JSON 里私域键名与哨兵 0 命中；带哨兵与不带哨兵输出逐字节一致；
+     凭据缺口照抄 Python 侧声明的 `next_action`（**不假装能发**）。
+  5. 十道门全绿（advice 30/30 + 14/14、webui 51/51、modules 469/469、wiring 5/5、plugins 4/4、
+     coverage 7/7、docs PASS、ac-registry PASS、canary-route 8/8、bid-heuristics 32/32 + 12/12）。
+
+十、AC 级与全量复跑
+tools/verify.sh advice          -> exit=0  passed=30 total=30 failures=0 all_ok=True
+tools/verify.sh webui           -> exit=0  RESULT: PASS（webui 门 51/51）
+tools/verify.sh modules         -> exit=0  counts=469/469
+tools/verify.sh wiring          -> exit=0  }
+tools/verify.sh plugins         -> exit=0  RESULT: PASS（插件清单门 4/4）
+tools/verify.sh coverage        -> exit=0  }
+tools/verify.sh docs            -> exit=0  RESULT: PASS
+tools/verify.sh ac-registry     -> exit=0  [ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查）
+tools/verify.sh canary-route    -> exit=0  RESULT: PASS（canary-route 门 8/8）
+tools/verify.sh bid-heuristics  -> exit=0  passed=32 total=32 failures=0 all_ok=True
+tools/verify.sh ac AC-ADV-001 -> exit=0  （9/9 断言；探针含真执行）
+tools/run.sh -m quotagent.qa all -> exit=0  全量 AC：81/81 通过（含 AC-ADV-001 9/9）

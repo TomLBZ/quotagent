@@ -18,11 +18,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环 / 决策建议）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel']
 
 export const provides = ['webui']
 
@@ -99,13 +99,18 @@ const subNav = (prefix, view, current) => {
   }
   // 比价 heuristics（T-279）：业务方看得见、点得到（新页面本身零内联脚本）
   links.push(`<a href="${prefix}/${view}/heuristics/" data-heuristics-link="1"${current === 'heuristics' ? ' aria-current="page"' : ''}>比价口径</a>`)
+  // 决策建议层（本批）：确定性规则派生的下一步（`engine=rules`，同样零内联脚本）
+  links.push(`<a href="${prefix}/${view}/advice/" data-advice-link="1"${current === 'advice' ? ' aria-current="page"' : ''}>决策建议</a>`)
   return `<nav data-subnav="${view}">${links.join(' ')}</nav>`
 }
 
-/** 页内锚点导航（ops / admin 两道；同样带 `data-subnav` 抓手）。 */
-const anchorNav = (view, home, sections, extras = []) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
+/** 页内锚点导航（ops / admin 两道；同样带 `data-subnav` 抓手）。
+ *  `extras` 是比价口径入口（带 `data-heuristics-link`），`adviceExtras` 是决策建议入口
+ *  （带 `data-advice-link`）—— 两种入口的抓手分开，免得门把其中一个当成另一个的证据。 */
+const anchorNav = (view, home, sections, extras = [], adviceExtras = []) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
   .concat(sections.map(([id, label]) => `<a href="${home}#${id}">${label}</a>`))
   .concat(extras.map(([href, label]) => `<a href="${href}" data-heuristics-link="1">${label}</a>`))
+  .concat(adviceExtras.map(([href, label]) => `<a href="${href}" data-advice-link="1">${label}</a>`))
   .join(' ')}</nav>`
 
 
@@ -214,6 +219,7 @@ export function apply(ctx, config) {
   const configView = ctx.configView          // 配置与凭据的可视面 + 干跑 + 待处理项（本批新增模块）
   const mailView = ctx.mailView              // 邮件域（SMTP/IMAP）的只读运维视图（**本批新增模块**）
   const bid = ctx.bidHeuristics              // 比价 heuristics（domain 插件，T-279）：只做算术，不读账本
+  const advice = ctx.advicePanel             // 决策建议层（domain 插件，本批）：确定性规则派生，不读账本、不联网、不调模型
   const feedback = ctx.uiFeedback            // WebUI 反馈闭环（ui-feedback 插件）：版本事实只读 + 只落 0600 待办件
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
@@ -532,6 +538,143 @@ export function apply(ctx, config) {
       note: '五个分量的贡献点（无量纲）；极差归一按行项目分组（baseline=per-item 时同项才互相比较）；'
         + '同权重下与 services/compare.py 名次一致；只输出白名单字段（行项目/代号/名次/分数/贡献/缺失/提示），'
         + '不出任何绝对量级与私域键' }
+  }
+
+  // ==========================================================================================
+  // 决策建议层：**确定性规则**从本视角自己的投影/快照派生"下一步"。
+  //   · 派生全在 `host/modules/advice-panel.mjs`（domain 插件：不读账本、不写文件、不联网、不调模型）；
+  //   · 本文件只做一件事：把**本视角自己的行/快照**过滤成白名单结构（带私域键的行整行跳过并报数，
+  //     与比价候选同一道防线），再把插件给的建议原样渲染（页面 **0 行脚本**，下一步是可复制的命令/路由）；
+  //   · `as_of` = 本视角行里最大的 `ts`（**事实时刻**，不是墙钟）—— 没有它就不派生截止类建议（不猜）。
+  // ==========================================================================================
+  const ADVICE_CAP = 8          // 喂给建议层的每段条目上限（有界；每段各自截断，互不影响）
+  const lastTsOf = (rows) => rows.map((row) => (typeof row?.ts === 'string' && row.ts.trim() !== '' ? row.ts.trim() : null))
+    .filter((ts) => ts !== null).sort().pop() ?? null
+
+  /** 截止：本视角自己的 `rfq/*` 行（`package_id` + `quote_by` / `clarify_by`）。 */
+  const adviceDeadlines = (view) => {
+    const out = []
+    for (const row of ledgerOf(view).rows()) {
+      const body = row && typeof row.body === 'object' && row.body !== null ? row.body : {}
+      if (hasPrivateKey(body, view)) continue
+      if (!String(row?.type ?? '').startsWith('rfq/')) continue
+      const ref = [body.package_id, row?.correlation_id]
+        .map((value) => (typeof value === 'string' ? value.trim() : '')).find((text) => text !== '')
+      if (!ref) continue
+      for (const [kind, value] of [['quote_by', body.quote_by], ['clarify_by', body.clarify_by]]) {
+        if (typeof value !== 'string' || value.trim() === '') continue
+        out.push({ ref, due_at: value.trim(), kind })
+      }
+    }
+    return out
+  }
+  /** 等待人工门：按 `approval_id` 取最后一条 `approval/*`，不是 granted/aborted 就算仍待批。 */
+  const adviceGates = (view) => {
+    const last = new Map()
+    for (const row of ledgerOf(view).rows()) {
+      const type = String(row?.type ?? '')
+      if (!type.startsWith('approval/')) continue
+      const body = row && typeof row.body === 'object' && row.body !== null ? row.body : {}
+      if (hasPrivateKey(body, view)) continue
+      const id = typeof body.approval_id === 'string' ? body.approval_id.trim() : ''
+      if (!id) continue
+      last.set(id, { type, scope: typeof body.scope === 'string' ? body.scope.trim() : '',
+        ref: typeof body.ref === 'string' ? body.ref.trim() : '' })
+    }
+    return [...last.entries()].sort((left, right) => (left[0] < right[0] ? -1 : (left[0] > right[0] ? 1 : 0)))
+      .filter(([, item]) => item.type !== 'approval/granted' && item.type !== 'approval/aborted')
+      .map(([approval_id, item]) => ({ approval_id, scope: item.scope, ref: item.ref }))
+  }
+  /** 通道声明：三域快照里本视角的 `mail.transport`（缺则退到顶层两档），同名只取第一处。 */
+  const adviceChannels = (view) => {
+    const snap = pipelinePayload() || {}
+    const slice = (snap.views || {})[view] || {}
+    const out = []
+    for (const [label, decl] of [['mail', (slice.mail || {}).transport], ['mail', (snap.mail || {}).transport],
+      ['transport', snap.transport]]) {
+      if (!decl || typeof decl !== 'object' || Array.isArray(decl) || typeof decl.available !== 'boolean') continue
+      if (out.some((item) => item.name === label)) continue
+      out.push({ name: label, available: decl.available,
+        reason: typeof decl.reason === 'string' ? decl.reason : '',
+        next_action: typeof decl.next_action === 'string' ? decl.next_action : '' })
+    }
+    return out
+  }
+  /**
+   * 比价口径（**复用 heuristics 的候选映射与同口径打分**）：不截断候选 —— 截断会改变极差归一的
+   * 基数（等于换了一套口径），展示行数由 `bid-heuristics` 自己的 `max_candidates` 兜。
+   */
+  const adviceRanking = (view) => {
+    const payload = bid.rank({ candidates: heuristicsCandidates(view).list })
+    return { rows: payload.rows.map((row) => ({ code: row.code, item: row.item, score: row.score,
+      focus: row.focus, potential: row.potential, hint: row.hint })) }
+  }
+  const advicePayload = (view) => ({
+    view,
+    as_of: lastTsOf(ledgerOf(view).rows()),
+    deadlines: adviceDeadlines(view).slice(0, ADVICE_CAP),
+    gates: adviceGates(view).slice(0, ADVICE_CAP),
+    ranking: adviceRanking(view),
+    channels: adviceChannels(view).slice(0, ADVICE_CAP),
+  })
+  const adviceRun = (view) => advice.advise(advicePayload(view))
+  /** JSON（机器可读；与页面同数据、同口径；引擎自述一起给）。 */
+  const adviceJson = (view) => {
+    const run = adviceRun(view)
+    const meta = advice.meta()
+    return { view, source: 'advice-panel（domain 插件：确定性规则；不读账本、不写账本、不联网、不调模型）',
+      engine: run.engine, engine_note: run.engine_note, as_of: run.as_of, items: run.items,
+      counts: run.counts, absent: run.absent, notes: run.notes, rules: run.rules, bounds: run.bounds,
+      truncated: run.truncated, omitted: run.omitted, bounded: run.bounded, degraded: run.degraded,
+      reason: run.reason, privacy: run.privacy,
+      meta: { engine: meta.engine, severities: meta.severities, sections: meta.sections,
+        degraded_reasons: meta.degraded_reasons },
+      note: 'engine=rules：本接口给的是**确定性规则**从投影/快照派生的一组"下一步"，不含模型推测；'
+        + '每条建议的 `basis` 指向本视角投影里的真键；没有可分的数据时 `degraded:true` + 有名 `reason` 且'
+        + ' `items` 为 0（不编建议）；`next_action` 是可直接复制的命令或本前缀下的路由（凭据缺口时照抄声明里的真值，'
+        + '不假装能发）' }
+  }
+  /** 建议页（SSR，**零内联脚本**：下一步是 `<pre><code>` 里的命令/路由，点的是链接）。 */
+  const adviceHtml = (view) => {
+    const run = adviceRun(view)
+    const SEVERITY_LABEL = { high: '高', medium: '中', low: '低' }
+    const rows = run.items.map((item) => `<tr data-advice-id="${esc(item.id)}" data-rule="${esc(item.rule)}"`
+      + ` data-severity="${esc(item.severity)}"><td>${esc(SEVERITY_LABEL[item.severity] ?? item.severity)}</td>`
+      + `<td><code>${esc(item.rule)}</code><br><small><code>${esc(item.id)}</code></small></td>`
+      + `<td>${esc(item.title)}<br><small>${esc(item.why)}</small></td>`
+      + `<td>${item.basis.map((token) => `<code>${esc(token)}</code>`).join(' ')}</td>`
+      + `<td><pre>${esc(item.next_action)}</pre>`
+      + `${item.blocked_by === '' ? '' : `<small>阻塞：${esc(item.blocked_by)}</small>`}</td></tr>`).join('')
+    const header = '<tr><th>严重度</th><th>规则</th><th>建议与依据</th><th>溯源（投影真键）</th><th>下一步（可复制）</th></tr>'
+    const chips = run.rules.map((entry) => `<code>${esc(entry.rule)}</code> ${esc(entry.label)}`).join(' · ')
+    return subNav(prefix, view, 'advice')
+      + `<p><a href="${prefix}/${view}/">← 回 ${rules[view].title}</a> · JSON：<code>${prefix}/${view}/api/advice</code>`
+      + ` · <a href="${prefix}/${view}/advice/">重新派生</a>（本页每次都是现算的，没有缓存）</p>`
+      + `<p data-engine="${esc(run.engine)}"><b>引擎：<code>engine=${esc(run.engine)}</code></b> —— `
+      + `${esc(run.engine_note)}（本层是**确定性规则**：五条规则写在 <code>host/modules/advice-panel.mjs</code>，`
+      + `每条建议都带 <b>basis</b> 指回本视角投影里的真键；宿主不读账本、不写账本、不联网、不调模型，页面 0 行脚本）。</p>`
+      + `<p>规则表：${chips}</p>`
+      + `<p data-advice="inputs">参照时刻 <code>as_of=${esc(run.as_of ?? '（无）')}</code>`
+      + `（= 本视角账本事实里最大的 <code>ts</code>，**不是墙钟**）；本页读到的输入：`
+      + `截止 <b>${run.counts.inputs?.deadlines ?? 0}</b> · 待批 <b>${run.counts.inputs?.gates ?? 0}</b> ·`
+      + ` 比价行 <b>${run.counts.inputs?.ranking_rows ?? 0}</b> · 通道 <b>${run.counts.inputs?.channels ?? 0}</b>；`
+      + `本视角**没有**的输入段：<code>${esc(run.absent.join(', ') || '（无）')}</code></p>`
+      + (run.degraded
+        ? `<p class="degraded" data-degraded="1">降级（**不冒充健康、也不给你编建议**）：`
+          + `<code>${esc(run.reason)}</code> —— 建议数 <b>${run.counts.shown}</b> 条。`
+          + `${run.reason === 'no-usable-inputs' ? '本视角投影里还没有可供派生的数据（不是页面坏了）。' : ''}`
+          + `${run.reason === 'no-signal' ? '数据齐了但没有触发任何规则 —— 这本身就是结论，不编一条兜底建议。' : ''}</p>`
+        : `<table data-advice="items">${header}${rows}</table>`)
+      + `<p data-advice="counts">生成 <b>${run.counts.generated}</b> 条 / 展示 <b>${run.counts.shown}</b> 条；`
+      + `严重度分布（生成口径）：高 <b>${run.counts.by_severity.high}</b> / 中 <b>${run.counts.by_severity.medium}</b> /`
+      + ` 低 <b>${run.counts.by_severity.low}</b>；有界：上限 <code>max_items=${run.bounds.max_items}</code> →`
+      + ` 截断 <b>${run.truncated}</b>（被丢 <b>${run.omitted}</b> 条，照实报）；阈值：`
+      + ` 截止临近 <code>${run.bounds.expiry_soon_hours}h</code> / 得分极差 <code>${run.bounds.spread_points}</code> 分</p>`
+      + (run.notes.length
+        ? `<ul data-advice="notes">${run.notes.map((text) => `<li>${esc(text)}</li>`).join('')}</ul>`
+        : '<p data-advice="notes">说明：无（本次每条输入都进了派生）</p>')
+      + `<p><small>**浏览器的极限**：本页只把命令准备好给你复制 —— 批准 / 提交报价 / 定标 / 发 PO / 变更批准`
+      + `五件事**永远在终端做人签**（<code>ADR-0013 §3</code>），宿主不能代签。</small></p>`
   }
 
   // ==========================================================================================
@@ -1058,6 +1201,13 @@ ${sortForm('events', '筛查事件')}
             { path: `${prefix}/${v}/api/heuristics`, method: 'GET', auth: 'none',
               what: `${v} 道的比价 heuristics JSON（参数同页面；只出白名单字段，不出绝对量级与私域键）` },
           ]),
+          // 决策建议层：确定性规则派生的"下一步"（engine=rules；页面零内联脚本）
+          ...config.views.filter((v) => rules[v]).flatMap((v) => [
+            { path: `${prefix}/${v}/advice/`, method: 'GET', auth: 'none',
+              what: `${v} 道的决策建议页（严重度 / 依据 / 溯源键 / 可复制的命令或路由；engine=rules，不含模型推测）` },
+            { path: `${prefix}/${v}/api/advice`, method: 'GET', auth: 'none',
+              what: `${v} 道的决策建议 JSON（同页同口径；无可分数据时 degraded+reason 且 items 为空）` },
+          ]),
           { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
           // WebUI 反馈闭环（ui-feedback 插件）：SSR 表单页（**0 内联脚本**）+ 只落 0600 待办件 + 只读观察面
           ...config.views.flatMap((v) => [
@@ -1167,7 +1317,8 @@ ${sortForm('events', '筛查事件')}
         html(`${config.page_title} · 运维视角`,
           `<p>本视角**不属于任何一方**：只看系统整体（运行期中间件状态 + 各视角账本的证据面聚合），不显示条目正文与私域键。</p>`
           + anchorNav('ops', `${prefix}/ops/`, OPS_SECTIONS,
-            [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']])
+            [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
+            [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']])
           + `<p>JSON：<code>${prefix}/api/ops</code></p>`
           + `<h3 id="runtime">运行期</h3><p>${ops.summary({ rows: [] })}</p>`
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
@@ -1275,6 +1426,18 @@ ${sortForm('events', '筛查事件')}
       // 比价 heuristics（只读）：候选与权重进插件，名次与贡献解释出响应；宿主不写任何东西
       return json(200, heuristicsJson(viewHeuristics[1], url))
     }
+    const viewAdvice = path.match(/^\/([a-z]+)\/api\/advice\/?$/)
+    if (viewAdvice && rules[viewAdvice[1]]) {
+      // 决策建议（只读）：规则层只吃白名单载荷，响应里给 engine=rules 与每条建议的溯源键
+      return json(200, adviceJson(viewAdvice[1]))
+    }
+    const viewAdvicePage = path.match(/^\/([a-z]+)\/advice\/?$/)
+    if (viewAdvicePage && rules[viewAdvicePage[1]]) {
+      // 页面：SSR + 可复制的命令/路由（零内联脚本；看建议这件事本身不产生任何写入）
+      return send(200, 'text/html; charset=utf-8',
+        html(`${config.page_title} · ${rules[viewAdvicePage[1]].title} · 决策建议`,
+          adviceHtml(viewAdvicePage[1]), prefix))
+    }
     const viewHeuristicsPage = path.match(/^\/([a-z]+)\/heuristics\/?$/)
     if (viewHeuristicsPage && rules[viewHeuristicsPage[1]]) {
       // 页面：SSR + `<form method=get>` 调权重（零内联脚本；改权重这件事本身也不产生任何写入）
@@ -1336,7 +1499,8 @@ ${sortForm('events', '筛查事件')}
         + `<span class="dim">（提交只落待处理项；落账本要人工批准引用）</span></td></tr>`).join('')
       const switchLinks = Object.keys(rules).map((v) => `<a href="${prefix}/admin/api/switch?to=${v}">${v}</a>`).join(' · ')
       return `${anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS,
-        [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']])}`
+        [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
+        [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']])}`
         + `${data.degraded ? `<p>降级：<code>${data.reason ?? ''}</code> —— ${data.next_action ?? ''}</p>` : ''}`
         + `<h3 id="progress">进度与口径来源</h3>`
         + `<p>进度：阶段 <b>${data.progress?.phase ?? '—'}</b> · 下一步 <b>${data.progress?.next_task ?? '—'}</b>`
@@ -1541,7 +1705,7 @@ ${sortForm('events', '筛查事件')}
       if (!Object.prototype.hasOwnProperty.call(rules, to)) return json(400, { error: 'unknown-view', hint: Object.keys(rules).join(' / ') })
       return send(302, 'text/plain; charset=utf-8', '', { location: `${prefix}/${to}/` })
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/advice/ / ${prefix}/<view>/api/advice / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

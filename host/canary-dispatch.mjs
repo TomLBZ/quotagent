@@ -238,12 +238,15 @@ const e2e = async ({ weightBps, candidate }) => {
   const { apply: bhApplyE2E, Config: bhConfigE2E } = await import('./modules/bid-heuristics.mjs')
   await ctx.plugin({ name: 'bid-heuristics', inject: [], Config: bhConfigE2E,
     apply: (inner, cfg) => bhApplyE2E(inner, cfg) }, bhConfigE2E.parse({}))
+  const { apply: advApplyE2E, Config: advConfigE2E } = await import('./modules/advice-panel.mjs')
+  await ctx.plugin({ name: 'advice-panel', inject: [], Config: advConfigE2E,
+    apply: (inner, cfg) => advApplyE2E(inner, cfg) }, advConfigE2E.parse({}))
   const { apply: mvApplyE2E, Config: mvConfigE2E } = await import('./modules/mail-view.mjs')
   await ctx.plugin({ name: 'mail-view', inject: [], Config: mvConfigE2E,
     apply: (inner, cfg) => mvApplyE2E(inner, { ...cfg, mail_state: '', ui_shared: '' }) }, mvConfigE2E.parse({}))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }

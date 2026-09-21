@@ -8,6 +8,7 @@
 
 | FR | 承载体 | 证据 | 状态 |
 |---|---|---|---|
+| FR-ADV-001 | host/modules/advice-panel.mjs | 决策建议层围栏门 30/30 + 真路由门 14/14（`verify.sh advice`）；四道页面子导航入口 + 页面 0 内联脚本 | 直引 |
 | FR-APPROVE-001 | src/quotagent/services/approval.py | ApprovalService.request() | 直引 |
 | FR-APPROVE-002 | src/quotagent/services/approval.py | ApprovalService.require(scope, ref, approval | 直引 |
 | FR-APPROVE-003 | src/quotagent/services/approval.py | ApprovalService.sweep() | 直引 |
@@ -167,6 +168,7 @@
 
 | 插件 | 归属 FR/AC | 强度 |
 |---|---|---|
+| advice-panel | FR-ADV-001（确定性规则建议层：`engine=rules` / 每条建议 `basis` 指向投影真键 / 空投影必 degraded 且建议数 0 / 有界 + `omitted` / 私域零泄漏；4 处单点变异自证） | 强 |
 | approval-digest | FR-UX-001 | 部分 |
 | user-plugin-manager | FR-USERPLUG-003、FR-USERPLUG-004、FR-USERPLUG-006、FR-USERPLUG-008（T-268 subagent 产出） | 强 |
 | agent-context | FR-AGENTRT-006（有界/降级）| 部分 |

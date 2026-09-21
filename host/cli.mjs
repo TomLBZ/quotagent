@@ -189,6 +189,10 @@ const main = async () => {
     const { apply: bhApply, Config: bhConfig } = await import('./modules/bid-heuristics.mjs')
     await ctx.plugin({ name: 'bid-heuristics', inject: [], Config: bhConfig,
       apply: (inner, cfg) => bhApply(inner, cfg) }, bhConfig.parse({}))
+    // 决策建议层（本批）：确定性规则层，只吃调用方给的白名单载荷（纯函数插件）
+    const { apply: advApply, Config: advConfig } = await import('./modules/advice-panel.mjs')
+    await ctx.plugin({ name: 'advice-panel', inject: [], Config: advConfig,
+      apply: (inner, cfg) => advApply(inner, cfg) }, advConfig.parse({}))
     const { apply: mvApply, Config: mvConfig } = await import('./modules/mail-view.mjs')
     await ctx.plugin({ name: 'mail-view', inject: [], Config: mvConfig,
       apply: (inner, cfg) => mvApply(inner, { ...cfg,
@@ -233,7 +237,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)

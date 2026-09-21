@@ -356,6 +356,7 @@ try {
   await mountReal('config-view.mjs', {}, 'configView', 'config-view')
   await mountReal('mail-view.mjs', { mail_state: '', ui_shared: '' }, 'mailView', 'mail-view')
   await mountReal('bid-heuristics.mjs', {}, 'bidHeuristics', 'bid-heuristics')
+  await mountReal('advice-panel.mjs', {}, 'advicePanel', 'advice-panel')
   await mountReal('ui-feedback.mjs', { route_prefix: '/t280', ui_shared: httpFx.dir,
     views: ['contractor', 'supplier'], pending_limit: 2 }, 'uiFeedback', 'ui-feedback')
   const projection = await import(pathToFileURL(join(HERE, 'modules', 'projection.mjs')).href)

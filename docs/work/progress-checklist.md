@@ -163,3 +163,4 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 |---|---|---|---|---|
 | D-001 | 已知缺陷 | 已执行 AC：AC-DESIGN-001..003、AC-RUNTIME-001/002、AC-AUDIT-001/002、AC-EVT-001/002、AC-PLUGIN-001/002、AC-QEP-001/002、AC-INTEG-001、AC-NORM-001..003、AC-RFQ-001/002、AC-INTAKE-001/002、AC-COST-001、AC-TRUST-001、AC-PRICE-001、AC-APPROVE-001/002、AC-DEV-001、AC-COMPARE-001..003、AC-GUARD-001/003、AC-EVAL-001/002；其余 P0 AC 尚无实现 | 门 G0 未开始 | open（P0 进行中） |
 | D-002 | 未验证 | V-001..V-012 全部待现场验证（**备料已完成**：12 份执行包 + 模板 + 登记表 + 校验器在 `docs/work/validation/`；agent 自检 EV-036/EV-037 已过；结论需人工签字，`register.json` 12 条均为 `open`） | 影响 P1 目标值设定与 G0 门签署 | open（等人工） |
+| GUI-P0h | 「AI agent 决策建议」层插件（确定性规则从投影派生，`engine=rules`，空投影不编建议；门 30/30 + 路由门 14/14） | B82 | done | EV-150 |

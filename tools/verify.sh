@@ -104,6 +104,13 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     "${QUOTAGENT_NODE:-node}" "$HERE/../host/t279-heuristics-gate.mjs" || exit 1
     exec "$QUOTAGENT_PY" "$HERE/check-heuristics-route.py" "$@"
     ;;
+  advice)
+    # 决策建议层（本批）：① 插件围栏门（30 条断言 + 4 处单点变异 + 还原字节一致）
+    # ② 真 HTTP 端到端（真进程真回读：四条路由 200 / 两视角建议确实不同 / 空投影必须降级且建议数 0 /
+    # 私域哨兵 0 次 / 同 URL 两次逐字节一致）。两半都跑，任一失败即红。
+    "${QUOTAGENT_NODE:-node}" "$HERE/../host/t281-advice-gate.mjs" || exit 1
+    exec "$QUOTAGENT_PY" "$HERE/check-advice-route.py" "$@"
+    ;;
   ui-feedback)
     # WebUI 反馈闭环（用户反馈 → agent 产新版本 → 自动重载 → 页面提示"请刷新"）：
     # ① 插件围栏门（28 条断言 + 4 处单点变异 + 还原字节一致）② 真 HTTP 端到端
