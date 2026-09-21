@@ -77,6 +77,8 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-255 | 谈判轮次/让步：设计与契约落档（`16/17-negotiation-*.md`）+ ADR-0019 | B52 | done | EV-091 |
 | T-257a | FAQ 沉淀与复用（FR-CLARIFY-004）契约落档 + D-051（`docs/design/18-faq-contract.md`） | B54 | done | — |
 | T-258a | 邮件集成（无凭据部分）契约落档 + `AC-MAIL-001` + D-052（`docs/design/19-mail-contract.md`） | B56 | done | — |
+| T-260a | P2 新服务运维可见：快照契约 + `AC-PIPELINE-001`/`AC-UI-002` + D-053（`docs/design/20-…`） | B59 | done | — |
+| T-260 | 实现：Python 快照写入器 + `pipeline-view` 插件（自进化流程）+ `/api/pipeline` + 门与端到端 | B60 | todo | — |
 | T-259 | 邮件**发信/收信**（需 SMTP/IMAP 凭据 + 人工决定收发对象）：接入传输实现 | B58 | blocked | 待人工提供凭据 |
 | T-258 | 邮件实现（无凭据部分）：`services/mail.py` + `AC-MAIL-001` 机检 + 事件两侧登记 + 矩阵更新 | B57 | done | D-052 / EV-094 |
 | T-257 | FAQ 实现：`services/faq.py` + `AC-FAQ-001` 机检 + 事件两侧登记 + 矩阵转正 | B55 | done | D-051 / EV-093 |
