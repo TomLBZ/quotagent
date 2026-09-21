@@ -287,12 +287,37 @@ class BridgeKernel:
             self.bp_open = True
             self.bp_since = utc_now()
 
+    def _retention_plan(self, params: dict) -> dict:
+        """计算留存计划（只读）。形状见 `services/retention.py::RetentionPolicy.plan`。
+
+        · `params["now"]` 必填（ISO8601）：内核不读墙钟，两次同输入必须字节一致；
+        · `params["rules"]` 可选：`{事件类型: {retain_days, after, requires_approval, scope}}`；
+        · 条目一律取自账本（本方法不读磁盘、不删任何东西）。
+        """
+        from .services.retention import RetentionPolicy
+
+        now = params.get("now")
+        if not isinstance(now, str) or not now.strip():
+            raise ValueError(
+                "retention.plan 需要显式传入 now（ISO8601）：内核不读墙钟，两次同输入必须字节一致")
+        rules = params.get("rules") or {}
+        if not isinstance(rules, dict):
+            raise ValueError("retention.plan 的 rules 必须是对象：{事件类型: 规则}")
+        policy = RetentionPolicy(rules, default_days=params.get("default_days"))
+        entries = self.ledger.read(type=params.get("type"),
+                                   from_seq=int(params.get("from_seq", 1)),
+                                   to_seq=params.get("to_seq"))
+        return {"plan": policy.plan(entries, now), "source": "retention.plan", "now": now}
+
     # ---------------------------------------------------------------- 方法面
     def _register_methods(self) -> None:
         reg = self.surface.register
         reg("ledger.head", "read", lambda _p: {
             "head": self.ledger.head_hash, "seq": self.ledger.count, "healthy": self.ledger.healthy})
         reg("ledger.count", "read", lambda _p: {"count": self.ledger.count})
+        # 留存计划：**只读**（compute 类）。执行/销毁**不**在方法面里暴露 —— 执行侧在服务层，
+        # 且必须先过人工门（ADR-0018）。now 必须由调用方传入：内核不读墙钟。
+        reg("retention.plan", "compute", lambda p: self._retention_plan(p))
         reg("ledger.read", "read", lambda p: {
             "entries": self.ledger.read(type=p.get("type"),
                                         from_seq=int(p.get("from_seq", 1)),

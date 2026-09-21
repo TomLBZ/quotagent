@@ -73,6 +73,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-234 | `governor` 接进 UI 真实 HTTP 路径：背压端到端（429+Retry-After）+ 三档映射单测（504/500） | B30 | done | EV-069 / D-027 |
 | T-247 | 由 subagents 生产两件插件（supplier-scorecard 已接线 / idempotency-guard 待接线）+ 修 process.exit 截断 | B43 | done | D-042 / EV-082 |
 | T-252 | FR-EVIDENCE-004 留存与销毁：设计决策 + ADR-0018 + 判定器 `services/retention.py` + 机检 21/21 | B48 | done | D-047 / EV-087 |
+| T-254 | 留存计划可被看见：桥侧 `retention.plan`（compute，只读）**已完成**；宿主视图 `retention-view` 待晋升接线 | B50 | partial | EV-089 |
 | T-253 | 留存**执行侧**：真删派生副本 + 读侧封存 + 落 `evidence/retention-*`；`AC-AUDIT-005` 机检 22/22 | B49 | done | D-048 / EV-088 |
 | T-251 | 需求覆盖矩阵 + `verify.sh coverage`：FR↔插件↔门全链可核对；补登记 14 FR/14 AC | B47 | done | D-046 / EV-086 |
 | T-250 | subagents 产出两件（approval-digest→双方视角 / budget-guard→桥路径）并接线 | B46 | done | D-045 / EV-085 |

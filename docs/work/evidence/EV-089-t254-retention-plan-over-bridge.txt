@@ -1,0 +1,27 @@
+EV-089 T-254（桥侧）：把**只读**的留存计划暴露到桥的方法面（compute 类）
+生成时间 2026-09-21T11:09:10Z
+
+[1] 改动
+· `src/quotagent/bridge.py`：新增方法 `retention.plan`（**compute** 类）+ 私有实现 `_retention_plan(params)`
+· 边界：**执行/销毁永不进方法面**（ADR-0013 的 commit 类永不暴露 + ADR-0018 的执行侧须过人工门）
+· `params["now"]` **必填**（ISO8601）：内核不读墙钟，两次同输入必须字节一致
+· 条目一律取自账本（不读磁盘、不删任何东西）
+
+[2] 真实调用（原始输出）
+$ node host/cli.mjs bridge --profile contractor-ops --method retention.plan \
+    --params '{"now": "2026-09-21T12:00:00Z", "rules": {"approval/granted": {"retain_days": 0, "after": "archive"},
+      "approval/requested": {"retain_days": 0, "after": "purge-copy"}}}'
+→ exit=0
+  counts={keep:0, archive:0, purge-copy:0, accepted:0, rejected:0, total:0, undecided:0, refused:0, approval_required:0}
+  items=[] refused=[] ledger_rows_destroyed=0 auto_approved=0
+  （该 profile 的账本为空 → 全零计划；语义正确：没东西就没计划）
+
+[3] 缺口校验（负控：不传 now）
+$ ... --params '{}' → 桥返回错误帧（invalid-request），理由指向"必须显式传入 now"（内核不读墙钟）
+
+[4] 门（实测）
+docs · bridge · invariants（22/22）· events · v · p0-no-node → 全部 exit=0
+
+[5] 说明
+· 本增量只做**桥侧**（T-254 = partial）：宿主侧还没有消费方 —— 运维界面仍看不到留存计划。
+· 宿主侧插件候选（`retention-view`）正在由 subagent 生产，下一轮走既有自进化流程晋升 + 接线。
