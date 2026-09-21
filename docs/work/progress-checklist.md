@@ -76,6 +76,8 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-254b | 留存计划的**刷新钩子**：seed 之后 + 网关探活时刷新（清目录后最多一个探活周期恢复） | B51 | done | EV-090 §5 |
 | T-255 | 谈判轮次/让步：设计与契约落档（`16/17-negotiation-*.md`）+ ADR-0019 | B52 | done | EV-091 |
 | T-257a | FAQ 沉淀与复用（FR-CLARIFY-004）契约落档 + D-051（`docs/design/18-faq-contract.md`） | B54 | done | — |
+| T-258a | 邮件集成（无凭据部分）契约落档 + `AC-MAIL-001` + D-052（`docs/design/19-mail-contract.md`） | B56 | done | — |
+| T-258 | 邮件实现：`services/mail.py` + `AC-MAIL-001` 机检 + 事件两侧登记 + 矩阵转正 | B57 | todo | — |
 | T-257 | FAQ 实现：`services/faq.py` + `AC-FAQ-001` 机检 + 事件两侧登记 + 矩阵转正 | B55 | done | D-051 / EV-093 |
 | T-256 | 谈判轮次**实现**：`services/negotiation.py` + `AC-NEGO-003`（机检 + 变异自证）+ 事件两侧登记 + 矩阵转正 | B53 | done | D-050 / EV-092 |
 | T-254 | 留存计划可被看见：桥侧 `retention.plan`（compute，只读）+ 宿主 `retention-view`（自进化产出）→ 运维视角 `/api/retention`；线上+公网 200 | B50 | done | EV-089 / EV-090 |

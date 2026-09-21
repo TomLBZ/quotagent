@@ -301,15 +301,9 @@ FR/AC 归属**；`host/modules/` 与插件清单文档里**零个 FR 引用**。
 - 背景：roadmap S1.13 写「CSV/Excel」（FR-UX-003 同）。内核/服务层受"仅用标准库"约束，手写 xlsx（zip + OOXML）属于重复造轮子，引入 `openpyxl` 又会打破零依赖约束。
 - 裁决：P1 交付 **CSV**（stdlib `csv`，带 UTF-8 BOM 使 Excel 双击不乱码，列头稳定）；`.xlsx` 若确需，由**宿主层**（Node/cordis 侧，可正常用第三方库）承接，不在内核。
 - 后果：FR-UX-003 的"Excel"按"Excel 可直接打开的 CSV"满足；需求方若要原生 xlsx，走宿主层或另开 ADR。
-## D-050 T-256：谈判轮次落地（让步必过门、越界是拒绝、不产生义务）（2026-09-21T11:35:32Z）
-
-**实现**：`services/negotiation.py`（严格按 `docs/design/17-negotiation-contract.md`）+ `AC-NEGO-003` 机检。
-**要点**：让步空间只来自既有事实（成本模型底线 + pricing 授权带宽），策略键缺任一即拒、**不兜默认值**；
-让步必过 `negotiate.price-concession` 人工门（无自动批准）；越界/越限/越带宽是**拒绝**且落 `round-rejected`；
-轮次上限从**账本重建**；`recompute` 逐字节可复现；本服务**不产生任何义务**（无 commitment/PO/对外报价）。
-**纪律**：*承诺类逻辑先钉契约再实现*（T-252/T-255/T-256 三次都这么做，返工为 0）。
-
 ## 归档指针（正文已移入 `decisions-archive.md`，ID 仍在此处可索引）
+- D-051 —— 见 `decisions-archive.md`
+- D-050 —— 见 `decisions-archive.md`
 - D-017 —— 见 `decisions-archive.md`
 - D-021 —— 见 `decisions-archive.md`
 - D-044 —— 见 `decisions-archive.md`
@@ -333,11 +327,9 @@ FR/AC 归属**；`host/modules/` 与插件清单文档里**零个 FR 引用**。
 **纪律**：*破坏性代码的门必须自带变异自证*（本轮 5/5 处变异全红），且**契约先写死再并行实现**——
 否则两个 subagent 会在接口上互相返工。
 
-## D-051 T-257：FAQ 复用**不得跨版本**，且命中是纯读（2026-09-21T11:37:38Z）
+## D-052 T-258：邮件集成先做"不假装发送"的一半（2026-09-21T11:46:33Z）
 
-**决定**：FAQ 条目带 `package_id + rfq_rev` 的**版本绑定**；`reuse()` 只接受同版本，
-跨版本一律 `hit=false + reason=faq-version-mismatch + next_action`，**且不返回任何条目内容**（不做"最接近匹配"降级）。
-`reuse()` 是**纯读**：命中也不改票单、不改状态；沉淀必须 `human:` 发布（`AgentCannotPublish` 挡住 agent 自动发布）。
-**理由**：AC-CLARIFY-004 的字面要求就是"命中不影响回答的版本绑定"；而"最接近匹配"会让旧版本的答复悄悄进新版本 ——
-对采购/报价来说这是**把钱弄错**的错误，比"没有命中"贵得多。
-**纪律**：*复用是读，不是写；版本绑定只能靠新的一轮问答来改。*
+**决定**：`FR-INTEG-003` 拆两半。**本轮做**报文构造/解析 + 幂等投递记录 + 可解释失败（纯标准库，`email`）；
+**不做**真正收发（需 SMTP/IMAP 凭据，且"发给谁"是人的决定）。为此引入**传输边界**：内置实现永远返回
+`unavailable` + `reason` + `next_action`，**并且不声明 `mail/sent` 事件** —— 声明了就会有人以为能发。
+**纪律**：*做不到的事要在接口上显式拒绝，不能在返回值里含糊过去。*

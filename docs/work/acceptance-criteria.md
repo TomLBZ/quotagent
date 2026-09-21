@@ -141,6 +141,7 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-AUDIT-005 | P2 | 留存**执行侧**：派生副本销毁真的发生、账本落 `evidence/retention-copy-purged`（body 只出 target/sha256/bytes，不得含被销毁内容）、读侧封存后不可再读、越界路径与缺人工门批准一律拒绝且目标仍在、重复执行幂等（AC-AUDIT-003 管计划侧，本条管执行侧，两者合起来覆盖 FR-EVIDENCE-004） | `qa ac AC-AUDIT-005` | 见 `evidence/EV-088` |
 | AC-NEGO-003 | P2 | 谈判轮次与让步（服务层）：正常链落 `negotiate/round`；越界/越限/越带宽被拒**且落**`negotiate/round-rejected`；缺人工门必拒且不落轮次；轮次上限从账本重建；`recompute` 逐字节可复现；同 `(thread_id, attempt_no)` 幂等或冲突；**不产生任何义务**；账本链仍真 | `qa ac AC-NEGO-003` | 见 `evidence/EV-092` |
 | AC-FAQ-001 | P2 | 澄清 FAQ 的沉淀与复用（`FR-CLARIFY-004` 的机检）：同版本命中返回条目；**跨版本一律 `hit=false` 且不返回任何条目内容**（复用不得跨版本，AC-CLARIFY-004 的正面）；命中是纯读（不改票单/不改状态）；非 `human:` 发布被拒且不落 `entry-published`；跨 realm 条目不可见；私域键不进条目；`replay()` 可从账本重建 | `qa ac AC-FAQ-001` | 见 `evidence/EV-093` |
+| AC-MAIL-001 | P2 | 邮件集成（无凭据部分）：`compose` 确定性且可被解析回来；头注入被拒**且不落账**；无传输实现时 `deliver()` 返回 `unavailable` + `reason` + `next_action` 并落 `mail/refused`，**账本无 `mail/sent`**；同键重复 `enqueue` 幂等；私域哨兵不进报文与账本；`text/*` 附件带 sha256、其它类型被拒；`parse` 纯函数且畸形输入不崩；跨 realm 候选不可见；`replay()` 可重建；不产生义务；账本链仍真 | `qa ac AC-MAIL-001` | 见 `evidence/EV-094` |
 
 ## 7. 证据制度
 

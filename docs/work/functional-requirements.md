@@ -144,7 +144,7 @@
 | FR-INTEG-001 | 文件投递绑定（原子写 + 命名约定） | must | P0 | AC-INTEG-001 |
 | FR-INTEG-002 | HTTP relay 绑定（只转发与存证） | should | P1 | AC-INTEG-002 |
 | FR-INTEG-004 | 宿主与内核经 stdio NDJSON 桥通信：能力清单由内核自述；版本不兼容即拒绝且账本零新增；`commit` 面永不暴露、调用留痕；身份不可自我声明；错误码固定且带可行动 `next_action` | must | P1 | AC-INTEG-004, AC-INTEG-005, AC-INTEG-006 |
-| FR-INTEG-003 | 邮件绑定（P2）；失败不得落账为"已发送" | could | P2 | AC-INTEG-003 |
+| FR-INTEG-003 | 邮件绑定（P2）；失败不得落账为"已发送" | could | P2 | AC-INTEG-003 | AC-MAIL-001 |
 | FR-UX-001 | 人工门队列视图（动作、摘要、引用链、Flag） | must | P1 | AC-APPROVE-003 |
 | FR-UX-002 | 供应商视图不得暴露承包商私域字段 | must | P1 | AC-TRUST-001 |
 | FR-UX-003 | 比价表导出（CSV/Excel） | should | P1 | AC-COMPARE-004 |
