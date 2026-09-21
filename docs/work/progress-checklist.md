@@ -63,6 +63,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-223 | 模型 Jev 调研报告（强项/用法/适用性/插件建议） | B22 | done | EV-060 |
 | T-225 | 插件清单门 + 模块自动发现 + clean-copy 门（fresh clone 自足性）+ host 依赖自愈 | B23 | done | EV-061 |
 | T-226 | `timeline` 中间件插件（subagent 交付：按 realm 时间线环形缓冲、幂等去重、零残留） | B23 | done | EV-061 |
+| T-227 | 自进化产出插件/中间件：演化提案直接交付 `host/modules/*.mjs`，用模块 fixture A1..A6 当门信号，canary 后晋升仍需人工引用 | B24 | todo | — |
 | T-224 | Jev 建议层插件（`advisor`）：建议不入判定、低置信转人工、外部失败降级 | B23+ | todo | — |
 | T-222 | WebUI 插件（双方视角路由）+ 工作区接入（从现有 dashboard 可访问） | B20/B21 | done | EV-059 |
 | T-221 | P1 | 每个进树模块的 manifest（name/inject/Config/apply）+ fixture A1..A6 + ≥1 契约测试（§7.1 第 5 条） | FR-PLUGIN-001 | `verify.sh modules` 36/36（3 模块 × 12 项） | done | EV-058 |
