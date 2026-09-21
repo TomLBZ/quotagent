@@ -68,24 +68,7 @@ export function apply(ctx, config) {
       // 运行期准入（独立插件 governor）：背压 → 429 + Retry-After（**可解释**）；超时 → 504；其它 → 500。
       // 默认配置（capacity 64 / timeout 5s）等价于直通，升级路径零影响。
       const key = `webui:${String(req.url ?? '/').split('?')[0]}`
-      const routed = await governor.run({ key, fn: async () => handle(req, res) }).catch((err) => {
-        const code = err?.code
-        if (code === 'backpressure') {
-          res.writeHead(429, { 'content-type': 'application/json; charset=utf-8',
-            'retry-after': String(Math.ceil((err.detail?.retry_after_ms ?? 0) / 1000)) })
-          res.end(JSON.stringify({ error: 'backpressure', reason: err.detail?.reason,
-            retry_after_ms: err.detail?.retry_after_ms, next_action: err.detail?.next_action }) + '\n')
-        } else if (code === 'timeout') {
-          if (!res.headersSent) {
-            res.writeHead(504, { 'content-type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ error: 'timeout', detail: String(err.message).slice(0, 120) }) + '\n')
-          } else { res.end() }
-        } else if (!res.headersSent) {
-          res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify({ error: 'internal-error', detail: String(err?.message).slice(0, 120) }) + '\n')
-        } else { res.end() }
-        return null
-      })
+      const routed = await governor.run({ key, fn: async () => handle(req, res) }).catch((err) => sendGovernorError(res, err))
       return routed === null ? undefined : routed?.result
     } catch (err) {
       // 服务不得被单个请求杀死（实测教训）：先尽量回 500，再自报日志
@@ -176,4 +159,26 @@ export function apply(ctx, config) {
       resolve()
     })
   })
+}
+
+/**
+ * 运行期错误的 HTTP 映射（**纯函数**，便于单测）：背压 → 429 + `Retry-After`；超时 → 504；其它 → 500。
+ * 返回 `null` 表示"已在此处结束响应"，调用方据此短路。抽出来是为了让映射本身可被断言（不依赖慢请求）。
+ */
+export function sendGovernorError(res, err) {
+  const code = err?.code
+  const write = (status, payload, headers = {}) => {
+    if (!res.headersSent) {
+      res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...headers })
+      res.end(JSON.stringify(payload) + '\n')
+    } else { res.end() }
+  }
+  if (code === 'backpressure') {
+    const detail = err.detail ?? {}
+    return write(429, { error: 'backpressure', reason: detail.reason, retry_after_ms: detail.retry_after_ms,
+      next_action: detail.next_action },
+    { 'retry-after': String(Math.ceil((detail.retry_after_ms ?? 0) / 1000)) }), null
+  }
+  if (code === 'timeout') return write(504, { error: 'timeout', detail: String(err.message).slice(0, 120) }), null
+  return write(500, { error: 'internal-error', detail: String(err?.message).slice(0, 120) }), null
 }

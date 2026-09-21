@@ -13,7 +13,7 @@
  */
 import { Context, EventsService } from 'cordis'
 import { createServer as probeServer } from 'node:net'
-import { apply as webuiApply, Config as webuiConfig } from './modules/webui.mjs'
+import { apply as webuiApply, Config as webuiConfig, sendGovernorError } from './modules/webui.mjs'
 import { Config as projectionConfig, apply as projectionApply, project, projectWithAudit, VIEW_RULES } from './modules/projection.mjs'
 import { Config as governorConfig, apply as governorApply } from './modules/governor.mjs'
 
@@ -195,6 +195,45 @@ await brokenFiber.dispose()
 const unknown = await get('/nonexistent/')
 check('WebUI 负控：未知路径/视角返回 404 且带可用路径提示（不得静默空页面）',
   unknown.status === 404 && unknown.text.includes('可用'), `status=${unknown.status}`)
+
+// 4b. T-234：governor 作用在 UI 请求路径上（背压 → 429 + Retry-After，不是 500/挂起）
+// 桶名要按**应用实际用的 key** 取：req.url 带路由前缀，硬编码 webui:/api/health 会落到另一个桶（实测踩到）
+const bkey = Object.keys(gbox.handle.stats().buckets).find((k) => k.endsWith('/api/health'))
+if (!bkey) throw new Error('找不到 /api/health 的桶（说明请求没走 governor）')
+const beforeBuckets = JSON.stringify(gbox.handle.stats().buckets)
+for (let i = 0; i < 70; i++) gbox.handle.admit({ key: bkey })          // 占满该路由额度（70 > capacity 64）
+const afterBuckets = JSON.stringify(gbox.handle.stats().buckets)
+const pressured = await fetch(`${base}/api/health`)
+const pressuredBody = await pressured.text()
+check('T-234 正控：额度耗尽时 UI 返回 **429 + Retry-After**（可解释的背压，不是 500/挂起）',
+  pressured.status === 429 && Boolean(pressured.headers.get('retry-after'))
+  && JSON.parse(pressuredBody).error === 'backpressure',
+  `status=${pressured.status} retry-after=${pressured.headers.get('retry-after')} `
+  + `body=${pressuredBody.slice(0, 70)} buckets=${beforeBuckets}→${afterBuckets} refused=${gbox.handle.stats().refused}`)
+gbox.handle.release({ key: bkey, cost: 64 })
+const recovered = await get('/api/health')
+check('T-234 正控：归还额度后同一路由恢复 200（背压不是"永久封路"）',
+  recovered.status === 200, `status=${recovered.status}`)
+
+// 4c. T-234：错误映射的单测（429/504/500 三档；不依赖慢请求就能断言）
+const fakeRes = () => {
+  const captured = { status: null, headers: null, body: null }
+  return { headersSent: false, captured,
+    writeHead(status, headers) { captured.status = status; captured.headers = headers },
+    end(body) { captured.body = body } }
+}
+const bpRes = fakeRes()
+sendGovernorError(bpRes, { code: 'backpressure', detail: { reason: 'credit-exhausted', retry_after_ms: 50, next_action: 'wait' } })
+const toRes = fakeRes()
+sendGovernorError(toRes, { code: 'timeout', message: '调用超时（5ms）' })
+const otherRes = fakeRes()
+sendGovernorError(otherRes, { code: 'whatever', message: 'boom' })
+check('T-234 正控：错误映射三档（背压→429+Retry-After / 超时→504 / 其它→500）可在单测层断言',
+  bpRes.captured.status === 429 && bpRes.captured.headers['retry-after'] === '1'
+  && JSON.parse(bpRes.captured.body).error === 'backpressure'
+  && toRes.captured.status === 504 && JSON.parse(toRes.captured.body).error === 'timeout'
+  && otherRes.captured.status === 500,
+  `429=${bpRes.captured.status} retry-after=${bpRes.captured.headers?.['retry-after']} 504=${toRes.captured.status} 500=${otherRes.captured.status}`)
 
 // 5. 零残留：dispose 后端口释放，可被重新监听
 const port = box.handle.port

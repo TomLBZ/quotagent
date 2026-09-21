@@ -137,6 +137,14 @@ const e2e = async ({ weightBps, candidate }) => {
   }, canaryConfig.parse({ weight_bps: weightBps, min_samples: 2 }))
   // 投影服务由 canary 分流包起来（这就是"接线"：真实请求路径上的选择权交给 canary）
   const dispatcher = makeDispatcher({ canary: cbox.handle, realm: 'ui', name: 'projection', clock: () => 0, cost: () => 0 })
+  const gbox2 = {}
+  const { apply: governorApply2, Config: governorConfig2 } = await import('./modules/governor.mjs')
+  await ctx.plugin({ name: 'governor#e2e', inject: [], Config: governorConfig2,
+    apply: async (inner, cfg) => {
+      const original = inner.provide.bind(inner)
+      inner.provide = (service, value) => { if (service === 'governor') gbox2.handle = value; return original(service, value) }
+      await governorApply2(inner, cfg)
+    } }, governorConfig2.parse({ capacity: 64, timeout_ms: 5000 }))
   const pbox = {}
   const pfiber = await ctx.plugin({
     name: 'projection#e2e', inject: [], Config: projectionConfig,
@@ -165,7 +173,7 @@ const e2e = async ({ weightBps, candidate }) => {
   }, projectionConfig.parse({}))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }
