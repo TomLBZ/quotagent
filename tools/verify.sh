@@ -13,6 +13,11 @@ ROOT=$(CDPATH= cd -- "$HERE/.." && pwd)
 QUOTAGENT_ROOT=$ROOT
 export QUOTAGENT_ROOT
 
+# 门名从脚本自身解析（不手写、不漂移）：用于 help 与用法串
+gate_names() {
+  grep -oE '^  [a-z0-9|_-]+\)' "$0" 2>/dev/null || grep -oE '^  [a-z0-9|_-]+\)' "$1"
+}
+
 . "$HERE/runtime.sh"
 if [ -z "${QUOTAGENT_PY:-}" ]; then
   echo "quotagent: 无可用 Python 解释器，见上方提示（可设 QUOTAGENT_PY 或运行 tools/bootstrap.sh）" >&2
@@ -29,6 +34,13 @@ else
 fi
 
 case "${1:-}" in
+  help|-h|--help)
+    names=$(gate_names "$0")
+    printf '可用门（%s 个名字）：\n' "$(printf '%s\n' "$names" | tr -d ' )' | tr '|' '\n' | sort -u | wc -l | tr -d ' ')"
+    printf '  %s\n\n' "$(printf '%s\n' "$names" | tr -d ' )' | tr '|' '\n' | sort -u | tr '\n' '|' | sed 's/|$//')"
+    printf '说明：`all` 不含 ui-mutate（约 4 分钟）；`clean-copy` 校验 HEAD，须在 commit 之后跑。\n'
+    exit 0
+    ;;
   docs)
     shift
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-docs.py" "$@"
@@ -232,7 +244,7 @@ audit)
     exit 2
     ;;
   *)
-    echo "用法: tools/verify.sh ac-registry|approval-digest|audit-hook|breaker|breaker-route|bridge|bridge-canary|budget-guard|budget-route|canary|canary-route|clean-copy|cordis|coverage|docs|events|evolution|evolve-journal|evolve-module|g1|governor|idem-route|idempotency-guard|invariants|modules|observability|ops-view|p0-no-node|plugins|retention|smoke|supplier-scorecard|v|webui|wiring" >&2
+    printf '用法: tools/verify.sh %s （全部见 `tools/verify.sh help`）\n' "$(gate_names "$0" | tr -d ' )' | tr '|' '\n' | sort -u | tr '\n' '|' | sed 's/|$//')" >&2
     exit 2
     ;;
 esac
