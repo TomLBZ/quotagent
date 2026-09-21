@@ -242,3 +242,18 @@
   · H3 承诺出口唯一化：三条承诺路径无批准即抛错、agent 代签被拒、批准不可跨 scope 复用；
   · H5 冻结面：`kernel.*` 伪造更新被拒（frozen）且配置摘要不变；**否决必须由宿主显式安装**（裸 context 上 `fiber.update` 不会自动被白名单拦下）；
   · H6 卸载残留：干净插件 dispose 后 effect=0 且资源计数差分全 0；泄漏定时器必须被检出。
+
+## 8. 演化门（P1 骨架，评审 C §5.2/§5.3、`ADR-0014 §7` 第 7 条）
+
+- 实现：`host/lib/evolution.mjs`（提案记录 / `PatchJournal` 归属 / `shadowMount` 影子挂载 / `gate` 五条 AND /
+  `promote` / `rollback`）+ `host/evolution.mjs`（冒烟，含负控）+ `tools/evolve-record.py`（**Python 是唯一账本写入者**，H1）。
+- 提案记录：`{id=内容哈希, target, diff, rationale, expected_effect{metric,direction,magnitude}, risks, rollback_plan,
+  evidence_refs[]}`；指标来源只认白名单（**不接受模型自评**）、每个指标至少一条账本引用；
+  `target` 落在 `kernel.*` 一律拒绝（INV-010）；同类提案连续失败 3 次 → host 强制转人工，不再自动重试。
+- 归属：`journal.owner(key)` 可查（`proposal` / `file-or-human`）；提案**不得占用文件或人工 patch 的键**，
+  回滚只撤自己拥有的键。
+- 影子：`isolate('shadow:<proposal_id>')` 隔离 realm + **账本复制到新文件**（否则幂等去重会把重放变成重复投递）。
+- 门：五条 AND（目标指标不退化、INV 全绿、反例集全绿、预算不越界、**人工介入率不上升**），逐条给理由，由 host 计算。
+- 晋升：**P1 不允许自动晋升** —— `promote` 必带形如 `ap-0001` 的人工 `approval_ref`，且门必须已通过；否则拒绝。
+- 回滚：`dispose()`（effect 逆序回收）+ journal 撤回，**不依赖人工删文件**。
+- 事件：`evolve/proposed|shadowed|gated|promoted|rolled-back`（两侧已登记；由 Python 侧落账）。

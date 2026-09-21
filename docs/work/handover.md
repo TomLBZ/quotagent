@@ -4,14 +4,14 @@
 
 ## 现在在哪
 
-**P1 尚未收口**（上一轮误记为收口，已纠正）：评审 C §7.1 八条最小集的第 5/6/7 条当时未做。
-本批完成**第 6 条 T-219**：`verify.sh invariants` —— H1/H2/H3/H5/H6 各带正控 + **负控**，**22/22 通过**。
-九个入口、57 条 AC、s1..s4 全绿。
+**P1 尚未收口**：评审 C §7.1 八条最小集里，本批完成**第 7 条 T-220**（演化门骨架）：
+`verify.sh evolution` **15/15**（提案记录/归属/影子挂载/门五条 AND/**无 approval_ref 不得晋升**/回滚/事件经 Python 落账）。
+九个入口 + 新增 evolution、57 条 AC、s1..s4 全绿。**仅剩第 5 条 T-221**。
 
 ## 下一步唯一动作
 
-**B18 = T-220**：演化门机检骨架（proposal 记录 + patch/journal 归属 + 影子挂载（隔离 realm + 账本副本）+
-dispose 回滚 + **promote 必带人工 `approval_ref`**、P1 不允许自动晋升）。之后 T-221（模块 manifest/fixture）。
+**B19 = T-221**：每个进树模块的 manifest（name/inject/Config/apply）+ fixture A1..A6 + ≥1 契约测试（§7.1 第 5 条）；
+完成后 P1 才真正收口，再回头核对 MVP 判据（ADR-0014 §3）。
 
 ## 不变量
 

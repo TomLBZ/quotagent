@@ -110,6 +110,10 @@
 | `sync/suggestion-raised` | emit | ✔ | `ctx.sync` | 对非权威字段的本地修改转为建议（不外发，03 §4.3） |
 | `evidence/pack-exported` | emit | ✔ | `ctx.evidence` | 审计包（含 Merkle 根） |
 | `evolve/proposed` | serial | ✔ | `ctx.evolve` | 自进化提案（P3 阶段）；族内后续名称见 `07`，**登记时必须在本表逐条声明**（事件门机检：事件表有而本表无即红） |
+| `evolve/shadowed` | serial | ✔ | 影子 → 门 | 隔离 realm 挂提案后条目树（账本复制到新文件，含 `MetricDelta`） |
+| `evolve/gated` | serial | ✔ | host gate runner | 五条门槛 AND 的裁决与逐条理由 |
+| `evolve/promoted` | serial | ✔ | 人工签署 → journal | 晋升（**必带人工 `approval_ref`**，P1 不允许自动晋升） |
+| `evolve/rolled-back` | serial | ✔ | 门 → journal | 回滚：dispose 回收 effect + journal 只撤自己拥有的键 |
 
 ## 4. Agent 侧事件（live）
 

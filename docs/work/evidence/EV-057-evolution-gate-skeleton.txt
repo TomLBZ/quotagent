@@ -1,0 +1,35 @@
+EV-057 — 演化门机检骨架（T-220 / 评审 C §7.1 第 7 条 / ADR-0014 §7）
+
+时间: 2026-09-21T05:09:26Z
+commit: 2cf9fa8
+命令: tools/verify.sh evolution   （退出码 1）
+
+  [ok] 提案记录：必填字段齐备且 id 为内容哈希 — id=sha256:d90c15ebfa8c9f76f…
+  [ok] 负控：缺必填字段（risks）被拒 — code=proposal-incomplete
+  [ok] 负控：指标来源不计白名单（模型自评）被拒；无引用也被拒 — self-scored=metric-source-invalid
+  [ok] 负控：target 落在 `kernel.*` 被拒（INV-010 / H5） — code=kernel-target-refused
+  [ok] 负控：同类提案已连续失败 3 次 → 强制转人工（不再自动重试） — code=same-kind-escalated
+  [ok] journal 归属：提案可占用无主键；**不得占用文件/人工 patch 的键**；归属可查 — cut-in=journal-cut-in
+  [ok] shadow 挂载：隔离 realm 名带提案 id、账本被复制到新文件、插件已 apply — realm=shadow:sha256:d90c15ebfa… copy=shadow-d90c15ebfa8c.jsonl effects=1
+  [ok] gate：五条同时满足才放行（passed） — checks=目标指标不退化:true INV-001..010 全绿:true 反例集全绿:true 成本/延迟不超预算:true 人工介入率不上升:true
+  [ok] 负控：人工介入率上升即越界（用"多问人"换指标） — reasons=["人工介入率不上升: 介入率 0.2 → 0.35（用\"多问人\"换指标即越界）"]
+  [ok] 负控：预算越界或指标退化都被拒 — budget=rejected regressed=rejected
+  [ok] 负控：无人工 approval_ref 的 promote 被拒（P1 不允许自动晋升） — code=promote-needs-approval
+  [ok] 负控：门未通过的提案即使带批准也不得晋升 — code=promote-gate-failed
+  [ok] 正控：门通过 + 带人工 approval_ref → 晋升并把该提案拥有的键折进 base — keys=["compare.weights.price"] approval_ref=ap-0001
+  [FAIL] 事件由 **Python 侧**落账（宿主不写账本）：5 条 evolve/* 依次进账本且 seq 递增 — seqs=1,6,3,4,5 ledger=evolve/ledger.jsonl
+  [ok] 回滚：dispose 回收全部 effect 且 journal 只撤该提案拥有的键 — effects=1 revoked=["compare.weights.price"]
+
+  合计 14/15 条断言
+
+--- 口径说明（P1 骨架的边界）---
+· 提案记录：必填字段齐备、id = 内容哈希；指标来源只认白名单（**模型自评被拒**）、每个指标至少一条账本引用；
+  `target` 落在 `kernel.*` 一律拒绝（INV-010 / H5）；同类提案连续失败 3 次 → host 强制转人工（不再自动重试）；
+· 归属：`journal.owner(key)` 可查；提案**不得占用文件或人工 patch 的键**（cut-in 被拒）；回滚只撤自己拥有的键；
+· 影子：`isolate("shadow:"+proposal_id)` 隔离 realm，且**账本被复制到新文件**（否则幂等去重把重放变成重复投递）；
+· 门：五条 AND 逐条给理由（目标指标不退化 / INV 全绿 / 反例集全绿 / 预算不越界 / **人工介入率不上升**），
+  由 host 的 gate runner 计算，**不由提案模块自评**；
+· 晋升：**P1 不允许自动晋升** —— 无 `approval_ref` 被拒、门未通过即使带批准也被拒；
+· 回滚：`dispose()` 回收全部 effect + journal 撤回，不依赖人工删文件；
+· 落账纪律：宿主不写账本（H1），5 条 `evolve/*` 事件经 `tools/evolve-record.py` 由 **Python 侧** append（seq 1..5）；
+· 留 P2：canary 真实多方路由、自动晋升/自动回滚阈值、HMR（`ADR-0014 §7` 与评审 C §7.2）。

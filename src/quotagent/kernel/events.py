@@ -106,6 +106,10 @@ class EventBus:
         "quote/deviation-captured": ("emit", True, ""),
         "quote/deviation-quantified": ("emit", True, ""),
         "evolve/proposed": ("serial", True, ""),
+        "evolve/shadowed": ("serial", True, ""),
+        "evolve/gated": ("serial", True, ""),
+        "evolve/promoted": ("serial", True, ""),
+        "evolve/rolled-back": ("serial", True, ""),
         # §3 业务事件（P0 用到/会落账的部分）
         "rfq/published": ("emit", True, ""),
         "rfq/amended": ("emit", True, ""),

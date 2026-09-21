@@ -48,3 +48,11 @@ stdout 只输出**一行 JSON**（机器可读），日志走 stderr——沿用
 - `host/package.json` 钉确切版本；`host/package-lock.json` 入库保证可复现。
 - 升级 cordis = 改 `package.json` + `npm install` + `tools/cordis.sh smoke` 通过 + 一次独立 commit。
 - cordis 目前是 `4.0.0-rc.*`（预发布）：升级前先跑冒烟与 `qa ac AC-PLUGIN-003`，结论写进 commit 信息。
+
+## 演化门骨架（T-220 / 评审 C §7.1 第 7 条）
+
+- `host/lib/evolution.mjs`：`makeProposal` / `PatchJournal` / `shadowMount` / `gate` / `promote` / `rollback`。
+- `host/evolution.mjs`：冒烟（`tools/verify.sh evolution`），15 条断言含**负控**（模型自评、占用别人的键、
+  kernel 目标、人工介入率上升、无 `approval_ref` 的 promote 全部必须被拒）。
+- 落账纪律：**宿主不写账本**（H1）。事件体交给 `tools/evolve-record.py` 由 Python 侧 append。
+- P1 边界：canary 真实路由、自动晋升/自动回滚阈值留 P2（`ADR-0014 §7`）。
