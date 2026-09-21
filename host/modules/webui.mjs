@@ -18,11 +18,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback']
 
 export const provides = ['webui']
 
@@ -214,6 +214,7 @@ export function apply(ctx, config) {
   const configView = ctx.configView          // 配置与凭据的可视面 + 干跑 + 待处理项（本批新增模块）
   const mailView = ctx.mailView              // 邮件域（SMTP/IMAP）的只读运维视图（**本批新增模块**）
   const bid = ctx.bidHeuristics              // 比价 heuristics（domain 插件，T-279）：只做算术，不读账本
+  const feedback = ctx.uiFeedback            // WebUI 反馈闭环（ui-feedback 插件）：版本事实只读 + 只落 0600 待办件
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
   const pipelinePayload = () => {
@@ -986,7 +987,38 @@ ${sortForm('events', '筛查事件')}
     const path = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) || '/' : url.pathname
     const send = (code, type, payload, extraHeaders = {}) => {
       res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store', ...extraHeaders })
-      res.end(payload)
+      res.end(decorateHtml(type, payload))
+    }
+    /**
+     * HTML 装饰（`ui-feedback` 插件，服务端可判、**不靠 JS**）：
+     * 每页 `<html>` 上写 `data-ui-revision="rN"`；当**最新已应用版本 > 本视图的版本**时，
+     * 在页面顶部插 `data-ui-stale="true"` 横幅（"已更新到 rM，请刷新页面" + `<form method=get>` 的
+     * "我已刷新"，带上 `?seen=rM` → 横幅消失）。版本号只来自落盘事实（插件里读 `versions.json`）。
+     * 装饰失败**不得**让页面崩：记一行 stderr，原样返回。
+     */
+    const decorateHtml = (type, payload) => {
+      if (typeof payload !== 'string' || !String(type).startsWith('text/html')) return payload
+      if (!payload.includes('<html lang="zh">')) return payload
+      try {
+        const deco = feedback.decorate(path, url.searchParams.get('seen') ?? '')
+        const out = payload.replace('<html lang="zh">',
+          `<html lang="zh" data-ui-revision="${esc(deco.revision)}" data-ui-view="${esc(deco.scope)}">`)
+        return deco.stale ? out.replace('<body>', `<body>${deco.banner}`) : out
+      } catch (err) {
+        console.error(`[webui] ui-feedback 装饰失败（页面原样返回）：${String(err).slice(0, 120)}`)
+        return payload
+      }
+    }
+    /** 反馈提交的读体：**有界**（超上界如实拒，不截断成另一份正文）。 */
+    const readFeedbackBody = (done) => {
+      let data = ''
+      let over = false
+      req.on('data', (chunk) => {
+        if (data.length + chunk.length > 65536) over = true
+        else if (!over) data += chunk
+      })
+      req.on('end', () => done(over ? null : data))
+      req.on('error', () => done(null))
     }
     // 回调式读体（本处理函数不是 async：不引入 await，避免吞掉异常）
     const readBody = (done) => {
@@ -1027,6 +1059,16 @@ ${sortForm('events', '筛查事件')}
               what: `${v} 道的比价 heuristics JSON（参数同页面；只出白名单字段，不出绝对量级与私域键）` },
           ]),
           { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
+          // WebUI 反馈闭环（ui-feedback 插件）：SSR 表单页（**0 内联脚本**）+ 只落 0600 待办件 + 只读观察面
+          ...config.views.flatMap((v) => [
+            { path: `${prefix}/${v}/feedback`, method: 'GET', auth: 'none',
+              what: `${v} 道的反馈页（textarea + POST 提交；每页带 data-ui-revision，落后时顶部出"请刷新"横幅）` },
+            { path: `${prefix}/${v}/feedback`, method: 'POST', auth: 'none',
+              what: `${v} 反馈提交（**只落 0600 待办件**、账本零新增；202 + 待办件 id + next_action）` },
+          ]),
+          { path: `${prefix}/ops/ui-feedback/`, method: 'GET', auth: 'none',
+            what: '反馈观察面（待处理计数 / 最近一次处理结果与 reason / 各视图版本号 / available / degraded+reason；有界、确定性）' },
+          { path: `${prefix}/api/ui-feedback`, method: 'GET', auth: 'none', what: '反馈观察面 JSON（只读；不含反馈正文）' },
           // 道内子视图（P0-3）：只读 GET + `<form method=get>` 筛选/翻页/排序（无脚本）
           ...Object.entries(SUBVIEWS).flatMap(([view, subs]) => subs.map((sub) => ({
             path: `${prefix}/${view}/${sub}/`, method: 'GET', auth: 'none',
@@ -1052,6 +1094,29 @@ ${sortForm('events', '筛查事件')}
           note: '浏览器永远不能签的五个动作：批准 / 提交报价 / 定标 / 发 PO / 变更批准（人工门在终端）' },
       })
     }
+    // WebUI 反馈闭环（ui-feedback 插件）：反馈页（GET）/ 提交（POST，只落 0600 待办件、账本零新增）/ 观察面（只读）
+    const feedbackPath = /^\/([A-Za-z0-9-]+)\/feedback\/?$/.exec(path)
+    if (feedbackPath && config.views.includes(feedbackPath[1])) {
+      const view = feedbackPath[1]
+      if (String(req.method) === 'POST') {
+        return readFeedbackBody((data) => {
+          if (data === null) {
+            return json(413, { service: 'ui-feedback', ok: false, code: 'feedback-too-long', view,
+              next_action: '请求体超过 65536 字节：宿主**不截断**（截断会合成另一份正文），请把反馈拆小后重提' })
+          }
+          const form = new URLSearchParams(data)
+          const out = feedback.submitFeedback(view, form.get('text') ?? form.get('feedback') ?? '')
+          const code = out.ok ? 202 : (out.code === 'pending-write-failed' ? 500
+            : (out.code === 'ui-shared-unresolved' ? 503 : 400))
+          return json(code, { service: 'ui-feedback', ...out, view })
+        })
+      }
+      return send(200, 'text/html; charset=utf-8', feedback.feedbackPage(view, url.search))
+    }
+    if (path === '/ops/ui-feedback' || path === '/ops/ui-feedback/') {
+      return send(200, 'text/html; charset=utf-8', feedback.opsPage())
+    }
+    if (path === '/api/ui-feedback') return json(200, feedback.snapshot())
     if (path === '/start' || path === '/start/') {
       // 上手页：**未提权也能看**（只讲机制与命令，不显示任何状态位与凭据值）
       send(200, 'text/html; charset=utf-8',

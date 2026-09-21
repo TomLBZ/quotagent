@@ -161,6 +161,7 @@
 | FR-MAIL-001 | src/quotagent/services/mail_transport.py + src/quotagent/services/mail.py | 见 AC-MAIL-001 | 直引 |
 | FR-MAIL-002 | host/modules/mail-view.mjs + host/lib/config-keys.mjs | 见 AC-MAIL-002 | 直引 |
 | FR-VIZ-001 | host/modules/bid-heuristics.mjs | 见 AC-VIZ-001 | 直引 |
+| FR-UIFB-001 | host/modules/ui-feedback.mjs + tools/ui-feedback-apply.py | 见 AC-UIFB-001 | 直引 |
 
 ## 2. 插件归属
 
@@ -199,6 +200,7 @@
 | retention-view | FR-EVIDENCE-004、FR-UX-004（本次登记） | 强 |
 | mail-view | FR-INTEG-003、FR-UX-005（邮件域只读视图：队列计数 / 最近一次尝试 / available / next_action；本次登记） | 强 |
 | bid-heuristics | FR-COMPARE-002（权重可调 + 同输入同输出）、FR-UX-002（供应商视角不暴露承包商私域）、FR-UX-003（比价口径对齐；本次登记） | 强 |
+| ui-feedback | FR-UIFB-001（宿主只落 0600 待办件 + 服务端可判的 `data-ui-revision`/"请刷新"横幅；本批反馈闭环） | 强 |
 | webui | FR-UX-001、FR-UX-002、FR-INTEG-001 | 强 |
 
 > 更新（T-253）：`FR-EVIDENCE-004` **已完整落地（计划侧 + 执行侧）**，`AC-AUDIT-003`/`AC-AUDIT-005` 均有机检。

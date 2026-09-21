@@ -628,6 +628,7 @@ try {
   await mountReal('config-view.mjs', {}, 'configView', 'config-view')
   await mountReal('mail-view.mjs', { mail_state: '', ui_shared: '' }, 'mailView', 'mail-view')
   await mountReal('bid-heuristics.mjs', {}, 'bidHeuristics', 'bid-heuristics')
+  await mountReal('ui-feedback.mjs', { ui_shared: '' }, 'uiFeedback', 'ui-feedback')
   const projection = await import(pathToFileURL(join(HERE, 'modules', 'projection.mjs')).href)
   await httpCtx.plugin({ name: 'projection#t279', inject: [], Config: projection.Config,
     apply: (inner, config) => projection.apply(inner, config) }, projection.Config.parse({}))

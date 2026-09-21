@@ -222,6 +222,23 @@ const STUBS = {
     factors: () => [],
     config: () => ({ weights: {}, max_candidates: 50 }),
   },
+  uiFeedback: {
+    // fixture 的 stub：只满足"能装饰页面/能取观察面"；版本事实与横幅口径由 ui-feedback 自己的门验（t280）
+    decorate: () => ({ scope: 'ops', revision: 'r0', latest: { view: '', revision: 'r0' }, stale: false,
+      degraded: true, reason: 'stub', banner: '' }),
+    revisionOf: () => 'r0',
+    scopeOf: () => 'ops',
+    scopeRevision: () => 'r0',
+    latestOf: () => ({ view: '', revision: 'r0', number: 0 }),
+    snapshot: () => ({ service: 'ui-feedback', available: false, degraded: true, reason: 'stub',
+      next_action: 'stub', queue: { pending: 0, applied: 0, limit: 0, omitted: 0, items: [] },
+      last_applied: null, scope: { ops: 'r0', views: {} }, latest: { view: '', revision: 'r0' },
+      bounded: true, privacy: { feedback_bodies_included: false } }),
+    feedbackPage: () => '<!doctype html><html lang="zh"><head></head><body>（stub）</body></html>',
+    opsPage: () => '<!doctype html><html lang="zh"><head></head><body>（stub）</body></html>',
+    submitFeedback: () => ({ ok: true, code: 'accepted', id: 'fb-contractor-000000000000',
+      bytes: 2, text_sha256: 'sha256:' + '0'.repeat(64), next_action: 'stub' }),
+  },
   evolveJournal: {
     // fixture 的 stub：只满足"能归纳流水"；口径由 evolve-journal 模块自己的门验
     summarize: () => ({ rows: 0, by_type: [], proposed: 0, shadowed: 0,

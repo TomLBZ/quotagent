@@ -104,6 +104,14 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     "${QUOTAGENT_NODE:-node}" "$HERE/../host/t279-heuristics-gate.mjs" || exit 1
     exec "$QUOTAGENT_PY" "$HERE/check-heuristics-route.py" "$@"
     ;;
+  ui-feedback)
+    # WebUI 反馈闭环（用户反馈 → agent 产新版本 → 自动重载 → 页面提示"请刷新"）：
+    # ① 插件围栏门（28 条断言 + 4 处单点变异 + 还原字节一致）② 真 HTTP 端到端
+    # （真进程真回读：401 同形 / 两侧反馈页 200 / 提交后计数 +1 / 真跑 ui-feedback-apply.py /
+    #  横幅两个方向 / 幂等 / 三条拒绝路径）。两半都跑，任一失败即红。
+    "${QUOTAGENT_NODE:-node}" "$HERE/../host/t280-ui-feedback-gate.mjs" || exit 1
+    exec "$QUOTAGENT_PY" "$HERE/check-ui-feedback.py" "$@"
+    ;;
   mail)
     shift
     exec python3 tools/check-mail.py "$@"

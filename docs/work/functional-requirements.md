@@ -203,6 +203,7 @@
 | FR-MAIL-001 | P2 | **邮件收发由插件提供**（`services/mail_transport.py`，标准库 `smtplib`/`imaplib`）：SMTP 参数与 IMAP 参数从配置读（**环境变量优先于** `/workspace/config.yaml`）；**未配置必须如实报未连接**（`available:false` + reason + next_action，且给出与"连不上"**可区分**的 reason），配置了就真能收发；凭据不进日志/账本正文/异常消息 | AC-MAIL-001 |
 | FR-MAIL-002 | P2 | 邮件相关配置键**进白名单**（⇒ 既有配置 UI 可直接改并持久化到 YAML，不新增第二条写路径）；宿主侧只读视图 `host/modules/mail-view.mjs`（队列计数 / 最近结果与 reason / `available` / `next_action`，零写面）+ `GET /quotagent/ops/mail/`（0 行 `<script>`）与 `GET /quotagent/api/mail` | AC-MAIL-002 |
 | FR-VIZ-001 | P2 | **比价 heuristics 可视化（domain 插件）**：把候选按**可调权重**（价格/交期/付款/质保/偏差）排序，并给出**每项的贡献分解**与确定性的"如何提升排名"提示；权重越界**夹取并回显**（归一后和为一）；有界并诚实报 `omitted`；**私域零泄漏**（供应商侧不得因排名暗示标底：带私域键的行整行跳过并报数，带哨兵与不带哨兵的输出**逐字节一致**）；页面 SSE 交互（`<form method=get>`，无内联脚本） | AC-VIZ-001 |
+| FR-UIFB-001 | P2 | **WebUI 自适应闭环（反馈 → 新版本 → 自动重载 → 提示"请刷新"）**：每页渲染 `data-ui-revision="rN"`（版本号**只来自落盘的 `versions.json`**，宿主从不凭空递增）；`/<view>/feedback` 是 SSR 页（`<textarea>` + POST），提交**只落一条 0600 待办件**（含用户**原话正文** + sha256 + 视图名，宿主**账本零新增**）并回 202 + id + `next_action`；`tools/ui-feedback-apply.py` 是**唯一落账本者**（重算产物哈希 → 原子写版本状态 → 落 `ui/feedback-applied`，body **不含反馈正文**；幂等、拒绝路径给具体 code）；版本落后时页面顶部出现 `data-ui-stale="true"` 横幅（"已更新到 rM，请刷新页面" + `<form method=get>` 的"我已刷新"，`?seen=rM` 即消），版本相同**不得**出现横幅；运维观察面只读、有界、确定性（`degraded` 有名 reason） | AC-UIFB-001 |
 ## 7. 阶段分布（用于排期）
 
 | 阶段 | must 数 | 核心内容 |

@@ -40,6 +40,7 @@ PROVIDERS = {
     "configView": "config-view",
     "mailView": "mail-view",
     "bidHeuristics": "bid-heuristics",
+    "uiFeedback": "ui-feedback",
 }
 
 

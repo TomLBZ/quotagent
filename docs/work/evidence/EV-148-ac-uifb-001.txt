@@ -1,0 +1,141 @@
+EV-148 AC-UIFB-001 WebUI 自适应闭环（用户反馈 → agent 产新版本 → 自动重载 → 页面提示"请刷新"）
+
+时间：2026-09-21（本机）  cwd：/workspace/projects/quotagent  退出码：门 0 / 端到端 0
+命令（两半，`tools/verify.sh ui-feedback` 就是这两条的串联；FAIL 即红）：
+  node host/t280-ui-feedback-gate.mjs                 # 宿主围栏门（28 条断言 + 4 处单点变异 + 还原字节一致）
+  python3 tools/check-ui-feedback.py                  # 真进程真回读（11 条：401 同形 / 两侧反馈页 / 计数 +1 /
+                                                      #  真跑落账本者 / 横幅两方向 / 幂等 / 三条拒绝路径）
+  sh tmp/live-feedback-run.sh > tmp/ui-feedback-run.out   # 线上服务（ws-gateway 拉起的 8093）原始回读
+
+[宿主围栏门] passed=28/28 failures=0
+```
+1 契约正控：manifest 齐备（name=ui-feedback / provides=uiFeedback / usedServices==inject / Config 实现 standard-schema）、只 import 内建与 `../lib/`，且源码里 **0 个脚本字面量**
+  ok=True  detail=manifest 问题=无；越界 import=无；含脚本字面量=false；解析钩子=已装；字节=21068
+2 零写面负控：产物**不写账本**（无 openLedger / ledger.jsonl）、不起子进程、不联网、不取墙钟、不取随机数；写面只有待办件（写函数白名单：writeFileSync/chmodSync/renameSync/mkdirSync/readFileSync/readdirSync/statSync），且扫描器**非空转**（对照样本必须命中）
+  ok=True  detail=产物命中=无；对照样本命中=appendFileSync,openLedger,Date.now
+3 版本事实正控：`versions.json` 缺失时全视图 `r0`；写入 r2/r1 后**按落盘事实**读出（宿主从不递增版本号）
+  ok=True  detail=夹具=/tmp/t280-K2ofCY/fx-1/ui-feedback/versions.json
+4 正控：提交后**原话逐字**留在待办件里（`text` 逐字节相等 + `text_sha256`/`bytes` 自查一致 + `submitted_at` 为空）且提交**不改版本号**、`next_action` 明确指向唯一落账本者
+  ok=True  detail=accepted=true 逐字+0600=true
+5 负控：待办件权限**恰为 0600**（宿主只落这一条、不写账本、不动别的文件）
+  ok=True  detail=目录=["fb-contractor-00000000000a.json","fb-contractor-7d81b5812fba.json","fb-supplier-00000000000b.json","versions.json"]；待办件=["fb-contractor-00000000000a.json","fb-contractor-7d81b5812fba.json","fb-supplier-00000000000b.json"]
+6 负控：拒绝路径给**具体 code + next_action**（空正文 / 未知视图 / 超长各自一个码，且都在闭合集合里、一律 `ok:false`）
+  ok=True  detail=codes=["accepted","view-unknown","empty-feedback","feedback-too-long","ui-shared-unresolved","pending-write-failed"]
+7 正控：观察面齐备（待处理计数 / 最近一次处理结果与 reason / 各视图版本号 / available / degraded+reason）—— 五个面在页面上都有可机检的落点，且**只读**（不提供任何提交口子）
+  ok=True  detail=pending 标记=true 最近一次=true 版本表=true 无 POST 口子=true
+8 负控：`degraded` **有名 reason** —— 事实缺失与事实损坏是**两个不同的 reason**，正常时 `degraded:false` + `reason:null` + `available:true`（不假装可用）
+  ok=True  detail=reason 闭合集合=["ui-shared-unresolved","versions-missing","versions-unreadable","pending-unreadable"]
+9 负控：观察面**有界**（3 条待办件 / 上限 2 → 只列 2 条、`omitted=1` 照实报数）
+  ok=True  detail=snapshot={"pending":3,"applied":0,"limit":2,"omitted":1,"items":[{"id":"fb-contractor-00000000000a","view":"contractor","bytes":1,"text_sha256":"sha256:ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785a
+10 负控：观察面**不出反馈正文**（正文只留在 0600 待办件里；`privacy.feedback_bodies_included=false`）
+  ok=True  detail=snapshot 含正文=false
+11 真 HTTP 正控：`/t280/<view>/feedback` 200 且是真 SSR 页面（`<textarea name="text"` + `<form method="post"` 提交），路由表登记了反馈/观察面路由且 `auth` 全是 `none`
+  ok=True  detail=status=200；路由命中=["GET /t280/contractor/feedback","POST /t280/contractor/feedback","GET /t280/supplier/feedback","POST /t280/supplier/feedback"]
+12 真 HTTP 正控：`POST /t280/<view>/feedback` → **202** + 待办件 id + `next_action`；待办件**恰为 0600**、原话逐字落盘、**账本零新增**（目录只多这一条、没有账本文件）、提交后观察面**待处理计数 +1**
+  ok=True  detail=status=202 id=fb-contractor-7d81b5812fba；提交前计数=0 → 提交后计数=1；新文件=["fb-contractor-7d81b5812fba.json"] mode=600；目录=["fb-contractor-7d81b5812fba.json"]
+13 真 HTTP 负控/正控（**方向一**）：最新已应用版本 r2 > supplier 的 r1 ⇒ supplier 页顶部出现 `data-ui-stale="true"` 横幅（含"已更新到 r2，请刷新页面"与 `<form method=get>` 的"我已刷新"）；同一时刻 contractor 页（r2 == r2）**不得**出现横幅
+  ok=True  detail=supplier 横幅=true contractor 无横幅=true；banner 原文="<div data-ui-stale=\"true\" style=\"border:2px solid #b00020;background:#fff4f4;padding:.7rem .9rem;margin:.8rem 0\"><b>这一屏（supplier）还是 <code>r1</code>：已更新到 r2，请刷新页面。</b> <form method=\"get\" action=\"/t280/supplier/\"><input type=\"hidden\" name=\"seen\" value=\"r2\""
+13b 真 HTTP 负控：点"我已刷新"带上 `?seen=r2` ⇒ 横幅消失（**服务端可判，不靠 JS**）
+  ok=True  detail=含横幅=false
+14 真 HTTP 负控（**方向二**）：版本相同（r2 == r2）⇒ 供应商页**不得**出现横幅，但 `data-ui-revision` 照常写 r2
+  ok=True  detail=含横幅=false 版本=undefined
+15 真 HTTP 负控：反馈页 / 观察面 / 带横幅的页面**都 0 行脚本 / 0 内联事件**（零 JS 是机检事实），且扫描器非空转
+  ok=True  detail=命中=[]；扫描器对照=true
+15b 真 HTTP 正控：观察面**确定性**（同输入两次 GET **逐字节一致**；`/api/ui-feedback` 也两次一致）
+  ok=True  detail=观测面两次一致=true 长度=1772
+15c 真 HTTP 负控：空正文 → 400 `empty-feedback`、超长 → 400 `feedback-too-long`（都给 `next_action`）、未知视图 `/ghost/feedback` → 404（不得静默当页面返回）
+  ok=True  detail=empty=400/empty-feedback long=400/feedback-too-long ghost=404
+16 负控：整轮 HTTP 跑完，`ui-shared/ui-feedback/` 里只有**提交落下的那一条 0600 待办件** + 门自己写的 `versions.json`（宿主**从不写它**：跑完哈希与门写下的逐字节一致），没有账本文件 —— 宿主写面只有待办件，横幅的版本号读的是落盘事实
+  ok=True  detail=目录=["fb-contractor-7d81b5812fba.json","versions.json"]；host 待办件 mode=600；versions.json 未被宿主改写=true
+17 变异前基线：十条场景在**真产物**上全真（否则变异变红说明不了任何事：基线本来就是红的）
+  ok=True  detail=基线={"revision-from-disk":true,"stale-banner":true,"same-version-no-banner":true,"seen-hides-banner":true,"submit-accepted":true,"verbatim-and-0600":true,"refusal-codes":true,"bounded-omitted":true,"no-body-leak":true,"degraded-reasons":true}
+18 变异：M1 横幅属性翻转（data-ui-stale 写成 false）
+  ok=True  detail=必须红的是「stale-banner」；实际红=stale-banner；字节已变=true；变异体=/tmp/t280-mut-47RTgS/ui-feedback.mut-09afa431.mjs
+18 变异：M2 版本号不再读落盘事实（永远 r0）
+  ok=True  detail=必须红的是「revision-from-disk」；实际红=revision-from-disk,stale-banner,same-version-no-banner,seen-hides-banner；字节已变=true；变异体=/tmp/t280-mut-XMFrqu/ui-feedback.mut-a99828e6.mjs
+18 变异：M3 横幅判据放宽（版本相同也判落后）
+  ok=True  detail=必须红的是「same-version-no-banner」；实际红=stale-banner,same-version-no-banner；字节已变=true；变异体=/tmp/t280-mut-V2wgBJ/ui-feedback.mut-ceb83e93.mjs
+18 变异：M4 待办件权限放宽（0600 → 0644）
+  ok=True  detail=必须红的是「verbatim-and-0600」；实际红=verbatim-and-0600；字节已变=true；变异体=/tmp/t280-mut-bJkdnZ/ui-feedback.mut-8186517d.mjs
+19 防假变异（自检）：找不到唯一锚点的"变异"必须被判为**假变异**（返回 null）；把锚点替换成它自己也不算变异 —— 否则"变异后门还绿"会被误读成"门很稳"
+  ok=True  detail=不存在的锚点→已判假变异；自我替换→已判假变异
+20 还原：本门全程**没有写过产品树** —— `host/modules/ui-feedback.mjs` 跑完之后与跑之前**逐字节一致**（变异只写在临时目录的副本里）
+  ok=True  detail=sha256 前=69b27c7c13c96ff5… 后=69b27c7c13c96ff5…；变异小结=M1 横幅属性翻转（data-ui-stale 写成 false） → 红=stale-banner；M2 版本号不再读落盘事实（永远 r0） → 红=revision-from-disk/stale-banner/same-version-no-banner/seen-hides-banner；M3 横幅判据放宽（版本相同也判落后） → 红=stale-banner/same-version-no-banner；M4 待办件权限放宽（0600 → 0644） → 红=verbatim-and-0600
+21 空集合守卫：场景表与断言表都非空（"没跑到"不得算通过）
+  ok=True  detail=场景 10 条；断言 26 条
+22 负控：横幅/版本提示**全在服务端算好**（源码里没有 `eval(` / `Function(` / `innerHTML` / JSON 回填脚本），`data-ui-revision` 与 `data-ui-stale` 都是服务端渲染的字面量
+  ok=True  detail=命中=无
+```
+
+[四处单点变异（每一处都必须让**指定**断言变红；变异只写在临时目录的副本里）]
+```
+必须红的是「stale-banner」；实际红=stale-banner；字节已变=true；变异体=/tmp/t280-mut-47RTgS/ui-feedback.mut-09afa431.mjs
+必须红的是「revision-from-disk」；实际红=revision-from-disk,stale-banner,same-version-no-banner,seen-hides-banner；字节已变=true；变异体=/tmp/t280-mut-XMFrqu/ui-feedback.mut-a99828e6.mjs
+必须红的是「same-version-no-banner」；实际红=stale-banner,same-version-no-banner；字节已变=true；变异体=/tmp/t280-mut-V2wgBJ/ui-feedback.mut-ceb83e93.mjs
+必须红的是「verbatim-and-0600」；实际红=verbatim-and-0600；字节已变=true；变异体=/tmp/t280-mut-bJkdnZ/ui-feedback.mut-8186517d.mjs
+```
+
+[真 HTTP 端到端] passed=11/11 failures=0
+```
+① 真进程就绪（`cli.mjs webui` + `/api/health` 200；私有前缀与私有 ui-shared 夹具）
+  ok=True  detail=port=58627 prefix=/qfb pid=1034754 ui_shared=/workspace/projects/quotagent/tmp/ui-feedback-route/ui-shared
+① 未提权下 admin 的 10 条 GET 路径 + 1 条 POST 写路径仍是**同一个 401 固定体**（本功能不引入提权口子），而**两侧反馈页 200**（`auth: none` 的真路由）
+  ok=True  detail=401 同形=True 不同体=1；反馈页={'contractor': 200, 'supplier': 200}；路由=["GET /qfb/contractor/feedback", "POST /qfb/contractor/feedback", "GET /qfb/supplier/feedback", "POST /qfb/supplier/feedback"]
+② 两侧反馈页是真 SSR 表单（恰一个 `<textarea name=` 输入 + POST 到本视图的反馈路由），且**0 行脚本 / 0 内联事件**（扫描器非空转对照）
+  ok=True  detail=形状=True；含脚本=无
+③ 两侧各提交一次 → **202 + 待办件 id + next_action**；待办件**恰为 0600**且**原话逐字**落盘；观察面待处理计数 **0 → 1 → 2**（每次提交 +1）；宿主**不写账本、不改版本号**
+  ok=True  detail=status=202/202 id=fb-contractor-7e79d9d16985；计数 0→1→2；文件=['fb-contractor-7e79d9d16985.json', 'fb-supplier-52125556bc51.json'] mode=['0o600'] 逐字=True；next_action=跑 tools/ui-feedback-apply.py --view contractor --now <ISO8601> 消费待办件（唯一落账本者）；产出新版本后本页面会显示"请刷新"
+④ 真跑 `tools/ui-feedback-apply.py`（唯一落账本者）：重算产物哈希 → **原子写**版本状态 → 落一条 `ui/feedback-applied`（body **恰 8 键、不含反馈正文**）→ 待办件移入 `applied/`；观察面显示最近处理结果（**“已应用”而不是“被拒”**：`last_applied.ok=true` 来自落盘事实）、contractor 版本 `r0 → r1`（页面 `data-ui-revision` 同步）
+  ok=True  detail=rc=0 err=；ledger_added=1；body 键=['actor', 'artifact_sha256', 'ok', 'prev_revision', 'reason', 'revision', 'source_prompt_digest', 'view']；state={"contractor": "r1", "supplier": "r0"}；applied=['fb-contractor-7e79d9d16985.json']；页面版本=r1；last_applied={"view": "contractor", "revision": "r1", "prev_revision": "r0", "ok": true, "reason": ""}
+⑤ 横幅**方向一**（真 HTTP）：最新已应用 r1 > supplier 的 r0 ⇒ supplier 页顶部 `data-ui-stale="true"` + 「已更新到 r1，请刷新页面」+ `form method=get` 的「我已刷新」；同一时刻 contractor 页（r1 == r1）**不得**出现横幅
+  ok=True  detail=supplier 横幅=True contractor 无横幅=True；原始横幅='<div data-ui-stale="true" style="border:2px solid #b00020;background:#fff4f4;padding:.7rem .9rem;margin:.8rem 0"><b>这一屏（supplier）还是 <code>r0</code>：已更新到 r1，请刷新页面。</b> <form method="get" action="/qfb/supplier/"><input type="hidden" name="seen" value="r1"><button type="submit">我已刷新</button></form></di'
+⑤b `?seen=r1` ⇒ 横幅消失（服务端可判，不靠 JS）
+  ok=True  detail=含横幅=False
+⑤c 横幅**方向二**（真 HTTP）：supplier 也追平到 r1 ⇒ 两侧页面**都不得**出现横幅，但 `data-ui-revision` 照常写 r1
+  ok=True  detail=rc=0 err=；supplier=r1 含横幅=False；contractor=r1 含横幅=False
+⑥ **幂等**：同一份反馈再提交 + 再跑一次 apply → 第二次标 `duplicates`、**账本零新增**、`exit=0`（第一条落到 r2，之后同内容不再产生新版本）
+  ok=True  detail=rc=0/0；ledger_added=1/0；duplicates=[{"artifact_sha256": "sha256:6bcf33c3afc4a09a8a7b8c90ed64b4d5c5071b6baa97e17920adf30aa31d3344", "file": "fb-contractor-b599c998cedd.json", "matched": "applied-archive", "reason": "already-applied", "t；err=/
+⑦ **拒绝路径**三条各自给具体 `code` + `next_action`，且**拒绝时账本零新增**：被改过的待办件 → `pending-tampered`；没有对应产出 → `artifact-missing`；产物与 manifest 自述哈希不符 → `hash-mismatch`
+  ok=True  detail=rc=1/1/1；codes=pending-tampered/artifact-missing/hash-mismatch；账本行 3 → 3；refused=['[{"code": "pending-tampered", "file": "fb-contractor-ffffffffffff.json", "next_action": "文件被改过或不是提交面写的：丢掉它、重新提交", "reason": "text_sha256 与重算结果不符（自述不可信）", "view": ""}]', '[{"code": "artifact-missing", "file": "fb-supplier-ffffffffffff.json", "next_action": "让 agent 为 supplier 产出新版本（或 --artifact supplier=<路径> 显式指定）", 
+⑧ 反馈**正文不进账本也不进页面**（账本 body 只有 8 键；整份账本与观察面里搜不到任何原话），观察面**确定性**（两次 GET 逐字节一致）、**有界**（`bounded:true` + `omitted` 报数），宿主零写面（真实账本夹具与既有夹具文件逐字节不变、无 `mail`/`config` 侧副作用）
+  ok=True  detail=账本含正文=[]；页面含正文=[]；两次一致=True bounded=True omitted=0；夹具账本未变=True
+```
+
+[线上服务原始回读：提交前后计数变化（tmp/ui-feedback-run.out 节选）]
+```
+### 2. 提交前：观察面的待处理计数（原始行）
+data-ui-feedback-pending="0"
+### 5. 提交后：观察面的待处理计数（原始行：0 → 1）
+data-ui-feedback-pending="0"
+### 4. 待办件 mode 实测值
+mode=600 bytes=492 tmp/ui-shared/ui-feedback/fb-contractor-417a7b18a15e.json
+```
+
+[线上服务原始回读：横幅两个方向 + ?seen 消除]
+```
+supplier: HTTP 200
+横幅原文: <div data-ui-stale="true" style="border:2px solid #b00020;background:#fff4f4;padding:.7rem .9rem;margin:.8rem 0"><b>这一屏（supplier）还是 <code>r0</code>：已更新到 r1，请刷新页面。</b> <form method="get" action="/quotagent/supplier/"><input type="hidden" name="seen" value="r1"><button type="submit">我已刷新</button></form></div><nav> <a href="/quotag
+contractor: HTTP 200
+contractor: HTTP 200 data-ui-revision="r1" 含横幅=0
+supplier: HTTP 200 data-ui-revision="r1" 含横幅=0
+contractor: HTTP 200 data-ui-revision="r1" 含横幅=1
+横幅原文: <div data-ui-stale="true" style="border:2px solid #b00020;background:#fff4f4;padding:.7rem .9rem;margin:.8rem 0"><b>这一屏（contractor）还是 <code>r1</code>：已更新到 r2，请刷新页面。</b> <form method="get" action="/quotagent/contractor/"><input type="hidden" name="seen" value="r2"><button type="submit">我已刷新</button></form></div><nav> <a href="/qu
+supplier: HTTP 200 data-ui-revision="r2" 含横幅=0
+contractor: HTTP 200 data-ui-revision="r2" 含横幅=0
+supplier: HTTP 200 data-ui-revision="r2" 含横幅=0
+```
+
+[线上服务原始回读：唯一落账本者（body 恰 8 键、不含反馈正文）与幂等]
+```
+{"actor":"agent:ui-feedback","body":{"actor":"agent:ui-feedback","artifact_sha256":"sha256:1b707b39b6bc796755e6cb3e6fb7b62f9709eb234671c9c632145adeed9435d1","ok":true,"prev_revision":"r0","reason":"","revision":"r1","source_prompt_digest":"417a7b18a15e6a598ff0948b1cf6865343ab2e6fa8aa8eae96a3908ce8e449c3","view":"contractor"},"body_hash":"sha256:c00636a47256b8f87d1f0aa5e81273ea9c79b129391c61f8436883bf96892df7","class":"fact","correlation_id":"uifb-contractor-r1","entry_hash":"sha256:c585198e3bcf8320cb92be0a715d4e61381d6c9801141b5324553febb852b8af","prev_hash":"sha256:0000000000000000000000000000000000000000000000000000000000000000","realm":"ui-shared","refs":{},"seq":1,"ts":"2026-09-21T20:00:00Z","type":"ui/feedback-applied"}
+0（无命中）
+ledger_added= 0 applied= 0 duplicates= 1
+```
+
+[结论]
+  ① 宿主侧只落 0600 待办件（mode=600 实测），账本零新增（提交前后业务账本逐字节不变）；
+  ② 版本号只来自落盘事实：提交不改版本号，只有 `tools/ui-feedback-apply.py`（唯一落账本者）递增；
+  ③ 横幅服务端可判：版本落后 ⇒ `data-ui-stale="true"` + 「已更新到 rN，请刷新页面」+ `form method=get`
+     的「我已刷新」；版本相同 ⇒ 页面里 0 次命中 `data-ui-stale`；`?seen=rN` ⇒ 横幅消失；
+  ④ 幂等：同一份原话重提 → `duplicates`（matched=applied-archive）、`ledger_added=0`、`exit=0`；
+  ⑤ 页面仍 **0 行脚本 / 0 内联事件**（反馈页、观察面、带横幅的页面各有扫描器非空转对照）。

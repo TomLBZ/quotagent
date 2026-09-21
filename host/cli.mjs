@@ -199,6 +199,15 @@ const main = async () => {
     const { apply: rvApply, Config: rvConfig } = await import('./modules/retention-view.mjs')
     await ctx.plugin({ name: 'retention-view', inject: [], Config: rvConfig,
       apply: (inner, cfg) => rvApply(inner, cfg) }, rvConfig.parse({}))
+    // WebUI 反馈闭环（ui-feedback，本批新增）：版本事实与待办件都在 `<ui-shared>/ui-feedback/`
+    // （宿主只读版本事实、只落 0600 待办件；唯一落账本者是 tools/ui-feedback-apply.py）
+    const { apply: fbApply, Config: fbConfig } = await import('./modules/ui-feedback.mjs')
+    await ctx.plugin({ name: 'ui-feedback', inject: [], Config: fbConfig,
+      apply: (inner, cfg) => fbApply(inner, { ...cfg,
+        route_prefix: String(args.prefix ?? '/quotagent'),
+        views: String(args.views ?? 'contractor,supplier').split(',').map((item) => item.trim()).filter(Boolean),
+        ui_shared: String(args['ui-shared'] ?? process.env.QUOTAGENT_UI_SHARED ?? 'tmp/ui-shared') }) },
+      fbConfig.parse({}))
     // 人工门待批摘要（subagent 产出，T-250）
     const { apply: apApply, Config: apConfig } = await import('./modules/approval-digest.mjs')
     await ctx.plugin({ name: 'approval-digest', inject: [], Config: apConfig,
@@ -224,7 +233,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -262,6 +271,8 @@ const main = async () => {
              subs.map((sub) => `${String(args.prefix ?? '/quotagent')}/${view}/${sub}/`)),
            retention_route: `${String(args.prefix ?? '/quotagent')}/api/retention`,
            pipeline_route: `${String(args.prefix ?? '/quotagent')}/api/pipeline`,
+           feedback_routes: ['contractor', 'supplier'].flatMap((v) => [`${String(args.prefix ?? '/quotagent')}/${v}/feedback`])
+             .concat([`${String(args.prefix ?? '/quotagent')}/ops/ui-feedback/`, `${String(args.prefix ?? '/quotagent')}/api/ui-feedback`]),
            admin_route: `${String(args.prefix ?? '/quotagent')}/admin/`,
            view_domain_routes: ['contractor', 'supplier'].flatMap((v) => [`${String(args.prefix ?? '/quotagent')}/${v}/api/negotiation`,
              `${String(args.prefix ?? '/quotagent')}/${v}/api/faq`]),

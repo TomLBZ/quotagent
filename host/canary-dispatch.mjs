@@ -232,6 +232,9 @@ const e2e = async ({ weightBps, candidate }) => {
     apply: (inner, cfg) => cvApplyE2E(inner, { ...cfg, config_file: '', config_inbox: '', config_status: '',
       config_ledger: '' }) }, cvConfigE2E.parse({}))
   // 邮件域（mail-view）：webui 的 inject 需要它；快照指向**不存在的文件** → 视图如实降级（不假装有数据）
+  const { apply: fbApplyE2E, Config: fbConfigE2E } = await import('./modules/ui-feedback.mjs')
+  await ctx.plugin({ name: 'ui-feedback', inject: [], Config: fbConfigE2E,
+    apply: (inner, cfg) => fbApplyE2E(inner, { ...cfg, ui_shared: '' }) })
   const { apply: bhApplyE2E, Config: bhConfigE2E } = await import('./modules/bid-heuristics.mjs')
   await ctx.plugin({ name: 'bid-heuristics', inject: [], Config: bhConfigE2E,
     apply: (inner, cfg) => bhApplyE2E(inner, cfg) }, bhConfigE2E.parse({}))
@@ -240,7 +243,7 @@ const e2e = async ({ weightBps, candidate }) => {
     apply: (inner, cfg) => mvApplyE2E(inner, { ...cfg, mail_state: '', ui_shared: '' }) }, mvConfigE2E.parse({}))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }
