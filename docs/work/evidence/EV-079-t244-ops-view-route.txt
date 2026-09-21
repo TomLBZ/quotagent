@@ -1,0 +1,55 @@
+EV-079 T-244 第三条视角道：运维视角挂到 /quotagent/ops/（自进化产出的 ops-view 上线）
+生成时间 2026-09-21T09:54:04Z
+命令与原始输出（原样留档）
+
+[1] 线上真实进程回读（重启后）
+$ curl -s http://127.0.0.1:8093/quotagent/ops/ → 200
+（页面含"运维视角""运行期""各视角账本证据面"三块）
+$ curl -s http://127.0.0.1:8093/quotagent/api/ops → 200
+{
+  "view": "ops",
+  "source": "ops-view（自进化产出的插件）",
+  "summary": "governor: admitted=4 refused=0 timeouts=0 failed=0 | breaker: allowed=0 refused=0 opened=0 closed=0 | canary: phase=base base=0 cand=0 | evidence: rows=0 types=0",
+  "runtime": {
+    "governor": {
+      "admitted": 4,
+      "refused": 0,
+      "timeouts": 0,
+      "retries": 0,
+      "completed": 3,
+      "failed": 0,
+      "buckets": {
+        "webui:/api/health": 64,
+        "webui:/quotagent/ops/": 64,
+        "webui:/quotagent/api/ops": 63
+      }
+    },
+    "audit": {
+      "captured": 0,
+      "deduped": 0,
+      "skipped": 0,
+      "dropped": 0,
+      "size": 0,
+      "capacity": 200
+    },
+    "canary": {
+      "state": {
+        "phase": "base",
+        "proposal": null,
+        "approval_ref": null,
+        "entered_at_seq": 0,
+        "weight_bps": 0,
+        "realms": []
+      },
+      "stats": {
+        "base
+
+[2] 公网：$ curl -s -o /dev/null -w '%{http_code}' https://novara.remoteblossom.com/quotagent/api/ops → 200
+
+[3] 门：verify.sh webui → 18/18
+  新增断言：/ops/ 与 /api/ops 都 200；含运行期（governor/breaker/canary）与**各视角**证据面聚合；
+  source 指向自进化插件 ops-view；**不出条目正文与私域键**。
+
+结论：三条视角道齐备 —— `/quotagent/contractor/`、`/quotagent/supplier/`（业务双方，各读自己的账本）
+与 `/quotagent/ops/`（运维，不属于任何一方）。三条道都由**插件**提供（webui + 三个自进化产出）。
+

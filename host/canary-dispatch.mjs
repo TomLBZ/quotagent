@@ -178,6 +178,12 @@ const e2e = async ({ weightBps, candidate }) => {
   const { apply: obsApplyE2E, Config: obsConfigE2E } = await import('./modules/observability.mjs')
   await ctx.plugin({ name: 'observability#e2e', inject: ['governor', 'audit', 'canary'], Config: obsConfigE2E,
     apply: (inner, cfg) => obsApplyE2E(inner, cfg) }, obsConfigE2E.parse({}))
+  const { apply: brApplyE2E, Config: brConfigE2E } = await import('./modules/circuit-breaker.mjs')
+  await ctx.plugin({ name: 'circuit-breaker#e2e', inject: [], Config: brConfigE2E,
+    apply: (inner, cfg) => brApplyE2E(inner, cfg) }, brConfigE2E.parse({}))
+  const { apply: opsApplyE2E, Config: opsConfigE2E } = await import('./modules/ops-view.mjs')
+  await ctx.plugin({ name: 'ops-view#e2e', inject: ['observability', 'breaker', 'evidenceSummary'], Config: opsConfigE2E,
+    apply: (inner, cfg) => opsApplyE2E(inner, cfg) }, opsConfigE2E.parse({}))
   const { apply: evApplyE2E, Config: evConfigE2E } = await import('./modules/evidence-summary.mjs')
   await ctx.plugin({ name: 'evidence-summary#e2e', inject: [], Config: evConfigE2E,
     apply: (inner, cfg) => evApplyE2E(inner, cfg) }, evConfigE2E.parse({}))
@@ -186,7 +192,7 @@ const e2e = async ({ weightBps, candidate }) => {
     apply: (inner, cfg) => histApplyE2E(inner, cfg) }, histConfigE2E.parse({ key_field: 'supplier_id' }))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }

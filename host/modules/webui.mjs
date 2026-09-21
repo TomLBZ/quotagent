@@ -15,11 +15,11 @@ import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary']   // 每个都是独立插件（准入 / 观测）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView']   // 每个都是独立插件（准入 / 观测）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView']
 
 export const provides = ['webui']
 
@@ -86,6 +86,7 @@ export function apply(ctx, config) {
   const obs = ctx.observability   // 本地句柄（D-027：不按请求去 ctx 里查自己依赖的服务）
   const history = ctx.priceHistory
   const evidence = ctx.evidenceSummary   // 账本证据面（第二个自进化产出，T-239）
+  const ops = ctx.opsView               // 运维视角（第四个自进化产出，T-243）
   /**
    * 价格序列的输入：**原始行**的 `body.lines[]`，但只取非私域字段（`item_id` / `unit_price`）。
    * 为什么要用原始行：投影层只保留 `seq/type/summary/ts`，价格明细会被截掉（实测 groups=0）。
@@ -135,6 +136,38 @@ export function apply(ctx, config) {
       }
       return json(200, { service: 'quotagent-webui', route_prefix: prefix, views: config.views,
         ledgers, routes: config.views.map((view) => `${prefix}/${view}/`) })
+    }
+    if (path === '/ops/' || path === '/ops') {
+      // 运维视角：不属于任何一方（业务视角各读自己的账本；运维看的是"系统整体"）
+      const runtime = ops.snapshot({ rows: [] })
+      const perView = Object.fromEntries(config.views.filter((view) => rules[view])
+        .map((view) => [view, ops.snapshot({ rows: rowsFor(view) }).evidence]))
+      const rowsHtml = config.views.filter((view) => rules[view]).map((view) => {
+        const ev = perView[view]
+        return `<tr><td>${view}</td><td>${ev.rows}</td><td>${ev.types}</td><td>${ev.correlations}</td>`
+          + `<td>${ev.rows_with_refs}</td><td>${ev.span.first ?? '—'} → ${ev.span.last ?? '—'}</td></tr>`
+      }).join('')
+      const g = runtime.runtime.governor
+      const b = runtime.breaker.stats
+      return send(200, 'text/html; charset=utf-8',
+        html(`${config.page_title} · 运维视角`,
+          `<p>本视角**不属于任何一方**：只看系统整体（运行期中间件状态 + 各视角账本的证据面聚合），不显示条目正文与私域键。</p>`
+          + `<p>JSON：<code>${prefix}/api/ops</code></p>`
+          + `<h3>运行期</h3><p>${ops.summary({ rows: [] })}</p>`
+          + `<table><tr><th>governor</th><th>breaker</th></tr>`
+          + `<tr><td>admitted=${g.admitted ?? 0} refused=${g.refused ?? 0} timeouts=${g.timeouts ?? 0} failed=${g.failed ?? 0}</td>`
+          + `<td>allowed=${b.allowed ?? 0} refused=${b.refused ?? 0} opened=${b.opened ?? 0} closed=${b.closed ?? 0}</td></tr></table>`
+          + `<h3>各视角账本证据面（聚合）</h3>`
+          + `<table><tr><th>视角</th><th>行数</th><th>类型数</th><th>关联数</th><th>带引用行</th><th>时间跨度</th></tr>${rowsHtml}</table>`,
+          prefix))
+    }
+    if (path === '/api/ops') {
+      const runtime = ops.snapshot({ rows: [] })
+      const perView = Object.fromEntries(config.views.filter((view) => rules[view])
+        .map((view) => [view, ops.snapshot({ rows: rowsFor(view) }).evidence]))
+      return json(200, { view: 'ops', source: 'ops-view（自进化产出的插件）', summary: ops.summary({ rows: [] }),
+        runtime: runtime.runtime, breaker: runtime.breaker, evidence_by_view: perView,
+        note: '运维视角：不属于任何一方；只给聚合数字与状态，不给条目正文/私域键' })
     }
     const viewMatch = path.match(/^\/([a-z]+)\/?$/)
     if (viewMatch && rules[viewMatch[1]]) {
@@ -194,10 +227,10 @@ export function apply(ctx, config) {
         return `<li><a href="${prefix}/${view}/">${rules[view].title}</a>（${report.count} 条，链自洽=${report.ok}）</li>`
       }).join('')
       return send(200, 'text/html; charset=utf-8', html(config.page_title,
-        `<ul>${rows}</ul>`
+        `<ul>${rows}</ul><ul><li><a href="${prefix}/ops/">运维视角</a>（系统整体：运行期中间件 + 各视角证据面聚合）</li></ul>`
         + '<p>本 UI 由 cordis 插件 <code>webui</code> 提供；每个视角读**自己的**账本，宿主不写账本。</p>', prefix))
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

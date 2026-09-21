@@ -139,6 +139,16 @@ const STUBS = {
     config: () => ({ key: 'host', failure_threshold: 5, cooldown_ms: 1000, half_open_max: 1, half_open_limit: 3 }),
     setClock: () => {},
   },
+  opsView: {
+    // fixture 的 stub：只满足"能取运维快照/摘要"；组合语义由 ops-view 门验
+    snapshot: () => ({ view: 'ops', runtime: { governor: { admitted: 0, refused: 0, timeouts: 0, failed: 0 },
+      audit: { captured: 0 }, canary: { state: { phase: 'base' }, stats: { base: { count: 0 }, canary: { count: 0 } } } },
+      breaker: { stats: { allowed: 0, refused: 0, opened: 0, closed: 0, buckets: {} }, buckets: {} },
+      evidence: { rows: 0, types: 0, by_type: [], correlations: 0, rows_with_refs: 0,
+        span: { count: 0, first: null, last: null } }, sources: ['observability', 'breaker', 'evidenceSummary'],
+      privacy: { entry_bodies_included: false, private_keys_included: false } }),
+    summary: () => 'stub',
+  },
   compare: { flagCount: () => 0 },
   bridge: { surface: () => ({}) },
 }

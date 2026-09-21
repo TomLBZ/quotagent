@@ -21,6 +21,8 @@ import { Config as canaryConfig, apply as canaryApply } from './modules/canary.m
 import { Config as obsConfig, apply as obsApply } from './modules/observability.mjs'
 import { Config as historyConfig, apply as historyApply } from './modules/price-history.mjs'
 import { Config as evConfig2, apply as evApply2 } from './modules/evidence-summary.mjs'
+import { Config as brConfig3, apply as brApply3 } from './modules/circuit-breaker.mjs'
+import { Config as opsConfig3, apply as opsApply3 } from './modules/ops-view.mjs'
 
 const facts = { checks: [] }
 let failures = 0
@@ -100,6 +102,8 @@ const mountObs = async (targetCtx) => {
   await wrap({ apply: obsApply, Config: obsConfig, inject: ['governor', 'audit', 'canary'] }, {}, 'observability', 'obs')
   await wrap({ apply: historyApply, Config: historyConfig, inject: [] }, { key_field: 'supplier_id' }, 'priceHistory', 'history')
   await wrap({ apply: evApply2, Config: evConfig2, inject: [] }, {}, 'evidenceSummary', 'evidence')
+  await wrap({ apply: brApply3, Config: brConfig3, inject: [] }, {}, 'breaker', 'breaker')
+  await wrap({ apply: opsApply3, Config: opsConfig3, inject: ['observability', 'breaker', 'evidenceSummary'] }, {}, 'opsView', 'ops')
 }
 await mountObs(ctx)
 
@@ -109,7 +113,7 @@ const gfiber = await ctx.plugin(governorMount('governor#probe', gbox),
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -207,7 +211,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -261,6 +265,20 @@ check('证据面正控：/contractor/api/evidence 与 /supplier/api/evidence 都
   && String(ev1Json.source).includes('evidence-summary')
   && !/"body"\s*:/.test(ev1.text) && !ev1.text.includes('private:'),
   `status=${ev1.status}/${ev2.status} rows=${ev1Json.summary?.rows} types=${ev1Json.summary?.by_type?.length}`)
+
+// 4f. T-244：第三条视角道（运维视角）—— 不属于任何一方，且不出正文/私域
+const opsPage = await get('/ops/')
+const opsApi = await get('/api/ops')
+let opsJson = {}
+try { opsJson = JSON.parse(opsApi.text) } catch (err) { opsJson = {} }
+check('运维视角正控：/ops/ 与 /api/ops 都 200，含运行期（governor/breaker/canary）与**各视角**证据面聚合，'
+  + '来源为自进化插件 ops-view，且不出正文/私域',
+  opsPage.status === 200 && opsApi.status === 200 && opsPage.text.includes('运维视角')
+  && typeof opsJson.runtime?.governor?.admitted === 'number' && typeof opsJson.breaker?.stats?.opened === 'number'
+  && ['contractor', 'supplier'].every((v) => (opsJson.evidence_by_view?.[v]?.rows ?? -1) >= 0)
+  && String(opsJson.source).includes('ops-view')
+  && !/"body"\s*:/.test(opsApi.text) && !opsApi.text.includes('private:'),
+  `page=${opsPage.status} api=${opsApi.status} perView=${Object.keys(opsJson.evidence_by_view ?? {}).join(',')}`)
 
 // 4. 未知视角
 const unknown = await get('/nonexistent/')

@@ -150,6 +150,14 @@ const main = async () => {
     const { apply: historyApply, Config: historyConfig } = await import('./modules/price-history.mjs')
     await ctx.plugin({ name: 'price-history', inject: [], Config: historyConfig,
       apply: (inner, cfg) => historyApply(inner, cfg) }, historyConfig.parse({ key_field: 'supplier_id' }))
+    // 熔断器（第三个自进化产出，T-241）：运维视角要读它的状态
+    const { apply: brApply2, Config: brConfig2 } = await import('./modules/circuit-breaker.mjs')
+    await ctx.plugin({ name: 'circuit-breaker', inject: [], Config: brConfig2,
+      apply: (inner, cfg) => brApply2(inner, cfg) }, brConfig2.parse({}))
+    // 运维视角（第四个自进化产出，T-243/T-244）：只组合上面几个来源
+    const { apply: opsApply2, Config: opsConfig2 } = await import('./modules/ops-view.mjs')
+    await ctx.plugin({ name: 'ops-view', inject: ['observability', 'breaker', 'evidenceSummary'], Config: opsConfig2,
+      apply: (inner, cfg) => opsApply2(inner, cfg) }, opsConfig2.parse({}))
     // 账本证据面插件（第二个自进化产出，T-239/T-240）
     const { apply: evApply, Config: evConfig } = await import('./modules/evidence-summary.mjs')
     await ctx.plugin({ name: 'evidence-summary', inject: [], Config: evConfig,
@@ -159,7 +167,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -183,6 +191,7 @@ const main = async () => {
            observability_route: `${String(args.prefix ?? '/quotagent')}/api/obs`,
            history_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/history`),
            evidence_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/evidence`),
+           ops_routes: [`${String(args.prefix ?? '/quotagent')}/ops/`, `${String(args.prefix ?? '/quotagent')}/api/ops`],
            observability: obox.handle ? obox.handle.summary() : null,
            note: '每方视角读自己的账本（结构性隔离）+ 投影白名单（纵深防御）；宿主不写账本' }) + '\n')
     // 保活：直到收到信号（ws-gateway 以 SIGTERM 停服）

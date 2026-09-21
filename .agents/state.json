@@ -3,7 +3,7 @@
   "updated_at": "2026-09-21T09:16:17Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-244：把 ops-view 挂到 /quotagent/ops/ 路由（第三条视角道），并复核 T-224 凭据状态",
+  "next_task": "T-245：复核 T-224 凭据状态；五个自进化产物已上线三条道，可考虑再产出并接线的下一件（如把 canary 决策接进运维视角）",
   "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
   "last_verified_command": "tools/verify.sh g1",
   "last_verified_result": "PASS：57/57 AC + 14/14 MVP 判据 + 十一个入口（docs/events/invariants/evolution/modules/bridge/cordis/p0-no-node/ac-registry/audit/v）全绿；modules 36/36",
@@ -85,6 +85,7 @@
     "t240": "done：evidence-summary 接进 WebUI 双方视角（EV-075 / D-035）",
     "t241": "done：第三个自进化产出=中间件 circuit-breaker（EV-076 / D-036）",
     "t242": "done：breaker 已接真实调用路径（EV-077 / D-037）",
-    "t243": "done：第四个自进化产出=运维视角 ops-view（EV-078 / D-038）"
+    "t243": "done：第四个自进化产出=运维视角 ops-view（EV-078 / D-038）",
+    "t244": "done：运维视角上线（EV-079 / D-039），三条视角道齐备"
   }
 }
