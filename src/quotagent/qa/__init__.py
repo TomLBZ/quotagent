@@ -8,7 +8,7 @@ from . import (checks_audit, checks_award, checks_bridge, checks_capacity, check
                checks_design, checks_deviation, checks_export, checks_eval, checks_events, checks_guard, checks_intake, checks_norm,
                checks_plugin, checks_pricing, checks_qep, checks_quotes, checks_rfq, checks_runtime,
                checks_sync, checks_terms, checks_change,
-               checks_retention, checks_retention_exec, checks_negotiation)
+               checks_retention, checks_retention_exec, checks_negotiation, checks_faq)
 from .registry import (ACReport, Assertion, ACCheck, REGISTRY, list_acs, run_ac,  # noqa: F401
                        run_check, EXIT_CONFIG, EXIT_FAIL, EXIT_PASS)
 

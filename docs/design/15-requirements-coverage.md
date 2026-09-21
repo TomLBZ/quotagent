@@ -21,7 +21,7 @@
 | FR-CLARIFY-001 | src/quotagent/services/clarify.py | ClarificationService.ask(package_id, rfq_rev | 直引 |
 | FR-CLARIFY-002 | src/quotagent/services/clarify.py | ClarificationService.broadcast(to) | 直引 |
 | FR-CLARIFY-003 | src/quotagent/services/clarify.py | ClarificationService.on_package_rev(package_ | 直引 |
-| FR-CLARIFY-004 | — | — | 缺口 |
+| FR-CLARIFY-004 | src/quotagent/services/faq.py | FaqService.reuse（AC-FAQ-001；跨版本必须不命中） | 直引 |
 | FR-COMPARE-001 | src/quotagent/services/compare.py | CompareService.tco(quote, package, policy) | 映射 |
 | FR-COMPARE-002 | src/quotagent/services/compare.py | CompareService.rank(package, quotes, weights | 直引 |
 | FR-COMPARE-003 | src/quotagent/services/compare.py | CompareService.verify_citations(evaluation) | 直引 |
@@ -147,13 +147,15 @@
 
 > 更新（T-256）：`FR-NEGO-001/002` 已落地（服务层 + 机检 `AC-NEGO-003`）。
 
+> 更新（T-257）：`FR-CLARIFY-004` 已落地（`services/faq.py` + `AC-FAQ-001`）。
+
 ## 3. 缺口与存疑登记
 
 > 门要求：状态为【缺口】【存疑】的 FR **必须**在本节逐条登记，且状态只能取 直引/映射/缺口/存疑。
 
 | ID | 类型 | 说明 | 计划 |
 |---|---|---|---|
-| FR-CLARIFY-004 | 缺口 | — | P2 规划内未做（T-310） |
+| FR-CLARIFY-004 | src/quotagent/services/faq.py | FaqService.reuse（AC-FAQ-001；跨版本必须不命中） | 直引 |
 | FR-EVIDENCE-004 | src/quotagent/services/retention.py、src/quotagent/services/retention_exec.py | 计划侧（AC-AUDIT-003）+ 执行侧（AC-AUDIT-005），两侧均有门 | 直引 |
 | FR-NEGO-001 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |
 | FR-NEGO-002 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |

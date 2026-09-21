@@ -155,6 +155,10 @@ class EventBus:
         "negotiate/round": ("serial", False, ""),
         "negotiate/round-rejected": ("bail", True, ""),
         "negotiate/closed": ("emit", True, ""),
+        # faq/*（D-051）
+        "faq/entry-published": ("emit", True, ""),
+        "faq/reuse-served": ("emit", True, ""),
+        "faq/reuse-refused": ("emit", True, ""),
         # §4 agent 侧（live）
         "agent/step-start": ("emit", False, ""),
         "agent/step-end": ("emit", False, ""),

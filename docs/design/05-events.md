@@ -97,6 +97,9 @@
 | `negotiate/opened` | `emit` | 谈判线程开立（挂采购包版本、对手方、本方报价与其人确认报价单） | 与 `negotiate/round` 同族；落账不产生义务（ADR-0019） |
 | `negotiate/round-rejected` | `bail` | 让步被拒（code/reason/next_action）——拒绝也要落痕 | 与 `negotiate/round` 同族；落账不产生义务（ADR-0019） |
 | `negotiate/closed` | `emit` | 谈判关闭（outcome/决定人/轮次用量） | 与 `negotiate/round` 同族；落账不产生义务（ADR-0019） |
+| `faq/entry-published` | `emit` | FAQ 条目发布（human: 来源；带 package_id + rfq_rev 版本绑定） | 与 `faq/*` 同族；复用是读不是写（D-051） |
+| `faq/reuse-served` | `emit` | FAQ 复用命中（观测事件，不改任何状态） | 与 `faq/*` 同族；复用是读不是写（D-051） |
+| `faq/reuse-refused` | `emit` | FAQ 复用被拒（跨版本/未发布；带 reason + next_action） | 与 `faq/*` 同族；复用是读不是写（D-051） |
 | `award/intent-proposed` | emit | ✔ | `ctx.award` → 对方 | Intent，可撤回 |
 | `award/intent-withdrawn` | emit | ✔ | `ctx.award` | 意向撤回（可复：再次提出得新意向） |
 | `award/commit-requested` | serial | live | `ctx.award` → 人工门 | 需 `approval/granted` 才能推进（名称与事件表一致：`award/committed` 与 `commit-requested` 成对） |

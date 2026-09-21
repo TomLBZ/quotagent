@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-21T11:22:16Z",
+  "updated_at": "2026-09-21T12:10:00Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-255：谈判轮次/让步实现（设计+契约已在 tmp，先落设计文档再派实现单）",
+  "next_task": "T-258：FR-INTEG-003 邮件集成（发信需凭据 → 先做报文构造/解析等不需凭据的部分）；T-224 仍待 Jev 凭据",
   "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
   "last_verified_command": "tools/verify.sh all",
-  "last_verified_result": "PASS：36 个门入口全绿（webui 22/22、retention-view 12/12）+ g1 0（59/59 AC）+ clean-copy 0；线上 /api/retention degraded=False，公网 200",
-  "last_verified_evidence": "docs/work/evidence/EV-090-t254-retention-view.txt",
+  "last_verified_result": "PASS：38 个门入口全绿（faq 20/20、negotiation 30/30、retention 两侧、webui 22/22）+ g1 退出 0（61/61 AC）+ clean-copy 退出 0",
+  "last_verified_evidence": "docs/work/evidence/EV-093-t257-faq.txt",
   "last_verified_commit": "1a70ac3",
   "blockers": [],
   "human_required": [
@@ -99,6 +99,7 @@
     "t253": "done：留存执行侧入库（AC-AUDIT-005 22/22、5/5 变异自证）；FR-EVIDENCE-004 完整落地；已删未记窗口如实记入 D-048",
     "t254a": "桥侧完成：retention.plan（compute，只读；执行永不进方法面）；EV-089",
     "t254": "done：留存计划在运维道可见（自进化产出 retention-view，ap-0109）；EV-089/090",
-    "t254b": "刷新钩子已接（seed 后 + 探活时）；真回读发现并修：相对路径 / 走查清文件 / 我造的 NameError"
+    "t254b": "刷新钩子已接（seed 后 + 探活时）；真回读发现并修：相对路径 / 走查清文件 / 我造的 NameError",
+    "t257": "done：FAQ 沉淀与复用落地（AC-FAQ-001 20/20、6/6 变异）；矩阵缺口 FR 只剩 FR-INTEG-003"
   }
 }

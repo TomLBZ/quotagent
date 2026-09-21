@@ -19,5 +19,14 @@ EV-093 T-257 FAQ 沉淀与复用（FR-CLARIFY-004）：契约 + AC + 实现
 `tools/verify.sh docs` 报"未解析的 ID 引用"，但当时我的命令没有把门与提交用 `&&` 串联 →
 红门提交被推了上去。本文件落地后复验全绿；该错误已在本批修复提交中记明（同一坑第二次踩）。
 
-[4] 实现证据
+[4] 实现证据（T-257）
+· `src/quotagent/services/faq.py`（28297 B，
+  sha256 cdb2a1123fbcd981…）
+· `src/quotagent/qa/checks_faq.py`（46236 B，
+  sha256 3fe1f193999ba10e…）→ `AC-FAQ-001`
+· 事件两侧登记：`05-events.md` + `kernel/events.py`（faq/entry-published、reuse-served、reuse-refused）
+· `tools/check-faq.py` + `verify.sh faq`；覆盖矩阵 `FR-CLARIFY-004` 由【缺口】→【直引】
+$ tools/verify.sh faq → exit=0
+{"ac": "AC-FAQ-001", "exit": 0, "passed": 20, "total": 20, "failures": []}
+断言 20/20 通过
 （待 T-257 实现轮次落地后追加：服务文件哈希、机检断言数与变异自证、事件两侧登记、矩阵转正。）
