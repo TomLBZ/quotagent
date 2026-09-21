@@ -1,0 +1,33 @@
+EV-087 T-252 FR-EVIDENCE-004 留存与销毁：设计决策 + ADR-0018 + 判定器 + 机检
+生成时间 2026-09-21T10:53:22Z
+
+[1] 交付（两个 subagent 并行，deleg_69aacd9b，284s；只许写 tmp/ 与指定文件）
+· tmp/t252-retention-design.md（31825 B）→ 设计决策记录（用后清理）
+· tmp/t252-retention-adr.md（10284 B）→ 收进 ADR-0018 后清理
+· src/quotagent/services/retention.py（22484 B，sha256 3d03421a41095d38…）
+· src/quotagent/qa/checks_retention.py（25180 B，sha256 4f992972fa4ca442…）
+
+[2] 父侧核验（D-019：subagent 自述不算事实，父侧自己跑）
+$ tools/run.sh tmp/run-ac-audit-003.py → **断言 21/21 通过**（父侧实跑）
+关键断言：账本行被判 keep + refused；guard_destroy(账本行) 抛 LedgerRowNotDestroyable；
+未知类型不判销毁；now=None 即拒（不读墙钟）；两次 render() 字节一致；静态+动态零残留；
+人工门 auto_approved == 0；超时策略只能 remind/escalate/abort；私域字段（INV-008）只记个数；
+verify_plan 能定位篡改。变异测试（子代理自证）：`elif ledger_row:` → `elif False:` 使前三条断言变红。
+
+[3] 接入与门
+$ tools/verify.sh retention → exit=0（断言 None/None 通过；范围=plan-only；退出码=0）
+· 门 = `tools/check-retention.py`，**明确声明范围 = plan-only**
+· 内核事件表新增 `evidence/retention-archived`、`evidence/retention-copy-purged`（emit/fact）；
+  否则 `verify.sh events` 会报"文档声明但事件表没有"（"声明即登记"双向）
+$ tools/verify.sh events → exit=0 ；tools/verify.sh coverage → exit=0
+  （矩阵里 FR-EVIDENCE-004 由【缺口】→【直引】+ 部分实现说明）
+
+[4] 如实说明（不粉饰）
+· `AC-AUDIT-003` 字面要求含"销毁**生效后**目标事件不可再读"，本轮只实现**判定器**：
+  不执行销毁、不落账本事件 → **该 AC 不标绿**（`qa ac AC-AUDIT-003` 仍为"未实现"/退出码 2），
+  执行侧与读侧封存登记为 **T-253**。
+· `checks_retention` 因此**未**加入 `qa/__init__.py` 注册表 → g1 仍是 57/57，无虚增。
+· 未在 Python 3.9 上跑过（容器仅 3.13）；未接消费方（输出字段形状由实现方决定）。
+
+结论：5 条【缺口】FR 中第 1 条启动落地 —— **边界先钉死（账本行永不销毁）**，判定器入库 + 21 条机检；
+破坏性动作的执行侧显式留待 T-253，**没有用"门绿"掩盖它**。

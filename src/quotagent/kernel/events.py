@@ -147,6 +147,8 @@ class EventBus:
         "award/committed": ("emit", True, ""),
         "po/issued": ("emit", True, ""),
         "evidence/pack-exported": ("emit", True, ""),
+        "evidence/retention-archived": ("emit", True, ""),
+        "evidence/retention-copy-purged": ("emit", True, ""),
         # §4 agent 侧（live）
         "agent/step-start": ("emit", False, ""),
         "agent/step-end": ("emit", False, ""),

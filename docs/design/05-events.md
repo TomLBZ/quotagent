@@ -109,6 +109,8 @@
 | `sync/suspended` | emit | ✔ | `ctx.sync` | 承诺字段或矩阵未覆盖字段的冲突 → 条目挂起待人工 |
 | `sync/suggestion-raised` | emit | ✔ | `ctx.sync` | 对非权威字段的本地修改转为建议（不外发，03 §4.3） |
 | `evidence/pack-exported` | emit | ✔ | `ctx.evidence` | 审计包（含 Merkle 根） |
+| `evidence/retention-archived` | `emit` | 到期归档动作落痕（T-252；判定器只管计划，落痕由执行方做） | 逐条取证；body 只出计数与哈希，**不得复活已销毁数据** |
+| `evidence/retention-copy-purged` | `emit` | 派生副本销毁落痕（同上） | 同上；归档包一次成型，事后补写即自证篡改 |
 | `evolve/proposed` | serial | ✔ | `ctx.evolve` | 自进化提案（P3 阶段）；族内后续名称见 `07`，**登记时必须在本表逐条声明**（事件门机检：事件表有而本表无即红） |
 | `evolve/shadowed` | serial | ✔ | 影子 → 门 | 隔离 realm 挂提案后条目树（账本复制到新文件，含 `MetricDelta`） |
 | `evolve/gated` | serial | ✔ | host gate runner | 五条门槛 AND 的裁决与逐条理由 |

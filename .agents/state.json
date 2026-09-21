@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-21T10:44:39Z",
+  "updated_at": "2026-09-21T11:20:00Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "T-252：复核 T-224 凭据（仍缺）→ 继续推进（候选：为 5 条【缺口】FR 派 subagents 做设计/实现）",
+  "next_task": "T-253：留存执行侧（删除派生副本 + 读侧封存 + 落 evidence/retention-* 事件），之后 AC-AUDIT-003 才可标绿",
   "next_action": "P1 的 §7.1 八条最小集全部完成（T-219/T-220/T-221 已 done），`verify.sh g1` 退出 0。下一步需人定：① 签署 G0/G1；② 进入 P2（建议先做自进化流水线：观察→提案→影子→门→canary→晋升，T-220 的骨架可作起点；其次是 HTTP relay 与宿主视图）",
-  "last_verified_command": "tools/verify.sh coverage",
-  "last_verified_result": "PASS：coverage ?/?；矩阵与 FR 文档/插件目录双向全覆盖",
-  "last_verified_evidence": "docs/work/evidence/EV-086-t251-requirement-coverage.txt",
+  "last_verified_command": "tools/verify.sh all",
+  "last_verified_result": "PASS：35 个门入口全绿（retention 21/21、coverage 7/7、webui 21/21、modules 248/248）+ g1 退出 0（57/57 AC）+ clean-copy 退出 0",
+  "last_verified_evidence": "docs/work/evidence/EV-087-t252-retention-policy.txt",
   "last_verified_commit": "1a70ac3",
   "blockers": [],
   "human_required": [
@@ -94,6 +94,7 @@
     "t248": "done：idempotency-guard 上线（桥调用路径，端到端门 5/5，EV-083 / D-043）",
     "t249": "done：运维手册补齐 P2 现状（EV-084 / D-044），线上六条路由全部 200",
     "t250": "done：approval-digest（双方视角 /api/approvals）+ budget-guard（桥路径）；9 件自进化产物、其中 4 件 subagent 产出（EV-085 / D-045）",
-    "t251": "done：覆盖矩阵 + coverage 门；12 件孤儿插件补登记 14 FR/14 AC（EV-086 / D-046）"
+    "t251": "done：覆盖矩阵 + coverage 门；12 件孤儿插件补登记 14 FR/14 AC（EV-086 / D-046）",
+    "t252": "done：FR-EVIDENCE-004 设计+ADR-0018+判定器（21 机检）；执行侧 T-253 未做，AC-AUDIT-003 不标绿"
   }
 }

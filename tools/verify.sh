@@ -86,6 +86,10 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec node host/t247-scorecard-gate.mjs "$@"
     ;;
+  retention)
+    shift
+    exec python3 tools/check-retention.py "$@"
+    ;;
   coverage)
     shift
     exec python3 tools/check-fr-coverage.py "$@"
@@ -196,7 +200,7 @@ audit)
     exit 2
     ;;
   *)
-    echo "用法: tools/verify.sh ac-registry|approval-digest|audit-hook|breaker|breaker-route|bridge|bridge-canary|budget-guard|budget-route|canary|canary-route|clean-copy|cordis|coverage|docs|events|evolution|evolve-journal|evolve-module|g1|governor|idem-route|idempotency-guard|invariants|modules|observability|ops-view|p0-no-node|plugins|smoke|supplier-scorecard|v|webui|wiring" >&2
+    echo "用法: tools/verify.sh ac-registry|approval-digest|audit-hook|breaker|breaker-route|bridge|bridge-canary|budget-guard|budget-route|canary|canary-route|clean-copy|cordis|coverage|docs|events|evolution|evolve-journal|evolve-module|g1|governor|idem-route|idempotency-guard|invariants|modules|observability|ops-view|p0-no-node|plugins|retention|smoke|supplier-scorecard|v|webui|wiring" >&2
     exit 2
     ;;
 esac
