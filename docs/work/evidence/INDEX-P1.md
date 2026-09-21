@@ -23,6 +23,7 @@
 | EV-055 | 部署手册干净副本实跑（T-215b）：`git archive HEAD` → 裸解释器 `verify.sh smoke` / `verify.sh docs` / `python3 tools/g1-walkthrough.py` 的原始输出；并含 `verify.sh g1` 聚合门（全量 57 条 AC + 14 条 MVP 判据）的结论 | T-215b / S1.14 |
 | EV-056 | 宿主强制不变量 H1/H2/H3/H5/H6（`verify.sh invariants` 22/22）（详情见 EV 文件本体） | T-219 / 评审 C §7.1 |
 | EV-060 | 模型 Jev 一手来源核验（Cloudflare/Vercel 原文节选） | T-223 | P2 |
+| EV-066 | canary 接到真实桥调用（调用面分流 + 失败隔离） | T-231 | P2 |
 | EV-065 | canary 接线到真实入口（投影插件化 + 失败隔离 + 端到端） | T-230 | P2 |
 | EV-064 | canary 分流与自动回滚（方向性纪律的机检） | T-229 | P2 |
 | EV-063 | 自进化产出插件（提案→影子→fixture 门→晋升→回滚） | T-227 | P2 |

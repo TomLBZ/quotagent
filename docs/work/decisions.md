@@ -115,3 +115,18 @@
   包装 `inject` 没跟着加 `projection` → 服务起不来（`cannot get property "projection" without inject`）。
   后者只在"真的重启服务"时暴露，说明"门全绿"不等于"服务能起"——已作为纪律记入本批次。
 - 记录：`ADR-0017 §4`（本决定补上其"已知限制"里那一条）；证据 `EV-065`。
+
+## D-023 canary 的样本来自**真实桥调用**（T-231，2026-09-21T08:52:39Z）
+
+- 决定：把 canary 分桶接到宿主→内核的**真实调用路径**上——新插件 `host/modules/bridge-canary.mjs`
+  （`provides: ['canary-dispatch']`）对外提供 `register({base, candidate})` 与 `call(method, params)`；
+  `host/cli.mjs bridge` 新增 `--canary-weight <bps>`（默认 **0 = 零影响**）与 `--candidate-module <path>`
+  （候选实现，形如晋升产物的入口）。调用结果（成败/回退）回灌给 `canary` 的判定器。
+- 为什么单独成插件：`kernel-bridge` 是**声明面**（暴露/拒绝哪些方法），不该知道"上线策略"；
+  canary 在多数 profile 里不挂，所以调用面分流器独立装配（各自独立演进）。
+- **同形契约**：候选必须与 base 同签名、同返回结构；形不对不会在分流器里被抓住，而是在调用方炸 TypeError
+  （实测踩到：候选返回 `{jsonrpc,...}` 而 base 返回桥帧 `{n, p:{id,m,result}}`）。接候选前先用
+  `verify.sh bridge-canary` 的夹具验形状。
+- 纪律重申：**注册了不等于用上了**——`--method` 路径必须真走分流器（本轮先写了"注册但没走"的假接线，
+  实测发现后改为真走）；`--canary-weight 0` 时行为与未接线完全一致。
+- 记录：证据 `EV-066`（含真实桥调用下 `lane=canary` 且候选真的服务了这次调用的原始输出）。

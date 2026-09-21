@@ -14,7 +14,7 @@ export const PROFILES = {
     label: '承包商运营台',
     realm: 'contractor:con-B',
     ledger: 'ledger-contractor.jsonl',
-    modules: ['config', 'frozen', 'kernel-bridge', 'sourcing', 'compare', 'guard', 'approval', 'queue', 'canary'],
+    modules: ['config', 'frozen', 'kernel-bridge', 'sourcing', 'compare', 'guard', 'approval', 'queue', 'canary', 'bridge-canary'],
     sidecar: 'deferred-to-B3',
     config: {
       approval: { queue: { enabled: true }, auto_approve: false },

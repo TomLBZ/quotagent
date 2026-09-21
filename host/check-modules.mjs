@@ -68,6 +68,16 @@ const STUBS = {
     },
     convert: (qty, factor) => ({ qty: Number(qty), factor: Number(factor), base: Number(qty) * Number(factor) }),
   },
+  canary: {
+    // fixture 的 stub：只满足"能分桶、能记样本"；分流语义由 canary 模块自己的 fixture 与 canary 门验
+    bucket: () => 'base',
+    record: () => ({ lane: 'base', count: 1 }),
+    stats: () => ({ base: { count: 0 }, canary: { count: 0 }, phase: 'base', seq: 0 }),
+    verdict: () => ({ recommendation: 'insufficient', reasons: [], computed_by: 'stub' }),
+    decide: () => ({ action: 'hold', automatic: false, approval_required: false }),
+    enterCanary: () => ({ phase: 'canary' }),
+    exitCanary: () => ({ phase: 'base' }),
+  },
   projection: {
     // fixture 的 stub：webui 只依赖"拿得到投影服务"，具体规则由 projection 模块自己的 fixture 验
     rules: { contractor: { title: '承包商视角', types: ['rfq/'], privateKeys: [], fields: ['seq', 'type'] },

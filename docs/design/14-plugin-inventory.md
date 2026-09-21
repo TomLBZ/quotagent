@@ -16,6 +16,7 @@
 | `host/modules/sourcing.mjs` | 领域插件：RFQ 覆盖率与缺口分析（`coverage`/`gaps`/`expiring`，纯函数只读账本行） | `sourcing` | `contractor-ops` | 只改本文件；覆盖率口径变更须同步其 fixture 断言 |
 | `host/modules/timeline.mjs` | 中间件：按 realm 的事件时间线环形缓冲（有界、幂等去重、零残留；不产生业务事实） | `timeline` | `webui` | 只改本文件；容量/去重口径变更须同步其 fixture 断言 |
 | `host/modules/projection.mjs` | 视角投影服务（谁看到什么字段；私域键拒收、抑制原因对外通用） | `projection` | `webui`、`contractor-ops` | 只改本文件；字段白名单变更须同步 `AC-TRUST-001` |
+| `host/modules/bridge-canary.mjs` | 调用面分流器：把 canary 接到宿主→内核的真实桥调用上（候选抛错回退 base、base 抛错原样抛） | `canary-dispatch` | `contractor-ops` | 只改本文件；接线语义变更须同步 `verify.sh bridge-canary` |
 | `host/modules/canary.mjs` | 自进化产物的真实路由分流 + 自动回滚判定（进/升需人工引用，回滚自动） | `canary` | `contractor-ops` | 只改本文件；阈值/分流语义变更须同步 ADR-0017 与其断言 |
 | `host/modules/webui.mjs` | 双方视角 WebUI（承包商/供应商两个路由；只读账本） | `webui` | `webui` | 只改本文件 + `host/lib/ledger-view.mjs`；接入见 `docs/work/deployment-manual.md` |
 

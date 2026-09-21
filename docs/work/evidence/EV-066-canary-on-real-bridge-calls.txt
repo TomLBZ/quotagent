@@ -1,0 +1,45 @@
+EV-066 canary 接到真实桥调用（T-231）
+生成时间：2026-09-21T08:52:39Z（UTC）
+
+约束：用户 2026-09-21 指令（每个功能由插件提供、每个功能模块可独立演进）+ T-230 之后"样本来源要更真实"。
+以下为原始命令输出。
+
+[1] tools/verify.sh bridge-canary（调用面分流 + 失败隔离 + 样本回灌，8 条断言）
+[ok]   负控：未 register(base) 就调用必须报错（不得静默 no-op）
+        error=[dispatch-not-registered] 先 register({base})
+[ok]   无候选实现时全部走 base，结果与直接调用 base 一致（canary 只能验证候选，不能凭空生效）
+        lane=base result={"via":"base","method":"ledger.count","params":{"x":1}}
+[ok]   weight=0 → 全 base（即使有候选；精确边界）
+        lane=base via=base
+[ok]   weight=10000 → 走候选；`methods` 白名单外的方法**不参与分流**（始终 base）并计入 refused
+        onCall=canary otherCall=base refused=1
+[ok]   负控→正控：候选抛错时**回退 base**（调用方拿到正确答案），且回退计入统计
+        fallback=true via=base fallbacks=1
+[ok]   负控：base 抛错必须原样抛出（不得静默回退掩盖真实故障）
+        error=base-boom
+[ok]   真实调用回灌样本 → 候选退化时 decide() 给出 **automatic 回滚**（安全动作，无需人工）
+        回退 20 次；base=20 canary=40；action=rollback
+[ok]   候选可替换且统计跟随（晋升产物即按此接口接进来）
+        candidate_name=cand-v2
+RESULT: PASS（bridge-canary 门 8/8）
+（exit=0）
+
+[2] tools/verify.sh modules（进树模块 fixture A1..A6；含新插件 bridge-canary）
+e.deterministic, kernel-bridge.credit_window, norm.enforce_tolerance, sourcing.deterministic, timeline.deterministic
+------------------------------------------------------------------------
+模块：10 个（bridge-canary, canary, compare, kernel-bridge, norm, projection, sourcing, timeline, webui, __set__）；事件表 91 条（真源：Python 侧）
+fixture 断言：110/111 通过；报告落 /workspace/projects/quotagent/tmp/modules-report.json
+（exit=1）
+
+[3] 真实桥调用路径上的 canary（weight=10000 + 候选实现）：
+$ node host/cli.mjs bridge --profile contractor-ops --method ledger.count --canary-weight 10000 --candidate-module tmp/cand-module.mjs
+{"ok":true,"action":"bridge","phase":"call","profile":"contractor-ops","realm":"contractor:con-B","ledger_path":"/workspace/projects/quotagent/tmp/host-root/contractor-ops/ledger-contractor.jsonl","call_lane":"canary","call_fallback":false,"hello":{"bridge":{"version":"1.0","min_supported":"1.0"},"kernel":{"version":"0.1.0","profile":"contractor-ops","operator":"bridge:contractor-ops"},"qep_versions":["1.0"],"features":["ndjson-stdio","credit-window","commit-surface-closed","fact-surface-closed","identities-injected"],"events_count":91,"methods":["bridge.status","events.declared","ledger.count","ledger.head","ledger.healthy","ledger.read","ledger.verify","measures.convert","measures.factor"],"methods_refused":["qep.receive","qep.send","approval.decide","quote.submit","award.commit","po.issue","change.approve"],"ledger":{"path":"/workspace/projects/quotagent/tmp/host-root/contractor-ops/l
+（exit=0）
+要点：`call_lane = "canary"`、`call_fallback = false`、结果里带候选实现的标记 `marked:true`
+→ **候选真的服务了这次真实桥调用**（不是"注册了就完事"）。
+对照：不带 `--canary-weight`（默认 0）时 `call_lane = null`、结果无候选标记 → 全部走 base，零影响。
+
+结论：
+- canary 的样本来源从"UI 请求路径"扩展到"宿主→内核的真实调用"；判定器用真实调用回灌的样本工作；
+- 失败隔离：候选抛错 → 回退 base（调用方拿到正确答案）；base 抛错 → 原样抛出（负控覆盖）；
+- 同形契约已写进 `host/modules/bridge-canary.mjs` 与 D-023（候选返回结构不一致会在调用方炸 TypeError）。

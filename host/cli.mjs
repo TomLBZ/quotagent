@@ -13,9 +13,9 @@
  */
 import { Context, EventsService, RegistryService } from 'cordis'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { makeConfigHostPlugin, requestUpdate, digestOf } from './lib/config.mjs'
 import { SCHEMA } from './lib/schema.mjs'
 import { PROFILES, profileDir } from './profiles.mjs'
@@ -174,6 +174,30 @@ const main = async () => {
     mkdirSync(dir, { recursive: true })
     const client = new BridgeClient({ repoRoot: REPO_ROOT, realm: profile.realm, ledger: ledgerPath,
                                       profile: profileName, node: process.env.QUOTAGENT_NODE ?? null }).start()
+    // canary 接线（可选）：`--canary-weight <bps>` > 0 时，真实桥调用按 canary 分桶走 base/候选。
+    // 默认 0 = 全部走 base，行为与未接线时完全一致（升级路径安全）。
+    let canaryDispatch = null
+    const canaryWeight = Number(args['canary-weight'] ?? 0)
+    if (canaryWeight > 0 || args['candidate-module']) {
+      const ctx = new Context()
+      await ctx.plugin(EventsService)
+      const { apply: canaryApply, Config: canaryConfig } = await import('./modules/canary.mjs')
+      await ctx.plugin({ name: 'canary', inject: [], Config: canaryConfig,
+        apply: (inner, cfg) => canaryApply(inner, cfg) }, canaryConfig.parse({ weight_bps: canaryWeight }))
+      const { apply: bcApply, Config: bcConfig } = await import('./modules/bridge-canary.mjs')
+      const dbox = {}
+      await ctx.plugin({ name: 'bridge-canary', inject: ['canary'], Config: bcConfig,
+        apply: async (inner, cfg) => {
+          const original = inner.provide.bind(inner)
+          inner.provide = (service, value) => { if (service === 'canary-dispatch') dbox.handle = value; return original(service, value) }
+          await bcApply(inner, cfg)
+        } }, bcConfig.parse({ realm: profile.realm, name: `bridge:${profileName}` }))
+      const candidatePath = args['candidate-module'] ? String(args['candidate-module']) : null
+      const candidate = candidatePath ? (await import(pathToFileURL(resolve(REPO_ROOT, candidatePath)).href)).call : null
+      dbox.handle.register({ base: (method, params) => client.call(method, params), candidate,
+        candidate_name: candidatePath ?? '' })
+      canaryDispatch = { weight_bps: canaryWeight, candidate: candidatePath, dispatch: dbox.handle }
+    }
     const handshake = await client.handshake({ acceptBridge: accept, wantEvents, profile: profileName })
     if (!handshake.ok) {
       const code = await client.stop()
@@ -182,17 +206,34 @@ const main = async () => {
              ledger_path: ledgerPath, ledger_exists: ledgerExists(ledgerPath),
              stderr_log_lines: client.stderr.length })
     }
+    if (canaryDispatch) {
+      const stats = canaryDispatch.dispatch.stats()
+      process.stderr.write(`[bridge-canary] 接线：weight=${canaryDispatch.weight_bps}bps 候选=${canaryDispatch.candidate ?? '（无）'} stats=${JSON.stringify(stats)}\n`)
+    }
     let call = null
+    let call_lane = null
+    let call_fallback = false
     if (args.method) {
       const params = args.params ? JSON.parse(args.params) : {}
       if (args.claim) params.source = args.claim
-      const frame = await client.call(String(args.method), params, { id: Number(args.id ?? 1) })
+      // 真走分流器（不是"注册了就完事"）：--canary-weight > 0 时由 canary 决定走 base 还是候选。
+      // 候选抛出时 dispatcher 回退 base，调用方仍拿到正确答案（失败隔离）。
+      let frame
+      if (canaryDispatch) {
+        const routed = canaryDispatch.dispatch.call(String(args.method), params)
+        call_lane = routed.lane
+        call_fallback = routed.fallback_used
+        frame = await routed.result
+      } else {
+        frame = await client.call(String(args.method), params, { id: Number(args.id ?? 1) })
+      }
       call = frame
     }
     client.shutdown(); const code = await client.stop()
     const errorFrame = call && call.n === 'error' ? call.p : null
     emit({ ok: Boolean(call ? call.n === 'result' : true), action: 'bridge', phase: 'call',
            profile: profileName, realm: profile.realm, ledger_path: ledgerPath,
+           call_lane, call_fallback,
            hello: handshake.hello ? {
              bridge: handshake.hello.bridge, kernel: handshake.hello.kernel,
              qep_versions: handshake.hello.qep_versions, features: handshake.hello.features,
@@ -379,4 +420,6 @@ const main = async () => {
   emit({ ok: false, error: `未知 action: ${action}（可用 boot|status|config-update|help）` }, 2)
 }
 
-main().catch((err) => emit({ ok: false, error: `${err?.name ?? 'Error'}: ${err?.message ?? err}` }, 3))
+main().catch((err) => emit({ ok: false, error: `${err?.name ?? 'Error'}: ${err?.message ?? err}`,
+  // 调试栈：只在 QUOTAGENT_DEBUG=1 时给（默认输出保持稳定、可机检）
+  stack: process.env.QUOTAGENT_DEBUG ? String(err?.stack ?? '').split('\n').slice(0, 6) : undefined }, 3))
