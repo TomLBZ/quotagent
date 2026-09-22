@@ -27,7 +27,6 @@ import { Config as jConfig3, apply as jApply3 } from './modules/evolve-journal.m
 import { Config as scConfig3, apply as scApply3 } from './modules/supplier-scorecard.mjs'
 import { Config as apConfig3, apply as apApply3 } from './modules/approval-digest.mjs'
 import { Config as rvConfig3, apply as rvApply3 } from './modules/retention-view.mjs'
-import { Config as pvConfig3, apply as pvApply3 } from './modules/pipeline-view.mjs'
 import { Config as agConfig3, apply as agApply3 } from './modules/admin-guard.mjs'
 import { Config as avConfig3, apply as avApply3 } from './modules/admin-view.mjs'
 import { Config as pmConfig3, apply as pmApply3 } from './modules/plugin-market.mjs'
@@ -199,7 +198,6 @@ const mountObs = async (targetCtx) => {
   await wrap({ apply: scApply3, Config: scConfig3, inject: [] }, {}, 'supplierScorecard', 'scorecard')
   await wrap({ apply: apApply3, Config: apConfig3, inject: [] }, {}, 'approvalDigest', 'approvals')
   await wrap({ apply: rvApply3, Config: rvConfig3, inject: [] }, {}, 'retentionView', 'retention')
-  await wrap({ apply: pvApply3, Config: pvConfig3, inject: [] }, {}, 'pipelineView', 'pipeline')
   await wrap({ apply: avApply3, Config: avConfig3, inject: [] }, {}, 'adminView', 'admin-view')
   await wrap({ apply: upApply3, Config: upConfig3, inject: [] }, { root: process.cwd() + '/user-space' }, 'userPluginManager', 'user-plugin-manager')
   await wrap({ apply: pmApply3, Config: pmConfig3, inject: [] },
@@ -245,38 +243,17 @@ writeFileSync(evolvePath, [
   JSON.stringify({ type: 'evolve/promoted', body: { approval_ref: 'ap-9' } }),
 ].join('\n') + '\n', 'utf8')
 
-// T-262：业务视角断言必须**自带夹具快照** —— 干净副本里没有 tmp/ 演示数据
-// （第一版靠真 `tmp/ui-shared/pipeline.json`，clean-copy 门立刻报 webui 23/25 红）
-const pipeFixtureDir = mkdtempSync(join(tmpdir(), 'wui-pipe-'))
-const pipeFixture = join(pipeFixtureDir, 'pipeline.json')
-const pipeRec = (n) => Array.from({ length: n }, (_, i) => ({
-  thread_id: `nt-000${i + 1}`, attempt_no: i + 1, status: 'conceded',
-  body: 'SECRET-BODY-不该外泄', drift: 'private:必须过滤',   // 哨兵：路由必须按键投影，不得原样透传
-}))
-const pipeFaqRec = (n) => Array.from({ length: n }, (_, i) => ({
-  entry_id: `fq-000${i + 1}`, rfq_rev: i + 1, subject: 'SECRET-SUBJECT', note: 'private:必须过滤',
-}))
-writeFileSync(pipeFixture, JSON.stringify({
-  generated_at: '2026-09-21T12:00:00Z',
-  totals: { threads: 2, rounds: 2, rejected: 2, entries: 2, queued: 2, refused: 2 },
-  views: Object.fromEntries(['contractor', 'supplier'].map((v) => [v, {
-    negotiate: { threads: 1, open: 0, closed: 1, rounds: 1, rejected: 1, recent: pipeRec(5) },
-    faq: { entries: 1, revs: [1], recent: pipeFaqRec(5) },
-    mail: { queued: 1, refused: 1, transport: { available: false, reason: 'mail-transport-unavailable', next_action: '配置 SMTP/IMAP 凭据后接入' } },
-  }])),
-}), 'utf8')
-
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
     inner.provide = (service, value) => { if (service === 'webui') box.handle = value; return original(service, value) }
     await webuiApply(inner, config)
   },
-}, { port: 0, route_prefix: '/quotagent', ledger_evolve: evolvePath, pipeline_snapshot: pipeFixture })
+}, { port: 0, route_prefix: '/quotagent', ledger_evolve: evolvePath })
 
 const base = box.handle.url.replace(/\/$/, '')
 
@@ -417,7 +394,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -511,45 +488,9 @@ check('绩效记分卡正控：/contractor/api/scorecard 与 /supplier/api/score
   && !/"body"\s*:/.test(sc1.text) && !sc1.text.includes('private:') && !sc1.text.includes('cost_floor'),
   `status=${sc1.status}/${sc2.status} groups=${scJson.groups}`)
 
-// 4l. T-262：谈判轮次与 FAQ 条目在**业务双方视角**可见（渲染只读快照；判定在 Python 侧）
-const nva = await get('/contractor/api/negotiation')
-const nvb = await get('/supplier/api/negotiation')
-let nvJson = {}
-try { nvJson = JSON.parse(nva.text) } catch (err) { nvJson = {} }
-check('业务视角·谈判正控：双方 /<view>/api/negotiation 都 200，含计数与最近轮次，且不出正文/私域',
-  nva.status === 200 && nvb.status === 200 && nvJson.counts && Array.isArray(nvJson.recent)
-  && !/"body"\s*:/.test(nva.text) && !nva.text.includes('private:') && !nva.text.includes('reserve_price'),
-  `status=${nva.status}/${nvb.status} counts=${JSON.stringify(nvJson.counts)} recent=${(nvJson.recent || []).length}`)
-// 夹具负控：快照里放了 SECRET/private: 哨兵，路由必须按键投影掉；且列表有界（夹具 5 条）
-check('业务视角·谈判投影：recent 按键投影（thread_id/attempt_no/status），哨兵 body/private 不得出现，且 ≤5 条',
-  !nvJson.recent?.some((r) => Object.keys(r).some((k) => !['thread_id', 'attempt_no', 'status'].includes(k)))
-  && (nvJson.recent || []).length > 0 && (nvJson.recent || []).length <= 5
-  && !nva.text.includes('SECRET-BODY') && !nva.text.includes('private:'),
-  `keys=${JSON.stringify((nvJson.recent || []).map((r) => Object.keys(r)))} n=${(nvJson.recent || []).length}`)
-const fqa = await get('/contractor/api/faq')
-let fqJson = {}
-try { fqJson = JSON.parse(fqa.text) } catch (err) { fqJson = {} }
-check('业务视角·FAQ 投影：recent 按键投影（entry_id/rfq_rev），subject/private 哨兵不得出现，且 ≤5 条',
-  !fqJson.recent?.some((r) => Object.keys(r).some((k) => !['entry_id', 'rfq_rev'].includes(k)))
-  && (fqJson.recent || []).length > 0 && (fqJson.recent || []).length <= 5
-  && !fqa.text.includes('SECRET-SUBJECT') && !fqa.text.includes('private:'),
-  `keys=${JSON.stringify((fqJson.recent || []).map((r) => Object.keys(r)))} n=${(fqJson.recent || []).length}`)
-check('业务视角·FAQ 正控：/<view>/api/faq 200，含条目计数与最近条目，且不出正文/私域',
-  fqa.status === 200 && fqJson.counts && Array.isArray(fqJson.recent)
-  && !/"body"\s*:/.test(fqa.text) && !fqa.text.includes('private:'),
-  `status=${fqa.status} counts=${JSON.stringify(fqJson.counts)} recent=${(fqJson.recent || []).length}`)
-
-// 4k. T-260：谈判/FAQ/邮件三域在运维道可见（Python 写快照，宿主只读聚合）
-const pp = await get('/api/pipeline')
-let ppJson = {}
-try { ppJson = JSON.parse(pp.text) } catch (err) { ppJson = {} }
-check('三域流水正控：/api/pipeline 200，含谈判/FAQ/邮件三域计数与 transport 三件，且不出正文与私域',
-  pp.status === 200 && ppJson.pipeline && Array.isArray(ppJson.pipeline.views)
-  && typeof (ppJson.pipeline.transport || {}).available === 'boolean'
-  && typeof (ppJson.pipeline.transport || {}).reason === 'string'
-  && typeof (ppJson.pipeline.transport || {}).next_action === 'string'
-  && !/"body"\s*:/.test(pp.text) && !pp.text.includes('private:') && !pp.text.includes('reserve_price'),
-  `status=${pp.status} degraded=${ppJson.pipeline?.degraded} transport=${JSON.stringify(ppJson.pipeline?.transport || {})?.slice(0, 60)}`)
+// 4l/4k 的**三域流水只读快照**面（`/api/pipeline` 与 `/<view>/api/{negotiation,faq}`）已按
+// `docs/design/29-webui-gui-app.md` §2 + `AGENTS.md` 规则 12 **整体退役**（连同 `pipeline-view` 插件与
+// `refresh-ui-snapshots.py` 写入器）⇒ 这些断言只冻结旧形态，随路由一起删除，不再留副本。
 
 // 4j. T-254：留存计划在运维视角可见（判定在 Python 侧；宿主只读落盘文件并交给 retention-view 聚合）
 const rt = await get('/api/retention')
@@ -779,7 +720,6 @@ check('P0-3/E10 私域**负控**：供应商侧四个子视图页面里搜不到
 const FROZEN_SHA = {
   '/api/health': 'd7cc1159637ab26f7a24ab32ad9474578573afbc50e8a4eebd84a24e3c867f7b',
   '/api/status': '6aee6ecf98d18b6a882d476b3c3d72d9c3ab19f229496fb49984a4ee74ee721f',
-  '/api/pipeline': '52b5553c4a5741610e24d61d83431c91bcb88913fc9b22aed3b2c512108c0d7c',
   '/contractor/api/events': '8e109436cd6f47bc5ad0bbd63f71dabac13f60e5264739f95af121fcee30de81',
   '/supplier/api/events': '4ddf32f3a83f2b09c8d4b8eb3c057a1d60e9b088a9363cf6fccaf37e7c96ab82',
   '/contractor/api/evidence': 'e7eeade9618a5ba45da8bc354c33456e651d55b9a28b37991abc7da36b7601fc',
@@ -790,10 +730,6 @@ const FROZEN_SHA = {
   '/supplier/api/approvals': '5763b641e0e31cdd6858ba4387510b71c6495c03e9f1c027095ff295a2bb3643',
   '/contractor/api/scorecard': 'b061b79e2d401af5b8734d25ac6302482893c8aba19e3ce0d16ecbb8cc5896a0',
   '/supplier/api/scorecard': 'f90d113b23d85998299fb193d82667c2e1af357da042d2c6e6e68de2b56cfe17',
-  '/contractor/api/negotiation': 'eee3b89df35d4d64f3c720e38f199de6c6b79a7892e819ca0059e6652fefddbf',
-  '/supplier/api/negotiation': 'a92cbdb36ff13fb04ae99ee42b6ad85fc9d3c5fbb7b27a47867ee4437386d7b2',
-  '/contractor/api/faq': '8368207200a683e3a80dbac63b6a3535306430b33e8517fd166f15cfe4395675',
-  '/supplier/api/faq': '42bd0dfaec4ed5a77f1df50b9ee1753025d16ea254f760b70f8f6d053de98053',
 }
 const byteBad = []
 const byteSeen = []

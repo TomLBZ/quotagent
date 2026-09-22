@@ -271,10 +271,6 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec python3 tools/check-negotiation.py "$@"
     ;;
-  pipeline-view)
-    shift
-    exec node host/t260-pipeline-gate.mjs "$@"
-    ;;
   storage)
     # 存储（文件管理+键值表）的宿主围栏门（T-277）
     "${QUOTAGENT_NODE:-node}" "$HERE/../host/t277-storage-gate.mjs"
@@ -303,10 +299,6 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     # 配置与凭据（P0）：UI 化 + YAML 持久化 + 配置文件初始化的端到端门
     shift
     exec python3 tools/check-config-route.py "$@"
-    ;;
-  pipeline-route)
-    shift
-    exec python3 tools/check-pipeline-route.py "$@"
     ;;
   retention-view)
     shift

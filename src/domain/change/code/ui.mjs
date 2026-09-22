@@ -478,21 +478,58 @@ export async function register(surface, host) {
       const stagedDraft = host.stage('quote-drafts', record, { name: `${draftId}.json` })
       if (!stagedDraft.ok) {
         return { ok: true, code: 'draft-stage-failed', reason: stagedDraft.reason,
-          next_action: '作废与重报登记已落账；草稿没生成（看 reason），可在「备报价」里手工备一份',
-          result: { facts: facts.result, draft: stagedDraft } }
+          next_action: '作废与重报登记已落账（本动作账本 +'
+            + `${Number(facts.result?.ledger_added ?? 0)} 行）；草稿没生成（看 reason），可在「备报价」里手工备一份`,
+          result: { facts: facts.result, draft: stagedDraft,
+            ledger_added: Number(facts.result?.ledger_added ?? 0) } }
       }
       const run = host.runPython('src/domain/quote-prepare/tools/quote-draft.py',
         ['--inbox', `${host.sharedDir}/quote-drafts`, '--ui-shared', host.sharedDir, '--view', 'supplier',
           '--ledger-supplier', ledgerS(), '--ledger-contractor', ledgerC(), '--now', host.now()])
-      const json = run.json ?? {}
-      return { ok: facts.ok && run.ok, code: run.ok ? 'requoted' : 'draft-failed',
-        reason: run.ok ? '' : (run.reason ?? '草稿写者没有输出 JSON'),
-        next_action: run.ok
-          ? '新 rev 的草稿已落账（quote/drafted）：在「我的草稿」里人签提交（quote.submit）才算对外报价'
-          : '作废/重报登记已落账，但草稿生成失败：看失败原因，或手工在「备报价」里备一份',
+      // ---- **判据只有一条**：写者回执（退出码 + stdout JSON），且只认**本动作落的那一条待办件** --------
+      // `quote-draft.py` 与 `requote.py` 不同：它是**邮箱式**写者，一次消费 `quote-drafts/` 里所有待办件，
+      // 被拒的件**不归档**（会一直留在邮箱里）。修前第二步按 `run.ok`（**整次运行**的结论）判 ⇒
+      // 同一封邮箱里只要还有别人的（或上一次被拒的）件，**新草稿真落了、响应却报 `draft-failed`**
+      // （机制层标成 `writer_consistency=fake-failure`，用户会据此重复改报）。现在：第二步的
+      // ok/code/ledger_added/next_action **全部**从它自己的回执派生，归属按待办件名 + 草稿 id 指认。
+      const receipt = host.writerReceipt(run)
+      const mine = receipt.item({ file: stagedDraft.name, draft_id: draftId })
+      const written = mine && mine.where === 'applied' ? mine.entry : null
+      const duplicated = mine && mine.where === 'duplicates' ? mine.entry : null
+      const refusedRow = mine && mine.where === 'refused' ? mine.entry : null
+      const ok = facts.ok && Boolean(written || duplicated)
+      // 本动作第二步**自己**真落了几行（写者逐条给 `ledger_added`：供应商 + 承包商各一条 ⇒ 2）
+      const ledgerAdded = written ? Number(written.ledger_added ?? 0) : 0
+      const mineName = stagedDraft.name
+      const otherRefused = (receipt.refused ?? []).filter((row) => host.receiptFileName(row) !== mineName)
+      const othersNote = otherRefused.length
+        ? `（同一次运行里草稿写者还拒了 ${otherRefused.length} 条**别的**待办件：`
+          + `${otherRefused.map((row) => row?.file ?? '?').join(' / ')} —— 那些不属于本动作）`
+        : ''
+      return { ok, code: ok ? 'requoted'
+        : (refusedRow?.code ?? receipt.code ?? (mine ? 'writer-refused' : 'writer-receipt-missing')),
+        reason: refusedRow?.reason ?? (ok ? '' : (receipt.reason || '')),
+        next_action: ok
+          ? (written
+            ? '新 rev 的草稿已落账（quote/drafted）：在「我的草稿」里人签提交（quote.submit）才算对外报价'
+            : '这份新 rev 的草稿**本来就在账本里**（幂等：本次零新增）：直接去「我的草稿」人签提交')
+            + othersNote
+          : ((refusedRow?.next_action ?? receipt.next_action
+            ?? `这条待办件（${mineName}）没在草稿写者回执里出现 ⇒ 本动作草稿账本零新增`)
+            + othersNote),
         result: { facts: facts.result, draft_id: draftId, pending: stagedDraft.file,
-          ledger_added: json.ledger_added ?? 0, applied: json.applied ?? [], refused: json.refused ?? [],
-          writer: 'quote-draft.py', stdout: run.stdout ? run.stdout.slice(-500) : '' } }
+          pending_file: stagedDraft.name,
+          // 本动作的两步各自真落了几行（都来自写者逐条回执，不是整次运行的全局数）+ 合计
+          facts_ledger_added: Number(facts.result?.ledger_added ?? 0),
+          draft_ledger_added: ledgerAdded,
+          ledger_added: Number(facts.result?.ledger_added ?? 0) + ledgerAdded,
+          applied: written ? [written] : [], duplicates: duplicated ? [duplicated] : [],
+          refused: refusedRow ? [refusedRow] : [],
+          others: { refused: otherRefused.map((row) => ({ file: row?.file ?? '', code: row?.code ?? '' })) },
+          writer: 'quote-draft.py', writer_rc: receipt.rc, writer_code: receipt.code,
+          // 写者这一次运行的全局数只作**证据**列出（它不是本动作的结论）
+          writer_ledger_added_run_total: receipt.ledger_added,
+          stdout: receipt.stdout_tail } }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'exchange.rev-amend', title: '发新版（改量 → rev+1，人签）',

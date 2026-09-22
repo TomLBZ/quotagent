@@ -173,9 +173,6 @@ const main = async () => {
     const { apply: agApply, Config: agConfig } = await import('./modules/admin-guard.mjs')
     await ctx.plugin({ name: 'admin-guard', inject: [], Config: agConfig,
       apply: (inner, config) => agApply(inner, { ...config, token_env: 'QUOTAGENT_ADMIN_TOKEN', token_file: String(args['admin-token-file'] ?? '') }) })
-    const { apply: pvApply, Config: pvConfig } = await import('./modules/pipeline-view.mjs')
-    await ctx.plugin({ name: 'pipeline-view', inject: [], Config: pvConfig,
-      apply: (inner, cfg) => pvApply(inner, cfg) }, pvConfig.parse({}))
     // 邮件域只读视图（本批新增）：读 Python 侧写的状态快照（**绝对路径**；空 = 未配置 → 视图降级）
     const { apply: bhApply, Config: bhConfig } = await import('./modules/bid-heuristics.mjs')
     await ctx.plugin({ name: 'bid-heuristics', inject: [], Config: bhConfig,
@@ -250,7 +247,7 @@ const main = async () => {
     ctx.provide('ledgerView', openLedger(contractorLedger))
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare'],   // 全部是独立插件
       Config: webuiConfig,
       // 不再用 `inner.provide = …` 抓句柄（那个赋值会污染全树，见上面 audit-hook 处的说明）；
       // 装配完从 ctx 读同一个服务。
@@ -261,7 +258,6 @@ const main = async () => {
       route_prefix: String(args.prefix ?? '/quotagent'),
       // 留存计划的**绝对路径**（生产 cwd≠仓库根）：由 webui-serve 传入；缺失时路由降级
       retention_plan: String(args['retention-plan'] ?? process.env.QUOTAGENT_UI_RETENTION_PLAN ?? ''),
-      pipeline_snapshot: String(args['pipeline-snapshot'] ?? process.env.QUOTAGENT_UI_PIPELINE ?? ''),
       admin_snapshot: String(args['admin-snapshot'] ?? process.env.QUOTAGENT_UI_ADMIN ?? ''),
       admin_inbox: String(args['admin-inbox'] ?? process.env.QUOTAGENT_UI_ADMIN_INBOX ?? ''),
       views: String(args.views ?? 'contractor,supplier').split(',').map((item) => item.trim()).filter(Boolean),
@@ -325,12 +321,9 @@ const main = async () => {
            attachments_routes: ['upload', 'list', 'file', 'delete', 'store']
              .map((name) => `${String(args.prefix ?? '/quotagent')}/api/attachments/${name}`),
            attachments_store: attachmentsStore ? attachmentsStore.dir : null,
-           pipeline_route: `${String(args.prefix ?? '/quotagent')}/api/pipeline`,
            feedback_routes: ['contractor', 'supplier'].flatMap((v) => [`${String(args.prefix ?? '/quotagent')}/${v}/feedback`])
              .concat([`${String(args.prefix ?? '/quotagent')}/ops/ui-feedback/`, `${String(args.prefix ?? '/quotagent')}/api/ui-feedback`]),
            admin_route: `${String(args.prefix ?? '/quotagent')}/admin/`,
-           view_domain_routes: ['contractor', 'supplier'].flatMap((v) => [`${String(args.prefix ?? '/quotagent')}/${v}/api/negotiation`,
-             `${String(args.prefix ?? '/quotagent')}/${v}/api/faq`]),
            observability: observabilityHandle ? observabilityHandle.summary() : null,
            note: '每方视角读自己的账本（结构性隔离）+ 投影白名单（纵深防御）；宿主不写账本' }) + '\n')
     // 保活：直到收到信号（ws-gateway 以 SIGTERM 停服）

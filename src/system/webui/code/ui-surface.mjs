@@ -417,6 +417,59 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       object_kind: objectKind, hint: text(entry.hint) } }
   })
 
+  /**
+   * ⑨ `scenario` —— **沙盘/演示场景的步骤声明**（机制；外壳不认识任何业务）。
+   *
+   * 形状：`{plugin_id, id, scenario, scenario_title, title, view?, order, steps:[{action, input?, as?}], hint?}`
+   *   · `scenario` 是**场景分组键**（ID_RE）：多个插件各自贡献**自己那一段**步骤，外壳按 `order` 把它们
+   *     串成一条流程（谁的业务谁声明，外壳不替任何插件排序业务）；
+   *   · `steps[].action` 必须是已注册动作的 id（运行时由外壳 dispatch 到**同一个动作总线**）；
+   *   · `steps[].as = {human, side}` 声明这一步由**哪个演示身份**发起（沙盘里才有意义：沙盘账本不是合同
+   *     事实，演示身份由机制生成并固定，不是请求可以随便给的）；
+   *   · 入参里的字符串可以写 `$last.<点分路径>`（含数组下标）⇒ 取**上一步回执** `result` 里的值
+   *     （例如上一步给出 `quote_id`，下一步用它）—— 机制只做取值，不认识字段含义。
+   *
+   * 它**不生成任何数据**：数据由 `action` 的服务端一半按既有写路径产生（沙盘只是把路径换成沙盘路径）。
+   */
+  const scenario = (entry) => add('scenario', entry, (raw) => {
+    const scenarioId = text(raw.scenario)
+    if (!ID_RE.test(scenarioId)) {
+      return { error: code('illegal-scenario-id', `scenario.scenario 形状不合法：${JSON.stringify(raw.scenario)}`,
+        '写场景分组键（`<域>.<名字>`，同一场景的多个插件用同一个键）') }
+    }
+    const steps = Array.isArray(raw.steps) ? raw.steps : null
+    if (!steps || steps.length === 0 || steps.length > 40) {
+      return { error: code('invalid-steps', 'scenario.steps 必须是 1..40 个步骤的数组',
+        '每步 `{action:"<已有动作 id>", input:{…}, as:{human,side}?}`') }
+    }
+    const out = []
+    for (const step of steps) {
+      if (!plainObject(step) || !ID_RE.test(text(step.action))) {
+        return { error: code('invalid-step', `步骤形状不合法：${JSON.stringify(step ?? null)}`,
+          '每步给 `{action:"<已有动作 id>", input:{…}}`') }
+      }
+      const as = step.as === undefined || step.as === null ? null : step.as
+      if (as !== null && (!plainObject(as) || text(as.side) === '')) {
+        return { error: code('invalid-step-actor', `步骤 as 形状不合法：${JSON.stringify(as)}`,
+          '给 `{side:"<侧>"}`（这一步由**哪一侧**发起；沙盘里那一侧用哪个演示身份由机制决定）') }
+      }
+      const capture = text(step.capture)
+      if (capture !== '' && !/^[a-z][a-z0-9-]{0,31}$/.test(capture)) {
+        return { error: code('invalid-capture', `步骤 capture 名字不合法：${JSON.stringify(step.capture)}`,
+          '给小写字母/数字/连字符的短名（后面的步骤用 `$cap.<名字>.<字段>` 取它的回执）') }
+      }
+      out.push({ action: text(step.action), input: plainObject(step.input) ? step.input : {},
+        as: as === null ? null : { side: text(as.side), human: text(as.human) }, capture,
+        // `optional:true` = 这一步失败**不算整条流程失败**（场景照旧往下跑，失败如实记进回执）。
+        // 用途：某一步依赖的既有能力暂时不成立时，演示不该整条停在那里。
+        optional: step.optional === true, note: text(step.note) })
+    }
+    const view = text(raw.view)
+    return { entry: { kind: 'scenario', plugin_id: text(raw.plugin_id), id: text(raw.id), title: raw.title,
+      order: orderOf(raw.order), scenario: scenarioId, scenario_title: text(raw.scenario_title) || scenarioId,
+      view, steps: out, hint: text(raw.hint) } }
+  })
+
   const byKind = (kind) => [...entries.values()].filter((item) => item.kind === kind).sort((left, right) =>
     (sortKey(left) < sortKey(right) ? -1 : (sortKey(left) > sortKey(right) ? 1 : 0)))
 
@@ -433,6 +486,28 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
     && item.object_kind === String(objectKind ?? ''))
   /** 全部导出声明（`/api/ui/surface` 用它把「谁能导出什么」摆出来，含注册者与格式）。 */
   const reports = () => byKind('report')
+
+  /**
+   * **沙盘场景**（`scenario` 贡献）：按场景分组键聚合 ⇒ 一条可一键跑完的流程。
+   * 外壳只做**分组与排序**（同组内按 order，再按 plugin_id 字典序），不认识任何步骤的业务含义。
+   */
+  const scenarios = () => {
+    const groups = new Map()
+    for (const entry of byKind('scenario')) {
+      const group = groups.get(entry.scenario) ?? { scenario: entry.scenario, title: entry.scenario_title,
+        hint: '', order: entry.order, steps: [], contributors: [], step_count: 0 }
+      group.title = group.title || entry.scenario_title
+      if (entry.order < group.order) group.order = entry.order
+      group.hint = group.hint || entry.hint
+      for (const step of entry.steps) group.steps.push({ ...step, plugin_id: entry.plugin_id, view: entry.view,
+        declared_by: entry.title })
+      group.contributors.push({ plugin_id: entry.plugin_id, id: entry.id, title: entry.title,
+        step_count: entry.steps.length })
+      group.step_count = group.steps.length
+      groups.set(entry.scenario, group)
+    }
+    return [...groups.values()].sort((left, right) => (left.scenario < right.scenario ? -1 : 1))
+  }
 
   // ---- 对象深链（**机制**）：哪些对象类被声明过 / 某个对象类是谁在负责 / 某个视图的对象页动作 ----
   /** 本视图里被声明过的对象类（去重、字典序）：`/app/<view>/<kind>/<id>` 能打开哪些 kind 由它决定。 */
@@ -463,6 +538,10 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
     if (entry.kind === 'validator') return { ...base, actions: entry.actions }
     if (entry.kind === 'report') return { ...base, views: entry.views, formats: entry.formats,
       action: entry.action, object_kind: entry.object_kind, hint: entry.hint }
+    if (entry.kind === 'scenario') return { ...base, scenario: entry.scenario,
+      scenario_title: entry.scenario_title, view: entry.view, step_count: entry.steps.length,
+      steps: entry.steps.map((step) => ({ action: step.action, as: step.as, input_keys: Object.keys(step.input) })),
+      hint: entry.hint }
     return base
   }
 
@@ -478,8 +557,8 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       slots: [...allowedSlots],
       views: [...allowedViews],
       counts: { total: entries.size, by_kind: Object.fromEntries(
-        ['view', 'panel', 'action', 'shortcut', 'notification-source', 'status-item', 'validator', 'report']
-          .map((kind) => [kind, byKind(kind).length])) },
+        ['view', 'panel', 'action', 'shortcut', 'notification-source', 'status-item', 'validator', 'report',
+          'scenario'].map((kind) => [kind, byKind(kind).length])) },
       plugins: Object.entries(plugins).sort(([left], [right]) => (left < right ? -1 : 1))
         .map(([plugin_id, contributions]) => ({ plugin_id, contributions })),
       entries: [...entries.values()].map(snapshotOf).sort((left, right) =>
@@ -500,8 +579,9 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
 
   const dispose = () => { disposed = true; entries.clear() }
 
-  return { view, panel, action, shortcut, notificationSource, statusItem, validator, report,
+  return { view, panel, action, shortcut, notificationSource, statusItem, validator, report, scenario,
     findAction, panelsOf, panelsFor, actionsFor, objectKindsFor, shortcuts, validatorsFor, reportsFor, reports,
+    scenarios,
     byKind, snapshot, disposePlugin, dispose, get entries() { return [...entries.values()] },
     get size() { return entries.size }, get disposed() { return disposed } }
 }

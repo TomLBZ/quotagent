@@ -16,7 +16,7 @@
       `src/quotagent/qa/checks_*.py`）—— 新增一个资产而不登记即红。
   PA5 归属唯一：每个已搬资产的 basename 在 `src/**`（排除 `__pycache__`）里**只出现一次**，
       且位于**归属插件**的目录下（资产不得出现在别的插件目录里）。
-  PA6 门接口**不因搬迁失联**：`tools/verify.sh help` 真跑 rc=0、门名数 ≥ 70、`help` 列出的每个名字都有
+  PA6 门接口**不因搬迁失联**：`tools/verify.sh help` 真跑 rc=0、门名数 ≥ 67、`help` 列出的每个名字都有
       `case` 分支；每个分支里引用的**实现路径**都解析得到且真实存在；每个已搬资产仍被
       `tools/verify.sh` 或 `src/quotagent/qa/*.py` 引用（防"搬完就没人调用"）；再真跑一条最便宜的
       只读既有门（`v`）证明接口真能跑。
@@ -129,8 +129,6 @@ RELOCATED: dict[str, tuple[str, str]] = {
     # --- 阶段 4.2 续批（EV-173 / T-322）：`host/*-gate.mjs` **剩下 10 个**搬进各自插件的 `tests/`，
     # 旧位置留薄转发（`import './../src/…'`；门名与 `tools/verify.sh` 的分支一行未改）。
     # 搬迁补丁与上批逐字相同：HERE 由仓库根推出宿主目录 + `cordis` 改为按宿主目录显式解析。
-    "host/t260-pipeline-gate.mjs": (
-        "system/pipeline-view", "src/system/pipeline-view/tests/t260-pipeline-gate.mjs"),
     "host/t267-market-gate.mjs": (
         "system/market", "src/system/market/tests/t267-market-gate.mjs"),
     "host/t268-user-space-gate.mjs": (
@@ -250,8 +248,6 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "system/admin", "src/system/admin/tests/check-admin-route.py"),
     "tools/check-budget-route.py": (
         "system/budget-guard", "src/system/budget-guard/tests/check-budget-route.py"),
-    "tools/check-pipeline-route.py": (
-        "system/pipeline-view", "src/system/pipeline-view/tests/check-pipeline-route.py"),
     "tools/check-rfq-deadline-route.py": (
         "domain/rfq-deadline", "src/domain/rfq-deadline/tests/check-rfq-deadline-route.py"),
     "tools/check-mail-transport.py": (
@@ -348,10 +344,9 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "domain/quote-prepare", "src/domain/quote-prepare/tools/quote-draft.py"),
     "tools/quote-sign.py": (
         "domain/quote-prepare", "src/domain/quote-prepare/tools/quote-sign.py"),
-    "tools/refresh-ui-snapshots.py": (
-        "system/webui", "src/system/webui/tools/refresh-ui-snapshots.py"),
-    "tools/ui-seed-pipeline.py": (
-        "system/webui", "src/system/webui/tools/ui-seed-pipeline.py"),
+    # --- 本批：三域流水运维面退役（29 §2）；邮件域快照写入器搬进归属插件（`system/mail`）
+    "tools/mail-snapshot.py": (
+        "system/mail", "src/system/mail/tools/mail-snapshot.py"),
     "tools/v-kit.sh": (
         "system/repo-gate", "src/system/repo-gate/tools/v-kit.sh"),
     "tools/netblock.c": (
@@ -377,11 +372,13 @@ EXCLUDE_DIRS = frozenset({"__pycache__", ".git", "tmp", "node_modules", ".venv"}
 #: 逐批加减史与复算命令见 `docs/work/plans/plugin-file-map-batches.md` §「非薄入口数的加减史」。
 #: 锁的语义是"只减不增"：搬走本门或其它项时这个数应随之下调；**上调只允许"新增一个同级平台门"这一种理由**（改这一行是显式动作）。
 BASELINE_NONTHIN = 1
-#: 门名数下界（阶段 4.1 搬前 69 + `plugin-assets` = 70；新增 `run-clone` ⇒ 71）。
+#: 门名数下界（**按当前门集实测**：阶段 4.1 搬前 69 + `plugin-assets`；本批按 29 §2 退役 `pipeline-view`
+#: 与 `pipeline-route` 两道只冻结旧形态的门 ⇒ 实测 67，下界随之下调 **69 → 67**（仍是"只减不增"的护栏：
+#: 门名是接口，任何**计划外**的减少照样红）。
 #: 口径纠正（2026-09-22，`docs/design/29-webui-gui-app.md` §2 + AGENTS.md §12：门禁只删不加）后
 #: **下调 71 → 69**：随「旧口径」删除两个只冻旧形态的门（`ui-seed` / `ui-mutate`）。这是唯一的放宽方向，
 #: 且**只允许"删门"这一种理由**（新门仍只增不减）。
-MIN_GATE_NAMES = 69
+MIN_GATE_NAMES = 67
 #: `--help` 一类的别名不算"实现分支"。
 HELP_ALIASES = frozenset({"help", "--help", "-h"})
 

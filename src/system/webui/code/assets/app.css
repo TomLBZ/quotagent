@@ -6,13 +6,18 @@
    ④ 状态栏可读（不再挤成一行糊字）⑤ 空态/错误态/降级态三色统一。 */
 :root {
   --bg: #10151c; --bg-soft: #161d26; --bg-raise: #1d2733; --line: #2b3745;
-  --fg: #e7eef7; --fg-dim: #9fb0c3; --accent: #4da3ff; --accent-soft: #1d3a5c;
-  --ok: #3ddc97; --warn: #ffcc66; --bad: #ff6b6b; --chip: #24313f;
+  --fg: #e7eef7; --fg-dim: #9fb0c3; --accent: #5cabff; --accent-soft: #1d3a5c;
+  --ok: #3ddc97; --warn: #ffcc66; --bad: #ff7b7b; --chip: #24313f;
   --radius: 8px; --gap: 12px; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   /* 中文字体栈：先系统 UI 字体，再中文字体（Linux/Windows/macOS 三平台各留一个），最后兜底 sans-serif */
   --sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
     "Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Micro Hei", sans-serif;
 }
+/* 对比度（WCAG 2.1，全部**算过**，不是感觉）：
+   --fg/#e7eef7 on --bg-soft → 14.52 · --fg-dim/#9fb0c3 on --bg-soft → 7.65 · --fg-dim on --bg → 8.27
+   --accent/#5cabff on --bg → 7.61 · on --bg-soft → 7.05 · on --bg-raise → 6.28 · on --accent-soft → 4.81
+   --ok/#3ddc97 on --bg-soft → 9.6 · --warn/#ffcc66 on --bg-soft → 11.38 · --bad/#ff7b7b on --bg-soft → 6.76
+   正文要求 ≥4.5（AA），大字号 ≥3；上面每一项都过 AA。**改 token 前请重算**（`tmp/p7-a11y-verify.py` 会实测）。 */
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--fg); font: 14px/1.7 var(--sans); }
@@ -29,9 +34,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .q-skip:focus { left: 8px; top: 8px; z-index: 99; background: var(--bg-raise); padding: 6px 10px;
   border: 1px solid var(--accent); border-radius: 6px; }
 
-#q-app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; }
+#q-app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; min-width: 0;
+  max-width: 100vw; overflow-x: hidden; }
 header.q-top { display: flex; align-items: center; gap: var(--gap); padding: 8px 14px; flex-wrap: wrap;
-  background: var(--bg-soft); border-bottom: 1px solid var(--line); }
+  background: var(--bg-soft); border-bottom: 1px solid var(--line); min-width: 0; max-width: 100%; }
 .q-brand { font-weight: 650; letter-spacing: .3px; }
 .q-brand small { color: var(--fg-dim); font-weight: 400; margin-left: 6px; }
 .q-nav { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
@@ -54,7 +60,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .q-viewhead h1 { font-size: 20px; margin: 0; }
 .q-viewhead p { color: var(--fg-dim); margin: 0; }
 .q-crumbs { color: var(--fg-dim); font-size: 13px; }
-.q-crumbs .q-sep { color: var(--line); margin: 0 4px; }
+.q-crumbs .q-sep { color: var(--fg-dim); margin: 0 4px; }
 .q-panels { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
 .q-panel { background: var(--bg-soft); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px;
   min-width: 0; }
@@ -98,6 +104,8 @@ table.q-table input, table.q-table select { width: 100%; background: var(--bg-ra
 .q-field .q-fielderr { color: var(--bad); font-size: 12px; }
 .q-field .q-help { color: var(--fg-dim); font-size: 11.5px; }
 .q-rowsel { width: 26px; }
+/* 勾选框跟着主题走（深色底上的默认白框在手机上像一块白砖） */
+input[type=checkbox], input[type=radio] { accent-color: var(--accent); }
 #q-modal { position: fixed; inset: 0; background: #0008; display: flex; align-items: flex-start;
   justify-content: center; padding-top: 8vh; z-index: 40; }
 #q-modal .q-card { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px;
@@ -168,7 +176,7 @@ section[data-ui-block] h3 { margin: 0 0 4px; font-size: 14px; }
 .q-banner .q-hint { flex: 1 1 100%; }
 
 .q-fallback { padding: 6px 14px 14px; font-size: 12px; color: var(--fg-dim); }
-.q-fallback a { color: var(--fg-dim); }
+.q-fallback a { color: var(--fg-dim); display: inline-block; padding: 6px 4px; min-height: 32px; }
 
 /* ---- 窄屏（≤900px 单列；表格横向滚动；状态栏不挤） ---- */
 @media (max-width: 900px) {
@@ -293,6 +301,134 @@ table.q-table td.q-editing { box-shadow: inset 2px 0 0 var(--accent); }
   .q-tab { max-width: 18ch; }
   .q-editbar .q-keys { display: none; }
 }
+/* ============================================================================================
+   P7 可用性批（**手机/触控真能用 + 不看文档能用 + 可访问性**；全部是外壳机制，零业务语义）：
+     ① 窄屏：表格在小屏变成**卡片**（列名跟着值走，不再"右边还有一半看不见"）、行内动作吸在
+        右边不走丢、横向能滚的表有**可见的滑动提示**、动作条单行可滑（不再一屏按钮墙）；
+     ② 触控：`pointer: coarse` 下所有可点目标 ≥44px（`⠿`/`▾`/`✕`/勾选框一律有 44px 命中区）；
+     ③ 弹层：手机上全屏单页（标题+可滚正文+**吸底**按钮），确认页在窄屏**标签在上、值在下**，
+        背景更暗（不再"状态栏浮在弹层上"的错觉）；
+     ④ 可访问性：焦点陷阱靠 `#q-app[inert]`、省跳链接、`aria-labelledby`、对比度按 WCAG AA 校准。
+   ============================================================================================ */
+
+/* ---- ③ 弹层：背景更暗 + 卡片可滚 + 吸底操作区（手机上是整页） ---- */
+#q-modal { background: #000c; }
+#q-modal .q-card { display: flex; flex-direction: column; max-height: 88vh; overflow: hidden; }
+#q-modal .q-modal-body { overflow: auto; flex: 1 1 auto; min-height: 0; }
+#q-modal .q-modal-foot { position: sticky; bottom: 0; background: var(--bg-soft);
+  border-top: 1px solid var(--line); padding: 8px 0 2px; margin-top: 8px; }
+body.q-modal-open { overflow: hidden; }
+/* 弹层打开时，提示条**不压**在吸底按钮上（手机上那正是拇指所在的位置）：挪到顶部 */
+body.q-modal-open .q-toasts { top: 8px; bottom: auto; }
+
+/* ---- ② 触控命中区：粗指针设备（手机/平板）一律 ≥44px ---- */
+@media (pointer: coarse) {
+  button, .q-btn, .q-nav a, .q-link, select, input, textarea { min-height: 44px; }
+  .q-panel-head .q-drag, .q-panel-head button.q-panel-btn { min-width: 44px; min-height: 44px;
+    display: inline-flex; align-items: center; justify-content: center; }
+  .q-tab .q-tab-x { min-width: 32px; min-height: 32px; }
+  .q-skip:focus { padding: 10px 12px; }
+  /* 行内深链（「打开 →」「打开对象 →」）与表格里的按钮/勾选框：手指够得着 */
+  .q-deeplink, a.q-deeplink { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; }
+  table.q-table td.q-rowacts button, table.q-table td.q-rowacts .q-deeplink { min-height: 44px; }
+  table.q-table input[type=checkbox], input[type=checkbox] { min-width: 24px; min-height: 24px; }
+  .q-bucketbar .q-chip, .q-notify-tools .q-chip { min-height: 36px; display: inline-flex;
+    align-items: center; }
+  #q-modal[data-kind="q-palette"] li, #q-modal[data-kind="q-notify"] li { min-height: 44px;
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+}
+
+/* ---- ① 窄屏动作条：单行可滑（原来是一屏按钮墙，新人首屏只看到按钮） ---- */
+@media (max-width: 700px) {
+  .q-actions[data-toolbar] { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch; }
+  .q-actions[data-toolbar] button { white-space: nowrap; min-height: 40px; }
+  .q-actions[data-toolbar]::after { content: '↔'; color: var(--fg-dim); align-self: center;
+    padding-left: 4px; }
+}
+/* 粗指针下动作条按钮升到 44px（顺序在动作条规则之后，才盖得住 40px） */
+@media (pointer: coarse) and (max-width: 700px) {
+  .q-actions[data-toolbar] button, .q-actions[data-toolbar] .q-link { min-height: 44px; }
+}
+
+/* ---- ① 横向可滚的表格：给**看得见的**滑动提示（阴影 + 一行字） ---- */
+.q-scroll[data-scroll-x="1"] {
+  background-image: linear-gradient(to left, rgba(77, 163, 255, .18), rgba(77, 163, 255, 0) 48px);
+  background-repeat: no-repeat; background-position: right center; background-size: 48px 100%;
+  border-right: 1px solid var(--accent-soft); }
+.q-scroll[data-scroll-x="1"]::before { content: '↔ 左右滑动看更多列'; display: block; position: sticky;
+  left: 0; width: max-content; font-size: 11.5px; color: var(--accent); padding: 2px 0 4px; }
+@media (min-width: 901px) { .q-scroll[data-scroll-x="1"]::before { content: none; } }
+/* 顶栏/标签页/动作条同样是横向滚动容器：右边留一道渐变 = "还能往右滑" */
+.q-tools[data-scroll-x="1"], .q-nav[data-scroll-x="1"], .q-tabs[data-scroll-x="1"],
+.q-actions[data-toolbar][data-scroll-x="1"] {
+  background-image: linear-gradient(to left, rgba(76, 90, 108, .55), rgba(76, 90, 108, 0) 34px);
+  background-repeat: no-repeat; background-position: right center; background-size: 34px 100%; }
+
+/* ---- ① 平板宽度（561–900px）：关键列与动作列**吸边**，横滚时都不跑掉 ---- */
+@media (max-width: 900px) {
+  table.q-table:not(.q-keep-table) th:first-child,
+  table.q-table:not(.q-keep-table) td:first-child {
+    position: sticky; left: 0; z-index: 2; background: var(--bg-soft); box-shadow: 1px 0 0 var(--line); }
+  table.q-table:not(.q-keep-table) td.q-rowacts { position: sticky; right: 0; z-index: 2;
+    background: var(--bg-soft); box-shadow: -1px 0 0 var(--line); }
+}
+
+/* ---- ① 手机（≤560px）：表格 → **卡片**（每行一张卡：列名在上、值在下；动作在卡片底部） ----
+   `.q-keep-table` 是留给"我就想看表格"的逃生门（加了这个类就保持表格 + 横向滚动）。 */
+@media (max-width: 560px) {
+  table.q-table:not(.q-keep-table) { width: 100%; display: block; }
+  table.q-table:not(.q-keep-table) caption { display: block; }
+  table.q-table:not(.q-keep-table) thead { display: none; }   /* 列名跟着每个值走，表头不再需要 */
+  table.q-table:not(.q-keep-table) tbody,
+  table.q-table:not(.q-keep-table) tr,
+  table.q-table:not(.q-keep-table) td { display: block; width: auto; }
+  table.q-table:not(.q-keep-table) tr { border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--bg-raise); margin: 0 0 10px; padding: 6px 8px; }
+  table.q-table:not(.q-keep-table) td { border: 0; padding: 3px 0; display: flex; gap: 8px;
+    align-items: flex-start; flex-wrap: wrap; }
+  table.q-table:not(.q-keep-table) td::before { content: attr(data-label); color: var(--fg-dim);
+    font-size: 11.5px; flex: 0 0 38%; min-width: 6em; }
+  table.q-table:not(.q-keep-table) td:empty,
+  table.q-table:not(.q-keep-table) td[data-label=""] { display: none; }
+  table.q-table:not(.q-keep-table) td.q-rowacts { position: static; box-shadow: none; border-top: 1px dashed var(--line);
+    margin-top: 4px; padding-top: 6px; }
+  table.q-table:not(.q-keep-table) td.q-rowacts::before { content: none; }
+  table.q-table:not(.q-keep-table) td.q-rowacts button { min-height: 40px; }
+  table.q-table:not(.q-keep-table) td input { flex: 1 1 50%; min-height: 40px; }
+  table.q-table:not(.q-keep-table) td.q-rowsel { flex-direction: row; }
+  /* 确认页：标签在上、值在下（窄屏下两列会把 8 位 id 折成 3 行） */
+  #q-modal .q-kv { grid-template-columns: 1fr; gap: 0; }
+  #q-modal .q-kv dt { margin-top: 6px; font-size: 12px; }
+  #q-modal .q-kv dd { background: var(--bg-raise); border-radius: 6px; padding: 4px 7px;
+    overflow-wrap: anywhere; }
+  /* 弹层：全屏单页 + 吸底按钮（拇指够得到），不再是中间一张小卡 */
+  #q-modal { padding-top: 0; align-items: stretch; }
+  #q-modal .q-card { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh;
+    border-radius: 0; border: 0; padding: 12px 14px; }
+  #q-modal .q-modal-foot { padding-bottom: 14px; }
+  #q-modal .q-modal-foot button { flex: 1 1 auto; }
+  .q-export-modal .q-card, #q-modal[data-kind="q-palette"] .q-card { width: 100vw; max-width: 100vw; }
+  .q-export-frame { height: 60vh; }
+  /* 顶栏：工具条单行可滑，标题不换行 */
+  header.q-top { gap: 8px; padding: 6px 10px; }
+  .q-nav { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; }
+  .q-nav a { white-space: nowrap; }
+  .q-tools { width: 100%; max-width: 100%; min-width: 0; flex-wrap: nowrap; overflow-x: auto; }
+  .q-tools button { white-space: nowrap; }
+  .q-toasts { left: 10px; right: 10px; bottom: 8px; }
+  .q-toast { max-width: none; }
+  /* 标签页：手机上保持**一行**（原来每个标签被拉到 ~105px 高，占了六分之一屏） */
+  .q-tabs { align-items: center; max-height: 40px; overflow-y: hidden; padding: 3px 10px 0; }
+  .q-tab, .q-tab-add { max-height: 34px; align-self: center; padding: 2px 6px; max-width: 12ch; }
+  .q-tab .q-tab-x { min-width: 24px; min-height: 24px; }
+  /* 状态栏：手机上不再让它换行成 300px 高（那会把正文挤成一条缝）—— 单行可滑 + 上限高度 */
+  footer.q-status { flex-wrap: nowrap; overflow-x: auto; max-height: 42px; align-items: center;
+    gap: 10px; padding: 4px 10px; }
+  footer.q-status .q-st { white-space: nowrap; overflow: visible; text-overflow: clip; }
+  footer.q-status .q-spacer { display: none; }
+  footer.q-status details { white-space: nowrap; }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
 /* ---------------------------------------------------------------- ⑥ 文件集合面板（附件）
@@ -335,3 +471,15 @@ table.q-table td.q-editing { box-shadow: inset 2px 0 0 var(--accent); }
 }
 
 
+
+/* ---- P7 收尾：粗指针下的命中区（放在文件**最后**：与前面同形的选择器靠顺序取胜） ----
+   前面窄屏块里的 40px 是"桌面缩窄窗"的形态；真手机上（`pointer: coarse`）统一抬到 44px。 */
+@media (pointer: coarse) {
+  table.q-table:not(.q-keep-table) td.q-rowacts button,
+  table.q-table:not(.q-keep-table) td input,
+  table.q-table:not(.q-keep-table) td .q-deeplink { min-height: 44px; }
+  .q-tabs .q-tab .q-tab-x { min-width: 32px; min-height: 32px; }
+  .q-actions[data-toolbar] button, .q-actions[data-toolbar] .q-link { min-height: 44px; }
+  footer.q-status summary { min-width: 44px; min-height: 32px; display: inline-flex;
+    align-items: center; }
+}

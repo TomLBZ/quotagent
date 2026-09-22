@@ -21,7 +21,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 
 | FR 号 | 承载体（`15` §1 实测） | 关联 AC | 验收方式（门或命令） |
 |---|---|---|---|
-| `FR-NEGO-001` | src/quotagent/services/negotiation.py | `AC-NEGO-001`、`AC-NEGO-003`、`AC-PIPELINE-001` | `tools/verify.sh ac AC-NEGO-003` |
+| `FR-NEGO-001` | src/quotagent/services/negotiation.py | `AC-NEGO-001`、`AC-NEGO-003` | `tools/verify.sh ac AC-NEGO-003` |
 | `FR-NEGO-002` | src/quotagent/services/negotiation.py | `AC-NEGO-001`、`AC-NEGO-003` | `tools/verify.sh ac AC-NEGO-003` |
 
 ## 对外契约（provides / 依赖）

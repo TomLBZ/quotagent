@@ -220,16 +220,49 @@ export async function register(surface, host) {
         '--ui-shared', host.sharedDir, '--views', 'contractor,supplier', '--view', view,
         '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(),
         '--actor', asText(input.signature), '--now', host.now()])
-      const json = run.json ?? {}
-      const refused = (json.refused ?? [])[0] ?? null
-      const duplicate = (json.duplicates ?? [])[0] ?? null
-      return { ok: run.ok && json.ok === true && refused === null,
-        code: refused?.code ?? (duplicate ? 'already-nudged' : (json.ok ? 'nudged' : 'writer-failed')),
-        reason: refused?.reason ?? run.reason ?? '',
-        next_action: refused?.next_action ?? (duplicate
-          ? '同一句理由催过了（幂等，账本零新增）：换个说法或先看队列里"已催 N 次"'
-          : '催办已落 `gate/nudged`：队列里会出现「已催 N 次 @ts」（不改门的判定）'),
-        result: { pending: staged.file, ledger_added: json.ledger_added ?? 0, refused, duplicates: json.duplicates ?? [] } }
+      // ---- **判据只有一条**：写者回执（退出码 + stdout JSON），且只认**本动作落的那一条待办件** --------
+      // `gate-nudge.py` 是**邮箱式**写者：它一次消费 `gate-nudges/` 里同视角的**所有**待办件，而被拒的件
+      // **不归档**（会一直留在邮箱里）。修前按 `refused[0]` / 全局 `json.ok` / 全局 `ledger_added` 判 ⇒
+      // 同一封邮箱里只要还有**别人的**（或**上一次被拒的**）件，写者就把那条的结论当成整次运行的：
+      // **本动作的行真落了、响应却报失败**（机制层标成 `writer_consistency=fake-failure`；用户会据此
+      // 重复提交，比真失败更坏）。现在：ok/code/ledger_added/next_action **全部**从 `receipt` 派生，
+      // 归属用 `staged.name` 显式指认（回执的每条 applied/duplicates/refused 都带 `file`），不猜第一条。
+      const receipt = host.writerReceipt(run)
+      const mine = receipt.item({ file: staged.name }) ?? receipt.item({ gate_id: asText(input.gate_id) })
+      const written = mine && mine.where === 'applied' ? mine.entry : null
+      const duplicated = mine && mine.where === 'duplicates' ? mine.entry : null
+      const refusedRow = mine && mine.where === 'refused' ? mine.entry : null
+      const ok = Boolean(written || duplicated)
+      // 本动作**自己**真落了几行：一件 `gate/nudged` 就是 1 行（写者的逐条回执不带 ledger_added）
+      const ledgerAdded = written ? Number(written.ledger_added ?? 1) : 0
+      // 同一次运行里写者还处理了**别人**的（或上次留下的）待办件：如实列出来 —— 它们不是本动作的结论
+      const mineName = staged.name
+      const otherApplied = (receipt.applied ?? []).filter((row) => host.receiptFileName(row) !== mineName)
+      const otherRefused = (receipt.refused ?? []).filter((row) => host.receiptFileName(row) !== mineName)
+      const othersNote = otherApplied.length || otherRefused.length
+        ? `（同一次运行里写者还处理了 ${otherApplied.length + otherRefused.length} 条**别的**待办件：`
+          + `${otherApplied.length} 条已落行、${otherRefused.length} 条被拒 —— 那些不属于本动作）`
+        : ''
+      const code = ok ? (written ? 'nudged' : 'already-nudged')
+        : (refusedRow?.code ?? receipt.code ?? (mine ? 'writer-refused' : 'writer-receipt-missing'))
+      return { ok, code,
+        reason: refusedRow?.reason ?? (ok ? '' : (receipt.reason || '')),
+        next_action: ok
+          ? (written
+            ? `催办已落 \`gate/nudged\`（本动作账本 +${ledgerAdded} 行）：队列里会出现「已催 N 次 @ts」`
+              + '（不改门的判定）'
+            : '同一句理由催过了（幂等，账本零新增）：换个说法或先看队列里"已催 N 次"')
+          : ((refusedRow?.next_action ?? receipt.next_action
+            ?? `这条待办件（${mineName}）没在写者回执里出现（applied/duplicates/refused 都没有）`
+              + '⇒ 本动作账本零新增：看 result.writer.stdout_tail 定位后重提') + othersNote),
+        result: { pending: staged.file, pending_file: staged.name, ledger_added: ledgerAdded,
+          applied: written ? [written] : [], duplicates: duplicated ? [duplicated] : [],
+          refused: refusedRow ? [refusedRow] : [],
+          others: { applied: otherApplied.map((row) => ({ file: row?.file ?? '', gate_id: row?.gate_id ?? '' })),
+            refused: otherRefused.map((row) => ({ file: row?.file ?? '', code: row?.code ?? '' })) },
+          writer: { rc: receipt.rc, stdout_ok: receipt.said, code: receipt.code,
+            ledger_added: receipt.ledger_added, refused_codes: receipt.refused.map((row) => row?.code ?? ''),
+            stdout_tail: receipt.stdout_tail } } }
     } }))
 
   const stepAction = (id, step, title, extraFields, hint) => surface.action({

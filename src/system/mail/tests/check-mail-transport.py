@@ -257,7 +257,7 @@ NO_CONFIG = str(Path(tempfile.gettempdir()) / "quotagent-mail-transport-absent" 
 REAL_CONFIG = Path("/workspace/config.yaml")
 REAL_CONFIG_HASH = sha256_file(REAL_CONFIG) if REAL_CONFIG.exists() else ""
 #: 内置的"缺省即真源"快照写入器（Python 侧唯一判定者；宿主只读它的输出）
-SNAPSHOT_WRITER = ROOT / "src" / "system" / "webui" / "tools" / "refresh-ui-snapshots.py"
+SNAPSHOT_WRITER = ROOT / "src" / "system" / "mail" / "tools" / "mail-snapshot.py"
 
 
 # ===========================================================================
@@ -652,7 +652,7 @@ try:
         snap_stdout = {}
     mail_json_path = WORK / "mail.json"
     mail_json_text = mail_json_path.read_text(encoding="utf-8") if mail_json_path.exists() else ""
-    check("F7 快照写入器（`tools/refresh-ui-snapshots.py`）写出的 `mail.json`：队列计数来自账本（`sent=1`）、"
+    check("F7 快照写入器（本插件 `tools/mail-snapshot.py`）写出的 `mail.json`：队列计数来自账本（`sent=1`）、"
           "传输段来自 `mail_transport` 的真实状态（`smtp.available=true`）；**哨兵出现次数 0**"
           "（宿主读的就是这份文件，凭据不能随它出门）",
           snap_proc.returncode == 0 and snap_stdout.get("mail_totals", {}).get("sent") == 1

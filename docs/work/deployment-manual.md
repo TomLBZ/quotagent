@@ -195,24 +195,12 @@ docs/work/evolution-log.json      # 产出日志；tmp/evolve/ledger.jsonl 是�
 6. **canary 探针"永远样本不足"**：探针键必须随索引变化（固定键会把所有探针送进同一条道）。
 7. **AC 里不要写"相对当下的绝对时刻"**：门会随墙上时间自己变红/变绿。
 
-## 三域运维面板（谈判 / FAQ / 邮件）
-
-- 路由：`/quotagent/api/pipeline`（运维道）；页面上是 `<prefix>/ops/` 的「三域流水」区块。
-- 数据来源（**分工**）：`tools/refresh-ui-snapshots.py` 从三个服务的 `replay()` **重建计数**，
-  写 `tmp/ui-shared/pipeline.json`（**只读账本**）；宿主插件 `pipeline-view` 只做只读聚合。
-  宿主**不**直连内核桥，也不自己算留存/谈判/FAQ 的判定。
-- **刷新时机**：`tools/webui-serve.py` 在 **g1 走查 seed 之后**以及**每次健康探测**时各刷一次
-  （走查会清空 `tmp/ui-shared/`，不补这一下面板会长期 `degraded`）。
-- `transport` 字段：由 `services/mail_transport.py` 的**真实状态**派生（`services/mail.py` 的 `transport`
-  就是它）。**没配凭据就是不可用**（`available:false` + `reason=mail-smtp-unconfigured`），
-  配齐但还没真发过是 `mail-smtp-unprobed`，连不上是 `smtp-unreachable` —— 三种情形**分得开**。
-
 ## 邮件域（SMTP / IMAP）—— 真的收发于何时发生
 
 - **真收发只在 Python 侧**：`src/quotagent/services/mail_transport.py`（纯标准库 `smtplib`/`imaplib`）。
   宿主（`host/**`）**不联网、不起子进程**，只读一份状态快照。
 - **路由**：`GET /quotagent/ops/mail/`（页面，**脚本只来自受信来源**）与 `GET /quotagent/api/mail`（JSON）。
-  数据来源：`tools/refresh-ui-snapshots.py` 把「`mail/*` 账本计数」+「`mail_transport` 的真实状态」
+  数据来源：`src/system/mail/tools/mail-snapshot.py`（本插件的工具）把「`mail/*` 账本计数」+「`mail_transport` 的真实状态」
   写成 `tmp/ui-shared/mail.json`，宿主插件 `mail-view` 只做有界只读投影（坏快照 → `degraded` + 有名 reason）。
 - **配置键**（`host/lib/config-keys.mjs` + `host/lib/schema.mjs` 已登记，配置 UI 可直接改）：
   `mail.smtp.host/port/from/username/password/security`、`mail.imap.host/port/username/password/mailbox/security`、
@@ -223,30 +211,15 @@ docs/work/evolution-log.json      # 产出日志；tmp/evolve/ledger.jsonl 是�
   收信有界（条数 + 单封返回体），被夹时如实报 `truncated`/`clipped`。
 - **证据**：`tools/verify.sh mail-transport`（回环假 SMTP/IMAP 真收发的原始行 + 哨兵计数）。
 
-### 面板数字是"演示种子"数据（重要）
+### 演示数据来自 g1 走查（不是生产数据）
 
-`tmp/ui-shared/` 是**演示/联调账本**，不是生产数据。其中的谈判/FAQ/邮件事件由
-`tools/ui-seed-pipeline.py` 用**真服务**跑出（写入者一律是 `human:ui-seed` / `agent:ui-seed`），
-目的：让面板能端到端展示真实数据流。**读取这些数字时请记住它们来自演示种子。**
+`tmp/ui-shared/` 是**演示/联调账本**：两侧账本由 `./run up` 时的 g1 走查（`--keep-shared`）真跑出来。
+**读取这些数字时请记住它们来自演示夹具。**
 
-### 业务双方视角：谈判轮次与 FAQ 条目
-
-- `/<view>/api/negotiation`：该视角的谈判计数（线程/轮次/被拒）与最近轮次（`thread_id#attempt(status)`）。
-- `/<view>/api/faq`：该视角的 FAQ 条目计数（含涉及版本）与最近条目（`entry_id@rev<N>`）。
-- 两者都**只读**快照切片（`tmp/ui-shared/pipeline.json`），**不出正文与私域键**；判定在 `services/*`。
-- 页面（`/<view>/`）上对应「谈判轮次（本视角）」与「FAQ（本视角）」两个区块。
-
-### 三域快照的两个口径（别混着读）
-
-- **计数**（`negotiate.threads/rounds/rejected`、`faq.entries`）：走**服务回放**，只统计被服务跟踪的对象 —— 权威口径。
-- **最近列表**（`negotiate.recent[]`、`faq.recent[]`）：走**账本原始行**，按 `seq` 倒序、至多 5 条 —— "最近发生了什么"。
-
-两者**可以不一致**（例如计数 1、列表 5 条）。**读法**：计数看规模，列表看动态；不要用列表长度推计数。
-
-## 门清单（42 道，全部可用 `tools/verify.sh <名>` 单独跑）
+## 门清单（40 道，全部可用 `tools/verify.sh <名>` 单独跑）
 
 ```text
-ac-registry  approval-digest  audit-hook  breaker  breaker-route  bridge  bridge-canary  budget-guard  budget-route  canary  canary-route  clean-copy  cordis  coverage  docs  events  evolution  evolve-journal  evolve-module  faq  g1  governor  idem-route  idempotency-guard  invariants  mail  mail-transport  modules  negotiation  observability  ops-view  p0-no-node  pipeline-route  pipeline-view  plugins  retention  retention-view  smoke  supplier-scorecard  v  webui  wiring
+ac-registry  approval-digest  audit-hook  breaker  breaker-route  bridge  bridge-canary  budget-guard  budget-route  canary  canary-route  clean-copy  cordis  coverage  docs  events  evolution  evolve-journal  evolve-module  faq  g1  governor  idem-route  idempotency-guard  invariants  mail  mail-transport  modules  negotiation  observability  ops-view  p0-no-node  plugins  retention  retention-view  smoke  supplier-scorecard  v  webui  wiring
 ```
 
 - 一键全套：`tools/verify.sh all`（长门如 `g1`/`clean-copy`/`run-clone` 按需单独跑；`clean-copy` 与 `run-clone` 校验 **HEAD**，须在 commit 之后跑）。
@@ -264,7 +237,7 @@ ac-registry  approval-digest  audit-hook  breaker  breaker-route  bridge  bridge
   或直接 `POST /quotagent/admin/api/elevate`（`token=<值>`，表单体）。成功后拿到
   `qa_admin=<不透明 id>`（`HttpOnly; SameSite=Strict; Path=/quotagent/admin`，非 token 派生）。
 - 面板：`GET /quotagent/admin/api/blocks` → `{blocks, counts, progress, degraded, reason, next_action}`
-  ——阻塞与进度都来自 **Python 侧真源**（`.agents/state.json` 的阻塞/人工项 + 进度清单 + 三域快照的 transport 不可用）。
+  ——阻塞与进度都来自 **Python 侧真源**（`.agents/state.json` 的阻塞/人工项 + 进度清单 + 邮件域快照的 transport 不可用）。
   计数带 `counts.source` 口径说明；**源读不到就 `degraded=true`**，不会用"零阻塞"冒充健康。
 - 切视角：`GET /quotagent/admin/api/switch?to=<contractor|supplier|ops|admin>` → 302。
   **切换只改导航与道可见性，不改变任何字段白名单**——管理员身份不是看到私域键的新路径。

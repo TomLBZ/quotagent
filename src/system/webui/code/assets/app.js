@@ -373,10 +373,13 @@
   function renderChrome() {
     const nav = viewsOf().map((view) => `<a href="${attr(linkOf(view.id))}" data-nav="${attr(view.id)}"`
       + `${view.id === state.route.view ? ' class="current" aria-current="page"' : ''}>${esc(view.title)}</a>`).join('')
-    el('q-top').innerHTML = `<span class="q-brand">quotagent<small>GUI 应用外壳</small></span>`
+    el('q-top').innerHTML = `<a class="q-skip" href="#q-view">跳到主内容</a>`
+      + `<span class="q-brand">quotagent<small>GUI 应用外壳</small></span>`
       + `<nav class="q-nav" aria-label="视角">${nav}</nav>`
       + `<div class="q-tools">`
-      + `<button data-open="palette" title="命令面板（Ctrl/Cmd+K）" aria-label="打开命令面板">⌘K 命令</button>`
+      // 触控优先：手机上「⌘K」这个键名没有任何意义 —— 名字写「命令」，快捷键留在 tooltip 里
+      + `<button data-open="palette" title="命令面板：搜动作/视图/对象类，点一下就执行（键盘 Ctrl/Cmd+K）"`
+      + ` aria-label="打开命令面板（搜动作与视图）">命令 <kbd>⌘K</kbd></button>`
       + `<button data-open="recent" title="最近访问 / 继续上次（Ctrl/Cmd+E）" aria-label="打开最近访问">最近 `
       + `<span class="q-badge">${state.recentRoutes.length}</span></button>`
       + `<button data-open="notify" title="通知中心（待办/结果/失败）" aria-label="打开通知中心">通知`
@@ -560,14 +563,18 @@
               + `×${esc(String(cellValue(rowKey, column.line_total_of, row) ?? '—'))} = `
               + `${numOf(cellValue(rowKey, column.key, row)) * numOf(cellValue(rowKey, column.line_total_of, row))}</span>`
             : ''
-          return `<td class="${attr(cls)}"><input data-edit="${attr(rowKey)}" data-field="${attr(column.key)}"`
+          // 触控可用性：可编辑格在手机上要能看见自己在改哪一列（`data-label` 让小屏卡片视图带列名），
+          // 数字格给对键盘（`inputmode`），回车键按语义（`enterkeyhint`）——都是浏览器原生能力。
+          const numeric = column.type === 'number'
+          return `<td class="${attr(cls)}" data-label="${attr(column.label || column.key)}">`
+            + `<input data-edit="${attr(rowKey)}" data-field="${attr(column.key)}"`
             + ` data-type="${attr(column.type || 'text')}" value="${attr(value)}"`
-            + ` data-orig="${attr(value)}"`
+            + ` data-orig="${attr(value)}"${numeric ? ' inputmode="decimal" enterkeyhint="next"' : ''}`
             + ` placeholder="${attr(column.help || '')}" aria-label="${attr(column.label || column.key)}">${extra}</td>`
         }
-        if (column.type === 'code') return `<td class="${attr(cls)}"><code>${esc(value)}</code></td>`
-        if (column.type === 'json') return `<td class="${attr(cls)}"><code>${esc(value.slice(0, 220))}</code></td>`
-        return `<td class="${attr(cls)}${best ? ' q-cellbest' : ''}">${esc(value)}</td>`
+        if (column.type === 'code') return `<td class="${attr(cls)}" data-label="${attr(column.label || column.key)}"><code>${esc(value)}</code></td>`
+        if (column.type === 'json') return `<td class="${attr(cls)}" data-label="${attr(column.label || column.key)}"><code>${esc(value.slice(0, 220))}</code></td>`
+        return `<td class="${attr(cls)}${best ? ' q-cellbest' : ''}" data-label="${attr(column.label || column.key)}">${esc(value)}</td>`
       }).join('')
       // **按行**声明行内动作：行自己带 `row_actions` 时以行为准（机制：有的动作只对某几行成立 ——
       // 例如"确认收到 PO"只该长在真有 PO 的那一行上，否则点别行会送出一个占位符 id）
@@ -584,8 +591,8 @@
           + `${esc(action.title)}${action.permission === 'human-signature' ? ' ✍' : ''}</button>`
       }).join(' ')
       return `<tr data-row-key="${attr(rowKey)}">`
-        + (bulk ? `<td><input type="checkbox" data-select="${attr(rowKey)}" aria-label="选中这一行"></td>` : '')
-        + `${cells}<td class="q-rowacts">${inline} ${rowRefCell(row)}</td></tr>`
+        + (bulk ? `<td class="q-rowsel" data-label="选中"><input type="checkbox" data-select="${attr(rowKey)}" aria-label="选中这一行"></td>` : '')
+        + `${cells}<td class="q-rowacts" data-label="动作">${inline} ${rowRefCell(row)}</td></tr>`
     }).join('')
     const totals = totalsOf(data, rows, (row, index) => rowKeyOf(row, index))
     // ④ 对比模式下**每组一列合计**（如"每家报价的行合计总和"）：插件声明 `data.group_totals = {key, unit}`。
@@ -924,7 +931,7 @@
     <h2>你现在该做什么</h2>
     <p>${esc(headline)}${current === '' && items.length && wanted.length
       ? `（另有 ${items.length - wanted.length} 条信息）` : ''}</p>
-    <button class="q-link" data-open="palette">搜全部动作（Ctrl+K）</button>
+    <button class="q-link" data-open="palette">搜全部动作（点这里；键盘 <kbd>Ctrl/⌘+K</kbd>）</button>
   </div>
   ${bucketBar('workbench', buckets, current, items)}
   ${list.length ? `<ul class="q-todo-list">${list.map(todoRow).join('')}</ul>`
@@ -1069,9 +1076,26 @@
     renderStatus()
   }
 
+  /**
+   * **窄屏可读性（机制）**：横向能滚的表格给出**可见的滑动提示**，否则在手机上"右边还有列"这件事
+   * 只能靠猜（走查实测：报价表的单价/交期/动作列全在视口外，人根本不知道要滑）。
+   * 判据只用几何量（`scrollWidth > clientWidth`），与业务无关；窗口变化时重算。
+   */
+  function markScrollables(root) {
+    const scope = root || document
+    const boxes = [...scope.querySelectorAll('.q-scroll, .q-tools, .q-nav, .q-tabs, .q-actions[data-toolbar]')]
+    for (const box of boxes) {
+      const can = box.scrollWidth > box.clientWidth + 1
+      if (can) box.dataset.scrollX = '1'
+      else delete box.dataset.scrollX
+    }
+  }
+  window.addEventListener('resize', () => markScrollables(document))
+
   /** ② 面板层交互：拖拽排序、折叠、布局按钮、钉标签页。 */
   function bindPanels() {
     const root = el('q-view')
+    markScrollables(document)      // 顶栏/标签页/动作条同样是横向滚动容器：一样要给出提示
     root.querySelectorAll('[data-collapse]').forEach((node) => node.addEventListener('click', () =>
       toggleCollapse(node.dataset.collapse)))
     root.querySelectorAll('[data-layout]').forEach((node) => node.addEventListener('click', () => {
@@ -1718,6 +1742,7 @@
       + `权限 <code>${esc(action.permission)}</code>`
       + `${action.confirm?.required ? ' · 提交前会再确认一次' : ''}`
       + `${action.object_kind ? ` · 作用于 <code>${esc(action.object_kind)}</code>` : ''}</p>`,
+      '<div class="q-modal-body">',
       action.hint ? `<p class="q-hint">${esc(action.hint)}</p>` : '',
       action.permission === 'human-signature'
         ? `<p class="q-degraded">这一步是人工门：<code>signature</code> 里的署名会随请求送到插件自己的`
@@ -1727,9 +1752,10 @@
       (values.rows && values.rows.length ? `<p class="q-hint">这次提交会带上 <b>${values.rows.length}</b> 行`
         + `（表格里改过的行）：${values.rows.map((row) => `<code>${esc(row.item_id ?? row.id ?? '')}</code>`)
           .join(' ')}</p>` : ''),
-      `<div class="q-actions"><button class="primary" data-run="1">${action.confirm?.required
-        ? '下一步：确认' : '执行'}</button><button data-close="1">取消</button></div>`,
-      '<div data-result="1"></div>'])
+      '<div data-result="1"></div>',
+      '</div>',
+      `<div class="q-actions q-modal-foot"><button class="primary" data-run="1">${action.confirm?.required
+        ? '下一步：确认' : '执行'}</button><button data-close="1">取消</button></div>`])
     openModal(body, 'q-action-modal')
     const modal = el('q-modal')
     modal.querySelector('[data-close]').addEventListener('click', closeModal)
@@ -1794,12 +1820,14 @@
     const card = modal.querySelector('.q-card')
     card.innerHTML = html([
       `<h2 id="q-action-title">确认：${esc(action.title)}</h2>`,
+      '<div class="q-modal-body">',
       `<p class="q-degraded" data-confirm-message="1">${esc(action.confirm?.message || '确认执行这个动作？')}</p>`,
-      `<dl class="q-kv">${rows}</dl>`,
+      `<dl class="q-kv" data-confirm-kv="1">${rows}</dl>`,
       action.permission === 'human-signature'
         ? `<p class="q-consequence">后果：产生对外义务；签名与载荷指纹会写进账本（不可撤销，只能再走一次变更）。`
           + `署名必须是你本人（<code>human:&lt;名字&gt;</code>）。</p>` : '',
-      `<div class="q-actions"><button class="primary" data-yes="1">确认执行</button>`
+      '</div>',
+      `<div class="q-actions q-modal-foot"><button class="primary" data-yes="1">确认执行</button>`
       + `<button data-back="1">返回修改</button></div>`])
     card.querySelector('[data-yes]').focus()
     card.querySelector('[data-back]').addEventListener('click', () => openAction(action.id, input))
@@ -1909,6 +1937,17 @@
     }
   }
 
+  /**
+   * 弹层（**机制**）：所有对话框/命令面板/导出预览都走这里。本批把「键盘与屏幕阅读器」这一层补齐 ——
+   *   · 打开时：记住焦点 → 把**背景**设为 `inert`（Tab 出不去、屏幕阅读器也读不到背景）→ 焦点落到
+   *     第一个可聚焦元素（表单字段优先，否则标题/关闭按钮）；`aria-labelledby` 指向弹层标题；
+   *   · 关闭时：恢复 `inert`、把焦点还给**打开它的那个元素**（键盘用户不会掉到页面顶端）；
+   *   · Tab/Shift+Tab 在弹层内**循环**（焦点陷阱），Esc 由全局键盘处理（已有：先「返回修改」再关）；
+   *   · 手机上（≤560px）弹层是**全屏单页**（CSS），底部按钮吸底 —— 不用去够屏幕中间的按钮。
+   */
+  let modalOpener = null
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]),'
+    + ' select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
   function openModal(bodyHtml, id) {
     let modal = el('q-modal')
     if (!modal) {
@@ -1919,11 +1958,47 @@
     modal.className = ''
     modal.setAttribute('role', 'dialog')
     modal.setAttribute('aria-modal', 'true')
+    if (!modalOpener) modalOpener = document.activeElement
+    // 标题给个 id 并让弹层引用它：屏幕阅读器打开时会念「对话框：<标题>」而不是「空对话框」。
+    const titled = /<h2[^>]*>/.test(bodyHtml)
+    const withId = titled ? bodyHtml.replace('<h2', '<h2 id="q-modal-title"') : bodyHtml
+    modal.setAttribute('aria-labelledby', titled ? 'q-modal-title' : '')
     if (id) modal.dataset.kind = id
-    modal.innerHTML = `<div class="q-card">${bodyHtml}</div>`
+    modal.innerHTML = `<div class="q-card" role="document">${withId}</div>`
     modal.addEventListener('click', (ev) => { if (ev.target === modal) closeModal() })
+    modal.addEventListener('keydown', (ev) => { if (ev.key === 'Tab') trapTab(ev, modal) })
+    // 背景 inert：Tab 与辅助技术都停在弹层里（浏览器原生 inert，不需要自己数元素）
+    const app = el('q-app')
+    if (app) app.setAttribute('inert', '')
+    document.body.classList.add('q-modal-open')
+    // 初始焦点：第一个可聚焦元素（表单字段天然排在标题后面）；一个都没有时把焦点给卡片本身
+    const first = modal.querySelector(FOCUSABLE)
+    const card = modal.querySelector('.q-card')
+    if (first) {
+      first.focus()
+      if (first.tagName === 'INPUT' && first.type !== 'checkbox') first.select?.()
+    } else if (card) { card.tabIndex = -1; card.focus() }
   }
-  function closeModal() { const modal = el('q-modal'); if (modal) modal.remove() }
+  /** Tab 在弹层内循环（焦点陷阱）：到最后一个再按 Tab 回第一个，反之亦然。 */
+  function trapTab(ev, modal) {
+    const nodes = [...modal.querySelectorAll(FOCUSABLE)]
+      .filter((node) => node.offsetWidth || node.offsetHeight || node === document.activeElement)
+    if (!nodes.length) return
+    const first = nodes[0]
+    const last = nodes[nodes.length - 1]
+    if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus() }
+    else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus() }
+  }
+  function closeModal() {
+    const modal = el('q-modal')
+    const restore = modalOpener
+    modalOpener = null
+    if (modal) modal.remove()
+    const app = el('q-app')
+    if (app) app.removeAttribute('inert')
+    document.body.classList.remove('q-modal-open')
+    if (restore && typeof restore.focus === 'function' && document.contains(restore)) restore.focus()
+  }
 
   // ---------------------------------------------------------------- 命令面板 / 通知 / 插件 / 帮助
   function paletteItems() {

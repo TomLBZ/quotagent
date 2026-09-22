@@ -923,5 +923,25 @@ export async function register(surface, host) {
     views: ['contractor'], object_kind: 'po', formats: ['csv', 'html'], action: 'po.export', order: 32,
     hint: '逐行带单价基准与来源报价；表头给四段追溯链与账本行号' }))
 
+  // ---- **沙盘场景**：演示流程的第 ④ 段 = **授标（人签）→ 发 PO（人签）** ----------------------------
+  // 4 步：承包商提意向 → 供应商人签确认 → 承包商人签承诺 → 承包商人签发 PO。
+  // 门与写者一个字都没改：沙盘的差别只在**账本路径与署名来自机制生成的演示身份**（见 app-shell 沙盘段）。
+  out.push(surface.scenario({ plugin_id: me, id: 'scenario.award-po', scenario: 'demo.procurement',
+    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO', title: '④ 授标（人签）→ 发 PO（人签）',
+    view: 'contractor', order: 40,
+    hint: '意向 → 供应商确认 → 授标承诺 → 逐行派生 PO；每一道人签都由对应那一侧的演示身份签',
+    steps: [
+      { action: 'award.propose', capture: 'intent', input: { package_id: 'DEMO-PKG-001',
+        quote_id: '$cap.q1.quote_id', item_id: 'L-001', qty: 120, unit_price_cents: 8600,
+        reason: '沙盘演示：按比价第一名提意向' } },
+      { action: 'award.confirm', as: { side: 'supplier' },
+        input: { intent_id: '$cap.intent.intent_id', signature: '$actor', note: '沙盘演示：供应商确认',
+          confirm_ack: '1' } },
+      { action: 'award.commit', capture: 'award', input: { intent_id: '$cap.intent.intent_id',
+        signature: '$actor', reason: '沙盘演示：人工批准（三样门齐备）', comment: '沙盘演示',
+        confirm_ack: '1' } },
+      { action: 'po.issue', input: { award_id: '$cap.award.award_id', signature: '$actor',
+        reason: '沙盘演示：发 PO', comment: '沙盘演示', confirm_ack: '1' } }] }))
+
   return out
 }

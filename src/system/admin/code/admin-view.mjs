@@ -1,6 +1,6 @@
 /**
  * 进树模块：`admin-view` —— admin 面板的**只读数据视图**（阻塞清单 + 进度计数）。
- * 与 `pipeline-view`、`retention-view`、`ops-view` 同族：**只组合、不自算**。
+ * 与 `retention-view`、`ops-view` 同族：**只组合、不自算**。
  *
  * 分工（谁产生、谁展示）：
  *   · **判定在 Python 侧**：阻塞事实（`admin/block-*`）只由 Python 服务写账本；面板要看的聚合快照由

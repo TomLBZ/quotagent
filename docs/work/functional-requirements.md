@@ -99,7 +99,7 @@
 
 | ID | 需求 | 优先级 | 阶段 | 关联 AC |
 |---|---|---|---|---|
-| FR-NEGO-001 | 有限轮次谈判：轮次上限与让步上限来自策略 patch | could | P2 | AC-NEGO-001 、AC-NEGO-003 、AC-PIPELINE-001 |
+| FR-NEGO-001 | 有限轮次谈判：轮次上限与让步上限来自策略 patch | could | P2 | AC-NEGO-001 、AC-NEGO-003 |
 | FR-NEGO-002 | 任何价格让步必须人工批准 | must | P2 | AC-NEGO-001 、AC-NEGO-003 |
 | FR-EVAL-003 | 指标采集与基线报告 | must | P0 | AC-EVAL-002 |
 | FR-INTEG-001 | 文件投递绑定（原子写 + 命名约定） | must | P0 | AC-INTEG-001 |

@@ -84,10 +84,9 @@
 | AUDIT | 5 | system/evidence | 审计包与留存（`AC-AUDIT-001..005`） |
 | TRUST | 1 | system/projection | 私域过滤（`AC-TRUST-001`） |
 | UI | 2 | system/webui | 页面结构断言 |
-| PIPELINE | 1 | system/pipeline-view | 运维快照 |
 | FAQ | 1 | domain/faq | 与 `CLARIFY-004` 同源 |
 | SYNC | 1 | domain/sync | 三方协调 |
-| 其余 38 家族 | 119 | 与其对应 FR 家族同插件（§2.2 逐行） | `AUDIT`/`DESIGN`/`TRUST`/`UI`/`PIPELINE`/`FAQ`/`SYNC` 之外的家族名与 FR 家族名一致 |
+| 其余 38 家族 | 119 | 与其对应 FR 家族同插件（§2.2 逐行） | `AUDIT`/`DESIGN`/`TRUST`/`UI`/`FAQ`/`SYNC` 之外的家族名与 FR 家族名一致 |
 
 > 说明（避免"看起来是偷懒"）：AC 家族与 FR 家族的对应关系由**门**保证——`FR↔AC 无孤儿`（`tools/verify.sh docs` 的覆盖检查）要求每条 AC 被至少一条 FR 引用，
 > 因此"AC 家族与 FR 家族同名"时归属必然相同；不同名的 7 个家族（上表）逐条列出。

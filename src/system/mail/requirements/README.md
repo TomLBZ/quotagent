@@ -21,7 +21,7 @@
 |---|---|---|
 | FR-MAIL-001 | 邮件的真收发由插件提供：SMTP/IMAP 参数从配置读（env 优先），未配置如实报未连接 | `tools/verify.sh mail-transport` |
 | FR-MAIL-002 | 邮件配置键进白名单（配置 UI 可直接改并持久化）；宿主只读视图（队列计数/最近结果/reason/`next_action`，零写面） | `tools/verify.sh mail-transport` · `config-route` |
-| FR-INTEG-003 | 邮件绑定：失败**不得落账为「已发送」** | `tools/verify.sh mail` · `transport` · `pipeline-view` |
+| FR-INTEG-003 | 邮件绑定：失败**不得落账为「已发送」** | `tools/verify.sh mail` · `transport` · `mail-transport` |
 
 ## 对外契约（provides / 依赖）
 
@@ -29,7 +29,7 @@
 |---|---|
 | provides | `mailView`（宿主只读视图 `host/modules/mail-view.mjs`）；Python 侧服务面 `mail` / `mail_transport`（`src/quotagent/services/mail*.py`） |
 | 依赖 | `system/config`（配置键与凭据指纹只读）、`system/kernel`（发信事实落账本，唯一写者路径）；**不联网的宿主半边**：宿主零网络 |
-| 写面 | Python 侧：账本 `mail/*` 事件的唯一写者（`permissions.ledger = sole-writer`）；宿主侧：只读快照（`tools/refresh-ui-snapshots.py` 写快照，宿主不写） |
+| 写面 | Python 侧：账本 `mail/*` 事件的唯一写者（`permissions.ledger = sole-writer`）；宿主侧：只读快照（本插件 `tools/mail-snapshot.py` 写快照，宿主不写） |
 | 凭据 | 缺失**不阻塞启动**（28 §3.1）；凭据只存指针与指纹，永不回显、不进日志/账本/异常消息 |
 | 门 | `tools/verify.sh mail-transport`（27 条，含回环真发收）· `mail`（`AC-MAIL-001` / `AC-MAIL-002`） |
 

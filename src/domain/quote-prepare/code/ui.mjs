@@ -830,5 +830,28 @@ export async function register(surface, host) {
       level: pending ? 'warn' : 'ok', next_action: pending ? '去收件箱受理/退回（人签）' : '' }
   } }))
 
+  // ---- **沙盘场景**：演示流程的第 ② 段 = **备报价 + 人签提交**（供应商侧两家人，比价才有得看）------
+  // 4 步：备一份 → 人签提交 → 再备一份（另一家的价）→ 人签提交。
+  // `$actor` = 机制给的演示身份（沙盘按侧决定）；`capture` 把回执留下来给后来的步骤取用。
+  out.push(surface.scenario({ plugin_id: me, id: 'scenario.quote-draft-submit', scenario: 'demo.procurement',
+    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO', title: '② 备报价 + 人签提交（供应商发起）',
+    view: 'supplier', order: 20,
+    hint: '整张表一次备草稿 → 人签提交（沙盘里的人签用机制生成的演示身份）；两家候选，比价才看得出差别',
+    steps: [
+      { action: 'quote.draft', as: { side: 'supplier' },
+        input: { rfq_id: 'DEMO-PKG-001', prepared_by: '$actor',
+          currency: 'CNY', rows: [{ item_id: 'L-001', unit_price_cents: 8600, lead_time_days: 10 },
+            { item_id: 'L-002', unit_price_cents: 1150, lead_time_days: 10 }] } },
+      { action: 'quote.submit', as: { side: 'supplier' }, capture: 'q1',
+        input: { draft_id: '$last.applied.0.quote_draft_id', signature: '$actor',
+          comment: '沙盘演示：第一家候选提交', timeout_policy: 'remind', confirm_ack: '1' } },
+      { action: 'quote.draft', as: { side: 'supplier' },
+        input: { rfq_id: 'DEMO-PKG-001', prepared_by: '$actor', currency: 'CNY',
+          rows: [{ item_id: 'L-001', unit_price_cents: 9400, lead_time_days: 6 }] } },
+      { action: 'quote.submit', as: { side: 'supplier' },
+        input: { draft_id: '$last.applied.0.quote_draft_id', signature: '$actor',
+          comment: '沙盘演示：第二家候选提交（交期更短、价更高）', timeout_policy: 'remind',
+          confirm_ack: '1' } }] }))
+
   return out
 }

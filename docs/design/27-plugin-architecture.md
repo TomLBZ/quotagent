@@ -25,8 +25,8 @@
 
 ### 1.3 当前清单（逐文件映射见 `docs/work/plans/plugin-file-map.md`）
 
-- **system：34 个**（按 id 排序）：`admin` `agent-runtime` `approval` `audit-hook` `budget-guard` `canary` `circuit-breaker` `config` `eval` `evidence` `evolution` `governor` `idempotency-guard` `kernel` `kernel-bridge` `mail` `market` `measures` `norm` `observability` `ops-view` `pipeline-view` `projection` `qa-runner` `realm` `relay` `repo-gate` `retention` `runtime` `storage` `timeline` `ui-feedback` `user-plugin-manager` `webui`
 - **domain：25 个**：`advice` `authority-band` `bid-heuristics` `capacity` `change` `clarify` `commitments` `compare` `costmodel` `deviation` `export` `faq` `gate-timeline` `guard` `intake` `negotiation` `price-history` `pricing` `quotes` `rfq` `rfq-deadline` `sourcing` `supplier-scorecard` `sync` `terms`（+ 在飞未提交的 `quote-prepare` = 26）
+- **system：33 个**（按 id 排序）：`admin` `agent-runtime` `approval` `audit-hook` `budget-guard` `canary` `circuit-breaker` `config` `eval` `evidence` `evolution` `governor` `idempotency-guard` `kernel` `kernel-bridge` `mail` `market` `measures` `norm` `observability` `ops-view` `projection` `qa-runner` `realm` `relay` `repo-gate` `retention` `runtime` `storage` `timeline` `ui-feedback` `user-plugin-manager` `webui`
 - **userspace：2 个命名空间**：`con-a/quote-trend`、`demo-ns/hello`（运行时根 `src/userspace/` 沿用 `user-space/` 的 gitignore 语义，见 §7 未决 2）
 
 ### 1.4 用户点名但**尚未成立**的系统级插件（缺口，登记不假装）

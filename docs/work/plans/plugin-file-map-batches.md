@@ -49,7 +49,6 @@
 
 | 资产（旧位置） | 归属插件 | 新位置 |
 |---|---|---|
-| `host/t260-pipeline-gate.mjs` | `system/pipeline-view` | `src/system/pipeline-view/tests/t260-pipeline-gate.mjs` |
 | `host/t267-market-gate.mjs` | `system/market` | `src/system/market/tests/t267-market-gate.mjs` |
 | `host/t268-user-space-gate.mjs` | `system/user-plugin-manager` | `src/system/user-plugin-manager/tests/t268-user-space-gate.mjs` |
 | `host/t271-admin-gate.mjs` | `system/admin` | `src/system/admin/tests/t271-admin-gate.mjs` |

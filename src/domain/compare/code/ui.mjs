@@ -439,5 +439,22 @@ export async function register(surface, host) {
     views: ['contractor'], formats: ['csv', 'html'], action: 'compare.print', order: 32,
     hint: '名次/得分/偏差计数逐行来自账本里已记录的那次评估' }))
 
+  // ---- **沙盘场景**：演示流程的第 ③ 段 = **比价**（`compare.rank` 只读：账本零新增）------------------
+  out.push(surface.scenario({ plugin_id: me, id: 'scenario.compare-rank', scenario: 'demo.procurement',
+    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO', title: '③ 比价（排名 → 落一条评估事实）',
+    view: 'contractor', order: 30, hint: '先按示例权重排一次名（只读），再把这次评估落成一条事实（导出比价表要用它）',
+    steps: [{ action: 'compare.rank', input: { package_id: 'DEMO-PKG-001', w_price: 0.6, w_delivery: 0.15,
+      w_payment: 0.1, w_warranty: 0.05, w_deviation: 0.1 } },
+    // 排完再**把这次评估落成一条事实**（`compare/rank-computed`）：导出/打印比价表要的就是这条记录
+    // （只跑 rank 只是"看一眼"，不落账；导出面板会如实说"还没有已记录的评估"）。
+    { action: 'compare.save-weights', optional: true,
+      // 可选项：这一步依赖 compare 的**写者**认这份多行报价（口径见 29 §7.5：多行报价没有"唯一那个行项目"）。
+      // 现状：`compare-rank.py`（只读）认，`compare-apply.py`（写者）按 item_id 找报价 ⇒ 多行报价被它拒
+      // （`no-quotes-for-package`）。这不是沙盘的问题，也不属于本批允许改的文件；故标 optional ⇒ 演示照旧
+      // 走完，失败原样记进回执（`optional_failures`），界面上也照实说"比价表导出要的那条评估还没有"。
+      note: '可选项：把这次评估落成事实（多行报价当前会被 compare 的写者按 item_id 拒）',
+      input: { w_price: 0.6, w_delivery: 0.15, w_payment: 0.1,
+      w_warranty: 0.05, w_deviation: 0.1, package_id: 'DEMO-PKG-001', actor: '$actor', confirm_ack: '1' } }] }))
+
   return out
 }

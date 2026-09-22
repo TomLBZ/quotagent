@@ -3,7 +3,7 @@
 
 真做七件事（全部走真进程 + 真路由 + 真回读，不是"看着像接上了"）：
   ① 写两份**夹具账本**（承包商侧 / 供应商侧各自的账本文件，与部署形状一致：每个视角读自己的账本）
-     + 一份**夹具三域快照**（只放通道声明：邮件 `available:false` + 真实 next_action）；
+     + 一份**夹具邮件域快照**（只放通道声明：SMTP `available:false` + 真实 next_action）；
   ② 起一个真 `cli.mjs webui` 进程（随机空闲端口、私有前缀 `/qaadv`）；
   ③ 双方视角的 `GET <prefix>/<view>/advice/` 与 `<prefix>/<view>/api/advice` 都 200、是**真页面/真契约**
      （`data-engine="rules"` + "不含模型推测"那句 + 建议表 + 逐条 `basis`），且 **0 行 `<script>` / 0 内联事件**；
@@ -164,8 +164,8 @@ SHARED = ROOT / "tmp" / "advice-route"
 CONTRACTOR_LEDGER = SHARED / "contractor" / "ledger.jsonl"
 SUPPLIER_LEDGER = SHARED / "supplier" / "ledger.jsonl"
 EMPTY_LEDGER = SHARED / "empty" / "ledger.jsonl"
-PIPELINE = SHARED / "pipeline.json"
-PIPELINE_MISSING = SHARED / "pipeline-absent.json"
+MAIL_SNAPSHOT = SHARED / "mail.json"
+MAIL_SNAPSHOT_MISSING = SHARED / "mail-absent.json"
 # 身份会话（P3）故意落在**被监视的目录之外**：会话文件是宿主按设计写的**服务端状态**（`<ui_shared>/identity/`），
 # 不是夹具数据。放进 SHARED 会让 ⑫「目录一元不增」变成「容忍一个文件」—— 那是**放松判据**，不做。
 UI_SHARED = ROOT / "tmp" / "advice-route-identity"
@@ -206,11 +206,23 @@ SUPPLIER_ROWS = [
     row(3, "approval/requested", "q-sup-1", "2026-09-21T10:00:00Z",
         {"approval_id": "ap-0021", "scope": "quote.submit", "ref": "q-sup-1", "status": "pending"}, "supplier:sup-A"),
 ]
-PIPELINE_DOC = {
+# 通道声明的来源 = **邮件域快照**（`<ui_shared>/mail.json`，与 `/api/mail` 同一个文件）。
+# 三域流水只读快照已随运维面退役（29 §2）⇒ 夹具改成**邮件域快照**的形状（`transport` 是
+# `services/mail_transport.status()` 的摘要：顶层三件 + `smtp`/`imap` 明细）。
+MAIL_DOC = {
+    "schema": 1,
     "generated_at": "2026-09-21T12:00:00Z",
-    "views": {view: {"mail": {"queued": 1, "refused": 1, "transport": {
+    "service": "mail",
+    "views": {view: {"queued": 1, "refused": 1, "sent": 0, "parsed": 0} for view in ("contractor", "supplier")},
+    "totals": {"queued": 2, "refused": 2, "sent": 0, "parsed": 0},
+    "transport": {
         "available": False, "reason": "mail-smtp-unconfigured",
-        "next_action": "配置 SMTP/IMAP 凭据后接入（本接口不假装能发）"}}} for view in ("contractor", "supplier")},
+        "next_action": "配置 SMTP/IMAP 凭据后接入（本接口不假装能发）",
+        "smtp": {"available": False, "reason": "mail-smtp-unconfigured",
+                 "next_action": "配置 SMTP/IMAP 凭据后接入（本接口不假装能发）"},
+        "imap": {"available": False, "reason": "mail-imap-unconfigured",
+                 "next_action": "配置 SMTP/IMAP 凭据后接入（本接口不假装能发）"},
+    },
 }
 
 
@@ -220,16 +232,16 @@ def write_fixtures() -> None:
         path.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
     EMPTY_LEDGER.parent.mkdir(parents=True, exist_ok=True)
     EMPTY_LEDGER.write_text("", encoding="utf-8")
-    PIPELINE.write_text(json.dumps(PIPELINE_DOC, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    MAIL_SNAPSHOT.write_text(json.dumps(MAIL_DOC, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     UI_SHARED.mkdir(parents=True, exist_ok=True)
 
 
-def serve(port: int, prefix: str, contractor: Path, supplier: Path, pipeline: Path) -> subprocess.Popen:
+def serve(port: int, prefix: str, contractor: Path, supplier: Path, mail_snapshot: Path) -> subprocess.Popen:
     return subprocess.Popen(
         ["node", str(ROOT / "host" / "cli.mjs"), "webui", "--profile", "webui", "--port", str(port),
          "--host", "127.0.0.1", "--prefix", prefix,
          "--ledger-contractor", str(contractor), "--ledger-supplier", str(supplier),
-         "--pipeline-snapshot", str(pipeline), "--ui-shared", str(UI_SHARED)],
+         "--mail-snapshot", str(mail_snapshot), "--ui-shared", str(UI_SHARED)],
         cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         env={key: value for key, value in os.environ.items() if key != "QUOTAGENT_ADMIN_TOKEN"})
 
@@ -248,7 +260,7 @@ def wait_up(base: str, proc: subprocess.Popen) -> bool:
 def main() -> int:  # noqa: C901
     global BASE
     write_fixtures()
-    watched = [CONTRACTOR_LEDGER, SUPPLIER_LEDGER, EMPTY_LEDGER, PIPELINE]
+    watched = [CONTRACTOR_LEDGER, SUPPLIER_LEDGER, EMPTY_LEDGER, MAIL_SNAPSHOT]
     before = {str(path): sha256_file(path) for path in watched}
     listing_before = sorted(str(item.relative_to(SHARED)) for item in SHARED.rglob("*"))
     check("① 夹具就绪（承包商 5 行含哨兵 / 供应商 3 行 / 空账本 0 行 / 一份通道快照；"
@@ -256,11 +268,11 @@ def main() -> int:  # noqa: C901
           len(CONTRACTOR_ROWS) >= 4 and len(SUPPLIER_ROWS) >= 3 and all(Path(p).exists() for p in before)
           and EMPTY_LEDGER.read_text(encoding="utf-8") == "",
           f"{CONTRACTOR_LEDGER.name}={len(CONTRACTOR_ROWS)} 行；{SUPPLIER_LEDGER.name}={len(SUPPLIER_ROWS)} 行；"
-          f"空账本={EMPTY_LEDGER.stat().st_size} B；快照={json.dumps(PIPELINE_DOC['views']['contractor']['mail']['transport'], ensure_ascii=False)[:60]}…")
+          f"空账本={EMPTY_LEDGER.stat().st_size} B；快照={json.dumps(MAIL_DOC['transport'], ensure_ascii=False)[:60]}…")
 
     port = free_port()
     prefix = "/qaadv"
-    proc = serve(port, prefix, CONTRACTOR_LEDGER, SUPPLIER_LEDGER, PIPELINE)
+    proc = serve(port, prefix, CONTRACTOR_LEDGER, SUPPLIER_LEDGER, MAIL_SNAPSHOT)
     base = f"http://127.0.0.1:{port}{prefix}"
     BASE = base
     try:
@@ -444,7 +456,7 @@ def main() -> int:  # noqa: C901
     # ---- ⑪ 空投影必须降级且建议数为 0（第二个真进程：两本账本都是 0 行 + 无快照） ----
     port2 = free_port()
     prefix2 = "/qaadv0"
-    proc2 = serve(port2, prefix2, EMPTY_LEDGER, EMPTY_LEDGER, PIPELINE_MISSING)
+    proc2 = serve(port2, prefix2, EMPTY_LEDGER, EMPTY_LEDGER, MAIL_SNAPSHOT_MISSING)
     base2 = f"http://127.0.0.1:{port2}{prefix2}"
     try:
         up2 = wait_up(base2, proc2)

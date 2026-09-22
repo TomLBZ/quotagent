@@ -10,7 +10,7 @@
  *
  * 已知坑（必须处理，否则直接 ERR_MODULE_NOT_FOUND）：候选按契约 `import ... from '../lib/std-schema.mjs'`，
  * 而从 `tmp/` 看 `../lib` = **仓库根**的 `lib/`，它并不存在。这里照抄本仓既有做法
- * （`tools/evolve-module.mjs` 的影子目录、`host/t260-pipeline-gate.mjs`、`host/t254-retention-view-gate.mjs`）：
+ * （`tools/evolve-module.mjs` 的影子目录、`host/t277-storage-gate.mjs`、`host/t254-retention-view-gate.mjs`）：
  * 在 gitignored 的 `tmp/t267-market-gate-shadow/` 里把 `host/lib` 软链过去、把候选**按字节复制**进去，
  * 再 import 影子里的那一份，并断言"复制前后字节一致"。影子只落在 `tmp/` 内，仓库里其它文件一个字不动。
  *
@@ -341,7 +341,8 @@ const FIX_DIFFERENCES = ['仅目录有: eta', '仅清单有: delta', '仅用户�
 const FIX_HEADLINE = '插件市场 10 项（human 5/evolve 1/user-space 4）；未装配 5；三源不一致'
 
 /** 真数据手算表（真 `host/modules/` 26 个 .mjs − 非插件 index.mjs = 25 个插件；真清单 25 行，无缺无多）。 */
-const REAL_COUNTS = { 'human': 15, evolve: 25, user_space: 0, total: 40, unwired: 0 }
+// `pipeline-view` 已随三域流水运维面退役（29 §2）⇒ `host/modules/` 少一个模块：evolve 25→24、total 40→39
+const REAL_COUNTS = { 'human': 15, evolve: 24, user_space: 0, total: 39, unwired: 0 }
 
 /** 静态扫描（只扫候选源码；扫的是**产物**，不是本门）。只读被允许（FR-MARKET-002 的真源就是文件），
  *  写面/进程/网络/事件/随机/墙钟/定时器/账本一律不许出现。 */
@@ -853,18 +854,17 @@ try {
     .sort()
   const evolveNames = real.items.filter((item) => item.source === 'evolve').map((item) => item.name)
   const realOk = JSON.stringify(real.counts) === JSON.stringify(REAL_COUNTS)
-    && real.items.length === 40 && real.inconsistent === false && JSON.stringify(real.differences) === '[]'
+    && real.items.length === 39 && real.inconsistent === false && JSON.stringify(real.differences) === '[]'
     && real.truncated === false && real.clipped === 0 && real.degraded === false && real.reason === ''
     && !realNames.includes('index')                                   // 模块发现入口不是插件
     && real.items.every((item) => item.wired === true)
     && JSON.stringify([...realNames].sort()) === JSON.stringify(coverageNames)
     && evolveNames.includes('canary')                                 // 字面口径：其能力描述含"自进化产物"
-    && real.items.find((item) => item.name === 'pipeline-view')?.provides.join(',') === 'pipelineView'
     && real.items.find((item) => item.name === 'supplier-scorecard')?.provides.length === 0
     && real.items.find((item) => item.name === 'webui')?.source === 'human'
-    && real.items.find((item) => item.name === 'pipeline-view')?.file === F(join(REAL_MODULES, 'pipeline-view.mjs'))
+    && real.items.find((item) => item.name === 'retention-view')?.file === F(join(REAL_MODULES, 'retention-view.mjs'))
   check('13 真数据正控：真 `host/modules/` + 真 `docs/design/14-plugin-inventory.md`（另一主体维护的真源）'
-    + '→ items 40 / counts 15-25-0-40-0/ 三源一致 / 无截断；条目名集合与 `15-requirements-coverage.md` §2 '
+    + '→ items 39 / counts 15-24-0-39-0/ 三源一致 / 无截断；条目名集合与 `15-requirements-coverage.md` §2 '
     + '的插件归属表**逐名一致**（第二个鼻子）；`index.mjs` 不进条目；`supplier-scorecard` 的清单列写的是'
     + '"见模块 provides" → provides 照抄为 []（不猜）',
   realOk,
@@ -873,8 +873,7 @@ try {
   + ` truncated=${real.truncated} 未装配=${real.items.filter((item) => !item.wired).length}`
   + `；与 15 §2 逐名一致=${JSON.stringify([...realNames].sort()) === JSON.stringify(coverageNames)}（${coverageNames.length} 名）`
   + `；evolve=${evolveNames.length} 含 canary=${evolveNames.includes('canary')}`
-  + `；pipeline-view.provides=${JSON.stringify(real.items.find((item) => item.name === 'pipeline-view')?.provides)}`
-  + ` supplier-scorecard.provides=${JSON.stringify(real.items.find((item) => item.name === 'supplier-scorecard')?.provides)}`)
+  + `；supplier-scorecard.provides=${JSON.stringify(real.items.find((item) => item.name === 'supplier-scorecard')?.provides)}`)
 } catch (err) {
   check('门执行异常（不得静默通过）', false, `${err.name}: ${String(err.message).slice(0, 200)}`)
 }

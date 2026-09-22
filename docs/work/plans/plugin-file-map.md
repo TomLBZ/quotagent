@@ -7,7 +7,8 @@
 
 - 口径：路径清单 = `git ls-files src host tools user-space`（HEAD 时点，**250** 个路径）+ `user-space/` 磁盘上的 **6** 个文件 = **256** 个路径，另有 **8** 个在飞（未跟踪）源文件。
 - 行数：**248 行迁移 + 5 个保留入口（不迁移，见下行与迁移计划 §2 阶段 0）= 253**；表内另有 **8** 行在飞 ⇒ 表体 **256** 行
-  （比生成时点少 3 行：三个已迁资产已按 29 §2 删除，见 §分类 的注记）。未映射 **0** 个（判据：映射脚本对未知路径 `raise`，不静默跳过）。
+  （比生成时点少 3 行：三个已迁资产已按 29 §2 删除；本批再净少 4 行：三域流水运维面退役删掉 5 个已搬资产、
+  新增 1 个已搬资产 `tools/mail-snapshot.py`。逐条见 §分类 的注记）。未映射 **0** 个（判据：映射脚本对未知路径 `raise`，不静默跳过）。
 - 保留不动的是 `tools/` 的 5 个薄入口：`verify.sh`/`run.sh`/`runtime.sh`/`bootstrap.sh`/`cordis.sh`（门与一键运行的稳定入口，见 `27-plugin-architecture.md` §9 未决 3）。
 - 每行都由**规则**产生（不是逐条手写），规则表与复算命令在 `plugin-migration-plan.md` §3（`tmp/arch-batch/gen_map.py` 为一次性脚手架，不入库）。
 
@@ -68,7 +69,6 @@
 | `host/modules/norm.mjs` | `src/system/norm/code/norm.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/norm.mjs` 留**薄重导**） |
 | `host/modules/observability.mjs` | `src/system/observability/code/observability.mjs` |  |
 | `host/modules/ops-view.mjs` | `src/system/ops-view/code/ops-view.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
-| `host/modules/pipeline-view.mjs` | `src/system/pipeline-view/code/pipeline-view.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
 | `host/modules/plugin-market.mjs` | `src/system/market/code/plugin-market.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
 | `host/modules/price-history.mjs` | `src/domain/price-history/code/price-history.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
 | `host/modules/projection.mjs` | `src/system/projection/code/projection.mjs` |  |
@@ -92,7 +92,6 @@
 | `host/t250-approval-gate.mjs` | `src/system/approval/tests/t250-approval-gate.mjs` |  |
 | `host/t250-budget-gate.mjs` | `src/system/budget-guard/tests/t250-budget-gate.mjs` |  |
 | `host/t254-retention-view-gate.mjs` | `src/system/retention/tests/t254-retention-view-gate.mjs` |  |
-| `host/t260-pipeline-gate.mjs` | `src/system/pipeline-view/tests/t260-pipeline-gate.mjs` |  |
 | `host/t267-market-gate.mjs` | `src/system/market/tests/t267-market-gate.mjs` |  |
 | `host/t268-user-space-gate.mjs` | `src/system/user-plugin-manager/tests/t268-user-space-gate.mjs` |  |
 | `host/t271-admin-gate.mjs` | `src/system/admin/tests/t271-admin-gate.mjs` |  |
@@ -227,7 +226,6 @@
 | `tools/check-module-wiring.py` | `src/system/repo-gate/tests/check-module-wiring.py` |  |
 | `tools/check-modules.py` | `src/system/repo-gate/tests/check-modules.py` |  |
 | `tools/check-negotiation.py` | `src/domain/negotiation/tests/check-negotiation.py` |  |
-| `tools/check-pipeline-route.py` | `src/system/pipeline-view/tests/check-pipeline-route.py` |  |
 | `tools/check-plugin-inventory.py` | `src/system/repo-gate/tests/check-plugin-inventory.py` |  |
 | `tools/check-retention.py` | `src/system/retention/tests/check-retention.py` |  |
 | `tools/check-rfq-deadline-route.py` | `src/domain/rfq-deadline/tests/check-rfq-deadline-route.py` |  |
@@ -240,17 +238,16 @@
 | `tools/export-events.py` | `src/system/evidence/tools/export-events.py` |  |
 | `tools/g1-walkthrough.py` | `src/system/repo-gate/tests/g1-walkthrough.py` |  |
 | `tools/gate-nudge.py` | `src/domain/gate-timeline/tools/gate-nudge.py` |  |
+| `tools/mail-snapshot.py` | `src/system/mail/tools/mail-snapshot.py` |  | **本批新增**（邮件域快照写入器；从被删的三域快照写入器里**只**搬出邮件那一半）
 | `tools/manual-check.py` | `src/system/repo-gate/tools/manual-check.py` |  |
 | `tools/refresh-admin-snapshot.py` | `src/system/admin/tools/refresh-admin-snapshot.py` |  |
 | `tools/refresh-agent-memory.py` | `src/system/agent-runtime/tools/refresh-agent-memory.py` |  |
 | `tools/refresh-retention-plan.py` | `src/system/retention/tools/refresh-retention-plan.py` |  |
-| `tools/refresh-ui-snapshots.py` | `src/system/webui/tools/refresh-ui-snapshots.py` |  |
 | `tools/rfq-promise.py` | `src/domain/rfq-deadline/tools/rfq-promise.py` |  |
 | `tools/storage.py` | `src/system/storage/tools/storage.py` |  |
 | `tools/ui-feedback-apply.py` | `src/system/ui-feedback/tools/ui-feedback-apply.py` |  |
 | `tools/ui-feedback-monitor.sh` | `src/system/ui-feedback/tools/ui-feedback-monitor.sh` |  |
 | `tools/ui-feedback-tick.sh` | `src/system/ui-feedback/tools/ui-feedback-tick.sh` |  |
-| `tools/ui-seed-pipeline.py` | `src/system/webui/tools/ui-seed-pipeline.py` |  |
 | `tools/userplugin-elevate.py` | `src/system/user-plugin-manager/tools/userplugin-elevate.py` |  |
 | `tools/userplugin-record.py` | `src/system/user-plugin-manager/tools/userplugin-record.py` |  |
 | `tools/v-kit.sh` | `src/system/repo-gate/tools/v-kit.sh` |  |
@@ -376,7 +373,6 @@
 | `tools/check-module-wiring.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-modules.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-negotiation.py` | `domain/negotiation` | 插件·已搬 | `tests/` |
-| `tools/check-pipeline-route.py` | `system/pipeline-view` | 插件·已搬 | `tests/` |
 | `tools/check-plugin-assets.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-plugin-inventory.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-plugin-lifecycle.py` | `system/runtime` | 插件·已搬 | `tests/` |
@@ -397,6 +393,7 @@
 | `tools/export-events.py` | `system/evidence` | 插件·已搬 | `tools/` |
 | `tools/g1-walkthrough.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/gate-nudge.py` | `domain/gate-timeline` | 插件·已搬 | `tools/` |
+| `tools/mail-snapshot.py` | `system/mail` | 插件·已搬 | `tools/` |
 | `tools/manual-check.py` | `system/repo-gate` | 插件·待搬 | `tools/` |
 | `tools/netblock.c` | `system/runtime` | 插件·已搬 | `tests/` |
 | `tools/plugin.sh` | — | 平台薄入口 | — |
@@ -405,7 +402,6 @@
 | `tools/refresh-admin-snapshot.py` | `system/admin` | 插件·已搬 | `tools/` |
 | `tools/refresh-agent-memory.py` | `system/agent-runtime` | 插件·已搬 | `tools/` |
 | `tools/refresh-retention-plan.py` | `system/retention` | 插件·已搬 | `tools/` |
-| `tools/refresh-ui-snapshots.py` | `system/webui` | 插件·已搬 | `tools/` |
 | `tools/rfq-promise.py` | `domain/rfq-deadline` | 插件·已搬 | `tools/` |
 | `tools/run.sh` | — | 平台薄入口 | — |
 | `tools/runtime.sh` | — | 平台薄入口 | — |
@@ -413,7 +409,6 @@
 | `tools/ui-feedback-apply.py` | `system/ui-feedback` | 插件·已搬 | `tools/` |
 | `tools/ui-feedback-monitor.sh` | `system/ui-feedback` | 插件·已搬 | `tools/` |
 | `tools/ui-feedback-tick.sh` | `system/ui-feedback` | 插件·已搬 | `tools/` |
-| `tools/ui-seed-pipeline.py` | `system/webui` | 插件·已搬 | `tools/` |
 | `tools/userplugin-elevate.py` | `system/user-plugin-manager` | 插件·已搬 | `tools/` |
 | `tools/userplugin-record.py` | `system/user-plugin-manager` | 插件·已搬 | `tools/` |
 | `tools/v-kit.sh` | `system/repo-gate` | 插件·已搬 | `tools/` |
@@ -430,7 +425,6 @@
 | `host/t250-approval-gate.mjs` | `system/approval` | 插件·已搬 | `tests/` |
 | `host/t250-budget-gate.mjs` | `system/budget-guard` | 插件·已搬 | `tests/` |
 | `host/t254-retention-view-gate.mjs` | `system/retention` | 插件·已搬 | `tests/` |
-| `host/t260-pipeline-gate.mjs` | `system/pipeline-view` | 插件·已搬 | `tests/` |
 | `host/t267-market-gate.mjs` | `system/market` | 插件·已搬 | `tests/` |
 | `host/t268-user-space-gate.mjs` | `system/user-plugin-manager` | 插件·已搬 | `tests/` |
 | `host/t271-admin-gate.mjs` | `system/admin` | 插件·已搬 | `tests/` |
@@ -445,6 +439,12 @@
 | `host/t285-rfq-deadline-gate.mjs` | `domain/rfq-deadline` | 插件·已搬 | `tests/` |
 | `host/t286-quote-draft-gate.mjs` | `domain/quote-prepare` | 插件·已搬 | `tests/` |
 | `host/t287-rfq-visibility-gate.mjs` | `system/projection` | 插件·已搬 | `tests/` |
+
+> 注记（本批，三域流水运维面退役）：按 `docs/design/29-webui-gui-app.md` §2 与 `AGENTS.md` 规则 12，
+> 三域流水只读运维面（`/ops/` 面板 + `/api/pipeline` + `pipeline-view` 插件 + 快照写入器 + 演示种子 + 两道门）
+> **整体退役**：`tools/check-pipeline-route.py`、`tools/refresh-ui-snapshots.py`、`tools/ui-seed-pipeline.py`、
+> `host/t260-pipeline-gate.mjs` 这 4 个**已搬**资产的旧位置与新位置**整条删除**，本节行与门内登记同步减少 4 条；
+> 同时新增 `tools/mail-snapshot.py`（邮件域快照写入器 —— 邮件域是活功能，故从被删的写入器里**只**搬出邮件那一半）。
 
 ### C. `src/quotagent/qa/checks_*.py`（46 个：平台薄入口 0 + 已搬 **46**（阶段 4.1 的 1 + `EV-173` 的 20 + `EV-174` 的 25）+ 待搬 0）
 

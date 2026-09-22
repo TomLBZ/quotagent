@@ -5,6 +5,9 @@
 本页讲**怎么用**：起服务、两条业务闭环、每个动作落到哪条账本、接口清单与已知限制、身份与会话。
 机制与规则见 `docs/design/29-webui-gui-app.md` 与 `docs/design/27-plugin-architecture.md` §6。
 
+**新人不看文档的两条路**：① 首屏「演示数据（沙盘）」一键造一组可看的流转（`包 → 报价 → 比价 → 授标 → PO`，
+真动作真账本、落沙盘目录、随时清空、真实账本零新增）→ 见 `docs/sandbox-and-demo.md`；② 面板与动作自带"下一步"。
+
 ## 0. 一条命令起服务（人类可用）
 
 ```bash
@@ -89,8 +92,12 @@ stdout.ok === true`），归属用 `receipt.item({file: staged.name, draft_id})`
 与 `writer`（每次运行的 rc、stdout 自述、`ledger_added`、逐条 files、被拒码）。`fake-failure` = 写者回执说本动作
 的行**真的落了**、响应却报失败（用户会据此重复提交，比真失败更坏）。邮箱式写者（`quote-draft.py`）的回执逐条给
 `file`/`quote_draft_id`/`line_count`（这份报价几行，单行也是 1）/`ledger_added`（**这一条**真落几行）与
-`refused`/`skipped`（不静默丢件）；**别人**的件列进 `result.writer.others`。
-复跑：`python3 tmp/fix6-verify.py`（审计表 `tmp/fix6-audit-table.json`；修前/修后对照 `python3 tmp/fix6-before-after.py`）。
+`refused`/`skipped`（不静默丢件）；**别人**的件列进 `result.others`。
+**两个邮箱式写者已按同一判据改正**：`gate.nudge`（`system/approval/code/ui.mjs`）与 `exchange.requote-now`
+（`domain/change/code/ui.mjs`）都用 `receipt.item({file: staged.name, …})` 指认**自己那一条**，别人那条（含
+"上次被拒后留在邮箱里"的件）只进 `result.others`。
+复跑：`python3 tmp/fix6-verify.py`（审计表 `tmp/fix6-audit-table.json`；修前/修后对照
+`python3 tmp/fix6-before-after.py`）· `python3 tmp/fix9-verify.py`（两个邮箱式写者的四格 + 真失败负控）。
 
 ## 6. 卸载一个注册了 UI 的插件（可撤销）
 
@@ -117,20 +124,15 @@ curl -s -X POST 'http://127.0.0.1:8093/quotagent/api/ui/plugins/domain%2Frfq/unl
    都不是账本事实。
 5. **只读调用会被合并**：`runPython(tool, args, {read:true})` 同一组 `(工具, 参数)` 一次渲染只 spawn 一次、
    `python_cache_ms` 内复用；动作/落待办件清空缓存（`QUOTAGENT_UI_PYTHON_CACHE_MS=0` 关掉）。
-6. **两个邮箱式写者的判据还是"整次运行"的（在册登记）**：`gate.nudge`（`system/approval/code/ui.mjs` 按
-   `refused[0]`/`json.ok`/全局 `ledger_added` 判）与 `exchange.requote-now`（`domain/change/code/ui.mjs` 第二步按
-   `run.ok` 判 `quote-draft.py`）—— 同一封邮箱里只要还有**别人**的（或**上一次被拒**的）件，写者就把那条的结论
-   当成整次运行的：**本动作的行真落了、响应却报失败**（机制层标成 `writer_consistency=fake-failure`；审计里 3 格
-   由它造成）。根治同 §5.1；这两处不在本批允许改动的文件里，故**登记待办**。
 
-## 8. 身份与会话 + 三个自助面（DEF-001/003/025/026）
+## 8. 身份与会话 + 自助面
 
 登录一次，之后动作身份从**会话**取（`human:<名字>`，不再手填）：`/identity/**`（0600 会话 + HttpOnly cookie）、
 `/inbox/`（五类待办，**不取墙钟**）、`/sign/`（人签；署名 ≠ 会话 ⇒ `signer-mismatch`，账本零新增）、
 `/mail/config/`（0600 待处理项 → `config-apply.py`）、`/plugins/`（自己的命名空间）。
 **逐条路由/谁能用/落到哪**见 `docs/identity-and-selfservice.md`（含 21 条路由、48 条断言的真跑命令与负控）。
 
-## 9. P3 可用性（通知 / 布局 / 键盘 / 对比 / 标签页；机制在外壳，插件只声明）
+## 9. 可用性（通知/布局/键盘/标签页）
 
 全是**外壳**机制（`assets/app.js`/`app.css`/`app-shell.mjs`），插件只声明（键见 `ui-surface.mjs` 头注释）。
 

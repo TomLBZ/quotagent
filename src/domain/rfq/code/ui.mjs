@@ -105,29 +105,42 @@ export async function register(surface, host) {
           columns: [{ key: 'quote_id', label: '报价' }], rows: [] }
       }
       const qtyIndex = itemQtyIndex(host.rows('contractor'))
-      const table = rows.map((row) => {
+      // **逐行展开**：一份报价可以有多行（`lines[]`，口径见 29 §7.5：多行报价没有"唯一那个行项目"）。
+      // 面板自述就是"每一行 = 一条（报价 × 行项目）登记"—— 多行报价却展成空 item_id/单价的一行时，
+      // 行内「提出授标意向」就没有可预填的条目/单价（手机上等于让人手抄 id 与金额）。这里按 `lines[]` 展开。
+      const table = rows.flatMap((row) => {
         const quoteId = asText(row.quote_id)
         const packageId = asText(row.package_id)
-        const itemId = asText(row.item_id)
-        const known = qtyIndex.get(`${packageId}#${itemId}`) ?? null
-        return { id: `${quoteId}#${itemId}`, quote_id: quoteId, supplier: row.supplier ?? '',
-          package_id: packageId, item_id: itemId, qty: known ? known.qty : null, unit: known ? known.unit : '',
-          qty_source: known ? known.source : '（包事实里读不到这一条的量）',
-          unit_price_cents: row.unit_price_cents, lead_time_days: row.lead_time_days,
-          submitted_at: row.submitted_at,
-          ref: { kind: 'quote', id: quoteId, title: `报价 ${quoteId}` } }
+        const lines = Array.isArray(row.lines) && row.lines.length ? row.lines
+          : [{ item_id: row.item_id, unit_price_cents: row.unit_price_cents,
+            lead_time_days: row.lead_time_days }]
+        return lines.map((line) => {
+          const itemId = asText(line.item_id ?? line.id)
+          const known = qtyIndex.get(`${packageId}#${itemId}`) ?? null
+          return { id: `${quoteId}#${itemId}`, quote_id: quoteId, supplier: row.supplier ?? '',
+            package_id: packageId, item_id: itemId, description: line.description ?? '',
+            qty: known ? known.qty : null, unit: known ? known.unit : '',
+            qty_source: known ? known.source : '（包事实里读不到这一条的量）',
+            unit_price_cents: line.unit_price_cents ?? row.unit_price_cents,
+            lead_time_days: line.lead_time_days ?? row.lead_time_days,
+            line_count: lines.length, submitted_at: row.submitted_at,
+            ref: { kind: 'quote', id: quoteId, title: `报价 ${quoteId}` } }
+        })
       })
       const missing = table.filter((row) => row.qty === null).length
       return { ok: true, kind: 'table',
         columns: [{ key: 'quote_id', label: '报价', type: 'code' }, { key: 'supplier', label: '供应商' },
           { key: 'item_id', label: '行项目', type: 'code' }, { key: 'qty', label: '数量（来自包事实）' },
           { key: 'unit', label: '单位' }, { key: 'unit_price_cents', label: '单价（整数分）' },
-          { key: 'lead_time_days', label: '交期（天）' }, { key: 'submitted_at', label: '提交时刻' },
+          { key: 'lead_time_days', label: '交期（天）' }, { key: 'line_count', label: '这份报价共几行' },
+          { key: 'submitted_at', label: '提交时刻' },
           { key: 'qty_source', label: '量的来源' }],
         rows: table, bulk: 'compare.rank',
         counts: { quotes: rows.length, lines: table.length, qty_known: table.length - missing },
-        note: '数量取自**包事实**（发布事实 / 投递快照的 `spec.items`，并按 `rfq/amended` 取最新一版）：'
-          + '行内「提出授标意向」用它把行项目补齐（量 + 整数分单价）—— 意向不产生义务，可撤回。'
+        note: '一份报价可以有多行（`lines[]`）：这里**逐行**列，行内「提出授标意向」把这一行的包/报价/条目/'
+          + '数量/单价带进表单（多行报价没有"唯一那个行项目"，所以必须逐行给入口）。'
+          + '数量取自**包事实**（发布事实 / 投递快照的 `spec.items`，并按 `rfq/amended` 取最新一版）；'
+          + '意向不产生义务，可撤回。'
           + (missing ? ` 有 ${missing} 行读不到量（数量列显示「—」）：现在提意向会被唯一写者按 \`line-qty-invalid\` 拒，`
             + '先在「包的行项目」里把这一包的条目补上（或让供应商按最新一版重报）。' : '') }
     } }))
@@ -977,6 +990,20 @@ export async function register(surface, host) {
     title: 'RFQ 包（CSV / 可打印 HTML）', views: ['contractor', 'supplier'], object_kind: 'package',
     formats: ['csv', 'html'], action: 'rfq.export', order: 14,
     hint: '逐行带来源与版本锚；HTML 那一档可以直接打印或另存 PDF' }))
+
+  // ---- **沙盘场景**（机制：`surface.scenario`，见 `ui-surface.mjs`）--------------------------------
+  // 演示流程（`demo.procurement`）的第 ① 段：**发包**。这只是"声明要按顺序跑哪个动作"，
+  // 真干活的是 `rfq.publish` 自己的服务端一半（同一张待办件、同一个唯一写者）—— 外壳不认识"包"是什么。
+  // 入参里的 `$actor` 由机制换成这一步的**演示身份**（沙盘按侧决定，不是请求随便给的署名）。
+  out.push(surface.scenario({ plugin_id: me, id: 'scenario.rfq-publish', scenario: 'demo.procurement',
+    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO', title: '① 发包（承包商发起）',
+    view: 'contractor', order: 10,
+    hint: '发一包：包 id / 条目 / 邀请 realm 都用演示值（不产生对外义务）',
+    steps: [{ action: 'rfq.publish',
+      input: { package_id: 'DEMO-PKG-001', subject: '演示：厂区给排水管道更换', currency: 'CNY',
+        quote_by: '2026-12-31T00:00:00Z', clarify_by: '2026-12-20T00:00:00Z',
+        items: 'L-001,DN100 管道,m,120\nL-002,法兰,m,40', invited: 'supplier:g1',
+        note: '沙盘演示数据（不含真实合同内容）', actor: '$actor', confirm_ack: '1' } }] }))
 
   return out
 }

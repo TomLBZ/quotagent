@@ -21,7 +21,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 
 | FR 号 | 承载体（`15` §1 实测） | 关联 AC | 验收方式（门或命令） |
 |---|---|---|---|
-| `FR-CLARIFY-004` | src/quotagent/services/faq.py | `AC-CLARIFY-004`、`AC-FAQ-001`、`AC-PIPELINE-001` | `tools/verify.sh ac AC-FAQ-001` |
+| `FR-CLARIFY-004` | src/quotagent/services/faq.py | `AC-CLARIFY-004`、`AC-FAQ-001` | `tools/verify.sh ac AC-FAQ-001` |
 
 ## 对外契约（provides / 依赖）
 

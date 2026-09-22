@@ -171,12 +171,6 @@ const STUBS = {
       privacy: { entry_bodies_included: false, private_keys_included: false } }),
     summary: () => 'stub',
   },
-  pipelineView: {
-    // fixture 的 stub：只满足"能聚合三域快照"；口径由 pipeline-view 自己的门验
-    snapshot: () => ({ views: [], totals: {}, transport: { available: false, reason: 'stub', next_action: 'stub' },
-      degraded: true, omitted_views: 0, source: 'pipeline-view' }),
-    headline: () => '（stub）',
-  },
   userPluginManager: {
     config: () => ({ root: '' }),
     needs: [],

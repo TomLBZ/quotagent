@@ -50,7 +50,7 @@ const MARKERS = [/private:/i, /\bbody\b/i, /\bsubject\b/i, /\battachment\b/i, /\
   /\bcost_model\b/i, /\bsignature\b/i, /[\u0000-\u001f\u007f]/]
 const REDACTED = '(redacted)'
 const DEGRADED_HEADLINE = '邮件状态快照不可用：不猜，队列与传输都不展示'
-const DEGRADED_NEXT_ACTION = '让 Python 侧跑 tools/refresh-ui-snapshots.py 写出 <shared>/mail.json'
+const DEGRADED_NEXT_ACTION = '让 Python 侧跑 src/system/mail/tools/mail-snapshot.py 写出 <shared>/mail.json'
 const NOTE = '队列计数与最近一次尝试来自 Python 侧快照（mail_transport 的状态文件 + mail/* 账本行）；'
   + '本视图只读文件，不联网、不发信、不写账本，也不含任何凭据值与邮件正文'
 

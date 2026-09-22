@@ -800,7 +800,6 @@ try {
   await mountReal('supplier-scorecard.mjs', {}, 'supplierScorecard', 'supplier-scorecard')
   await mountReal('approval-digest.mjs', {}, 'approvalDigest', 'approval-digest')
   await mountReal('retention-view.mjs', {}, 'retentionView', 'retention-view')
-  await mountReal('pipeline-view.mjs', {}, 'pipelineView', 'pipeline-view')
   await mountReal('admin-guard.mjs', { token_env: 'QUOTAGENT_ADMIN_TOKEN_T282' }, 'adminGuard', 'admin-guard')
   await mountReal('admin-view.mjs', { admin_snapshot: '' }, 'adminView', 'admin-view')
   await mountReal('plugin-market.mjs', { modules_dir: join(HERE, 'modules'),

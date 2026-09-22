@@ -11,8 +11,13 @@
  *     （`src/system/webui/code/ui-surface.mjs` 的贡献 + 各插件 `code/ui.mjs` 的注册）。
  *   · 一切注册可撤销（`AGENTS.md` 规则 1）：`unload()` 撤掉一个插件的**全部**贡献（视图/面板/动作/快捷键/
  *     通知源/状态项/校验器 + 它注册的旧槽位区块），页面其余部分不动。
+ *   · **沙盘（演示数据）**：本文件提供**机制** —— 按会话身份把这一侧的读/写路径整体切到一个**沙盘目录**下
+ *     （自己的账本、自己的待办件目录、自己的投递信封），再按插件声明的 `scenario` 贡献把步骤串起来跑一遍。
+ *     机制只做「路径切换 + 顺序 dispatch」，**不认识任何业务步骤**；沙盘数据随时可清空、真实账本零新增。
+ *     口径与边界见 `docs/design/29-webui-gui-app.md` §11 与 `src/system/webui/docs/sandbox-and-demo.md`。
  */
-import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, chmodSync, renameSync, writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, chmodSync, renameSync, writeFileSync,
+  rmSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { join, relative, resolve } from 'node:path'
@@ -289,6 +294,119 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    * 它可以被后补配置（会话文件 ⇒ "今天谁登录过"；合法侧 ⇒ 名册按侧分片）。
    */
   const people = createPeopleStore({ root, sharedDir, sessionsFile, sides, log: (msg) => log?.(msg) })
+  /**
+   * **沙盘（演示数据）**：同样是**机制**，不是业务语义 —— 它只做一件事：把"这一侧的读/写路径"整体切到
+   * 一个沙盘目录下（自己的账本、自己的待办件目录、自己的投递信封），于是**同一套动作、同一套唯一写者**
+   * 在沙盘里跑出来的就是一份可看的真实流转，而**真实账本零新增**。
+   *
+   * 口径（判据都在这里）：
+   *   · 状态落 `<ui_shared>/sandbox/state.json`（目录 0700 / 文件 **0600**、原子写、有界：身份 ≤ 32 条），
+   *     按**会话身份**分条：`{<human>: {on, actors:{<side>: <演示身份名>}, seeded_at, scenario}}`。
+   *   · 沙盘目录 `<ui_shared>/sandbox/<human 安全化>/`，里面有 `contractor|supplier/ledger.jsonl`、
+   *     `<side>/`（待办件）、投递信封；**清空 = 删掉这个目录 + 关掉这一条的 `on`**。
+   *   · 打开时 `host.config.ledger_*` / `host.sharedDir` / `host.rows()` **全部**解析到沙盘路径 ——
+   *     不是"过滤掉真实数据"，而是**根本没有第二条路径**（写者的 `--ledger` 也来自同一处，所以写也只进沙盘）。
+   *   · 它**不是第二条事实写路径**：动作仍走同一个动作总线、同一批唯一写者、同一张待办件目录形状；
+   *     只是目录与账本路径换成了沙盘那一份。
+   *   · 沙盘里的**人签**由机制生成并固定的**演示身份**发起（`actors[side]`）——外壳在跑场景时把这一步的
+   *     身份替换成它；**真实面上这条替换不存在**（HTTP 请求仍只认会话身份，`signer-mismatch` 一字未改）。
+   *   · 边界（如实登记，不假装）：名册/协作面（`people`/`collab` 的存储）与附件存储仍指向真实目录 ——
+   *     演示场景不使用它们；沙盘动作也**不允许**改角色或传附件。
+   */
+  const SANDBOX_SCHEMA = 'quotagent/webui-sandbox/v1'
+  const SANDBOX_MAX_ACTORS = 32
+  const sandboxStateFile = join(sharedDir, 'sandbox', 'state.json')
+  const safeName = (value) => String(value ?? '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 48) || 'unknown'
+  const sandboxReadState = () => {
+    try {
+      const doc = JSON.parse(readFileSync(sandboxStateFile, 'utf8'))
+      return doc && typeof doc === 'object' && doc.actors && typeof doc.actors === 'object' ? doc : null
+    } catch (err) { return null }
+  }
+  const sandboxWriteState = (doc) => {
+    try {
+      const dir = join(sharedDir, 'sandbox')
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+      try { chmodSync(dir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
+      const tmp = join(dir, `.state.json.${process.pid}.tmp`)
+      writeFileSync(tmp, JSON.stringify(doc, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
+      chmodSync(tmp, 0o600)
+      renameSync(tmp, sandboxStateFile)
+      return { ok: true, file: sandboxStateFile }
+    } catch (err) {
+      return { ok: false, code: 'sandbox-state-write-failed', reason: flat(err),
+        next_action: '先修 <ui_shared>/sandbox/ 的权限（机制只落 0600）' }
+    }
+  }
+  /** 某条沙盘状态（`on` 才有效）；没有这条 ⇒ 一个"关着的"空状态（**不写盘**）。 */
+  const sandboxEntry = (human) => {
+    const name = String(human ?? '')
+    if (name === '') return null
+    const doc = sandboxReadState()
+    const entry = doc?.actors?.[name]
+    if (!entry || entry.on !== true) return null
+    return { on: true, human: name, owner: name, dir: sandboxDirFor(name),
+      actors: entry.actors && typeof entry.actors === 'object' ? entry.actors : {},
+      seeded_at: entry.seeded_at ?? '', scenario: entry.scenario ?? '' }
+  }
+  const sandboxDirFor = (human) => join(sharedDir, 'sandbox', safeName(human))
+  /** 沙盘里两侧的路径（账本 / 待办件 / 投递信封）：**全部**在沙盘目录里，真实面一个字节都不碰。 */
+  const sandboxPaths = (dir) => ({
+    contractor: join(dir, 'contractor', 'ledger.jsonl'),
+    supplier: join(dir, 'supplier', 'ledger.jsonl'),
+    delivery: join(dir, 'contractor', '01-package.json') })
+  /** 沙盘里的**有效配置**：账本与投递信封换成沙盘那一份（插件读 `host.config` 就自动跟着走）。 */
+  const sandboxConfig = (dir) => ({ ...config, ui_shared: dir,
+    ledger_contractor: sandboxPaths(dir).contractor, ledger_supplier: sandboxPaths(dir).supplier,
+    rfq_delivery: sandboxPaths(dir).delivery })
+  /** 读取沙盘账本行（沙盘账本与真实账本是**同一形状的 JSONL**：同一批写者写的）。 */
+  const sandboxRows = (dir, view) => {
+    const paths = sandboxPaths(dir)
+    const file = view === 'supplier' ? paths.supplier : (view === 'contractor' ? paths.contractor : '')
+    if (file === '' || !existsSync(file)) return []
+    try {
+      return readFileSync(file, 'utf8').split('\n').filter((line) => line.trim() !== '')
+        .map((line) => { try { return JSON.parse(line) } catch (err) { return null } }).filter(Boolean)
+    } catch (err) { return [] }
+  }
+  /**
+   * 一次请求的沙盘作用域（栈，与 `renderScopes`/`actionScopes` 同一套机制）：**入口处压栈、出口弹栈**。
+   * 这样 `host.config`/`host.sharedDir`/`host.rows()`/`stage()`/`runPython()` 在整条调用链上解析到同一份路径。
+   */
+  const sandboxScopes = []
+  const currentSandbox = () => (sandboxScopes.length ? sandboxScopes[sandboxScopes.length - 1] : null)
+  const humanOf = (who) => (typeof who === 'string' ? who : String(who?.human ?? ''))
+  /** 压一个沙盘作用域（`entry` 的形状见 `sandboxEntry`）；`fn` 里的一切路径解析都跟着它走。
+   *  `fn` 可能返回 Promise（动作的服务端一半是 async）⇒ 弹栈要等它 settle，否则 await 之后作用域就没了。 */
+  const withSandboxEntry = (entry, fn) => {
+    sandboxScopes.push(entry)
+    const pop = () => { const at = sandboxScopes.lastIndexOf(entry)
+      if (at >= 0) sandboxScopes.splice(at, 1) }
+    let out
+    try { out = fn() } catch (err) { pop(); throw err }
+    if (out && typeof out.then === 'function') {
+      return out.then((value) => { pop(); return value }, (err) => { pop(); throw err })
+    }
+    pop()
+    return out
+  }
+  const withSandbox = (who, fn) => {
+    const entry = sandboxEntry(humanOf(who))
+    return entry ? withSandboxEntry(entry, fn) : fn()
+  }
+  /** 同一次沙盘、换个**演示身份**跑（场景里的 `as`）：目录不变，只有 `ctx.identity` 与署名变。 */
+  const withSandboxActor = (actorHuman, fn) => {
+    const entry = currentSandbox()
+    if (!entry) return fn()
+    return withSandboxEntry({ ...entry, actor: actorHuman }, fn)
+  }
+  /** 本次调用的**有效路径与配置**：沙盘打开 ⇒ 全是沙盘那一份；否则就是真实那一份。 */
+  const effective = () => {
+    const entry = currentSandbox()
+    if (!entry) return { on: false, dir: sharedDir, config, actors: {}, human: '' }
+    return { on: true, dir: entry.dir, human: entry.owner, actor: entry.actor ?? entry.owner,
+      actors: entry.actors, config: sandboxConfig(entry.dir) }
+  }
   const pythonBin = DEFAULT_PYTHON
   const contributions = new Map()        // plugin_id → {module, file, entries: [{kind,id}], error}
   const actionLog = []                   // 机制层动作流水（通知中心用；有界）
@@ -436,7 +554,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 
   /** 落一条 0600 待办件（**宿主唯一的写面**；账本零新增，落账本归 Python 侧）。 */
   const stage = (kind, record, { name: wantedName } = {}) => {
-    const dir = join(sharedDir, kind)
+    const dir = join(effective().dir, kind)
     const payload = { schema: PENDING_SCHEMA, kind, ...record, submitted_at: '' }
     payload.bytes = Buffer.byteLength(String(payload.note ?? ''), 'utf8')
     payload.payload_sha256 = digestOf(canonical(payload))
@@ -469,7 +587,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const readJson = (path) => {
     try { return JSON.parse(readFileSync(resolve(root, path), 'utf8')) } catch (err) { return null }
   }
-  const sharedFile = (name) => join(sharedDir, name)
+  const sharedFile = (name) => join(effective().dir, name)
 
   /** 机制级的**内存便签**（`plugin_id` 作用域）：贡献可以记住"这次用哪组参数"，面板再读回来。
    *  它是纯机制（键值），随进程生灭、不落盘、不进账本；卸载插件时清空它的键。 */
@@ -482,9 +600,26 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 
   /** 插件贡献拿到的**机制上下文**：只有通用能力，没有任何业务语义。 */
   const host = {
-    prefix, config, root, views, sharedDir, now: () => new Date().toISOString(),
-    rows: (view) => (typeof rowsOf === 'function' ? rowsOf(view) : []),
-    publicRows: (view) => (typeof publicRowsOf === 'function' ? publicRowsOf(view) : []),
+    prefix, root, views,
+    /** **有效配置**：沙盘打开时 `ledger_*`/`rfq_delivery`/`ui_shared` 全部指向沙盘那一份（见上面沙盘段落）。 */
+    get config() { return effective().config },
+    /** **有效待办件目录**（沙盘打开时是沙盘目录）：`host.stage()` 与它同源。 */
+    get sharedDir() { return effective().dir },
+    /** 本次身份是否在沙盘里（插件可以据此在界面上如实标注"这是演示数据"）。 */
+    get sandbox() { const state = effective(); return { on: state.on, actors: state.actors,
+      human: state.human, dir: state.on ? state.dir : '' } },
+    now: () => new Date().toISOString(),
+    /** 本视角的账本行：沙盘打开时读**沙盘账本**（同一形状的 JSONL，同一批写者写的）。 */
+    rows: (view) => {
+      const state = effective()
+      if (state.on) return sandboxRows(state.dir, view)
+      return typeof rowsOf === 'function' ? rowsOf(view) : []
+    },
+    publicRows: (view) => {
+      const state = effective()
+      if (state.on) return sandboxRows(state.dir, view)
+      return typeof publicRowsOf === 'function' ? publicRowsOf(view) : []
+    },
     runPython, stage, readJson, sharedFile,
     /**
      * **写者回执的单一判据**（插件用它派生 `ok`/`code`/`ledger_added`/`next_action`；见 `writerReceipt`）：
@@ -812,7 +947,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    * 且 `ctx.route` 带上 `kind/id` 供插件渲染那一个对象；没声明过该对象类 ⇒ 返回空数组（调用方报未命中）。
    * `who` = 本次请求的会话（可选；插件从 `ctx.identity` 拿"同侧人类之间"的协作身份与侧）。
    */
-  const panelsOf = (view, route = {}, who = null) => {
+  const panelsOf = (view, route = {}, who = null) => withSandbox(who, () => {
     const normalized = normRoute({ ...route, view })
     const picked = normalized.kind === '' ? surface.panelsFor(view, '')
       : surface.panelsFor(view, normalized.kind)
@@ -861,7 +996,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
           next_action: '修面板的 data()（抛错不静默吞：这块不渲染，页面其余部分照常）' }
       }
     }).sort((left, right) => (left.order - right.order) || (left.id < right.id ? -1 : 1)))
-  }
+  })
 
   /**
    * **对象页的整份数据**（`GET /api/ui/object?view=&kind=&id=`）：外壳只做机制 —— 找出"谁负责这个对象类"、
@@ -921,7 +1056,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const normTags = (value) => (Array.isArray(value) ? value.map((item) => String(item ?? '').trim())
     .filter((item) => item !== '').slice(0, 6).map((item) => item.slice(0, 24)) : [])
 
-  const notifications = (who = null) => withRenderScope(() => {
+  const notifications = (who = null) => withSandbox(who, () => withRenderScope(() => {
     const items = []
     for (const source of surface.byKind('notification-source')) {
       try {
@@ -950,9 +1085,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       items.push({ ...entry, ref: normRef(entry.ref) })
     }
     return items.slice(0, 200)
-  })
+  }))
 
-  const statusItems = (who = null) => withRenderScope(() => {
+  const statusItems = (who = null) => withSandbox(who, () => withRenderScope(() => {
     const out = []
     for (const item of surface.byKind('status-item')) {
       try {
@@ -972,7 +1107,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       text: `进程 ${ioStats.spawns} 次（只读 ${ioStats.read_spawns}）· 只读命中缓存 ${ioStats.read_hits} 次`
         + ` · 缓存窗口 ${readCacheTtlMs}ms` })
     return out
-  })
+  }))
 
   // ------------------------------------------------------------------ 动作：校验 → 插件的服务端一半
   /** 字段级校验（与服务端声明同源；客户端只是提前一步给同样的错误）。 */
@@ -1029,7 +1164,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     return errors
   }
 
-  const runAction = async (actionId, request, who = null) => {
+  const runAction = async (actionId, request, who = null) => withSandbox(who, () => runActionInner(actionId, request, who))
+
+  const runActionInner = async (actionId, request, who = null) => {
     const action = surface.findAction(actionId)
     if (!action) {
       return { ok: false, code: 'unknown-action', reason: `注册面里没有动作 ${actionId}`,
@@ -1116,6 +1253,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     // 协作面（外壳自带）：撤掉它的贡献时把机制侧的账也清干净（否则再 load 会说"已经装着"）
     if (pluginId === COLLAB_PLUGIN_ID) collabSurface.dispose()
     if (pluginId === PEOPLE_PLUGIN_ID) peopleSurface.dispose()
+    // 沙盘是**外壳机制**（不是业务插件）：它的面板/动作可以被撤，但机制本身不能卸载 —— 撤完立刻重建，
+    // 免得"演示数据"入口被一次误卸载永久干掉（清空沙盘的动作也在这里面）。
+    const sandboxWas = pluginId === SANDBOX_PLUGIN_ID
     const removed = surface.disposePlugin(pluginId)
     const slotRows = []
     if (slots && typeof slots.describe === 'function') {
@@ -1127,6 +1267,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     }
     contributions.set(pluginId, { entries: [], unloaded: true, file: fileOf(pluginId) })
     noteStore.drop(pluginId)
+    if (sandboxWas) syncSandbox()
     clearReadCache()
     const payload = { ok: true, plugin_id: pluginId, removed: [...removed.removed, ...slotRows],
       count: removed.count + slotRows.length,
@@ -1135,6 +1276,243 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     say(`卸载贡献：${pluginId}（移除 ${payload.count} 项）`)
     return payload
   }
+
+  // ------------------------------------------------------------------ 沙盘：机制贡献 + 场景 runner
+  /**
+   * **沙盘机制贡献**（`system/webui-sandbox`）：一块状态面板 + 两个动作（造 / 清）。
+   * 与协作面、名册面同构 —— 它是**外壳自带的机制贡献**（`surface.scenario` 由插件声明，外壳只串联与 dispatch）。
+   */
+  const SANDBOX_PLUGIN_ID = 'system/webui-sandbox'
+  const SANDBOX_DEMO_ACTOR = (side) => `demo-${safeSide(side)}`
+  function safeSide(side) { return String(side ?? '').replace(/[^a-z0-9-]/g, '').slice(0, 16) || 'side' }
+
+  const sandboxStateFor = (human) => {
+    const doc = sandboxReadState() ?? { schema: SANDBOX_SCHEMA, actors: {}, updated_at: '' }
+    return { doc, entry: doc.actors?.[human] ?? null }
+  }
+  /** 打开/更新某身份的沙盘（幂等）；有界（超过 32 条时丢掉最旧的几条）。 */
+  const sandboxOpen = ({ human, actors, scenario }) => {
+    const { doc } = sandboxStateFor(human)
+    doc.schema = SANDBOX_SCHEMA
+    doc.actors = doc.actors ?? {}
+    doc.actors[human] = { on: true, actors, scenario, seeded_at: doc.actors[human]?.seeded_at ?? '' }
+    const keys = Object.keys(doc.actors)
+    if (keys.length > SANDBOX_MAX_ACTORS) for (const key of keys.slice(0, keys.length - SANDBOX_MAX_ACTORS))
+      delete doc.actors[key]
+    doc.updated_at = new Date().toISOString()
+    return sandboxWriteState(doc)
+  }
+  const sandboxClose = (human) => {
+    const { doc } = sandboxStateFor(human)
+    doc.schema = SANDBOX_SCHEMA
+    doc.actors = doc.actors ?? {}
+    doc.actors[human] = { ...(doc.actors[human] ?? { actors: {} }), on: false }
+    doc.updated_at = new Date().toISOString()
+    return sandboxWriteState(doc)
+  }
+  /** **清空**：删掉这个身份的沙盘目录（账本/待办件/信封一起走）+ 关掉 `on`。真实面从不触碰。 */
+  const sandboxWipe = (human) => {
+    const dir = sandboxDirFor(human)
+    const existed = existsSync(dir)
+    try { rmSync(dir, { recursive: true, force: true }) } catch (err) {
+      return { ok: false, code: 'sandbox-wipe-failed', reason: flat(err),
+        next_action: '先修 <ui_shared>/sandbox/ 的权限（清空只删沙盘目录，不碰真实账本）' }
+    }
+    const closed = sandboxClose(human)
+    return { ok: closed.ok !== false, dir, removed: existed }
+  }
+  /** 值里的令牌：`$actor` = 这一步的演示身份；`$last.<点分路径>` = 上一步回执 `result` 里的值；
+   * `$cap.<名字>.<点分路径>` = 更早某一步（声明了 `capture`）的回执 `result` 里的值。 */
+  const deref = (value, { actor, last, caps }) => {
+    const walk = (source, path) => {
+      let cursor = source
+      for (const key of path.split('.')) {
+        if (cursor === null || cursor === undefined) return null
+        cursor = cursor[/^\d+$/.test(key) ? Number(key) : key]
+      }
+      return cursor === undefined ? null : cursor
+    }
+    if (typeof value === 'string') {
+      if (value === '$actor') return `human:${actor}`
+      if (value.startsWith('$last.')) return walk(last, value.slice(6))
+      if (value.startsWith('$cap.')) {
+        const rest = value.slice(5)
+        const dot = rest.indexOf('.')
+        const name = dot < 0 ? rest : rest.slice(0, dot)
+        return walk(caps[name] ?? null, dot < 0 ? '' : rest.slice(dot + 1))
+      }
+      return value
+    }
+    if (Array.isArray(value)) return value.map((item) => deref(item, { actor, last, caps }))
+    if (value && typeof value === 'object') {
+      const out = {}
+      for (const [key, item] of Object.entries(value)) out[key] = deref(item, { actor, last, caps })
+      return out
+    }
+    return value
+  }
+  /**
+   * 跑一条**沙盘场景**：按声明顺序 dispatch 到**同一个动作总线**（同一批唯一写者、同一张待办件形状）。
+   * 每一步都带自己的 `view` 与演示身份；`$last` 取上一步回执 ⇒ 步骤之间不必手抄 id。
+   */
+  const runScenario = async ({ scenario, who, skip = [] }) => {
+    const group = surface.scenarios().find((item) => item.scenario === scenario)
+    if (!group) {
+      return { ok: false, code: 'unknown-scenario', reason: `没有插件声明场景 ${scenario}`,
+        next_action: '场景由插件声明（`surface.scenario({scenario:"…", steps:[{action:"…"}]})`）：先确认该插件已装载' }
+    }
+    const sessionSide = String(who?.side ?? '')
+    const owner = humanOf(who)
+    const actors = {}
+    for (const side of new Set([sessionSide, ...group.steps.map((step) => step.as?.side).filter(Boolean)]).values())
+      if (side !== '') actors[side] = side === sessionSide ? String(who?.human ?? '') : SANDBOX_DEMO_ACTOR(side)
+    const opened = sandboxOpen({ human: owner, actors, scenario })
+    if (opened.ok === false) return { ...opened, ledger_added: 0, steps: [] }
+    // 关键：**从这里开始整条链路都在沙盘作用域里**（`runScenario` 自己压栈，不依赖 HTTP 入口那一层）——
+    // 否则步骤里的 `host.config.ledger_*` / `host.sharedDir` 还是真实路径，演示数据就写进真实账本了。
+    const entry = { on: true, owner, dir: sandboxDirFor(owner), actors, actor: owner }
+    return withSandboxEntry(entry, async () => {
+      const done = []
+      const caps = {}
+      let last = null
+      for (const step of group.steps) {
+        if (skip.includes(step.action)) { done.push({ action: step.action, skipped: true }); continue }
+        const actorSide = step.as?.side ?? sessionSide
+        const actor = actors[actorSide] || String(who?.human ?? '')
+        const input = deref(step.input ?? {}, { actor, last, caps })
+        /* eslint-disable no-await-in-loop */
+        const out = await withSandboxActor(actor, () => runActionInner(step.action,
+          { view: step.view || actorSide, input }, { human: actor, side: actorSide }))
+        done.push({ action: step.action, declared_by: step.declared_by, as: actor, view: step.view || actorSide,
+          ok: out?.ok === true, code: out?.code ?? null, reason: out?.reason ?? null,
+          content: out?.content ?? null, next_action: out?.next_action ?? null,
+          optional: step.optional === true,
+          ledger_added: Number(out?.writer?.rows_written ?? 0) })
+        last = out?.result ?? null
+        if (step.capture) caps[step.capture] = last ?? {}
+        if (out?.ok !== true && step.optional !== true) break
+      }
+      const failed = done.find((item) => item.ok === false && !item.optional) ?? null
+      const optionalFailed = done.filter((item) => item.ok === false && item.optional)
+      const { doc } = sandboxStateFor(owner)
+      doc.actors[owner] = { ...(doc.actors[owner] ?? {}), on: true, actors, scenario,
+        seeded_at: new Date().toISOString() }
+      sandboxWriteState(doc)
+      clearReadCache()
+      return { ok: failed === null, code: failed ? (failed.code ?? 'step-failed') : 'sandbox-seeded',
+        reason: failed ? `第 ${done.indexOf(failed) + 1} 步（${failed.action}）失败：${failed.reason ?? ''}` : '',
+        steps: done, actors, scenario, sandbox_dir: sandboxDirFor(owner),
+        optional_failures: optionalFailed.map((item) => ({ action: item.action, code: item.code,
+          reason: item.reason })),
+        ledger_added: done.reduce((sum, item) => sum + (item.ledger_added || 0), 0),
+        next_action: failed ? `按上面的原因修这一步的入参/前置事实后重跑；沙盘数据可以「清空沙盘」从零再来`
+          : ('沙盘已就绪：切到「供应商」看报价、切回「承包商」看比价/授标/PO —— 这些都是**演示数据**，'
+            + '真实账本零新增；看完点「清空沙盘」一键回到真实面'
+            + (optionalFailed.length ? `（有 ${optionalFailed.length} 步是可选项、这次没成，'
+              + '回执里列了原因：${optionalFailed.map((item) => `${item.action}:${item.code}`).join('、')}）` : '')) }
+    })
+  }
+
+  const sandboxDescribe = (human) => {
+    const entry = sandboxEntry(human)
+    const groups = surface.scenarios()
+    return { on: Boolean(entry), owner: human, actors: entry?.actors ?? {},
+      seeded_at: entry?.seeded_at ?? '', scenario: entry?.scenario ?? '', dir: entry?.dir ?? '',
+      state_file: sandboxStateFile, scenarios: groups.map((group) => ({ scenario: group.scenario,
+        title: group.title, hint: group.hint, step_count: group.step_count,
+        steps: group.steps.map((step) => ({ action: step.action, as: step.as?.side ?? '', view: step.view,
+          declared_by: step.declared_by, optional: step.optional === true, note: step.note })),
+        contributors: group.contributors })) }
+  }
+
+  const syncSandbox = () => {
+    const panelFor = (view, order, title) => surface.panel({ plugin_id: SANDBOX_PLUGIN_ID,
+      id: `sandbox.${view}`, title, view, order, kind: 'list',
+      hint: '沙盘把这一侧的读/写路径整体切到 <ui_shared>/sandbox/<你的名字>/：'
+        + '账本、待办件、投递信封全是沙盘自己那一份 —— 真实账本零新增，看完一键清空',
+      data: (ctx) => {
+        const who = String(ctx?.identity?.human ?? '')
+        const info = sandboxDescribe(who)
+        const items = []
+        items.push({ level: info.on ? 'ok' : 'info',
+          title: info.on ? `沙盘已打开（${info.scenarios.length} 条可用场景）` : '沙盘未打开（你现在看的是真实数据）',
+          body: info.on ? `沙盘目录：${info.dir}｜演示身份：${Object.entries(info.actors)
+            .map(([side, name]) => `${side}=${name}`).join('、')}` : '点下面的按钮造一组演示数据'
+            + '（包 → 报价 → 比价 → 授标 → PO）：它是真流转、真账本事件，只是落在沙盘目录里',
+          next_action: !who ? `先登录（沙盘按会话身份分条存放，谁造的谁清）：${prefix}/identity/?next=${prefix}/`
+            : (info.on ? '切到另一个视角看对面的那一半；看完「清空沙盘」回到真实面'
+              : '点「造一组演示数据」（会再确认一次），几秒后就能看到一整条流转') })
+        for (const group of info.scenarios) {
+          items.push({ level: 'info', title: `${group.title}（${group.step_count} 步）`,
+            body: group.steps.map((step, index) => `${index + 1}. ${step.action}`
+              + (step.as ? `（${step.as} 侧）` : '')).join(' → '),
+            next_action: group.hint || '这一步会按顺序真的跑一遍（写者照旧落账，只是落在沙盘里）',
+            action: 'sandbox.seed', label: '造一组演示数据',
+            preset: { scenario: group.scenario } })
+        }
+        if (!info.scenarios.length) {
+          items.push({ level: 'warn', title: '还没有插件声明演示场景',
+            body: '场景由插件自己声明（`surface.scenario({scenario, steps})`）——没有声明就没有可造的演示',
+            next_action: '装载/重载声明了场景的插件（顶栏「插件」）' })
+        }
+        if (info.on) items.push({ level: 'warn', title: '清空沙盘（回真实面）',
+          body: `删掉 ${info.dir} 并关掉沙盘；真实账本一个字节都没动过`,
+          next_action: '随时可以再来一次（造一组新的）', action: 'sandbox.clear', label: '清空沙盘' })
+        return { ok: true, kind: 'list', items, degraded: false, counts: { scenarios: info.scenarios.length },
+          note: '沙盘 = 演示数据：数据走**同一套动作与唯一写者**，只是路径在沙盘目录里；'
+            + '它不写真实账本、不改真实待办件；名册/协作/附件仍是真实面（演示场景不用它们）' }
+      } })
+    const out = []
+    out.push(panelFor('home', -98, '演示数据（沙盘）· 一键造一组可看的流转'))
+    for (const view of views) if (view !== 'home') out.push(panelFor(view, 98, '演示数据（沙盘）· 造 / 清'))
+    out.push(surface.action({ plugin_id: SANDBOX_PLUGIN_ID, id: 'sandbox.seed', title: '造一组演示数据（沙盘）',
+      views: ['home', 'contractor', 'supplier'], group: '沙盘', icon: '✨', confirm: { required: true,
+        message: '在**沙盘目录**里用同一套动作跑一遍演示流程（真实账本零新增）。确认造吗？' },
+      input: { fields: [{ name: 'scenario', label: '场景', type: 'text', required: false,
+        help: '留空 = 第一条可用场景（见「演示数据（沙盘）」面板）' }] },
+      hint: '沙盘：把这一侧的读/写路径切到 <ui_shared>/sandbox/<你>/，再按插件声明的步骤顺序跑一遍；'
+        + '人签用机制生成的演示身份（真实面上这条替换不存在）',
+      server: async (ctx, input) => {
+        const who = ctx.identity
+        if (!who || !who.human) {
+          return { ok: false, code: 'identity-required', ledger_added: 0,
+            reason: '沙盘按**会话身份**分条存放（谁造的谁清），未登录时不知道要放哪一份',
+            next_action: `先去 ${prefix}/identity/?next=${prefix}/ 登录（一个名字 + 属于哪一侧），再回来点这个按钮` }
+        }
+        const list = surface.scenarios()
+        const wanted = String(input.scenario ?? '').trim() || list[0]?.scenario || ''
+        const out = await runScenario({ scenario: wanted, who })
+        return { ok: out.ok, code: out.code, reason: out.reason, next_action: out.next_action,
+          ledger_added: out.ledger_added ?? 0,
+          result: { sandbox: { on: true, dir: out.sandbox_dir, actors: out.actors, scenario: out.scenario },
+            steps: out.steps ?? [], note: out.ok
+              ? '这些是**演示数据**（沙盘账本）：真实账本零新增；顶栏会显示「沙盘」标记'
+              : '中途失败：沙盘里的东西照旧留着，可以「清空沙盘」从零再来' } }
+      } }))
+    out.push(surface.action({ plugin_id: SANDBOX_PLUGIN_ID, id: 'sandbox.clear', title: '清空沙盘（回真实面）',
+      views: ['home', 'contractor', 'supplier'], group: '沙盘', icon: '🧹',
+      confirm: { required: true, message: '删掉沙盘目录（演示账本 + 待办件 + 信封）并关掉沙盘？真实账本不受影响。' },
+      input: { fields: [] },
+      hint: '只删 <ui_shared>/sandbox/<你的名字>/，并把沙盘关掉；真实账本、真实待办件一个字节都不动',
+      server: (ctx) => {
+        const who = ctx.identity
+        if (!who || !who.human) {
+          return { ok: false, code: 'identity-required', ledger_added: 0,
+            reason: '沙盘按会话身份分条存放：未登录时没有可清的沙盘',
+            next_action: '先登录（沙盘只清你自己那一份）' }
+        }
+        const before = sandboxEntry(who.human)
+        const out = sandboxWipe(who.human)
+        clearReadCache()
+        return { ok: out.ok, code: out.ok ? 'sandbox-cleared' : out.code, reason: out.reason ?? '',
+          next_action: out.ok ? '已经回到真实面：面板/状态栏/账本读数又都是真实那一份了（随时可以再造一次）'
+            : out.next_action, ledger_added: 0,
+          result: { sandbox: { on: false }, removed_dir: out.dir, existed: out.removed,
+            was_open: Boolean(before), note: '清空只发生在沙盘目录里；真实账本零新增、零改动' } }
+      } }))
+    return out
+  }
+  const sandboxContributions = syncSandbox()
 
   // ------------------------------------------------------------------ 外壳 HTML（单页应用；脚本只来自本服务）
   const shellHtml = (route) => {
@@ -1155,11 +1533,11 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 <script type="application/json" id="q-boot">${initial}</script>
 </head><body>
 <div id="q-app">
-  <header class="q-top" id="q-top"></header>
+  <header class="q-top" id="q-top" role="banner"></header>
   <nav class="q-tabs" id="q-tabs" aria-label="打开的标签页"></nav>
   <div class="q-banners" id="q-banners" aria-live="polite"></div>
-  <main class="q-main" id="q-view" tabindex="-1"></main>
-  <footer class="q-status" id="q-status"></footer>
+  <main class="q-main" id="q-view" role="main" aria-label="主内容" tabindex="-1"></main>
+  <footer class="q-status" id="q-status" role="contentinfo" aria-label="状态栏"></footer>
 </div>
 <div class="q-toasts" id="q-toasts" aria-live="polite"></div>
 <noscript><p>本页需要 JavaScript 才能渲染注册面（面板/动作/通知）。无脚本回退导航：</p></noscript>
@@ -1222,6 +1600,19 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       panels: peopleSurface.panelCount, plugin_id: PEOPLE_PLUGIN_ID,
       http: { roster: `${prefix}/api/people/roster`, suggest: `${prefix}/api/people/suggest`,
         store: `${prefix}/api/people/store` } },
+    // **沙盘 / 演示数据**（机制）：谁能造一组可看的流转、步骤由谁声明、数据落在哪、怎么清。
+    sandbox: { plugin_id: SANDBOX_PLUGIN_ID, state_file: sandboxStateFile,
+      dir: join(sharedDir, 'sandbox'), on: sandboxScopes.length > 0,
+      max_actors: SANDBOX_MAX_ACTORS, schema: SANDBOX_SCHEMA,
+      actors: surface.scenarios().length, contributions: sandboxContributions.filter((item) => item.ok !== false)
+        .map((item) => ({ kind: item.kind, id: item.id })),
+      scenarios: surface.scenarios().map((group) => ({ scenario: group.scenario, title: group.title,
+        step_count: group.step_count, contributors: group.contributors.map((item) => item.plugin_id),
+        steps: group.steps.map((step) => ({ action: step.action, as: step.as?.side ?? '',
+          view: step.view, declared_by: step.plugin_id, optional: step.optional === true })) })),
+      why_not_ledger: '沙盘账本在 <ui_shared>/sandbox/<身份>/ 下：它**是**账本事件（同一批写者写的），'
+        + '但不是真实账本那一份；清空 = 删目录，真实账本零新增',
+      http: { note: '沙盘没有独立路由：入口是 `sandbox.seed` / `sandbox.clear` 两个动作（走同一个动作总线）' } },
     plugins: [...contributions.entries()].map(([plugin_id, info]) => ({ plugin_id,
       entries: info.entries ?? [], error: info.error ?? null, unloaded: info.unloaded === true })),
     next_action: '动作一律 POST ' + `${prefix}/api/action/<id>` + '（含 JSON 入参）；'
@@ -1235,5 +1626,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     collab, collabSurface, syncCollab, configureCollab, collabPluginId: COLLAB_PLUGIN_ID,
     // **人员名册与角色**（机制）：HTTP 路由按会话身份拿侧；`collab` 的候选名单也从它来。
     people, peopleSurface, syncPeople, configurePeople, peoplePluginId: PEOPLE_PLUGIN_ID,
+    // **沙盘 / 演示数据**（机制）：场景由插件声明、外壳只串联；清空只删沙盘目录。
+    sandbox: { describe: sandboxDescribe, run: runScenario, clear: (human) => sandboxWipe(human),
+      entry: (human) => sandboxEntry(human), pluginId: SANDBOX_PLUGIN_ID, stateFile: sandboxStateFile },
     get contributions() { return contributions } }
 }

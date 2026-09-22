@@ -31,11 +31,11 @@ import { createIdentity } from './identity.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环 / 决策建议 / 审批与变更时间线 / 授权区间 / RFQ 回文时限）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环 / 决策建议 / 审批与变更时间线 / 授权区间 / RFQ 回文时限）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare']
 
 export const provides = ['webui', 'uiSlots']    // `uiSlots` = 注入式 UI 的注册面（机制；不含业务语义）
 
@@ -50,7 +50,6 @@ export const Config = object({
   ledger_supplier: string().default(''),
   ledger_evolve: string().default(''),   // 自进化账本（运维视角读它的**归纳**，不出正文）
   retention_plan: string().default(''),  // 留存计划的**绝对路径**（生产 cwd≠仓库根，相对路径会读不到）
-  pipeline_snapshot: string().default(''),  // 三域快照的**绝对路径**（同上）
   admin_snapshot: string().default(''),     // 系统管理快照（阻塞/进度）的**绝对路径**（同上）
   admin_inbox: string().default(''),        // 待处理提交目录（宿主写这里；Only Python 消费，账号不写账本）
   ui_shared: string().default('tmp/ui-shared'),  // 宿主侧共享目录（`gate-nudges/` = 催办待办件；与 ui-feedback 同口径）
@@ -116,7 +115,7 @@ const LIMIT_CHOICES = [10, 20, 50, 200]
 const GET_ONLY_PATTERNS = [
   /^\/?$/,                                                     // 工作台首屏（GUI 外壳）
   /^\/start\/?$/,
-  /^\/api\/(health|status|obs|ops|mail|pipeline|retention|routes|ui-feedback|ui\/blocks)\/?$/,
+  /^\/api\/(health|status|obs|ops|mail|retention|routes|ui-feedback|ui\/blocks)\/?$/,
   /^\/api\/ui\/(surface|panels|notifications|status|object|plugins)\/?$/,   // GUI 外壳：注册面自述 / 面板数据 / 通知 / 状态 / **对象页** / 插件清单
   // **只读**自述/查询路由：协作面与名册面（`side` 一律取会话）。它们必须在**任何处理器之前**按方法判据
   // 拒绝非 GET（否则会先撞上处理器里的身份校验 ⇒ 返回 401 而不是 405 + `Allow: GET`）。
@@ -189,7 +188,7 @@ export const AUTH_BUSINESS = 'identity-session'
 export const BUSINESS_SIDES = ['contractor', 'supplier']
 
 /** ops / admin 两道的道内导航（本步不新增子路由，用**页内锚点**：一跳可达这件事本身保留）。 */
-const OPS_SECTIONS = [['runtime', '运行期'], ['pipeline', '三域流水'], ['mail', '邮件（SMTP/IMAP）'], ['retention', '留存计划'],
+const OPS_SECTIONS = [['runtime', '运行期'], ['mail', '邮件（SMTP/IMAP）'], ['retention', '留存计划'],
   ['evolve', '自进化'], ['evidence', '证据面']]
 const ADMIN_SECTIONS = [['blocks', '阻塞清单'], ['progress', '进度'], ['config', '配置与凭据'],
   ['user-plugins', '用户空间插件'], ['market', '插件市场']]
@@ -250,7 +249,7 @@ function onboardingHtml(prefix, views) {
   const rows = views.map((v) => {
     const can = { contractor: '看本侧待办/事件/报价/待批摘要；准备批准材料（**批准本身在终端做人签**）',
       supplier: '看本侧待办/事件/自己的报价；提交澄清与报价草稿（**提交与定标在终端做人签**）',
-      ops: '三域流水、留存计划、自进化日志、证据索引（只读）',
+      ops: '运行期中间件、邮件域、留存计划、自进化日志、证据索引（只读）',
       admin: '提权后：插件市场、用户空间插件装卸/迭代、阻塞提交、跨道切换（**写操作只落待处理项，由 Python 侧消费**）' }
     return `<tr><td><code>${prefix}/${v}/</code></td><td>${can[v] ?? '（未登记）'}</td></tr>`
   }).join('')
@@ -615,7 +614,6 @@ export function apply(ctx, config) {
   const scorecard = ctx.supplierScorecard   // 供应商绩效记分卡（subagent 产出，T-247）
   const approvals = ctx.approvalDigest      // 人工门待批摘要（subagent 产出，T-250）
   const retention = ctx.retentionView       // 留存计划的只读聚合（subagent 产出，T-254）
-  const pipeline = ctx.pipelineView         // 三域运维快照的只读聚合（subagent 产出，T-260）
   const adminGuard = ctx.adminGuard         // 管理员 token / 会话 / 冷却（subagent 产出，T-272）
   const adminView = ctx.adminView           // 系统管理快照的只读聚合（同上）
   const pluginMarket = ctx.pluginMarket      // 插件列表/市场的只读聚合（subagent 产出，T-267）
@@ -629,13 +627,6 @@ export function apply(ctx, config) {
   const deadline = ctx.rfqDeadline           // RFQ 回文时限（domain 插件，本批）：只吃白名单事实载荷，不读账本、不发信、不取墙钟、**不能代发**
   const prepare = ctx.quotePrepare           // 报价草稿（domain 插件，本批）：只吃白名单事实载荷，不读账本、不写文件、不取墙钟、**不能签名**
   const feedback = ctx.uiFeedback            // WebUI 反馈闭环（ui-feedback 插件）：版本事实只读 + 只落 0600 待办件
-
-  /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
-  const pipelinePayload = () => {
-    const file = String(config.pipeline_snapshot ?? '') ||
-      join(String(config.ui_shared ?? 'tmp/ui-shared'), 'pipeline.json')
-    try { return JSON.parse(readFileSync(file, 'utf8')) } catch (err) { return null }
-  }
 
   /**
    * 留存计划：**判定在 Python 侧**（`services/retention.py`），由维护任务落到
@@ -996,13 +987,16 @@ export function apply(ctx, config) {
       .filter(([, item]) => item.type !== 'approval/granted' && item.type !== 'approval/aborted')
       .map(([approval_id, item]) => ({ approval_id, scope: item.scope, ref: item.ref }))
   }
-  /** 通道声明：三域快照里本视角的 `mail.transport`（缺则退到顶层两档），同名只取第一处。 */
+  /** 通道声明：**邮件域快照**（与 `/api/mail` 同一个来源 —— `mail-view` 的只读投影）里 SMTP（发信链）那一档。
+   *  来源与判定都没变（`services/mail_transport`），只是不再经过已退役的三域流水快照（29 §2）；
+   *  IMAP 是收信链，与「这份建议能不能发出去」无关，故不在这条声明里。 */
   const adviceChannels = (view) => {
-    const snap = pipelinePayload() || {}
-    const slice = (snap.views || {})[view] || {}
+    const snap = mailSnapshot() || {}
     const out = []
-    for (const [label, decl] of [['mail', (slice.mail || {}).transport], ['mail', (snap.mail || {}).transport],
-      ['transport', snap.transport]]) {
+    // 快照本身读不到 / 形状不对（`degraded`）⇒ **没有声明**：不拿全零的降级形状去冒充"通道不可用"
+    // （与旧口径一致：快照里没有那一档 ⇒ 不做通道建议）
+    if (snap.degraded === true) return out
+    for (const [label, decl] of [['mail', snap.smtp]]) {
       if (!decl || typeof decl !== 'object' || Array.isArray(decl) || typeof decl.available !== 'boolean') continue
       if (out.some((item) => item.name === label)) continue
       out.push({ name: label, available: decl.available,
@@ -1477,8 +1471,8 @@ export function apply(ctx, config) {
   //     不出现任何\"发过了\"的表述（`meta.can_send=false`）。
   // ==========================================================================================
   const DEADLINE_CAP = 64        // 喂给插件的每段条目上限（有界；三段各自截断，插件如实报 omitted）
-  /** 邮件通道事实：先认三域快照里 `mail.transport` 的声明（与 adviceChannels 同一口径），
-   *  没有声明才落到 Python 侧邮件快照的 smtp 读数；两处都没有 ⇒ **未声明 = 不可用**（不猜能发）。 */
+  /** 邮件通道事实：先认**邮件域快照**里 SMTP（发信链）那一档的声明（与 adviceChannels 同一口径），
+   *  快照缺失才落到它的 `smtp` 明细；两处都没有 ⇒ **未声明 = 不可用**（不猜能发）。 */
   const deadlineChannelOf = (view) => {
     const declared = adviceChannels(view).find((item) => item.name === 'mail')
     if (declared) {
@@ -1486,7 +1480,7 @@ export function apply(ctx, config) {
         available: declared.available === true,
         reason: declared.reason || (declared.available ? '' : 'transport-unavailable'),
         next_action: declared.next_action || '',
-        source: '三域快照的 mail.transport 声明（Python 侧写，宿主只读）' }
+        source: '邮件域快照（mail-view 只读投影）的 smtp 声明（Python 侧写，宿主只读）' }
     }
     const snap = mailSnapshot() || {}
     const smtp = snap.smtp || {}
@@ -2313,10 +2307,6 @@ export function apply(ctx, config) {
     const flags = scores.reduce((sum, item) => sum + (typeof item.deviation_count === 'number' ? item.deviation_count : 0), 0)
     const series = seriesView(view)
     const medians = series.map((item) => item.median).filter((value) => typeof value === 'number')
-    const payload = pipelinePayload() || {}
-    const slice = (payload.views || {})[view] || {}
-    const neg = slice.negotiate || {}
-    const faq = slice.faq || {}
     const reversed = [...rows].reverse()
     const lastOf = (type) => reversed.find((row) => String(row.type).startsWith(type)) ?? null
     const lastRfq = lastOf('rfq/')
@@ -2404,8 +2394,7 @@ ${rfqInboxHtml}
 <code>${esc(summary.span.first ?? '—')}</code> → <code>${esc(summary.span.last ?? '—')}</code>；
 链自洽 <b>${report.ok}</b>（${report.count} 条）</p>
 <p>最后事件：${lastRow ? `<code>seq ${esc(lastRow.seq)} ${esc(lastRow.type)}</code>` : '—'} ·
-本视角被抑制行 <b>${suppressed}</b> 行 · 快照声明的生成时间
-<code>${esc(payload.generated_at ?? '缺失（degraded）')}</code>（快照由 Python 侧写、宿主只读；宿主不读墙钟）</p>
+本视角被抑制行 <b>${suppressed}</b> 行（宿主不读墙钟）</p>
 ${sortForm('events', '筛查事件')}
 <p><a href="${prefix}/${view}/events/">原始事件 →</a> ·
 <a href="${prefix}/${view}/evidence/?limit=200&amp;page=1">证据面与类型分布 →</a> ·
@@ -2421,13 +2410,6 @@ ${sortForm('events', '筛查事件')}
               + `<td>${esc(item.deviation_count)}</td></tr>`).join('')}</table>`
         : '<h3>供应商绩效记分卡</h3><p>（本视角暂无可聚合的供应商行）</p>')
       + `</details>`
-
-    const domainHtml = `<details><summary>谈判轮次与 FAQ（折叠）</summary>`
-      + `<h3>谈判轮次（本视角）</h3><p>线程 <b>${neg.threads ?? 0}</b> / 轮次 <b>${neg.rounds ?? 0}</b> / 被拒 <b>${neg.rejected ?? 0}</b></p>`
-      + `<p>最近：<code>${esc((neg.recent || []).map((item) => `${item.thread_id}#${item.attempt_no}(${item.status ?? '—'})`).join(' · ') || '—')}</code></p>`
-      + `<h3>FAQ（本视角）</h3><p>条目 <b>${faq.entries ?? 0}</b>（版本 ${esc((faq.revs || []).join('、') || '—')}）</p>`
-      + `<p>最近：<code>${esc((faq.recent || []).map((item) => `${item.entry_id}@rev${item.rfq_rev}`).join(' · ') || '—')}</code></p>`
-      + `<p>JSON：<code>${prefix}/${view}/api/negotiation</code> · <code>${prefix}/${view}/api/faq</code></p></details>`
 
     const priceHtml = `<details><summary>价格序列（按行项目，折叠）</summary><h3>价格序列（按行项目）</h3>`
       + `<p>由自进化产出的插件 <code>price-history</code> 计算</p>`
@@ -2459,7 +2441,7 @@ ${sortForm('events', '筛查事件')}
       + `供应商视角显式拒收私域键 <code>${rules.supplier.privateKeys.join(' ')}</code>。</p>`
       + `<p>JSON：<code>${prefix}/${view}/api/events</code> · <code>${prefix}/${view}/api/history</code> · <code>${prefix}/${view}/api/evidence</code></p>`
       + pendingBlock + inProgressBlock + healthBlock
-      + scoreHtml + domainHtml + priceHtml + rawHtml + elevateHtml
+      + scoreHtml + priceHtml + rawHtml + elevateHtml
       // 注入式 UI：本槽位上"别人注册的区块"（通用机制；本文件不知道它们是什么）
       + slotsHtmlOf(view).html, prefix)
   }
@@ -3303,11 +3285,9 @@ ${sortForm('events', '筛查事件')}
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
           + `<tr><td>admitted=${g.admitted ?? 0} refused=${g.refused ?? 0} timeouts=${g.timeouts ?? 0} failed=${g.failed ?? 0}</td>`
           + `<td>allowed=${b.allowed ?? 0} refused=${b.refused ?? 0} opened=${b.opened ?? 0} closed=${b.closed ?? 0}</td></tr></table>`
-          + `<h3 id="pipeline">三域流水（谈判 / FAQ / 邮件）</h3><p>由 subagent 产出并晋升的插件 <code>pipeline-view</code> 聚合：<b>${pipeline.headline(pipelinePayload())}</b></p>`
           + `<p><a href="${prefix}/ops/mail/">邮件域（SMTP/IMAP）专页</a>：队列计数 / 最近一次真尝试的结果与 reason / `
-          + `available / next_action（数据来自 Python 侧快照；宿主只读，不联网不发信）。</p>`
-          + `<p>邮件（运输通道聚合）：运输通道 <b>${(pipeline.snapshot(pipelinePayload()).transport || {}).available ? '可用' : '不可用'}</b>`
-          + `——由 <code>pipeline-view</code> 从三域快照的通道声明归并；**未配置凭据时必须报不可用**（配置后由 <code>services/mail_transport</code> 的真实状态派生）</p>`
+          + `available / next_action（数据来自 Python 侧快照；宿主只读，不联网不发信）。**未配置凭据时必须报不可用**`
+          + `（配置后由 <code>services/mail_transport</code> 的真实状态派生）。</p>`
           + `<h3 id="retention">留存计划（只读）</h3><p>判定在 Python 侧（<code>services/retention.py</code>），由 subagent 产出并晋升的插件 <code>retention-view</code> 聚合：<b>${retention.headline(retentionPlanOf('contractor'))}</b></p>`
           + `<p>账本行永不销毁；销毁只作用于派生副本，不可重建物须过人工门（ADR-0018）</p>`
           + `<h3 id="evolve">自进化流水</h3><p>由自进化产出的插件 <code>evolve-journal</code> 归纳（只给计数，不出正文）</p>`
@@ -3349,33 +3329,6 @@ ${sortForm('events', '筛查事件')}
       const summary = evidence.summarize(rowsFor(view))
       return json(200, { view, source: 'evidence-summary（自进化产出的插件）', summary,
         note: '账本证据面：按类型计数 / 关联数 / 带引用行数 / 时间跨度；只统计公开投影后的行' })
-    }
-    const viewDomain = path.match(/^\/([a-z]+)\/api\/(negotiation|faq)\/?$/)
-    if (viewDomain && rules[viewDomain[1]]) {
-      const view = viewDomain[1]
-      const domain = viewDomain[2]
-      const slice = ((pipelinePayload() || {}).views || {})[view] || {}
-      // URL 用业务词（negotiation/faq），快照用域键（negotiate/faq）—— 这里显式对照，别靠名字凑巧相同
-      const DOMAIN_KEY = { negotiation: 'negotiate', faq: 'faq' }
-      const data = slice[DOMAIN_KEY[domain]] || null
-      const out = { view, domain, source: '三域快照（Python 侧写，宿主只读；判定在 services/*）',
-        degraded: !data, note: '只给计数与最近事件的 id/序号/状态；不出正文与私域键' }
-      if (data) {
-        out.counts = Object.fromEntries(Object.entries(data).filter(([, v]) => typeof v === 'number'))
-        // **按键投影**而不是原样透传：即使快照里混进正文/私域键，也不出这条路由
-        // （D-033/D-053 的"不出正文与私域"在宿主侧也要成立，不能只靠写入器规矩）
-        const RECENT_KEYS = { negotiation: ['thread_id', 'attempt_no', 'status'], faq: ['entry_id', 'rfq_rev'] }[domain]
-        out.recent = (Array.isArray(data.recent) ? data.recent : []).slice(0, 5)
-          .map((row) => Object.fromEntries(RECENT_KEYS.filter((k) => row && Object.prototype.hasOwnProperty.call(row, k)).map((k) => [k, row[k]])))
-      }
-      return json(200, out)
-    }
-    if (/^\/api\/pipeline\/?$/.test(path)) {
-      const payload = pipelinePayload()
-      const snap = pipeline.snapshot(payload)
-      return json(200, { source: 'pipeline-view（subagent 产出、经自进化流程晋升）+ 三域服务（Python 侧写快照）',
-        pipeline: snap, headline: pipeline.headline(payload),
-        note: '谈判/FAQ/邮件三域只给计数与最近事件 id；**本轮没有发信能力**，故 transport.available 恒为 false' })
     }
     if (/^\/api\/retention\/?$/.test(path)) {
       const plan = retentionPlanOf('contractor') ?? retentionPlanOf('supplier')
@@ -3759,7 +3712,7 @@ ${sortForm('events', '筛查事件')}
       if (!Object.prototype.hasOwnProperty.call(rules, to)) return json(400, { error: 'unknown-view', hint: Object.keys(rules).join(' / ') })
       return send(302, 'text/plain; charset=utf-8', '', { location: `${prefix}/${to}/` })
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/api/ui/blocks / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/advice/ / ${prefix}/<view>/api/advice / ${prefix}/<view>/gates/ / ${prefix}/<view>/api/gates / ${prefix}/<view>/changes/<id>/ / ${prefix}/<view>/api/changes/<id> / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/mail / ${prefix}/api/ui/blocks / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/advice/ / ${prefix}/<view>/api/advice / ${prefix}/<view>/gates/ / ${prefix}/<view>/api/gates / ${prefix}/<view>/changes/<id>/ / ${prefix}/<view>/api/changes/<id> / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

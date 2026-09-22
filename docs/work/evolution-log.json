@@ -1,198 +1,202 @@
 {
-  "note": "自进化产出的插件清单（机检：tools/check-evolved-module.py；哈希必须与进树文件一致）",
-  "entries": [
-    {
-      "name": "price-history",
-      "proposal_id": "sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40",
-      "artifact_hash": "edf4fc3cb4f124c4d57ea85be568521b728628f7c45c20172c3566f81c04804e",
-      "bytes": 3555,
-      "approval_ref": "ap-0100",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "evolved_at": "T-237",
-      "produced_by": "tools/evolve-module.mjs（提案→影子→真跑 fixture→五门→带引用晋升）",
-      "ledger": "tmp/evolve/ledger.jsonl（evolve/proposed|shadowed|gated|promoted）",
-      "evidence": "EV-072",
-      "artifact_path": "src/domain/price-history/code/price-history.mjs"
-    },
-    {
-      "name": "evidence-summary",
-      "proposal_id": "sha256:f88e3b87b71d21e5910979097892922025bde9cb5bef0a81524bbdd5fd179814",
-      "artifact_hash": "be399b59ac3f2f99188f2e3e81948939d9c74c7a7a791bbca71ef26ebab98763",
-      "bytes": 3374,
-      "approval_ref": "ap-0101",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "produced_by": "tools/evolve-module.mjs",
-      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
-      "evidence": null,
-      "artifact_path": "src/system/evidence/code/evidence-summary.mjs"
-    },
-    {
-      "name": "circuit-breaker",
-      "proposal_id": "sha256:20e799b34bba40b7cc5f799ea068e4105470dbd6eeda1fa78cf4cb5bf5b9c746",
-      "artifact_hash": "4bddc04fbd83aafbb95cf9d5551cddf48e74ad779d11052a5cfdf60f6a1abaa6",
-      "bytes": 5791,
-      "approval_ref": "ap-0102",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "produced_by": "tools/evolve-module.mjs",
-      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
-      "evidence": null,
-      "artifact_path": "src/system/circuit-breaker/code/circuit-breaker.mjs"
-    },
-    {
-      "name": "ops-view",
-      "proposal_id": "sha256:8e3c7e07d06db7b8c82eccdb8a162c011ec949bb5b146be3edb1692260a3a20b",
-      "artifact_hash": "14948a40890d7dcfcf0a28e8bc84171f2fc767514346d056071bcb49df05ed66",
-      "bytes": 3354,
-      "approval_ref": "ap-0103",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "produced_by": "tools/evolve-module.mjs",
-      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
-      "evidence": null,
-      "artifact_path": "src/system/ops-view/code/ops-view.mjs"
-    },
-    {
-      "name": "evolve-journal",
-      "proposal_id": "sha256:647e4ca5eab2b7db90595c5e37770c0066d3af7032fef3b9b0716fdf5c4f9ce8",
-      "artifact_hash": "a242c8ea8d79e5ff49bfc53e5072218d2747c4c96ec754401591aae6f4927586",
-      "bytes": 4154,
-      "approval_ref": "ap-0104",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "produced_by": "tools/evolve-module.mjs",
-      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
-      "evidence": null,
-      "artifact_path": "src/system/evolution/code/evolve-journal.mjs"
-    },
-    {
-      "name": "supplier-scorecard",
-      "proposal_id": "sha256:73454ef54da0e295b1d7cd472d4f4946220655fb21ffb35fb2a643fe50dec484",
-      "artifact_hash": "fb7acd47a2baa280c528f9adaba12335dd422dc2e71f4491a29f7db916d6243d",
-      "bytes": 9990,
-      "approval_ref": "ap-0105",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "produced_by": "tools/evolve-module.mjs",
-      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
-      "evidence": null,
-      "artifact_path": "src/domain/supplier-scorecard/code/supplier-scorecard.mjs"
-    },
-    {
-      "name": "idempotency-guard",
-      "proposal_id": "sha256:bf15a30e483c0a864ae807c97f4197e46e069f3443198e7dcd8a296b31895ee1",
-      "artifact_hash": "6d9b9e450aa7a9fe4232960f41a413549f39295d9e2709571d565cba6898635a",
-      "bytes": 16708,
-      "approval_ref": "ap-0106",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "produced_by": "tools/evolve-module.mjs",
-      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
-      "evidence": null,
-      "artifact_path": "src/system/idempotency-guard/code/idempotency-guard.mjs"
-    },
-    {
-      "name": "approval-digest",
-      "proposal_id": "sha256:174ab8a68eda670bc36264825dd3c64f7593ec2dcd8ada8a492bdbab2ae1d8a9",
-      "artifact_hash": "d421207e8822901ef57871c2e0321ca8467b2e8e9b200614dc2bf29670972c7b",
-      "bytes": 16519,
-      "approval_ref": "ap-0107",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "produced_by": "tools/evolve-module.mjs",
-      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
-      "evidence": null,
-      "artifact_path": "src/system/approval/code/approval-digest.mjs"
-    },
-    {
-      "name": "budget-guard",
-      "proposal_id": "sha256:8dc66183f624a0c91a8e0a8dd6f020115cdbfe604d914a52226d7ae2ca0d15b3",
-      "artifact_hash": "b8196aa0d5b437efdffa896e08d0865d03a7bbe425f8ce1571184a7258739bab",
-      "bytes": 21885,
-      "approval_ref": "ap-0108",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "produced_by": "tools/evolve-module.mjs",
-      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
-      "evidence": null,
-      "artifact_path": "src/system/budget-guard/code/budget-guard.mjs"
-    },
-    {
-      "name": "retention-view",
-      "proposal_id": "sha256:11498b54d7f9e217788e0434a368a4e267ce3673fdbb95b52bf43901a530678f",
-      "artifact_hash": "96a1dda2c6f2f1ea9fa2cc5837b280bd66e95f2cd437d22d42ffc66595dbf81f",
-      "bytes": 10158,
-      "approval_ref": "ap-0109",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "produced_by": "tools/evolve-module.mjs",
-      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
-      "evidence": null,
-      "artifact_path": "src/system/retention/code/retention-view.mjs"
-    },
-    {
-      "name": "pipeline-view",
-      "proposal_id": "sha256:0b477523f8c09ca6adef1ce0fb79fa904e6907fe1e116af8a6c982abf323a059",
-      "artifact_hash": "25d56c92e97d4011f617a33d2fab36ba6165c3d66c2a74a6a9bbd38d27478bef",
-      "bytes": 17950,
-      "approval_ref": "ap-0110",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "produced_by": "tools/evolve-module.mjs",
-      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
-      "evidence": null,
-      "artifact_path": "src/system/pipeline-view/code/pipeline-view.mjs"
-    },
-    {
-      "name": "plugin-market",
-      "proposal_id": "sha256:0e9d9e8329583ef210e6599fcb25cc3c4260f3ed2dcc9659b90ff5d6f33947bc",
-      "artifact_hash": "867a7c792ac1f97ff6733e55578808988ab58902251b19290a46c63981343f0a",
-      "bytes": 27337,
-      "approval_ref": "ap-0111",
-      "gate": "passed",
-      "fixture": {
-        "passed": 13,
-        "total": 13
-      },
-      "produced_by": "tools/evolve-module.mjs",
-      "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
-      "evidence": null,
-      "artifact_path": "src/system/market/code/plugin-market.mjs"
-    }
-  ]
+ "note": "自进化产出的插件清单（机检：tools/check-evolved-module.py；哈希必须与进树文件一致）",
+ "entries": [
+  {
+   "name": "price-history",
+   "proposal_id": "sha256:4883cb4ee4a0852a7fe0503bf08747f68399e79f23b1117b2410148353a70d40",
+   "artifact_hash": "edf4fc3cb4f124c4d57ea85be568521b728628f7c45c20172c3566f81c04804e",
+   "bytes": 3555,
+   "approval_ref": "ap-0100",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "evolved_at": "T-237",
+   "produced_by": "tools/evolve-module.mjs（提案→影子→真跑 fixture→五门→带引用晋升）",
+   "ledger": "tmp/evolve/ledger.jsonl（evolve/proposed|shadowed|gated|promoted）",
+   "evidence": "EV-072",
+   "artifact_path": "src/domain/price-history/code/price-history.mjs"
+  },
+  {
+   "name": "evidence-summary",
+   "proposal_id": "sha256:f88e3b87b71d21e5910979097892922025bde9cb5bef0a81524bbdd5fd179814",
+   "artifact_hash": "be399b59ac3f2f99188f2e3e81948939d9c74c7a7a791bbca71ef26ebab98763",
+   "bytes": 3374,
+   "approval_ref": "ap-0101",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "produced_by": "tools/evolve-module.mjs",
+   "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+   "evidence": null,
+   "artifact_path": "src/system/evidence/code/evidence-summary.mjs"
+  },
+  {
+   "name": "circuit-breaker",
+   "proposal_id": "sha256:20e799b34bba40b7cc5f799ea068e4105470dbd6eeda1fa78cf4cb5bf5b9c746",
+   "artifact_hash": "4bddc04fbd83aafbb95cf9d5551cddf48e74ad779d11052a5cfdf60f6a1abaa6",
+   "bytes": 5791,
+   "approval_ref": "ap-0102",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "produced_by": "tools/evolve-module.mjs",
+   "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+   "evidence": null,
+   "artifact_path": "src/system/circuit-breaker/code/circuit-breaker.mjs"
+  },
+  {
+   "name": "ops-view",
+   "proposal_id": "sha256:8e3c7e07d06db7b8c82eccdb8a162c011ec949bb5b146be3edb1692260a3a20b",
+   "artifact_hash": "14948a40890d7dcfcf0a28e8bc84171f2fc767514346d056071bcb49df05ed66",
+   "bytes": 3354,
+   "approval_ref": "ap-0103",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "produced_by": "tools/evolve-module.mjs",
+   "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+   "evidence": null,
+   "artifact_path": "src/system/ops-view/code/ops-view.mjs"
+  },
+  {
+   "name": "evolve-journal",
+   "proposal_id": "sha256:647e4ca5eab2b7db90595c5e37770c0066d3af7032fef3b9b0716fdf5c4f9ce8",
+   "artifact_hash": "a242c8ea8d79e5ff49bfc53e5072218d2747c4c96ec754401591aae6f4927586",
+   "bytes": 4154,
+   "approval_ref": "ap-0104",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "produced_by": "tools/evolve-module.mjs",
+   "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+   "evidence": null,
+   "artifact_path": "src/system/evolution/code/evolve-journal.mjs"
+  },
+  {
+   "name": "supplier-scorecard",
+   "proposal_id": "sha256:73454ef54da0e295b1d7cd472d4f4946220655fb21ffb35fb2a643fe50dec484",
+   "artifact_hash": "fb7acd47a2baa280c528f9adaba12335dd422dc2e71f4491a29f7db916d6243d",
+   "bytes": 9990,
+   "approval_ref": "ap-0105",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "produced_by": "tools/evolve-module.mjs",
+   "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+   "evidence": null,
+   "artifact_path": "src/domain/supplier-scorecard/code/supplier-scorecard.mjs"
+  },
+  {
+   "name": "idempotency-guard",
+   "proposal_id": "sha256:bf15a30e483c0a864ae807c97f4197e46e069f3443198e7dcd8a296b31895ee1",
+   "artifact_hash": "6d9b9e450aa7a9fe4232960f41a413549f39295d9e2709571d565cba6898635a",
+   "bytes": 16708,
+   "approval_ref": "ap-0106",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "produced_by": "tools/evolve-module.mjs",
+   "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+   "evidence": null,
+   "artifact_path": "src/system/idempotency-guard/code/idempotency-guard.mjs"
+  },
+  {
+   "name": "approval-digest",
+   "proposal_id": "sha256:174ab8a68eda670bc36264825dd3c64f7593ec2dcd8ada8a492bdbab2ae1d8a9",
+   "artifact_hash": "d421207e8822901ef57871c2e0321ca8467b2e8e9b200614dc2bf29670972c7b",
+   "bytes": 16519,
+   "approval_ref": "ap-0107",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "produced_by": "tools/evolve-module.mjs",
+   "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+   "evidence": null,
+   "artifact_path": "src/system/approval/code/approval-digest.mjs"
+  },
+  {
+   "name": "budget-guard",
+   "proposal_id": "sha256:8dc66183f624a0c91a8e0a8dd6f020115cdbfe604d914a52226d7ae2ca0d15b3",
+   "artifact_hash": "b8196aa0d5b437efdffa896e08d0865d03a7bbe425f8ce1571184a7258739bab",
+   "bytes": 21885,
+   "approval_ref": "ap-0108",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "produced_by": "tools/evolve-module.mjs",
+   "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+   "evidence": null,
+   "artifact_path": "src/system/budget-guard/code/budget-guard.mjs"
+  },
+  {
+   "name": "retention-view",
+   "proposal_id": "sha256:11498b54d7f9e217788e0434a368a4e267ce3673fdbb95b52bf43901a530678f",
+   "artifact_hash": "96a1dda2c6f2f1ea9fa2cc5837b280bd66e95f2cd437d22d42ffc66595dbf81f",
+   "bytes": 10158,
+   "approval_ref": "ap-0109",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "produced_by": "tools/evolve-module.mjs",
+   "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+   "evidence": null,
+   "artifact_path": "src/system/retention/code/retention-view.mjs"
+  },
+  {
+   "name": "pipeline-view",
+   "proposal_id": "sha256:0b477523f8c09ca6adef1ce0fb79fa904e6907fe1e116af8a6c982abf323a059",
+   "artifact_hash": "25d56c92e97d4011f617a33d2fab36ba6165c3d66c2a74a6a9bbd38d27478bef",
+   "bytes": 17950,
+   "approval_ref": "ap-0110",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "produced_by": "tools/evolve-module.mjs",
+   "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+   "evidence": null,
+   "artifact_path": "src/system/pipeline-view/code/pipeline-view.mjs",
+   "retired": {
+    "at": "2026-09-22",
+    "reason": "按 docs/design/29-webui-gui-app.md §2 + AGENTS.md 规则 12，三域流水只读运维面整体退役（/ops/ 面板、/api/pipeline、pipeline-view 插件、快照写入器与两道门）⇒ 产物连同插件一起删除。本条记录**保留**（历史可追）；校验改成断言「产物确实不在树」而不是比对哈希。"
+   }
+  },
+  {
+   "name": "plugin-market",
+   "proposal_id": "sha256:0e9d9e8329583ef210e6599fcb25cc3c4260f3ed2dcc9659b90ff5d6f33947bc",
+   "artifact_hash": "867a7c792ac1f97ff6733e55578808988ab58902251b19290a46c63981343f0a",
+   "bytes": 27337,
+   "approval_ref": "ap-0111",
+   "gate": "passed",
+   "fixture": {
+    "passed": 13,
+    "total": 13
+   },
+   "produced_by": "tools/evolve-module.mjs",
+   "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
+   "evidence": null,
+   "artifact_path": "src/system/market/code/plugin-market.mjs"
+  }
+ ]
 }

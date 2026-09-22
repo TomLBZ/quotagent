@@ -55,6 +55,20 @@ def main() -> int:
     for item in entries:
         name = item.get("name", "?")
         path = resolve_artifact(item)
+        # 退役的产出（`retired` 标记）：条目**保留**（历史可追），但断言从"哈希一致"改成**"产物确实不在树"** ——
+        # 门槛一格没松：`artifact_path` 与旧路径 `host/modules/<name>.mjs` 都必须消失，
+        # 而 `artifact_hash`/`bytes` 仍在记录里（谁想偷偷把实体放回来都会红）。
+        if item.get("retired"):
+            gone = not path.exists() and not (MODULES / f"{name}.mjs").exists()
+            check(f"{name} · 已退役（产物不在树）", gone,
+                  f"artifact_path={item.get('artifact_path')} 不存在={not path.exists()}；"
+                  f"旧路径 host/modules/{name}.mjs 不存在={not (MODULES / f'{name}.mjs').exists()}；"
+                  f"记录保留 artifact_hash={str(item.get('artifact_hash'))[:12]}… bytes={item.get('bytes')}")
+            check(f"{name} · 退役留痕（理由与依据都在记录里）",
+                  bool(str((item.get("retired") or {}).get("reason") or "").strip())
+                  and bool((item.get("retired") or {}).get("at")),
+                  f"retired.at={(item.get('retired') or {}).get('at')}")
+            continue
         if not path.exists():
             check(f"{name} · 产物在树", False, f"{path.relative_to(ROOT)} 不存在（产出被删？）")
             continue

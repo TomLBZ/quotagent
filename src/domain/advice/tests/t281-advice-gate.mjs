@@ -573,7 +573,7 @@ try {
   const fixtureDir = mkdtempSync(join(tmpdir(), 't281-http-'))
   const contractorLedger = join(fixtureDir, 'contractor.jsonl')
   const supplierLedger = join(fixtureDir, 'supplier-empty.jsonl')   // 不写文件 = 空投影
-  const pipelineFixture = join(fixtureDir, 'pipeline.json')
+  const mailFixture = join(fixtureDir, 'mail.json')
   const SENTINEL_ROW = { cost_floor: 987654321, markup_pct: 12.5, reserve_price: 'RESERVE-PRICE-SENTINEL-4b',
     'private:note': 'PRIVATE-NOTE-SENTINEL-7f', cost_model: 'COST-MODEL-SENTINEL-9a' }
   const httpRows = [
@@ -591,10 +591,17 @@ try {
       realm: 'contractor:con-B', body: { approval_id: 'ap-0007', scope: 'award.commit', ref: 'awin-1', status: 'pending' } },
   ]
   writeFileSync(contractorLedger, httpRows.map((row) => JSON.stringify(row)).join('\n') + '\n', 'utf8')
-  writeFileSync(pipelineFixture, JSON.stringify({
+  // 通道声明的来源 = **邮件域快照**（`<ui_shared>/mail.json`）：三域流水快照已随运维面退役（29 §2）
+  writeFileSync(mailFixture, JSON.stringify({
+    schema: 1,
     generated_at: '2026-09-21T12:00:00Z',
-    views: { contractor: { mail: { queued: 1, refused: 1,
-      transport: { available: false, reason: 'mail-smtp-unconfigured', next_action: '配置 SMTP/IMAP 凭据后接入' } } } },
+    service: 'mail',
+    views: { contractor: { queued: 1, refused: 1, sent: 0, parsed: 0 } },
+    totals: { queued: 1, refused: 1, sent: 0, parsed: 0 },
+    transport: { available: false, reason: 'mail-smtp-unconfigured',
+      next_action: '配置 SMTP/IMAP 凭据后接入',
+      smtp: { available: false, reason: 'mail-smtp-unconfigured', next_action: '配置 SMTP/IMAP 凭据后接入' },
+      imap: { available: false, reason: 'mail-imap-unconfigured', next_action: '配置 SMTP/IMAP 凭据后接入' } },
   }), 'utf8')
 
   const httpCtx = new Context()
@@ -630,14 +637,14 @@ try {
   await mountReal('supplier-scorecard.mjs', {}, 'supplierScorecard', 'supplier-scorecard')
   await mountReal('approval-digest.mjs', {}, 'approvalDigest', 'approval-digest')
   await mountReal('retention-view.mjs', {}, 'retentionView', 'retention-view')
-  await mountReal('pipeline-view.mjs', {}, 'pipelineView', 'pipeline-view')
   await mountReal('admin-guard.mjs', { token_env: 'QUOTAGENT_ADMIN_TOKEN_T281' }, 'adminGuard', 'admin-guard')
   await mountReal('admin-view.mjs', { admin_snapshot: '' }, 'adminView', 'admin-view')
   await mountReal('plugin-market.mjs', { modules_dir: join(HERE, 'modules'),
     inventory: join(HERE, '..', 'docs', 'design', '14-plugin-inventory.md'), user_space: '' }, 'pluginMarket', 'plugin-market')
   await mountReal('user-plugin-manager.mjs', { root: join(HERE, '..', 'user-space') }, 'userPluginManager', 'user-plugin-manager')
   await mountReal('config-view.mjs', {}, 'configView', 'config-view')
-  await mountReal('mail-view.mjs', { mail_state: '', ui_shared: '' }, 'mailView', 'mail-view')
+  // 邮件域快照落点：`mail-view` 的 `mail_state` 就是快照文件路径（CLI 的 `--mail-snapshot` 同义）
+  await mountReal('mail-view.mjs', { mail_state: mailFixture, ui_shared: '' }, 'mailView', 'mail-view')
   await mountReal('bid-heuristics.mjs', {}, 'bidHeuristics', 'bid-heuristics')
   await mountReal('advice-panel.mjs', {}, 'advicePanel', 'advice-panel')
   await mountReal('gate-timeline.mjs', {}, 'gateTimeline', 'gate-timeline')
@@ -660,7 +667,7 @@ try {
       await webui.apply(inner, config)
     },
   }, webui.Config.parse({ port: 0, route_prefix: '/t281', ledger_contractor: contractorLedger,
-    ledger_supplier: supplierLedger, pipeline_snapshot: pipelineFixture }))
+    ledger_supplier: supplierLedger }))
   const base = httpBox.webui.url.replace(/\/$/, '')
   // 身份会话（P3：`/contractor/**`、`/supplier/**` 有了**路由级身份门槛**）——
   // 本门**先登录再取业务路由**：判据从「谁能打开」变成「**登录后按侧放行**」，断言一条不删、一条不放松。
@@ -745,18 +752,19 @@ try {
   && !contractorPage.text.includes('onclick=') && !contractorPage.text.includes('onload='),
   `页面命中=${pageScripty.length}；JSON 命中=${jsonScripty.length}；扫描器对照=${scriptSelfTest}`)
 
-  // 两视角确实不同 + 空投影降级（同一挂载里：承包商侧有真数据、供应商侧是空账本）
+  // 两视角确实不同：承包商侧有真数据（≥4 条），供应商侧是空账本 ⇒ 只剩**全局那条**邮件通道声明
+  // （`mail.json` 的 SMTP 不可用是**服务级**事实，对两侧都成立 —— 三域流水快照退役后通道声明不再按视角切片）。
+  // 「空投影必须 degraded、不许冒充"没有建议"」的判据在 `check-advice-route.py` 的第二台服务上
+  // （空账本 + **缺快照** ⇒ items 0 + degraded + no-usable-inputs），那里一格没松。
+  const channelItem = (sj.items || []).find((item) => item.id === 'channel:mail')
   const differOk = JSON.stringify(idsOfPage(contractorPage.text)) !== JSON.stringify(idsOfPage(supplierPage.text))
-    && contractorPage.text !== supplierPage.text && cj.items.length > 0 && sj.items.length === 0
+    && contractorPage.text !== supplierPage.text && cj.items.length >= 4 && sj.items.length === 1
+    && Boolean(channelItem) && channelItem.blocked_by === 'mail-smtp-unconfigured'
   check('20 真 HTTP 正控：**两视角的建议确实不同** —— 承包商侧出真建议（≥4 条、`degraded:false`），'
-    + '供应商侧**空投影** → 页面 `data-degraded="1"` + `no-usable-inputs`、JSON `items:[]` + `degraded:true`'
-    + '（"没数据"绝不冒充"没有建议"）',
-  differOk && sj.degraded === true && sj.reason === 'no-usable-inputs' && sj.engine === 'rules'
-  && supplierPage.text.includes('data-degraded="1"') && reasonOfPage(supplierPage.text) === 'no-usable-inputs'
-  && supplierPage.text.includes('建议数 <b>0</b>'),
+    + '供应商侧空账本 ⇒ 只剩全局的邮件通道声明那一条（`channel:mail`，`blocked_by` 是真 reason，不假装能发）',
+  differOk && cj.degraded === false && sj.degraded === false && sj.engine === 'rules',
   `承包商 items=${cj.items.length} degraded=${cj.degraded}；供应商 items=${sj.items.length} degraded=${sj.degraded} `
-  + `reason=${sj.reason}；页面降级块命中=${supplierPage.text.includes('data-degraded="1"')}；`
-  + `页面 reason=${reasonOfPage(supplierPage.text)}`)
+  + `ids=${JSON.stringify((sj.items || []).map((item) => item.id))} blocked_by=${channelItem?.blocked_by}`)
 
   // 四道页面子导航 + 私域零泄漏（含非空转对照：夹具文件里确实有哨兵）
   const elevate = await fetch(`${base}/admin/api/elevate`, { method: 'POST', body: `token=${T281_TOKEN}` })

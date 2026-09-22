@@ -13,7 +13,7 @@ src/
   system/<plugin>/     # 34 个：kernel kernel-bridge runtime repo-gate qa-runner norm measures realm approval
                        #         mail relay retention eval evidence evolution canary market config admin storage
                        #         projection governor audit-hook observability timeline circuit-breaker budget-guard
-                       #         idempotency-guard ops-view pipeline-view user-plugin-manager ui-feedback webui
+                       #         idempotency-guard ops-view user-plugin-manager ui-feedback webui
   domain/<plugin>/     # 25 个：rfq rfq-deadline sourcing intake compare guard costmodel pricing quotes commitments
                        #         deviation capacity change clarify faq negotiation sync terms export
                        #         gate-timeline authority-band advice bid-heuristics supplier-scorecard price-history

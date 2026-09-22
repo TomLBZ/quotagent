@@ -26,28 +26,33 @@ ROOT = Path(__file__).resolve().parents[4]
 HEALTH_PATH = "/api/health"
 
 
-def refresh_pipeline_snapshot() -> None:
-    """刷新三域运维快照（谈判/FAQ/邮件）。与留存计划同一模式：**走查会清 `tmp/`，所以 seed 之后要补一次**，
-    探活时也刷一次，界面就不会长期停在 degraded。尽力而为，不影响探活结果。
+def refresh_mail_snapshot() -> None:
+    """刷新**邮件域**状态快照（`<ui-shared>/mail.json`）。与留存计划同一模式：**走查会清 `tmp/`，所以 seed 之后
+    要补一次**，探活时也刷一次，界面就不会长期停在 degraded。尽力而为，不影响探活结果。
+
+    写入者是归属插件自己的工具 `src/system/mail/tools/mail-snapshot.py`（旧的三域快照写入器
+    `tools/refresh-ui-snapshots.py` 已按 `docs/design/29-webui-gui-app.md` §2 与三域流水运维面**一起退役**）。
     """
-    script = ROOT / "src" / "system" / "webui" / "tools" / "refresh-ui-snapshots.py"
+    script = ROOT / "src" / "system" / "mail" / "tools" / "mail-snapshot.py"
     if not script.exists():
         return
     try:
         proc = subprocess.run([sys.executable, str(script), "--shared-dir", str(ROOT / "tmp" / "ui-shared")],
                               capture_output=True, timeout=120, check=False)
         if proc.returncode != 0:
-            print(f"[webui-serve] 三域快照刷新失败 rc={proc.returncode} "
+            print(f"[webui-serve] 邮件快照刷新失败 rc={proc.returncode} "
                   f"{(proc.stderr or b'').decode('utf-8', 'ignore')[-120:]}", file=sys.stderr, flush=True)
     except Exception as exc:  # noqa: BLE001
-        print(f"[webui-serve] 三域快照刷新异常（不影响探活）：{exc}", file=sys.stderr, flush=True)
+        print(f"[webui-serve] 邮件快照刷新异常（不影响探活）：{exc}", file=sys.stderr, flush=True)
 
 
 def refresh_admin_snapshot() -> None:
-    """刷新系统管理快照（阻塞/进度）——与留存计划、三域快照同一模式的**钩子**。
+    """刷新系统管理快照（阻塞/进度）——与留存计划、邮件快照同一模式的**钩子**。
 
     真源：`.agents/state.json`（任务登记/阻塞/进度）+ `docs/work/progress-checklist.md`（任务行状态）
-    + `tmp/ui-shared/pipeline.json`（服务自述不可用，如邮件通道）。
+    + `tmp/ui-shared/mail.json`（服务自述不可用：`transport.<通道>.available=false` 的节点）。
+    第三个源原来指三域快照 `pipeline.json`；那个写入器已随运维面退役 ⇒ 改指**仍在被写的**邮件域快照
+    （判定与形状要求不变：`services/admin_blocks.py` 只看"含非空 views 的快照里 available=false 的节点"）。
     **只读**这些输入、只写一个快照文件；判定在 `services/admin_blocks.py`（Python 管事实）。
     """
     script = ROOT / "tools" / "refresh-admin-snapshot.py"
@@ -57,7 +62,7 @@ def refresh_admin_snapshot() -> None:
         proc = subprocess.run([sys.executable, str(script),
                                "--state", str(ROOT / ".agents" / "state.json"),
                                "--checklist", str(ROOT / "docs" / "work" / "progress-checklist.md"),
-                               "--pipeline", str(ROOT / "tmp" / "ui-shared" / "pipeline.json"),
+                               "--pipeline", str(ROOT / "tmp" / "ui-shared" / "mail.json"),
                                "--out", str(ROOT / "tmp" / "ui-shared" / "admin.json"),
                                "--resolutions", str(ROOT / "tmp" / "ui-shared" / "admin" / "ledger.jsonl")],
                               capture_output=True, timeout=120, check=False)
@@ -124,7 +129,7 @@ def probe(port: int, path: str = HEALTH_PATH, timeout: float = 3.0) -> int:
     # 刷新钩子：`ws-gateway` 周期性探活 → 顺手重算一次留存计划（判定在 Python 侧）。
     # 为什么需要它：清 `tmp/` 的任务会把计划文件带走，界面会长期停在 degraded。
     refresh_retention_plan()
-    refresh_pipeline_snapshot()
+    refresh_mail_snapshot()
     refresh_admin_snapshot()
     try:
         with socket.create_connection(("127.0.0.1", int(port)), timeout=timeout) as sock:
@@ -155,18 +160,10 @@ def main(argv: list[str]) -> int:
         print(f"[webui-serve] 走查 seed rc={seeded.returncode} "
               f"{(seeded.stdout or '').strip().splitlines()[-1][:120] if seeded.stdout.strip() else ''}",
               file=sys.stderr, flush=True)
-    # 三域演示种子：g1 走查只种报价/批准类事件，三域面板会是空的（空面板与坏面板看不出区别）。
-    # 用**真服务**种出谈判/FAQ/邮件事件；写入者一律 *:ui-seed，幂等（重复运行不撑大账本）。
-    if os.environ.get("QUOTAGENT_WEBUI_SEED_PIPELINE", "1") == "1":
-        seeded_pipe = subprocess.run([sys.executable, str(ROOT / "src" / "system" / "webui" / "tools" / "ui-seed-pipeline.py"),
-                                      "--shared-dir", ui_shared],
-                                     cwd=str(ROOT), capture_output=True, text=True, timeout=300)
-        print(f"[webui-serve] 三域种子 rc={seeded_pipe.returncode} "
-              f"{(seeded_pipe.stdout or '').strip()[:160]}", file=sys.stderr, flush=True)
-    # seed 之后立即刷新留存计划与三域快照：走查会清空 ui-shared/，
+    # seed 之后立即刷新留存计划与邮件快照：走查会清空 ui-shared/，
     # 不补这一下，界面会一直停在 degraded 直到下一次探活。
     refresh_retention_plan()
-    refresh_pipeline_snapshot()
+    refresh_mail_snapshot()
     refresh_admin_snapshot()
     args = [node_bin(), str(ROOT / "host" / "cli.mjs"), "webui", "--profile", "webui", "--port", str(port),
             "--host", os.environ.get("QUOTAGENT_WEBUI_HOST", "127.0.0.1"),
@@ -177,8 +174,6 @@ def main(argv: list[str]) -> int:
                 "QUOTAGENT_UI_LEDGER_SUPPLIER", str(ROOT / "tmp" / "ui-shared" / "supplier" / "ledger.jsonl")),
             "--retention-plan", os.environ.get(
                 "QUOTAGENT_UI_RETENTION_PLAN", str(ROOT / "tmp" / "ui-shared" / "retention-plan.json")),
-            "--pipeline-snapshot", os.environ.get(
-                "QUOTAGENT_UI_PIPELINE", str(ROOT / "tmp" / "ui-shared" / "pipeline.json")),
             "--mail-snapshot", os.environ.get(
                 "QUOTAGENT_UI_MAIL", str(ROOT / "tmp" / "ui-shared" / "mail.json")),
             "--admin-snapshot", os.environ.get(
