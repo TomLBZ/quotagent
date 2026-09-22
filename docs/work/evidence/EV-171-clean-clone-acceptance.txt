@@ -253,3 +253,74 @@ SWEEP_RC=0
 
 （`run-once` 34/34 未因本批改动而红：`./run` 的依赖准备只多了一条留痕与更详细的失败体，
 `doctor` 的 cordis 项在"已装好"的树上仍是 `ok`。）
+
+
+--------------------------------------------------------------------------------
+七、提交之后的验证（门校验 HEAD）与两处"门自己写错"的修正
+--------------------------------------------------------------------------------
+
+主提交 sha：`2b5838ed9c30e0ee2a1c507143f27c28ae41058d`（`git push origin HEAD`：`d4bb4b1..2b5838e`；`git ls-remote origin refs/heads/main`
+回读 = `2b5838ed9c30e0ee2a1c507143f27c28ae41058d`，与本地 HEAD 一致）。
+
+`tools/verify.sh run-clone`（校验 **HEAD**；与 `clean-copy` 同类，须在 commit 之后跑）**20/20 PASS**，原始行：
+
+```
+干净副本工作目录（仓库外）：/tmp/quotagent-run-clone-r8_m54yb
+副本：/tmp/quotagent-run-clone-r8_m54yb/copy（671 个文件，只含已提交内容）
+[ok]   K1 副本**只含已提交内容**：解包路径集合 == `git ls-tree -r HEAD`（逐条对账，无多无少）
+        HEAD 671 条 / 副本 671 条；只在 HEAD=[] 只在副本=[]
+[ok]   K1b 副本里**没有运行时目录**（`.venv` / `host/node_modules` / `tmp` / `__pycache__` 全部不在）
+        0 个（干净）
+[ok]   K1c `user-space` 是 tracked 的**符号链接**（指向 `src/userspace`），不是目录
+        is_symlink=True -> src/userspace
+[ok]   K2 副本里的入口**真的可执行**：`run` 与每个 `tools/*.sh` 都有执行位（实测缺陷：索引 100644 ⇒ 干净克隆 `./run up` 报 `host-deps-install-failed`）
+        共 10 个全部可执行（run tools/bootstrap.sh tools/cordis.sh …）
+[ok]   K3 干净副本里 `./run doctor` **不崩 + 7 项齐全 + 逐项 next_action + 退出码 0**（缺凭据/缺依赖只降级：`blocking=0` = 这机器能跑）
+        rc=0 ok=True blocking=0 items=['interpreter', 'node', 'cordis', 'port', 'config', 'credentials', 'gates'] 状态={'interpreter': 'ok', 'node': 'ok', 'cordis': 'degraded', 'port': 'ok', 'config': 'degraded', 'credentials': 'degraded', 'gates': 'ok'} 逐项行=8 err=
+[ok]   K4 干净副本里 `./run up` **一条命令成功**：真起服务（pid 是活进程）+ 外部实测 `/api/health` 200 + `/quotagent/` 页面 200 + 副本内自建 `.venv/`（自包含）+ 依赖准备有留痕
+        rc=0 state=started healthy=True 外部health=True page=200 pid=236537 活=True .venv=True deps_log=`cordis.sh install`=True err=
+[ok]   K5 `./run status` 健康：`healthy=true` + port/pid 与 up 一致 + `managed=true`；`degraded[]` 逐项 `available:false` + 有名 reason + next_action（缺凭据不阻塞）
+        rc=0 payload={"ok": true, "service": "quotagent-webui", "pid": 236537, "port": 40765, "url": "http://127.0.0.1:40765/quotagent/", "healthy": true, "ready_ms": 1014, "managed": true, "degraded": [{"plugin": "system/config", "available": false, "reason": "config-file-absent"
+[ok]   K6 二次 `up` 幂等（`state=already-up` + pid 不变 + `idempotent:true`）且两次 `status` **逐字节一致**
+        rc=0 state=already-up pid=236537 vs 236537 status 一致=True
+[ok]   K7 `down` 真回收：退出码 0 + `released:true` + 端口**真释放**（外部连接被拒）
+        rc=0 payload={"ok": true, "action": "down", "state": "stopped", "pid": 236537, "port": 40765, "stopped": true, "released": true, "next_action": "数据没删；再起用 ./run up"} 端口释放=True
+[ok]   K7b 再 `down` 幂等（`state=not-managed` / `process-gone`，退出码 0；不碰不是自己起的进程）
+        rc=0 state=not-managed
+[ok]   K12 副本外的 HOME 里**除了 npm 自己的缓存/日志**（`.npm/**`）**没有别的东西**：`./run` 的服务与运行期数据全在副本自己的 `tmp/` 内（`tmp/run/` pid+日志、`tmp/run-shared` 数据根）
+        HOME=/tmp/quotagent-run-clone-r8_m54yb/home 非 npm 条目=[]；npm 自己写了 27 条（依赖安装步骤的既有边界）
+[ok]   K8 反向对照①（缺依赖，非空转）：删掉 `host/node_modules` 后 `doctor` **如实**报 cordis 非 ok（命名 reason + next_action），`up` **要么**一条命令重装好并健康、**要么**如实失败（有名 code + next_action）；实测 本机 npm 缓存热/有网（真实重装路径）
+        doctor: cordis={"item": "cordis", "status": "degraded", "detail": "will-install-on-up", "next_action": "./run up（内部 tools/cordis.sh install；离线机器需 npm 缓存或预先带好 host/node_modules rc=0 | up: rc=0 state=started code=None healthy=True 重装=True err=
+[ok]   K9 反向对照②（装不上 ⇒ 如实失败且可诊断）：断网垫片（libc 层拦 connect/getaddrinfo）+ 空 npm 缓存下 `up` 退出码非 0、`code=host-deps-install-failed`、`ok:false`，并把**日志路径 + 尾部真原因**带回来（不吞输出、不假装成功）
+        rc=1 code=host-deps-install-failed 垫片=编译成功（/usr/bin/gcc） 拦下的对外尝试=['getaddrinfo registry.npmjs.org'] log=/tmp/quotagent-run-clone-r8_m54yb/negative-install/tmp/run/deps-install.log log_tail=manifest: /tmp/quotagent-run-clone-r8_m54yb/negative-install/.venv/quotagent-runtime.json|quotagent 0.1.0 on Python 3.13.5|runtime ready: /tmp/quotagent-run-clone-r8_m54yb/negative-install/.venv (crea
+[ok]   K9b 反向对照②b（npm 不可用，可移植）：`QUOTAGENT_NODE` 指向没有同级 `npm` 的 node ⇒ 同一条失败路径（`code=host-deps-install-failed` + 退出码非 0 + 日志尾部给出真原因）
+        rc=1 code=host-deps-install-failed QUOTAGENT_NODE=/usr/bin/true log_tail=rdis.sh install|安装 host 依赖（仓库内 host/node_modules，gitignored）...|/tmp/quotagent-run-clone-r8_m54yb/negative-install/tools/cordis.sh: 40: /usr/bin/npm: not found|
+[ok]   K10-1 变异：变异1：把依赖准备步骤改坏（跳过 cordis 安装）（必须让指定断言变红；变异体 == 原件 + 单点替换）
+        红=True 单点=True | 缺依赖又不装 ⇒ 起不来；这条红 = K4 真的在验「一条命令装好并起服务」 | up rc=1 {"ok": false, "action": "up", "code": "unhealthy", "reason": "起了但健康检查连
+[ok]   K10-2 变异：变异2：把健康检查改成不检查（探针恒真）（必须让指定断言变红；变异体 == 原件 + 单点替换）
+        红=True 单点=True | 探针恒真 ⇒ 什么都没起也报 already-up/healthy；这条红 = K4 的外部实测与 pid 活体断言不是摆设 | up rc=0 {"ok": true, "action": "up", "state": "already-up", "service": "quotag
+[ok]   K10-3 变异：变异3：把 down 改成不释放端口（收不到本次启动的 pid ⇒ 不回收）（必须让指定断言变红；变异体 == 原件 + 单点替换）
+        红=True 单点=True | down 拿不到自己起的 pid ⇒ 走 not-managed 分支、服务照旧在跑、端口没释放；这条红 = K7 的「真释放」断言真的连了端口（而不是只看 JSON 里的 released 字段） | up rc=0 {"ok": true, "action": "up", "state": "started", "service": "quotagent; down rc=0 {"ok": true, "action": "down", "state": "not-managed", "port": 56589, 
+[ok]   K10-4 变异：变异4：doctor 把缺失的依赖报成 ok（假装能跑）（必须让指定断言变红；变异体 == 原件 + 单点替换）
+        红=True 单点=True | 缺依赖报到 ok ⇒ 「如实报」被破；这条红 = K8 的 doctor 口径真的能抓住假装成功 | up rc=0 {"ok": true, "action": "up", "state": "started", "service": "quotagent; doctor rc=0 {"ok": true, "action": "doctor", "port": 42411, "blocking": 0, "items"
+[ok]   K10-0 基线（未变异）在同一序列上**不红**（否则四处变异变红都是空转）
+        #1 基线红=False；#2 基线红=False；#3 基线红=False；#4 基线红=False
+[ok]   K10-5 全过程**产品树字节不变**（变异只写在仓库外的副本里；`./run` 与原件逐字节一致）
+        before=54a507fff328 after=54a507fff328
+RESULT: PASS（run-clone 门 20/20）
+RUNCLONE_RC=0
+```
+
+**第一次在 HEAD 上跑是 18/20 —— 两处红都是"门自己写错"，如实留档（不掩盖、不删）**：
+
+1. **K12** 当初写成"HOME 里 0 个文件"，实测红：干净副本的第一次 `up` 要跑 `npm install`，而 **npm 会写
+   `$HOME/.npm/**`**（实测 27 条：`_cacache`/`_logs`/`_update-notifier-last-checked`）。这是**依赖准备步骤的既有
+   边界**（npm 自己的家目录缓存），不是 `./run` 的写面 ⇒ 断言收窄为"**非 `.npm` 的条目必须为空**"（`.npm` 条目
+   如实计数并打印），并补一条"运行期数据（pid/日志/数据根）在副本自己的 `tmp/` 内"。收窄的是"判据覆盖的无关写入者"，
+   **不是放宽结论**：往仓库外写别的东西仍会红。
+2. **变异3** 当初锚在 `kill -TERM "$_pid"`，实测**不红**：`do_down` 在 TERM 之后还有 15 秒等待 + `kill -KILL` 兜底，
+   "不给 TERM"并不等于"不释放端口"。改成锚在 `do_down` 的 `_pid=$(read_pid_file)`（连下一行以保证锚点唯一）⇒
+   down 拿不到自己起的 pid、走 `not-managed` 分支、服务照旧在跑、端口没释放 ⇒ K7 的"真释放"断言（**外部真连端口**，
+   不是只看 JSON 里的 `released` 字段）变红。这正是"变异必须真让**指定**断言变红"的价值。
+
+（本批两笔提交：主提交 `2b5838ed9c30e0ee2a1c507143f27c28ae41058d`；其后一笔只追加本文件、`INDEX-P2` 行与 `.agents/state.json`。）
