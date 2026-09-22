@@ -178,8 +178,8 @@ tools/plugin.sh deps  domain/bid-heuristics    # 依赖闭包（可视化插件 
 四道围栅（控制令牌 fail-closed / 显式确认 / system 层锁定 / 只认显式动词与 id）逐条有名 `code` + `next_action`；
 装卸全程零写面（不写文件、不写账本）。契约见 `src/system/runtime/docs/lifecycle-contract.md` §5。
 **仍未做**（诚实标注）：① `./run` 的动词面里 `logs` 与 `config init` 已实现，但**依赖闭包自动拓扑装配**
-（今天只回答闭包，不代装）仍未做；② `src/domain/**` 的业务插件里只有样板（advice）从插件入口装配，
-其余仍由 `host/modules/**` + `host/cli.mjs` 静态装配（阶段 4.1/5.3 的剩余项）。
+（今天只回答闭包，不代装）仍未做；② **装配**仍由 `host/cli.mjs` + `host/modules/**` 静态完成 —— 但 `host/modules/**` 的 **41 个文件全是薄重导**
+（实体在各插件 `code/`，见 §10），`host/cli.mjs` 的 import 面**一行未改**；阶段 5.3 只剩「由 `plugin.sh` 统一驱动装配」。
 本规范要求的是**接口收敛**：三个层最终都由 `tools/plugin.sh` 一个入口驱动。
 
 ## 5. 依赖规则
@@ -244,7 +244,7 @@ ADR-0007 定的是"**运行环境仅标准库、不引入第三方运行时依�
 | 能力 | cordis 提供 | 用法（本仓锚点） |
 |---|---|---|
 | 组合与依赖注入 | `Context.plugin()` / `inject()` / `RegistryService`（`resolve/get/has/delete/size`） | `host/cli.mjs`、`host/profiles.mjs`；插件写成 `{name, inject, provides, Config, apply}` |
-| 插件生命周期与可回滚副作用 | `fiber.effect()` / `dispose()` / `DisposableList`（`fiber.d.ts`） | `host/lib/user-space.mjs` 的"独立 Context + fiber"；卸载零残留（`AC-PLUGIN-001`） |
+| 插件生命周期与可回滚副作用 | `fiber.effect()` / `dispose()` / `DisposableList`（`fiber.d.ts`） | `src/system/user-plugin-manager/code/user-space.mjs` 的"独立 Context + fiber"；卸载零残留（`AC-PLUGIN-001`） |
 | 事件五模式 | `EventsService.emit/parallel/serial/bail/waterfall/on` | 桥接语义按 ADR-0012 的载荷约定；Python 侧 `kernel/events.py` 是内核等价物 |
 | 配置 schema | `Plugin.Config` + `@standard-schema/spec ^1.1.0` | `host/lib/std-schema.mjs`、各模块 `Config` |
 | 配置热更新可否决 | `fiber.update()` + `internal/update` 瀑布（守卫不调 `next()` 即否决 ⇒ 配置不变、插件不重启） | `host/lib/config.mjs` + `host/lib/frozen.mjs`（`FR-PLUGIN-004`） |
@@ -255,7 +255,7 @@ ADR-0007 定的是"**运行环境仅标准库、不引入第三方运行时依�
 
 | 上游包（版本为 2026-09-22 registry 的 latest） | 覆盖我方哪个自研件 | 结论 |
 |---|---|---|
-| `@cordisjs/plugin-loader@1.0.0-rc.7`（cordis 的**可选 peer 依赖**，本仓未装） | `host/modules/index.mjs`（目录即清单）+ `host/lib/user-space.mjs` 的装载/卸载 | **可替换**：宿主侧动态装卸优先采用上游；替换前先写 ADR（涉及隔离四件套的语义） |
+| `@cordisjs/plugin-loader@1.0.0-rc.7`（cordis 的**可选 peer 依赖**，本仓未装） | `src/system/runtime/code/plugin-index.mjs`（目录即清单；旧路径 `host/modules/index.mjs` 只剩薄重导）+ `src/system/user-plugin-manager/code/user-space.mjs` 的装载/卸载 | **可替换**：宿主侧动态装卸优先采用上游；替换前先写 ADR（涉及隔离四件套的语义） |
 | `@cordisjs/plugin-hmr@1.1.0` | `tools/verify.sh user-space` 的重载路径 | 可替换（热重载） |
 | `@cordisjs/plugin-database@4.1.1` + 驱动（`-sqlite@5.1.1`/`-memory@4.1.1`/…） | 规划中的 `db-store` | **宿主侧优先直接用**；Python 侧不引（ADR-0007） |
 | `@cordisjs/plugin-server@1.7.0`、`@cordisjs/plugin-server-acl@1.0.1` | `tools/webui-serve.py` 的 HTTP 服务 | **可替换/可组合**：WebUI 的 HTTP 层不需要自研 |
@@ -287,10 +287,11 @@ Python 内核（必须保持仅标准库可运行，ADR-0007）与账本写路�
 |---|---|
 | 预算与路径一致（$2.1 的布局不把文档挤出预算） | `tools/verify.sh docs` |
 | 插件↔清单↔装配双向一致 | `tools/verify.sh plugins`；`tools/verify.sh modules`；`tools/verify.sh wiring` |
+| 宿主层**没有**未登记的实体（§10） | `tools/verify.sh plugin-assets`（PA8；双向断言） |
 | 每个插件至少归属 1 条 FR/AC | `tools/verify.sh coverage` |
 | 生命周期六动词可达 | `tools/plugin.sh list --json`（已实现）；门 `tools/verify.sh plugin-lifecycle`（EV-165） |
 | 卸载零残留（三层同一判据） | `tools/verify.sh user-space`（用户空间既有实现）；`plugin-lifecycle` 门对三层同一套接口断言 effects 归零 |
-| webui 零业务耦合 | §6.3 的四条**已加入** `tools/verify.sh plugin-lifecycle`（`host/modules/webui.mjs` 0 次出现样板插件 id/标题 + 机制行 0 业务名词 + 两页 0 内联脚本 + 注册面只读路由 405） |
+| webui 零业务耦合 | §6.3 的四条**已加入** `tools/verify.sh plugin-lifecycle`（实体 `src/system/webui/code/webui.mjs` 0 次出现样板插件 id/标题 + 机制行 0 业务名词 + 两页 0 内联脚本 + 注册面只读路由 405） |
 | cordis 边界不漂移 | §7 的包名/版本与 `src/system/runtime/package.json`、锁文件一致 |
 
 ## 9. 未决
@@ -299,3 +300,18 @@ Python 内核（必须保持仅标准库可运行，ADR-0007）与账本写路�
 2. **`src/userspace/` 是否随源码入库**：现状 `user-space/` 被 gitignore（运行时产物）。迁移后建议"运行时根 gitignore + 一个跟踪的 `EXAMPLE/` 参考实现"，需在阶段 0 定。
 3. **`tools/` 保留几个入口**：本规范保留 `verify.sh`/`run.sh`/`runtime.sh`/`bootstrap.sh`/`cordis.sh` 五个薄入口 + 新增 `plugin.sh`；是否把 `plugin.sh` 也并入 `verify.sh`，等接口收敛后再定。
 4. **门与被围插件同目录的独立性**：门搬到 `tests/` 后，"门不能由被围对象自己写"这条靠什么机检（现在靠评审 + `clean-copy` 门），待设计（登记为 `T-312` 子项）。
+
+## 10. 宿主层非薄入口的**例外登记**（机检真源，默认空）
+
+<!-- exceptions: host-layer-nonthin -->
+
+搬迁完成后 `host/modules/**` 与 `host/lib/**` 里应当只剩薄入口/薄重导/薄转发；任何**仍有实体**（除注释与
+`import`/`export *` 外还含 function/class/const 之类实现声明）的文件必须**在本表逐条登记**。
+
+门：`tools/verify.sh plugin-assets` 的 **PA8**（双向）。薄 = 含 `薄重导`/`薄转发` 标记 + ≤ 20 行 + ≤ 1200 字节
++ 无实现声明（同 `check-evolved-module.py` 的 `THIN_MARK` 语义）。断言「磁盘非薄文件集合 == 本表登记的路径
+集合」：漏搬一个、或把实体放回 `host/modules/` 而不登记 ⇒ **必红**（反例原文 `docs/work/evidence/EV-178-*`）。
+本表**默认空**：登记一条是写进事实，不是放宽门。
+
+| 路径 | 为什么不能是薄入口（实体理由） |
+|---|---|

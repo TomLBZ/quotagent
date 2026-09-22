@@ -24,8 +24,8 @@ from pathlib import Path
 from quotagent.qa.registry import Assertion, register
 
 ROOT = Path(__file__).resolve().parents[4]
-MONITOR = ROOT / "tools" / "ui-feedback-monitor.sh"
-TICK = ROOT / "tools" / "ui-feedback-tick.sh"
+MONITOR = ROOT / "src" / "system" / "ui-feedback" / "tools" / "ui-feedback-monitor.sh"   # 实体（本批 EV-178 搬进本插件 tools/；旧路径只剩薄转发）
+TICK = ROOT / "src" / "system" / "ui-feedback" / "tools" / "ui-feedback-tick.sh"   # 同上
 # 输出里**不得**出现的「已经发了东西」措辞（空待办时出现任何一条 ⇒ 就是在发垃圾消息）
 MESSAGE_WORDS = ("已处理", "已通知", "已提醒", "已发送", "已发出", "已催", "消息", "summary")
 # 时间/随机源：探测器里出现这些 ⇒ 同一状态两次输出可能不同 ⇒ 调度器判不出「无变化」而反复起 agent

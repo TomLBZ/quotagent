@@ -64,7 +64,7 @@ ROOT = Path(__file__).resolve().parents[4]
 #: `src/quotagent/services/admin_blocks.py` 只剩**薄重导**。这里必须指实体 —— 扫旧路径的话，十几行的
 #: 转发文件会让「不写账本 / 不读墙钟 / 不读环境变量」这些文本判据**静默判绿**（= 断言变空）。
 SERVICE = ROOT / "src" / "system" / "admin" / "code" / "admin_blocks.py"
-WRITER = ROOT / "tools" / "refresh-admin-snapshot.py"
+WRITER = ROOT / "src" / "system" / "admin" / "tools" / "refresh-admin-snapshot.py"   # 实体（本批 EV-178 搬进本插件 tools/；旧路径只剩薄转发）
 REAL_STATE = ROOT / ".agents" / "state.json"
 REAL_CHECKLIST = ROOT / "docs" / "work" / "progress-checklist.md"
 REAL_PIPELINE = ROOT / "tmp" / "ui-shared" / "pipeline.json"
@@ -570,7 +570,7 @@ def check_admin_006() -> list[Assertion]:
 # AC-ADMIN-005：UI 内解阻塞的**消费侧**（宿主只提交、Python 只消费并落账）
 # ---------------------------------------------------------------------------
 APPLIER = ROOT / "tools" / "admin-apply.py"
-HOST_WEBUI = ROOT / "host" / "modules" / "webui.mjs"
+HOST_WEBUI = ROOT / "src" / "system" / "webui" / "code" / "webui.mjs"   # 实体（本批 EV-178 搬进本插件 `code/`；旧路径 `host/modules/webui.mjs` 只剩薄重导）
 CRED_SENTINEL = "SMTP-PASSWORD-SENTINEL"     # 凭据**值**：账本里搜不到
 CRED_FIELD = "password"                      # 凭据**键名**：账本里同样搜不到
 APPLY_NOW = "2026-09-21T00:00:00Z"

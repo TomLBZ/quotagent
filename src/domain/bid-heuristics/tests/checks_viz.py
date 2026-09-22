@@ -41,7 +41,8 @@ def check() -> list[Assertion]:
                          all(marks.values()), f"marks={marks}"))
     # 零写面（非注释源码）
     code = '\n'.join(l for l in src.splitlines() if not l.lstrip().startswith(('//', '*', '/*', '#')))
-    webui = ROOT / 'host' / 'modules' / 'webui.mjs'
+    # 实体（本批 `EV-178` 搬进本插件 `code/`；旧路径 `host/modules/webui.mjs` 只剩薄重导）
+    webui = ROOT / 'src' / 'system' / 'webui' / 'code' / 'webui.mjs'
     wsrc = webui.read_text(encoding='utf-8') if webui.is_file() else ''
     chk_code = code + '\n' + '\n'.join(l for l in wsrc.splitlines()
                                        if not l.lstrip().startswith(('//', '*', '/*', '#')))

@@ -674,7 +674,8 @@ try:
             mail_imports |= {alias.name.split(".")[0] for alias in node_.names}
         elif isinstance(node_, ast.ImportFrom) and not node_.level:
             mail_imports.add((node_.module or "").split(".")[0])
-    view_source = (ROOT / "host" / "modules" / "mail-view.mjs").read_text(encoding="utf-8")
+    # 实体（本批 `EV-178` 搬进本插件 `code/`；旧路径 `host/modules/mail-view.mjs` 只剩薄重导）
+    view_source = (ROOT / "src" / "system" / "mail" / "code" / "mail-view.mjs").read_text(encoding="utf-8")
     # **按 import 说明符判**（不是按正文里出现过这个词：注释里写"不 import net"不该被判成 import）
     view_specifiers = re.findall(r"from\s+'([^']+)'", view_source) + re.findall(r"import\(\s*'([^']+)'", view_source)
     view_banned = [spec for spec in view_specifiers

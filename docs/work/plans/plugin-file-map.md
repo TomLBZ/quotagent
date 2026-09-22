@@ -296,8 +296,8 @@
 | `src/quotagent/{__init__,paths}.py` | `src/system/runtime/` | 运行时与路径解析 |
 | `src/quotagent/bridge.py` | `src/system/kernel-bridge/bridge.py` | 与宿主桥同插件 |
 | `src/quotagent/g1side.py` | `src/system/repo-gate/g1side.py` | G1 走查的 Python 侧 |
-| `host/modules/<stem>.mjs` | `src/{system|domain}/<plugin>/code/<stem>.mjs` | 归属规则见 27 §1.2（`norm/compare` 与 Python 侧同插件）；**实体落 `code/`**（本批 `EV-176` 起明确）——旧路径 `host/modules/<stem>.mjs` 留**薄重导**，`host/modules/index.mjs` 的目录即清单自动发现与全部 import 面一行未改。宿主模块源码只许 `./` 与 `../lib/` 这一条（`verify.sh modules` 的 A6）⇒ 重导经 `host/lib/entity-<stem>.mjs` 一跳；另一侧，实体里的 `../lib/…` 由各插件目录的**过渡软链** `src/<层>/<插件>/lib -> host/lib` 解析（模块 import 契约逐字未改） |
-| `host/lib/<f>.mjs` | 按功能拆到 `system/{kernel,kernel-bridge,canary,config,evolution,user-plugin-manager}/` | 库层不单独成立插件：它属于使用它的插件；**本批 `EV-177` 落 13 个到插件 `code/`**，`evolution.mjs`/`user-space.mjs` 因裸 `cordis` 解析（`src/` 下上溯不到 `host/node_modules/`）留待下批 |
+| `host/modules/<stem>.mjs` | `src/{system|domain}/<plugin>/code/<stem>.mjs` | 归属规则见 27 §1.2（`norm/compare` 与 Python 侧同插件）；**实体落 `code/`**（`EV-176` 起明确；`EV-178` 起 `host/modules/**` **41 个文件全是薄重导**）——旧路径 `host/modules/<stem>.mjs` 留**薄重导**，`host/modules/index.mjs` 的目录即清单自动发现与全部 import 面一行未改。宿主模块源码只许 `./` 与 `../lib/` 这一条（`verify.sh modules` 的 A6）⇒ 重导经 `host/lib/entity-<stem>.mjs` 一跳；另一侧，实体里的 `../lib/…` 由各插件目录的**过渡软链** `src/<层>/<插件>/lib -> host/lib` 解析（模块 import 契约逐字未改） |
+| `host/lib/<f>.mjs` | 按功能拆到 `system/{kernel,kernel-bridge,canary,config,evolution,user-plugin-manager}/` | 库层不单独成立插件：它属于使用它的插件；`EV-177` 落 13 个到插件 `code/`、**本批 `EV-178` 落最后 2 个**（`evolution.mjs`→`system/evolution/code/`、`user-space.mjs`→`system/user-plugin-manager/code/`；两处的裸 `cordis` 改为**模块内显式解析**（`$QUOTAGENT_CORDIS` → `host/node_modules/cordis` → 裸名，与 `plugin-registry.mjs` 的 `loadCordis` 同一套）⇒ `host/lib/**` **0 个实体**） |
 | `host/<plugin>.mjs`（围栏门） | `src/<层>/<plugin>/tests/<plugin>.mjs` | 门的对象即插件 |
 | `host/t2NN-*-gate.mjs` | `src/<层>/<plugin>/tests/` | 同上 |
 | `host/{package.json,package-lock.json,README.md,smoke.mjs,cli.mjs,profiles.mjs}` | `src/system/runtime/` | 宿主运行时清单与入口 |
@@ -324,13 +324,10 @@
    `插件·已搬`（实体已在新位置，旧位置**只剩薄转发**）· `插件·待搬`（实体仍在旧位置，**逐条登记**在此，不许无名散落）。
 3. **子目录**：`tests/` = 门/检查（`check-*.py`、`checks_*.py`、围栏门 `*-gate.mjs`）随被检查的插件走；
    `tools/` = 有写面的工具（写账本者只能是该账本唯一写者，27 §2.2）。
-4. **`tools/**` 的非薄入口数**（散落的度量）：搬前 **69**（75 个文件 − 6 个薄入口），阶段 4.1 **搬走 7 个**（旧位置变薄转发）
-   并**新增 1 个**（本节的机检门 `tools/check-plugin-assets.py` 自己，也登记为 `插件·待搬`）⇒ **63**；
-   一键运行的干净副本验收门 `tools/check-run-clone.py`（EV-171）再 **+1** ⇒ **64**（同样是本类的平台门，登记为 `插件·待搬`）。
-   阶段 4.2 续搬（`EV-175`）再**搬走 10 个**（旧位置变薄转发，全部落在 `tests/`）⇒ **54**；
-   本批（`EV-176`）再**搬走 12 个**（同样是外圈、归属明确的 `check-*.py`，全部落 `tests/`）⇒ **42**；
-   门把 42 冻结为下界锁（`tools/check-plugin-assets.py` 的 `BASELINE_NONTHIN`，由 64 **收紧**为 54、再**收紧**为 42，
-   不是放宽）：**只减不增**，且集合必须与下表逐条相等。
+4. **`tools/**` 的非薄入口数**（散落的度量）：**本批（`EV-178`）再搬走 17 个**（旧位置全部变薄转发）⇒ **13**。
+   逐批的加减史（搬前 69 → 63 → 64 → 54 → 42 → 30 → **13**）、每批搬了哪些、复算命令见
+   [`plugin-file-map-batches.md`](plugin-file-map-batches.md) §「非薄入口数的加减史」。门把 **13** 冻结为下界锁
+   （`tools/check-plugin-assets.py` 的 `BASELINE_NONTHIN`，一路**收紧**、**从未放宽**）：只减不增，且集合必须与下表逐条相等。
 5. **薄转发**：旧位置那几行只做转发（Python 用 `runpy`/`importlib` 指到新位置；`.mjs` 围栅门用 `import './../src/…'`，
    实现只在 `src/<层>/<插件>/tests/` 那一份），**不含任何实现**；
    改实现只改新位置那一份。留下的理由：`tools/verify.sh` 的门名与分支、`src/quotagent/qa/*.py` 里按路径读实现的判据、
@@ -345,12 +342,12 @@
 
 ### 全量分类表（144 行 = 77 + 20 + 47）
 
-### A. `tools/**`（77 个，其中平台薄入口 6 + 阶段 4.1 已搬 7 + `EV-175` 已搬 10 + `EV-176` 已搬 12 + `EV-177` 已搬 12 + 待搬 30）
+### A. `tools/**`（77 个，其中平台薄入口 6 + 阶段 4.1 已搬 7 + `EV-175` 已搬 10 + `EV-176` 已搬 12 + `EV-177` 已搬 12 + `EV-178` 已搬 17 + 待搬 13）
 
 | 资产 | 归属插件 | 分类 | 子目录 |
 |---|---|---|---|
-| `tools/admin-apply.py` | `system/admin` | 插件·待搬 | `tools/` |
-| `tools/audit-verify.py` | `system/evidence` | 插件·待搬 | `tools/` |
+| `tools/admin-apply.py` | `system/admin` | 插件·已搬 | `tools/` |
+| `tools/audit-verify.py` | `system/evidence` | 插件·已搬 | `tools/` |
 | `tools/bootstrap.sh` | — | 平台薄入口 | — |
 | `tools/check-ac-registry.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-admin-route.py` | `system/admin` | 插件·已搬 | `tests/` |
@@ -397,35 +394,35 @@
 | `tools/check-webui.py` | `system/webui` | 插件·已搬 | `tests/` |
 | `tools/config-apply.py` | `system/config` | 插件·待搬 | `tools/` |
 | `tools/cordis.sh` | — | 平台薄入口 | — |
-| `tools/evolve-module.mjs` | `system/evolution` | 插件·待搬 | `tools/` |
-| `tools/evolve-record.py` | `system/evolution` | 插件·待搬 | `tools/` |
-| `tools/export-events.py` | `system/evidence` | 插件·待搬 | `tools/` |
+| `tools/evolve-module.mjs` | `system/evolution` | 插件·已搬 | `tools/` |
+| `tools/evolve-record.py` | `system/evolution` | 插件·已搬 | `tools/` |
+| `tools/export-events.py` | `system/evidence` | 插件·已搬 | `tools/` |
 | `tools/g1-walkthrough.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
-| `tools/gate-nudge.py` | `domain/gate-timeline` | 插件·待搬 | `tools/` |
+| `tools/gate-nudge.py` | `domain/gate-timeline` | 插件·已搬 | `tools/` |
 | `tools/manual-check.py` | `system/repo-gate` | 插件·待搬 | `tools/` |
 | `tools/mutate-ui-views.py` | `system/webui` | 插件·待搬 | `tools/` |
 | `tools/netblock.c` | `system/runtime` | 插件·待搬 | `tests/` |
 | `tools/plugin.sh` | — | 平台薄入口 | — |
 | `tools/quote-draft.py` | `domain/quote-prepare` | 插件·待搬 | `tools/` |
 | `tools/quote-sign.py` | `domain/quote-prepare` | 插件·待搬 | `tools/` |
-| `tools/refresh-admin-snapshot.py` | `system/admin` | 插件·待搬 | `tools/` |
-| `tools/refresh-agent-memory.py` | `system/agent-runtime` | 插件·待搬 | `tools/` |
-| `tools/refresh-retention-plan.py` | `system/retention` | 插件·待搬 | `tools/` |
+| `tools/refresh-admin-snapshot.py` | `system/admin` | 插件·已搬 | `tools/` |
+| `tools/refresh-agent-memory.py` | `system/agent-runtime` | 插件·已搬 | `tools/` |
+| `tools/refresh-retention-plan.py` | `system/retention` | 插件·已搬 | `tools/` |
 | `tools/refresh-ui-snapshots.py` | `system/webui` | 插件·待搬 | `tools/` |
-| `tools/rfq-promise.py` | `domain/rfq-deadline` | 插件·待搬 | `tools/` |
+| `tools/rfq-promise.py` | `domain/rfq-deadline` | 插件·已搬 | `tools/` |
 | `tools/run.sh` | — | 平台薄入口 | — |
 | `tools/runtime.sh` | — | 平台薄入口 | — |
-| `tools/storage.py` | `system/storage` | 插件·待搬 | `tools/` |
-| `tools/ui-feedback-apply.py` | `system/ui-feedback` | 插件·待搬 | `tools/` |
-| `tools/ui-feedback-monitor.sh` | `system/ui-feedback` | 插件·待搬 | `tools/` |
-| `tools/ui-feedback-tick.sh` | `system/ui-feedback` | 插件·待搬 | `tools/` |
+| `tools/storage.py` | `system/storage` | 插件·已搬 | `tools/` |
+| `tools/ui-feedback-apply.py` | `system/ui-feedback` | 插件·已搬 | `tools/` |
+| `tools/ui-feedback-monitor.sh` | `system/ui-feedback` | 插件·已搬 | `tools/` |
+| `tools/ui-feedback-tick.sh` | `system/ui-feedback` | 插件·已搬 | `tools/` |
 | `tools/ui-seed-pipeline.py` | `system/webui` | 插件·待搬 | `tools/` |
-| `tools/userplugin-elevate.py` | `system/user-plugin-manager` | 插件·待搬 | `tools/` |
-| `tools/userplugin-record.py` | `system/user-plugin-manager` | 插件·待搬 | `tools/` |
+| `tools/userplugin-elevate.py` | `system/user-plugin-manager` | 插件·已搬 | `tools/` |
+| `tools/userplugin-record.py` | `system/user-plugin-manager` | 插件·已搬 | `tools/` |
 | `tools/v-kit.sh` | `system/repo-gate` | 插件·待搬 | `tools/` |
 | `tools/verify.sh` | — | 平台薄入口 | — |
 | `tools/webui-serve.py` | `system/webui` | 插件·待搬 | `tools/` |
-| `tools/ws-integrate.py` | `system/runtime` | 插件·待搬 | `tools/` |
+| `tools/ws-integrate.py` | `system/runtime` | 插件·已搬 | `tools/` |
 
 ### B. `host/*-gate.mjs`（20 个：**已全部搬** —— 阶段 4.2 前 10 个（EV-172）+ 续批 10 个（EV-173））
 

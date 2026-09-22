@@ -22,10 +22,14 @@
       只读既有门（`v`）证明接口真能跑。
   PA7 `tools/**` 的**散落不再增长**：`tools/` 下的**非薄入口**文件集合 == §分类 里 `插件·待搬` 的集合（双向），
       且数量 ≤ `BASELINE_NONTHIN`（本批实测值，**只减不增**）。
+  PA8 宿主层**非薄入口 == 文档登记的例外集合**（双向，默认集合为**空**）：`host/modules/**` 与 `host/lib/**`
+      里不该再有实现文件（搬迁完成后应只剩薄入口/薄重导/薄转发）；任何仍有实体声明的文件必须在
+      `docs/design/27-plugin-architecture.md` §10 的例外表里逐条登记（登记锚点 `<!-- exceptions: host-layer-nonthin -->`）。
+      以前「搬漏一个」只有人眼能发现；这条把它变成**必红**。
   F0 基线（未变异）在同一套判据上**不红**（否则"变异变红"说明不了任何事）。
   F1..F4 **4 处单点变异全红**（整树副本 + 单点改动；每处必须让**指定的**断言变红）；
       ① 抽走目标目录里的资产 ② 把一条转发改成实体 ③ 把资产副本放进另一个插件目录
-      ④ 往 `tools/` 加一个未登记的非薄入口。
+      ④ 往 `tools/` 加一个未登记的非薄入口 ⑤ 把一个**实体**放回 `host/modules/` 而不登记（PA8）。
   F5 防假变异：不存在的锚点必须被判为假变异（不许"没改到任何字节"也算红）。
   F6 全过程**产品树字节不变**（变异只写在 `tmp/` 的整树副本里）。
 
@@ -262,6 +266,46 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "system/repo-gate", "src/system/repo-gate/tests/check-plugin-requirements.py"),
     "tools/check-plugin-assets.py": (
         "system/repo-gate", "src/system/repo-gate/tests/check-plugin-assets.py"),
+    # --- 本批（EV-178 / T-328）：`tools/**` 非薄入口 **17 个**搬进各自插件的 `tools/`（旧位置留**薄转发**，
+    # `runpy`/`exec bash`/副作用 import 三种形态按扩展名选，见 `plugin-file-map-batches.md` §批次台账）。
+    # 实现只改一处 —— 仓库根推导 `parents[1]`/`parent.parent`（`tools/` 下）→ `parents[4]`
+    # （`src/<层>/<插件>/tools/` 下，深度与既有 `tests/` 已搬件一致）；门名与 `tools/verify.sh` 的分支一行未改。
+    # 被**源码文本读**的三处读方（`checks_uifb.py` 的 `APPLY`、`checks_admin.py` 的 `WRITER`、
+    # `checks_usreq.py` 的 `MONITOR`/`TICK`）**先改指实体**再搬，否则断言会在 4 行转发上静默判绿。
+    "tools/admin-apply.py": (
+        "system/admin", "src/system/admin/tools/admin-apply.py"),
+    "tools/audit-verify.py": (
+        "system/evidence", "src/system/evidence/tools/audit-verify.py"),
+    "tools/evolve-module.mjs": (
+        "system/evolution", "src/system/evolution/tools/evolve-module.mjs"),
+    "tools/evolve-record.py": (
+        "system/evolution", "src/system/evolution/tools/evolve-record.py"),
+    "tools/export-events.py": (
+        "system/evidence", "src/system/evidence/tools/export-events.py"),
+    "tools/gate-nudge.py": (
+        "domain/gate-timeline", "src/domain/gate-timeline/tools/gate-nudge.py"),
+    "tools/refresh-admin-snapshot.py": (
+        "system/admin", "src/system/admin/tools/refresh-admin-snapshot.py"),
+    "tools/refresh-agent-memory.py": (
+        "system/agent-runtime", "src/system/agent-runtime/tools/refresh-agent-memory.py"),
+    "tools/refresh-retention-plan.py": (
+        "system/retention", "src/system/retention/tools/refresh-retention-plan.py"),
+    "tools/rfq-promise.py": (
+        "domain/rfq-deadline", "src/domain/rfq-deadline/tools/rfq-promise.py"),
+    "tools/storage.py": (
+        "system/storage", "src/system/storage/tools/storage.py"),
+    "tools/ui-feedback-apply.py": (
+        "system/ui-feedback", "src/system/ui-feedback/tools/ui-feedback-apply.py"),
+    "tools/ui-feedback-monitor.sh": (
+        "system/ui-feedback", "src/system/ui-feedback/tools/ui-feedback-monitor.sh"),
+    "tools/ui-feedback-tick.sh": (
+        "system/ui-feedback", "src/system/ui-feedback/tools/ui-feedback-tick.sh"),
+    "tools/userplugin-elevate.py": (
+        "system/user-plugin-manager", "src/system/user-plugin-manager/tools/userplugin-elevate.py"),
+    "tools/userplugin-record.py": (
+        "system/user-plugin-manager", "src/system/user-plugin-manager/tools/userplugin-record.py"),
+    "tools/ws-integrate.py": (
+        "system/runtime", "src/system/runtime/tools/ws-integrate.py"),
     # --- 阶段 4.2 续搬（EV-175 / T-325）：挑**外圈且归属明确**的 10 个 `tools/**` 非薄入口搬进各自插件的
     # `tests/`（旧位置留薄转发；`tools/verify.sh` 的门名与分支一行未改）。选的都是自洽的小门：
     # 只做 `ROOT` 推导（`parents[1]` → `parents[4]`）这一处改动，行为逐项对拍一致。
@@ -294,11 +338,13 @@ MAX_FORWARDER_BYTES = 1200
 MAX_FORWARDER_LINES = 20
 EXCLUDE_DIRS = frozenset({"__pycache__", ".git", "tmp", "node_modules", ".venv"})
 
-#: `tools/` 下非薄入口文件的**实测值**：阶段 4.1 搬前 69（75 个文件 − 6 个薄入口）− 搬走 7 个 + `plugin-assets.py` 自己 1 个
-#: = 63；一键运行的干净副本验收门 `tools/check-run-clone.py`（EV-171）再 +1 ⇒ 64；**阶段 4.2 续搬（EV-175）再搬走 10 个**
-#: ⇒ **54**；`EV-176` 再搬走 12 个 ⇒ **42**；**本批（`EV-177`）再搬走 12 个** ⇒ **30**（旧位置全部变薄转发）。
+#: `tools/` 下非薄入口文件的**实测值**：一路由 69（搬前）→ 63 → 64（`EV-171` 加干净副本门）→ 54（`EV-175` 搬 10）
+#: → 42（`EV-176` 搬 12）→ 30（`EV-177` 搬 12）→ **13（本批 `EV-178` 搬 17）**；旧位置全部变薄转发。
+#: 为什么 `manual-check.py` 留着不搬：PA6 断言「已搬资产仍被**契约面**引用」，它在 verify.sh / qa / tests /
+#: tools 里都没有调用者（只在手册与 docs 里被提到）⇒ 搬了就等于制造一个孤儿。
+#: 逐批加减史与复算命令见 `docs/work/plans/plugin-file-map-batches.md` §「非薄入口数的加减史」。
 #: 锁的语义是"只减不增"：搬走本门或其它项时这个数应随之下调；**上调只允许"新增一个同级平台门"这一种理由**（改这一行是显式动作）。
-BASELINE_NONTHIN = 30
+BASELINE_NONTHIN = 13
 #: 门名数下界（阶段 4.1 搬前 69 + `plugin-assets` = 70；本批新增 `run-clone` ⇒ 71；门名是接口，只增不减）。
 MIN_GATE_NAMES = 71
 #: `--help` 一类的别名不算"实现分支"。
@@ -399,6 +445,70 @@ def forwarder_problem(root: Path, old: str, target: str) -> str:
             return (f"旧位置相对目标过大（{size} B vs {target_path.stat().st_size} B，"
                     f"超过 1/4 ⇒ 不像薄转发）：{old}")
     return ""
+
+
+# ---------------------------------------------------------------------------
+# PA8：宿主层非薄入口的判据与「文档登记的例外集合」读取
+# ---------------------------------------------------------------------------
+EXCEPTIONS_DOC = "docs/design/27-plugin-architecture.md"
+EXCEPTIONS_ANCHOR = "<!-- exceptions: host-layer-nonthin -->"
+#: 实现声明（出现任意一条即「不是薄入口」）。
+DECL_RE = re.compile(r"^\s*(?:export\s+)?(?:async\s+)?(?:function|class|const|let|var)\b")
+THIN_MARKS = ("薄重导", "薄转发")
+
+
+def is_thin_host_file(path: Path) -> bool:
+    """薄入口/薄重导/薄转发：含标记 + ≤ `MAX_FORWARDER_LINES` 行 + ≤ `MAX_FORWARDER_BYTES` 字节 + 无实现声明。
+
+    为什么不用「文件很小」当唯一判据：8 行的重导与 8 行的**实现**在字节上分不开 —— 判据必须落在
+    「除注释与 `import`/`export *` 外没有声明」这一条上，否则把实体改短就能绕过去。
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    if not any(mark in text for mark in THIN_MARKS):
+        return False
+    if path.stat().st_size > MAX_FORWARDER_BYTES:
+        return False
+    lines = [line for line in text.splitlines()
+             if line.strip() and not line.strip().startswith(("//", "*", "/*"))]
+    if len(lines) > MAX_FORWARDER_LINES:
+        return False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("import ") or stripped.startswith("export *"):
+            continue
+        if DECL_RE.match(line):
+            return False
+    return True
+
+
+def nonthin_host_files(root: Path) -> list[str]:
+    """`host/modules/**` 与 `host/lib/**` 里**仍有实体**的 `.mjs`（相对仓库根，排序）。"""
+    out: list[str] = []
+    for base in ("host/modules", "host/lib"):
+        for path in sorted((root / base).glob("*.mjs")):
+            if not is_thin_host_file(path):
+                out.append(str(path.relative_to(root)))
+    return out
+
+
+def exception_rows(root: Path) -> set[str] | None:
+    """读 `27-plugin-architecture.md` §10 的例外登记表；缺锚点返回 None（= 判红，不许悄悄没有登记处）。"""
+    try:
+        text = (root / EXCEPTIONS_DOC).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if EXCEPTIONS_ANCHOR not in text:
+        return None
+    section = text.split(EXCEPTIONS_ANCHOR, 1)[1].split("\n## ", 1)[0]
+    rows: set[str] = set()
+    for line in section.splitlines():
+        match = re.match(r"^\|\s*`(?P<path>[^`]+)`\s*\|", line.strip())
+        if match:
+            rows.add(match.group("path").strip())
+    return rows
 
 
 def resolve_tokens(root: Path, body: str) -> tuple[list[str], list[str]]:
@@ -556,10 +666,24 @@ def evaluate(root: Path, run_gates: bool = True) -> tuple[list[tuple[str, bool, 
     verify_text = (root / VERIFY_REL).read_text(encoding="utf-8")
     qa_text = "\n".join((root / "src" / "quotagent" / "qa" / p.name).read_text(encoding="utf-8", errors="replace")
                         for p in (root / "src" / "quotagent" / "qa").glob("*.py"))
+    # 参考面（`EV-178` 起**跟到搬完的家**）：早期批次里已搬资产的调用者都还在 `tools/verify.sh` 与
+    # `src/quotagent/qa/*.py`；但阶段 4.1/4.2 把**门与 AC 的实现**也搬进了 `src/<层>/<插件>/tests/`
+    # （`qa/*.py` 只剩薄转发）⇒ 只扫旧面会把「调用者自己搬了家」误判成「没人调用」。
+    # 判据本身**一格没松**：任何一个参考面里都找不到该资产 ⇒ 仍然红（下面另有一条非空转探针）。
+    tests_text = "\n".join(p.read_text(encoding="utf-8", errors="replace")
+                           for p in sorted((root / "src").glob("*/*/tests/*.*")) if p.is_file())
+    chain_text = "\n".join(p.read_text(encoding="utf-8", errors="replace")
+                           for p in sorted((root / "src").glob("*/*/tools/*.*")) if p.is_file())
+    surface = "\n".join((verify_text, qa_text, tests_text, chain_text))
     for old, (_owner, target) in sorted(RELOCATED.items()):
         base = Path(target).name
-        if old not in verify_text and base not in verify_text and base not in qa_text and old not in qa_text:
-            referenced.append(f"{old} 搬完之后没人引用（门名/AC 都指不到它）")
+        if old not in surface and base not in surface:
+            referenced.append(f"{old} 搬完之后没人引用（门名/AC/测试/工具链都指不到它）")
+    # 非空转探针：一个绝不可能被引用的名字必须在参考面上**找不到**（否则说明 surface 是空串/恒真）。
+    # 探针串**在运行期拼**：本文件自己也在 `src/*/*/tests/` 里（参考面会读到自己），写死会自命中。
+    probe = "zz-orphan" + "-probe-" + "does-not-exist"
+    if probe in surface or not surface.strip():
+        referenced.append("参考面判据在空转（surface 为空或探针命中）")
     add("PA6 门接口不因搬迁失联（help 门名 ↔ case 分支 ↔ 实现路径三方对齐 + 真跑 help/v + 已搬资产仍被引用）",
         not problems and not referenced, "; ".join((problems + referenced)[:6]) or note)
 
@@ -577,6 +701,23 @@ def evaluate(root: Path, run_gates: bool = True) -> tuple[list[tuple[str, bool, 
         f"且 ≤ 基线 {BASELINE_NONTHIN}）", not diff, "; ".join(diff[:8]) or f"实计 {len(nonthin)} 项，双向一致")
     facts["nonthin"] = len(nonthin)
     facts["thin_entries"] = sorted(Path(f).name for f in disk["tools"] if Path(f).name in THIN_ENTRIES)
+
+    # --- PA8：宿主层非薄入口 == 文档登记的例外集合（双向；默认空）----------------------
+    host_nonthin = nonthin_host_files(root)
+    registered = exception_rows(root)
+    p8: list[str] = []
+    if registered is None:
+        p8.append(f"缺例外登记锚点 `{EXCEPTIONS_ANCHOR}`（{EXCEPTIONS_DOC} §10 是这条断言的登记真源）")
+    else:
+        for rel in sorted(set(host_nonthin) - registered):
+            p8.append(f"`{rel}` 是**非薄入口实体**，但 27 §10 例外表里没有登记（搬漏，或放回 host/modules 没登记）")
+        for rel in sorted(registered - set(host_nonthin)):
+            p8.append(f"27 §10 登记了 `{rel}`，但它现在是**薄**的（登记与事实不符，应删掉这行）")
+    add(f"PA8 宿主层非薄入口 == 27 §10 登记的例外集合（默认空；双向）",
+        not p8, "; ".join(p8[:6]) or f"host/modules+host/lib 非薄入口 {len(host_nonthin)} 个，"
+                                     f"例外表 {len(registered) if registered is not None else '（缺）'} 条，双向一致")
+    facts["host_nonthin"] = len(host_nonthin)
+    facts["host_exceptions"] = sorted(registered) if registered is not None else None
     return res, facts
 
 
@@ -639,6 +780,12 @@ def main() -> int:
              "# 未登记的新检查资产（变异）\n", encoding="utf-8"),
          "must_red": "PA7 ", "why": "散落变多且没登记"},
     ]
+    mutant_specs.append({
+        "name": "F7 把一个**实体**放回 `host/modules/` 而不登记（`host/modules/zz-unregistered-entity.mjs`）必须让 PA8 变红",
+        "apply": lambda base: (base / "host/modules/zz-unregistered-entity.mjs").write_text(
+            "/** 未登记的实体（变异）：含实现声明，不是薄重导。 */\nexport function zz() { return 1 }\n",
+            encoding="utf-8"),
+        "must_red": "PA8 ", "why": "宿主层出现未登记的实现文件 ⇒ 例外表与事实不符"})
     mutated_roots: list[Path] = []
     for index, spec in enumerate(mutant_specs, start=1):
         base = tree_copy(ROOT, work / f"mutant-{index}")

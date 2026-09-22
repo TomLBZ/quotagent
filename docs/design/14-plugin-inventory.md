@@ -34,7 +34,7 @@
 | `host/modules/approval-digest.mjs` | 人工门**待批摘要**（总数/按动作/等待时长四桶/置信度分布/最久等待；只给计数与时长，不出正文）——**第六个自进化产出（subagent 生产）** | `approvalDigest` | `webui`（双方视角 `/api/approvals`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh approval-digest` 围栏 |
 | `host/modules/budget-guard.mjs` | 中间件：**窗口成本预算准入**（整数 µ 金额、窗口滚动、超预算拒绝可解释；`budget-exceeded`（等窗口有用）与 `cost-exceeds-budget`（等也没用）分开报）——**第七个自进化产出（subagent 生产）** | `budgetGuard` | `contractor-ops`（桥调用路径） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯，语义受 `verify.sh budget-guard` + `budget-route` 围栏 |
 | `host/modules/retention-view.mjs` | 留存计划的**只读聚合视图**（计数/动作分布/待人工门/最久项/一行摘要；只组合不自算、不出正文与私域键、确定性、有界）——**第八个自进化产出（subagent 生产，T-254）** | `retentionView` | `webui`（运维视角 `/api/retention`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯 |
-| `host/modules/user-plugin-manager.mjs` | **用户空间插件的管理面（本身也是插件）**：list/load/unload/reload/requestCreate/elevateRequest（待办载荷；写盘与落账本均交 Python 侧）；隔离四件套由 `host/lib/user-space.mjs` 落实（独立 Context、服务键 `<ns>.<plugin>.<svc>`、文件根绑定、凭据作用域）—— **subagent 产出（T-268）** | `userPluginManager` | `webui`（系统管理道） | 只改本文件 |
+| `host/modules/user-plugin-manager.mjs` | **用户空间插件的管理面（本身也是插件）**：list/load/unload/reload/requestCreate/elevateRequest（待办载荷；写盘与落账本均交 Python 侧）；隔离四件套由 `src/system/user-plugin-manager/code/user-space.mjs` 落实（旧路径 `host/lib/user-space.mjs` 只剩薄重导）（独立 Context、服务键 `<ns>.<plugin>.<svc>`、文件根绑定、凭据作用域）—— **subagent 产出（T-268）** | `userPluginManager` | `webui`（系统管理道） | 只改本文件 |
 | `host/modules/plugin-market.mjs` | **插件列表/市场本身由插件提供**：只读聚合三真源（`host/modules/*.mjs` 目录 / 本清单 / `user-space/*/plugin.json`），逐项给 `source`(human/evolve/user-space) 与 `wired`；三源不一致**必须报**（`inconsistent`+`differences`），不可取其一静默；降级优先、有界、确定性、零写面 —— **subagent 产出并晋升（T-267，ap-0111）** | `pluginMarket` | `webui`（系统管理道 `/quotagent/admin/api/market`） | 只改本文件；哈希受 `verify.sh evolve-module` 追溯 |
 | `host/modules/admin-guard.mjs` | 系统管理道的**门卫**：token 校验（sha256 归一 + 恒定时间比较）、不透明会话（≥128 bit，非 token 派生）、失败五类**统一拒绝体**（无 oracle）、连续失败有界冷却（冷却内正确 token 也拒、结束不自动提权）、可注入假时钟 —— **subagent 生产（T-272）** | `adminGuard` | `webui`（系统管理道） | 只改本文件 |
 | `host/modules/admin-view.mjs` | 系统管理面板的**只读聚合**：阻塞（来自 Python 侧真源）与进度；降级优先、有界、确定性、按键白名单投影、不出正文与私域键 —— **subagent 生产（T-272）** | `adminView` | `webui`（`/quotagent/admin/`） | 只改本文件 |
@@ -56,24 +56,30 @@
 
 目录即清单：新增功能 = 新增 `host/modules/<name>.mjs`（`host/modules/index.mjs` 自动发现），不必改中心清单；模块被哪个 profile 挂载仍写在 `host/profiles.mjs`（组成即数据，ADR-0015）。
 
+> **实体位置（`EV-178` 起，事实）**：本表 25 行的 `host/modules/<stem>.mjs` **全部只剩薄重导**，实体在
+> `src/{system,domain}/<插件>/code/<stem>.mjs`（逐条见 `plugin-file-map.md` 的规则表；例外登记见 27 §10）。
+
 ## 2. 三层插件（`src/<层>/<插件>/`）
 
 目录布局与最小契约见 `docs/design/27-plugin-architecture.md` §2/§3；需求归属见 `docs/work/plugin-requirements-map.md`。
-**`T-321` 起 63/63 插件目录均已建出**（`plugin.json` + `requirements/README.md`；测试/围栅门按阶段 4.1/4.2 搬进 `tests/`）：
-其中 **9 个是"清单合法"的实体**（`code/` 入口真实存在），**54 个是"清单先行"**——只有最小契约字段，
-`entry` 指向的 `code/index.mjs` 尚未随实体搬迁落地，故 `tools/plugin.sh list` **如实**报 `degraded: artifact-missing`
-（不假装已实现，也不再把这种目录当成"不存在的插件"以外的东西）。
+**`T-321` 起 63/63 插件目录均已建出**（`plugin.json` + `requirements/README.md`；测试/围栅门按阶段 4.1/4.2 搬进 `tests/`）。
+**承载体现状（`EV-178` 末实测，逐条可复算）**：**53/63 已接承载**（`code/index.mjs` 或 `code/__init__.py` 真实存在
+⇒ `plugin.sh list` 报 `valid:true`；本批新接 **5 个 ESM + 19 个 Python** 入口）；**10 个仍无入口**（如实报
+`degraded: artifact-missing`）：**8 个**是「多实体插件，'哪个实体当入口'未定」（`system/admin`、`system/agent-runtime`、
+`system/canary`、`system/eval`、`system/kernel-bridge`、`system/mail`、`system/webui`、`domain/compare`），
+**2 个**的实现在插件根而非 `code/`（`system/repo-gate`、`system/qa-runner` —— 跨插件的**平台门/AC 运行器**，
+落 `code: 待实现`）。**不假装已实现**。
 
 | 插件（目录 / id） | 提供的能力 | 提供者服务名 | 被哪些装配 | 独立演进时改哪里 |
 |---|---|---|---|---|
 | `src/system/runtime/`（`system/runtime`） | 仓库内自包含运行时 + 六动词生命周期 + 一键运行 `./run` | `pluginLifecycle` | 运行时进程（`tools/plugin.sh`） | 只改本插件 `code/`（规则文本在 27） |
 | `src/domain/advice/`（`domain/advice`） | 决策建议层：没有可分的数据就不给建议 | `advicePanel` | wrapper → `host/modules/advice-panel.mjs`（阶段 4.1 实体搬迁） | 只改本插件 `code/` + 围栏门 |
 | `src/userspace/demo-ns/hello/`（`userspace/demo-ns/hello`） | 用户空间样板：命名空间服务 + 只读区块，零写面 | `bucket`、`status` | 宿主运行时（副本 `user-space/demo-ns/hello/`） | 只改本插件目录（隔离四件套在 `host/lib/user-space.mjs`） |
-| `src/system/webui/` | 双方视角 WebUI + 注入式 UI 注册面（0 业务语义） | `webui`、`uiSlots` | `webui` profile | 阶段 4.1 搬 `host/modules/webui.mjs` |
-| `src/system/storage/` | 按 ns 分区的文件管理 + 键值表 + 只读观察面 | `storageView` / `storage` | `storage` profile | 阶段 2/4 搬 `tools/storage.py`、`storage-view.mjs` |
-| `src/system/market/` | 插件市场：三真源只读聚合（逐项 `source`/`wired`） | `pluginMarket` | `webui`（系统管理道） | 阶段 4.1 搬 `plugin-market.mjs` |
-| `src/system/evolution/` | 自进化流水线 + 流水只读归纳 | `evolution` / `evolveJournal` | `webui`（运维道与管理道） | 阶段 4.1/4.2 搬 `host/lib/evolution.mjs` |
-| `src/system/mail/` | 邮件真收发（SMTP/IMAP）+ 只读运维视图 | `mailView` / `mail`、`mail_transport` | `webui`（运维道邮件的运维视图） | 阶段 2.2/4.1 搬 `services/mail*.py` |
+| `src/system/webui/` | 双方视角 WebUI + 注入式 UI 注册面（0 业务语义） | `webui`、`uiSlots` | `webui` profile | 实体已落 `code/webui.mjs`（`EV-178`；旧路径薄重导） |
+| `src/system/storage/` | 按 ns 分区的文件管理 + 键值表 + 只读观察面 | `storageView` / `storage` | `storage` profile | 实体已落 `code/storage-view.mjs` + `tools/storage.py`（`EV-177`/`EV-178`；旧路径薄重导/薄转发） |
+| `src/system/market/` | 插件市场：三真源只读聚合（逐项 `source`/`wired`） | `pluginMarket` | `webui`（系统管理道） | 实体已落 `code/plugin-market.mjs`（`EV-177`；旧路径薄重导） |
+| `src/system/evolution/` | 自进化流水线 + 流水只读归纳 | `evolution` / `evolveJournal` | `webui`（运维道与管理道） | 实体已落 `code/evolution.mjs`（`EV-178`，裸 `cordis` 由模块内显式解析）+ `code/evolve-journal.mjs` |
+| `src/system/mail/` | 邮件真收发（SMTP/IMAP）+ 只读运维视图 | `mailView` / `mail`、`mail_transport` | `webui`（运维道邮件的运维视图） | 实体已落 `code/mail.py`·`mail_transport.py`·`mail-view.mjs`（旧路径薄重导） |
 | `src/system/kernel/` | 平台内核：唯一账本写者 + 事件总线 + QEP + 插件宿主 + 交付绑定 | `ledger`、`events`、`qep`、`plugin`、`delivery` | 内核进程（经 `kernel-bridge.mjs`） | 阶段 3.1；**内核不可自改**（ADR-0002） |
 
 ## 3. 已归档的四节

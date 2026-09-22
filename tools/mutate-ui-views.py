@@ -39,7 +39,9 @@ MUTATIONS = [
     dict(name='M3 写入器原样透传（正文/私域随行出去）', path='tools/refresh-ui-snapshots.py',
          old='    return [one(row) for row in _recent_rows(rows, ROUND_EVENT)]',
          new='    return [_body(row) for row in _recent_rows(rows, ROUND_EVENT)]', gate=['ui-seed']),
-    dict(name='M4 路由去掉按键投影（原样透传）', path='host/modules/webui.mjs',
+    # 实体已随批 EV-178 搬进插件 `code/`（旧路径只剩**薄重导**）：变异必须打**实体那一份**
+    # （打在转发文件上锚点未命中 ⇒ 假变异）。
+    dict(name='M4 路由去掉按键投影（原样透传）', path='src/system/webui/code/webui.mjs',
          old='          .map((row) => Object.fromEntries(RECENT_KEYS.filter((k) => row && Object.prototype.hasOwnProperty.call(row, k)).map((k) => [k, row[k]])))',
          new='          .map((row) => row)', gate=['webui']),
 ]

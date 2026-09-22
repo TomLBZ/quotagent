@@ -5,6 +5,12 @@
   "provides": [
     "quotes"
   ],
-  "entry": "code/index.mjs",
-  "description": "domain 插件「quotes」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/domain/quotes/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "entry": "code/__init__.py",
+  "description": "domain 插件「quotes」：本批 `EV-178` 补**真实承载** —— Python 承载入口 `code/__init__.py`（`from quotagent.services.quotes import *` 的原样重导出） + 实体 `code/quotes.py`（`entry` 指向的入口**真实存在**，`tools/plugin.sh list` 不再报 `artifact-missing`）。**不新造功能**：语义仍只在实体里。",
+  "migration": {
+    "stage": 5,
+    "mode": "python-entry-wrapper",
+    "impl": "src/domain/quotes/code/quotes.py",
+    "batch": "EV-178"
+  }
 }

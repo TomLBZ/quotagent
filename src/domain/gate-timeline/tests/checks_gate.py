@@ -19,10 +19,11 @@ from pathlib import Path
 from quotagent.qa.registry import Assertion, register
 
 ROOT = Path(__file__).resolve().parents[4]
-MOD = ROOT / 'host' / 'modules' / 'gate-timeline.mjs'
+MOD = ROOT / 'src' / 'domain' / 'gate-timeline' / 'code' / 'gate-timeline.mjs'   # 实体（本批 EV-178 搬进本插件 `code/`；旧路径 `host/modules/gate-timeline.mjs` 只剩薄重导）
 GATE = ROOT / 'src' / 'domain' / 'gate-timeline' / 'tests' / 't282-gate-timeline-gate.mjs'
 ROUTE = ROOT / 'src' / 'domain' / 'gate-timeline' / 'tests' / 'check-gate-timeline-route.py'
-NUDGE = ROOT / 'tools' / 'gate-nudge.py'
+NUDGE = ROOT / 'src' / 'domain' / 'gate-timeline' / 'tools' / 'gate-nudge.py'   # 实体（本批 EV-178 搬进本插件
+# `tools/`；旧路径只剩薄转发）—— 本文件把它的**源码**当证据读（`body = {` 形状断言）⇒ 必须指实体那一份。
 
 #: 一次真执行探针：口径（不取墙钟）/ 空投影不编 / basis 可溯源 / 催办只产 nudge 载荷。
 PROBE = r"""
@@ -152,7 +153,7 @@ def check() -> list[Assertion]:
                          not hits and len(self_test) >= 3,
                          f'产物命中={hits}；对照样本命中={self_test}'))
 
-    webui = (ROOT / 'host' / 'modules' / 'webui.mjs').read_text(encoding='utf-8')
+    webui = (ROOT / 'src' / 'system' / 'webui' / 'code' / 'webui.mjs').read_text(encoding='utf-8')
     routes = ('/gates/' in webui and '/api/gates' in webui and '/gates/nudge' in webui
               and 'data-gates-link' in webui)
     out.append(Assertion('① 三条路由 + 四道页面子导航入口齐备（`<view>/gates/` + `<view>/api/gates` + '
@@ -321,7 +322,7 @@ def check_detail() -> list[Assertion]:
     gate_src = gate.read_text(encoding='utf-8') if gate.is_file() else ''
     route = (ROOT / 'src' / 'domain' / 'gate-timeline' / 'tests' / 'check-change-detail-route.py')
     route_src = route.read_text(encoding='utf-8') if route.is_file() else ''
-    webui = (ROOT / 'host' / 'modules' / 'webui.mjs').read_text(encoding='utf-8')
+    webui = (ROOT / 'src' / 'system' / 'webui' / 'code' / 'webui.mjs').read_text(encoding='utf-8')
     verify = (ROOT / 'tools' / 'verify.sh').read_text(encoding='utf-8')
 
     out.append(Assertion('① 四件齐备：插件规则 ⑤ + 围栏门 `t283` + 真路由门 + `verify.sh change-detail` 分支',

@@ -64,8 +64,12 @@ const CORDIS_URL = process.env.QUOTAGENT_CORDIS
   ? pathToFileURL(process.env.QUOTAGENT_CORDIS).href
   : pathToFileURL(join(HERE, 'node_modules', 'cordis', 'lib', 'index.js')).href
 const { Context, EventsService } = await import(CORDIS_URL)
-const TARGET = join(HERE, 'modules', 'rfq-deadline.mjs')
-const WEBUI = join(HERE, 'modules', 'webui.mjs')
+// 实体已随批 `EV-178` 搬进插件 `code/`（旧路径 `host/modules/rfq-deadline.mjs` 只剩**薄重导**）：
+// 本门读/变异的是**实体那一份**（否则会静默判绿：变异打在转发文件上不改变行为）。
+const TARGET = join(HERE, '..', 'src', 'domain', 'rfq-deadline', 'code', 'rfq-deadline.mjs')
+// 实体已随批 `EV-178` 搬进插件 `code/`（旧路径 `host/modules/webui.mjs` 只剩**薄重导**）：
+// 本门读/变异的是**实体那一份**（否则会静默判绿：变异打在转发文件上不改变行为）。
+const WEBUI = join(HERE, '..', 'src', 'system', 'webui', 'code', 'webui.mjs')
 const SOURCING = join(HERE, 'modules', 'sourcing.mjs')
 const SCHEMA_URL = pathToFileURL(join(HERE, 'lib', 'std-schema.mjs')).href
 

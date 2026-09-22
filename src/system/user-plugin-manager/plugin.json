@@ -5,6 +5,9 @@
   "provides": [
     "userPluginManager"
   ],
+  "dependencies": {
+    "cordis": "4.0.0-rc.10"
+  },
   "entry": "code/index.mjs",
   "description": "用户空间插件的管理面（list/load/unload/reload/requestCreate/elevateRequest）。（本批 EV-176：实体已进 `code/`，`entry` 指真实包装入口 ⇒ 合法清单；`provides` 为实体自述的真实服务键。）",
   "migration": {
@@ -12,6 +15,14 @@
     "mode": "entity-moved-and-wrapper",
     "impl": "src/system/user-plugin-manager/code/user-plugin-manager.mjs",
     "from": "host/modules/user-plugin-manager.mjs",
-    "moves_in_stage": 4.2
+    "moves_in_stage": 4.2,
+    "lib_entities": [
+      {
+        "impl": "src/system/user-plugin-manager/code/user-space.mjs",
+        "from": "host/lib/user-space.mjs",
+        "batch": "EV-178",
+        "note": "实体搬迁：裸 `cordis` 由模块内**显式解析**（$QUOTAGENT_CORDIS → host/node_modules → 裸名），旧路径留薄重导"
+      }
+    ]
   }
 }

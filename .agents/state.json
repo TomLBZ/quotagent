@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-22T14:03:36Z",
+  "updated_at": "2026-09-22T14:35:34Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "阶段 2（插件迁移）续批：**余下 30 项 `tools/**`**（`docs/work/plans/plugin-file-map.md` §分类 A 节的 `插件·待搬`）与 `host/modules/**` 余下 16 个非自进化实体、`host/lib/**` 余 2 个（`evolution.mjs`/`user-space.mjs` —— 两者都 `import 'cordis'`，搬到 `src/**/code/` 后裸解析会上溯不到 `host/node_modules/`，须先解决解析（例如与 `plugin-registry.mjs` 的 `loadCordis` 同一套）再搬）",
-  "next_action": "下批照本批范式：① 每项 `git mv` 实体 + 旧位置**薄重导/薄转发**；② `host/**` 与 `host/lib/**` 的搬迁**必须先改读方**（本批实测 6 处按源码文本读库层的读点：不动就读到 8 行转发 ⇒ `p0-no-node`/`config-route`/`mail-transport` 真红）；③ 重导链要让**按源码文本判的门**跟到实体（本批加了 `module_source()`/`moduleSource()`）；④ 自进化产物搬迁必须**同批追链** `docs/work/evolution-log.json`；⑤ 收尾：17 道门全绿 + 提交前后 `git status --porcelain` 原文（提交后 0 行）+ push 后 `git ls-remote` 回读。",
+  "next_task": "阶段 2（插件迁移）续批：**余下 13 项 `tools/**`**（`docs/work/plans/plugin-file-map.md` §分类 A 节的 `插件·待搬`：含 `check-run-once.py`/`check-run-clone.py` 两个**在 commit 后跑**的平台门、`config-apply.py`/`refresh-ui-snapshots.py`/`ui-seed-pipeline.py` 三个**被以模块方式 import** 的（`runpy` 薄转发会丢模块命名空间 ⇒ 须换转发形态或先改读方）、`quote-draft.py`/`quote-sign.py`/`mutate-ui-views.py`/`netblock.c`/`v-kit.sh`/`plugin-assets` 自述等）+ 给 8 个「多实体插件」（system/{admin,agent-runtime,canary,eval,kernel-bridge,mail,webui}、domain/compare）定入口（**不许代做决定**：哪个实体是入口属插件设计）。",
+  "next_action": "下批照本批范式：① 每项 `git mv` 实体 + 旧位置**薄转发**；② `host/**`、`host/lib/**` 的搬迁**必须先改读方**（本批实测 4 类读点：围栏门的 TARGET/WEBUI 常量、`host/check-modules.mjs` 的按源码文本读点（`moduleSource`）、AC 检查里的 MOD/WEBUI/APPLY/WRITER/MONITOR 常量、`tools/mutate-ui-views.py` 的变异路径）——不先改会**静默判绿**；③ 搬迁补丁只改仓库根推导（`parents[1]`→`parents[4]` / `resolve(join(HERE,'..'))`→四层）；④ 新增 `host/modules`/`host/lib` 的非薄文件必须登记在 `docs/design/27-plugin-architecture.md` §10 例外表（否则 PA8 必红）；⑤ 收尾：19 道门全绿 + 提交前后 `git status --porcelain` 原文（各 0 行）+ push 后 `git ls-remote` 回读。",
   "last_verified_command": "tools/verify.sh docs | coverage | ac-registry | plugins | webui | modules | wiring | invariants | events | storage | plugin-assets | plugin-requirements | plugin-lifecycle | p0-no-node | run-once | evolution | evolve-module（+ 提交后 run-clone / clean-copy）",
   "last_verified_result": "PASS。docs PASS、coverage 8/8、ac-registry rc=0、plugins 5/5、webui 51/51、modules 521/521、wiring 5/5、invariants 22/22、events rc=0、storage 19/19、plugin-assets 14/14（PA1 108 / PA7 30 ≤ 基线 30）、plugin-requirements 18/18、plugin-lifecycle 66/66、p0-no-node rc=0、run-once 34/34、evolution rc=0、evolve-module 61/61；本批改到的门：wiring、plugin-assets、evolve-module、modules（check-modules.mjs 读方）",
-  "last_verified_evidence": "docs/work/evidence/EV-177-plugin-relocation-batch7.md（+ plugin-file-map-batches.md 的批次台账）",
+  "last_verified_evidence": "docs/work/evidence/EV-178-plugin-relocation-batch8.md（+ plugin-file-map-batches.md §「非薄入口数的加减史」）",
   "last_verified_commit": "3a40f56f68e8956e4f3e7ea7dc45985c5979e72f",
   "blockers": [],
   "human_required": [

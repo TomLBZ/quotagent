@@ -19,7 +19,9 @@ ROOT = Path(__file__).resolve().parents[4]
 #: （实测：`p0-no-node` 的 AC-MAIL-002 就是这样红的）。
 FILES = {'transport': ROOT / 'src' / 'system' / 'mail' / 'code' / 'mail_transport.py',
          'mail': ROOT / 'src' / 'system' / 'mail' / 'code' / 'mail.py',
-         'view': ROOT / 'host' / 'modules' / 'mail-view.mjs',
+         # 实体（本批 `EV-178` 搬进本插件 `code/`；旧路径 `host/modules/mail-view.mjs` 只剩薄重导）：
+         # 本 AC 按**源码字节**判「视图模块非空/够大」⇒ 必须读实体那一份（读 289 B 的转发会误判）。
+         'view': ROOT / 'src' / 'system' / 'mail' / 'code' / 'mail-view.mjs',
          'keys': ROOT / 'src' / 'system' / 'config' / 'code' / 'config-keys.mjs',
          # 实体（EV-177 搬进本插件 tests/；旧路径只剩薄转发 ⇒ 按大小/文本判的读点必须指实体）
          'gate': ROOT / 'src' / 'system' / 'mail' / 'tests' / 'check-mail-transport.py'}

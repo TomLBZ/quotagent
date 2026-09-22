@@ -16,11 +16,11 @@ from pathlib import Path
 from quotagent.qa.registry import Assertion, register
 
 ROOT = Path(__file__).resolve().parents[4]
-MOD = ROOT / 'host' / 'modules' / 'ui-feedback.mjs'
-APPLY = ROOT / 'tools' / 'ui-feedback-apply.py'
+MOD = ROOT / 'src' / 'system' / 'ui-feedback' / 'code' / 'ui-feedback.mjs'   # 实体（本批 EV-178 搬进本插件 `code/`；旧路径 `host/modules/ui-feedback.mjs` 只剩薄重导）
+APPLY = ROOT / 'src' / 'system' / 'ui-feedback' / 'tools' / 'ui-feedback-apply.py'   # 实体（本批 EV-178 搬进本插件 tools/；旧路径只剩薄转发）
 GATE = ROOT / 'src' / 'system' / 'ui-feedback' / 'tests' / 't280-ui-feedback-gate.mjs'
 ROUTE_CHECK = ROOT / 'src' / 'system' / 'ui-feedback' / 'tests' / 'check-ui-feedback.py'   # 实体（EV-177 搬进本插件 tests/；旧路径只剩薄转发）
-WEBUI = ROOT / 'host' / 'modules' / 'webui.mjs'
+WEBUI = ROOT / 'src' / 'system' / 'webui' / 'code' / 'webui.mjs'   # 实体（本批 EV-178 搬进本插件 `code/`；旧路径 `host/modules/webui.mjs` 只剩薄重导）
 INVENTORY = ROOT / 'docs' / 'design' / '14-plugin-inventory.md'
 SCRIPT_NEEDLE = '<scr' + 'ipt'
 

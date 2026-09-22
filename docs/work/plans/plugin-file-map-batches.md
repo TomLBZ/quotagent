@@ -272,3 +272,20 @@ rc/passed-total 对拍」原始行见 `docs/work/evidence/EV-175b-tools-relocati
 5. **两处门读方加"跟重导链"**（否则按源码文本判的断言在 8 行转发上**静默判绿**）：
    `src/system/repo-gate/tests/check-module-wiring.py` 的 `module_source()`（实测：`ops-view` 的 inject 看不见 ⇒ `breaker` 变孤儿）、
    `host/check-modules.mjs` 的 `moduleSource()`（A1/A4/A6 一起跟到实体）。
+
+### 非薄入口数的加减史（`tools/**` 的散落度量；复算：`tools/verify.sh plugin-assets` 的 PA7 行）
+
+> 本节的数是**事实**（每批由门 `tools/check-plugin-assets.py` 的 `BASELINE_NONTHIN` 逐批收紧；只减不增、从未放宽）。
+> 源文本本在 `plugin-file-map.md` §分类 point 4，本批（`EV-178`）因该文件逼近 48 KB 预算**整段逐字搬来**（内容未改，只补本批一行）。
+
+| 时刻 | 非薄入口数 | 这一批做了什么 |
+|---|---|---|
+| 搬前 | **69** | 75 个文件 − 6 个平台薄入口（`verify.sh`/`run.sh`/`runtime.sh`/`bootstrap.sh`/`cordis.sh`/`plugin.sh`） |
+| 阶段 4.1 | **63** | 搬走 7 个（旧位置变薄转发）；并新增 1 个（本节的机检门 `tools/check-plugin-assets.py` 自己，登记为 `插件·待搬`） |
+| `EV-171` | **64** | 一键运行的干净副本验收门 `tools/check-run-clone.py` 加入（同样是本类的平台门） |
+| `EV-175` | **54** | 阶段 4.2 续搬 10 个（旧位置变薄转发，全部落在 `tests/`） |
+| `EV-176` | **42** | 再搬 12 个（外圈、归属明确的 `check-*.py`，全部落 `tests/`） |
+| `EV-177` | **30** | 再搬 12 个（8 个路由门 + 4 个平台门） |
+| **`EV-178`（本批）** | **13** | 再搬 **17** 个：`audit-verify`·`export-events`·`refresh-admin-snapshot`·`admin-apply`·`refresh-agent-memory`·`refresh-retention-plan`·`gate-nudge`·`rfq-promise`·`userplugin-record`·`userplugin-elevate`·`ui-feedback-apply`·`ui-feedback-monitor`·`ui-feedback-tick`·`ws-integrate`·`evolve-record`·`evolve-module`·`storage`（旧位置全部变薄转发） |
+
+剩下的 **13** 个非薄入口（**逐条登记在** `plugin-file-map.md` §A 的 `插件·待搬` 行）：`check-run-once.py`、`check-run-clone.py`（两个平台级真跑门，须在 commit 后跑 ⇒ 与 `verify.sh` 的分支强耦合）、`manual-check.py`（契约面上没有调用者：搬了就是孤儿 ⇒ 本批留着不搬）、`config-apply.py`、`refresh-ui-snapshots.py`、`ui-seed-pipeline.py`、`quote-draft.py`、`quote-sign.py`、`gate-nudge`… 中的**被以模块方式 import 的**几个（`config-apply.py` 被 `check-run-once.py` 按 `spec_from_file_location` 装载、`refresh-ui-snapshots.py` 被 `ui-seed-pipeline.py` 同法装载 ⇒ 用 `runpy` 薄转发会**丢掉模块命名空间**）与**被变异锚点钉住路径的**几个（`tools/mutate-ui-views.py` 的 M1..M3 锚在 `refresh-ui-snapshots.py` 源码里），属于下一批：要么先把读方改成「跟到实体」，要么换一种转发形态（保模块语义）。

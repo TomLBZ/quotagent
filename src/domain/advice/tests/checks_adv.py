@@ -14,7 +14,7 @@ from pathlib import Path
 from quotagent.qa.registry import Assertion, register
 
 ROOT = Path(__file__).resolve().parents[4]
-MOD = ROOT / 'host' / 'modules' / 'advice-panel.mjs'
+MOD = ROOT / 'src' / 'domain' / 'advice' / 'code' / 'advice-panel.mjs'   # 实体（本批 EV-178 搬进本插件 `code/`；旧路径 `host/modules/advice-panel.mjs` 只剩薄重导）
 GATE = ROOT / 'src' / 'domain' / 'advice' / 'tests' / 't281-advice-gate.mjs'
 ROUTE = ROOT / 'src' / 'domain' / 'advice' / 'tests' / 'check-advice-route.py'
 
@@ -99,7 +99,8 @@ def check() -> list[Assertion]:
     # 零写面 / 不读账本（非注释源码）
     code = '\n'.join(line for line in src.splitlines()
                      if not line.lstrip().startswith(('//', '*', '/*', '#')))
-    webui = ROOT / 'host' / 'modules' / 'webui.mjs'
+    # 实体（本批 `EV-178` 搬进本插件 `code/`；旧路径 `host/modules/webui.mjs` 只剩薄重导）
+    webui = ROOT / 'src' / 'system' / 'webui' / 'code' / 'webui.mjs'
     wsrc = webui.read_text(encoding='utf-8') if webui.is_file() else ''
     chk_code = code + '\n' + '\n'.join(line for line in wsrc.splitlines()
                                        if not line.lstrip().startswith(('//', '*', '/*', '#')))

@@ -114,7 +114,9 @@ const ROOT = join(HERE, '..')
 const GATE_PATH = join(HERE, 't277-storage-gate.mjs')
 // 实体已随批 `EV-176` 搬进插件 `code/`（旧路径只剩薄重导）：本门读/变异的是实体那一份。
 const MODULE_PATH = join(ROOT, 'src', 'system', 'storage', 'code', 'storage-view.mjs')
-const PY_PATH = join(ROOT, 'tools', 'storage.py')
+// 实体（本批 `EV-178` 搬进本插件 `tools/`；旧路径 `tools/storage.py` 只剩**薄转发**）：本门既用它起子进程，
+// 也把变异 1..3 打在它身上 ⇒ 必须指实体那一份（打在转发上锚点未命中 ⇒ 假变异）。
+const PY_PATH = join(ROOT, 'src', 'system', 'storage', 'tools', 'storage.py')
 const PY = process.env.QUOTAGENT_PYTHON || 'python3'
 const UI_SHARED = join(ROOT, 'tmp', 'ui-shared')
 const USER_SPACE = join(ROOT, 'user-space')
@@ -788,16 +790,18 @@ try {
   const ledgerSentinel = scanTreeText(UI_SHARED, BODY_SENTINEL)
   // ---- 反向自证（**不空转**）：把事实区判据回退成搬迁前的**词法形态**（`user-space` 是符号链接 ⇒
   // `_inside(USER_SPACE, <realpath>)` 恒假的旧行为），写进 `tmp/` 下的**变体副本**（产品树不动）。
-  // 副本放在 `tmp/` 顶层是**必须的**：实体的 `ROOT = Path(__file__).resolve().parents[1]` 要靠
-  // 「父目录的父目录 = 仓库根」=> 只有这样 UI_SHARED / USER_SPACE 才与对照实体同一片事实区。
+  // 副本放在 `tmp/<3 层>/` 是**必须的**：实体（`EV-178` 起在 `src/system/storage/tools/`）的
+  // `ROOT = Path(__file__).resolve().parents[4]` 要靠「四层上溯 = 仓库根」=> 只有这样
+  // UI_SHARED / USER_SPACE 才与对照实体落在同一片事实区（深度不对 ⇒ 判据会因路径算错而"放行"）。
   // 回退后 f5/f6 必须**不再**返回 `storage-fact-path` ⇒ 证明这两条绿是真判出来的（不是"没跑到"）。
   const LEXICAL_FROM = '    for root in _zone_forms(zone):\n        for item in _zone_forms(target):\n'
   const LEXICAL_TO = '    for root in _zone_forms(zone)[:1]:\n        for item in _zone_forms(target)[:1]:\n'
   const entitySource = readFileSync(PY_PATH, 'utf8')
   const mutantAnchorUnique = entitySource.split(LEXICAL_FROM).length === 2
-  const MUTANT = join(ROOT, 'tmp', `t277-storage-lexical-only-${process.pid}.py`)
+  // 深度与实体一致：`tmp/t277-mutant-<pid>/a/b/storage-lexical-only.py` ⇒ parents[4] == 仓库根。
+  const MUTANT = join(ROOT, 'tmp', `t277-mutant-${process.pid}`, 'a', 'b', 'storage-lexical-only.py')
   if (mutantAnchorUnique) {
-    mkdirSync(join(ROOT, 'tmp'), { recursive: true })
+    mkdirSync(dirname(MUTANT), { recursive: true })
     writeFileSync(MUTANT, entitySource.replace(LEXICAL_FROM, LEXICAL_TO))
   }
   const m5 = mutantAnchorUnique

@@ -5,6 +5,9 @@
   "provides": [
     "evolveJournal"
   ],
+  "dependencies": {
+    "cordis": "4.0.0-rc.10"
+  },
   "entry": "code/index.mjs",
   "description": "system/evolution：本批 EV-177 补**真实承载** —— 实体（自进化产出）`code/evolve-journal.mjs` + 入口 `code/index.mjs`（薄包装：`export *` 活绑定 + 透传自述面），`entry` 指向的入口**真实存在**（不再 `degraded: artifact-missing`）。**不新造功能**：语义仍只在 `code/evolve-journal.mjs` 里。",
   "migration": {
@@ -12,6 +15,14 @@
     "mode": "entity-moved-and-wrapper",
     "impl": "src/system/evolution/code/evolve-journal.mjs",
     "from": "host/modules/evolve-journal.mjs",
-    "moves_in_stage": 4.2
+    "moves_in_stage": 4.2,
+    "lib_entities": [
+      {
+        "impl": "src/system/evolution/code/evolution.mjs",
+        "from": "host/lib/evolution.mjs",
+        "batch": "EV-178",
+        "note": "实体搬迁：裸 `cordis` 由模块内**显式解析**（$QUOTAGENT_CORDIS → host/node_modules → 裸名），旧路径留薄重导"
+      }
+    ]
   }
 }

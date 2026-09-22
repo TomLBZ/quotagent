@@ -17,7 +17,7 @@ from pathlib import Path
 from quotagent.qa.registry import Assertion, register
 
 ROOT = Path(__file__).resolve().parents[4]
-WEBUI = ROOT / 'host' / 'modules' / 'webui.mjs'
+WEBUI = ROOT / 'src' / 'system' / 'webui' / 'code' / 'webui.mjs'   # 实体（本批 EV-178 搬进本插件 `code/`；旧路径 `host/modules/webui.mjs` 只剩薄重导）
 BLOCKS = ('data-block="pending-approvals"', 'data-block="in-progress"', 'data-block="health"')
 
 

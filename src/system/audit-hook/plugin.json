@@ -6,5 +6,11 @@
     "audit-hook"
   ],
   "entry": "code/index.mjs",
-  "description": "system 插件「audit-hook」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/system/audit-hook/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "description": "system 插件「audit-hook」：本批 `EV-178` 补**真实承载** —— 入口 `code/index.mjs`（薄包装：`export *` 活绑定 + 透传自述面）+ 实体 `code/audit-hook.mjs`（`entry` 指向的入口**真实存在**，`tools/plugin.sh list` 不再报 `artifact-missing`）。**不新造功能**：语义仍只在实体里。",
+  "migration": {
+    "stage": 5,
+    "mode": "entity-moved-and-wrapper",
+    "impl": "src/system/audit-hook/code/audit-hook.mjs",
+    "batch": "EV-178"
+  }
 }
