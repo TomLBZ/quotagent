@@ -78,31 +78,90 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const surface = createUiSurface({ slots: slots?.slots?.() ?? [], views })
   const sharedDir = resolve(root, String(config.ui_shared ?? 'tmp/ui-shared'))
   const pythonBin = DEFAULT_PYTHON
-  const contributions = new Map()        // plugin_id → {module, entries: [{kind,id}], error}
+  const contributions = new Map()        // plugin_id → {module, file, entries: [{kind,id}], error}
   const actionLog = []                   // 机制层动作流水（通知中心用；有界）
-
+  /**
+   * **只读调用缓存**（机制：同一组参数的只读工具调用在一次渲染内只 spawn 一次）+ 计数（前后可对账）。
+   * 来源优先级：环境变量 `QUOTAGENT_UI_PYTHON_CACHE_MS`（用来做"开/关缓存"的对照实测）> 配置
+   * `python_cache_ms` > 默认 3000ms。**0 = 关闭合并**（只读调用一律真起进程；对照用，也可在资源紧张时关掉）。
+   */
+  const envCacheMs = Number(process.env.QUOTAGENT_UI_PYTHON_CACHE_MS ?? '')
+  const readCacheTtlMs = Number.isInteger(envCacheMs) && String(process.env.QUOTAGENT_UI_PYTHON_CACHE_MS ?? '') !== ''
+    ? envCacheMs
+    : (Number.isInteger(config.python_cache_ms) ? config.python_cache_ms : 3000)
+  const readCacheOn = readCacheTtlMs > 0
+  const readCache = new Map()            // key → {at, result}
+  const ioStats = { spawns: 0, read_spawns: 0, read_hits: 0, cache_clears: 0 }
   const say = (msg) => { if (typeof log === 'function') log(`[webui-shell] ${msg}`) }
 
   // ------------------------------------------------------------------ 机制：进程与代价可控的 IO
-  /** 跑 Python 侧工具（唯一写者或只读工具）：stdout **最后一行**必须是 JSON；rc≠0 也如实回报。 */
-  const runPython = (toolPath, args = [], { timeoutMs = PYTHON_TIMEOUT_MS } = {}) => {
+  /**
+   * 跑 Python 侧工具（唯一写者或只读工具）：stdout **最后一行**必须是 JSON；rc≠0 也如实回报。
+   *
+   * `{read: true}`（插件声明"这一调用只读"）⇒ 同一组 `(工具, 参数)` 在 `python_cache_ms` 窗口内**只 spawn 一次**
+   * （同一个进程里三块面板读同一个只读工具时，第三次不会再起第三个进程）；写入类调用**不缓存**，
+   * 且任何一次 `stage()`/动作执行都会**清空缓存**（界面上的下一步不会读到旧值）。
+   */
+  const runPython = (toolPath, args = [], { timeoutMs = PYTHON_TIMEOUT_MS, read = false } = {}) => {
     const file = resolve(root, toolPath)
     if (!existsSync(file)) {
       return { ok: false, code: 'tool-missing', reason: `找不到工具：${toolPath}`,
         next_action: '先确认该插件已安装（工具路径写错时如实报，不猜）' }
     }
+    const cacheKey = `${toolPath}\u0000${args.join('\u0000')}`
+    if (read && readCacheOn) {
+      const hit = readCache.get(cacheKey)
+      if (hit && Date.now() - hit.at <= readCacheTtlMs) {
+        ioStats.read_hits += 1
+        return { ...hit.result, cached: true, cache_age_ms: Date.now() - hit.at }
+      }
+      const memo = renderScopes[renderScopes.length - 1]
+      if (memo && memo.has(cacheKey)) {
+        const shared = memo.get(cacheKey)
+        ioStats.read_hits += 1
+        return { ...shared, cached: true, cache_age_ms: 0, same_render: true }
+      }
+    }
     const started = Date.now()
     const proc = spawnSync(pythonBin, [file, ...args], { cwd: root, encoding: 'utf8', timeout: timeoutMs,
       maxBuffer: 4 * 1024 * 1024, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
+    ioStats.spawns += 1
+    if (read) ioStats.read_spawns += 1
     const stdout = proc.stdout ?? ''
     const lines = stdout.trim().split('\n').filter((line) => line.trim() !== '')
     let parsed = null
     if (lines.length) {
       try { parsed = JSON.parse(lines[lines.length - 1]) } catch (err) { parsed = null }
     }
-    return { ok: proc.status === 0 && parsed !== null, rc: proc.status, tool: toolPath, args,
+    const result = { ok: proc.status === 0 && parsed !== null, rc: proc.status, tool: toolPath, args,
       json: parsed, stdout: flat(stdout, 4000), stderr: flat(proc.stderr, 1200), ms: Date.now() - started,
       reason: proc.error ? String(proc.error).slice(0, 200) : (parsed === null ? '工具没有输出 JSON' : '') }
+    if (read && result.ok && readCacheOn) {
+      readCache.set(cacheKey, { at: Date.now(), result })
+      const memo = renderScopes[renderScopes.length - 1]
+      if (memo) memo.set(cacheKey, result)
+    }
+    return result
+  }
+
+  /** 清空只读缓存（任何一次可能改变事实的动作前后都调它：界面绝不读旧值）。 */
+  const clearReadCache = () => {
+    if (readCache.size === 0) return
+    readCache.clear()
+    ioStats.cache_clears += 1
+  }
+
+  /** 一次渲染的作用域（面板/状态/通知在同一批里读同一个只读工具 ⇒ 只起一个进程）。 */
+  const renderScopes = []
+  const withRenderScope = (fn) => {
+    const memo = new Map()
+    renderScopes.push(memo)
+    try { return fn() } finally {
+      renderScopes.pop()
+      for (const [key, result] of memo) {
+        if (result.ok) readCache.set(key, { at: Date.now(), result })
+      }
+    }
   }
 
   /** 落一条 0600 待办件（**宿主唯一的写面**；账本零新增，落账本归 Python 侧）。 */
@@ -126,6 +185,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       writeFileSync(tmp, JSON.stringify(payload, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
       chmodSync(tmp, 0o600)
       renameSync(tmp, target)
+      clearReadCache()          // 落了一条待办件 ⇒ 只读缓存作废（下一次渲染读到的是新状态）
       return { ok: true, duplicate: false, kind, file: relative(root, target), path: target, name,
         record: payload }
     } catch (err) {
@@ -191,43 +251,153 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const loadContributions = async () => {
     const summary = []
     for (const item of scanContributions()) {
-      try {
-        const module = await import(`${item.file}?v=${SURFACE_VERSION}`)
-        const register = module.register ?? module.default
-        if (typeof register !== 'function') {
-          contributions.set(item.plugin_id, { error: 'no-register-function', entries: [] })
-          summary.push({ plugin_id: item.plugin_id, ok: false, code: 'no-register-function',
-            next_action: 'code/ui.mjs 必须导出 `register(surface, host)`' })
-          continue
-        }
-        const verdicts = await register(surface, host, item.plugin_id)
-        const refused = (Array.isArray(verdicts) ? verdicts : []).filter((row) => row && row.ok === false)
-        const registered = (Array.isArray(verdicts) ? verdicts : []).filter((row) => row && row.ok === true)
-        contributions.set(item.plugin_id, { module, entries: registered.map((row) => ({ kind: row.kind, id: row.id })),
-          refused: refused.map((row) => ({ code: row.code, reason: row.reason })) })
-        summary.push({ plugin_id: item.plugin_id, ok: refused.length === 0, registered: registered.length,
-          refused: refused.map((row) => ({ code: row.code, reason: flat(row.reason) })) })
-      } catch (err) {
-        contributions.set(item.plugin_id, { error: flat(err), entries: [] })
-        summary.push({ plugin_id: item.plugin_id, ok: false, code: 'register-failed', reason: flat(err),
-          next_action: '修该插件 code/ui.mjs 的 register（装载失败不静默吞）' })
-        say(`插件贡献装载失败 ${item.plugin_id}：${flat(err)}`)
-      }
+      const verdict = await loadOne(item)
+      summary.push(verdict)
     }
     return summary
   }
 
-  // ------------------------------------------------------------------ 渲染：面板 / 通知 / 状态
-  const panelCtx = (view) => ({ view, host, now: host.now(), rows: host.rows(view),
-    panels: surface.panelsOf(view).map((panel) => panel.id),
-    actions: surface.byKind('action').map((action) => action.id) })
+  /** 装载/重载计数：它进 `?v=`（**唯一的模块缓存失效手段**）—— 没有它，改 `code/ui.mjs` 必须重启进程。 */
+  let loadSeq = 0
+  const moduleVersionOf = (file) => {
+    let stamp = 0
+    try { stamp = Math.round(statSync(file).mtimeMs) } catch (err) { stamp = 0 }
+    return `${SURFACE_VERSION}.${stamp}.${loadSeq}`
+  }
 
-  const panelsOf = (view) => {
-    const ctx = panelCtx(view)
-    return surface.panelsOf(view).map((panel) => {
+  /** 装载**一个**插件文件（`load`/`reload` 共用）：import 带 `?v=<mtime>`，装载失败有名报错，不静默吞。 */
+  const loadOne = async (item) => {
+    let module = null
+    try {
+      loadSeq += 1
+      module = await import(`${item.file}?v=${moduleVersionOf(item.file)}`)
+    } catch (err) {
+      contributions.set(item.plugin_id, { file: item.file, error: flat(err), entries: [] })
+      say(`插件贡献装载失败 ${item.plugin_id}：${flat(err)}`)
+      return { plugin_id: item.plugin_id, file: item.file, ok: false, code: 'register-failed',
+        reason: flat(err), next_action: '修该插件 code/ui.mjs 的语法/import（装载失败不静默吞）' }
+    }
+    const register = module.register ?? module.default
+    if (typeof register !== 'function') {
+      contributions.set(item.plugin_id, { module, file: item.file, error: 'no-register-function', entries: [] })
+      return { plugin_id: item.plugin_id, file: item.file, ok: false, code: 'no-register-function',
+        next_action: 'code/ui.mjs 必须导出 `register(surface, host)`' }
+    }
+    try {
+      const verdicts = await register(surface, host, item.plugin_id)
+      const refused = (Array.isArray(verdicts) ? verdicts : []).filter((row) => row && row.ok === false)
+      const registered = (Array.isArray(verdicts) ? verdicts : []).filter((row) => row && row.ok === true)
+      contributions.set(item.plugin_id, { module, file: item.file,
+        entries: registered.map((row) => ({ kind: row.kind, id: row.id })),
+        refused: refused.map((row) => ({ code: row.code, reason: row.reason })) })
+      return { plugin_id: item.plugin_id, file: item.file, ok: refused.length === 0,
+        registered: registered.length, refused: refused.map((row) => ({ code: row.code, reason: flat(row.reason) })) }
+    } catch (err) {
+      contributions.set(item.plugin_id, { module, file: item.file, error: flat(err), entries: [] })
+      say(`插件贡献注册失败 ${item.plugin_id}：${flat(err)}`)
+      return { plugin_id: item.plugin_id, file: item.file, ok: false, code: 'register-failed', reason: flat(err),
+        next_action: '修该插件 code/ui.mjs 的 register（注册失败不静默吞）' }
+    }
+  }
+
+  const fileOf = (pluginId) => (scanContributions().find((item) => item.plugin_id === pluginId) ?? {}).file ?? ''
+
+  /**
+   * **运行期装载一个插件**（`POST /api/ui/plugins/<id>/load`）。
+   * 已经装载过 ⇒ 拒绝（`already-loaded`）并指向 `reload`（不静默重装：重装会先撤掉它的贡献）。
+   */
+  const loadPlugin = async (pluginId) => {
+    const item = scanContributions().find((row) => row.plugin_id === pluginId)
+    if (!item) {
+      return { ok: false, code: 'plugin-not-found', plugin_id: pluginId,
+        next_action: '磁盘上没有这个插件的 code/ui.mjs：先在 `src/<层>/<名>/code/ui.mjs` 写它的 register' }
+    }
+    const known = contributions.get(pluginId)
+    if (known && known.entries && known.entries.length && known.unloaded !== true) {
+      return { ok: false, code: 'already-loaded', plugin_id: pluginId, file: relative(root, item.file),
+        next_action: `它已经在界面上：要让它重读磁盘上的新代码，用 reload（POST ${prefix}/api/ui/plugins/${encodeURIComponent(pluginId)}/reload）` }
+    }
+    const started = Date.now()
+    const verdict = await loadOne(item)
+    clearReadCache()               // 新贡献可能带来新的只读读取：缓存一律作废
+    return { ok: verdict.ok === true, code: verdict.ok ? 'loaded' : (verdict.code ?? 'register-failed'),
+      plugin_id: pluginId, file: relative(root, item.file), ms: Date.now() - started,
+      registered: verdict.registered ?? 0, refused: verdict.refused ?? [], reason: verdict.reason ?? null,
+      next_action: verdict.ok
+        ? `它的视图/面板/动作/快捷键已出现在界面上（刷新页面即可看到）；要撤销用 POST ${prefix}/api/ui/plugins/${encodeURIComponent(pluginId)}/unload`
+        : (verdict.next_action ?? '看 reason 定位（装载失败时界面不变）') }
+  }
+
+  /**
+   * **热重载一个插件**：撤销它的全部贡献 → 按磁盘上的**当前**内容重新 import（`?v=<mtime>`）→ 重新注册。
+   * 这是"改 `code/ui.mjs` 不用重启进程"的那条路；**不改**其它插件的任何贡献。
+   */
+  const reloadPlugin = async (pluginId) => {
+    const item = scanContributions().find((row) => row.plugin_id === pluginId)
+    if (!item) {
+      return { ok: false, code: 'plugin-not-found', plugin_id: pluginId,
+        next_action: '磁盘上没有这个插件的 code/ui.mjs（先写它，再用 load）' }
+    }
+    const before = contributions.get(pluginId) ?? { entries: [] }
+    const removed = unload(pluginId)
+    const started = Date.now()
+    const verdict = await loadOne(item)
+    clearReadCache()
+    let mtime = null
+    try { mtime = new Date(statSync(item.file).mtimeMs).toISOString() } catch (err) { mtime = null }
+    return { ok: verdict.ok === true, code: verdict.ok ? 'reloaded' : (verdict.code ?? 'register-failed'),
+      plugin_id: pluginId, file: relative(root, item.file), mtime, module_version: moduleVersionOf(item.file),
+      ms: Date.now() - started, removed: removed.count, was: (before.entries ?? []).length,
+      registered: verdict.registered ?? 0, refused: verdict.refused ?? [], reason: verdict.reason ?? null,
+      next_action: verdict.ok
+        ? '新代码已在**同一个进程**里生效：刷新页面即可看到新贡献（进程没有重启，其它插件的贡献一项未动）'
+        : (verdict.next_action ?? '看 reason 定位（装载失败时该插件的贡献保持**已撤销**状态，页面上会少东西）') }
+  }
+
+  /** 插件装载清单（`GET /api/ui/plugins`）：谁在磁盘上、装载没装载、mtime 多少。 */
+  const pluginsJson = () => ({
+    ok: true, prefix,
+    plugins: scanContributions().map((item) => {
+      const known = contributions.get(item.plugin_id) ?? {}
+      let mtime = null
+      try { mtime = new Date(statSync(item.file).mtimeMs).toISOString() } catch (err) { mtime = null }
+      return { plugin_id: item.plugin_id, file: relative(root, item.file), mtime,
+        loaded: Array.isArray(known.entries) && known.entries.length > 0 && known.unloaded !== true,
+        contributions: known.entries ?? [], refused: known.refused ?? [], error: known.error ?? null }
+    }),
+    mechanism: '装载面是**机制**：按磁盘上的 `code/ui.mjs` 发现式装载；`reload` = 撤掉这个插件的全部贡献后按'
+      + '当前文件内容重新 import（带 ?v=<mtime> 击穿模块缓存）⇒ 改插件 UI 不必重启进程。'
+      + '卸载后它的视图/面板/动作/快捷键/通知源/状态项一起消失（AGENTS.md 规则 1）',
+    next_action: `POST ${prefix}/api/ui/plugins/<plugin_id>/reload 让磁盘上的新代码在**当前进程**里生效`,
+  })
+
+  // ------------------------------------------------------------------ 渲染：面板 / 通知 / 状态
+  /** 当前地址（**对象深链** `/app/<view>/<kind>/<id>`）：插件从 `ctx.route` 才知道"现在要看哪一个对象"。 */
+  const normRoute = (route) => ({ view: String(route?.view ?? 'home'), panel: String(route?.panel ?? ''),
+    kind: String(route?.kind ?? ''), id: String(route?.id ?? '') })
+
+  const panelCtx = (view, route = { view }) => {
+    const normalized = normRoute({ ...route, view })
+    return { view: normalized.view, route: normalized, host, now: host.now(), rows: host.rows(normalized.view),
+      panels: surface.panelsOf(normalized.view).map((panel) => panel.id),
+      actions: surface.byKind('action').map((action) => action.id) }
+  }
+
+  /**
+   * 某视图上面板的数据。
+   * `route.kind` 非空 ⇒ **对象页**：只渲染声明了该 `object_kind` 的面板（其余面板在这一页上不出现），
+   * 且 `ctx.route` 带上 `kind/id` 供插件渲染那一个对象；没声明过该对象类 ⇒ 返回空数组（调用方报未命中）。
+   */
+  const panelsOf = (view, route = {}) => {
+    const normalized = normRoute({ ...route, view })
+    const picked = normalized.kind === '' ? surface.panelsFor(view, '')
+      : surface.panelsFor(view, normalized.kind)
+    const ctx = panelCtx(view, normalized)
+    // 一次渲染的作用域：这一页上的多块面板读同一个只读工具时**只起一个进程**（缓存见 `runPython`）。
+    return withRenderScope(() => picked.map((panel) => {
       const base = { id: panel.id, title: panel.title, plugin_id: panel.plugin_id, order: panel.order,
         panel_kind: panel.panel_kind, placement: panel.placement, actions: panel.actions, hint: panel.hint,
-        wide: panel.placement === 'wide' }
+        object_kind: panel.object_kind, wide: panel.placement === 'wide' }
       try {
         if (panel.when && panel.when(ctx) !== true) return { ...base, visible: false, data: null }
       } catch (err) {
@@ -249,10 +419,40 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         return { ...base, visible: true, error: { code: 'data-failed', reason: flat(err) },
           next_action: '修面板的 data()（抛错不静默吞：这块不渲染，页面其余部分照常）' }
       }
-    }).sort((left, right) => (left.order - right.order) || (left.id < right.id ? -1 : 1))
+    }).sort((left, right) => (left.order - right.order) || (left.id < right.id ? -1 : 1)))
   }
 
-  const notifications = () => {
+  /**
+   * **对象页的整份数据**（`GET /api/ui/object?view=&kind=&id=`）：外壳只做机制 —— 找出"谁负责这个对象类"、
+   * 把它声明的 `data.object` 页头（标题/摘要/事实/链接）按通用形状摊平、附上该对象类的动作与可用对象类清单。
+   * 没有任何插件声明这个对象类 ⇒ `found:false` + 有名 reason + 下一步（**不编内容**）。
+   */
+  const objectOf = (view, kind, id) => {
+    const kinds = surface.objectKindsFor(view)
+    const claimed = kinds.includes(kind)
+    const panels = claimed ? panelsOf(view, { view, kind, id }) : []
+    const header = panels.map((panel) => (panel.data ?? {}).object).find((item) => item && typeof item === 'object')
+      ?? null
+    const found = claimed && panels.length > 0 && (header ? header.found !== false : true)
+    return {
+      ok: true, view, kind, id, found,
+      title: header?.title ?? (claimed ? `${kind} ${id}` : `${kind}（本视图没有这种对象）`),
+      subtitle: header?.subtitle ?? '', facts: Array.isArray(header?.facts) ? header.facts : [],
+      links: Array.isArray(header?.links) ? header.links : [],
+      reason: found ? '' : (header?.reason ?? (claimed ? 'object-not-found' : 'object-kind-not-registered')),
+      next_action: found ? '' : (header?.next_action ?? (claimed
+        ? '这个 id 不在本视图的投影里：换成列表里真实存在的 id（列表里每一行的 id 就是它的深链）'
+        : `本视图可打开的对象类：${kinds.join(' / ') || '（一个都没有：还没有插件声明 object_kind）'}`
+          + `；也可以回到 ${prefix}/app/${view}/ 看列表`)),
+      kinds, panels,
+      actions: surface.actionsFor(view, kind).map((action) => action.id),
+      deep_link: `${prefix}/app/${view}/${kind}/${id}/`,
+      mechanism: '对象页是**机制**：外壳按插件声明的 `object_kind` 找面板、把面板给的 `data.object` 摊成页头；'
+        + '外壳不认识任何具体对象类',
+    }
+  }
+
+  const notifications = () => withRenderScope(() => {
     const items = []
     for (const source of surface.byKind('notification-source')) {
       try {
@@ -260,8 +460,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         for (const item of Array.isArray(out) ? out : []) {
           items.push({ id: String(item.id ?? `${source.plugin_id}:${items.length}`), level: String(item.level ?? 'info'),
             title: String(item.title ?? ''), body: String(item.body ?? ''),
-            next_action: String(item.next_action ?? ''), ref: item.ref ?? null, at: String(item.at ?? ''),
-            plugin_id: source.plugin_id })
+            next_action: String(item.next_action ?? ''), action: item.action ? String(item.action) : '',
+            ref: item.ref ?? null, at: String(item.at ?? ''), plugin_id: source.plugin_id })
         }
       } catch (err) {
         items.push({ id: `${source.plugin_id}:poll-failed`, level: 'bad', title: '通知源读取失败',
@@ -271,9 +471,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     }
     for (const entry of actionLog.slice(0, 20)) items.push(entry)
     return items.slice(0, 200)
-  }
+  })
 
-  const statusItems = () => {
+  const statusItems = () => withRenderScope(() => {
     const out = []
     for (const item of surface.byKind('status-item')) {
       try {
@@ -288,8 +488,12 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     out.push({ id: 'surface.counts', title: '注册面', level: 'ok', plugin_id: 'system/webui',
       text: `面板 ${surface.byKind('panel').length} · 动作 ${surface.byKind('action').length} · `
         + `快捷键 ${surface.shortcuts().length} · 通知源 ${surface.byKind('notification-source').length}` })
+    // 机制的**代价读数**：一次页面渲染到底起了几个 Python 进程、省掉几个（前后可对账）
+    out.push({ id: 'shell.io', title: 'Python', level: ioStats.spawns ? 'ok' : 'ok', plugin_id: 'system/webui',
+      text: `进程 ${ioStats.spawns} 次（只读 ${ioStats.read_spawns}）· 只读命中缓存 ${ioStats.read_hits} 次`
+        + ` · 缓存窗口 ${readCacheTtlMs}ms` })
     return out
-  }
+  })
 
   // ------------------------------------------------------------------ 动作：校验 → 插件的服务端一半
   /** 字段级校验（与服务端声明同源；客户端只是提前一步给同样的错误）。 */
@@ -354,7 +558,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       return { ok: false, code: 'confirm-required', action: action.id,
         next_action: `这个动作需要显式确认：${action.confirm.message}` }
     }
-    const ctx = { view: String(request?.view ?? action.view), input, host, now: host.now(),
+    const ctx = { view: String(request?.view ?? action.view), route: normRoute({ view: request?.view ?? action.view,
+      kind: request?.route?.kind, id: request?.route?.id }), input, host, now: host.now(),
       action: { id: action.id, title: action.title, plugin_id: action.plugin_id, permission: action.permission } }
     let out = null
     try {
@@ -370,6 +575,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       ref: result.result ?? null, at: host.now(), plugin_id: action.plugin_id, action: action.id }
     actionLog.unshift(entry)
     if (actionLog.length > 100) actionLog.length = 100
+    clearReadCache()   // 动作可能改了事实（写者刚跑过）⇒ 只读缓存作废：下一屏读到的一定是新状态
     return { ok: result.ok === true, action: action.id, code: result.code ?? null, reason: result.reason ?? null,
       next_action: result.next_action ?? null, result: result.result ?? null, note: result.note ?? null,
       errors: result.errors ?? null, refresh: result.refresh ?? ['panels', 'notifications', 'status'] }
@@ -386,21 +592,23 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         slotRows.push({ kind: 'slot-block', id: `${block.slot}:${block.plugin_id}`, title: block.title })
       }
     }
-    contributions.set(pluginId, { entries: [], unloaded: true })
+    contributions.set(pluginId, { entries: [], unloaded: true, file: fileOf(pluginId) })
     noteStore.drop(pluginId)
+    clearReadCache()
     const payload = { ok: true, plugin_id: pluginId, removed: [...removed.removed, ...slotRows],
       count: removed.count + slotRows.length,
       next_action: '该插件的视图/面板/动作/快捷键/通知源/状态项与它注册的区块都已撤销；'
-        + '页面其余部分逐字节不变（可重新装载它恢复）' }
+        + '页面其余部分逐字节不变（可 POST .../load 或 .../reload 恢复）' }
     say(`卸载贡献：${pluginId}（移除 ${payload.count} 项）`)
     return payload
   }
 
   // ------------------------------------------------------------------ 外壳 HTML（单页应用；脚本只来自本服务）
   const shellHtml = (route) => {
-    const title = route.view === 'home' ? '工作台' : route.view
-    const initial = JSON.stringify({ prefix, route: { view: route.view, panel: route.panel ?? '' } })
-      .replace(/</g, '\\u003c')
+    const safe = normRoute(route)
+    const title = safe.kind !== '' ? `${safe.kind} ${safe.id}` : (safe.view === 'home' ? '工作台' : safe.view)
+    const initial = JSON.stringify({ prefix, route: { view: safe.view, panel: safe.panel, kind: safe.kind,
+      id: safe.id } }).replace(/</g, '\\u003c')
     // **无脚本回退导航**：脚本没跑起来（或禁用 JS / 爬虫 / 屏幕阅读器）时，人也能到达每一道与上手页 ——
     // 这是可访问性与渐进增强，不是"第二套页面"：正式界面仍由客户端按注册面渲染。
     const fallback = ['', 'contractor/', 'supplier/', 'ops/', 'admin/', 'start/', 'overview/']
@@ -415,10 +623,11 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 </head><body>
 <div id="q-app">
   <header class="q-top" id="q-top"></header>
-  <main class="q-main" id="q-view"></main>
+  <div class="q-banners" id="q-banners" aria-live="polite"></div>
+  <main class="q-main" id="q-view" tabindex="-1"></main>
   <footer class="q-status" id="q-status"></footer>
 </div>
-<div class="q-toasts" id="q-toasts"></div>
+<div class="q-toasts" id="q-toasts" aria-live="polite"></div>
 <noscript><p>本页需要 JavaScript 才能渲染注册面（面板/动作/通知）。无脚本回退导航：</p></noscript>
 <nav class="q-fallback" data-shell-fallback="1">${fallback}</nav>
 <script src="${prefix}/assets/app.js" defer></script>
@@ -435,21 +644,29 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const surfaceJson = () => ({
     ok: true, service: 'quotagent-webui', surface_version: SURFACE_VERSION,
     mechanism: '扩展注册面：视图/面板/区块 + 交互（字段/表格/快捷键/右键/内联）+ 动作与命令（含服务端一半）'
-      + ' + 通知与状态；外壳只做机制、不懂业务语义',
+      + ' + 通知与状态 + **对象深链**（面板/动作声明 object_kind，地址 /app/<view>/<kind>/<id>）；外壳只做机制、'
+      + '不懂业务语义',
     prefix,
     views: [...views].map((view) => ({ id: view,
       title: config.view_titles?.[view] ?? ({ home: '工作台', contractor: '承包商', supplier: '供应商',
         ops: '运维', admin: '系统管理' }[view] ?? view),
+      object_kinds: surface.objectKindsFor(view),
       external: ['ops', 'admin'].includes(view) ? `${prefix}/${view}/` : null })),
+    deep_link: { pattern: `${prefix}/app/<view>/[<kind>/<id>/]`,
+      note: '视图地址 `…/app/<view>/`；**对象地址** `…/app/<view>/<kind>/<id>/`（kind 由插件声明 object_kind，'
+        + '刷新不丢、可复制分享；对方视角打开同一 id 只会在它自己的投影里找不到 ⇒ 如实未命中）' },
+    io: { python_spawns: ioStats.spawns, python_read_spawns: ioStats.read_spawns,
+      read_cache_hits: ioStats.read_hits, read_cache_ttl_ms: readCacheTtlMs, cache_clears: ioStats.cache_clears,
+      note: '只读工具调用（插件声明 read:true）按「工具+参数」缓存 TTL；任何一次动作/落待办件都会清空缓存' },
     registries: surface.snapshot(),
     actions: surface.byKind('action').map((action) => ({ id: action.id, title: action.title,
       views: action.views, group: action.group, icon: action.icon, placement: action.placement,
       inline: action.inline, context_menu: action.context_menu, shortcut: action.shortcut,
       input: action.input, permission: action.permission, confirm: action.confirm, hint: action.hint,
-      plugin_id: action.plugin_id })),
+      object_kind: action.object_kind, plugin_id: action.plugin_id })),
     panels: surface.byKind('panel').map((panel) => ({ id: panel.id, title: panel.title, view: panel.view,
       panel_kind: panel.panel_kind, placement: panel.placement, actions: panel.actions, order: panel.order,
-      plugin_id: panel.plugin_id })),
+      object_kind: panel.object_kind, plugin_id: panel.plugin_id })),
     shortcuts: surface.shortcuts().map((item) => ({ keys: item.keys, action: item.action, title: item.title,
       plugin_id: item.plugin_id })),
     shell_shortcuts: SHELL_SHORTCUTS,
@@ -459,6 +676,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       + '写动作最终由插件自己的服务端一半落 0600 待办件、再由 Python 侧唯一写者落账本',
   })
 
-  return { surface, host, loadContributions, unload, runAction, panelsOf, notifications, statusItems,
+  return { surface, host, loadContributions, unload, loadPlugin, reloadPlugin, pluginsJson, runAction,
+    panelsOf, objectOf, notifications, statusItems, normalizeRoute: normRoute, ioStats, clearReadCache,
     surfaceJson, shellHtml, asset, scanContributions, runPython, stage, get contributions() { return contributions } }
 }

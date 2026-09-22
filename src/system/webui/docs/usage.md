@@ -15,38 +15,39 @@
 ./run down                    # 停服务
 ```
 
-其它入口（等价，便于换端口/数据目录）：`./run up --port 8207 --host 127.0.0.1 --data-dir tmp/gui-run`；
-或直接跑宿主 CLI `node host/cli.mjs webui --profile webui --port 8207 …`（`--help` 列出全部开关），
-路径类开关都有同名环境变量：`QUOTAGENT_UI_SHARED` / `QUOTAGENT_UI_LEDGER_{CONTRACTOR,SUPPLIER}` /
-`QUOTAGENT_UI_RFQ_DELIVERY`（`QUOTAGENT_WEBUI_SEED=0` 可跳过启动时的走查 seed）。
+其它入口（换端口/数据目录）：`./run up --port 8207 --data-dir tmp/gui-run`；或 `node host/cli.mjs webui …`
+（`--help` 全部开关；路径类开关有同名环境变量 `QUOTAGENT_UI_*`）。
 
 打开 `http://127.0.0.1:8093/quotagent/`（前缀可配）：首屏是**工作台**（「我今天要做什么」），不是报告列表；
 页面脚本**只来自本服务**（`assets/app.js`/`app.css`，源文件在 `src/system/webui/code/assets/`），不引外网 CDN、无需构建。
 
-> 空数据目录下面板**如实报"还没有数据 + next_action"**（degraded），不编一行假数据；想看有数据的界面：
-> `python3 src/system/webui/tools/gui-walkthrough.py --base http://127.0.0.1:8093/quotagent`（只发 HTTP，双闭环全走一遍）。
+> 空数据目录下面板**如实报"还没有数据 + next_action"**（degraded），不编假数据；想看有数据的界面见 §8。
 
 ## 1. 界面骨架（机制在外壳、功能在插件）
 
 | 部位 | 怎么用 |
 |---|---|
 | 顶栏导航 | `工作台 / 承包商 / 供应商`（+ 运维/管理走旧页）；点即切视图，URL 变深链 |
-| 工作台（首屏） | 各插件注册的"待办"面板：待人签的草稿、待回应的包、待人工门、比价头名（身份相关入口见 §9） |
+| 工作台（首屏） | 顶部「**你现在该做什么**」把各插件待办汇成一张卡（warn/bad 优先 + 一键按钮/深链）+「从这里开始」
+四步上手指引；下面才是插件自己的待办面板 |
+| 对象页 | 行内「打开 →」= 该对象深链；对象页只出该对象类的面板与动作（其余收进「本视图的其它动作」折叠）；
+声明 `from_route` 的入参按地址 id 自动预填 |
+| 插件面 | 顶栏「插件」：贡献条数 / 文件 mtime / **重载**（= 热更）/ 卸载 / 装载 |
 | 命令面板 | `⌘K` / `Ctrl+K`：列全部动作（插件注册什么就有什么），回车即执行/开表单 |
 | 通知中心 | 顶栏「通知」：动作结果（含失败原因与 `next_action`）+ 插件通知源 + 待人工门队列 |
 | 状态栏 | 底栏：插件注册的状态读数（发包数/报价数/授标链/比价）+ 当前视图与深链 |
-| 命令面板外的快捷键 | 外壳：`g h`/`g c`/`g s` 切视图、`?` 帮助、`r` 重载、`Esc` 关弹层；插件：`p` 发布 RFQ、`d` 备报价草稿、`c` 比价、`a` 提授标意向（卸载插件后这些键一起消失） |
+| 快捷键 | 外壳：`g h/c/s` 切视图、`?` 帮助、`r` 重载、`Esc` 关弹层（弹层里先回表单再关）；插件：`p` 发包、
+`d` 备草稿、`c` 比价、`a` 提意向（卸载后一起消失） |
 | 表格 | 可编辑列（备报价的"单价整数分 / 交期天数"）在单元格里改，改完点「提交编辑」批量提交；勾选框 + 批量按钮（比价表：选中几家单独排） |
 | 右键菜单 | 行上右键 → 该视图注册了 `context_menu` 的动作（如「人签提交报价」「提出授标意向」），并把该行字段预填进表单 |
 | 人工门 | 需要人签的动作在标题后带 `✍`：表单里必须写 `human:<你的名字>`，执行前再确认一次 |
 
 ## 2. 供应商侧闭环（看包 → 备报价 → 人签提交 → 回读）
 
-1. **看包**：「发给我的 RFQ 包（只出自己那份）」列出**发给自己的**包与行项目（来源：投递信封
-   `<ui_shared>/contractor/01-package.json`；`delivered_to` 不含自己就不显示）。
-2. **备报价（可续草稿）**：行项目表的「单价（整数分）/交期（天）」列直接改 →「提交编辑（备报价草稿）」（或按 `d`）。
-   动作 **`quote.draft`**：字段级校验（整数分、上下界、发言人必须 `human:`）→ 落**一条 0600 待办件** → 唯一写者
-   `quote-draft.py` 落 `quote/drafted`（**非签名动作**，两侧各一条）。
+1. **看包**：「发给我的 RFQ 包」只出**发给自己的**那份（投递信封 `delivered_to` 不含自己就不显示）。
+2. **备报价（可续草稿）**：行项目表的「单价/交期」列直接改 →「提交编辑」（或按 `d`）→ 动作 **`quote.draft`**：
+   字段级校验（整数分、上下界、发言人 `human:`）→ 0600 待办件 → 唯一写者 `quote-draft.py` 落 `quote/drafted`
+   （**非签名**，两侧各一条）。
 3. **提交（人工门：签名）**：「我的草稿（待签署）」行上点「人签提交」→ 填 `human:<你的名字>` + 确认 →
    动作 **`quote.submit`** → 唯一写者 `quote-sign.py` 落 `approval/requested` → `approval/granted` →
    `quote/submitted`（顺序不可颠倒），并在**承包商账本**登记一条「供应商已提交报价」。
@@ -54,15 +55,14 @@
 
 ## 3. 承包商侧闭环（发布 RFQ → 比价 → 批准 → 授标 → 发 PO）
 
-1. **发布 RFQ**：`承包商 → 工作台`的「发布 RFQ」动作（或快捷键 `p`）填包 id / 标题 / 币种 / 报价截止 /
-   行项目（每行 `item_id,描述,单位,数量`）/ 邀请对象（realm）/ 发言人（`human:`）→ 确认 → 动作
-   **`rfq.publish`**：唯一写者 `src/domain/rfq/tools/rfq-publish.py` 落 `rfq/published` + `rfq/distributed`，
-   并把**投递信封**写给被邀供应商（同时在被邀方账本写一条投递登记 —— 收件人据此备报价）。
+1. **发布 RFQ**：「发布 RFQ」（或按 `p`）填包 id / 标题 / 币种 / 截止 / 行项目（`item_id,描述,单位,数量`）/
+   受邀 realm / 发言人（`human:`）→ 确认 → 动作 **`rfq.publish`**：唯一写者 `rfq-publish.py` 落
+   `rfq/published` + `rfq/distributed`，并给被邀供应商写**投递信封**（被邀方据此备报价）。
 2. **看回应与比价**：「收到的报价」列出本侧登记行；「比价排名」面板是动作 **`compare.rank`** 的结果：
    名次 / 得分 / **五个分量各自的贡献值**（单价、交期、付款条件、质保、偏差计数）/ 引用链；权重可调
    （表单里改 `w_price` 等五个，或选中若干行批量「用这组权重重排」）。服务端一半跑只读工具
    `compare-rank.py`（复用 `CompareService.rank`；**账本零新增**）。
-3. **授权与人工门**：「授权区间」页回答"谁能批到多少/越界怎么办"（本轮金额在角色区间内）。
+3. **授权与人工门**：「授权区间」页回答"谁能批到多少/越界怎么办"。
 4. **授标意向（不产生义务）**：在「收到的报价」行上（右键或行内按钮）→ 动作 **`award.propose`** →
    唯一写者 `src/domain/commitments/tools/commitment-apply.py --step propose` 落 `award/intent-proposed`，
    并把意向写给供应商（`<ui_shared>/exchange/award-intents.json`）。
@@ -70,8 +70,8 @@
    + 承包商账本一条同名登记。
 6. **授标承诺（人签）**：动作 **`award.commit`**（`--step commit`）：门是**三样齐备**——意向仍 proposed +
    有供应商确认 + 人工批准（`scope=award.commit`）→ 落 `award/committed`（承诺类事件）。
-7. **发 PO（人签）**：动作 **`po.issue`**（`--step po`）：门是"PO 只能由承诺派生" + 逐行引用中标条目且**不得改价**
-   + 人工批准（`scope=po.issue`）→ 落 `po/issued`（`po → award → intent → quote` 链 + 每行
+7. **发 PO（人签）**：动作 **`po.issue`**（`--step po`）：门是"只能由承诺派生" + 逐行引用中标条目且**不得改价**
+   + 人工批准（`scope=po.issue`）→ `po/issued`（`po→award→intent→quote` 链 + 行内
    `basis=<quote_id>#<item_id>:unit_price`）。
 8. **回读**：「授标链」面板把意向 / 供应商确认 / 承诺 / PO 与追溯链摆在一起；没签的那两列是空的（**不假装已承诺**）。
 
@@ -80,14 +80,17 @@
 | 路由 | 方法 | 说明 |
 |---|---|---|
 | `/quotagent/` | GET | GUI 首屏（工作台） |
-| `/quotagent/app/<view>/[<panel>/]` | GET | 深链（`home` / `contractor` / `supplier`） |
+| `/quotagent/app/<view>/` | GET | 视图地址（`home` / `contractor` / `supplier`） |
+| `/quotagent/app/<view>/<kind>/<id>/`、`/api/ui/object?…` | GET | **对象深链**（页面/JSON）：`kind` 由插件声明
+`object_kind`；刷新不丢、可复制；对方视角打开 ⇒ 如实未命中（不回落成"能看"） |
 | `/quotagent/assets/app.js`、`app.css` | GET | 客户端资源（**只来自本服务**） |
 | `/quotagent/api/ui/surface` | GET | 注册面自述：视图/面板/动作（schema、权限、确认策略）/快捷键/通知源/状态项 + 逐插件贡献 |
 | `/quotagent/api/ui/panels?view=<view>` | GET | 面板数据（通用形状：table/form/list/kv/metrics/html） |
 | `/quotagent/api/ui/notifications`、`/api/ui/status` | GET | 通知中心（失败原因 + `next_action` + 待人工门）/ 状态栏项 |
 | `/quotagent/api/ui/blocks?slot=page.<view>` | GET | 旧槽位注册面装配出的区块 HTML |
 | `/quotagent/api/action/<id>` | POST | **动作总线**：`{"view":"…","input":{…}}`；校验 → 插件自己的服务端一半 |
-| `/quotagent/api/ui/plugins/<plugin_id>/unload` | POST | 撤销一个插件的**全部** UI 贡献（可卸载；见 §6） |
+| `/quotagent/api/ui/plugins`；`…/<plugin_id>/{load,reload,unload}` | GET / POST | 装载清单；**运行期装载/热重载**
+（`reload` = 撤掉该插件贡献 → 按磁盘当前内容重新 import → 重新注册 ⇒ **改 `code/ui.mjs` 不必重启进程**）/ 卸载 |
 
 动作（`id` → 服务端一半 → 谁落账本）：
 
@@ -105,18 +108,15 @@
 等价命令行（同一套唯一写者；拒绝时账本零新增），例如
 
 ```bash
-python3 src/domain/commitments/tools/commitment-apply.py --step commit --request <0600待办件> \
-  --now … --ui-shared … --ledger-contractor … --ledger-supplier …
+python3 src/domain/<插件>/tools/<写者>.py --step <步骤> --request <0600待办件> --now … --ui-shared …
 ```
 
 ## 5. 写路径纪律（GUI 不是第二条事实写路径）
 
-- 动作只**发起**：外壳校验入参 → 交给插件自己的**服务端一半** → **落一条 0600 待办件**
-  （含 `payload_sha256`/`bytes`/空 `submitted_at`）→ **spawn 唯一写者**；写者自己再复核（权限 0600 + 普通文件
-  + 重算哈希 + 业务门）才落账本；
-- 对外承诺（提交报价 / 授标承诺 / 发 PO）**必须人签**：界面上的 `signature` 作为 `--actor human:<名字>` 交给写者，
-  写者的门不接受 `agent:`（GUI 被字段级校验拦下，命令行被 `human-required` 拦下）；**本轮起签名者还必须等于会话身份**（§9）；
-- 人工门记录（`approval/requested` → `approval/granted`）与承诺事件同一次落账完成，顺序不可颠倒（INV-005）。
+- 动作只**发起**：外壳校验入参 → 插件自己的**服务端一半** → 落一条 **0600 待办件**（`payload_sha256`/`bytes`/
+  空 `submitted_at`）→ spawn **唯一写者**；写者复核（0600 + 普通文件 + 重算哈希 + 业务门）才落账本；
+- 对外承诺（提交报价 / 授标承诺 / 发 PO）**必须人签**且签名者 = 会话身份（§9）：签名作为
+  `--actor human:<名字>` 交给写者，`agent:` 一律拒；人工门记录与承诺事件同一次落账（INV-005，顺序不可颠倒）。
 
 ## 6. 卸载一个注册了 UI 的插件（可撤销）
 
@@ -127,9 +127,8 @@ curl -s -X POST 'http://127.0.0.1:8093/quotagent/api/ui/plugins/userspace%2Fdemo
 ```
 
 卸载后：该插件的入口（含快捷键与右键菜单项）在界面与 `/api/ui/surface` 里**同时消失**，其余插件的面板
-**逐字节不变**（可对照 `/api/ui/panels?view=…` 的指纹）。重新装载：贡献在服务启动时发现式装载
-（扫 `src/{system,domain}/*/code/ui.mjs` 与 `src/userspace/*/*/code/ui.mjs`），重启即恢复；
-`plugin.json` 类插件走既有装卸面（`tools/plugin.sh`、`/admin/api/user-plugins/{load,unload,reload}`）。
+**逐字节不变**（可对照 `/api/ui/panels?view=…` 的指纹）。恢复：`POST …/{load,reload}`（§4）—— **不必重启**；
+`plugin.json` 类插件走 `/admin/api/user-plugins/{load,unload,reload}`。
 
 插件把自己搬上界面只需一件事：在**自己的** `code/ui.mjs` 里 `export register(surface, host)`，
 用 `surface.view/panel/action/shortcut/notificationSource/statusItem/validator` 注册并返回回执数组：
@@ -148,26 +147,28 @@ export async function register(surface, host) {
 
 ## 7. 已知限制（如实登记，不假装完成）
 
-1. **比价的候选口径**：`compare-rank.py` 按 `quote_id` 逐条排名，与 `bid-heuristics` 的 per-item 归一
-   **尚未统一**（单包多行的严格同项比较是 P1；口径真源仍是 `services/compare.py`）。
-2. **投递是单收件人 P0**：`rfq-publish.py` 的投递登记只写一条（多 realm 时写者明确拒绝，不猜写给谁）；
-   它的登记行在既有字段外**追加**了 `items`/`envelope`/`quote_by`/`subject`（不改旧键语义；若被认定为
-   账本格式变更，按规则 8 应由主 agent 补 ADR）。
-3. **realm 命名与时间口径**：走查里发布方 realm = `contractor:gui`、被邀方 = `supplier:g1`（界面以账本
-   `realm` 为准）；写者**不读墙钟**（`--now` 必填、待办件 `submitted_at` 为空），`rfq/*` 行的 `ts` 由既有
-   `RfqService` 的 `utc_now()` 打。
+1. **比价的候选口径**：`compare-rank.py` 按 `quote_id` 排名，与 `bid-heuristics` 的 per-item 归一**尚未统一**
+   （口径真源仍是 `services/compare.py`）。
+2. **投递是单收件人 P0**：多 realm 时写者**明确拒绝**，不猜写给谁；登记行**追加**了
+   `items`/`envelope`/`quote_by`/`subject`（不改旧键语义）。
+3. **realm 与时间口径**：界面以账本 `realm` 为准；写者**不读墙钟**（`--now` 必填、待办件 `submitted_at`
+   为空），`rfq/*` 行的 `ts` 由 `RfqService.utc_now()` 打。
 4. **通知中心**是"最近一次动作结果 + 插件通知源"的队列（有界 100 + 200），不是持久化信箱。
+5. **只读调用会被合并**：插件声明 `host.runPython(tool, args, {read:true})` 后，同一组 `(工具, 参数)` 在一次
+渲染内只 spawn 一次、并在 `python_cache_ms`（默认 3000）窗口内复用；任何动作/落待办件都会清空缓存
+（界面不读旧值）。`QUOTAGENT_UI_PYTHON_CACHE_MS=0` 关掉（对照用）。
 
 ## 8. 验收怎么复现（仓库内脚本）
 
 ```bash
-# 起服务见 §0；② 双闭环走查（只发 HTTP）·③ 回读账本（逐行）·④ 卸载一个插件的 UI 并对照页面其余部分
+# 起服务见 §0；② 双闭环走查 · ③ 回读账本 · ④ 卸载插件 UI 并对照页面其余部分
 python3 src/system/webui/tools/gui-walkthrough.py --base http://127.0.0.1:8093/quotagent
 python3 src/system/webui/tools/gui-readback.py --shared tmp/ui-shared
 python3 src/system/webui/tools/gui-unload.py --base http://127.0.0.1:8093/quotagent
 ```
 
-三个脚本都**不写账本**：①③④ 只读 HTTP / 只读账本文件，② 只发动作请求（落账本的是各插件的唯一写者）。
+三个脚本都**不写账本**（只读 HTTP/账本文件；动作请求的落账本者是各插件的唯一写者）。手工复现两条新能力：
+列表行「打开 →」看 URL、刷新内容不变；改任一 `code/ui.mjs` → 顶栏「插件」→「重载」，页面即变而进程未重启。
 
 ## 9. 身份与会话 + 三个自助面（DEF-001/003/025/026）
 
@@ -177,7 +178,7 @@ python3 src/system/webui/tools/gui-unload.py --base http://127.0.0.1:8093/quotag
 |---|---|---|---|
 | 登录·切换·登出 | `GET /identity/`、`GET /identity/me`、`POST /identity/{login,logout}` | 所有人 | 服务端会话 `<ui_shared>/identity/sessions.json`（**0600**、原子写）+ 不透明 cookie（HttpOnly / SameSite=Strict / Path=前缀）；过期与登出**只减权** |
 | 待我处理 | `GET /inbox/`（JSON `/inbox/api`）、`GET /<side>/inbox/` | 已登录且属于该侧 | 五类：待签报价 / 待批准 / 待确认中标 / 待回澄清 / 超期未回；只列 `owed_by = human:<我>` 或 `side:<本侧>`；`?as_of=<ISO>` 给事实时刻（缺省取账本最大 `ts`，**不取墙钟**）；越侧 ⇒ `side-mismatch` |
-| 人签 | `GET /sign/`、`POST /sign/quote`、`POST /sign/award` | 会话身份与署名一致 | 先校验 **署名 == 会话身份**（不等 ⇒ `signer-mismatch`，账本零新增），再交**既有唯一写者**（`identity-sign.py`→`quote-sign.py`；`identity-confirm.py`→`commitment-apply.py --step confirm`）；**草稿只有本人能签**（`prepared_by` 必须等于会话身份，否则 `not-my-draft`） |
+| 人签 | `GET /sign/`、`POST /sign/{quote,award}` | 会话身份与署名一致 | **署名 == 会话身份**（不等 ⇒ `signer-mismatch`，账本零新增）→ 既有唯一写者（`identity-sign.py`→`quote-sign.py`；`identity-confirm.py`→`commitment-apply.py --step confirm`）；草稿只有本人能签（否则 `not-my-draft`） |
 | 邮件配置 | `GET/POST /mail/config/` | `side=ops` 且署名一致 | 干跑 → **0600 待处理项** → 唯一落盘者 `config-apply.py` 写受管 YAML；**凭据永不回显**（页面只给键名 / 来源 / 有无值） |
 | 我的插件 | `GET /plugins/`、`POST /plugins/{load,unload,reload}` | 自己的命名空间 | 走既有管理面 `userPluginManager`；跨命名空间 ⇒ `not-my-namespace`；装卸后重扫/撤销其 UI 贡献（规则 1） |
 

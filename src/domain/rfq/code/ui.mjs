@@ -75,7 +75,8 @@ export async function register(surface, host) {
         const rev = Number(row.rev ?? 0)
         return { id: `${packageId}#r${rev}`, package_id: packageId, rev, items: row.items,
           quote_by: row.quote_by ?? '', published_at: row.ts,
-          recipients: recipientsOf(packageId).join(' '), snapshot_hash: row.hash ?? '' }
+          recipients: recipientsOf(packageId).join(' '), snapshot_hash: row.hash ?? '',
+          ref: { kind: 'package', id: packageId, title: `包 ${packageId} rev${rev}` } }
       })
       if (!table.length) {
         return { ok: true, kind: 'table', degraded: true, reason: 'no-published-rfq',
@@ -107,7 +108,9 @@ export async function register(surface, host) {
           { key: 'lead_time_days', label: '交期（天）' }, { key: 'submitted_at', label: '提交时刻' }],
         rows: rows.map((row) => ({ id: row.quote_id, quote_id: row.quote_id, supplier: row.supplier ?? '',
           package_id: row.package_id ?? '', item_id: row.item_id, unit_price_cents: row.unit_price_cents,
-          lead_time_days: row.lead_time_days, submitted_at: row.submitted_at })), bulk: 'compare.rank',
+          lead_time_days: row.lead_time_days, submitted_at: row.submitted_at,
+          ref: { kind: 'quote', id: asText(row.quote_id), title: `报价 ${asText(row.quote_id)}` } })),
+        bulk: 'compare.rank',
         counts: { quotes: rows.length } }
     } }))
 
@@ -122,12 +125,82 @@ export async function register(surface, host) {
       items.push({ level: packages.length ? 'info' : 'warn',
         title: packages.length ? `已发布 ${packages.length} 个包` : '还没有发布任何 RFQ',
         body: packages.slice(-1).map((row) => `${row.package_id} rev${row.rev}（截止 ${row.quote_by ?? '—'}）`).join(''),
-        next_action: packages.length ? `深链 ${host.prefix}/app/contractor/` : '用「发布 RFQ」发一包（不产生对外义务）' })
+        next_action: packages.length ? '点按钮看最新那一包的对象页（可复制分享）' : '用「发布 RFQ」发一包（不产生对外义务）',
+        action: 'rfq.publish', label: packages.length ? '再发一包' : '发布 RFQ',
+        ref: packages.length ? { kind: 'package', id: asText(packages[packages.length - 1].package_id) } : null })
       items.push({ level: quotes.length ? 'ok' : 'warn',
         title: quotes.length ? `收到 ${quotes.length} 条报价登记` : '还没有收到报价',
         body: quotes.slice(0, 3).map((row) => `${row.quote_id}：${row.item_id} @ ${row.unit_price_cents} 分`).join('；'),
-        next_action: quotes.length ? '去比价（可调权重，贡献可解释）→ 授标（人签）' : '等供应商人签提交' })
+        next_action: quotes.length ? '去比价（可调权重，贡献可解释）→ 授标（人签）' : '等供应商人签提交',
+        action: quotes.length ? 'compare.rank' : '', label: '用当前权重排一次' })
       return { ok: true, kind: 'list', items }
+    } }))
+
+  // ---- **对象页**：`/app/contractor/package/<pkg-id>/`（一个包的全部事实：rev / 条目 / 收件人 / 回应 / 截止） ----
+  out.push(surface.panel({ plugin_id: me, id: 'package.object', title: '包（对象页：一屏事实）',
+    view: 'contractor', order: 12, kind: 'kv', object_kind: 'package',
+    data: (ctx) => {
+      const packageId = asText(ctx.route?.id)
+      const rows = host.rows('contractor')
+      const published = rowsOfType(rows, 'rfq/published').map((row) => ({ ...bodyOf(row), ts: row.ts }))
+        .filter((row) => asText(row.package_id) === packageId)
+      if (!published.length) {
+        return { ok: true, kind: 'kv', object: { found: false, title: `包 ${packageId}`,
+          reason: 'package-not-in-my-view',
+          next_action: '这个包不在承包商侧账本的投影里：回「已发布的 RFQ」表，点行内「打开 →」用真实存在的深链' },
+          items: [] }
+      }
+      const latest = published[published.length - 1]
+      const rev = Number(latest.rev ?? 0)
+      const snapshot = snapshotOfPackage(packageId)
+      const invited = (snapshot?.invited ?? []).map(String)
+      const quotes = rowsOfType(rows, 'quote/submitted').map((row) => bodyOf(row))
+        .filter((row) => asText(row.package_id) === packageId)
+      const answered = [...new Set(quotes.map((quote) => asText(quote.supplier)))].filter(Boolean)
+      const deadlines = (snapshot?.spec?.deadlines ?? snapshot?.deadlines ?? {})
+      return { ok: true, kind: 'kv',
+        object: { title: `包 ${packageId} rev${rev}`, subtitle: latest.subject ? String(latest.subject) : '',
+          found: true,
+          facts: [
+            { key: '版本', value: `rev${rev}（共 ${published.length} 个版本事实）` },
+            { key: '条目数', value: String(latest.items ?? (snapshot?.spec?.items ?? []).length) },
+            { key: '报价截止', value: asText(latest.quote_by) || asText(deadlines.quote_by) || '—' },
+            { key: '已回 / 邀请', value: `${answered.length} / ${invited.length || '—'}` },
+            { key: '快照哈希', value: String(latest.hash ?? ''), code: true },
+          ],
+          links: [
+            ...quotes.slice(0, 8).map((quote) => ({ kind: 'quote', id: asText(quote.quote_id),
+              title: `报价 ${quote.quote_id}（${asText(quote.supplier)}）` })),
+          ].filter((link) => link.id !== '') },
+        items: [
+          { key: '收件人（谁收到了）', value: invited.join(' ') || '（快照里没有名单）' },
+          { key: '已回（谁报了价）', value: answered.join(' ') || '（还没人回）' },
+          { key: '还没回', value: invited.filter((who) => !answered.includes(who)).join(' ') || '（都回了）' },
+          { key: '上一版时间', value: String(latest.ts ?? '') },
+        ],
+        note: `这一页只读本侧事实；催报/发新版的入口在承包商道的工具栏与「回文时限」表（都要人签）。`
+          + ` 深链可以直接发给同事：${host.prefix}/app/contractor/package/${encodeURIComponent(packageId)}/` }
+    } }))
+
+  out.push(surface.panel({ plugin_id: me, id: 'package.items', title: '包的行项目（rev 快照）',
+    view: 'contractor', order: 13, kind: 'table', object_kind: 'package',
+    data: (ctx) => {
+      const packageId = asText(ctx.route?.id)
+      const snapshot = snapshotOfPackage(packageId)
+      const items = Array.isArray(snapshot?.spec?.items) ? snapshot.spec.items : []
+      if (!items.length) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'package-snapshot-missing',
+          next_action: '本机读不到这个包的快照文件：发布时唯一写者会把 `<ui-shared>/contractor/rfq-<包>-rev<n>.json`'
+            + ' 落盘；读不到就如实降级（不编条目）',
+          columns: [{ key: 'item_id', label: '行项目' }], rows: [] }
+      }
+      return { ok: true, kind: 'table',
+        columns: [{ key: 'item_id', label: '行项目', type: 'code' }, { key: 'description', label: '描述' },
+          { key: 'unit', label: '单位' }, { key: 'qty', label: '数量' }],
+        rows: items.map((item) => ({ id: String(item.item_id), item_id: item.item_id,
+          description: item.description ?? '', unit: item.unit ?? '', qty: item.qty })),
+        counts: { items: items.length },
+        note: '行项目来自发布时落盘的快照文件（唯一写者写的），不是界面自己拼的' }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'rfq.publish', title: '发布 RFQ', views: ['contractor'],

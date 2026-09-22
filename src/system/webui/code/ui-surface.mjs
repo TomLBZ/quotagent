@@ -29,6 +29,18 @@
  * 交互类（表单字段与校验、可编辑表格与批量操作、右键菜单、内联动作）都由上面的**声明**拼出来：
  * 字段形状 = `action.input.fields`；表格可编辑/批量 = `panel.data()` 返回的 `editable` / `bulk`；右键菜单 =
  * `action.context_menu=true` 且 `panel.data()` 的行给出 `id`；快捷键 = `shortcut`。**机制不替插件猜业务**。
+ *
+ * **对象深链**（对象级地址 `/app/<view>/<kind>/<id>`）：机制只提供三件事，对象是什么由插件声明 ——
+ *   ① 面板/动作可以声明 `object_kind: '<对象类>'`（如一行 P0 把"某类对象"搬上界面的面板）；
+ *   ② `data(ctx)` 的 `ctx.route` 给出当前地址的 `{view, kind, id}` 三元组（没在对象地址上时 `kind/id` 为空串），
+ *      面板据此渲染**那一个对象**；面板可选返回 `data.object = {title, subtitle, facts:[{key,value}],
+ *      links:[{kind,id,title}], found, reason, next_action}` —— 外壳只按这个通用形状渲染对象页头
+ *      （`found:false` ⇒ 外壳渲染**如实未命中态**，不编内容）；
+ *   ③ 表格行/列表项可以带 `ref = {kind, id, title}` ⇒ 客户端把该行渲染成**可点、可复制的深链**；
+ *      列表项还可以带 `action = '<动作 id>'` + `label` ⇒ 渲染成一键入口（工作台"你现在该做什么"用它）。
+ *      行内动作（`row_actions: ['<动作 id>']`）打开时，**行的字段按同名预填该动作的入参**
+ *      （动作要 `draft_id`，行就要给 `draft_id` —— 名字对不上就等于让人手抄一遍 id）。
+ *   这三条都是**声明**，外壳不认识任何具体 kind；插件卸载后它的对象页与深链一起消失（规则 1）。
  */
 
 /** 面板的通用渲染形状（外壳按 `kind` 选渲染器；不认识的一律 `unknown-panel-kind` 拒收）。 */
@@ -45,6 +57,8 @@ export const PLACEMENTS = ['toolbar', 'inline', 'command', 'context', 'shortcut'
 
 export const ID_RE = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/
 export const PLUGIN_ID_RE = /^(system|domain|userspace)\/[a-z][a-z0-9-]{0,31}(\/[a-z][a-z0-9-]{0,31})?$/
+/** **对象类**（`object_kind`）的形状：它要进 URL（`/app/<view>/<kind>/<id>`），故限定小写集。 */
+export const OBJECT_KIND_RE = /^[a-z][a-z0-9-]{0,31}$/
 export const ORDER_MIN = -1000
 export const ORDER_MAX = 1000
 export const TITLE_MAX = 120
@@ -54,7 +68,7 @@ export const MAX_FIELDS = 40
 export const REFUSAL_CODES = ['illegal-plugin-id', 'illegal-contribution-id', 'illegal-kind', 'unknown-view',
   'invalid-title', 'invalid-order', 'invalid-input', 'invalid-permission', 'invalid-confirm', 'invalid-server',
   'invalid-when', 'invalid-data', 'duplicate-contribution', 'unknown-panel-kind', 'unknown-field-type',
-  'unknown-action', 'surface-disposed']
+  'unknown-action', 'invalid-object-kind', 'surface-disposed']
 
 const plainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const text = (value) => (typeof value === 'string' ? value.trim() : '')
@@ -159,10 +173,15 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
     if (entry.when !== undefined && typeof entry.when !== 'function') {
       return { error: code('invalid-when', 'panel.when 必须是函数（可见性条件）', 'when: (ctx) => boolean') }
     }
+    const objectKind = text(entry.object_kind)
+    if (objectKind !== '' && !OBJECT_KIND_RE.test(objectKind)) {
+      return { error: code('invalid-object-kind', `panel.object_kind 形状不合法：${JSON.stringify(entry.object_kind)}`,
+        '对象类写小写字母/数字/连字符（例如某类业务对象），它要能出现在 URL /app/<view>/<kind>/<id> 里') }
+    }
     return { entry: { kind: 'panel', plugin_id: text(entry.plugin_id), id: text(entry.id), title: entry.title,
       order: orderOf(entry.order), view: text(entry.view), panel_kind: text(entry.kind),
       placement: text(entry.placement) || 'main', data: entry.data,
-      when: typeof entry.when === 'function' ? entry.when : null,
+      when: typeof entry.when === 'function' ? entry.when : null, object_kind: objectKind,
       hint: text(entry.hint), actions: Array.isArray(entry.actions) ? entry.actions.map(text) : [] } }
   })
 
@@ -202,7 +221,10 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       outFields.push({ name: text(field.name), label: text(field.label) || text(field.name), type,
         required: field.required === true, min: field.min ?? null, max: field.max ?? null,
         pattern: text(field.pattern) || null, options: Array.isArray(field.options) ? field.options.map(text) : [],
-        help: text(field.help), default: field.default ?? null })
+        help: text(field.help), default: field.default ?? null,
+        // `from_route: true` = 这个字段由**当前对象地址**的 id 预填（插件声明"它就是那个对象的 id"）：
+        // 于是 `/app/<view>/<kind>/<id>/` 对象页工具栏上的动作可以一键打开，不用手抄 id。
+        from_route: field.from_route === true })
     }
     const permission = text(entry.permission) || 'none'
     if (!PERMISSIONS.includes(permission)) {
@@ -228,10 +250,15 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       return { error: code('invalid-input', 'human-signature 动作必须声明 signature 字段（人签的入口）',
         '在 input.fields 里加 {name:"signature", label:"署名", type:"signature", required:true}') }
     }
+    const objectKind = text(entry.object_kind)
+    if (objectKind !== '' && !OBJECT_KIND_RE.test(objectKind)) {
+      return { error: code('invalid-object-kind', `action.object_kind 形状不合法：${JSON.stringify(entry.object_kind)}`,
+        '对象类写小写字母/数字/连字符；声明后该动作会出现在 `/app/<view>/<kind>/<id>` 对象页的工具栏上') }
+    }
     return { entry: { kind: 'action', plugin_id: text(entry.plugin_id), id: text(entry.id), title: entry.title,
       order: orderOf(entry.order), views: viewsOf, view: viewsOf[0] ?? '', group: text(entry.group) || '通用',
       icon: text(entry.icon), placement, inline: entry.inline === true,
-      context_menu: entry.context_menu === true,
+      context_menu: entry.context_menu === true, object_kind: objectKind,
       shortcut: text(entry.shortcut) || null,
       input: { fields: outFields, bulk: text(entry.input?.bulk) || null },
       permission, confirm, server: entry.server, hint: text(entry.hint),
@@ -294,17 +321,29 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
   const validatorsFor = (actionId) => byKind('validator')
     .filter((item) => item.actions.length === 0 || item.actions.includes(actionId))
 
+  // ---- 对象深链（**机制**）：哪些对象类被声明过 / 某个对象类是谁在负责 / 某个视图的对象页动作 ----
+  /** 本视图里被声明过的对象类（去重、字典序）：`/app/<view>/<kind>/<id>` 能打开哪些 kind 由它决定。 */
+  const objectKindsFor = (viewId) => [...new Set(byKind('panel').filter((item) => item.view === viewId
+    && item.object_kind !== '').map((item) => item.object_kind))].sort()
+  /** 某个视图里服务某个对象类的面板（对象页只渲染这些；没声明过 ⇒ 空数组，调用方据此报未命中）。 */
+  const panelsFor = (viewId, objectKind) => byKind('panel').filter((item) => item.view === viewId
+    && (objectKind ? item.object_kind === objectKind : item.object_kind === ''))
+  /** 某个视图里作用于某个对象类的动作（对象页工具栏用它；`objectKind` 为空 ⇒ 视图级动作）。 */
+  const actionsFor = (viewId, objectKind) => byKind('action').filter((item) => item.views.includes(viewId)
+    && item.object_kind === (objectKind ?? ''))
+
   /** 只回执**元数据**（不含 data/server/poll/read/validate —— 那些是插件自己的实现，不出现接口里）。 */
   const snapshotOf = (entry) => {
     const base = { kind: entry.kind, plugin_id: entry.plugin_id, id: entry.id, title: entry.title,
       order: entry.order }
     if (entry.kind === 'view') return { ...base, view: entry.view, hint: entry.hint, when: Boolean(entry.when) }
     if (entry.kind === 'panel') return { ...base, view: entry.view, panel_kind: entry.panel_kind,
-      placement: entry.placement, actions: entry.actions, hint: entry.hint, when: Boolean(entry.when) }
+      placement: entry.placement, actions: entry.actions, hint: entry.hint, when: Boolean(entry.when),
+      object_kind: entry.object_kind }
     if (entry.kind === 'action') return { ...base, views: entry.views, group: entry.group, icon: entry.icon,
       placement: entry.placement, inline: entry.inline, context_menu: entry.context_menu,
       shortcut: entry.shortcut, input: entry.input, permission: entry.permission, confirm: entry.confirm,
-      hint: entry.hint, panel: entry.panel }
+      hint: entry.hint, panel: entry.panel, object_kind: entry.object_kind }
     if (entry.kind === 'shortcut') return { ...base, keys: entry.keys, action: entry.action }
     if (entry.kind === 'notification-source') return { ...base, hint: entry.hint }
     if (entry.kind === 'status-item') return { ...base }
@@ -347,7 +386,7 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
   const dispose = () => { disposed = true; entries.clear() }
 
   return { view, panel, action, shortcut, notificationSource, statusItem, validator,
-    findAction, panelsOf, shortcuts, validatorsFor, byKind, snapshot, disposePlugin, dispose,
-    get entries() { return [...entries.values()] }, get size() { return entries.size },
+    findAction, panelsOf, panelsFor, actionsFor, objectKindsFor, shortcuts, validatorsFor, byKind, snapshot,
+    disposePlugin, dispose, get entries() { return [...entries.values()] }, get size() { return entries.size },
     get disposed() { return disposed } }
 }

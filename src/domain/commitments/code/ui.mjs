@@ -54,7 +54,9 @@ export async function register(surface, host) {
           package_id: intent.package_id ?? '', lines: (intent.lines ?? []).length,
           confirmed: confirmed.has(intentId) ? `${asText(confirmed.get(intentId).confirmed_by)} @ ${confirmed.get(intentId).confirmed_at}` : '未确认',
           award_id: award?.award_id ?? '', approved_by: award?.approved_by ?? '',
-          po_id: po?.po_id ?? '', chain: po?.chain ?? '' })
+          po_id: po?.po_id ?? '', chain: po?.chain ?? '',
+          ref: { kind: 'award', id: award?.award_id ?? intentId,
+            title: award ? `授标 ${award.award_id}` : `意向 ${intentId}` } })
       }
       if (!table.length) {
         return { ok: true, kind: 'table', degraded: true, reason: 'no-award-intent',
@@ -104,11 +106,12 @@ export async function register(surface, host) {
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'award.commit', title: '授标承诺（人签）', views: ['contractor'],
-    group: '授标', order: 20, permission: 'human-signature',
+    group: '授标', order: 20, permission: 'human-signature', object_kind: 'award',
     confirm: { required: true, message: '授标承诺＝对外义务：确认以你的署名承诺？' },
     hint: '三样门齐备才落账：意向 + 供应商确认 + 人工批准（approval/requested → granted → award/committed）',
     input: { fields: [
-      { name: 'intent_id', label: '意向 id', type: 'text', required: true, help: '从「授标链」表里复制（awin-…）' },
+      { name: 'intent_id', label: '意向 id', type: 'text', required: true, from_route: true,
+        help: '从「授标链」表里复制（awin-…）；在授标对象页上会自动填当前这一条' },
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
       { name: 'reason', label: '批准理由', type: 'text' },
       { name: 'comment', label: '批注（进批准记录）', type: 'text' },
@@ -130,11 +133,12 @@ export async function register(surface, host) {
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'po.issue', title: '发 PO（人签）', views: ['contractor'],
-    group: '授标', order: 30, permission: 'human-signature',
+    group: '授标', order: 30, permission: 'human-signature', object_kind: 'award',
     confirm: { required: true, message: '发 PO 是承诺类动作：确认以你的署名发出？' },
     hint: 'PO 只能由承诺派生；行与价都从中标条目派生（不得在界面上自由改价）',
     input: { fields: [
-      { name: 'award_id', label: '承诺 id', type: 'text', required: true, help: '从「授标链」表里复制（aw-…）' },
+      { name: 'award_id', label: '承诺 id', type: 'text', required: true, from_route: true,
+        help: '从「授标链」表里复制（aw-…）；在授标对象页上会自动填当前这一条' },
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
       { name: 'reason', label: '批准理由', type: 'text' },
       { name: 'comment', label: '批注（进批准记录）', type: 'text' },
@@ -238,13 +242,19 @@ export async function register(surface, host) {
       for (const [id, gate] of last) {
         if (gate.type === 'approval/granted' || gate.type === 'approval/aborted') continue
         items.push({ level: 'warn', title: `人工门 ${id} 还在等（${gate.scope}）`,
-          body: `对象 ${gate.ref}`, next_action: '在承包商道「授标与订单」里人签；界面不代签' })
+          body: `对象 ${gate.ref}`, next_action: '在承包商道「授标与订单」里人签；界面不代签',
+          ref: gate.scope === 'change.approve' ? { kind: 'change', id: String(gate.ref) } : null,
+          action: gate.scope === 'change.approve' ? 'change.approve'
+            : (gate.scope === 'award.commit' ? 'award.commit' : '') ,
+          label: gate.scope === 'change.approve' ? '去批准这条变更' : '去人签' })
       }
       const intents = typeRows(cRows, 'award/intent-proposed').length
       const awards = typeRows(cRows, 'award/committed').length
       const pos = typeRows(cRows, 'po/issued').length
       items.push({ level: awards ? 'ok' : 'info', title: `授标链：意向 ${intents} · 承诺 ${awards} · PO ${pos}`,
-        body: '承诺要三样门：意向 + 供应商确认 + 人工批准', next_action: awards ? '发 PO（人签）' : '先提意向' })
+        body: '承诺要三样门：意向 + 供应商确认 + 人工批准',
+        action: awards ? 'po.issue' : 'award.propose',
+        label: awards ? '发 PO（人签）' : '先提授标意向' })
       const supplierIntents = typeRows(host.rows('supplier'), 'award/confirmed').length
       if (supplierIntents === 0) {
         items.push({ level: 'info', title: '供应商侧：还没有确认过授标',
@@ -301,6 +311,43 @@ export async function register(surface, host) {
   const awardsOf = (rows) => rowByType(rows, 'award/committed')
   const intentsOf = (rows) => rowByType(rows, 'award/intent-proposed')
 
+  /**
+   * PO 的追溯链（**唯一一处**计算：行内动作与对象页 `/app/<view>/po/<id>/` 共用同一份，避免两处漂移）。
+   * 返回 `null` = 本侧账本里没有这条 PO（调用方据此渲染未命中态，不编内容）。
+   */
+  const traceOf = (poId, view = 'contractor') => {
+    const rows = host.rows(view)
+    const po = posOf(rows).find((item) => asText(item.po_id) === asText(poId))
+    if (!po) return null
+    const award = awardsOf(rows).find((item) => asText(item.award_id) === asText(po.award_id)) ?? {}
+    const intent = intentsOf(rows).find((item) => asText(item.intent_id) === asText(po.intent_id)) ?? {}
+    const base = `${host.prefix}/app/${view}/`
+    return {
+      po_id: po.po_id, chain: po.chain, trace_mode: po.trace_mode, total_amount: po.total_amount,
+      approved_by: po.approved_by, issued_at: po.issued_at, approval_id: po.approval_id,
+      award_id: po.award_id, intent_id: po.intent_id, quote_id: po.quote_id,
+      segments: [
+        { kind: 'po', id: po.po_id, label: `PO ${po.po_id}`, where: '承包商道 › 授标与订单 › 采购单',
+          fact: `${(po.lines ?? []).length} 行 · 金额 ${po.total_amount} · ${po.issued_at}`,
+          href: `${base}po/${encodeURIComponent(asText(po.po_id))}/` },
+        { kind: 'award', id: po.award_id, label: `承诺 ${po.award_id}`, where: '承包商道 › 授标与订单 › 授标链',
+          fact: `批准人 ${po.approved_by} · 人工门 ${po.approval_id}`,
+          href: `${base}award/${encodeURIComponent(asText(po.award_id))}/` },
+        { kind: 'intent', id: po.intent_id, label: `意向 ${po.intent_id}`, where: '承包商道 › 授标与订单 › 授标链',
+          fact: `中标行 ${((award.lines ?? intent.lines ?? []).length)} 条`,
+          href: `${base}award/${encodeURIComponent(asText(po.intent_id))}/` },
+        { kind: 'quote', id: po.quote_id, label: `报价 ${po.quote_id}`, where: '承包商道 › 报价收件箱 / 比价',
+          fact: `${(intent.lines ?? []).length} 行快照`,
+          href: `${base}quote/${encodeURIComponent(asText(po.quote_id))}/` },
+      ],
+      lines: (po.lines ?? []).map((line) => ({ ref_line: line.ref_line, qty: line.qty,
+        unit_price: line.unit_price, basis: line.basis, trace: line.trace,
+        quote_id: po.quote_id, href: `${base}quote/${encodeURIComponent(asText(po.quote_id))}/` })),
+      note: '链路四段都能点（每段给出所在页面与事实摘要）；行内 `basis` 指向中标报价条目，'
+        + '点报价段进「报价收件箱/比价」页核对',
+    }
+  }
+
   out.push(surface.panel({ plugin_id: me, id: 'po.list', title: '采购单（PO）：逐行可追溯',
     view: 'contractor', order: 50, kind: 'table', actions: ['po.trace'],
     data: () => {
@@ -322,52 +369,81 @@ export async function register(surface, host) {
         rows: pos.map((po) => ({ id: String(po.po_id), po_id: po.po_id, award_id: po.award_id,
           intent_id: po.intent_id, quote_id: po.quote_id, line_count: (po.lines ?? []).length,
           trace_mode: po.trace_mode, total_amount: po.total_amount, approved_by: po.approved_by,
-          chain: po.chain, issued_at: po.issued_at })),
+          chain: po.chain, issued_at: po.issued_at,
+          ref: { kind: 'po', id: String(po.po_id), title: `PO ${po.po_id}` } })),
         row_actions: ['po.trace'], counts: { po: pos.length },
-        note: '点行内「追溯这条 PO」→ 下方「追溯链」把 po → 承诺 → 意向 → 报价 **四段都做成可点的链接**'
-          + '（每个分段还能点进对应的界面页），不用手拼 URL' }
+        note: '行内「打开 →」是这条 PO 的**对象深链**（可复制分享、刷新不丢）；'
+          + '「追溯这条 PO」把链路摊到下方，两者同一份计算'
+      }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'po.trace', title: '追溯这条 PO（四段可点）',
-    views: ['contractor'], group: '授标', order: 40, inline: true,
+    views: ['contractor'], group: '授标', order: 40, inline: true, object_kind: 'po',
     hint: '只读：把 po → 承诺 → 意向 → 报价 的链路与逐行 basis 摊开（账本零新增）',
     input: { fields: [
       { name: 'po_id', label: 'PO id', type: 'text', required: true, help: '从 PO 列表行里取（po-…）' },
     ] },
     server: async (ctx, input) => {
-      const poId = asText(input.po_id)
-      const rows = host.rows('contractor')
-      const po = posOf(rows).find((item) => asText(item.po_id) === poId)
-      if (!po) {
+      const poId = asText(input.po_id) || asText(ctx.route?.id)
+      const trace = traceOf(poId, 'contractor')
+      if (!trace) {
         return { ok: false, code: 'po-not-found', reason: `本侧账本里没有 PO ${poId}`,
-          next_action: '从 PO 列表列出的真 po_id 里选一条（不猜、不凭 URL）' }
-      }
-      const award = awardsOf(rows).find((item) => asText(item.award_id) === asText(po.award_id)) ?? {}
-      const intent = intentsOf(rows).find((item) => asText(item.intent_id) === asText(po.intent_id)) ?? {}
-      const base = `${host.prefix}/app/contractor/`
-      const trace = {
-        po_id: po.po_id, chain: po.chain, trace_mode: po.trace_mode, total_amount: po.total_amount,
-        approved_by: po.approved_by, issued_at: po.issued_at, approval_id: po.approval_id,
-        segments: [
-          { kind: 'po', id: po.po_id, label: `PO ${po.po_id}`, where: '承包商道 › 授标与订单 › 采购单',
-            fact: `${(po.lines ?? []).length} 行 · 金额 ${po.total_amount} · ${po.issued_at}`, href: base },
-          { kind: 'award', id: po.award_id, label: `承诺 ${po.award_id}`, where: '承包商道 › 授标与订单 › 授标链',
-            fact: `批准人 ${po.approved_by} · 人工门 ${po.approval_id}`, href: base },
-          { kind: 'intent', id: po.intent_id, label: `意向 ${po.intent_id}`, where: '承包商道 › 授标与订单 › 授标链',
-            fact: `中标行 ${((award.lines ?? intent.lines ?? []).length)} 条`, href: base },
-          { kind: 'quote', id: po.quote_id, label: `报价 ${po.quote_id}`, where: '承包商道 › 报价收件箱 / 比价',
-            fact: `${(intent.lines ?? []).length} 行快照`, href: base },
-        ],
-        lines: (po.lines ?? []).map((line) => ({ ref_line: line.ref_line, qty: line.qty,
-          unit_price: line.unit_price, basis: line.basis, trace: line.trace,
-          quote_id: po.quote_id, href: base })),
-        note: '链路四段都能点（每段给出所在页面与事实摘要）；行内 `basis` 指向中标报价条目，'
-          + '点报价段进「报价收件箱/比价」页核对',
+          next_action: `从 PO 列表列出的真 po_id 里选一条，或直接打开对象深链 ${host.prefix}/app/contractor/po/<id>/` }
       }
       host.note.set(me, TRACE_KEY, trace)
       return { ok: true, code: 'traced',
-        next_action: '链路已摊到下方「追溯链」面板：四段与逐行 basis 都能点（报价段进承包商报价收件箱）',
+        next_action: '链路已摊到下方「追溯链」面板：四段与逐行 basis 都能点'
+          + `（也可以直接把 ${host.prefix}/app/contractor/po/${asText(poId)}/ 发给同事）`,
         result: trace }
+    } }))
+
+  // ---- **对象页**：`/app/contractor/po/<po-id>/`（刷新不丢、可复制分享；不再依赖上面那条内存便签） ----
+  out.push(surface.panel({ plugin_id: me, id: 'po.object', title: 'PO 追溯（对象页）', view: 'contractor',
+    order: 50, kind: 'kv', object_kind: 'po',
+    data: (ctx) => {
+      const poId = asText(ctx.route?.id)
+      const trace = traceOf(poId, 'contractor')
+      if (!trace) {
+        return { ok: true, kind: 'kv', object: { found: false, title: `PO ${poId}`,
+          reason: 'po-not-in-my-view',
+          next_action: '这条 PO 不在承包商侧账本的投影里：回「采购单（PO）」列表，'
+            + '点行内「打开 →」用真实存在的深链' }, items: [] }
+      }
+      return { ok: true, kind: 'kv',
+        object: { title: `PO ${trace.po_id}`, subtitle: `${trace.chain} · 追溯模式 ${trace.trace_mode}`
+          + ` · 签发 ${trace.issued_at}`, found: true,
+          facts: [
+            { key: '金额', value: String(trace.total_amount) },
+            { key: '行数', value: String((trace.lines ?? []).length) },
+            { key: '签发人（人签）', value: trace.approved_by, code: true },
+            { key: '人工门', value: trace.approval_id, code: true },
+            { key: '报价', value: trace.quote_id, code: true },
+          ],
+          links: (trace.segments ?? []).filter((seg) => seg.kind !== 'po') },
+        items: [
+          { key: '链路', value: trace.chain, code: true },
+          { key: '追溯模式', value: `${trace.trace_mode}（full=逐行可回溯；ref-only=只给引用）` },
+          { key: '逐行', value: `${(trace.lines ?? []).length} 行（见下方明细表）` },
+          { key: '事实时刻', value: trace.issued_at },
+        ],
+        note: '这一页**只看**账本事实：PO 由承诺派生、逐行引用中标条目，界面上不提供任何改价入口' }
+    } }))
+
+  out.push(surface.panel({ plugin_id: me, id: 'po.object-lines', title: 'PO 逐行明细（单价基准可点）',
+    view: 'contractor', order: 51, kind: 'table', object_kind: 'po',
+    data: (ctx) => {
+      const trace = traceOf(asText(ctx.route?.id), 'contractor')
+      if (!trace) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'po-not-in-my-view',
+          columns: [{ key: 'ref_line', label: 'PO 行' }], rows: [] }
+      }
+      return { ok: true, kind: 'table',
+        columns: [{ key: 'ref_line', label: 'PO 行', type: 'code' }, { key: 'qty', label: '量' },
+          { key: 'unit_price', label: '单价' }, { key: 'basis', label: '单价基准（中标报价条目）', type: 'code' },
+          { key: 'trace', label: '追溯模式' }],
+        rows: (trace.lines ?? []).map((line) => ({ id: String(line.ref_line), ...line })),
+        counts: { lines: (trace.lines ?? []).length },
+        note: '每一行的 `basis` 指向中标报价里的条目；缺基准的行不会出现在 PO 里（`po-line-not-derived` 会拒绝签发）' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'po.detail', title: '追溯链（PO → 承诺 → 意向 → 报价，全链可点）',
@@ -378,9 +454,10 @@ export async function register(surface, host) {
       const pos = posOf(rows)
       if (!trace) {
         return { ok: true, kind: 'html', html: `<p class="q-hint">还没有选中的 PO。`
-          + (pos.length ? '在上面的 PO 列表里点某一行「追溯这条 PO」（行内动作）——四段链路会出现在这里。'
+          + (pos.length ? '在上面的 PO 列表里点某一行「追溯这条 PO」或「打开 →」（对象页会显示同一条链路）。'
             : '本侧账本里还没有 PO：PO 只能由承诺派生（提意向 → 对方确认 → 人签承诺 → 人签发 PO）。')
-          + `</p><p class="q-hint">深链：<code>${host.prefix}/app/contractor/</code>（本页）</p>` }
+          + `</p><p class="q-hint">深链：<code>${host.prefix}/app/contractor/po/&lt;po-id&gt;/</code>`
+          + '（从列表行「打开 →」拿真 id）</p>' }
       }
       const seg = (item) => `<li><a href="${item.href}" title="去 ${item.where}">${item.label}</a>`
         + ` —— <code>${item.id}</code><br><small>${item.where} · ${item.fact}</small></li>`
@@ -395,6 +472,89 @@ export async function register(surface, host) {
         + `<div class="q-scroll"><table class="q-table"><thead><tr><th>PO 行</th><th>量</th><th>单价</th>`
         + `<th>单价基准（可点）</th><th>追溯模式</th></tr></thead><tbody>${lines}</tbody></table></div>`
         + `<p class="q-hint">${trace.note}</p>` }
+    } }))
+
+  // ---- **对象页**：`/app/contractor/award/<awin-… 或 aw-…>/`（意向 → 确认 → 承诺 → PO 四段） ----
+  out.push(surface.panel({ plugin_id: me, id: 'award.object', title: '授标（对象页：四段状态）',
+    view: 'contractor', order: 41, kind: 'kv', object_kind: 'award',
+    data: (ctx) => {
+      const id = asText(ctx.route?.id)
+      const rows = host.rows('contractor')
+      const intents = intentsOf(rows)
+      const awards = awardsOf(rows)
+      const intent = intents.find((item) => asText(item.intent_id) === id
+        || asText(item.award_id) === id) ?? intents.find((item) => {
+        const award = awards.find((row) => asText(row.intent_id) === asText(item.intent_id))
+        return award && asText(award.award_id) === id
+      })
+      if (!intent) {
+        return { ok: true, kind: 'kv', object: { found: false, title: `授标 ${id}`, reason: 'award-not-in-my-view',
+          next_action: '这条授标不在承包商侧投影里：回「授标链」表，点行内「打开 →」用真实存在的深链' },
+          items: [] }
+      }
+      const intentId = asText(intent.intent_id)
+      const award = awards.find((item) => asText(item.intent_id) === intentId)
+      const po = award ? posOf(rows).find((item) => asText(item.award_id) === asText(award.award_id)) : null
+      const confirmed = typeRows(rows, 'award/confirmed').map((row) => bodyOf(row))
+        .find((row) => asText(row.intent_id) === intentId)
+      const base = `${host.prefix}/app/contractor/`
+      const step = (label, done, fact) => ({ key: label, value: done ? `✅ ${fact}` : `⏳ ${fact}` })
+      return { ok: true, kind: 'kv',
+        object: { title: `授标 ${intentId}`, subtitle: `报价 ${intent.quote_id ?? '—'} ·`
+          + ` 包 ${intent.package_id ?? '—'}`, found: true,
+          facts: [
+            { key: '状态', value: award ? (po ? '已承诺 + 已发 PO' : '已承诺（待发 PO）') : '仅有意向（未承诺）' },
+            { key: '中标行', value: String((intent.lines ?? []).length) },
+            { key: '报价', value: asText(intent.quote_id), code: true },
+          ],
+          links: [
+            { kind: 'quote', id: asText(intent.quote_id), title: `报价 ${intent.quote_id}` },
+            { kind: 'package', id: asText(intent.package_id), title: `包 ${intent.package_id}` },
+          ].filter((link) => link.id !== '') },
+        items: [
+          step('① 意向', true, `已提出（${intent.proposed_at ?? '—'}）`),
+          step('② 供应商确认', Boolean(confirmed), confirmed
+            ? `${confirmed.confirmed_by} @ ${confirmed.confirmed_at}` : '还没确认（对方要在它自己的界面确认）'),
+          step('③ 人签承诺', Boolean(award), award ? `${award.award_id} · ${award.approved_by}` : '还没承诺'),
+          step('④ 发 PO', Boolean(po), po ? `${po.po_id}` : '还没签发'),
+        ],
+        note: `承诺与 PO 都必须**人签**且要过人工门（INV-005）；这一页只读。`
+          + `${po ? ` PO 深链：${base}po/${encodeURIComponent(asText(po.po_id))}/` : ''}` }
+    } }))
+
+  // ---- **对象页**：`/app/contractor/change/<chg-…>/`（逐行差异 + 批准判定） ----
+  out.push(surface.panel({ plugin_id: me, id: 'change.object', title: '变更单（对象页：逐行差异）',
+    view: 'contractor', order: 61, kind: 'table', object_kind: 'change',
+    data: (ctx) => {
+      const id = asText(ctx.route?.id)
+      const rows = host.rows('contractor')
+      const change = changeRows(rows).find((item) => asText(item.change_id) === id)
+      if (!change) {
+        return { ok: true, kind: 'table', object: { found: false, title: `变更单 ${id}`,
+          reason: 'change-not-in-my-view',
+          next_action: '这条变更单不在承包商侧投影里：回「变更与价格让步」列表，点行内「打开 →」用真实存在的深链' },
+          columns: [{ key: 'change_id', label: '变更' }], rows: [] }
+      }
+      const decision = changeDecisions(rows).get(asText(change.change_id))
+      const status = change.status === 'approved' ? '已批准（生效）'
+        : (decision?.decision === 'denied' ? `已驳回（${decision.by}）` : '待批（未生效，不计金额）')
+      return { ok: true, kind: 'table',
+        object: { title: `变更单 ${change.change_id}`, subtitle: `报价 ${change.quote_id} · ${status}`, found: true,
+          facts: [
+            { key: '差额', value: String(change.delta_amount ?? 0) },
+            { key: '状态', value: status },
+            { key: '批准人', value: change.approved_by ?? '—' },
+            { key: '理由', value: String(change.reason ?? '') },
+          ],
+          links: [{ kind: 'quote', id: asText(change.quote_id), title: `报价 ${change.quote_id}` }]
+            .filter((link) => link.id !== '') },
+        columns: [{ key: 'ref_line', label: '行', type: 'code' }, { key: 'old_qty', label: '原量' },
+          { key: 'new_qty', label: '新量' }, { key: 'old_unit_price', label: '原单价（只读）' }],
+        rows: (change.lines ?? []).map((line, index) => ({ id: `${line.ref_line ?? line.item_id ?? index}`,
+          ref_line: line.ref_line ?? line.item_id, old_qty: line.old_qty, new_qty: line.new_qty,
+          old_unit_price: line.old_unit_price ?? '' })),
+        counts: { lines: (change.lines ?? []).length },
+        note: '未批准的变更**一分钱都不计**；批准/驳回都是人工门（在列表行内点，或本页工具栏的动作）' }
     } }))
 
   // ------------------------------------------------------------------ 变更与价格让步（DEF-018）
@@ -479,7 +639,8 @@ export async function register(surface, host) {
               + `${line.old_unit_price === undefined ? '' : ` @ ${line.old_unit_price}`}`).join(' · '),
             delta_amount: change.delta_amount, status_label: status,
             approved_by: change.approved_by ?? '', reason: change.reason, proposed_at: change.proposed_at,
-            reject_comment: decision?.decision === 'denied' ? decision.comment : '' }
+            reject_comment: decision?.decision === 'denied' ? decision.comment : '',
+            ref: { kind: 'change', id: String(change.change_id), title: `变更单 ${change.change_id}` } }
         }),
         row_actions: ['change.approve', 'change.reject'], counts: { changes: changes.length,
           approved: changes.filter((change) => change.status === 'approved').length },
@@ -557,9 +718,11 @@ export async function register(surface, host) {
 
   const decideAction = (id, step, title, hint) => surface.action({ plugin_id: me, id, title,
     views: ['contractor'], group: '变更', order: step === 'approve' ? 20 : 25, permission: 'human-signature',
-    inline: true, confirm: { required: true, message: `${title}：确认以你的署名执行？（人工门 change.approve）` },
+    inline: true, object_kind: 'change',
+    confirm: { required: true, message: `${title}：确认以你的署名执行？（人工门 change.approve）` },
     hint, input: { fields: [
-      { name: 'change_id', label: '变更 id', type: 'text', required: true, help: '从变更列表行里取（chg-…）' },
+      { name: 'change_id', label: '变更 id', type: 'text', required: true, from_route: true,
+        help: '从变更列表行里取（chg-…）；在变更对象页上会自动填当前这一条' },
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
       { name: 'comment', label: '意见（驳回必填；逐字落 approval 记录）', type: 'textarea',
         required: step === 'reject' },

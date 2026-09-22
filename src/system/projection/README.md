@@ -30,6 +30,8 @@ tools/verify.sh rfq-visibility                 # 本插件的真路由门（围�
 ## 纪律（本插件的硬边界）
 
 - **零写面**：不写文件、不写账本（`permissions.ledger = none`）；字段过滤只读调用方给的载荷。
+- **视角类型白名单必须是本侧待办的全集**：`VIEW_RULES[view].types` 少一个前缀，用 `publicRows` 的消费者
+  （页面子视图、插件面板）就**静默丢行**；规则与逐视角清单见 `docs/design/04-services-catalog.md` §9.3。
 - **不编内容**：读不出来的字段如实进 `omitted`，不补默认值、不猜。
 - **一处一事实**：规则文本在 `docs/design/26-rfq-delivery-visibility.md`，本文件不复述。
 

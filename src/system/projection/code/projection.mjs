@@ -31,13 +31,21 @@ export const Config = object({
 export const VIEW_RULES = {
   contractor: {
     title: '承包商视角',
-    types: ['rfq/', 'quote/', 'compare/', 'award/', 'po/', 'change/', 'approval/', 'capacity/', 'terms/'],
+    // 承包商与供应商**各自只看自己那本账本**（结构性隔离：对方的账本不在本视角的读取路径上）。
+    // 这张类型白名单是纵深防御的第一道；**它必须是本侧待办的全集** —— 少一个前缀，用 `publicRows`
+    // 的消费者（页面子视图、插件面板）就会**静默丢行**（实测：`clarification/` 缺 ⇒ 承包商侧看不到
+    // 自己的澄清工单行；`mail/` 缺 ⇒ 看不到邮件通道事实；`gate/nudged` 缺 ⇒ 看不到「谁催过这个门」）。
+    // 本批补齐的三个前缀都是**已登记**的事件类型（`docs/design/05-events.md`），不新增事件、不放宽私域键。
+    types: ['rfq/', 'quote/', 'compare/', 'award/', 'po/', 'change/', 'approval/', 'capacity/', 'terms/',
+      'clarification/', 'mail/', 'gate/nudged'],
     privateKeys: [],
     fields: ['seq', 'type', 'correlation_id', 'actor', 'ts', 'summary'],
   },
   supplier: {
     title: '供应商视角',
-    types: ['rfq/', 'quote/', 'award/', 'po/', 'change/', 'clarification/'],
+    // 同上：`approval/`（我自己那本账本里的人工门：报价提交签名、价格让步）与 `mail/`（发给我的通知
+    // 登记 + 通道不可用的如实拒绝）在补进来之前会**静默丢行**。
+    types: ['rfq/', 'quote/', 'award/', 'po/', 'change/', 'clarification/', 'approval/', 'mail/'],
     privateKeys: ['calendar:private', 'cost_floor', 'markup_pct', 'profiles', 'bidders_private',
       'authorized_band', 'internal_notes'],
     fields: ['seq', 'type', 'correlation_id', 'ts', 'summary'],

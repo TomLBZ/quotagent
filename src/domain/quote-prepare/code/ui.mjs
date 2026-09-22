@@ -113,11 +113,106 @@ export async function register(surface, host) {
         }),
         editable_action: 'quote.draft',
         editable_defaults: { rfq_id: String(spec.package_id ?? ''), currency: String(spec.currency ?? 'CNY'),
-          prepared_by: 'human:（请改成你的名字）' },
+          prepared_by: '' },
         bulk: 'quote.draft',
+        ref: spec.package_id ? { kind: 'package', id: String(spec.package_id),
+          title: `包 ${spec.package_id} rev${envelope.rev ?? '—'}` } : null,
         counts: { items: items.length, rev: envelope.rev },
         note: `包 ${spec.package_id ?? '—'} rev${envelope.rev ?? '—'} · 报价截止 ${(spec.deadlines ?? {}).quote_by ?? '—'}`
-          + ` · 报价一律**整数分**（8600 = 86.00）；改完单价/交期后点「备这份草稿」（可逐条，也可批量）` }
+          + ` · 报价一律**整数分**（8600 = 86.00）；改完单价/交期后点「备这份草稿」（可逐条，也可批量）`
+          + ` · 标题旁的「打开对象 →」是这个包的深链（可复制分享、刷新不丢）` }
+    } }))
+
+  // ---- **对象页**：`/app/supplier/package/<pkg-id>/`（我收到的那个包：条目 + 我的草稿进度） ----
+  out.push(surface.panel({ plugin_id: me, id: 'package.mine', title: '我收到的包（对象页）', view: 'supplier',
+    order: 11, kind: 'table', object_kind: 'package',
+    data: (ctx) => {
+      const wanted = asText(ctx.route?.id)
+      const realm = realmOf('supplier')
+      const mine = myPackage(host, realm)
+      const spec = mine.ok ? (mine.envelope.spec ?? {}) : {}
+      const packageId = String(spec.package_id ?? '')
+      if (!mine.ok || (wanted && packageId !== wanted)) {
+        return { ok: true, kind: 'table', object: { found: false, title: `包 ${wanted}`,
+          reason: mine.ok ? 'package-not-addressed-to-me' : mine.code,
+          next_action: mine.ok
+            ? `这份包不是发给 ${realm || '本侧'} 的（投递名单：${((mine.envelope.delivered_to ?? [])).join(' ') || '—'}）：`
+              + '只出自己的那份，回供应商道首页看「发给我的 RFQ 包」'
+            : (mine.next_action ?? '') },
+          columns: [{ key: 'item_id', label: '行项目' }], rows: [] }
+      }
+      const items = Array.isArray(spec.items) ? spec.items : []
+      const drafts = new Map(typeRows(host.rows('supplier'), 'quote/drafted')
+        .map((row) => [asText(bodyOf(row).item_id), bodyOf(row)]))
+      return { ok: true, kind: 'table',
+        object: { title: `包 ${packageId} rev${mine.envelope.rev ?? '—'}`, found: true,
+          subtitle: `发给 ${((mine.envelope.delivered_to ?? []).map(String).join(' ') || realm || '本侧')}`
+            + ` · 报价截止 ${(spec.deadlines ?? {}).quote_by ?? '—'}`,
+          facts: [
+            { key: '条目数', value: String(items.length) },
+            { key: '版本 rev', value: String(mine.envelope.rev ?? '—') },
+            { key: '澄清截止', value: String((spec.deadlines ?? {}).clarify_by ?? '—') },
+            { key: '已备草稿', value: `${drafts.size} / ${items.length}` },
+          ], links: [] },
+        columns: [
+          { key: 'item_id', label: '行项目', type: 'code' }, { key: 'description', label: '描述' },
+          { key: 'qty', label: '数量' }, { key: 'unit', label: '单位' },
+          { key: 'unit_price_cents', label: '单价（整数分，可直接改）', editable: true, type: 'number' },
+          { key: 'lead_time_days', label: '交期（天，可直接改）', editable: true, type: 'number' },
+          { key: 'draft', label: '已备草稿' },
+        ],
+        rows: items.map((item) => {
+          const draft = drafts.get(String(item.item_id))
+          return { id: String(item.item_id), item_id: String(item.item_id), description: item.description ?? '',
+            qty: item.qty, unit: item.unit,
+            unit_price_cents: draft?.unit_price_cents ?? '', lead_time_days: draft?.lead_time_days ?? '',
+            draft: draft ? `${draft.quote_draft_id}（待签署）` : '' }
+        }),
+        editable_action: 'quote.draft',
+        editable_defaults: { rfq_id: packageId, currency: String(spec.currency ?? 'CNY'),
+          prepared_by: '' },
+        bulk: 'quote.draft',
+        counts: { items: items.length, rev: mine.envelope.rev },
+        note: '这一页是那个包的**对象地址**（刷新不丢、可复制）：改单价/交期 → 「备这份草稿」→ 再去「我的草稿」人签提交' }
+    } }))
+
+  out.push(surface.panel({ plugin_id: me, id: 'quote.object', title: '报价逐行明细（承包商收到的）',
+    view: 'contractor', order: 36, kind: 'table', object_kind: 'quote',
+    data: (ctx) => {
+      const wanted = asText(ctx.route?.id)
+      const { json } = inboxOf()
+      const bagOf = (json.packages ?? []).find((bag) => (bag.quotes ?? [])
+        .some((quote) => asText(quote.quote_id) === wanted))
+      const quote = bagOf ? (bagOf.quotes ?? []).find((row) => asText(row.quote_id) === wanted) : null
+      if (!quote) {
+        return { ok: true, kind: 'table', object: { found: false, title: `报价 ${wanted}`,
+          reason: json.ok ? 'quote-not-in-my-view' : (json.reason ?? json.refusal?.code ?? 'inbox-failed'),
+          next_action: json.ok
+            ? '这份报价不在承包商侧收件箱里：回「报价收件箱」（承包商道）点行内「打开 →」用真实存在的深链'
+            : (json.next_action ?? json.refusal?.next_action ?? '看只读工具的输出') },
+          columns: [{ key: 'item_id', label: '行项目' }], rows: [] }
+      }
+      return { ok: true, kind: 'table',
+        object: { title: `报价 ${asText(quote.quote_id)}`, found: true,
+          subtitle: `供应商 ${asText(quote.supplier)} · 包 ${asText(bagOf.package_id)} rev${bagOf.rev ?? '—'}`
+            + ` · ${asText(quote.vs_current_rev)}`,
+          facts: [
+            { key: '行合计（整数分）', value: String(quote.total_cents ?? '') },
+            { key: '提交时刻', value: String(quote.submitted_at ?? '') },
+            { key: '受理状态', value: String(quote.review_status ?? '') },
+            { key: '签署人（人签）', value: String(quote.approved_by ?? '—') },
+            { key: '人工门', value: String(quote.approval_id ?? '—'), code: true },
+          ],
+          links: [
+            { kind: 'package', id: asText(bagOf.package_id), title: `包 ${asText(bagOf.package_id)}` },
+          ].filter((link) => link.id !== '') },
+        columns: [{ key: 'item_id', label: '行项目', type: 'code' }, { key: 'qty', label: '量' },
+          { key: 'unit_price_cents', label: '单价（整数分）' }, { key: 'lead_time_days', label: '交期（天）' }],
+        rows: (quote.items ?? []).map((line) => ({ id: String(line.item_id), item_id: line.item_id,
+          qty: line.qty, unit_price_cents: line.unit_price_cents, lead_time_days: line.lead_time_days })),
+        counts: { lines: (quote.items ?? []).length },
+        note: '受理 / 退回 / 要求补件是人工门：本页工具栏上的那个动作直接对**这份**报价发起（id 已按地址预填，'
+          + '不必手抄）；逐行单价与量的对账口径见「报价收件箱」面板的备注' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'quote.drafts', title: '我的草稿（待签署）', view: 'supplier',
@@ -128,7 +223,7 @@ export async function register(surface, host) {
         const body = bodyOf(row)
         const id = asText(body.quote_draft_id) || asText(row?.correlation_id)
         if (!id) continue
-        drafts.set(id, { id, quote_draft_id: id, rfq_id: body.rfq_id ?? body.package_id ?? '',
+        drafts.set(id, { id, quote_draft_id: id, draft_id: id, rfq_id: body.rfq_id ?? body.package_id ?? '',
           item_id: body.item_id ?? '', unit_price_cents: body.unit_price_cents ?? '',
           lead_time_days: body.lead_time_days ?? '', prepared_by: body.prepared_by ?? '',
           ts: row.ts ?? '' })
@@ -164,8 +259,49 @@ export async function register(surface, host) {
           { key: 'item_id', label: '行项目', type: 'code' }, { key: 'unit_price_cents', label: '单价（整数分）' },
           { key: 'lead_time_days', label: '交期（天）' }, { key: 'approved_by', label: '签署人', type: 'code' },
           { key: 'approval_id', label: '人工门', type: 'code' }, { key: 'submitted_at', label: '提交时刻' }],
-        rows: rows.map((row) => ({ id: row.quote_id, ...row })), counts: { quotes: rows.length },
-        note: '每一行都对应一次人签的人工门（approval/requested → granted → quote/submitted，顺序不可颠倒）' }
+        rows: rows.map((row) => ({ id: row.quote_id, ...row,
+          ref: { kind: 'quote', id: asText(row.quote_id), title: `报价 ${asText(row.quote_id)}` } })),
+        counts: { quotes: rows.length },
+        note: '每一行都对应一次人签的人工门（approval/requested → granted → quote/submitted，顺序不可颠倒）；'
+          + '行内「打开 →」是该报价的对象页深链（可复制发给对方核对）' }
+    } }))
+
+  // ---- **对象页**：`/app/supplier/quote/<q-…>/`（我提交的那份报价的全链事实） ----
+  out.push(surface.panel({ plugin_id: me, id: 'quote.mine', title: '我的报价（对象页：提交与批准记录）',
+    view: 'supplier', order: 31, kind: 'kv', object_kind: 'quote',
+    data: (ctx) => {
+      const wanted = asText(ctx.route?.id)
+      const rows = typeRows(host.rows('supplier'), 'quote/submitted').map((row) => bodyOf(row))
+      const quote = rows.find((row) => asText(row.quote_id) === wanted)
+      if (!quote) {
+        return { ok: true, kind: 'kv', object: { found: false, title: `报价 ${wanted}`,
+          reason: 'quote-not-in-my-view',
+          next_action: '这份报价不在供应商侧账本里：回「已提交的报价」面板，点行内「打开 →」用真实存在的深链' },
+          items: [] }
+      }
+      const gates = typeRows(host.rows('supplier'), 'approval/').map((row) => bodyOf(row))
+        .filter((row) => asText(row.ref) === wanted)
+      return { ok: true, kind: 'kv',
+        object: { title: `报价 ${asText(quote.quote_id)}`, found: true,
+          subtitle: `包 ${asText(quote.package_id)} · rev${asText(quote.rfq_rev) || '—'}`
+            + ` · ${asText(quote.currency)}`,
+          facts: [
+            { key: '行数', value: String((quote.lines ?? []).length) },
+            { key: '签署人（人签）', value: asText(quote.approved_by), code: true },
+            { key: '人工门', value: asText(quote.approval_id), code: true },
+            { key: '提交时刻', value: asText(quote.submitted_at) },
+          ],
+          links: [{ kind: 'package', id: asText(quote.package_id),
+            title: `包 ${asText(quote.package_id)}` }].filter((link) => link.id !== '') },
+        items: [
+          { key: '逐行', value: (quote.lines ?? []).map((line) => `${line.item_id}: `
+            + `${line.unit_price_cents} 分 / ${line.lead_time_days} 天`).join('；') || '（没有行明细）' },
+          { key: '人工门记录', value: gates.map((gate) => `${gate.status ?? ''} ${gate.decided_by ?? ''}`
+            + ` ${gate.comment ?? ''}`.trim()).join(' | ') || '（没有批准记录）' },
+          { key: '对账口径', value: '金额一律整数分；这一页只读，改报要按新版重填（人签提交）' },
+        ],
+        note: '这一页是那份报价的**对象地址**：刷新不丢、可复制；对外承诺类动作只有人签提交那一步'
+          + `（提交入口在「我的草稿」面板）。` }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'quote.draft', title: '备报价草稿（可批量）', views: ['supplier'],
@@ -322,12 +458,17 @@ export async function register(surface, host) {
       items.push({ level: pending.length ? 'warn' : 'info',
         title: pending.length ? `${pending.length} 份草稿待你人签提交` : '没有待签署的草稿',
         body: '提交报价是对外承诺：要人签（human:<你的名字>）',
-        next_action: pending.length ? `深链 ${host.prefix}/app/supplier/` : '先在供应商道「发给我的 RFQ 包」里备草稿' })
+        action: pending.length ? 'quote.submit' : 'quote.draft',
+        label: pending.length ? '人签提交报价' : '备一份草稿',
+        next_action: pending.length ? '点按钮直接开签名弹层；也可以在「我的草稿」里逐条签'
+          : '先在供应商道「发给我的 RFQ 包」里填单价与交期' })
       items.push({ level: mine.ok ? 'info' : 'warn',
         title: mine.ok ? `发给我的包：${(mine.envelope.spec?.items ?? []).length} 条行项目（rev${mine.envelope.rev}）`
           : '还没有发给我的 RFQ 包',
         body: mine.ok ? `报价截止 ${(mine.envelope.spec?.deadlines ?? {}).quote_by ?? '—'}` : mine.reason,
-        next_action: mine.ok ? '去填单价与交期 → 备草稿' : (mine.next_action ?? '') })
+        action: mine.ok ? 'quote.draft' : '', label: '备这份草稿',
+        next_action: mine.ok ? '去填单价与交期 → 备草稿' : (mine.next_action ?? ''),
+        ref: mine.ok ? { kind: 'package', id: String(mine.envelope.spec?.package_id ?? '') } : null })
       return { ok: true, kind: 'list', items }
     } }))
 
@@ -353,8 +494,10 @@ export async function register(surface, host) {
   const reviewTool = 'src/domain/quote-prepare/tools/quote-review.py'
   const reviewsFile = () => `${host.sharedDir}/exchange/quote-reviews.json`
   const inboxOf = () => {
+    // `{read:true}`：quote-inbox.py 是只读收件箱（写者在别处）⇒ 同一批参数在一次渲染里只 spawn 一次
+    // （收件箱面板、待受理通知源、状态栏三处读的是同一份结果）。
     const run = host.runPython(inboxTool, ['--ui-shared', host.sharedDir,
-      '--ledger-contractor', contractorLedger()])
+      '--ledger-contractor', contractorLedger()], { read: true })
     return { run, json: run.json ?? {} }
   }
   const reviewNotices = () => {
@@ -381,7 +524,8 @@ export async function register(surface, host) {
             total_cents: quote.total_cents, vs_current_rev: quote.vs_current_rev,
             submitted_at: quote.submitted_at, review_status: quote.review_status,
             reviewed_by: quote.reviewed_by ?? '', review_comment: quote.review_comment ?? '',
-            approved_by: quote.approved_by ?? '', lead_time: (quote.items ?? []).map((line) => line.lead_time_days).join('/') })
+            approved_by: quote.approved_by ?? '', lead_time: (quote.items ?? []).map((line) => line.lead_time_days).join('/'),
+            ref: { kind: 'quote', id: asText(quote.quote_id), title: `报价 ${asText(quote.quote_id)}` } })
         }
       }
       return { ok: true, kind: 'table',
@@ -406,11 +550,13 @@ export async function register(surface, host) {
 
   out.push(surface.action({ plugin_id: me, id: 'quote.review', title: '受理 / 退回 / 要求补件（人签）',
     views: ['contractor'], group: '报价', order: 5, permission: 'human-signature', inline: true,
+    object_kind: 'quote',
     confirm: { required: true, message: '这是**人签判定**：受理后对方会看到「已受理」；确认以你的署名执行？' },
     hint: '受理=approval/granted、退回/要补件=approval/denied（scope 带判定）；退回/补件必须给理由；'
       + '通知对方只含判定与披露理由，**不含内部备注**',
     input: { bulk: 'ids', fields: [
-      { name: 'quote_id', label: '报价 id', type: 'text', required: true, help: '从收件箱行里取（批量时每行自带）' },
+      { name: 'quote_id', label: '报价 id', type: 'text', required: true, from_route: true,
+        help: '从收件箱行里取（批量时每行自带）；在报价对象页上会自动填当前这一份' },
       { name: 'decision', label: '判定', type: 'select', options: ['accepted', 'returned', 'need-info'],
         default: 'accepted', help: '受理 / 退回 / 要求补件' },
       { name: 'signature', label: '受理人（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },

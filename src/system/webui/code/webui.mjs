@@ -60,6 +60,9 @@ export const Config = object({
   // 缺省空 = 没有投递来源（视图如实报 degraded + reason，不编数据）。
   rfq_delivery: string().default(''),
   rfq_delivery_max: number().default(8),    // 每视角最多展示几个包（有界；超出如实报 omitted）
+  // 只读工具调用的**缓存窗口**（毫秒；机制层）：同一组 `(工具, 参数)` 的只读调用在这个窗口内只 spawn 一次。
+  // 插件要显式声明 `host.runPython(tool, args, { read: true })` 才会进缓存；任何一次动作/落待办件都会清空缓存。
+  python_cache_ms: number().default(3000),
   // 注入式 UI 的槽位闭合集合（机制层）：插件只能注册到这些槽位；新增槽位改 host/lib/ui-slot.mjs。
   ui_slots: array(string()).default([...UI_SLOTS]),
 })
@@ -115,9 +118,12 @@ const GET_ONLY_PATTERNS = [
   /^\/overview\/?$/,                                           // 旧总览页（GUI 首屏换成工作台后，它降为一张明细页）
   /^\/start\/?$/,
   /^\/api\/(health|status|obs|ops|mail|pipeline|retention|routes|ui-feedback|ui\/blocks)\/?$/,
-  /^\/api\/ui\/(surface|panels|notifications|status)\/?$/,      // GUI 外壳：注册面自述 / 面板数据 / 通知 / 状态
+  /^\/api\/ui\/(surface|panels|notifications|status|object|plugins)\/?$/,   // GUI 外壳：注册面自述 / 面板数据 / 通知 / 状态 / **对象页** / 插件清单
   /^\/assets\/[A-Za-z0-9._-]+$/,                                // GUI 外壳自己的客户端资源（只来自本服务）
-  /^\/app(\/[A-Za-z0-9._-]+)*\/?$/,                             // GUI 深链（工作台/各视图/面板）
+  /^\/app(\/[A-Za-z0-9._%<>-]+)*\/?$/,                          // GUI 深链（工作台/各视图/**对象** `/app/<view>/<kind>/<id>/`）
+  // 上面这条也认**路由表里的占位形式**（`<view>`/`<kind>`/`<id>`，含被百分号编码的 `%3C…%3E`）：反向对照门会拿
+  // `/api/routes` 的 path 逐条 POST，占位形式若落不到这张表就会变成 404 而不是 405 —— 那等于"只读路由对写方法不表态"。
+  // 真实请求里的 `<`/`>`/`%` 一律被浏览器编码成安全字符，所以放宽字符集不会把真实路径误判成只读。
   /^\/ops\/?$/,
   /^\/ops\/mail\/?$/,
   /^\/ops\/ui-feedback\/?$/,
@@ -142,6 +148,7 @@ const GET_ONLY_PATTERNS = [
 const WRITE_PATTERNS = [
   /^\/api\/action\/[A-Za-z0-9._-]+\/?$/,                       // GUI 动作总线（插件自己的服务端一半）
   /^\/api\/ui\/plugins\/[^/]+\/unload\/?$/,                    // 撤销一个插件的全部 UI 贡献（可卸载）
+  /^\/api\/ui\/plugins\/[^/]+\/(load|reload)\/?$/,             // **运行期装载/热重载**（改插件 UI 不必重启进程）
   /^\/admin\/api\/elevate\/?$/,
   /^\/admin\/api\/blocks\/[^/]+\/resolve\/?$/,
   /^\/admin\/api\/user-plugins\/(load|unload|reload|request|elevate)\/?$/,
@@ -2503,13 +2510,25 @@ ${sortForm('events', '筛查事件')}
     const appMatch = /^\/app(\/[A-Za-z0-9._-]+)*\/?$/.exec(path)
     if ((path === '/' || path === '' || appMatch) && (method === 'GET' || method === 'HEAD')) {
       // 首屏 = **「我今天要做什么」的工作台**（不是报告列表）：面板 + 待办动作 + 通知都由注册面给。
-      const bits = path.split('/').filter(Boolean)          // ['app', view?, panel?]
+      // 地址形态：`/app/<view>/`（视图）与 `/app/<view>/<kind>/<id>/`（**对象深链**：刷新不丢、可分享）。
+      const bits = path.split('/').filter(Boolean)          // ['app', view?, kind?, id?]
+      if (bits.length > 4) {
+        return json(404, { ok: false, code: 'deep-link-too-deep', path,
+          next_action: `深链形如 ${prefix}/app/<view>/ 或 ${prefix}/app/<view>/<kind>/<id>/（多出来的段不猜）` })
+      }
       const view = bits[1] ?? 'home'
       if (!['home', ...config.views].includes(view)) {
         return json(404, { ok: false, code: 'unknown-view', view,
           next_action: `可用视图：home / ${config.views.join(' / ')}` })
       }
-      return send(200, 'text/html; charset=utf-8', shell.shellHtml({ view, panel: bits[2] ?? '' }))
+      const kind = bits[2] ?? ''
+      const id = bits[3] ?? ''
+      if (kind !== '' && (id === '' || kind === 'panel')) {
+        return json(404, { ok: false, code: 'deep-link-incomplete', view, kind,
+          next_action: `对象深链要写全：${prefix}/app/${view}/<kind>/<id>/（只给 kind 无法定位到哪一个对象）；`
+            + `要看这一类对象有哪些，先回 ${prefix}/app/${view}/` })
+      }
+      return send(200, 'text/html; charset=utf-8', shell.shellHtml({ view, kind, id, panel: '' }))
     }
     if (path.startsWith('/assets/')) {
       const name = path.slice('/assets/'.length)
@@ -2529,10 +2548,28 @@ ${sortForm('events', '筛查事件')}
         return json(400, { ok: false, code: 'unknown-view', view,
           next_action: `可用视图：home / ${config.views.join(' / ')}` })
       }
-      return json(200, { ok: true, view, panels: shell.panelsOf(view),
+      // `kind`/`id` 非空 ⇒ **对象页**的面板（只出声明了该 object_kind 的面板；插件从 ctx.route 读对象身份）
+      const kind = String(url.searchParams.get('kind') ?? '')
+      const id = String(url.searchParams.get('id') ?? '')
+      return json(200, { ok: true, view, kind, id, panels: shell.panelsOf(view, { view, kind, id }),
         mechanism: '面板数据由插件自己的 data() 产出（通用形状：table/form/list/kv/metrics/html）；'
           + '外壳只按形状渲染，不解读语义' })
     }
+    if (path === '/api/ui/object') {
+      const view = String(url.searchParams.get('view') ?? 'home')
+      if (!['home', ...config.views].includes(view)) {
+        return json(400, { ok: false, code: 'unknown-view', view,
+          next_action: `可用视图：home / ${config.views.join(' / ')}` })
+      }
+      const kind = String(url.searchParams.get('kind') ?? '')
+      const id = String(url.searchParams.get('id') ?? '')
+      if (kind === '' || id === '') {
+        return json(400, { ok: false, code: 'object-address-incomplete', view, kind, id,
+          next_action: `对象地址要写全：${prefix}/app/<view>/<kind>/<id>/；JSON 侧同样要 kind 与 id` })
+      }
+      return json(200, shell.objectOf(view, kind, id))
+    }
+    if (path === '/api/ui/plugins') return json(200, shell.pluginsJson())
     if (path === '/api/ui/notifications') return json(200, { ok: true, items: shell.notifications() })
     if (path === '/api/ui/status') return json(200, { ok: true, items: shell.statusItems() })
     if (path === '/api/ui/plugins/unload-all') {
@@ -2543,6 +2580,21 @@ ${sortForm('events', '筛查事件')}
     if (unloadMatch && method === 'POST') {
       const pluginId = decodeURIComponent(unloadMatch[1])
       return json(200, shell.unload(pluginId))
+    }
+    // **运行期装载面**（本批 P2）：改一个插件的 `code/ui.mjs` 后不重启进程即可生效。
+    //   · `load`   = 磁盘上这个插件还没装载过 ⇒ 装载它（已经装载过 ⇒ `already-loaded` + 指向 reload）
+    //   · `reload` = 先撤掉它的全部贡献，再按**磁盘当前内容**重新 import（`?v=<mtime>` 击穿模块缓存）并注册
+    // 两者都返回「移除了几项 / 注册了几项 / 拒绝了几项」，装载失败**有名**且不静默吞。
+    const loadMatch = /^\/api\/ui\/plugins\/([^/]+)\/(load|reload)\/?$/.exec(path)
+    if (loadMatch && method === 'POST') {
+      const pluginId = decodeURIComponent(loadMatch[1])
+      const op = loadMatch[2]
+      const promise = op === 'reload' ? shell.reloadPlugin(pluginId) : shell.loadPlugin(pluginId)
+      promise.then((out) => json(out.ok ? 200 : 400, out))
+        .catch((err) => json(500, { ok: false, code: 'plugin-load-failed', plugin_id: pluginId,
+          reason: String(err).slice(0, 240),
+          next_action: '看宿主日志（装载异常时如实报，不假装已装载）' }))
+      return undefined
     }
     const actionMatch = /^\/api\/action\/([A-Za-z0-9._-]+)\/?$/.exec(path)
     if (actionMatch && method === 'POST') {
@@ -2673,7 +2725,20 @@ ${sortForm('events', '筛查事件')}
           { path: `${prefix}/`, method: 'GET', auth: 'none',
             what: 'GUI 应用外壳首屏 =「我今天要做什么」工作台（多视图导航/命令面板/通知中心/状态栏/深链/快捷键）' },
           { path: `${prefix}/app/<view>/`, method: 'GET', auth: 'none',
-            what: 'GUI 深链（home / 各视图）；客户端按注册面渲染面板与动作，资源只来自本服务 `/assets/**`' },
+            what: 'GUI 视图地址（home / 各视图）；客户端按注册面渲染面板与动作，资源只来自本服务 `/assets/**`' },
+          { path: `${prefix}/app/<view>/<kind>/<id>/`, method: 'GET', auth: 'none',
+            what: '**对象深链**（PO / 报价 / 包 / 授标 / 变更…）：`kind` 由插件声明 `object_kind`，刷新不丢、可复制'
+              + '分享；对方视角打开同一 id 只会在它自己的投影里找不到 ⇒ 如实渲染未命中态（不回落成"能看"）' },
+          { path: `${prefix}/api/ui/object`, method: 'GET', auth: 'none',
+            what: '对象页 JSON（view/kind/id）：谁负责这个对象类、页头（标题/摘要/事实/链接）、该对象类的动作、'
+              + '本视图可用的对象类清单；未命中 ⇒ found:false + 有名 reason + 下一步' },
+          { path: `${prefix}/api/ui/plugins`, method: 'GET', auth: 'none',
+            what: '插件装载清单（谁在磁盘上 / 装载没装载 / mtime / 贡献与拒绝）：装载面是机制，外壳不懂业务' },
+          { path: `${prefix}/api/ui/plugins/<plugin_id>/load`, method: 'POST', auth: 'none',
+            what: '**运行期装载**一个插件的 UI 贡献（已装载 ⇒ 400 already-loaded + 指向 reload）' },
+          { path: `${prefix}/api/ui/plugins/<plugin_id>/reload`, method: 'POST', auth: 'none',
+            what: '**热重载**一个插件：撤掉它的全部贡献 → 按磁盘当前内容重新 import（?v=<mtime>）→ 重新注册；'
+              + '改 `code/ui.mjs` 不必重启进程（其它插件的贡献一项未动）' },
           { path: `${prefix}/assets/app.js`, method: 'GET', auth: 'none',
             what: 'GUI 客户端脚本（**只来自本服务**：src/system/webui/code/assets/，无外网 CDN、无构建步骤）' },
           { path: `${prefix}/assets/app.css`, method: 'GET', auth: 'none', what: 'GUI 客户端样式（同上）' },

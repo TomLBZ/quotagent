@@ -95,12 +95,19 @@ const pendingRows = (rows) => {
     const nudge = nudges.get(gate.approval_id) ?? { count: 0, last_at: '', by: '' }
     const waited = secondsBetween(gate.requested_at, moment)
     const since = secondsBetween(gate.last_at, moment)
+    // 超时倒计时**只由账本事实算**：`timeout_s` 与开单时刻都在 `approval/requested` 的 body 里（ADR-0022），
+    // 上次动作时刻取该门最后一次写入的行（升级/委托/催办都会刷新它）。不取墙钟。
+    const left = since === null ? null : Math.round(gate.timeout_s - since)
     return { ...gate, waited_seconds: waited, waited: human(waited), since_last: human(since),
+      timeout_left_seconds: left,
+      timeout_left: left === null ? '—' : (left > 0 ? `剩 ${human(left)}` : `已超时 ${human(-left)}`),
       overdue: since !== null && since >= gate.timeout_s,
       policy_label: POLICY_LABEL[gate.timeout_policy] ?? gate.timeout_policy,
       nudge_count: nudge.count, last_nudged_at: nudge.last_at, last_nudged_by: nudge.by,
       waiting_on: (gate.approvers ?? []).join(' ') || (gate.escalate_to ?? ''),
-      who: (gate.approvers ?? []).join(' ') || (gate.escalate_to ?? '（账本行未带审批人）'),
+      // 审批人**从账本回读**（开单时已写进 `approval/requested` 的 body）；只有开单时真的没点名审批人
+      // （旧行/无审批人）才如实说「未指定审批人」——不再把它说成「账本行未带」这种口径缺陷。
+      who: (gate.approvers ?? []).join(' ') || (gate.escalate_to ?? '（未指定审批人）'),
       next_action: `催办/升级/终止都在卡片上（人签 ${gate.approval_id}）；升级到授权区间的下一角色` }
   })
 }
@@ -137,6 +144,7 @@ export async function register(surface, host) {
           { key: 'who', label: '卡在谁', type: 'code' },
           { key: 'waited', label: '已等（按事实时刻）' },
           { key: 'policy_label', label: '超时策略' },
+          { key: 'timeout_left', label: '超时剩余（按事实时刻）' },
           { key: 'overdue', label: '已超时？' },
           { key: 'nudge_count', label: '已催次数' },
           { key: 'last_nudged_at', label: '最后一次催办 @ts' },
@@ -148,13 +156,12 @@ export async function register(surface, host) {
         row_actions: ['gate.nudge', 'gate.escalate', 'gate.delegate', 'gate.abort'],
         counts: { pending: gates.length, decided: decided.length,
           nudges: gates.reduce((sum, gate) => sum + gate.nudge_count, 0) },
-        note: `事实时刻 ${moment || '—'}（等待时长相对账本里最大的 ts 算，不取墙钟）；`
-          + '催办落 `gate/nudged`（不改判定），升级/委托落 `approval/escalated`，终止落 `approval/aborted`；'
-          + '**不存在超时自动批准**；'
-          + '「卡在谁 / 超时策略」在**升级或委托之后**可回读（`approval/escalated` 的 body 带 `approvers`/`escalated_to`），'
-          + '而开单时写的审批人与策略**没有进账本**（`approval/requested` 的 body 只有 7 键：'
-          + 'approval_id/scope/ref/payload_hash/status/decided_by/comment）——这里如实标「账本行未带」，不假装知道；'
-          + '要让它可回读需要改 `src/system/approval/code/approval.py:_append`（文档 05-events.md 声明 body 应带策略），本轮未改，已记进报告' }
+        note: `事实时刻 ${moment || '—'}（等待时长与超时剩余都相对账本里最大的 ts 算，不取墙钟）；`
+          + '「卡在谁 / 超时策略 / 超时剩余 / 该催谁」**在开单后即可回读**：审批人与超时策略随 '
+          + '`approval/requested` 一起落在账本 body（追加键 approvers/timeout_policy/timeout_s/escalate_to/'
+          + 'requested_at，ADR-0022；旧行没有这些键时按缺省读，语义不变）；升级/委托落 `approval/escalated` '
+          + '并把 `approvers` 改成接手的人；催办落 `gate/nudged`（不改判定），终止落 `approval/aborted`；'
+          + '超时策略只有 remind/escalate/abort，**不存在超时自动批准**' }
     } })
 
   out.push(surface.view({ plugin_id: me, id: 'gate.workspace', title: '审批队列', order: 5, view: 'contractor',
@@ -171,7 +178,7 @@ export async function register(surface, host) {
           items.push({ level: gate.overdue ? 'warn' : 'info',
             title: `[${view}] ${gate.approval_id} 等 ${gate.waited}：${gate.scope}（${gate.ref}）`,
             body: `卡在 ${gate.who} · 已催 ${gate.nudge_count} 次${gate.last_nudged_at ? ` @${gate.last_nudged_at}` : ''}`
-              + ` · 超时策略 ${gate.policy_label}`,
+              + ` · 超时策略 ${gate.policy_label}（${gate.timeout_left}）`,
             next_action: `深链 ${host.prefix}/app/${view}/ → 「审批队列」卡片上点催办/升级/终止（人签）` })
         }
       }

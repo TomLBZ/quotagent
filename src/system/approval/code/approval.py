@@ -27,6 +27,17 @@ GRANTED_EVENT = "approval/granted"
 DENIED_EVENT = "approval/denied"
 HUMAN_PREFIX = "human:"
 
+#: 门的**派分事实**（ADR-0022）：开单时随 `approval/requested` 一起写进账本 body 的追加键。
+#:
+#: 为什么必须有：界面要回答的三个问题是「**卡在谁**（审批人）/ **超时策略**与倒计时 / **该催谁**」，
+#: 而这三样在开单那一刻就已经定了。此前只有 `approval/escalated`（升级/委托之后）才带 `approvers`，
+#: 于是 `gate.queue` 面板只能如实标一句「账本行未带审批人」——待办看得见、却看不出该催谁。
+#:
+#: 兼容性（**追加型，不改旧行语义**）：旧账本行没有这些键，读侧一律按缺省处理
+#: （`replay()` 的 `setdefault`、`queue_view()` 的 `.get(...)`、宿主 `gatesOf()` 的 `?? previous.X`），
+#: 所以旧行读出来逐字段与改前一致；新键只**增加**可回读的事实，不改任何既有键的语义。
+GATE_FACT_KEYS = ("approvers", "timeout_policy", "timeout_s", "escalate_to", "requested_at")
+
 
 class ApprovalError(RuntimeError):
     """人工门错误基类。"""
@@ -286,11 +297,17 @@ class ApprovalService:
     def _append(self, event: str, record: dict, *, correlation_id: str | None) -> None:
         if self.ledger is None:
             return
-        self.ledger.append(event,
-                           {"approval_id": record["approval_id"], "scope": record["scope"],
-                            "ref": record["ref"], "payload_hash": record["payload_hash"],
-                            "status": record["status"], "decided_by": record["decided_by"],
-                            "comment": record["comment"]},
+        body = {"approval_id": record["approval_id"], "scope": record["scope"],
+                "ref": record["ref"], "payload_hash": record["payload_hash"],
+                "status": record["status"], "decided_by": record["decided_by"],
+                "comment": record["comment"]}
+        # ADR-0022：追加门的**派分事实**（审批人 / 超时策略与秒数 / 该升级给谁 / 开单时刻）。
+        # 追加型变更：旧键逐字节不变；`None`（如未指定 escalate_to）不进 body，避免留空噪声。
+        # 载荷正文仍只出 `payload_hash` —— 摘要/正文不进账本（与「凭据正文与私钥一律不进账本」同纪律）。
+        for key in GATE_FACT_KEYS:
+            if record.get(key) is not None:
+                body[key] = record[key]
+        self.ledger.append(event, body,
                            correlation_id=correlation_id, actor=record["decided_by"] or self.actor,
                            refs={"approval_id": record["approval_id"], "scope": record["scope"]})
         if self.events is not None:

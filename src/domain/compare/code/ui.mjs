@@ -47,7 +47,9 @@ export async function register(surface, host) {
       '--ledger-contractor', asText(host.config?.ledger_contractor),
       '--weights', weightsText(weights)]
     if (packageId) args.push('--package-id', packageId)
-    const run = host.runPython('src/domain/compare/tools/compare-rank.py', args)
+    // `{read:true}`：这是**只读复算**（compare-rank.py 用 CompareService(ledger=None)），
+    // 所以同一组权重在一次页面渲染里只 spawn 一次（排名表/矩阵/贡献分解/状态栏共用同一个结果）。
+    const run = host.runPython('src/domain/compare/tools/compare-rank.py', args, { read: true })
     const json = run.json ?? {}
     const ranking = (json.ranking ?? []).filter((row) => !quoteIds?.length || quoteIds.includes(row.quote_id))
     return { run, json, ranking }
@@ -76,7 +78,7 @@ export async function register(surface, host) {
           { key: 'rank', label: '名次' },
           { key: 'quote_id', label: '报价', type: 'code' },
           { key: 'supplier', label: '供应商', type: 'code' },
-          { key: 'score', label: '得分（越高越前）' },
+          { key: 'score', label: '得分（越小越前，minmax 口径）' },
           { key: 'components', label: '分量贡献（谁拉高了 / 拉低了）' },
           { key: 'citations', label: '引用链' },
         ],

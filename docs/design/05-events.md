@@ -74,7 +74,7 @@
 | `quote/price-drafted` | waterfall | live | `ctx.pricing` | 定价流水线：成本基线→市场参考→策略加价→风险准备金→授权区间检查 |
 | `quote/cost-built` | emit | ✔ | `ctx.costmodel` | 成本构成建立（账本只带私域工件哈希，明细不出 realm） |
 | `quote/deviation-captured` / `quote/deviation-quantified` | emit | ✔ | `ctx.deviation` | 偏差捕捉与影响量化（未标 impact 不进 TCO） |
-| `approval/requested` | emit | ✔ | `ctx.approval` | 人工门：请求（带动作/摘要/引用链/Flag/超时策略） |
+| `approval/requested` | emit | ✔ | `ctx.approval` | 人工门：请求。body = 7 个基底键（`approval_id`/`scope`/`ref`/`payload_hash`/`status`/`decided_by`/`comment`）**+ 门的派分事实**（追加键 `approvers`/`timeout_policy`/`timeout_s`/`escalate_to`/`requested_at`，ADR-0022）⇒「**卡在谁 / 超时策略与倒计时 / 该催谁**」**开单后即可由账本回读**（不再只有升级/委托之后才可读）；旧行缺这些键时读侧按缺省处理，语义不变。**载荷正文与摘要不进账本**（只出 `payload_hash`）；Flag/置信度只在 `queue_view` 的服务面，不落账 |
 | `approval/granted` | emit | ✔ | `ctx.approval` | 人工门：批准（只能由人产生，绝无自动批准） |
 | `approval/denied` | emit | ✔ | `ctx.approval` | 人工门：拒绝 |
 | `approval/reminded` | emit | ✔ | `ctx.approval` | 超时策略 `remind`：仍等待人类决定（不改状态） |

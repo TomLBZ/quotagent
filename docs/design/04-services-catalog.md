@@ -270,6 +270,12 @@
   **双方视角各一个**：`/quotagent/contractor/` 与 `/quotagent/supplier/`（含各自 `/api/events`）。
 - **结构性隔离**：每个视角只读**自己的**账本（`ledger_contractor`/`ledger_supplier`）；投影白名单（`VIEW_RULES`）是纵深防御；
   私域键在对方视角被抑制且**对外只说"含私域字段"**（键名仅留服务端 stderr —— 集成实测出的泄漏）。
+- **类型白名单必须是本侧待办的全集**（2026-09-22 修）：白名单少一个前缀，用 `publicRows` 的消费者
+  （页面子视图、插件面板）就**静默丢行** —— 实测缺 `clarification/`（承包商看不到自己的工单）、
+  `mail/`（看不到邮件通道事实）、`gate/nudged`（看不到"谁催过这个门"）、`approval/`（供应商看不到自己
+  那本账本里的人工门）。补的都是**已登记**事件类型（`05-events.md`）：承包商 = rfq/quote/compare/award/
+  po/change/approval/capacity/terms/**clarification/mail/gate-nudged**，供应商 = rfq/quote/award/po/change/
+  clarification/**approval/mail**；私域键拒收名单与字段白名单一字未改。
 - 健壮性：请求级兜底（单个坏数据记录不得杀死服务，实测过一次）；`ctx.effect()` 注册 HTTP 服务，dispose 即释放端口。
 - 宿主**不写**账本（H1）。接入工作区 dashboard 见 `docs/work/deployment-manual.md`，机检 `tools/verify.sh webui`。
 的 manifest 与 fixture（评审 C §6 / §7.1 第 5 条 / T-221）
