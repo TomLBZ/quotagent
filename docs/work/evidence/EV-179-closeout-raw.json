@@ -1,0 +1,141 @@
+{
+  "ev": "EV-179",
+  "task": "T-329 清遗留红 + 收尾",
+  "commit_functional": "21d60af01344ce1024b442cba2982b250db088a4",
+  "six_gates": {
+    "approval-digest": {
+      "before": "rc=1 / 9/10（第 1 条 ok:false：越界=../lib/entity-approval-digest.mjs）",
+      "after": "rc=0 / 10/10",
+      "reverse": "真实体加 `import * as zzUndeclaredProbe from ../../../../host/lib/schema.mjs` ⇒ rc=1、红 1 条（第 1 条）、还原 sha256 一致"
+    },
+    "budget-guard": {
+      "before": "rc=1 / 9/10（负控⑥ ok:false：Date.now( 出现 0 次、不符合默认时钟形状）",
+      "after": "rc=0 / 10/10",
+      "reverse": "真实体加 `node:fs` ⇒ rc=1、红 1 条（负控⑥ 命中 node:fs）、还原一致"
+    },
+    "supplier-scorecard": {
+      "before": "rc=1 / 9/10（第 1 条：越界 import=../lib/entity-supplier-scorecard.mjs）",
+      "after": "rc=0 / 10/10",
+      "reverse": "同探针 ⇒ rc=1、红 1 条、还原一致"
+    },
+    "plugin-market": {
+      "before": "rc=1 / 12/13（第 1 条：越界 import=../lib/entity-plugin-market.mjs）",
+      "after": "rc=0 / 13/13",
+      "reverse": "同探针 ⇒ rc=1、红 1 条、还原一致"
+    },
+    "pipeline-view": {
+      "before": "rc=1 / 12/13（第 1 条：越界 import=../lib/entity-pipeline-view.mjs）",
+      "after": "rc=0 / 13/13",
+      "reverse": "同探针 ⇒ rc=1、红 1 条、还原一致"
+    },
+    "retention-view": {
+      "before": "rc=1 / 11/12（第 1 条：越界 import=../lib/entity-retention-view.mjs）",
+      "after": "rc=0 / 12/12",
+      "reverse": "同探针 ⇒ rc=1、红 1 条、还原一致"
+    }
+  },
+  "six_gates_chain_reverse": "把未声明 import 加在**链上的一跳**（host/lib/entity-approval-digest.mjs）⇒ 该跳不再是纯重导 ⇒ 跟链停在那一跳、其 spec 一并按普通 import 判 ⇒ approval-digest rc=1、第 1 条红；还原后 rc=0（10/10）",
+  "tools_moved": [
+    "tools/check-run-once.py -> src/system/runtime/tests/check-run-once.py",
+    "tools/check-run-clone.py -> src/system/runtime/tests/check-run-clone.py",
+    "tools/config-apply.py -> src/system/config/tools/config-apply.py",
+    "tools/g1-walkthrough.py -> src/system/repo-gate/tests/g1-walkthrough.py",
+    "tools/mutate-ui-views.py -> src/system/webui/tools/mutate-ui-views.py",
+    "tools/quote-draft.py -> src/domain/quote-prepare/tools/quote-draft.py",
+    "tools/quote-sign.py -> src/domain/quote-prepare/tools/quote-sign.py",
+    "tools/refresh-ui-snapshots.py -> src/system/webui/tools/refresh-ui-snapshots.py",
+    "tools/ui-seed-pipeline.py -> src/system/webui/tools/ui-seed-pipeline.py",
+    "tools/webui-serve.py -> src/system/webui/tools/webui-serve.py"
+  ],
+  "tools_nonthin": {
+    "baseline_before": 13,
+    "moved": 10,
+    "now": 3,
+    "remain": [
+      "tools/netblock.c",
+      "tools/v-kit.sh",
+      "tools/manual-check.py"
+    ],
+    "plugin_assets_baseline_locked": "BASELINE_NONTHIN 13 -> 3（门内常量随之下调，只减不增）"
+  },
+  "invariance_vs_head_worktree": "HEAD 干净 worktree /tmp/qa-baseline vs 本树，逐门 rc 与 passed/total 相同：plugin-assets 16/16、plugins 5/5、config-route 22/22、mail-transport 27/27、mail 20/20、ui-seed 17/17、quote-draft 14/14、webui 51/51、storage 19/19、retention 22/22、pipeline-route 18/18、invariants 22/22、wiring 5/5、events rc=0、evolution rc=0、evolve-module 61/61、run-once rc=0、ui-mutate 4/4 且 rc=0、ac-registry rc=0；g1 两树都 rc=1（HEAD 即红：tools/audit-verify.py 无执行位）",
+  "ui_mutate_baseline_note": "mutate-ui-views.py 里 ROOT 是**硬编码** /workspace/projects/quotagent（既有不可移植缺陷）⇒ HEAD 侧对拍前把该行指到基线树（只改这一行，产品语义未动）",
+  "carriers_added": {
+    "domain/compare": "code/index.mjs（薄包装 ./compare.mjs）⇒ valid:true / kind:esm",
+    "system/kernel-bridge": "code/index.mjs（薄包装 ./kernel-bridge.mjs；provides 占位键 -> bridge）⇒ valid:true / kind:esm",
+    "system/qa-runner": "code/__init__.py（Python 装载面，重导出 quotagent.qa.registry，__all__ 11 名）⇒ valid:true / kind:python",
+    "system/repo-gate": "entry 指插件根下的实现 tests/check-plugin-assets.py（无可包装的模块面）⇒ valid:true / kind:python",
+    "total": "53 -> 57 / 63"
+  },
+  "carriers_pending_design_decision": [
+    "system/webui（A13/A14 + 变异 6 会同时失去对照 ⇒ 需人工定）",
+    "system/admin",
+    "system/agent-runtime",
+    "system/canary",
+    "system/eval",
+    "system/kernel",
+    "system/mail"
+  ],
+  "docs_sync": {
+    "docs/design/14-plugin-inventory.md": "28631/28672 B（事实路径；删重复叙述吸收变长）",
+    "docs/design/15-requirements-coverage.md": "28668/28672 B（同上；两行逐字重复的括号缩成一行指引）",
+    "docs/design/14-plugin-inventory-archive.md": "5447 B（事实路径 + 已归位标注）",
+    "docs/work/plugin-requirements-map.md": "30255 B",
+    "docs/work/plugin-requirements-deviations.md": "4149 B",
+    "docs/work/plans/plugin-file-map.md": "48758 B（§分类 A 节 10 行 -> 已搬；待搬 13 -> 3）",
+    "scope_limit": "只同步本批搬走的 tools/** 10 项；更早批次的 host/modules/<x>.mjs 写法保留（该路径作为宿主模块路径仍是事实=薄重导）"
+  },
+  "gates_23": [
+    "docs                 rc=0  ",
+    "coverage             rc=0  ",
+    "ac-registry          rc=0  ",
+    "plugins              rc=0  PASS（插件清单门 5/5）",
+    "webui                rc=0  PASS（webui 门 51/51）",
+    "modules              rc=0  ",
+    "wiring               rc=0  ",
+    "invariants           rc=0  ",
+    "events               rc=0  ",
+    "storage              rc=0  \"passed\":19,\"total\":19",
+    "plugin-assets        rc=0  PASS（plugin-assets 门 16/16）",
+    "plugin-requirements  rc=0  PASS（plugin-requirements 门 18/18）",
+    "plugin-lifecycle     rc=0  PASS（plugin-lifecycle 门 66/66）",
+    "evolution            rc=0  ",
+    "evolve-module        rc=0  ",
+    "p0-no-node           rc=1  ",
+    "run-once             rc=0  PASS（run-once 门 34/34）",
+    "approval-digest      rc=0  \"passed\":10,\"total\":10",
+    "budget-guard         rc=0  \"passed\":10,\"total\":10",
+    "supplier-scorecard   rc=0  \"passed\":10,\"total\":10",
+    "plugin-market        rc=0  \"passed\":13,\"total\":13",
+    "pipeline-view        rc=0  \"passed\":13,\"total\":13",
+    "retention-view       rc=0  \"passed\":12,\"total\":12",
+    "DONE"
+  ],
+  "git_status_precommit": {
+    "when": "git add -A 之后（提交前）",
+    "lines": 67,
+    "raw_head": [
+      "M  .agents/state.json",
+      "M  docs/design/14-plugin-inventory-archive.md",
+      "M  docs/design/14-plugin-inventory.md",
+      "M  docs/design/15-requirements-coverage.md",
+      "A  docs/work/evidence/EV-179-leftover-reds-and-closeout.md",
+      "M  docs/work/handover.md"
+    ]
+  },
+  "git_status_postcommit": {
+    "when": "提交之后",
+    "lines": 0,
+    "raw": ""
+  },
+  "run_clone": {
+    "rc": 0,
+    "result": "RESULT: PASS（run-clone 门 20/20）"
+  },
+  "clean_copy": {
+    "rc": 0,
+    "result": "RESULT: PASS（15 道门在干净副本里全绿；已提交内容自足可复现）"
+  },
+  "gate_regression_found_and_fixed": "AC-RUNTIME-001「P0 内核与服务不依赖宿主运行时」扫 src/{system,domain}/*/code/*.py；新 Python 载体的注释里出现字面量 cordis ⇒ p0-no-node rc=1（隔离重试两次都红）；改写该注释后 AC-RUNTIME-001 rc=0、p0-no-node rc=0",
+  "push": null
+}
