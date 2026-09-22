@@ -207,6 +207,29 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "domain/terms", "src/domain/terms/tests/checks_terms.py"),
     "src/quotagent/qa/checks_ui_snapshot.py": (
         "system/webui", "src/system/webui/tests/checks_ui_snapshot.py"),
+    # --- 阶段 4.2 续搬（EV-175 / T-325）：挑**外圈且归属明确**的 10 个 `tools/**` 非薄入口搬进各自插件的
+    # `tests/`（旧位置留薄转发；`tools/verify.sh` 的门名与分支一行未改）。选的都是自洽的小门：
+    # 只做 `ROOT` 推导（`parents[1]` → `parents[4]`）这一处改动，行为逐项对拍一致。
+    "tools/check-faq.py": (
+        "domain/faq", "src/domain/faq/tests/check-faq.py"),
+    "tools/check-negotiation.py": (
+        "domain/negotiation", "src/domain/negotiation/tests/check-negotiation.py"),
+    "tools/check-retention.py": (
+        "system/retention", "src/system/retention/tests/check-retention.py"),
+    "tools/check-mail.py": (
+        "system/mail", "src/system/mail/tests/check-mail.py"),
+    "tools/check-canary.py": (
+        "system/canary", "src/system/canary/tests/check-canary.py"),
+    "tools/check-canary-dispatch.py": (
+        "system/canary", "src/system/canary/tests/check-canary-dispatch.py"),
+    "tools/check-bridge-canary.py": (
+        "system/canary", "src/system/canary/tests/check-bridge-canary.py"),
+    "tools/check-governor.py": (
+        "system/governor", "src/system/governor/tests/check-governor.py"),
+    "tools/check-audit-hook.py": (
+        "system/audit-hook", "src/system/audit-hook/tests/check-audit-hook.py"),
+    "tools/check-breaker-route.py": (
+        "system/circuit-breaker", "src/system/circuit-breaker/tests/check-breaker-route.py"),
 }
 
 #: 平台级薄入口（27 §9 未决 3 + 阶段 5.2 的 `plugin.sh`）：不搬、留名。
@@ -217,9 +240,10 @@ MAX_FORWARDER_LINES = 20
 EXCLUDE_DIRS = frozenset({"__pycache__", ".git", "tmp", "node_modules", ".venv"})
 
 #: `tools/` 下非薄入口文件的**实测值**：阶段 4.1 搬前 69（75 个文件 − 6 个薄入口）− 搬走 7 个 + `plugin-assets.py` 自己 1 个
-#: = 63；一键运行的干净副本验收门 `tools/check-run-clone.py`（EV-171）再 +1 ⇒ **64**。
+#: = 63；一键运行的干净副本验收门 `tools/check-run-clone.py`（EV-171）再 +1 ⇒ 64；**阶段 4.2 续搬（EV-175）再搬走 10 个**
+#: ⇒ **54**（旧位置全部变薄转发）。
 #: 锁的语义是"只减不增"：搬走本门或其它项时这个数应随之下调；**上调只允许"新增一个同级平台门"这一种理由**（改这一行是显式动作）。
-BASELINE_NONTHIN = 64
+BASELINE_NONTHIN = 54
 #: 门名数下界（阶段 4.1 搬前 69 + `plugin-assets` = 70；本批新增 `run-clone` ⇒ 71；门名是接口，只增不减）。
 MIN_GATE_NAMES = 71
 #: `--help` 一类的别名不算"实现分支"。

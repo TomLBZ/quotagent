@@ -325,7 +325,9 @@
 4. **`tools/**` 的非薄入口数**（散落的度量）：搬前 **69**（75 个文件 − 6 个薄入口），阶段 4.1 **搬走 7 个**（旧位置变薄转发）
    并**新增 1 个**（本节的机检门 `tools/check-plugin-assets.py` 自己，也登记为 `插件·待搬`）⇒ **63**；
    一键运行的干净副本验收门 `tools/check-run-clone.py`（EV-171）再 **+1** ⇒ **64**（同样是本类的平台门，登记为 `插件·待搬`）。
-   门把 64 冻结为下界锁（`tools/check-plugin-assets.py` 的 `BASELINE_NONTHIN`）：**只减不增**，且集合必须与下表逐条相等。
+   阶段 4.2 续搬（`EV-175`）再**搬走 10 个**（旧位置变薄转发，全部落在 `tests/`）⇒ **54**；
+   门把 54 冻结为下界锁（`tools/check-plugin-assets.py` 的 `BASELINE_NONTHIN`，由 64 **收紧**为 54，
+   不是放宽）：**只减不增**，且集合必须与下表逐条相等。
 5. **薄转发**：旧位置那几行只做转发（Python 用 `runpy`/`importlib` 指到新位置；`.mjs` 围栅门用 `import './../src/…'`，
    实现只在 `src/<层>/<插件>/tests/` 那一份），**不含任何实现**；
    改实现只改新位置那一份。留下的理由：`tools/verify.sh` 的门名与分支、`src/quotagent/qa/*.py` 里按路径读实现的判据、
@@ -340,7 +342,7 @@
 
 ### 全量分类表（144 行 = 77 + 20 + 47）
 
-### A. `tools/**`（77 个，其中平台薄入口 6 + 阶段 4.1 已搬 7 + 待搬 64）
+### A. `tools/**`（77 个，其中平台薄入口 6 + 阶段 4.1 已搬 7 + `EV-175` 已搬 10 + 待搬 54）
 
 | 资产 | 归属插件 | 分类 | 子目录 |
 |---|---|---|---|
@@ -350,38 +352,38 @@
 | `tools/check-ac-registry.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
 | `tools/check-admin-route.py` | `system/admin` | 插件·待搬 | `tests/` |
 | `tools/check-advice-route.py` | `domain/advice` | 插件·已搬 | `tests/` |
-| `tools/check-audit-hook.py` | `system/audit-hook` | 插件·待搬 | `tests/` |
+| `tools/check-audit-hook.py` | `system/audit-hook` | 插件·已搬 | `tests/` |
 | `tools/check-authority-route.py` | `domain/authority-band` | 插件·已搬 | `tests/` |
-| `tools/check-breaker-route.py` | `system/circuit-breaker` | 插件·待搬 | `tests/` |
-| `tools/check-bridge-canary.py` | `system/canary` | 插件·待搬 | `tests/` |
+| `tools/check-breaker-route.py` | `system/circuit-breaker` | 插件·已搬 | `tests/` |
+| `tools/check-bridge-canary.py` | `system/canary` | 插件·已搬 | `tests/` |
 | `tools/check-budget-route.py` | `system/budget-guard` | 插件·待搬 | `tests/` |
-| `tools/check-canary-dispatch.py` | `system/canary` | 插件·待搬 | `tests/` |
-| `tools/check-canary.py` | `system/canary` | 插件·待搬 | `tests/` |
+| `tools/check-canary-dispatch.py` | `system/canary` | 插件·已搬 | `tests/` |
+| `tools/check-canary.py` | `system/canary` | 插件·已搬 | `tests/` |
 | `tools/check-change-detail-route.py` | `domain/gate-timeline` | 插件·已搬 | `tests/` |
 | `tools/check-clean-copy.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
 | `tools/check-config-route.py` | `system/config` | 插件·待搬 | `tests/` |
 | `tools/check-docs.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
 | `tools/check-events.py` | `system/kernel` | 插件·待搬 | `tests/` |
 | `tools/check-evolved-module.py` | `system/evolution` | 插件·待搬 | `tests/` |
-| `tools/check-faq.py` | `domain/faq` | 插件·待搬 | `tests/` |
+| `tools/check-faq.py` | `domain/faq` | 插件·已搬 | `tests/` |
 | `tools/check-fr-coverage.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
 | `tools/check-gate-timeline-route.py` | `domain/gate-timeline` | 插件·已搬 | `tests/` |
-| `tools/check-governor.py` | `system/governor` | 插件·待搬 | `tests/` |
+| `tools/check-governor.py` | `system/governor` | 插件·已搬 | `tests/` |
 | `tools/check-heuristics-route.py` | `domain/bid-heuristics` | 插件·待搬 | `tests/` |
 | `tools/check-idem-route.py` | `system/idempotency-guard` | 插件·待搬 | `tests/` |
 | `tools/check-invariants.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
 | `tools/check-mail-transport.py` | `system/mail` | 插件·待搬 | `tests/` |
-| `tools/check-mail.py` | `system/mail` | 插件·待搬 | `tests/` |
+| `tools/check-mail.py` | `system/mail` | 插件·已搬 | `tests/` |
 | `tools/check-module-wiring.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
 | `tools/check-modules.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
-| `tools/check-negotiation.py` | `domain/negotiation` | 插件·待搬 | `tests/` |
+| `tools/check-negotiation.py` | `domain/negotiation` | 插件·已搬 | `tests/` |
 | `tools/check-pipeline-route.py` | `system/pipeline-view` | 插件·待搬 | `tests/` |
 | `tools/check-plugin-assets.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
 | `tools/check-plugin-inventory.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
 | `tools/check-plugin-lifecycle.py` | `system/runtime` | 插件·已搬 | `tests/` |
 | `tools/check-plugin-requirements.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
 | `tools/check-quote-draft-route.py` | `domain/quote-prepare` | 插件·已搬 | `tests/` |
-| `tools/check-retention.py` | `system/retention` | 插件·待搬 | `tests/` |
+| `tools/check-retention.py` | `system/retention` | 插件·已搬 | `tests/` |
 | `tools/check-rfq-deadline-route.py` | `domain/rfq-deadline` | 插件·待搬 | `tests/` |
 | `tools/check-rfq-visibility-route.py` | `system/projection` | 插件·已搬 | `tests/` |
 | `tools/check-run-once.py` | `system/runtime` | 插件·待搬 | `tests/` |

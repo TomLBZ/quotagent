@@ -160,3 +160,28 @@
 
 至此 `src/quotagent/services/**` 的 **30/30** 实体都在 `src/<层>/<插件>/code/`，旧目录只剩薄重导。
 
+### 阶段 4.2 续搬：10 个外圈 `tools/**` 非薄入口进各自插件的 `tests/`（`EV-175`）
+
+**选取口径**：挑**归属明确、自洽的小门**（只做 `ROOT` 推导一处改动：`parents[1]`（`tools/` 下）→
+`parents[4]`（`src/<层>/<插件>/tests/` 下）），搬完把 `tools/verify.sh` 的**门名与分支一行未改**、
+逐门 `rc` 与 `passed/total` **逐项对拍**。旧位置留**薄转发**（`runpy`；含「薄转发（迁移阶段 4.1）」标记、
+≤ 20 行、且 ≤ 目标 1/4 —— 就是 `tools/check-plugin-assets.py` PA1/PA2 判据）。`tools/**` 非薄入口
+由门的基线**收紧**：`BASELINE_NONTHIN` **64 → 54**（只减不增，**不是放宽**）。
+
+| 资产（旧位置） | 归属插件 | 新位置 | 门名（行为搬前搬后一致） |
+|---|---|---|---|
+| `tools/check-faq.py` | `domain/faq` | `src/domain/faq/tests/check-faq.py` | `tools/verify.sh faq` |
+| `tools/check-negotiation.py` | `domain/negotiation` | `src/domain/negotiation/tests/check-negotiation.py` | `tools/verify.sh negotiation` |
+| `tools/check-retention.py` | `system/retention` | `src/system/retention/tests/check-retention.py` | `tools/verify.sh retention` |
+| `tools/check-mail.py` | `system/mail` | `src/system/mail/tests/check-mail.py` | `tools/verify.sh mail` |
+| `tools/check-canary.py` | `system/canary` | `src/system/canary/tests/check-canary.py` | `tools/verify.sh canary` |
+| `tools/check-canary-dispatch.py` | `system/canary` | `src/system/canary/tests/check-canary-dispatch.py` | `tools/verify.sh canary-route` |
+| `tools/check-bridge-canary.py` | `system/canary` | `src/system/canary/tests/check-bridge-canary.py` | `tools/verify.sh bridge-canary` |
+| `tools/check-governor.py` | `system/governor` | `src/system/governor/tests/check-governor.py` | `tools/verify.sh governor` |
+| `tools/check-audit-hook.py` | `system/audit-hook` | `src/system/audit-hook/tests/check-audit-hook.py` | `tools/verify.sh audit-hook` |
+| `tools/check-breaker-route.py` | `system/circuit-breaker` | `src/system/circuit-breaker/tests/check-breaker-route.py` | `tools/verify.sh breaker-route` |
+
+**分类表与门内登记同步**：主文件 §分类 A 节的这 10 行由 `插件·待搬` 改成 `插件·已搬`（PA3 双向逐条一致）；
+A 节计数行与 §分类 口径第 4 条同步为 `已搬 10 + 待搬 54`。10 项的「旧位置 → 归属 → 新位置 → 逐门
+rc/passed-total 对拍」原始行见 `docs/work/evidence/EV-175b-tools-relocation.md`。
+
