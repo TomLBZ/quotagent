@@ -30,7 +30,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / "src"))
 
-from quotagent.services.compare import COMPONENTS, DEFAULT_WEIGHTS, CompareService  # noqa: E402
+from quotagent.services.compare import (  # noqa: E402
+    COMPONENTS, DEFAULT_WEIGHTS, CompareService, _minmax,
+)
 
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
@@ -113,6 +115,75 @@ def package_of(snapshot_dir: Path, package_id: str) -> tuple[dict | None, str | 
                "warranty_months": spec.get("warranty_months"),
                "items": items, "snapshot_hash": snapshot.get("snapshot_hash")}
     return package, None, str(latest)
+
+
+def per_item_matrix(package: dict, prepared: list[dict], weights: dict) -> dict:
+    """比较矩阵 + **同一行项目内**才互相比较（per-item 归一）的贡献分解（DEF-012）。
+
+    口径（与 `compare.py` 的 `_minmax` **同一个函数**，只是分母换成**本行项目内**的极差）：
+
+      · 单元格：`unit_price_cents` / `line_total_cents`（量×单价）/ `delta_pct_vs_item_min`
+        （相对**本行项目最低价**的百分比差 —— 只有同一行项目内的价才互相比较）；
+      · `normalized`：`_minmax(价, 本行最低, 本行最高)` ∈ [0,1]，0 = 本行最便宜；
+      · `contribution`：`w_price × normalized × share`（share = 该行金额 / 该家报价总额）——
+        即"这一行在它这家的价格分里贡献了多少惩罚"，逐行给、可解释；
+      · 全局名次仍以 `CompareService.rank` 为准（跨报价 minmax 的 TCO 口径），两者**不混算**、
+        矩阵页脚如实写明这个差别。
+    """
+    totals = {str(quote.get("quote_id")): float(quote.get("total_amount") or 0.0) for quote in prepared}
+    prices: dict[str, dict[str, float]] = {}
+    qtys: dict[str, float] = {}
+    for quote in prepared:
+        for line in quote.get("lines") or []:
+            item_id = str(line.get("item_id") or "")
+            if not item_id:
+                continue
+            prices.setdefault(item_id, {})[str(quote.get("quote_id"))] = float(line.get("unit_price") or 0.0)
+            if line.get("qty") is not None:
+                qtys[item_id] = float(line.get("qty") or 0.0)
+    w_price = float(weights.get("price") or 0.0)
+    items: list[dict] = []
+    summary: dict[str, float] = {str(quote.get("quote_id")): 0.0 for quote in prepared}
+    cheapest_wins = 0
+    for item_id in sorted(prices):
+        cells = prices[item_id]
+        values = [value for value in cells.values() if value is not None]
+        low, high = (min(values), max(values)) if values else (0.0, 0.0)
+        qty = float(qtys.get(item_id) or 0.0)
+        row_cells = []
+        for quote in prepared:
+            quote_id = str(quote.get("quote_id"))
+            price = cells.get(quote_id)
+            if price is None:
+                row_cells.append({"quote_id": quote_id, "supplier": quote.get("supplier", ""),
+                                  "missing": True, "reason": "这条报价没有报这一行项目",
+                                  "next_action": "要就这一行比价，先让对方补报这一行"})
+                continue
+            normalized = _minmax(price, low, high)
+            line_total = round(qty * price, 6)
+            share = (line_total / totals[quote_id]) if totals.get(quote_id) else 0.0
+            contribution = round(w_price * normalized * share, 9)
+            summary[quote_id] = round(summary.get(quote_id, 0.0) + contribution, 9)
+            row_cells.append({"quote_id": quote_id, "supplier": quote.get("supplier", ""),
+                              "unit_price_cents": round(price * 100, 6),
+                              "unit_price": price, "line_total_cents": round(line_total * 100, 6),
+                              "delta_pct_vs_item_min": round((price / low - 1.0) * 100, 3) if low else 0.0,
+                              "normalized": round(normalized, 9), "contribution": contribution,
+                              "is_item_min": price == low, "missing": False})
+        items.append({"item_id": item_id, "qty": qty, "min_unit_price_cents": round(low * 100, 6),
+                      "max_unit_price_cents": round(high * 100, 6),
+                      "spread_pct": round((high / low - 1.0) * 100, 3) if low else 0.0,
+                      "cells": row_cells})
+        cheapest_wins += sum(1 for cell in row_cells if cell.get("is_item_min"))
+    return {"kind": "per-item", "items": items,
+            "quote_summary": [{"quote_id": quote_id, "supplier": next((quote.get("supplier", "") for quote in prepared
+                                                                       if str(quote.get("quote_id")) == quote_id), ""),
+                               "matrix_price_contribution": round(summary.get(quote_id, 0.0), 9),
+                               "total_amount": totals.get(quote_id)}
+                              for quote_id in sorted(summary)],
+            "counts": {"items": len(items), "quotes": len(prepared), "item_min_cells": cheapest_wins},
+            "note": "单元格只在**同一行项目内**比较（per-item 归一：本行最低价/最高价做极差）；"
+                    "全局名次与五分量贡献仍以 CompareService.rank 的跨报价 minmax 为准，两者不混算"}
 
 
 def main(argv: list[str] | None = None) -> int:  # noqa: C901
@@ -234,6 +305,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                         "weights": evaluation["weights"], "policy": evaluation["policy"],
                         "ranking": ranking, "excluded": evaluation["excluded"],
                         "citations": evaluation["citations"], "snapshot": snapshot_file,
+                        "matrix": per_item_matrix(package, prepared, evaluation["weights"]),
+                        "prepared": len(prepared),
                         "degraded": False})
     primary = results[0] if results else {}
     return emit({"ok": True, "view": args.view, "service": "compare",
@@ -244,6 +317,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                  "rev": primary.get("rev"), "ranking": primary.get("ranking", []),
                  "excluded": primary.get("excluded", []), "citations": primary.get("citations", []),
                  "evaluation_id": primary.get("evaluation_id"),
+                 "matrix": primary.get("matrix"),
                  "packages": results, "counts": {"packages": len(results),
                                                  "quotes": len(quotes),
                                                  "ranked": len(primary.get("ranking", []))},

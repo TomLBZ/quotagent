@@ -215,5 +215,374 @@ export async function register(surface, host) {
       return items
     } }))
 
+  // ------------------------------------------------------------------ 催报（DEF-013）
+  const remindTool = 'src/domain/rfq/tools/rfq-remind.py'
+  const clarifyTool = 'src/domain/rfq/tools/rfq-clarify-apply.py'
+  const REMIND_PREFIX = '催报：'
+
+  const packageFacts = (view) => {
+    const rows = host.rows(view)
+    const published = rowsOfType(rows, 'rfq/published').map((row) => ({ ...bodyOf(row), ts: row.ts }))
+    const distributed = rowsOfType(rows, 'rfq/distributed')
+    const quotes = rowsOfType(rows, 'quote/submitted').map((row) => bodyOf(row))
+    const reminders = rowsOfType(rows, 'mail/queued').map((row) => ({ ...bodyOf(row), ts: row.ts }))
+      .filter((row) => asText(row.subject).startsWith(REMIND_PREFIX))
+    return { rows, published, distributed, quotes, reminders }
+  }
+  const recipientsOf = (distributed, packageId) => {
+    const out2 = new Set()
+    for (const row of distributed) {
+      const body = bodyOf(row)
+      if (asText(body.package_id) !== packageId) continue
+      for (const who of body.recipients ?? []) out2.add(String(who))
+    }
+    return [...out2].sort()
+  }
+  const snapshotOfPackage = (packageId) => {
+    for (const rev of [5, 4, 3, 2, 1]) {
+      const data = host.readJson(`${host.sharedDir}/contractor/rfq-${packageId}-rev${rev}.json`)
+      if (data) return data
+    }
+    return null
+  }
+  const remindNotices = () => {
+    const data = host.readJson(`${host.sharedDir}/exchange/reminders.json`)
+    return data && Array.isArray(data.reminders) ? data.reminders : []
+  }
+
+  out.push(surface.panel({ plugin_id: me, id: 'rfq.remind-board', title: '回文时限与催报（谁没回 / 已催几次）',
+    view: 'contractor', order: 15, kind: 'table', actions: ['rfq.remind'],
+    data: () => {
+      const { published, distributed, quotes, reminders } = packageFacts('contractor')
+      if (!published.length) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'no-published-rfq',
+          next_action: '先用「发布 RFQ」发一包（发布不产生对外义务）', columns: [{ key: 'package_id', label: '包' }], rows: [] }
+      }
+      const moment = published.map((row) => String(row.ts ?? '')).sort().pop() ?? ''
+      const rows = published.map((row) => {
+        const packageId = asText(row.package_id)
+        const snapshot = snapshotOfPackage(packageId)
+        const deadlines = (snapshot && snapshot.spec ? snapshot.spec.deadlines : null) ?? snapshot?.deadlines ?? {}
+        const quoteBy = asText(row.quote_by) || asText(deadlines.quote_by)
+        const hoursLeft = quoteBy && moment
+          ? Math.round(((Date.parse(quoteBy) - Date.parse(moment)) / 3600000) * 100) / 100 : null
+        const invited = (snapshot?.invited ?? recipientsOf(distributed, packageId)).map(String)
+        const answered = new Set(quotes.filter((quote) => asText(quote.package_id) === packageId)
+          .map((quote) => asText(quote.supplier)))
+        const mine = reminders.filter((item) => asText(item.package_id) === packageId)
+        const notReplied = invited.filter((who) => !answered.has(who))
+        return { id: `${packageId}#r${row.rev}`, package_id: packageId, rev: row.rev, quote_by: quoteBy,
+          hours_left: hoursLeft, invited: invited.join(' '), replied: [...answered].join(' ') || '（还没人回）',
+          not_replied: notReplied.join(' ') || '（都回了）', recipients: notReplied.join(' '),
+          remind_count: mine.length, last_remind_at: mine.map((item) => String(item.ts ?? '')).sort().pop() ?? '',
+          mail_kind: mine.length ? asText(mine[mine.length - 1].kind) : '' }
+      })
+      return { ok: true, kind: 'table',
+        columns: [
+          { key: 'package_id', label: '包', type: 'code' }, { key: 'rev', label: 'rev' },
+          { key: 'quote_by', label: '报价截止' }, { key: 'hours_left', label: '距截止（小时，按事实时刻）' },
+          { key: 'invited', label: '邀请' }, { key: 'replied', label: '已回' },
+          { key: 'not_replied', label: '还没回' }, { key: 'remind_count', label: '已催次数' },
+          { key: 'last_remind_at', label: '最后一次催报 @ts' },
+        ],
+        rows, row_actions: ['rfq.remind'], counts: { packages: rows.length,
+          not_replied: rows.reduce((sum, row) => sum + (row.not_replied.startsWith('（') ? 0 : row.not_replied.split(' ').length), 0) },
+        note: `事实时刻 ${moment || '—'} · 勾选若干行（或行内）点「催报」：落本侧 \`mail/queued\`（催报本体）+`
+          + `对方账本 \`mail/queued\`（对方可见）；临近/已过截止会另落 \`rfq/due-soon\`|\`rfq/overdue\`；`
+          + `邮件通道不可用时**绝不假装已发**（如实报 mail-smtp-unconfigured，可复制正文文件）` }
+    } }))
+
+  out.push(surface.action({ plugin_id: me, id: 'rfq.remind', title: '催报（一键 · 真落账 · 给对方出通知）',
+    views: ['contractor'], group: '发包', order: 20, permission: 'human-signature', inline: true,
+    confirm: { required: true, message: '催报会落账并给对方出通知（不是承诺、也不假装已发信）：确认？' },
+    hint: '收件人默认「还没回的」；落 mail/queued（两侧）+ 临近/已过截止时落 rfq/due-soon|overdue；'
+      + '通知正文只留 sha256 进账本，可读的一份在 exchange/reminders.json',
+    input: { bulk: 'ids', fields: [
+      { name: 'package_id', label: '包 id', type: 'text', required: true, help: '从表格行里取' },
+      { name: 'rev', label: '版本 rev', type: 'number', min: 1, help: '空=最新已发布版本' },
+      { name: 'recipients', label: '收件人（逗号分隔 realm；空=表格里「还没回」那几位）', type: 'text' },
+      { name: 'subject', label: '主题', type: 'text', help: '默认「催报：<包 id>」' },
+      { name: 'soon_hours', label: '临近阈值（小时）', type: 'number', min: 0, max: 8760, default: 48,
+        help: '距截止小于它才算「临近」，会另落 rfq/due-soon' },
+      { name: 'letter', label: '催报正文', type: 'textarea', required: true,
+        help: '只留 sha256 进账本；不得含凭据/私域字段' },
+      { name: 'signature', label: '催报人（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
+    ] },
+    server: async (ctx, input) => {
+      const recipients = String(input.recipients ?? '').split(/[,\s]+/).map((item) => item.trim()).filter(Boolean)
+      const letter = String(input.letter ?? '')
+      if (letter.trim() === '') {
+        return { ok: false, code: 'empty-note', reason: '催报正文为空：对方要能看懂你要他做什么',
+          next_action: '写一句话再催' }
+      }
+      const staged = host.stage('rfq-remind', { kind: 'rfq-remind', action: 'remind', view: 'contractor',
+        package_id: asText(input.package_id), rev: input.rev === undefined || input.rev === '' ? null : Number(input.rev),
+        recipients, subject: asText(input.subject), soon_hours: Number(input.soon_hours ?? 48),
+        actor: asText(input.signature), note: letter })
+      if (!staged.ok) return staged
+      const run = host.runPython(remindTool, ['--request', staged.path, '--ui-shared', host.sharedDir,
+        '--ledger-contractor', asText(host.config?.ledger_contractor),
+        '--ledger-supplier', asText(host.config?.ledger_supplier), '--now', host.now()])
+      const json = run.json ?? {}
+      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'reminded' : 'writer-failed'),
+        reason: json.refusal?.reason ?? run.reason ?? '',
+        next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '看 result 里的落账与传输状态',
+        result: { pending: staged.file, package_id: json.package_id ?? null, rev: json.rev ?? null,
+          recipients: json.recipients ?? [], applied: json.applied ?? [], fired: json.fired ?? [],
+          ledger_added: json.ledger_added ?? 0, mail_transport: json.mail_transport ?? null,
+          notices: json.notices ?? null, supplier_notice: json.supplier_notice ?? null } }
+    } }))
+
+  out.push(surface.panel({ plugin_id: me, id: 'rfq.remind-notices', title: '承包商给我的催报（对方通知）',
+    view: 'supplier', order: 55, kind: 'table',
+    data: () => {
+      const letters = remindNotices()
+      const rows = []
+      for (const row of rowsOfType(host.rows('supplier'), 'mail/')) {
+        const body = bodyOf(row)
+        const subject = asText(body.subject)
+        if (!subject.startsWith(REMIND_PREFIX)) continue
+        const letter = (letters.filter((item) => asText(item.package_id) === asText(body.package_id)
+          && asText(item.subject) === subject).slice(-1)[0] ?? {}).letter ?? ''
+        rows.push({ id: `${body.message_id ?? ''}-${row.ts ?? ''}`, at: row.ts ?? '', subject,
+          package_id: asText(body.package_id), rfq_rev: body.rfq_rev, letter,
+          body_sha256: asText(body.body_sha256) })
+      }
+      if (!rows.length) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'no-reminder',
+          next_action: '还没收到催报；快到截止还没回时对方会催', columns: [{ key: 'subject', label: '通知' }], rows: [] }
+      }
+      return { ok: true, kind: 'table',
+        columns: [{ key: 'at', label: '收到时刻' }, { key: 'subject', label: '主题', type: 'code' },
+          { key: 'package_id', label: '包', type: 'code' }, { key: 'rfq_rev', label: 'rev' },
+          { key: 'letter', label: '对方原话' }, { key: 'body_sha256', label: '正文哈希', type: 'code' }],
+        rows, counts: { reminders: rows.length },
+        note: '通知是"入队"事实（`mail/queued`）：**不代表邮件真的发出**（本机没有 SMTP 凭据时如实为 refused）' }
+    } }))
+
+  // ------------------------------------------------------------------ 澄清单据（DEF-014）
+  const ticketsOf = (rows) => {
+    const map = new Map()
+    const order = []
+    for (const row of rows) {
+      const type = String(row?.type ?? '')
+      if (!type.startsWith('clarification/')) continue
+      const body = bodyOf(row)
+      const id = asText(body.ticket_id)
+      if (!id) continue
+      if (!map.has(id)) order.push(id)
+      const previous = map.get(id) ?? { ticket_id: id, status: 'open', question: '', refs: [], rfq_rev: null,
+        package_id: '', asker_realm: '', answer: null, broadcast_to: [], created_at: String(row.ts ?? ''),
+        answered_at: '', closed_at: '', mirror: false }
+      const next = { ...previous }
+      if (type === 'clarification/asked') {
+        if (body.question) next.question = String(body.question)
+        if (body.refs) next.refs = body.refs.item_ids ?? previous.refs
+        if (body.rfq_rev) next.rfq_rev = body.rfq_rev
+        if (body.package_id) next.package_id = String(body.package_id)
+        if (body.asker_realm) next.asker_realm = String(body.asker_realm)
+        if (asText(body.status) === 'closed') { next.status = 'closed'; next.closed_at = String(row.ts ?? '') }
+        else if (asText(body.status) === 'open' && body.question) next.status = 'open'
+      } else if (type === 'clarification/answered') {
+        if (body.text !== undefined && body.text !== null) {
+          next.answer = String(body.text)
+          next.answered_at = String(row.ts ?? '')
+          if (next.status !== 'closed') next.status = 'answered'
+        }
+        if (body.broadcast_to) { next.broadcast_to = body.broadcast_to.map(String) }
+      } else if (type === 'clarification/reopened') {
+        next.status = 'open'
+        next.answer = previous.answer
+      }
+      next.mirror = body.mirror === true
+      map.set(id, next)
+    }
+    return order.map((id) => map.get(id))
+  }
+
+  out.push(surface.panel({ plugin_id: me, id: 'clarify.queue', title: '澄清单据队列（待答 / 已答 / 已关闭）',
+    view: 'contractor', order: 18, kind: 'table', actions: ['clarify.answer', 'clarify.broadcast', 'clarify.close'],
+    data: () => {
+      const rowsIn = host.rows('contractor')
+      const tickets = ticketsOf(rowsIn)
+      const moment = rowsIn.map((row) => String(row?.ts ?? '')).filter(Boolean).sort().pop() ?? ''
+      if (!tickets.length) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'no-ticket',
+          next_action: '供应商提问后这里会出现工单（提问方在供应商道的「我的澄清」里提）',
+          columns: [{ key: 'ticket_id', label: '工单' }], rows: [] }
+      }
+      return { ok: true, kind: 'table',
+        columns: [
+          { key: 'ticket_id', label: '工单', type: 'code' }, { key: 'package_id', label: '包', type: 'code' },
+          { key: 'rfq_rev', label: 'rev' }, { key: 'refs', label: '引用条目', type: 'code' },
+          { key: 'question', label: '问题' }, { key: 'status_label', label: '状态' },
+          { key: 'waited', label: '未答时长（按事实时刻）' }, { key: 'answer', label: '我的答复' },
+          { key: 'broadcast_label', label: '广播' }, { key: 'created_at', label: '提问 @ts' },
+        ],
+        rows: tickets.map((ticket) => ({ id: ticket.ticket_id, ...ticket,
+          refs: (ticket.refs ?? []).join(' '),
+          status_label: ticket.status === 'open' ? '待答' : (ticket.status === 'answered' ? '已答（未广播=只有提问方可见）' : '已关闭'),
+          waited: ticket.status === 'open'
+            ? `${Math.round((Date.parse(moment) - Date.parse(ticket.created_at)) / 3600000 * 100) / 100} 小时`
+            : '—',
+          broadcast_label: (ticket.broadcast_to ?? []).length ? `已广播给 ${ticket.broadcast_to.join(' ')}` : '未广播' })),
+        row_actions: ['clarify.answer', 'clarify.broadcast', 'clarify.close'],
+        counts: { tickets: tickets.length,
+          open: tickets.filter((ticket) => ticket.status === 'open').length,
+          answered: tickets.filter((ticket) => ticket.status === 'answered').length,
+          closed: tickets.filter((ticket) => ticket.status === 'closed').length },
+        note: `事实时刻 ${moment || '—'} · 答复必须署名 \`human:*\`；**广播必须覆盖全部在册投标人**`
+          + `（缺一家就落 \`clarification/broadcast-incomplete\` 并拒绝），未完整广播的工单不得关闭（INV-006）` }
+    } }))
+
+  out.push(surface.panel({ plugin_id: me, id: 'clarify.mine', title: '我的澄清（我提的问题与答复）',
+    view: 'supplier', order: 50, kind: 'table', actions: ['clarify.ask', 'clarify.broadcast'],
+    data: () => {
+      const rowList = host.rows('supplier')
+      const tickets = ticketsOf(rowList)
+      if (!tickets.length) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'no-ticket',
+          next_action: '用「提问澄清」对某几条行项目提问（必须绑定包版本 rev 与 ≥1 个条目引用）',
+          columns: [{ key: 'ticket_id', label: '工单' }], rows: [] }
+      }
+      return { ok: true, kind: 'table',
+        columns: [{ key: 'ticket_id', label: '工单', type: 'code' }, { key: 'package_id', label: '包', type: 'code' },
+          { key: 'rfq_rev', label: 'rev' }, { key: 'refs', label: '引用条目', type: 'code' },
+          { key: 'question', label: '我问的' }, { key: 'status_label', label: '状态' },
+          { key: 'answer', label: '承包商答复' }],
+        rows: tickets.map((ticket) => ({ id: ticket.ticket_id, ...ticket, refs: (ticket.refs ?? []).join(' '),
+          status_label: ticket.status === 'open' ? '待回答' : (ticket.status === 'answered' ? '已答复' : '已关闭'),
+          answer: ticket.answer ?? '（还没答）' })),
+        counts: { tickets: tickets.length,
+          answered: tickets.filter((ticket) => ticket.answer).length },
+        note: '答复在承包商侧「回答」并「广播」之后全员可见；未广播前只有提问方看得见' }
+    } }))
+
+  out.push(surface.action({ plugin_id: me, id: 'clarify.ask', title: '提问澄清（绑定版本与条目）',
+    views: ['supplier'], group: '澄清', order: 5, permission: 'human-signature',
+    confirm: { required: true, message: '提问会落账并让对方看到：确认以你的署名提问？' },
+    hint: '必须给包版本（rev）与 ≥1 个条目引用（FR-CLARIFY-001）；问题 ≤500 字',
+    input: { fields: [
+      { name: 'package_id', label: '包 id', type: 'text', required: true },
+      { name: 'rfq_rev', label: '包版本 rev', type: 'number', required: true, min: 1, default: 1 },
+      { name: 'item_ids', label: '引用条目（逗号分隔，至少 1 个）', type: 'text', required: true,
+        help: '如 L-001,L-002' },
+      { name: 'question', label: '问题（≤500 字）', type: 'textarea', required: true },
+      { name: 'signature', label: '提问人（人签）', type: 'signature', required: true },
+    ] },
+    server: async (ctx, input) => {
+      const itemIds = String(input.item_ids ?? '').split(/[,\s]+/).map((item) => item.trim()).filter(Boolean)
+      const question = String(input.question ?? '')
+      const staged = host.stage('clarify-apply', { kind: 'clarify-apply', action: 'ask', view: 'supplier',
+        package_id: asText(input.package_id), rfq_rev: Number(input.rfq_rev ?? 1), item_ids: itemIds,
+        actor: asText(input.signature), note: question })
+      if (!staged.ok) return staged
+      const run = host.runPython(clarifyTool, ['--step', 'ask', '--request', staged.path, '--view', 'supplier',
+        '--ui-shared', host.sharedDir, '--ledger-contractor', asText(host.config?.ledger_contractor),
+        '--ledger-supplier', asText(host.config?.ledger_supplier), '--now', host.now()])
+      const json = run.json ?? {}
+      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'asked' : 'writer-failed'),
+        reason: json.refusal?.reason ?? run.reason ?? '',
+        next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '看 result 里的工单号与双向登记',
+        result: { pending: staged.file, ticket_id: json.ticket_id ?? null, applied: json.applied ?? [],
+          ledger_added: json.ledger_added ?? 0, counterpart_notice: json.counterpart_notice ?? null } }
+    } }))
+
+  out.push(surface.action({ plugin_id: me, id: 'clarify.answer', title: '回答澄清（人签）',
+    views: ['contractor'], group: '澄清', order: 10, permission: 'human-signature', inline: true,
+    confirm: { required: true, message: '答复会落 `clarification/answered`（未广播前只有提问方可见）：确认？' },
+    hint: '回答人必须 human:*；答复要广播给在册投标人才算完成（INV-006）',
+    input: { fields: [
+      { name: 'ticket_id', label: '工单 id', type: 'text', required: true },
+      { name: 'text', label: '答复正文', type: 'textarea', required: true },
+      { name: 'signature', label: '回答人（人签）', type: 'signature', required: true },
+    ] },
+    server: async (ctx, input) => {
+      const staged = host.stage('clarify-apply', { kind: 'clarify-apply', action: 'answer', view: 'contractor',
+        ticket_id: asText(input.ticket_id), actor: asText(input.signature), note: String(input.text ?? '') })
+      if (!staged.ok) return staged
+      const run = host.runPython(clarifyTool, ['--step', 'answer', '--request', staged.path, '--view', 'contractor',
+        '--ui-shared', host.sharedDir, '--ledger-contractor', asText(host.config?.ledger_contractor),
+        '--ledger-supplier', asText(host.config?.ledger_supplier), '--now', host.now()])
+      const json = run.json ?? {}
+      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'answered' : 'writer-failed'),
+        reason: json.refusal?.reason ?? run.reason ?? '',
+        next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '下一步：广播（覆盖全部在册投标人）',
+        result: { pending: staged.file, ticket_id: json.ticket_id ?? null, status: json.status ?? null,
+          ledger_added: json.ledger_added ?? 0, counterpart_notice: json.counterpart_notice ?? null } }
+    } }))
+
+  out.push(surface.action({ plugin_id: me, id: 'clarify.broadcast', title: '广播答复（覆盖在册投标人）',
+    views: ['contractor', 'supplier'], group: '澄清', order: 20, permission: 'human-signature', inline: true,
+    confirm: { required: true, message: '广播后**在册投标人全员**可见（缺一家会被拒，工单不得关闭）：确认？' },
+    hint: '默认广播给全部在册投标人（本包邀请名单）；名单不全即 `broadcast-incomplete` 并拒绝',
+    input: { fields: [
+      { name: 'ticket_id', label: '工单 id', type: 'text', required: true },
+      { name: 'to', label: '广播名单（逗号分隔；空=全部在册投标人）', type: 'text' },
+      { name: 'signature', label: '发言人（人签）', type: 'signature', required: true },
+    ] },
+    server: async (ctx, input) => {
+      const to = String(input.to ?? '').split(/[,\s]+/).map((item) => item.trim()).filter(Boolean)
+      const staged = host.stage('clarify-apply', { kind: 'clarify-apply', action: 'broadcast',
+        view: String(ctx.view ?? 'contractor'), ticket_id: asText(input.ticket_id), to,
+        actor: asText(input.signature), note: '' })
+      if (!staged.ok) return staged
+      const run = host.runPython(clarifyTool, ['--step', 'broadcast', '--request', staged.path,
+        '--view', String(ctx.view ?? 'contractor'), '--ui-shared', host.sharedDir,
+        '--ledger-contractor', asText(host.config?.ledger_contractor),
+        '--ledger-supplier', asText(host.config?.ledger_supplier), '--now', host.now()])
+      const json = run.json ?? {}
+      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'broadcast' : 'writer-failed'),
+        reason: json.refusal?.reason ?? run.reason ?? '',
+        next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '广播完成后才能「关闭工单」',
+        result: { pending: staged.file, ticket_id: json.ticket_id ?? null,
+          broadcast_to: json.broadcast_to ?? [], registered: json.registered_bidders ?? [],
+          ledger_added: json.ledger_added ?? 0 } }
+    } }))
+
+  out.push(surface.action({ plugin_id: me, id: 'clarify.close', title: '关闭工单（前置：已完整广播）',
+    views: ['contractor'], group: '澄清', order: 30, permission: 'human-signature', inline: true,
+    confirm: { required: true, message: '关闭工单：未完整广播的工单会被拒（INV-006）：确认？' },
+    hint: '关闭前置是"答案已完整广播给在册投标人"，否则落 broadcast-incomplete 并拒绝',
+    input: { fields: [
+      { name: 'ticket_id', label: '工单 id', type: 'text', required: true },
+      { name: 'signature', label: '关闭人（人签）', type: 'signature', required: true },
+    ] },
+    server: async (ctx, input) => {
+      const staged = host.stage('clarify-apply', { kind: 'clarify-apply', action: 'close', view: 'contractor',
+        ticket_id: asText(input.ticket_id), actor: asText(input.signature), note: '' })
+      if (!staged.ok) return staged
+      const run = host.runPython(clarifyTool, ['--step', 'close', '--request', staged.path, '--view', 'contractor',
+        '--ui-shared', host.sharedDir, '--ledger-contractor', asText(host.config?.ledger_contractor),
+        '--ledger-supplier', asText(host.config?.ledger_supplier), '--now', host.now()])
+      const json = run.json ?? {}
+      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'closed' : 'writer-failed'),
+        reason: json.refusal?.reason ?? run.reason ?? '',
+        next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '工单已关闭',
+        result: { pending: staged.file, ticket_id: json.ticket_id ?? null, status: json.status ?? null,
+          ledger_added: json.ledger_added ?? 0 } }
+    } }))
+
+  out.push(surface.notificationSource({ plugin_id: me, id: 'notify.clarify', title: '澄清单据待办', order: 12,
+    poll: () => {
+      const items = []
+      for (const ticket of ticketsOf(host.rows('contractor'))) {
+        if (ticket.status !== 'open') continue
+        items.push({ id: `clarify:${ticket.ticket_id}`, level: 'warn', at: ticket.created_at, ref: ticket.ticket_id,
+          title: `待回答：${ticket.ticket_id}（${ticket.package_id} rev${ticket.rfq_rev}）`,
+          body: `引用 ${(ticket.refs ?? []).join(' ')} · ${String(ticket.question).slice(0, 80)}`,
+          next_action: '去「澄清单据队列」回答（人签），然后广播给在册投标人' })
+      }
+      for (const row of rowsOfType(host.rows('supplier'), 'mail/')) {
+        const body = bodyOf(row)
+        const subject = asText(body.subject)
+        if (!subject.startsWith('报价评审：')) continue
+        items.push({ id: `review:${body.message_id ?? ''}`, level: 'info', at: String(row.ts ?? ''),
+          title: `承包商判定：${subject}`, body: '看「承包商对我报价的判定」面板',
+          next_action: '按判定处理：退回/要补件时改后重报（人签提交）' })
+      }
+      return items
+    } }))
+
   return out
 }

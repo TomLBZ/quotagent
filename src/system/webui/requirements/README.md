@@ -42,6 +42,16 @@
 | 门 | `tools/verify.sh webui`（51/51）· `plugin-lifecycle`（注册面 C/D 组）· `run-once`（一键起服务 + `/healthz`） |
 | 路由登记 | 新增路由必须在 `GET /api/routes` 里登记，且只读路由收到非 GET ⇒ 405 + `Allow: GET`（`FR-QUOTE-001` 批次加的机检） |
 
+## 身份与会话 + 三个自助面（`DEF-001/003/025/026`；承载 `FR-UXWEB-001/002`、`FR-USREQ-001` 的这部分）
+
+| 面 | 实现 | 可执行验收命令 |
+|---|---|---|
+| 会话（登录/切换/登出；**不是**每动作手填名字） | `code/identity.mjs`（服务端会话 0600 + 不透明 cookie） | `bash tmp/verify-identity/run-server.sh && python3 tmp/verify-identity.py` |
+| 人签只能本人签（署名 == 会话身份；别人的草稿不可替你签） | `tools/identity-sign.py` → `quote-sign.py`；`tools/identity-confirm.py` → `commitment-apply.py --step confirm` | 同上（`signer-mismatch` / `not-my-draft` / `not-my-quote` 三条负控 + 账本零新增断言） |
+| 「待我处理」（待签报价/待批准/待确认中标/待回澄清/超期未回；只列本人或本侧） | `code/identity.mjs` 的 `workbench()`（只读本侧账本 + 本侧 0600 待办件；`as_of` = 事实时刻） | 同上（换人/换侧列表变化 + 越侧 `side-mismatch` + 新门只出现在该侧） |
+| `DEF-025` 邮件/SMTP 配置可改可持久化（不必提权） | `tools/identity-mail-apply.py` → `config-apply.py`（唯一落盘者） | 同上（ops 侧可改、落 YAML、凭据不回显、业务身份 `/admin/config/` 仍 401） |
+| `DEF-026` 自助装卸**自己的**用户空间插件 | `code/identity.mjs` → `userPluginManager`（跨命名空间 `not-my-namespace`） | 同上（装载/卸载真变化 + 跨 ns 拒） |
+
 ## 本插件不承载
 
 | 事项 | 归属 |

@@ -334,10 +334,178 @@ export async function register(surface, host) {
   // 字段与校验规则的只读自述（让人在界面上能看到规则，而不是靠猜）
   out.push(surface.panel({ plugin_id: me, id: 'quote.rules', title: '草稿字段与校验规则（自述）',
     view: 'supplier', order: 40, kind: 'kv', placement: 'side',
-    data: () => ({ ok: true, kind: 'kv', items: FIELDS.map((field) => ({ key: `${field.label}${field.required ? ' *' : ''}`,
-      value: field.rule })).concat([{ key: '金额单位', value: `整数分（unit=${prepare({}, { views: ['supplier'] }).limits?.money_unit ?? 'cents'}）`, code: true },
-      { key: '数值范围', value: `单价 ${LIMITS.unit_price_cents_min}..${LIMITS.unit_price_cents_max} 分；`
-        + `交期 ${LIMITS.lead_time_days_min}..${LIMITS.lead_time_days_max} 天；备注 ≤ ${LIMITS.note_bytes_max} 字节` }]) }) }))
+    data: () => {
+      // 金额单位：`prepare()` 在没有事实可读时会抛错 —— 自述面板不该因此整块变红（如实降级成 'cents'）
+      let moneyUnit = 'cents'
+      try {
+        moneyUnit = prepare({}, { views: ['supplier'] }).limits?.money_unit ?? 'cents'
+      } catch (err) {
+        moneyUnit = `cents（兜底：prepare() 抛 ${String(err).slice(0, 40)}）`
+      }
+      return { ok: true, kind: 'kv', items: FIELDS.map((field) => ({ key: `${field.label}${field.required ? ' *' : ''}`,
+        value: field.rule })).concat([{ key: '金额单位', value: `整数分（unit=${moneyUnit}）`, code: true },
+        { key: '数值范围', value: `单价 ${LIMITS.unit_price_cents_min}..${LIMITS.unit_price_cents_max} 分；`
+          + `交期 ${LIMITS.lead_time_days_min}..${LIMITS.lead_time_days_max} 天；备注 ≤ ${LIMITS.note_bytes_max} 字节` }]) }
+    } }))
+
+  // ------------------------------------------------------------------ 承包商侧：报价收件箱 + 受理（DEF-011）
+  const inboxTool = 'src/domain/quote-prepare/tools/quote-inbox.py'
+  const reviewTool = 'src/domain/quote-prepare/tools/quote-review.py'
+  const reviewsFile = () => `${host.sharedDir}/exchange/quote-reviews.json`
+  const inboxOf = () => {
+    const run = host.runPython(inboxTool, ['--ui-shared', host.sharedDir,
+      '--ledger-contractor', contractorLedger()])
+    return { run, json: run.json ?? {} }
+  }
+  const reviewNotices = () => {
+    const data = host.readJson(reviewsFile())
+    const items = data && Array.isArray(data.reviews) ? data.reviews : []
+    return items
+  }
+
+  out.push(surface.panel({ plugin_id: me, id: 'quotes.inbox', title: '报价收件箱（按包分组 · 可受理 · 可退回 · 可要补件）',
+    view: 'contractor', order: 35, kind: 'table', actions: ['quote.review'],
+    data: () => {
+      const { json, run } = inboxOf()
+      if (!json.ok || json.degraded) {
+        return { ok: true, kind: 'table', degraded: true, reason: json.reason ?? json.refusal?.code ?? 'inbox-failed',
+          next_action: json.next_action ?? json.refusal?.next_action ?? (run.reason || '看只读工具的输出'),
+          columns: [{ key: 'quote_id', label: '报价' }], rows: [] }
+      }
+      const rows = []
+      for (const bag of json.packages ?? []) {
+        for (const quote of bag.quotes ?? []) {
+          rows.push({ id: quote.quote_id, quote_id: quote.quote_id, package_id: bag.package_id, rev: bag.rev,
+            supplier: quote.supplier, currency: quote.currency,
+            items: (quote.items ?? []).map((line) => `${line.item_id}×${line.qty ?? '?'}@${line.unit_price_cents}分`).join(' '),
+            total_cents: quote.total_cents, vs_current_rev: quote.vs_current_rev,
+            submitted_at: quote.submitted_at, review_status: quote.review_status,
+            reviewed_by: quote.reviewed_by ?? '', review_comment: quote.review_comment ?? '',
+            approved_by: quote.approved_by ?? '', lead_time: (quote.items ?? []).map((line) => line.lead_time_days).join('/') })
+        }
+      }
+      return { ok: true, kind: 'table',
+        columns: [
+          { key: 'quote_id', label: '报价', type: 'code' },
+          { key: 'package_id', label: '包', type: 'code' },
+          { key: 'rev', label: 'rev' },
+          { key: 'supplier', label: '供应商', type: 'code' },
+          { key: 'items', label: '行级明细（条目×量@单价分）' },
+          { key: 'total_cents', label: '行合计（整数分）' },
+          { key: 'lead_time', label: '交期（天）' },
+          { key: 'submitted_at', label: '提交时刻' },
+          { key: 'vs_current_rev', label: '版本状态' },
+          { key: 'review_status', label: '受理状态' },
+          { key: 'reviewed_by', label: '受理人', type: 'code' },
+        ],
+        rows, row_actions: ['quote.review'], bulk: 'quote.review',
+        counts: { ...(json.counts ?? {}) },
+        note: `事实时刻 ${json.as_of || '—'} · 逐条「受理/退回/要求补件」（人签，按行内或勾选批量）；`
+          + '受理状态读账本 `approval/*` 的 `scope=quote-review:<decision>`；作废的报价不允许受理（`quote-superseded`）' }
+    } }))
+
+  out.push(surface.action({ plugin_id: me, id: 'quote.review', title: '受理 / 退回 / 要求补件（人签）',
+    views: ['contractor'], group: '报价', order: 5, permission: 'human-signature', inline: true,
+    confirm: { required: true, message: '这是**人签判定**：受理后对方会看到「已受理」；确认以你的署名执行？' },
+    hint: '受理=approval/granted、退回/要补件=approval/denied（scope 带判定）；退回/补件必须给理由；'
+      + '通知对方只含判定与披露理由，**不含内部备注**',
+    input: { bulk: 'ids', fields: [
+      { name: 'quote_id', label: '报价 id', type: 'text', required: true, help: '从收件箱行里取（批量时每行自带）' },
+      { name: 'decision', label: '判定', type: 'select', options: ['accepted', 'returned', 'need-info'],
+        default: 'accepted', help: '受理 / 退回 / 要求补件' },
+      { name: 'signature', label: '受理人（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
+      { name: 'comment', label: '理由（退回/补件必填；会披露给对方）', type: 'textarea', required: true },
+    ] },
+    server: async (ctx, input) => {
+      const decision = asText(input.decision) || 'accepted'
+      const comment = String(input.comment ?? '')
+      if (decision !== 'accepted' && comment.trim() === '') {
+        return { ok: false, code: 'reason-required', reason: '退回/要求补件必须给理由（对方要知道改什么）',
+          next_action: '在「理由」里写清楚：哪一条不对、要补什么' }
+      }
+      const quoteIds = Array.isArray(input.ids) && input.ids.length
+        ? input.ids.map(asText) : [asText(input.quote_id)]
+      const results = []
+      for (const quoteId of quoteIds) {
+        const staged = host.stage('quote-review', { kind: 'quote-review', action: 'review', view: 'contractor',
+          quote_id: quoteId, decision, actor: asText(input.signature), note: comment })
+        if (!staged.ok) { results.push({ quote_id: quoteId, ok: false, code: staged.code, reason: staged.reason }); continue }
+        const run = host.runPython(reviewTool, ['--request', staged.path, '--ui-shared', host.sharedDir,
+          '--ledger-contractor', contractorLedger(), '--ledger-supplier', supplierLedger(), '--now', host.now()])
+        const json = run.json ?? {}
+        results.push({ quote_id: quoteId, ok: run.ok && json.ok === true,
+          code: json.refusal?.code ?? (json.ok ? decision : 'writer-failed'),
+          reason: json.refusal?.reason ?? run.reason ?? '',
+          next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '',
+          approval_id: json.approval_id ?? null, ledger_added: json.ledger_added ?? 0,
+          pending: staged.file, notices: json.notices ?? null })
+      }
+      const okAll = results.every((row) => row.ok)
+      const failed = results.filter((row) => !row.ok)
+      return { ok: okAll && results.length > 0,
+        code: okAll ? decision : (results.length > 1 ? 'partial-failure' : (failed[0]?.code ?? 'refused')),
+        reason: failed.map((row) => `${row.quote_id}: ${row.reason}`).join('；'),
+        next_action: okAll
+          ? `判定已落账（approval/requested + granted|denied，scope=quote-review:${decision}）：`
+            + '对方侧看到「已受理/已退回/要求补件」（不含内部备注）；邮件通道不可用时通知未发出，可复制通知正文'
+          : failed.map((row) => `${row.quote_id}：${row.next_action}`).join('；'),
+        result: { results, accepted: results.filter((row) => row.ok).length, failed: failed.length,
+          notices: reviewsFile() } }
+    } }))
+
+  out.push(surface.panel({ plugin_id: me, id: 'quotes.review-notices', title: '承包商对我报价的判定（对方通知）',
+    view: 'supplier', order: 45, kind: 'table',
+    data: () => {
+      const rows = []
+      const letters = reviewNotices()
+      const letterOf = (subject) => {
+        const match = /\s(q-[\w.-]+)\s*$/.exec(String(subject))
+        const quoteId = match ? match[1] : ''
+        return (letters.filter((item) => item.quote_id === quoteId).slice(-1)[0] ?? {}).letter ?? ''
+      }
+      for (const row of typeRows(host.rows('supplier'), 'mail/') ) {
+        const body = bodyOf(row)
+        const subject = asText(body.subject)
+        if (!subject.startsWith('报价评审：')) continue
+        rows.push({ id: `${body.message_id ?? ''}-${row.ts ?? ''}`, at: row.ts ?? '', subject,
+          to: (body.to ?? []).join(' '), body_sha256: asText(body.body_sha256),
+          disclosed: letterOf(subject) })
+      }
+      if (!rows.length) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'no-quote-review-notice',
+          next_action: '等承包商在收件箱里受理/退回你的报价（判定会通过通知信封送到本侧）',
+          columns: [{ key: 'subject', label: '通知' }], rows: [] }
+      }
+      return { ok: true, kind: 'table',
+        columns: [{ key: 'at', label: '收到时刻' }, { key: 'subject', label: '判定' },
+          { key: 'disclosed', label: '承包商披露的理由' }, { key: 'body_sha256', label: '正文哈希', type: 'code' }],
+        rows, counts: { notices: rows.length },
+        note: '只含判定与承包商愿意披露的理由（**不含**内部备注）；通知是"入队"事实，不代表邮件真的发出' }
+    } }))
+
+  out.push(surface.notificationSource({ plugin_id: me, id: 'notify.quote-review', title: '待受理的报价',
+    order: 8, poll: () => {
+      const { json } = inboxOf()
+      const items = []
+      for (const bag of json.packages ?? []) {
+        for (const quote of bag.quotes ?? []) {
+          if (quote.review_status !== '待审') continue
+          items.push({ id: `quote:review:${quote.quote_id}`, level: 'warn', at: quote.submitted_at,
+            ref: quote.quote_id, title: `待受理：${quote.quote_id}（${bag.package_id} · ${quote.supplier}）`,
+            body: `行合计 ${quote.total_cents} 分 · ${(quote.items ?? []).length} 行 · ${quote.vs_current_rev}`,
+            next_action: '去承包商道「报价收件箱」点行内「受理/退回/要求补件」（人签）' })
+        }
+      }
+      return items
+    } }))
+
+  out.push(surface.statusItem({ plugin_id: me, id: 'status.quote-review', title: '报价收件箱', order: 6, read: () => {
+    const { json } = inboxOf()
+    if (!json.ok) return { text: '收件箱读不到', level: 'warn', next_action: json.refusal?.next_action ?? '' }
+    const pending = json.counts?.pending ?? 0
+    return { text: `${json.counts?.quotes ?? 0} 条报价 · 待受理 ${pending}`,
+      level: pending ? 'warn' : 'ok', next_action: pending ? '去收件箱受理/退回（人签）' : '' }
+  } }))
 
   return out
 }

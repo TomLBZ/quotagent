@@ -25,6 +25,9 @@ import { createRouteRegistry } from '../lib/ui-route.mjs'
 // GUI **应用外壳**（机制；见 `docs/design/29-webui-gui-app.md`）：多视图/导航/命令面板/通知中心/状态栏/深链/
 // 快捷键 + 动作总线。本文件只把它挂上路由；功能全部由插件通过注册面贡献（`code/ui.mjs` 发现式装载）。
 import { createAppShell } from './app-shell.mjs'
+// 身份与会话 + 三个「仅本人可见」的自助面（DEF-001/003/025/026）。它**注册到既有的路由注册面**
+// （`uiRoutes`），本文件只多三行接线（见下面 `createIdentity(...)` / `identity.register(uiRoutes)`）。
+import { createIdentity } from './identity.mjs'
 
 export const name = 'webui'
 
@@ -127,6 +130,12 @@ const GET_ONLY_PATTERNS = [
   /^\/[a-z]+\/changes\/[A-Za-z0-9_.:-]+\/?$/,
   /^\/[a-z]+\/api\/(events|evidence|negotiation|faq|heuristics|advice|gates|authority|deadlines|scorecard|history|approvals)\/?$/,
   /^\/[a-z]+\/api\/changes\/[A-Za-z0-9_.:-]+\/?$/,
+  // 身份与会话 + 自助面的**读**侧（`identity.mjs`）：写侧在 WRITE_PATTERNS 里，这里只冻读形态
+  /^\/identity\/(me)?\/?$/,
+  /^\/inbox(\/api)?\/?$/,
+  /^\/sign\/?$/,
+  /^\/plugins\/?$/,
+  /^\/[a-z]+\/inbox(\/api)?\/?$/,
 ]
 
 /** **真的会处理写**的路径（POST 白名单）：只有这几条能把请求变成一条待办件或一次状态变化。 */
@@ -143,6 +152,11 @@ const WRITE_PATTERNS = [
   /^\/[a-z]+\/deadlines\/promise\/?$/,
   /^\/[a-z]+\/feedback\/?$/,
   /^\/[a-z]+\/quotes\/prepare\/?$/,                            // 报价草稿（只有准备视角有这一步）
+  // 身份与会话 + 自助面（`identity.mjs` 注册到路由注册面的那几条；**只落待办件/委托唯一写者**）
+  /^\/identity\/(login|logout)\/?$/,                           // 登录/登出（服务端会话 0600 + cookie）
+  /^\/sign\/(quote|award)\/?$/,                                // 人签（署名必须等于会话身份）
+  /^\/mail\/config\/?$/,                                       // 邮件配置（干跑 → 0600 待办件 → config-apply.py）
+  /^\/plugins\/(load|unload|reload)\/?$/,                      // 自己的用户空间插件自助装卸
 ]
 
 /** 该路径是不是「只应为 GET」的（收到非 GET ⇒ 405）。 */
@@ -316,6 +330,14 @@ export function apply(ctx, config) {
     log: (msg) => console.error(msg),
   })
   ctx.effect(() => () => shell.surface.dispose())
+  // ---- 身份与会话（DEF-001/003/025/026）：**注册进既有的路由注册面**，本文件不认识它的任何面 ----
+  // 只做两件事：① 建它（把外壳、宿主服务句柄交给它）；② 让它把路由注册进 `uiRoutes`。
+  const identity = createIdentity({ root: repoRoot, prefix, config, shell,
+    services: { userPluginManager: ctx.userPluginManager, configView: ctx.configView }, log: (msg) => console.error(msg) })
+  const identityRoutes = identity.register(uiRoutes)
+  console.error(`[webui] 身份与会话路由：${identityRoutes.routes.filter((row) => row.ok).length} 条已注册`
+    + `${identityRoutes.ok ? '' : `（有被拒：${identityRoutes.routes.filter((row) => !row.ok)
+      .map((row) => `${row.method} ${row.path}=${row.code}`).join(',')}）`}`)
   // 插件贡献的**发现式装载**（任何插件放 `code/ui.mjs` 就会被装载；装载失败如实记日志，不静默吞）
   Promise.resolve(shell.loadContributions()).then((summary) => {
     const bad = summary.filter((row) => row.ok === false)
