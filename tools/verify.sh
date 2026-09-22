@@ -292,6 +292,10 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     exec node host/t267-market-gate.mjs "$@"
     ;;
   admin-route)
+    # admin 道的**宿主侧围栏门**（T-271）：两件产物（`admin-guard` 鉴权 + `admin-view` 只读视图）的
+    # 18 条断言，含 4 处单点变异。**本批（EV-173 / T-322）搬迁时实测发现它此前没有任何门在跑**
+    # （`tools/verify.sh` 无分支、无 AC 引用它）⇒ 孤儿门，这里接上（门名不变、只增不减）。
+    "${QUOTAGENT_NODE:-node}" "$HERE/../host/t271-admin-gate.mjs" || exit 1
     shift
     exec python3 tools/check-admin-route.py "$@"
     ;;

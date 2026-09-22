@@ -87,6 +87,73 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "domain/quote-prepare", "src/domain/quote-prepare/tests/t286-quote-draft-gate.mjs"),
     "host/t287-rfq-visibility-gate.mjs": (
         "system/projection", "src/system/projection/tests/t287-rfq-visibility-gate.mjs"),
+    # --- 阶段 4.2 续批（EV-173 / T-322）：`host/*-gate.mjs` **剩下 10 个**搬进各自插件的 `tests/`，
+    # 旧位置留薄转发（`import './../src/…'`；门名与 `tools/verify.sh` 的分支一行未改）。
+    # 搬迁补丁与上批逐字相同：HERE 由仓库根推出宿主目录 + `cordis` 改为按宿主目录显式解析。
+    "host/t260-pipeline-gate.mjs": (
+        "system/pipeline-view", "src/system/pipeline-view/tests/t260-pipeline-gate.mjs"),
+    "host/t267-market-gate.mjs": (
+        "system/market", "src/system/market/tests/t267-market-gate.mjs"),
+    "host/t268-user-space-gate.mjs": (
+        "system/user-plugin-manager", "src/system/user-plugin-manager/tests/t268-user-space-gate.mjs"),
+    "host/t271-admin-gate.mjs": (
+        "system/admin", "src/system/admin/tests/t271-admin-gate.mjs"),
+    "host/t275-runtime-gate.mjs": (
+        "system/agent-runtime", "src/system/agent-runtime/tests/t275-runtime-gate.mjs"),
+    "host/t277-storage-gate.mjs": (
+        "system/storage", "src/system/storage/tests/t277-storage-gate.mjs"),
+    "host/t279-heuristics-gate.mjs": (
+        "domain/bid-heuristics", "src/domain/bid-heuristics/tests/t279-heuristics-gate.mjs"),
+    "host/t281-advice-gate.mjs": (
+        "domain/advice", "src/domain/advice/tests/t281-advice-gate.mjs"),
+    "host/t282-gate-timeline-gate.mjs": (
+        "domain/gate-timeline", "src/domain/gate-timeline/tests/t282-gate-timeline-gate.mjs"),
+    "host/t283-change-detail-gate.mjs": (
+        "domain/gate-timeline", "src/domain/gate-timeline/tests/t283-change-detail-gate.mjs"),
+    # --- 同批（EV-173 / T-322）：`src/quotagent/qa/checks_*.py` **21 个**搬进各自插件的 `tests/`，
+    # 旧位置留薄转发（`importlib` 按文件路径装载实体；`quotagent.qa` 包的导入面与 AC 注册不变）。
+    "src/quotagent/qa/checks_admin.py": (
+        "system/admin", "src/system/admin/tests/checks_admin.py"),
+    "src/quotagent/qa/checks_adv.py": (
+        "domain/advice", "src/domain/advice/tests/checks_adv.py"),
+    "src/quotagent/qa/checks_gate.py": (
+        "domain/gate-timeline", "src/domain/gate-timeline/tests/checks_gate.py"),
+    "src/quotagent/qa/checks_uifb.py": (
+        "system/ui-feedback", "src/system/ui-feedback/tests/checks_uifb.py"),
+    "src/quotagent/qa/checks_viz.py": (
+        "domain/bid-heuristics", "src/domain/bid-heuristics/tests/checks_viz.py"),
+    "src/quotagent/qa/checks_config.py": (
+        "system/config", "src/system/config/tests/checks_config.py"),
+    "src/quotagent/qa/checks_uxweb.py": (
+        "system/webui", "src/system/webui/tests/checks_uxweb.py"),
+    "src/quotagent/qa/checks_storage.py": (
+        "system/storage", "src/system/storage/tests/checks_storage.py"),
+    "src/quotagent/qa/checks_userplugin.py": (
+        "system/user-plugin-manager", "src/system/user-plugin-manager/tests/checks_userplugin.py"),
+    "src/quotagent/qa/checks_userplugin_versions.py": (
+        "system/user-plugin-manager", "src/system/user-plugin-manager/tests/checks_userplugin_versions.py"),
+    "src/quotagent/qa/checks_userplugin_elevate.py": (
+        "system/user-plugin-manager", "src/system/user-plugin-manager/tests/checks_userplugin_elevate.py"),
+    "src/quotagent/qa/checks_agentrt.py": (
+        "system/agent-runtime", "src/system/agent-runtime/tests/checks_agentrt.py"),
+    "src/quotagent/qa/checks_agentrt_lifecycle.py": (
+        "system/agent-runtime", "src/system/agent-runtime/tests/checks_agentrt_lifecycle.py"),
+    "src/quotagent/qa/checks_agentrt_memory.py": (
+        "system/agent-runtime", "src/system/agent-runtime/tests/checks_agentrt_memory.py"),
+    "src/quotagent/qa/checks_mail.py": (
+        "system/mail", "src/system/mail/tests/checks_mail.py"),
+    "src/quotagent/qa/checks_mail_transport.py": (
+        "system/mail", "src/system/mail/tests/checks_mail_transport.py"),
+    "src/quotagent/qa/checks_usreq.py": (
+        "system/repo-gate", "src/system/repo-gate/tests/checks_usreq.py"),
+    "src/quotagent/qa/checks_design.py": (
+        "system/repo-gate", "src/system/repo-gate/tests/checks_design.py"),
+    "src/quotagent/qa/checks_audit.py": (
+        "system/evidence", "src/system/evidence/tests/checks_audit.py"),
+    "src/quotagent/qa/checks_retention.py": (
+        "system/retention", "src/system/retention/tests/checks_retention.py"),
+    "src/quotagent/qa/checks_retention_exec.py": (
+        "system/retention", "src/system/retention/tests/checks_retention_exec.py"),
 }
 
 #: 平台级薄入口（27 §9 未决 3 + 阶段 5.2 的 `plugin.sh`）：不搬、留名。

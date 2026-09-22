@@ -106,15 +106,15 @@
 | `src/quotagent/__init__.py` | `src/system/runtime/__init__.py` |  |
 | `src/quotagent/bridge.py` | `src/system/kernel-bridge/bridge.py` |  |
 | `src/quotagent/g1side.py` | `src/system/repo-gate/g1side.py` |  |
-| `src/quotagent/kernel/__init__.py` | `src/system/kernel/__init__.py` |  |
-| `src/quotagent/kernel/canon.py` | `src/system/kernel/canon.py` |  |
-| `src/quotagent/kernel/delivery.py` | `src/system/kernel/delivery.py` |  |
-| `src/quotagent/kernel/events.py` | `src/system/kernel/events.py` |  |
-| `src/quotagent/kernel/evidence.py` | `src/system/kernel/evidence.py` |  |
-| `src/quotagent/kernel/ledger.py` | `src/system/kernel/ledger.py` |  |
-| `src/quotagent/kernel/modelgate.py` | `src/system/kernel/modelgate.py` |  |
-| `src/quotagent/kernel/plugin.py` | `src/system/kernel/plugin.py` |  |
-| `src/quotagent/kernel/qep.py` | `src/system/kernel/qep.py` |  |
+| `src/quotagent/kernel/__init__.py` | `src/system/kernel/code/__init__.py` |  |
+| `src/quotagent/kernel/canon.py` | `src/system/kernel/code/canon.py` |  |
+| `src/quotagent/kernel/delivery.py` | `src/system/kernel/code/delivery.py` |  |
+| `src/quotagent/kernel/events.py` | `src/system/kernel/code/events.py` |  |
+| `src/quotagent/kernel/evidence.py` | `src/system/kernel/code/evidence.py` |  |
+| `src/quotagent/kernel/ledger.py` | `src/system/kernel/code/ledger.py` |  |
+| `src/quotagent/kernel/modelgate.py` | `src/system/kernel/code/modelgate.py` |  |
+| `src/quotagent/kernel/plugin.py` | `src/system/kernel/code/plugin.py` |  |
+| `src/quotagent/kernel/qep.py` | `src/system/kernel/code/qep.py` |  |
 | `src/quotagent/paths.py` | `src/system/runtime/paths.py` |  |
 | `src/quotagent/qa/__init__.py` | `src/system/qa-runner/__init__.py` |  |
 | `src/quotagent/qa/__main__.py` | `src/system/qa-runner/__main__.py` |  |
@@ -287,7 +287,7 @@
 
 | 现路径模式 | 目标 | 说明 |
 |---|---|---|
-| `src/quotagent/kernel/<f>.py` | `src/system/kernel/<f>.py` | 内核冻结（ADR-0002），不随自进化改 |
+| `src/quotagent/kernel/<f>.py` | `src/system/kernel/code/<f>.py` | 内核冻结（ADR-0002），不随自进化改；旧路径留**薄重导**（阶段 5 第一小片，EV-173） |
 | `src/quotagent/services/<name>.py` | `src/{system|domain}/<plugin>/<name>.py` | 归属表：`norm/measures/realm/approval/mail(_transport)/relay/retention(_exec)/evaldata|evalmetrics|scenarios→eval/admin_blocks→admin` 为 system；`rfq/intake/compare/guard/costmodel/pricing/commitments/deviation/capacity/change/clarify/faq/negotiation/quotes/sync/terms/export` 为 domain |
 | `src/quotagent/qa/checks_*.py` | `src/{system|domain}/<plugin>/tests/checks_*.py` | 检查随被检查的插件搬家（47 个映射逐条写在脚手架里） |
 | `src/quotagent/qa/{__init__,__main__,registry}.py` | `src/system/qa-runner/` | AC 运行器（跨插件的运行入口） |
@@ -347,7 +347,7 @@
 ### 阶段 4.2 已搬的 10 个围栅门（`EV-172` / `T-321`）
 
 口径与上面 8 项相同：实体进 `src/<层>/<插件>/tests/`，旧位置 `host/` 只剩 5 行薄转发，`tools/verify.sh <门名>` 的**退出码与输出形状逐项对拍一致**（原始行见 `docs/work/evidence/EV-172-*`）。
-剩下的 10 个（`t260/t267/t268/t271/t275/t277/t279/t281/t282/t283`）**登记为下批**，仍在 `host/`。
+剩余的 10 个在续批里搬完，见下一节。
 
 | 资产（旧位置） | 归属插件 | 新位置 | 门名（行为搬前搬后一致） |
 |---|---|---|---|
@@ -361,6 +361,37 @@
 | `host/t287-rfq-visibility-gate.mjs` | `system/projection` | `src/system/projection/tests/t287-rfq-visibility-gate.mjs` | `tools/verify.sh rfq-deadline` |
 | `host/t285-rfq-deadline-gate.mjs` | `domain/rfq-deadline` | `src/domain/rfq-deadline/tests/t285-rfq-deadline-gate.mjs` | `tools/verify.sh quote-draft` |
 | `host/t284-authority-gate.mjs` | `domain/authority-band` | `src/domain/authority-band/tests/t284-authority-gate.mjs` | `tools/verify.sh rfq-visibility` |
+
+### 阶段 4.2 续批 + `qa` 检查搬家 + 阶段 5 第一小片（`EV-173` / `T-322`）
+
+口径与上面完全一样（`git mv` 实体 + 旧位置薄转发 + 门名/分支一行未改 + 逐项对拍）。本批三件：
+
+**① 剩下的 10 个围栅门**（`host/*-gate.mjs` 至此 **20/20 全部搬完**）：
+
+| 资产（旧位置） | 归属插件 | 新位置 |
+|---|---|---|
+| `host/t260-pipeline-gate.mjs` | `system/pipeline-view` | `src/system/pipeline-view/tests/t260-pipeline-gate.mjs` |
+| `host/t267-market-gate.mjs` | `system/market` | `src/system/market/tests/t267-market-gate.mjs` |
+| `host/t268-user-space-gate.mjs` | `system/user-plugin-manager` | `src/system/user-plugin-manager/tests/t268-user-space-gate.mjs` |
+| `host/t271-admin-gate.mjs` | `system/admin` | `src/system/admin/tests/t271-admin-gate.mjs` |
+| `host/t275-runtime-gate.mjs` | `system/agent-runtime` | `src/system/agent-runtime/tests/t275-runtime-gate.mjs` |
+| `host/t277-storage-gate.mjs` | `system/storage` | `src/system/storage/tests/t277-storage-gate.mjs` |
+| `host/t279-heuristics-gate.mjs` | `domain/bid-heuristics` | `src/domain/bid-heuristics/tests/t279-heuristics-gate.mjs` |
+| `host/t281-advice-gate.mjs` | `domain/advice` | `src/domain/advice/tests/t281-advice-gate.mjs` |
+| `host/t282-gate-timeline-gate.mjs` | `domain/gate-timeline` | `src/domain/gate-timeline/tests/t282-gate-timeline-gate.mjs` |
+| `host/t283-change-detail-gate.mjs` | `domain/gate-timeline` | `src/domain/gate-timeline/tests/t283-change-detail-gate.mjs` |
+
+**② 21 个 `qa` 检查**（`src/quotagent/qa/checks_*.py` → 各自插件的 `tests/`；`qa` 包的导入面靠
+`importlib` 薄转发保持不变，AC 注册与 `tools/verify.sh ac <AC>` 的入口一字未改）：
+`checks_admin` · `checks_adv` · `checks_gate` · `checks_uifb` · `checks_viz` · `checks_config` ·
+`checks_uxweb` · `checks_storage` · `checks_userplugin` · `checks_userplugin_versions` ·
+`checks_userplugin_elevate` · `checks_agentrt` · `checks_agentrt_lifecycle` · `checks_agentrt_memory` ·
+`checks_mail` · `checks_mail_transport` · `checks_usreq` · `checks_design` · `checks_audit` ·
+`checks_retention` · `checks_retention_exec`。
+
+**③ 阶段 5 的第一小片**：内核实体 `src/quotagent/kernel/**`（9 个 `.py`）搬进 `src/system/kernel/code/`，
+旧路径留**薄重导**（实体源码在 `quotagent.kernel` 的命名空间里执行 ⇒ `import quotagent.kernel.*` 与
+内核间相对导入一字不改）。内核**依然不可自改**（ADR-0002 / INV-010），唯一一份实现只在 `code/` 下。
 
 ### 全量分类表（144 行 = 77 + 20 + 47）
 
@@ -446,7 +477,7 @@
 | `tools/webui-serve.py` | `system/webui` | 插件·待搬 | `tools/` |
 | `tools/ws-integrate.py` | `system/runtime` | 插件·待搬 | `tools/` |
 
-### B. `host/*-gate.mjs`（20 个，其中阶段 4.2 已搬 10 + 待搬 10）
+### B. `host/*-gate.mjs`（20 个：**已全部搬** —— 阶段 4.2 前 10 个（EV-172）+ 续批 10 个（EV-173））
 
 | 资产 | 归属插件 | 分类 | 子目录 |
 |---|---|---|---|
@@ -455,51 +486,51 @@
 | `host/t250-approval-gate.mjs` | `system/approval` | 插件·已搬 | `tests/` |
 | `host/t250-budget-gate.mjs` | `system/budget-guard` | 插件·已搬 | `tests/` |
 | `host/t254-retention-view-gate.mjs` | `system/retention` | 插件·已搬 | `tests/` |
-| `host/t260-pipeline-gate.mjs` | `system/pipeline-view` | 插件·待搬 | `tests/` |
-| `host/t267-market-gate.mjs` | `system/market` | 插件·待搬 | `tests/` |
-| `host/t268-user-space-gate.mjs` | `system/user-plugin-manager` | 插件·待搬 | `tests/` |
-| `host/t271-admin-gate.mjs` | `system/admin` | 插件·待搬 | `tests/` |
-| `host/t275-runtime-gate.mjs` | `system/agent-runtime` | 插件·待搬 | `tests/` |
-| `host/t277-storage-gate.mjs` | `system/storage` | 插件·待搬 | `tests/` |
-| `host/t279-heuristics-gate.mjs` | `domain/bid-heuristics` | 插件·待搬 | `tests/` |
+| `host/t260-pipeline-gate.mjs` | `system/pipeline-view` | 插件·已搬 | `tests/` |
+| `host/t267-market-gate.mjs` | `system/market` | 插件·已搬 | `tests/` |
+| `host/t268-user-space-gate.mjs` | `system/user-plugin-manager` | 插件·已搬 | `tests/` |
+| `host/t271-admin-gate.mjs` | `system/admin` | 插件·已搬 | `tests/` |
+| `host/t275-runtime-gate.mjs` | `system/agent-runtime` | 插件·已搬 | `tests/` |
+| `host/t277-storage-gate.mjs` | `system/storage` | 插件·已搬 | `tests/` |
+| `host/t279-heuristics-gate.mjs` | `domain/bid-heuristics` | 插件·已搬 | `tests/` |
 | `host/t280-ui-feedback-gate.mjs` | `system/ui-feedback` | 插件·已搬 | `tests/` |
-| `host/t281-advice-gate.mjs` | `domain/advice` | 插件·待搬 | `tests/` |
-| `host/t282-gate-timeline-gate.mjs` | `domain/gate-timeline` | 插件·待搬 | `tests/` |
-| `host/t283-change-detail-gate.mjs` | `domain/gate-timeline` | 插件·待搬 | `tests/` |
+| `host/t281-advice-gate.mjs` | `domain/advice` | 插件·已搬 | `tests/` |
+| `host/t282-gate-timeline-gate.mjs` | `domain/gate-timeline` | 插件·已搬 | `tests/` |
+| `host/t283-change-detail-gate.mjs` | `domain/gate-timeline` | 插件·已搬 | `tests/` |
 | `host/t284-authority-gate.mjs` | `domain/authority-band` | 插件·已搬 | `tests/` |
 | `host/t285-rfq-deadline-gate.mjs` | `domain/rfq-deadline` | 插件·已搬 | `tests/` |
 | `host/t286-quote-draft-gate.mjs` | `domain/quote-prepare` | 插件·已搬 | `tests/` |
 | `host/t287-rfq-visibility-gate.mjs` | `system/projection` | 插件·已搬 | `tests/` |
 
-### C. `src/quotagent/qa/checks_*.py`（47 个，其中平台薄入口 0 + 本批已搬 1 + 待搬 46）
+### C. `src/quotagent/qa/checks_*.py`（47 个，其中平台薄入口 0 + 已搬 22（阶段 4.1 的 1 + 续批 21）+ 待搬 25）
 
 | 资产 | 归属插件 | 分类 | 子目录 |
 |---|---|---|---|
-| `src/quotagent/qa/checks_admin.py` | `system/admin` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_adv.py` | `domain/advice` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_agentrt.py` | `system/agent-runtime` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_agentrt_lifecycle.py` | `system/agent-runtime` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_agentrt_memory.py` | `system/agent-runtime` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_audit.py` | `system/evidence` | 插件·待搬 | `tests/` |
+| `src/quotagent/qa/checks_admin.py` | `system/admin` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_adv.py` | `domain/advice` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_agentrt.py` | `system/agent-runtime` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_agentrt_lifecycle.py` | `system/agent-runtime` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_agentrt_memory.py` | `system/agent-runtime` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_audit.py` | `system/evidence` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_award.py` | `domain/commitments` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_bridge.py` | `system/kernel-bridge` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_capacity.py` | `domain/capacity` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_change.py` | `domain/change` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_clarify.py` | `domain/clarify` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_compare.py` | `domain/compare` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_config.py` | `system/config` | 插件·待搬 | `tests/` |
+| `src/quotagent/qa/checks_config.py` | `system/config` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_cost.py` | `domain/costmodel` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_design.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
+| `src/quotagent/qa/checks_design.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_deviation.py` | `domain/deviation` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_eval.py` | `system/eval` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_events.py` | `system/kernel` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_export.py` | `domain/export` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_faq.py` | `domain/faq` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_gate.py` | `domain/gate-timeline` | 插件·待搬 | `tests/` |
+| `src/quotagent/qa/checks_gate.py` | `domain/gate-timeline` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_guard.py` | `domain/guard` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_intake.py` | `domain/intake` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_mail.py` | `system/mail` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_mail_transport.py` | `system/mail` | 插件·待搬 | `tests/` |
+| `src/quotagent/qa/checks_mail.py` | `system/mail` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_mail_transport.py` | `system/mail` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_negotiation.py` | `domain/negotiation` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_norm.py` | `system/norm` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_plugin.py` | `system/kernel` | 插件·待搬 | `tests/` |
@@ -507,21 +538,21 @@
 | `src/quotagent/qa/checks_qep.py` | `system/kernel` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_qprep.py` | `domain/quote-prepare` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_quotes.py` | `domain/quotes` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_retention.py` | `system/retention` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_retention_exec.py` | `system/retention` | 插件·待搬 | `tests/` |
+| `src/quotagent/qa/checks_retention.py` | `system/retention` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_retention_exec.py` | `system/retention` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_rfq.py` | `domain/rfq` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_runtime.py` | `system/runtime` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_storage.py` | `system/storage` | 插件·待搬 | `tests/` |
+| `src/quotagent/qa/checks_storage.py` | `system/storage` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_sync.py` | `domain/sync` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_terms.py` | `domain/terms` | 插件·待搬 | `tests/` |
 | `src/quotagent/qa/checks_ui_snapshot.py` | `system/webui` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_uifb.py` | `system/ui-feedback` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_userplugin.py` | `system/user-plugin-manager` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_userplugin_elevate.py` | `system/user-plugin-manager` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_userplugin_versions.py` | `system/user-plugin-manager` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_usreq.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_uxweb.py` | `system/webui` | 插件·待搬 | `tests/` |
-| `src/quotagent/qa/checks_viz.py` | `domain/bid-heuristics` | 插件·待搬 | `tests/` |
+| `src/quotagent/qa/checks_uifb.py` | `system/ui-feedback` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_userplugin.py` | `system/user-plugin-manager` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_userplugin_elevate.py` | `system/user-plugin-manager` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_userplugin_versions.py` | `system/user-plugin-manager` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_usreq.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_uxweb.py` | `system/webui` | 插件·已搬 | `tests/` |
+| `src/quotagent/qa/checks_viz.py` | `domain/bid-heuristics` | 插件·已搬 | `tests/` |
 
 > 说明 1：`tools/check-plugin-assets.py`（本节的机检门）、`tools/check-plugin-requirements.py`、`tools/check-run-once.py`
 > 与 `tools/netblock.c` 这 4 项**不在**本文件上面的逐文件映射表里（那是更早批次生成的）；本节把它们一并登记（归属按同一个口径判定）。

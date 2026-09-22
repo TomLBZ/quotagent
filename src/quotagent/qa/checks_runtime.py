@@ -193,8 +193,9 @@ def ac_runtime_001() -> list[Assertion]:
     # ADR-0013 §8：P0 的 34 条 AC 与文档门不因引入宿主而失去可复跑性 ——
     # P0 内核/服务/AC 不得引用 Node/cordis（宿主侧能力一律走桥，且桥是 P1 的 AC）。
     root = repo_root()
-    p0_files = sorted((root / "src/quotagent/kernel").glob("*.py")) \
-        + sorted((root / "src/quotagent/services").glob("*.py")) \
+    kernel_entity = sorted((root / "src/system/kernel/code").glob("*.py"))
+    kernel_files = kernel_entity + sorted((root / "src/quotagent/kernel").glob("*.py"))
+    p0_files = kernel_files + sorted((root / "src/quotagent/services").glob("*.py")) \
         + [root / "src/quotagent/paths.py"]
     offenders = []
     for path in p0_files:
@@ -203,7 +204,10 @@ def ac_runtime_001() -> list[Assertion]:
             if needle in text:
                 offenders.append(f"{path.name}:{needle}")
     out.append(Assertion("P0 内核与服务不依赖宿主运行时（无 node/cordis 引用；宿主机能力属 P1 的桥接 AC）",
-                         not offenders, "; ".join(offenders[:4]) or f"检查 {len(p0_files)} 个文件"))
+                         not offenders and len(kernel_entity) >= 8,
+                         "; ".join(offenders[:4]) or
+                         f"检查 {len(p0_files)} 个文件（内核 {len(kernel_files)}：实体 {len(kernel_entity)} + 薄重导 "
+                         f"{len(kernel_files) - len(kernel_entity)}）；扫描面非空转（实体目录 ≥8 个 .py）"))
 
     extra = _extra_files(copy, baseline)
     out.append(Assertion("运行产物只落在 .venv/ tmp/ __pycache__/（不污染仓库）", not extra,

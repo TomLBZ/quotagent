@@ -19,7 +19,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EVENTS_DOC = ROOT / "docs/design/05-events.md"
-EVENTS_MODULE = ROOT / "src/quotagent/kernel/events.py"
+EVENTS_MODULE = ROOT / "src/system/kernel/code/events.py"
+# 阶段 5（EV-173）：内核实体已搬到 `src/system/kernel/code/`，`src/quotagent/kernel/events.py` 只剩薄重导
+# （没有默认事件表可解析）⇒ 本门读**实体**那一份。判据（AST 取默认事件表 ↔ 文档表格双向）一字未改。
 
 MODES = ("emit", "serial", "bail", "parallel", "waterfall")
 PLANNED_MARK = "规划中"  # 文档里标了"规划中"的事件允许尚未登记（阶段未到），但一旦登记，模式必须一致

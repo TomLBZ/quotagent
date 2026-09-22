@@ -47,7 +47,7 @@ def main(argv: list[str]) -> int:
     required = ['host/lib/config.mjs', 'host/lib/schema.mjs', 'host/lib/frozen.mjs', 'host/lib/std-schema.mjs',
                 'host/lib/ledger-view.mjs', 'host/modules/webui.mjs', 'host/modules/index.mjs', 'host/modules/canary.mjs', 'host/canary.mjs',
                 'docs/design/adr/0016-self-evolution-artifact-surface.md', 'docs/design/adr/0017-canary-routing-and-auto-rollback.md',
-                'host/package-lock.json', 'src/quotagent/kernel/ledger.py']
+                'host/package-lock.json', 'src/system/kernel/code/ledger.py', 'src/quotagent/kernel/ledger.py']
     missing = [rel for rel in required if not (WORK / rel).exists()]
     print(f"[{'ok' if not missing else 'FAIL'}] 自足性：{len(required) - len(missing)}/{len(required)} 个必需文件在副本里"
           + (f"；缺 {missing}" if missing else ''))
