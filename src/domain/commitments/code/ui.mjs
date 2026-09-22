@@ -98,11 +98,19 @@ export async function register(surface, host) {
           '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(),
           '--intent-out', intentFile(), '--now', host.now()])
       const json = run.json ?? {}
+      // 唯一写者的 `next_action` 里偶尔提到走查脚本（`本脚本 --step confirm`）——产品界面不该教用户回终端，
+      // 这里换成**界面内**的下一步（写者原文仍留在 `result.writer_next_action` 里可查）。
+      const writerNext = asText(json.next_action)
+      const inAppNext = (writerNext && /本脚本|--step|PYTHONPATH/.test(writerNext))
+        ? '等供应商在 APP 里确认中标（供应商道「确认授标」/ 通知中心「去处理」）；'
+          + '确认 + 人工批准齐备后，在「授标链」行内点「授标承诺（人签）」'
+        : writerNext
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'proposed' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
-        next_action: json.refusal?.next_action ?? json.next_action ?? '看 stdout 定位唯一写者的拒绝原因',
+        next_action: json.refusal?.next_action ?? inAppNext ?? '看 stdout 定位唯一写者的拒绝原因',
         result: { intent_id: json.intent_id ?? null, applied: json.applied ?? [], envelope: json.envelope ?? null,
-          ledger_added: json.ledger_added ?? 0, duplicates: json.duplicates ?? [] } }
+          ledger_added: json.ledger_added ?? 0, duplicates: json.duplicates ?? [],
+          writer_next_action: writerNext || null } }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'award.commit', title: '授标承诺（人签）', views: ['contractor'],
@@ -127,7 +135,9 @@ export async function register(surface, host) {
       const json = run.json ?? {}
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'committed' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
-        next_action: json.refusal?.next_action ?? json.next_action ?? '看 stdout 定位唯一写者的拒绝原因',
+        next_action: json.refusal?.next_action
+          ?? (json.ok === true ? '已成立：' + (json.award_id ?? 'aw-…') + ' 已落账（授权人 = 你的会话身份）。下一步：在「授标链」行内点「发 PO（人签）」逐行派生采购单'
+            : (json.next_action ?? '看 result / stdout 定位唯一写者的输出（这条路才是失败）')),
         result: { award_id: json.award_id ?? null, approval_id: json.approval_id ?? null,
           applied: json.applied ?? [], ledger_added: json.ledger_added ?? 0, duplicates: json.duplicates ?? [] } }
     } }))
@@ -154,7 +164,9 @@ export async function register(surface, host) {
       const json = run.json ?? {}
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'issued' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
-        next_action: json.refusal?.next_action ?? json.next_action ?? '看 stdout 定位唯一写者的拒绝原因',
+        next_action: json.refusal?.next_action
+          ?? (json.ok === true ? '已签发：' + (json.po_id ?? 'po-…') + '（追溯模式 ' + (json.trace_mode ?? '—') + '）。下一步：点行内「追溯这条 PO」看四段链路，或把 PO 对象页深链发给供应商'
+            : (json.next_action ?? '看 result / stdout 定位唯一写者的输出（这条路才是失败）')),
         result: { po_id: json.po_id ?? null, award_id: json.award_id ?? null, chain: json.chain ?? null,
           trace_mode: json.trace_mode ?? null, total_amount: json.total_amount ?? null,
           applied: json.applied ?? [], ledger_added: json.ledger_added ?? 0 } }
@@ -207,7 +219,8 @@ export async function register(surface, host) {
     confirm: { required: true, message: '确认这份意向（不是承诺，但对方要凭它才能承诺）：确认？' },
     hint: '写自己账本 award/confirmed + 承包商账本一条同名登记（双向登记）',
     input: { fields: [
-      { name: 'intent_id', label: '意向 id', type: 'text', required: true, help: '从「发给我的授标意向」里复制' },
+      { name: 'intent_id', label: '意向 id', type: 'text', required: true,
+        help: '从「发给我的授标意向」里复制（或点通知中心那条「去处理」自动带上）' },
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
       { name: 'note', label: '备注', type: 'text' },
     ] },
@@ -221,7 +234,9 @@ export async function register(surface, host) {
       const json = run.json ?? {}
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'confirmed' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
-        next_action: json.refusal?.next_action ?? json.next_action ?? '看 stdout 定位唯一写者的拒绝原因',
+        next_action: json.refusal?.next_action
+          ?? (json.ok === true ? '已确认：对方侧（承包商）的「授标承诺」现在可以提交了（确认不等于承诺）。下一步回承包商侧的授标链看状态'
+            : (json.next_action ?? '看 result / stdout 定位唯一写者的输出（这条路才是失败）')),
         result: { intent_id: json.intent_id ?? null, applied: json.applied ?? [],
           ledger_added: json.ledger_added ?? 0, duplicates: json.duplicates ?? [] } }
     } }))
@@ -285,11 +300,30 @@ export async function register(surface, host) {
           body: `对象 ${item.ref} —— 承诺类动作没有人工批准就落不了账`,
           next_action: '在「授标与订单」里用对应的动作（人签）批准；或先看「审批与变更」页等多久' })
       }
-      for (const row of host.rows('supplier')) {
-        if (String(row?.type ?? '') !== 'award/intent-proposed') continue
-        items.push({ id: `intent:${bodyOf(row).intent_id}`, level: 'info', at: `${row.ts ?? ''}`,
-          title: `承包商提出了授标意向 ${bodyOf(row).intent_id ?? ''}`, body: '等你确认',
-          next_action: '在「发给我的授标意向」里确认（人签）' })
+      // 供应商侧「待确认中标」：读**授标意向信封**（与 award.inbox 面板同一来源；意向不在供应商账本里，
+      // 只通过信封投递 —— P3 走查实测：原来这里读的是供应商账本，导致供应商的通知中心里看不到"待你确认"）。
+      const realm = realmOf('supplier')
+      const envelope = host.readJson(intentFile())
+      const myQuotes = new Set(host.rows('supplier').filter((row) => String(row?.type ?? '') === 'quote/submitted')
+        .map((row) => asText(bodyOf(row).quote_id)))
+      const confirmedIds = new Set(host.rows('supplier').filter((row) => String(row?.type ?? '') === 'award/confirmed')
+        .map((row) => asText(bodyOf(row).intent_id)))
+      for (const item of (Array.isArray(envelope) ? envelope : [])) {
+        const intentId = asText(item.intent_id)
+        if (intentId === '' || confirmedIds.has(intentId)) continue
+        const delivered = (item.delivered_to ?? []).map(String)
+        // 可见性：**引用的报价是我提交过的那份**，或信封投递名单含我的 realm（与 clarify 侧同一口径；
+        // 只用 realm 匹配会在"信封 realm 与账本 realm 不一致"时漏掉应看到的意向）
+        const mineByQuote = asText(item.quote_id) !== '' && myQuotes.has(asText(item.quote_id))
+        const mineByRealm = delivered.length > 0 && realm !== '' && delivered.includes(realm)
+        if (!mineByQuote && !mineByRealm) continue
+        items.push({ id: `intent:${intentId}`, level: 'warn', at: '',
+          title: `承包商提出了授标意向 ${intentId}`,
+          body: `包 ${asText(item.package_id)} · ${(item.lines ?? []).length} 条目 · 等你确认（人签）`,
+          next_action: '点下面的按钮确认（署名 = 你的会话身份）',
+          action: 'award.confirm', preset: { intent_id: intentId },
+          ref: asText(item.quote_id) === '' ? null : { view: 'supplier', kind: 'quote',
+            id: asText(item.quote_id), title: `报价 ${asText(item.quote_id)}` } })
       }
       return items
     } }))

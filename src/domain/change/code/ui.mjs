@@ -385,7 +385,7 @@ export async function register(surface, host) {
       { name: 'change_id', label: '变更单 id', type: 'text', required: true, help: '从「变更单」表里复制' },
       { name: 'decision', label: '我的回应', type: 'select', options: ['accept', 'dispute'], default: 'accept' },
       { name: 'note', label: '理由（异议时必填）', type: 'textarea' },
-      { name: 'actor', label: '回应人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'actor', label: '回应人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
     ] },
     server: async (ctx, input) => {
       const decision = asText(input.decision) || 'accept'
@@ -412,7 +412,7 @@ export async function register(surface, host) {
       { name: 'item_id', label: '行项目', type: 'text', help: '批量（选中多行）时每行自带' },
       { name: 'new_qty', label: '新数量', type: 'number', min: 0, help: '批量时每行自带' },
       { name: 'reason', label: '原因（进变更正文）', type: 'text' },
-      { name: 'actor', label: '发言人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'actor', label: '发言人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
     ] },
     server: async (ctx, input) => {
       const rows = Array.isArray(input.rows) && input.rows.length ? input.rows : [input]
@@ -443,7 +443,7 @@ export async function register(surface, host) {
       { name: 'item_id', label: '行项目（新 rev 里的）', type: 'text', required: true },
       { name: 'unit_price_cents', label: '单价（整数分，预填旧价可改）', type: 'number', required: true, min: 1 },
       { name: 'lead_time_days', label: '交期（天）', type: 'number', required: true, min: 1 },
-      { name: 'prepared_by', label: '备报价人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'prepared_by', label: '备报价人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
       { name: 'currency', label: '币种', type: 'text', default: 'CNY' },
       { name: 'note', label: '备注（可选，只留 sha256 进账本）', type: 'textarea' },
     ] },
@@ -589,7 +589,8 @@ export async function register(surface, host) {
           title: `报价 ${quote.quote_id} 已被 rev${latest.rev} 作废`,
           body: `它基于 rev${basedOnRev(list, quote.submitted_at)}；新版数量：`
             + latest.items.map((item) => `${item.item_id}×${item.qty}`).join('、'),
-          next_action: '点「按最新 rev 重报」（预填 → 生成草稿 → 人签提交）' })
+          next_action: '点「按最新 rev 重报」（预填 → 生成草稿 → 人签提交）',
+          ref: { view: 'supplier', kind: 'quote', id: String(quote.quote_id), title: `报价 ${quote.quote_id}` } })
       }
       return items
     } }))

@@ -95,6 +95,8 @@ export async function register(surface, host) {
   out.push(surface.panel({ plugin_id: me, id: 'rfq.responses', title: '收到的报价（本侧登记行）',
     view: 'contractor', order: 20, kind: 'table',
     actions: ['compare.rank', 'award.propose'],
+    hint: '每一行 = 一条（报价 × 行项目）登记；行内「提出授标意向」把这一行的包/报价/条目/数量/单价带进表单'
+      + '（数量取自包事实 —— 缺量就会被唯一写者按 line-qty-invalid 拒）',
     data: () => {
       const rows = rowsOfType(host.rows('contractor'), 'quote/submitted').map((row) => bodyOf(row))
       if (!rows.length) {
@@ -102,16 +104,32 @@ export async function register(surface, host) {
           next_action: '等供应商在 APP 里备报价并**人签提交**（提交会同时在本侧登记一条）',
           columns: [{ key: 'quote_id', label: '报价' }], rows: [] }
       }
+      const qtyIndex = itemQtyIndex(host.rows('contractor'))
+      const table = rows.map((row) => {
+        const quoteId = asText(row.quote_id)
+        const packageId = asText(row.package_id)
+        const itemId = asText(row.item_id)
+        const known = qtyIndex.get(`${packageId}#${itemId}`) ?? null
+        return { id: `${quoteId}#${itemId}`, quote_id: quoteId, supplier: row.supplier ?? '',
+          package_id: packageId, item_id: itemId, qty: known ? known.qty : null, unit: known ? known.unit : '',
+          qty_source: known ? known.source : '（包事实里读不到这一条的量）',
+          unit_price_cents: row.unit_price_cents, lead_time_days: row.lead_time_days,
+          submitted_at: row.submitted_at,
+          ref: { kind: 'quote', id: quoteId, title: `报价 ${quoteId}` } }
+      })
+      const missing = table.filter((row) => row.qty === null).length
       return { ok: true, kind: 'table',
         columns: [{ key: 'quote_id', label: '报价', type: 'code' }, { key: 'supplier', label: '供应商' },
-          { key: 'item_id', label: '行项目', type: 'code' }, { key: 'unit_price_cents', label: '单价（整数分）' },
-          { key: 'lead_time_days', label: '交期（天）' }, { key: 'submitted_at', label: '提交时刻' }],
-        rows: rows.map((row) => ({ id: row.quote_id, quote_id: row.quote_id, supplier: row.supplier ?? '',
-          package_id: row.package_id ?? '', item_id: row.item_id, unit_price_cents: row.unit_price_cents,
-          lead_time_days: row.lead_time_days, submitted_at: row.submitted_at,
-          ref: { kind: 'quote', id: asText(row.quote_id), title: `报价 ${asText(row.quote_id)}` } })),
-        bulk: 'compare.rank',
-        counts: { quotes: rows.length } }
+          { key: 'item_id', label: '行项目', type: 'code' }, { key: 'qty', label: '数量（来自包事实）' },
+          { key: 'unit', label: '单位' }, { key: 'unit_price_cents', label: '单价（整数分）' },
+          { key: 'lead_time_days', label: '交期（天）' }, { key: 'submitted_at', label: '提交时刻' },
+          { key: 'qty_source', label: '量的来源' }],
+        rows: table, bulk: 'compare.rank',
+        counts: { quotes: rows.length, lines: table.length, qty_known: table.length - missing },
+        note: '数量取自**包事实**（发布事实 / 投递快照的 `spec.items`，并按 `rfq/amended` 取最新一版）：'
+          + '行内「提出授标意向」用它把行项目补齐（量 + 整数分单价）—— 意向不产生义务，可撤回。'
+          + (missing ? ` 有 ${missing} 行读不到量（数量列显示「—」）：现在提意向会被唯一写者按 \`line-qty-invalid\` 拒，`
+            + '先在「包的行项目」里把这一包的条目补上（或让供应商按最新一版重报）。' : '') }
     } }))
 
   // ---- 工作台（首屏「我今天要做什么」）----------------------------------------------------------
@@ -220,7 +238,7 @@ export async function register(surface, host) {
       { name: 'invited', label: '邀请对象（逗号分隔的 realm）', type: 'text', required: true,
         help: '例：supplier:g1' },
       { name: 'note', label: '备注（可选；只留 sha256 进待办件）', type: 'textarea' },
-      { name: 'actor', label: '发言人', type: 'text', required: true, help: 'human:<你的名字>（发包也要有人认领）' },
+      { name: 'actor', label: '发言人', type: 'text', required: true, identity: true, help: 'human:<你的名字>（发包也要有人认领）' },
     ] },
     server: async (ctx, input) => {
       const parsed = parseItems(input.items)
@@ -278,7 +296,9 @@ export async function register(surface, host) {
         items.push({ id: `rfq:${row.package_id}`, level: 'info', at: String(row.ts ?? ''),
           title: `包 ${row.package_id} 已发布（rev${row.rev}）`,
           body: `报价截止 ${row.quote_by ?? '—'}；条目 ${row.items ?? '—'}`,
-          next_action: '等回应；催报见「回文时限」页' })
+          next_action: '等回应；催报见「回文时限」页',
+          ref: { view: 'contractor', kind: 'package', id: String(row.package_id),
+            title: `包 ${row.package_id}` } })
       }
       if (!quotes.length && published.length) {
         items.push({ id: 'rfq:no-quotes', level: 'warn', at: '',
@@ -317,6 +337,67 @@ export async function register(surface, host) {
       if (data) return data
     }
     return null
+  }
+
+  /**
+   * **包的行项目量目录**（`"<包>#<条目>" → {qty, unit, source}`）：给「收到的报价」表带出 `qty`，
+   * 使「从这一行提授标意向」这条链能真走通（唯一写者 `commitment-apply.py --step propose` 要求行项目
+   * 逐条给量 + 整数分单价，缺量就会被**有名拒绝** `line-qty-invalid`）。
+   *
+   * 量的来源只取**本侧事实与投递快照**（不编数据、不猜）：
+   *   ① `rfq/published` 的 `items` 是数组时（新写者）直接用；
+   *   ② 投递信封（`--rfq-delivery` 那一份，本侧收到的）里的 `spec.items`；
+   *   ③ 逐版快照文件 `<ui_shared>/contractor/rfq-<包>-rev<n>.json` 的 `spec.items`（①③ 都缺时的兜底）；
+   *   ④ 最后按 `rfq/amended` 的 `deltas`（`field=qty`）覆盖 —— **最新一版为准**（升版改量的包不会拿旧量去授标）。
+   * 读不到量 ⇒ 该行 `qty` 为 `null`（面板如实标「—」并说明会被谁拒），绝不填一个假数量。
+   */
+  const itemQtyIndex = (rows) => {
+    const index = new Map()
+    const key = (packageId, itemId) => `${packageId}#${itemId}`
+    const put = (packageId, item, source) => {
+      const itemId = asText(item?.item_id)
+      const qty = Number(item?.qty)
+      if (packageId === '' || itemId === '' || !Number.isFinite(qty)) return
+      index.set(key(packageId, itemId), { qty, unit: asText(item?.unit), source })
+    }
+    const packages = new Set()
+    for (const row of rowsOfType(rows, 'rfq/published')) {
+      const body = bodyOf(row)
+      const packageId = asText(body.package_id)
+      if (packageId === '') continue
+      packages.add(packageId)
+      for (const item of (Array.isArray(body.items) ? body.items : [])) put(packageId, item, 'rfq/published')
+    }
+    const delivery = asText(host.config?.rfq_delivery)
+    if (delivery !== '') {
+      const raw = host.readJson(delivery)
+      for (const envelope of (Array.isArray(raw) ? raw : (raw ? [raw] : []))) {
+        const spec = envelope && typeof envelope.spec === 'object' && envelope.spec !== null ? envelope.spec : {}
+        const packageId = asText(spec.package_id)
+        for (const item of (Array.isArray(spec.items) ? spec.items : [])) put(packageId, item, 'delivery-envelope')
+      }
+    }
+    for (const packageId of packages) {
+      const snapshot = snapshotOfPackage(packageId)
+      const items = snapshot && typeof snapshot.spec === 'object' && snapshot.spec !== null
+        && Array.isArray(snapshot.spec.items) ? snapshot.spec.items : []
+      for (const item of items) {
+        if (!index.has(key(packageId, asText(item?.item_id)))) put(packageId, item, 'rfq-snapshot')
+      }
+    }
+    for (const row of rowsOfType(rows, 'rfq/amended')) {
+      const body = bodyOf(row)
+      const packageId = asText(body.package_id)
+      for (const delta of (Array.isArray(body.deltas) ? body.deltas : [])) {
+        if (asText(delta?.field) !== 'qty') continue
+        const itemId = asText(delta?.item_id)
+        const qty = Number(delta?.after)
+        if (itemId === '' || !Number.isFinite(qty)) continue
+        const previous = index.get(key(packageId, itemId)) ?? { unit: '' }
+        index.set(key(packageId, itemId), { qty, unit: previous.unit, source: 'rfq/amended' })
+      }
+    }
+    return index
   }
   const remindNotices = () => {
     const data = host.readJson(`${host.sharedDir}/exchange/reminders.json`)
@@ -509,7 +590,10 @@ export async function register(surface, host) {
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'clarify.mine', title: '我的澄清（我提的问题与答复）',
-    view: 'supplier', order: 50, kind: 'table', actions: ['clarify.ask', 'clarify.broadcast'],
+    view: 'supplier', order: 50, kind: 'table',
+    // 入口归属 `domain/clarify`（本文件不再注册「提问澄清」这个动作 —— 见下面的合并说明）：
+    // 这里的 `actions` 指的是**那个**动作，避免出现"引用了不存在的动作"的空按钮。
+    actions: ['exchange.ask', 'clarify.broadcast'],
     data: () => {
       const rowList = host.rows('supplier')
       const tickets = ticketsOf(rowList)
@@ -531,35 +615,11 @@ export async function register(surface, host) {
         note: '答复在承包商侧「回答」并「广播」之后全员可见；未广播前只有提问方看得见' }
     } }))
 
-  out.push(surface.action({ plugin_id: me, id: 'clarify.ask', title: '提问澄清（绑定版本与条目）',
-    views: ['supplier'], group: '澄清', order: 5, permission: 'human-signature',
-    confirm: { required: true, message: '提问会落账并让对方看到：确认以你的署名提问？' },
-    hint: '必须给包版本（rev）与 ≥1 个条目引用（FR-CLARIFY-001）；问题 ≤500 字',
-    input: { fields: [
-      { name: 'package_id', label: '包 id', type: 'text', required: true },
-      { name: 'rfq_rev', label: '包版本 rev', type: 'number', required: true, min: 1, default: 1 },
-      { name: 'item_ids', label: '引用条目（逗号分隔，至少 1 个）', type: 'text', required: true,
-        help: '如 L-001,L-002' },
-      { name: 'question', label: '问题（≤500 字）', type: 'textarea', required: true },
-      { name: 'signature', label: '提问人（人签）', type: 'signature', required: true },
-    ] },
-    server: async (ctx, input) => {
-      const itemIds = String(input.item_ids ?? '').split(/[,\s]+/).map((item) => item.trim()).filter(Boolean)
-      const question = String(input.question ?? '')
-      const staged = host.stage('clarify-apply', { kind: 'clarify-apply', action: 'ask', view: 'supplier',
-        package_id: asText(input.package_id), rfq_rev: Number(input.rfq_rev ?? 1), item_ids: itemIds,
-        actor: asText(input.signature), note: question })
-      if (!staged.ok) return staged
-      const run = host.runPython(clarifyTool, ['--step', 'ask', '--request', staged.path, '--view', 'supplier',
-        '--ui-shared', host.sharedDir, '--ledger-contractor', asText(host.config?.ledger_contractor),
-        '--ledger-supplier', asText(host.config?.ledger_supplier), '--now', host.now()])
-      const json = run.json ?? {}
-      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'asked' : 'writer-failed'),
-        reason: json.refusal?.reason ?? run.reason ?? '',
-        next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '看 result 里的工单号与双向登记',
-        result: { pending: staged.file, ticket_id: json.ticket_id ?? null, applied: json.applied ?? [],
-          ledger_added: json.ledger_added ?? 0, counterpart_notice: json.counterpart_notice ?? null } }
-    } }))
+  // 供应商侧的「提问澄清」入口**归 `domain/clarify`**（澄清域的主人：它拥有 `clarify.py` / `clarify-apply.py` /
+  // 「我的澄清工单」问答串面板）。本插件原先也注册了一个同名入口（`clarify.ask`），与 `domain/clarify` 的
+  // `exchange.ask` 在供应商工具栏上**并排出现两个「提问澄清」**（跨插件重复）⇒ 用户不知道该点哪个。
+  // 本批按「一个入口 + 明确归属」合并：**删掉本文件的 `clarify.ask`，保留 `domain/clarify#exchange.ask`**；
+  // 承包商侧的队列/回答/广播/关闭仍在本文件（它们是本视角的写动作，依赖 `rfq-clarify-apply.py`）。
 
   out.push(surface.action({ plugin_id: me, id: 'clarify.answer', title: '回答澄清（人签）',
     views: ['contractor'], group: '澄清', order: 10, permission: 'human-signature', inline: true,
@@ -656,6 +716,169 @@ export async function register(surface, host) {
       }
       return items
     } }))
+
+  // ------------------------------------------------------------------ ⑷ 按 id / 关键字找对象（本批新增）
+  // 用户诉求：手里有一个 id（或只记得一个关键字）时，**不用回终端、也不用一个个页面翻**：一个入口能搜
+  // 包 / 报价 / PO / 变更单，结果给**可点、可复制的深链**。
+  // 走**注册面**（面板 + 动作 + 对象深链 + 机制级便签），外壳机制一行未改：
+  //   · 动作 `find.object` 的**服务端一半**做检索，并把这一组关键词记进机制级便签（`host.note`）；
+  //   · 面板 `find.results-<view>`（`object_kind: 'find'`）按 `ctx.route.id`（可分享的深链）或便签渲染结果；
+  //   · 每行带 `ref` ⇒ 外壳把它渲染成可点、可复制的深链（跳到对应对象页）。
+  // 检索面只读**本视角的行**（`host.rows(view)`）：跨 realm 的对象在本视角根本不存在（规则 4），
+  // 且只对**本视图声明过的对象类**给链接（没声明的类如实标注"不可打开"，不给死链）。
+  const FIND_SOURCES = [
+    { kind: 'package', types: ['rfq/published', 'rfq/amended', 'rfq/distributed'],
+      id: (body) => asText(body.package_id),
+      title: (body, id) => `包 ${id}${body.rev === undefined || body.rev === null ? '' : ` rev${body.rev}`}`,
+      summary: (body) => [asText(body.subject),
+        asText(body.quote_by) ? `报价截止 ${asText(body.quote_by)}` : '',
+        (body.items !== undefined && body.items !== null && !Array.isArray(body.items)) ? `条目 ${body.items}` : '',
+        (body.spec && Array.isArray(body.spec.items)) ? `条目 ${body.spec.items.length}` : '']
+        .filter(Boolean).join(' · ') },
+    { kind: 'quote', types: ['quote/submitted'],
+      id: (body) => asText(body.quote_id),
+      title: (body, id) => `报价 ${id}`,
+      summary: (body) => [asText(body.supplier), asText(body.item_id),
+        body.unit_price_cents === undefined || body.unit_price_cents === null ? '' : `${body.unit_price_cents} 分`,
+        Array.isArray(body.lines) ? `${body.lines.length} 行` : '',
+        asText(body.package_id) ? `包 ${asText(body.package_id)}` : ''].filter(Boolean).join(' · ') },
+    { kind: 'award', types: ['award/intent-proposed', 'award/committed'],
+      id: (body) => asText(body.award_id) || asText(body.intent_id),
+      title: (body, id) => (asText(body.award_id) ? `授标承诺 ${id}` : `授标意向 ${id}`),
+      summary: (body) => [asText(body.package_id) ? `包 ${asText(body.package_id)}` : '',
+        asText(body.quote_id) ? `报价 ${asText(body.quote_id)}` : '',
+        Array.isArray(body.lines) ? `条目 ${body.lines.length}` : ''].filter(Boolean).join(' · ') },
+    { kind: 'po', types: ['po/issued', 'po/confirmed'],
+      id: (body) => asText(body.po_id),
+      title: (body, id) => `PO ${id}`,
+      summary: (body) => [asText(body.award_id) ? `授标 ${asText(body.award_id)}` : '',
+        Array.isArray(body.lines) ? `行 ${body.lines.length}` : '', asText(body.trace_mode)].filter(Boolean).join(' · ') },
+    { kind: 'change', types: ['change/proposed', 'change/priced', 'change/responded', 'change/approved', 'change/rejected'],
+      id: (body) => asText(body.change_id),
+      title: (body, id) => `变更 ${id}`,
+      summary: (body) => [asText(body.quote_id) ? `报价 ${asText(body.quote_id)}` : '',
+        asText(body.approved_by) ? `批准 ${asText(body.approved_by)}` : '',
+        body.delta_amount === undefined || body.delta_amount === null ? '' : `差额 ${body.delta_amount}`]
+        .filter(Boolean).join(' · ') },
+  ]
+
+  /** 检索（纯读本视角的行）：命中 id / 标题 / 摘要里的关键字；同一对象的多条事实合并成一条。 */
+  const findObjects = (view, query, limit) => {
+    const needle = String(query ?? '').trim().toLowerCase()
+    const allowed = new Set(surface.objectKindsFor(view))
+    const found = new Map()
+    if (needle !== '') {
+      for (const row of host.rows(view)) {
+        const type = String(row?.type ?? '')
+        for (const source of FIND_SOURCES) {
+          if (!source.types.includes(type)) continue
+          const body = bodyOf(row)
+          const id = source.id(body)
+          if (id === '') continue
+          const title = source.title(body, id)
+          const summary = source.summary(body)
+          if (!`${id} ${title} ${summary}`.toLowerCase().includes(needle)) continue
+          const key = `${source.kind}\u0000${id}`
+          const previous = found.get(key)
+          if (previous === undefined) {
+            found.set(key, { kind: source.kind, id, title, summary, facts: [type] })
+            continue
+          }
+          if (title.length > previous.title.length) previous.title = title      // 标题取更具体的那条事实
+          if (summary !== '' && !previous.summary.includes(summary)) {
+            previous.summary = [previous.summary, summary].filter(Boolean).join(' / ')
+          }
+          if (!previous.facts.includes(type)) previous.facts.push(type)
+        }
+      }
+    }
+    const ordered = [...found.values()].sort((left, right) => (left.kind < right.kind ? -1
+      : (left.kind > right.kind ? 1 : (left.id < right.id ? -1 : 1))))
+    const size = Math.max(1, Math.min(50, Number(limit) || 10))
+    return { matches: ordered.slice(0, size), total: ordered.length, kinds: [...allowed].sort() }
+  }
+
+  /** 结果面板（每个视角注册两块，同一份 data()）：
+   *   · `find.inline-<view>`：**视图页**上的结果区（无 `object_kind`）—— 搜完立刻看得见，不用跳页；
+   *   · `find.results-<view>`：**对象页**上的同一份结果（`object_kind: 'find'`）—— 它就是可分享的深链
+   *     `/app/<view>/find/<关键字>/`，也是命令面板里「打开对象类：find」的落点。
+   *  注册面按 (kind, plugin_id, id) 去重 ⇒ 两块面板 id 必须不同。 */
+  const findPanel = (view, { objectKind = '' } = {}) => surface.panel({ plugin_id: me,
+    id: objectKind === '' ? `find.inline-${view}` : `find.results-${view}`,
+    title: '查找结果（包 / 报价 / PO / 变更）', view, order: 5, kind: 'table',
+    ...(objectKind === '' ? {} : { object_kind: objectKind }),
+    actions: ['find.object'],
+    hint: '按 id 前缀（pkg- / qg- / po- / chg-）或关键字搜本视角的对象；每行给可点、可复制的深链',
+    data: (ctx) => {
+      const fromRoute = asText(ctx?.route?.id)
+      const query = fromRoute !== '' ? fromRoute : asText(host.note.get(me, 'find.query', ''))
+      const result = findObjects(view, query, host.note.get(me, 'find.limit', 10))
+      const columns = [{ key: 'kind', label: '类' }, { key: 'object_id', label: 'id', type: 'code' },
+        { key: 'title', label: '是什么' }, { key: 'summary', label: '细节' },
+        { key: 'facts', label: '来自哪些事实' }, { key: 'deep_link', label: '深链（可复制）', type: 'code' }]
+      if (query === '') {
+        return { ok: true, kind: 'table', degraded: true, reason: 'no-query', columns, rows: [],
+          next_action: '用工具栏 / 命令面板的「按 id / 关键字找对象」搜一次；'
+            + `或直接开深链 ${host.prefix}/app/${view}/find/<关键字>/` }
+      }
+      const rows = result.matches.map((item) => {
+        const openable = result.kinds.includes(item.kind)
+        return { id: `${item.kind}:${item.id}`, kind: item.kind, object_id: item.id, title: item.title,
+          summary: item.summary, facts: item.facts.join(' + '),
+          deep_link: openable ? `${host.prefix}/app/${view}/${item.kind}/${encodeURIComponent(item.id)}/` : '（这一类在本视图不可打开）',
+          ref: openable ? { kind: item.kind, id: item.id, title: item.title } : null }
+      })
+      if (!rows.length) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'no-match', columns, rows: [],
+          next_action: `「${query}」在本视角（${view}）的行里没有匹配：换个关键字，或确认这个对象是不是别的视角/别的 realm 的`
+            + `（可达的对象类：${result.kinds.join(' / ') || '（无）'}）` }
+      }
+      return { ok: true, kind: 'table', columns, rows,
+        counts: { matched: result.total, shown: rows.length },
+        note: `关键词「${query}」· 深链可直接发给同事（对方视角打开只会在**它自己**的投影里找，找不到就如实未命中）`
+          + ` · 本视图可打开的对象类：${result.kinds.join(' / ') || '（无）'}` }
+    } })
+
+  out.push(findPanel('contractor'))
+  out.push(findPanel('supplier'))
+  out.push(findPanel('contractor', { objectKind: 'find' }))
+  out.push(findPanel('supplier', { objectKind: 'find' }))
+
+  out.push(surface.action({ plugin_id: me, id: 'find.object',
+    title: '按 id / 关键字找对象（包 · 报价 · PO · 变更）',
+    views: ['contractor', 'supplier'], group: '查找', order: 1, placement: ['toolbar', 'command'],
+    hint: '一个入口搜本视角的包 / 报价 / PO / 变更单：结果里有可点、可复制的深链（不用一个个页面翻）',
+    input: { fields: [
+      { name: 'query', label: 'id 或关键字', type: 'text', required: true,
+        help: '例：pkg-g1 · qg-fresh · po-0001 · chg-0001 · L-001' },
+      { name: 'limit', label: '最多几条', type: 'number', min: 1, max: 50, default: 10 },
+    ] },
+    server: async (ctx, input) => {
+      const view = ['contractor', 'supplier'].includes(asText(ctx?.view)) ? asText(ctx.view) : 'contractor'
+      const query = asText(input.query)
+      if (query === '') {
+        return { ok: false, code: 'query-required', reason: '空关键字：一个 id 或一个词都行，但不能空着搜',
+          next_action: '写一个 id（如 pkg-g1）或一个关键字（如 chg）再搜' }
+      }
+      const limit = Math.max(1, Math.min(50, Number(input.limit) || 10))
+      const result = findObjects(view, query, limit)
+      // 机制级便签：结果面板随后按它渲染（纯内存、不落盘、不进账本；卸载插件时清空）
+      host.note.set(me, 'find.query', query)
+      host.note.set(me, 'find.limit', limit)
+      const deepLink = `${host.prefix}/app/${view}/find/${encodeURIComponent(query)}/`
+      return { ok: true, code: result.total ? 'found' : 'no-match',
+        reason: result.total ? `匹配 ${result.total} 条（本视图可打开：${result.kinds.join(' / ') || '（无）'}）`
+          : `「${query}」在本视角的行里没有匹配`,
+        next_action: `结果在「查找结果」面板里逐行可点；这条搜索的深链可复制分享：${deepLink}`,
+        result: { view, query, total: result.total,
+          matches: result.matches.map((item) => ({ kind: item.kind, id: item.id, title: item.title,
+            deep_link: result.kinds.includes(item.kind)
+              ? `${host.prefix}/app/${view}/${item.kind}/${encodeURIComponent(item.id)}/` : null })),
+          ref: { view, kind: 'find', id: query, title: `查找「${query}」` } } }
+    } }))
+
+  out.push(surface.shortcut({ plugin_id: me, id: 'shortcut.find', keys: 'f', action: 'find.object',
+    title: '按 id / 关键字找对象', order: 5 }))
 
   return out
 }

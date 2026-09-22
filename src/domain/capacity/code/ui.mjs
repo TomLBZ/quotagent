@@ -201,7 +201,7 @@ export async function register(surface, host) {
     input: { fields: [
       { name: 'days_text', label: '日历（每行：YYYY-MM-DD=可用量）', type: 'textarea', required: true,
         help: '例：2026-10-01=12\\n2026-10-02=10\\n2026-10-03=8' },
-      { name: 'actor', label: '发言人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'actor', label: '发言人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
       { name: 'note', label: '备注（可选）', type: 'textarea' },
     ] },
     server: async (ctx, input) => {
@@ -247,7 +247,7 @@ export async function register(surface, host) {
       { name: 'start_date', label: '开工日（YYYY-MM-DD）', type: 'text', required: true,
         pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
       { name: 'binding', label: '绑定性质', type: 'select', options: ['indicative', 'firm'], default: 'indicative' },
-      { name: 'actor', label: '承诺人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'actor', label: '承诺人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
       { name: 'note', label: '备注（可选）', type: 'textarea' },
     ] },
     server: async (ctx, input) => {
@@ -268,7 +268,7 @@ export async function register(surface, host) {
       { name: 'commitment_id', label: '承诺 id', type: 'text', required: true, help: '从「我的承诺交期」里复制' },
       { name: 'delivery_date', label: '新交期日（YYYY-MM-DD）', type: 'text', required: true,
         pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
-      { name: 'actor', label: '改期人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'actor', label: '改期人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
       { name: 'note', label: '改期原因（可选）', type: 'textarea' },
     ] },
     server: async (ctx, input) => {

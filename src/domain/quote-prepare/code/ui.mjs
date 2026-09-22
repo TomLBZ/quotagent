@@ -96,11 +96,12 @@ export async function register(surface, host) {
         .map((row) => [asText(bodyOf(row).item_id), bodyOf(row)]))
       return { ok: true, kind: 'table',
         columns: [
-          { key: 'item_id', label: '行项目', type: 'code' },
+          { key: 'item_id', label: '行项目', type: 'code', pin: 'left' },
           { key: 'description', label: '描述' },
           { key: 'qty', label: '数量' },
           { key: 'unit', label: '单位' },
-          { key: 'unit_price_cents', label: '单价（整数分，可直接改）', editable: true, type: 'number' },
+          { key: 'unit_price_cents', label: '单价（整数分，可直接改）', editable: true, type: 'number',
+            line_total_of: 'qty', help: '8600 = 86.00 元' },
           { key: 'lead_time_days', label: '交期（天，可直接改）', editable: true, type: 'number' },
           { key: 'draft', label: '已备草稿' },
         ],
@@ -111,6 +112,9 @@ export async function register(surface, host) {
             unit_price_cents: draft?.unit_price_cents ?? '', lead_time_days: draft?.lead_time_days ?? '',
             draft: draft ? `${draft.quote_draft_id}（待签署）` : '' }
         }),
+        // 实时小计（外壳在编辑时立刻重算：Σ 单价×数量）；Tab/Enter 走格、Esc 还原、Ctrl+Enter 提交
+        totals: [{ label: '报价小计（整数分）', key: 'unit_price_cents', factor: 'qty', unit: '分' },
+          { label: '已填条数', key: 'unit_price_cents', count: true, skip_empty: true }],
         editable_action: 'quote.draft',
         editable_defaults: { rfq_id: String(spec.package_id ?? ''), currency: String(spec.currency ?? 'CNY'),
           prepared_by: '' },
@@ -119,7 +123,8 @@ export async function register(surface, host) {
           title: `包 ${spec.package_id} rev${envelope.rev ?? '—'}` } : null,
         counts: { items: items.length, rev: envelope.rev },
         note: `包 ${spec.package_id ?? '—'} rev${envelope.rev ?? '—'} · 报价截止 ${(spec.deadlines ?? {}).quote_by ?? '—'}`
-          + ` · 报价一律**整数分**（8600 = 86.00）；改完单价/交期后点「备这份草稿」（可逐条，也可批量）`
+          + ` · 报价一律**整数分**（8600 = 86.00）；改单价时右边实时算"×量 = 行合计"，底部编辑栏给小计`
+          + ` · 键盘：Tab 走格 / Enter 走同列下一行 / Esc 还原 / Ctrl+Enter 提交 —— 备多行报价不用鼠标`
           + ` · 标题旁的「打开对象 →」是这个包的深链（可复制分享、刷新不丢）` }
     } }))
 
@@ -155,9 +160,10 @@ export async function register(surface, host) {
             { key: '已备草稿', value: `${drafts.size} / ${items.length}` },
           ], links: [] },
         columns: [
-          { key: 'item_id', label: '行项目', type: 'code' }, { key: 'description', label: '描述' },
+          { key: 'item_id', label: '行项目', type: 'code', pin: 'left' }, { key: 'description', label: '描述' },
           { key: 'qty', label: '数量' }, { key: 'unit', label: '单位' },
-          { key: 'unit_price_cents', label: '单价（整数分，可直接改）', editable: true, type: 'number' },
+          { key: 'unit_price_cents', label: '单价（整数分，可直接改）', editable: true, type: 'number',
+            line_total_of: 'qty', help: '8600 = 86.00 元' },
           { key: 'lead_time_days', label: '交期（天，可直接改）', editable: true, type: 'number' },
           { key: 'draft', label: '已备草稿' },
         ],
@@ -168,6 +174,8 @@ export async function register(surface, host) {
             unit_price_cents: draft?.unit_price_cents ?? '', lead_time_days: draft?.lead_time_days ?? '',
             draft: draft ? `${draft.quote_draft_id}（待签署）` : '' }
         }),
+        totals: [{ label: '报价小计（整数分）', key: 'unit_price_cents', factor: 'qty', unit: '分' },
+          { label: '已填条数', key: 'unit_price_cents', count: true, skip_empty: true }],
         editable_action: 'quote.draft',
         editable_defaults: { rfq_id: packageId, currency: String(spec.currency ?? 'CNY'),
           prepared_by: '' },
@@ -317,7 +325,8 @@ export async function register(surface, host) {
           min: LIMITS.lead_time_days_min, max: LIMITS.lead_time_days_max,
           help: '批量时每行自带（单条提交时必填）' },
         { name: 'currency', label: '币种', type: 'text', default: 'CNY' },
-        { name: 'prepared_by', label: '发言人', type: 'text', required: true, help: 'human:<你的名字>' },
+        { name: 'prepared_by', label: '发言人', type: 'text', required: true, identity: true,
+          help: 'human:<你的名字>（登录后会按会话身份自动填）' },
         { name: 'note', label: '备注（可选）', type: 'textarea' },
       ] },
     hint: '草稿是**非签名动作**：它只表示"报价已准备好"，不产生对外义务；签名提交另一步（人签）',
@@ -435,7 +444,10 @@ export async function register(surface, host) {
         if (signed.has(id)) continue
         items.push({ id: `q:pending:${id}`, level: 'warn', at: String(body.submitted_at ?? ''),
           title: `草稿待签署：${id}`, body: `行项目 ${body.item_id ?? '—'} · 单价 ${body.unit_price_cents ?? '—'} 分`,
-          next_action: '人签到「人签提交报价」（human:<你的名字>）' })
+          next_action: '人签提交报价（署名 = 你的会话身份）',
+          action: 'quote.submit', preset: { draft_id: id },
+          ref: asText(body.rfq_id) === '' ? null : { view: 'supplier', kind: 'package',
+            id: asText(body.rfq_id), title: `包 ${asText(body.rfq_id)}` } })
       }
       return items
     } }))
@@ -530,7 +542,7 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table',
         columns: [
-          { key: 'quote_id', label: '报价', type: 'code' },
+          { key: 'quote_id', label: '报价', type: 'code', pin: 'left' },
           { key: 'package_id', label: '包', type: 'code' },
           { key: 'rev', label: 'rev' },
           { key: 'supplier', label: '供应商', type: 'code' },
@@ -560,7 +572,8 @@ export async function register(surface, host) {
       { name: 'decision', label: '判定', type: 'select', options: ['accepted', 'returned', 'need-info'],
         default: 'accepted', help: '受理 / 退回 / 要求补件' },
       { name: 'signature', label: '受理人（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
-      { name: 'comment', label: '理由（退回/补件必填；会披露给对方）', type: 'textarea', required: true },
+      { name: 'comment', label: '理由（退回/补件必填；受理可空）', type: 'textarea',
+        help: '退回 / 要求补件时必须写清楚要对方改什么（会披露给对方）；受理时留空即可' },
     ] },
     server: async (ctx, input) => {
       const decision = asText(input.decision) || 'accepted'
@@ -598,6 +611,15 @@ export async function register(surface, host) {
         result: { results, accepted: results.filter((row) => row.ok).length, failed: failed.length,
           notices: reviewsFile() } }
     } }))
+
+  out.push(surface.validator({ plugin_id: me, id: 'validator.quote-review', title: '受理/退回/补件的理由规则',
+    actions: ['quote.review'], order: 5,
+    validate: (input) => (String(input.decision ?? 'accepted') !== 'accepted'
+      && String(input.comment ?? '').trim() === '')
+      ? [{ field: 'comment', code: 'reason-required',
+        message: '退回 / 要求补件必须给理由（对方要知道改什么）',
+        next_action: '在「理由」里写清楚：哪一条不对、要补什么' }]
+      : [] }))
 
   out.push(surface.panel({ plugin_id: me, id: 'quotes.review-notices', title: '承包商对我报价的判定（对方通知）',
     view: 'supplier', order: 45, kind: 'table',
@@ -637,9 +659,12 @@ export async function register(surface, host) {
         for (const quote of bag.quotes ?? []) {
           if (quote.review_status !== '待审') continue
           items.push({ id: `quote:review:${quote.quote_id}`, level: 'warn', at: quote.submitted_at,
-            ref: quote.quote_id, title: `待受理：${quote.quote_id}（${bag.package_id} · ${quote.supplier}）`,
+            ref: { view: 'contractor', kind: 'quote', id: asText(quote.quote_id),
+              title: `报价 ${asText(quote.quote_id)}` },
+            title: `待受理：${quote.quote_id}（${bag.package_id} · ${quote.supplier}）`,
             body: `行合计 ${quote.total_cents} 分 · ${(quote.items ?? []).length} 行 · ${quote.vs_current_rev}`,
-            next_action: '去承包商道「报价收件箱」点行内「受理/退回/要求补件」（人签）' })
+            next_action: '点下面的按钮受理/退回/要补件（人签）', action: 'quote.review',
+            preset: { quote_id: asText(quote.quote_id) } })
         }
       }
       return items

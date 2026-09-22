@@ -30,6 +30,20 @@
  * 字段形状 = `action.input.fields`；表格可编辑/批量 = `panel.data()` 返回的 `editable` / `bulk`；右键菜单 =
  * `action.context_menu=true` 且 `panel.data()` 的行给出 `id`；快捷键 = `shortcut`。**机制不替插件猜业务**。
  *
+ * **表格与布局的声明**（`panel.data()` 里，插件只管声明，渲染与键盘都在外壳）：
+ *   · 列可带 `editable:true`（可改）、`type`（`text`/`number`/`code`/`json`）、`help`（占位/说明）、
+ *     `pin:'left'|'right'`（**固定列**：横向滚动时关键列不跑掉）、`best_when:'min'`（一列里的最小值高亮）、
+ *     `group` + `group_label`（**对比模式的列组**：勾 2–3 组并排看，见 `data.compare`）、
+ *     `line_total_of:'<同行的另一个字段>'`（该格旁边实时显示"×系数 = 行合计"）；
+ *   · `data.totals = [{label, key, factor, unit, skip_empty}]` ⇒ 编辑栏实时算 `Σ key×factor`
+ *     （改任意一格立刻重算，不用提交）；`data.compare = {min:2, max:3, hint}` ⇒ 开启对比模式；
+ *   · 可编辑表格的键盘：`Tab`/`Shift+Tab` 走格、`Enter`/`↑`/`↓` 走同列上下行、`Esc` 还原这一格、
+ *     `Ctrl/⌘+Enter` 提交 —— 备一份多行报价可以只用键盘。
+ *   · 面板布局：用户可以拖动面板换顺序、折叠/展开；布局按「视图+对象类」存在浏览器里（刷新后仍在）。
+ *
+ * 通知源给出的每条通知可以带 `ref = {kind, id[, view, title]}` ⇒ 通知中心里能**一键跳到那个对象**
+ * （`view` 省略时按当前视角；外壳只认这种形状，裸 id 会被丢掉 —— 免得出现点不动的"假深链"）。
+ *
  * **对象深链**（对象级地址 `/app/<view>/<kind>/<id>`）：机制只提供三件事，对象是什么由插件声明 ——
  *   ① 面板/动作可以声明 `object_kind: '<对象类>'`（如一行 P0 把"某类对象"搬上界面的面板）；
  *   ② `data(ctx)` 的 `ctx.route` 给出当前地址的 `{view, kind, id}` 三元组（没在对象地址上时 `kind/id` 为空串），
@@ -224,7 +238,10 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
         help: text(field.help), default: field.default ?? null,
         // `from_route: true` = 这个字段由**当前对象地址**的 id 预填（插件声明"它就是那个对象的 id"）：
         // 于是 `/app/<view>/<kind>/<id>/` 对象页工具栏上的动作可以一键打开，不用手抄 id。
-        from_route: field.from_route === true })
+        from_route: field.from_route === true,
+        // `identity: true` = 这个字段由**当前会话身份**预填（`human:<名字>`；机制只知道"会话里是谁"，
+        // 不知道这个字段在业务上叫什么）。人签动作的 `signature` 字段自动按这条处理。
+        identity: field.identity === true })
     }
     const permission = text(entry.permission) || 'none'
     if (!PERMISSIONS.includes(permission)) {

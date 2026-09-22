@@ -452,6 +452,20 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     }
   }
 
+  /**
+   * 通知源里**可跳转的对象引用**的规范化（机制，不认识任何对象类）：
+   * 插件给的 `ref` 只有形如 `{kind, id[, view, title]}` 才被保留（`kind`/`id` 都是非空串）；
+   * 其它形状（裸 id、任意回执对象）一律丢成 `null` —— 免得界面上出现一条点不动的"假深链"。
+   */
+  const normRef = (ref) => {
+    if (!ref || typeof ref !== 'object' || Array.isArray(ref)) return null
+    const kind = String(ref.kind ?? '').trim()
+    const id = String(ref.id ?? '').trim()
+    if (kind === '' || id === '') return null
+    const view = String(ref.view ?? '').trim()
+    return { kind, id, view: views.includes(view) ? view : '', title: String(ref.title ?? '').trim() }
+  }
+
   const notifications = () => withRenderScope(() => {
     const items = []
     for (const source of surface.byKind('notification-source')) {
@@ -461,15 +475,19 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
           items.push({ id: String(item.id ?? `${source.plugin_id}:${items.length}`), level: String(item.level ?? 'info'),
             title: String(item.title ?? ''), body: String(item.body ?? ''),
             next_action: String(item.next_action ?? ''), action: item.action ? String(item.action) : '',
-            ref: item.ref ?? null, at: String(item.at ?? ''), plugin_id: source.plugin_id })
+            ref: normRef(item.ref), at: String(item.at ?? ''), plugin_id: source.plugin_id,
+            // `preset`：点通知上的「去处理」时，用这些键值预填动作表单（如那条通知讲的是哪个报价）
+            preset: item.preset && typeof item.preset === 'object' && !Array.isArray(item.preset)
+              ? item.preset : null })
         }
       } catch (err) {
         items.push({ id: `${source.plugin_id}:poll-failed`, level: 'bad', title: '通知源读取失败',
           body: flat(err), next_action: '修该通知源的 poll()', plugin_id: source.plugin_id,
-          at: host.now() })
+          at: host.now(), ref: null, action: '' })
       }
     }
-    for (const entry of actionLog.slice(0, 20)) items.push(entry)
+    // 动作流水：只保留 `{kind,id}` 形状的对象引用（动作回执是任意 JSON，不能当深链用）
+    for (const entry of actionLog.slice(0, 20)) items.push({ ...entry, ref: normRef(entry.ref) })
     return items.slice(0, 200)
   })
 
@@ -499,10 +517,16 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   /** 字段级校验（与服务端声明同源；客户端只是提前一步给同样的错误）。 */
   const validateInput = (action, input) => {
     const errors = []
+    // 批量动作：对象 id 由批量清单（`ids` / `rows`）顶替 ⇒ 不再要求手抄一个 id 字段
+    // （与客户端同一口径：P3 走查实测批量受理被"报价 id 必填"挡在门外的真缺陷）。
+    const bulk = (Array.isArray(input.ids) && input.ids.length > 0)
+      || (Array.isArray(input.rows) && input.rows.length > 0)
     for (const field of action.input.fields) {
       const value = input[field.name]
       const empty = value === undefined || value === null || String(value).trim() === ''
-      if (field.required && empty) {
+      const covered = bulk && (field.from_route === true
+        || (action.input.bulk === 'rows' && field.name === 'item_id'))
+      if (field.required && empty && !covered) {
         errors.push({ field: field.name, code: 'required', message: '必填',
           next_action: `填 ${field.label}` })
         continue
@@ -623,6 +647,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 </head><body>
 <div id="q-app">
   <header class="q-top" id="q-top"></header>
+  <nav class="q-tabs" id="q-tabs" aria-label="打开的标签页"></nav>
   <div class="q-banners" id="q-banners" aria-live="polite"></div>
   <main class="q-main" id="q-view" tabindex="-1"></main>
   <footer class="q-status" id="q-status"></footer>

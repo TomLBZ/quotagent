@@ -714,6 +714,42 @@ export function createIdentity({ root, prefix, config, shell, services, log } = 
         contributions, session_human: who.human, mine } }
   }
 
+  // ------------------------------------------------------------------ 路由级身份门槛（本批 ③；DEF-001）
+  /**
+   * **两侧静态业务路由的身份门槛**（`/contractor/**`、`/supplier/**`）。
+   *
+   * 判据（与 DEF-001 的期望逐条一致）：
+   *   · 未登录 / 会话过期 ⇒ 浏览器 `303` 回登录页并带 `next`（回跳原地址），API 客户端 `401` + 同上 `next`；
+   *   · 登录了但不是这一侧 ⇒ `403 side-mismatch`（**不得回落到「能看」**）；
+   *   · 对上侧 ⇒ `null`（放行；签名动作的 `actor` 仍由会话给，不由此改变）。
+   *
+   * 公开入口不经过这里（`/`、`/identity/**`、`/inbox/**`、`/sign/**`、`/api/health` 等由调用方先分流）：
+   * 本函数只对**业务路由**表态，`side` 不是两侧之一时一律返回 `null`（不越权表态）。
+   *
+   * @param {object} req HTTP 请求（读 cookie）
+   * @param {{side: string, next: string, wantsHtml?: boolean}} options `side` = 该路径所属侧；`next` = 回跳地址
+   */
+  const gateBusinessRoute = (req, { side, next, wantsHtml = false } = {}) => {
+    const wanted = text(side)
+    if (wanted !== 'contractor' && wanted !== 'supplier') return null     // 不是业务路由 ⇒ 不表态
+    const back = `${pfx}/identity/?next=${encodeURIComponent(text(next))}`
+    const who = whoOf(req)
+    if (!who.ok) {
+      if (wantsHtml) {
+        return { kind: 'redirect', status: 303, location: back, code: who.code, next: text(next), side: wanted }
+      }
+      return { kind: 'deny', status: Number(who.status) || 401, code: who.code, reason: who.reason,
+        next_action: who.next_action, next: text(next), side: wanted, login: back }
+    }
+    if (who.side !== wanted) {
+      return { kind: 'deny', status: 403, code: 'side-mismatch',
+        reason: `当前身份是 ${who.human}（side=${who.side}）：${wanted} 到的路由只对 ${wanted} 侧放行`,
+        next_action: `换用 ${wanted} 侧身份再打开；本侧自己的事在 ${pfx}/${who.side}/inbox/（身份与会话页可切换）`,
+        next: text(next), side: wanted, human: who.human, login: back }
+    }
+    return null
+  }
+
   // ------------------------------------------------------------------ 路由（注册进既有的路由注册面）
   const views = () => ['contractor', 'supplier', 'ops']
   const htmlPage = (title, body) => `<!doctype html><html lang="zh"><head><meta charset="utf-8">`
@@ -1045,7 +1081,7 @@ export function createIdentity({ root, prefix, config, shell, services, log } = 
   }
 
   return { register, resolve: whoOf, whoOf, login, logout, requireGuard: require_, workbench, signQuote, signAward,
-    mailFields, applyMailConfig, pluginsView, pluginOp, myNamespace,
+    mailFields, applyMailConfig, pluginsView, pluginOp, myNamespace, gateBusinessRoute,
     paths: { sessions_file: sessionsFile, dir, shared: sharedDir },
     ledgerPaths: { contractor: ledgerOf('contractor'), supplier: ledgerOf('supplier') },
     sides: IDENTITY_SIDES, prefix: pfx }

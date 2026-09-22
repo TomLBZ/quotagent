@@ -310,30 +310,36 @@ export async function register(surface, host) {
         const intentId = asText(intent.intent_id)
         const record = confirmed.get(intentId)
         const po = poNotices.find((item) => asText(item.award_id) === intentId || asText(item.award_id) === intentId)
+        const poId = po ? asText(po.po_id) : ''
         return { id: intentId, intent_id: intentId, package_id: asText(intent.package_id),
           quote_id: asText(intent.quote_id),
           lines: (intent.lines ?? []).map((line) => `${line.item_id}×${line.qty}@${money(line.unit_price_cents)}`).join(' '),
           confirmed: record ? `已确认（${asText(record.confirmed_by)}，能否按期=${
             record.can_meet_due === true ? '能' : (record.can_meet_due === false ? '不能' : '未声明')}）` : '待确认',
-          po_id: po ? asText(po.po_id) : '—',
-          po_ack: po ? (poConfirmed.has(asText(po.po_id)) ? '已确认收到' : '待确认收到') : '—' }
+          // `po_id` 留空（缺 PO 时）而不是填 "—"：行内动作按**同名字段**预填，填 "—" 会把一个占位符
+          // 当成真 id 送出去（P3 走查实测：po-id-malformed）。显示用 `po` 列，动作只长在真有 PO 的行上。
+          po_id: poId, po: poId || '—',
+          po_ack: po ? (poConfirmed.has(poId) ? '已确认收到' : '待确认收到') : '—',
+          row_actions: [`exchange.confirm-award`, ...(poId ? ['exchange.confirm-po'] : [])] }
       })
       for (const notice of poNotices) {
-        if (table.some((row) => row.po_id === asText(notice.po_id))) continue
-        table.push({ id: asText(notice.po_id), intent_id: asText(notice.award_id) || '—',
+        const poId = asText(notice.po_id)
+        if (table.some((row) => row.po_id === poId)) continue
+        table.push({ id: poId, intent_id: asText(notice.award_id) || '—',
           package_id: asText(notice.package_id), quote_id: '—', lines: '—',
-          confirmed: '已授标', po_id: asText(notice.po_id),
-          po_ack: poConfirmed.has(asText(notice.po_id)) ? '已确认收到' : '待确认收到' })
+          confirmed: '已授标', po_id: poId, po: poId,
+          po_ack: poConfirmed.has(poId) ? '已确认收到' : '待确认收到',
+          row_actions: ['exchange.confirm-po'] })
       }
       return { ok: true, kind: 'table',
         columns: [{ key: 'intent_id', label: '意向/授标', type: 'code' }, { key: 'package_id', label: '包', type: 'code' },
           { key: 'quote_id', label: '我的报价', type: 'code' }, { key: 'lines', label: '中标行' },
-          { key: 'confirmed', label: '我确认了吗' }, { key: 'po_id', label: 'PO', type: 'code' },
+          { key: 'confirmed', label: '我确认了吗' }, { key: 'po', label: 'PO', type: 'code' },
           { key: 'po_ack', label: 'PO 确认' }],
         rows: table, row_actions: ['exchange.confirm-award', 'exchange.confirm-po'],
         counts: { intents: table.length, confirmed: confirmed.size, po: poNotices.length },
         note: '确认中标要声明「能否按期」；不能按期时**备注必填**（避免确认了又交不了货）。'
-          + 'PO 确认只表示"我收到这张单"，不改变任何金额' }
+          + 'PO 确认只表示"我收到这张单"，不改变任何金额；**没有 PO 的行不会长出「确认收到 PO」按钮**' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'exchange.lost', title: '落标告知（本次未中选必须明确告知）',
@@ -433,7 +439,7 @@ export async function register(surface, host) {
       { name: 'package_id', label: '包 id', type: 'text', required: true, help: '从「我收到的包」表里复制' },
       { name: 'seen_rev', label: '我看到的版本（rev）', type: 'number', required: true, min: 1,
         help: '必须是本视角已知版本之一（不夹取）' },
-      { name: 'actor', label: '发言人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'actor', label: '发言人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
       { name: 'note', label: '备注（可选，只留 sha256 进账本）', type: 'textarea' },
     ] },
     server: async (ctx, input) => {
@@ -457,7 +463,7 @@ export async function register(surface, host) {
       { name: 'package_id', label: '包 id', type: 'text', required: true, help: '从「我收到的包」表里复制' },
       { name: 'due_at', label: '承诺回文时限（ISO8601 UTC）', type: 'text', required: true,
         help: '如 2026-09-26T00:00:00Z（形状由唯一写者校验：非 ISO ⇒ due-at-malformed，账本零新增）' },
-      { name: 'actor', label: '发言人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'actor', label: '发言人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
       { name: 'note', label: '原话（必填；只留 sha256 进账本）', type: 'textarea', required: true },
     ] },
     server: async (ctx, input) => {
@@ -488,7 +494,7 @@ export async function register(surface, host) {
       { name: 'item_ids', label: '条目引用（逗号分隔，至少 1 项）', type: 'text',
         help: '例：L-001,L-002（必须真的在这个包里）；留空 ⇒ 服务端以 clarify-ref-missing 明确拒绝' },
       { name: 'question', label: '问题（≤500 字）', type: 'textarea', required: true },
-      { name: 'actor', label: '提问人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'actor', label: '提问人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
     ] },
     server: async (ctx, input) => {
       const itemIds = String(input.item_ids ?? '').split(/[,\s]+/).map((piece) => piece.trim())
@@ -517,7 +523,7 @@ export async function register(surface, host) {
       { name: 'ticket_id', label: '工单 id', type: 'text', required: true,
         pattern: '^cl-[A-Za-z0-9._:-]+$', help: '从「供应商提问工单」表里复制' },
       { name: 'answer_text', label: '答复正文', type: 'textarea', required: true },
-      { name: 'actor', label: '答复人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'actor', label: '答复人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
     ] },
     server: async (ctx, input) => {
       const actor = asText(input.actor)

@@ -15,6 +15,22 @@
 | P1 | 17 | DEF-013 … DEF-029 |
 | P2 | 7 | DEF-030 … DEF-036 |
 
+**本批已修（原始输出见 `docs/work/evidence/EV-190-webui-identity-gate-and-award-qty.md`）**：
+
+1. **报价行带量（新发现，阻断 DEF-009 的入口）**：`rfq.responses` 的行缺 `qty` ⇒ 行内「提出授标意向」被唯一写者按
+   `line-qty-invalid` 拒。现按**包事实**（发布/投递快照 + `rfq/amended` 取最新一版）把量带上，行内一键真落
+   `award/intent-proposed`（无义务）。
+2. **重复入口合并**：供应商侧两个「提问澄清」合成一个 —— 归属 `domain/clarify#exchange.ask`，删掉 `domain/rfq#clarify.ask`。
+3. **DEF-001 的路由级一半**：`/contractor/**`、`/supplier/**` 静态业务路由未登录 ⇒ `401 identity-required`（API）
+   或 `303 → /identity/?next=…`（浏览器），登录后按侧放行、越侧 `403 side-mismatch`；公开入口不变。
+4. **新增「按 id / 关键字找对象」**：一个入口搜本视角的包 / 报价 / PO / 变更单，每行给可点、可复制的深链
+   （`/app/<view>/find/<关键字>/` 本身也可分享）。
+
+**同批登记（未动手，需本批之外的门主处置）**：身份门槛让 9 个门命令的「未登录也能取业务路由」一族断言由绿转红
+（共 63 条；`webui` 26、`quote-draft` 12、`rfq-deadline` 9、`bid-heuristics` 5、`plugin-lifecycle` 4、
+`advice`/`authority`/`gates` 各 2、`change-detail` 1）；逐条修法见 EV-190 §5（夹具先登录，或按规则 12 / 29 §2.2
+删旧断言）。`storage`/`p0-no-node`/`AC-ADMIN-004` 的红在纯 HEAD 基线上同样存在，与本批无关。
+
 ---
 
 ## 1. P0 —— 阻断一条真实闭环

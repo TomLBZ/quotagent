@@ -2502,6 +2502,39 @@ ${sortForm('events', '筛查事件')}
       }
     }
 
+    // ---- ③ 路由级身份门槛（本批**追加**；判据在 `code/identity.mjs#gateBusinessRoute`）-----------------
+    // 两侧的**静态业务路由**（`/contractor/**`、`/supplier/**`）不再"开哪个 URL 就是谁"：未登录一律拒。
+    //   · 浏览器（Accept 含 text/html）⇒ 303 到 `${prefix}/identity/?next=<原地址>`，登录后回跳原地址；
+    //   · API/JSON 客户端 ⇒ 401 `identity-required`（带同一个 `next`）；
+    //   · 登录了但不是这一侧 ⇒ 403 `side-mismatch`（**不回落成"能看"**）。
+    // 位置：动态注册路由**之后**（`/identity/**`、`/<side>/inbox/` 等自助面自己判身份，不受这里影响）、
+    // 静态业务路由**之前**；公开入口（`/`、`/app/**`、`/assets/**`、`/api/health`、`/api/status`、
+    // `/api/ui/**`、`/ops/**`、`/admin/**`）与本门槛无关。
+    // 台账注：`/api/routes` 表里这些行的 `auth` 仍写 `'none'`（本批只允许**追加**门槛，未改那张表）。
+    const businessSide = /^\/(contractor|supplier)(?:\/|$)/.exec(path)?.[1] ?? null
+    if (businessSide !== null) {
+      const nextPath = `${prefix}${path === '/' ? '/' : path}${url.search}`
+      const wantsHtml = String(req.headers.accept ?? '').includes('text/html')
+      const verdict = identity.gateBusinessRoute(req, { side: businessSide, next: nextPath, wantsHtml })
+      if (verdict !== null) {
+        if (verdict.kind === 'redirect') {
+          return send(verdict.status, 'text/plain; charset=utf-8', '', { location: verdict.location })
+        }
+        if (wantsHtml) {
+          return send(verdict.status, 'text/html; charset=utf-8',
+            '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
+            + `<title>需要身份 · ${esc(verdict.code)}</title></head><body>`
+            + `<h1>这一步需要身份：${esc(verdict.code)}</h1>`
+            + `<p>${esc(verdict.reason)}</p>`
+            + `<p>下一步：${esc(verdict.next_action)}</p>`
+            + `<p><a href="${esc(verdict.login)}">去登录 / 换一个身份</a> · `
+            + `<a href="${esc(prefix)}/">回工作台</a> · <a href="${esc(prefix)}/api/health">/api/health</a></p>`
+            + '</body></html>')
+        }
+        return json(verdict.status, verdict)
+      }
+    }
+
     // ---- GUI 应用外壳（**机制**；`docs/design/29-webui-gui-app.md`）--------------------------------
     // 外壳自有的路径族：`/`（工作台首屏）、`/app/<view>/[<panel>/]`（深链）、`/assets/**`（本服务自己的
     // 客户端资源）、`/api/ui/**`（注册面自述 + 面板数据 + 通知 + 状态 + 区块 HTML）、

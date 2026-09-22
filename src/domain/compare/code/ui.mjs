@@ -190,7 +190,7 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table',
         columns: [
-          { key: 'item_id', label: '行项目', type: 'code' },
+          { key: 'item_id', label: '行项目', type: 'code', pin: 'left' },
           { key: 'qty', label: '量' },
           { key: 'item_min_cents', label: '本行最低价（分）' },
           { key: 'spread_pct', label: '本行价差 %' },
@@ -208,6 +208,56 @@ export async function register(surface, host) {
           + '不同行项目之间**不比**（量纲不同）；量从本侧包快照的清单取；缺报的行明确标「未报此行」。'
           + '全局名次仍是跨报价 minmax 的口径（上方排名表），两者不混算。'
           + ` 当前权重来源：${weightsSource()}` }
+    } }))
+
+  // ---- ④ 并排对比（宽表：行=同一行项目，列=各家报价的一组列；勾 2–3 家进对比模式） ----------------
+  out.push(surface.panel({ plugin_id: me, id: 'compare.side-by-side', title: '并排对比（各行项目 × 各家报价，关键列固定）',
+    view: 'contractor', order: 33, kind: 'table', actions: ['compare.rank'],
+    data: () => {
+      const weights = weightsNow()
+      const { json, matrix } = matrixOf(weights)
+      if (!json.ok || json.degraded || !matrix) {
+        return { ok: true, kind: 'table', degraded: true, reason: json.reason ?? 'no-matrix',
+          next_action: json.next_action ?? '先让供应商提交报价（人签），再来比价',
+          columns: [{ key: 'item_id', label: '行项目' }], rows: [] }
+      }
+      const items = matrix.items ?? []
+      // 列组 = 一份报价（`group` 用 quote_id，标题带供应商）；行项目一列固定、量一列常显。
+      const quotes = []
+      for (const item of items) {
+        for (const cell of item.cells ?? []) {
+          if (quotes.some((row) => row.quote_id === String(cell.quote_id))) continue
+          quotes.push({ quote_id: String(cell.quote_id), supplier: String(cell.supplier ?? '') })
+        }
+      }
+      const columns = [
+        { key: 'item_id', label: '行项目（固定列）', type: 'code', pin: 'left' },
+        { key: 'qty', label: '量' },
+        { key: 'item_min_cents', label: '本行最低（分）', best_when: 'min' },
+      ]
+      for (const quote of quotes) {
+        columns.push({ key: `u__${quote.quote_id}`, label: `${quote.supplier} 单价（分）`,
+          group: quote.quote_id, group_label: `${quote.supplier} ${quote.quote_id}`, best_when: 'min' })
+        columns.push({ key: `t__${quote.quote_id}`, label: `${quote.supplier} 行合计（分）`,
+          group: quote.quote_id })
+      }
+      const rows = items.map((item) => {
+        const row = { id: String(item.item_id), item_id: String(item.item_id), qty: item.qty,
+          item_min_cents: item.min_unit_price_cents }
+        for (const quote of quotes) {
+          const cell = (item.cells ?? []).find((one) => String(one.quote_id) === quote.quote_id) ?? null
+          row[`u__${quote.quote_id}`] = !cell ? '' : (cell.missing ? '（未报此行）' : cell.unit_price_cents)
+          row[`t__${quote.quote_id}`] = !cell || cell.missing ? '' : cell.line_total_cents
+        }
+        return row
+      })
+      return { ok: true, kind: 'table', columns, rows,
+        compare: { min: 2, max: 3, hint: '勾 2–3 家并排比较（勾多了先取消一个）' },
+        group_totals: { key_prefix: 't__', label_suffix: '行合计总和（分）' },
+        counts: { items: items.length, quotes: quotes.length, ...(matrix.counts ?? {}) },
+        note: '**对比模式**：勾选上面的列组（2–3 家）= 只把这几家并排摆出来；「行项目」列固定不随横向滚动跑掉。'
+          + '单元格口径是**同一行项目内**的 minmax（不同行项目不比量纲），每行最低价那格标绿；'
+          + '底部给每组"行合计总和"。整表事实来源与「比较矩阵」完全相同（同一份只读复算，零新增事实）。' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'compare.contributions', title: '贡献分解（全局五分量 vs 矩阵价格贡献）',
@@ -249,7 +299,7 @@ export async function register(surface, host) {
       { name: 'w_warranty', label: '权重：质保', type: 'number', min: 0, max: 1, default: DEFAULTS.warranty },
       { name: 'w_deviation', label: '权重：偏差计数', type: 'number', min: 0, max: 1, default: DEFAULTS.deviation },
       { name: 'package_id', label: '包 id', type: 'text', required: true, help: '要针对哪个包存这组权重' },
-      { name: 'actor', label: '发言人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'actor', label: '发言人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
     ] },
     server: async (ctx, input) => {
       const weights = { price: Number(input.w_price ?? DEFAULTS.price), delivery: Number(input.w_delivery ?? DEFAULTS.delivery),
@@ -286,7 +336,7 @@ export async function register(surface, host) {
       { name: 'w_warranty', label: '权重：质保', type: 'number', min: 0, max: 1, default: DEFAULTS.warranty },
       { name: 'w_deviation', label: '权重：偏差计数', type: 'number', min: 0, max: 1, default: DEFAULTS.deviation },
       { name: 'package_id', label: '包 id', type: 'text', required: true },
-      { name: 'actor', label: '发言人', type: 'text', required: true, help: 'human:<你的名字>' },
+      { name: 'actor', label: '发言人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
     ] },
     server: async (ctx, input) => {
       const weights = { price: Number(input.w_price ?? DEFAULTS.price), delivery: Number(input.w_delivery ?? DEFAULTS.delivery),
