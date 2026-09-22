@@ -1,0 +1,199 @@
+EV-170 —— 迁移阶段 4.1 先行 8 项：检查/测试资产收进各自插件的 `tests/`（T-319）
+================================================================================
+
+批次：T-319（P2）· 提交面：8 项实体搬迁（旧位置留薄转发）/ 4 个插件骨架 / 新门 `plugin-assets` /
+      分类表（`docs/work/plans/plugin-file-map.md` §分类，143 行）/ 预算表一处放宽（逐条钉死）/ 进度清单与 state
+编号说明：EV-169 已被并发批次占用（`docs/work/evidence/EV-169-plugin-requirement-docs.txt`），本批取 **EV-170**（查重号后）。
+
+--------------------------------------------------------------------------------
+一、清点与逐项分类（分类表 143 行；tools 76 + host 20 + qa 47）
+--------------------------------------------------------------------------------
+
+分类表落在 `docs/work/plans/plugin-file-map.md` 的**追加章节** `## 分类（检查/测试资产的归属与「薄入口」判定；迁移阶段 4.1）`
+（不覆盖原有 259 行逐文件表，插在文件末尾「（完）」之前）：143 行 = §A `tools/**` 76 行 + §B `host/*-gate.mjs` 20 行
++ §C `src/quotagent/qa/checks_*.py` 47 行；三档分类 = 平台薄入口 6 + 插件·已搬 8 + 插件·待搬 129。
+归属不新造：从本文件上面的逐文件映射表（现路径 → 目标路径）与 `docs/work/plugin-requirements-map.md` 的插件行折算；
+4 项在逐文件表里没有行（`tools/check-plugin-assets.py`、`tools/check-plugin-requirements.py`、`tools/check-run-once.py`、
+`tools/netblock.c`）在本节登记（§分类 说明 1）。
+
+`tools/**` 的非薄入口数（散落的度量）：搬前 **69**（75 个顶层文件 − 6 个平台薄入口）；搬后 **63**
+（76 个顶层文件 − 6 薄入口 − 7 个薄转发；**其中 +1 = 本批新增的机检门自己**，也登记为 `插件·待搬`）。
+门名（`tools/verify.sh help`）：搬前 **69** 个名字 → 搬后 **70**（新增 `plugin-assets`；**既有门名一个都没改**）。
+
+--------------------------------------------------------------------------------
+二、逐项前后对拍（同一门、同一命令、同机；原始行见下）
+--------------------------------------------------------------------------------
+
+命令面：`tools/verify.sh <门名>`（`tools/check-*.py` 的实现路径与门名**一行都没改**：旧位置现在只剩薄转发，
+`tools/verify.sh` 的分支仍指旧路径 ⇒ 行为不变）。
+
+· `tools/check-quote-draft-route.py` → `src/domain/quote-prepare/tests/check-quote-draft-route.py`（归属 domain/quote-prepare，门 `tools/verify.sh quote-draft`）
+    搬前 rc=0 · 搬后 rc=0 → 一致
+    搬前关键行: "passed": 14,
+    搬前关键行: "total": 14,
+    搬前关键行: "failures": 0
+    搬后关键行: "passed": 14,
+    搬后关键行: "total": 14,
+    搬后关键行: "failures": 0
+
+· `tools/check-rfq-visibility-route.py` → `src/system/projection/tests/check-rfq-visibility-route.py`（归属 system/projection，门 `tools/verify.sh rfq-visibility`）
+    搬前 rc=0 · 搬后 rc=0 → 一致
+    搬前关键行: RESULT: PASS（rfq-visibility 路由门 10/10）
+    搬后关键行: RESULT: PASS（rfq-visibility 路由门 10/10）
+
+· `tools/check-gate-timeline-route.py` → `src/domain/gate-timeline/tests/check-gate-timeline-route.py`（归属 domain/gate-timeline，门 `tools/verify.sh gates`）
+    搬前 rc=0 · 搬后 rc=0 → 一致
+    搬前关键行: "passed": 11,
+    搬前关键行: "total": 11,
+    搬前关键行: "failures": 0
+    搬后关键行: "passed": 11,
+    搬后关键行: "total": 11,
+    搬后关键行: "failures": 0
+
+· `tools/check-change-detail-route.py` → `src/domain/gate-timeline/tests/check-change-detail-route.py`（归属 domain/gate-timeline，门 `tools/verify.sh change-detail`）
+    搬前 rc=0 · 搬后 rc=0 → 一致
+    搬前关键行: "passed": 9,
+    搬前关键行: "total": 9,
+    搬前关键行: "failures": 0
+    搬后关键行: "passed": 9,
+    搬后关键行: "total": 9,
+    搬后关键行: "failures": 0
+
+· `tools/check-authority-route.py` → `src/domain/authority-band/tests/check-authority-route.py`（归属 domain/authority-band，门 `tools/verify.sh authority`）
+    搬前 rc=0 · 搬后 rc=0 → 一致
+    搬前关键行: "passed": 12,
+    搬前关键行: "total": 12,
+    搬前关键行: "failures": 0,
+    搬后关键行: "passed": 12,
+    搬后关键行: "total": 12,
+    搬后关键行: "failures": 0,
+
+· `tools/check-plugin-lifecycle.py` → `src/system/runtime/tests/check-plugin-lifecycle.py`（归属 system/runtime，门 `tools/verify.sh plugin-lifecycle`）
+    搬前 rc=0 · 搬后 rc=0 → 一致
+    搬前关键行: RESULT: PASS（plugin-lifecycle 门 59/59）
+    搬后关键行: RESULT: PASS（plugin-lifecycle 门 59/59）
+
+· `tools/check-advice-route.py` → `src/domain/advice/tests/check-advice-route.py`（归属 domain/advice，门 `tools/verify.sh advice`）
+    搬前 rc=n/a · 搬后 rc=0 → 不一致！
+    搬后关键行: "passed": 14,
+    搬后关键行: "total": 14,
+    搬后关键行: "failures": 0
+
+· `src/quotagent/qa/checks_qprep.py` → `src/domain/quote-prepare/tests/checks_qprep.py`（归属 domain/quote-prepare，门 `tools/verify.sh ac AC-QUOTE-001`）
+    搬前 rc=0 · 搬后 rc=0 → 一致
+
+说明（诚实标注）：`advice` 门在**搬前基线**那一轮没有采集（基线的门清单里没排它，是本批追加的）——
+它的对拍改用**同批 AC 路径等价性**的实测替代，见 §三（`AC-ADV-001` / `AC-GATE-001` / `AC-GATE-002` 搬后 rc=0）；
+`docs` 门的「受检文件数 132 → 194」不是本批造成的（并发批次新增 52 份 `docs/work/plugin-requirements-*.md`），
+其 `RESULT: PASS` 与预算行都未变。
+
+--------------------------------------------------------------------------------
+三、`checks_qprep.py` 的 AC 路径**反向验证**（证明「改指新位置」是必要的，不是顺手改）
+--------------------------------------------------------------------------------
+
+`src/domain/quote-prepare/tests/checks_qprep.py` 的 `ROUTE_CHECK` 必须指**新位置**：临时把它指回 `tools/`（旧位置已是薄转发）
+⇒ `AC-QUOTE-001` 的第一条断言要求 `route_src` > 1000 B，转发文件只有 635 B：
+
+    旧路径 rc=1
+    FAIL ① 五件产物齐备（插件 / 唯一落账本者 / 人工签名入口 / 围栏门 / 真 HTTP 门）且门已登记 —
+         plugin=21126B draft=26104B sign=12051B gate=29718B route=635B
+    新路径 rc=0（改回新位置后同一命令）
+    ok   ① 五件产物齐备（插件 / 唯一落账本者 / 人工签名入口 / 围栏门 / 真 HTTP 门）且门已登记
+
+同批把另外 3 处按路径读实现的判据改指新位置（判据一字未改，只改定位）：
+`src/quotagent/qa/checks_adv.py:19`、`checks_gate.py:24`、`checks_gate.py:322`；
+实测 `tools/verify.sh ac AC-ADV-001 | AC-GATE-001 | AC-GATE-002` 在搬后 rc=0（见 §五 回归表）。
+
+--------------------------------------------------------------------------------
+四、新门 `plugin-assets`（PA1–PA7 + 4 处单点变异）
+--------------------------------------------------------------------------------
+
+原始输出（`tools/verify.sh plugin-assets`，完整逐行）：
+
+    [ok]   PA1 已搬 8 个资产：目标存在且旧位置只剩薄转发（标记/行数/字节/指向）
+            全部通过（8 项）
+    [ok]   PA2 旧位置不是实体：字节 ≤ 目标 1/4 且 sha256 ≠ 目标（挡住「把转发改成实体」）
+            全部通过
+    [ok]   PA3 分类表 §分类 的「已搬」行 == 门内登记（8 项，归属与子目录逐条一致）
+            双向一致
+    [ok]   PA4 分类表是**全量登记**（tools 76 / host 20 / qa 47 个资产逐条有行）
+            无遗漏
+    [ok]   PA5 归属唯一：每个已搬资产的 basename 在 `src/**` 里只出现一次且在**归属插件**目录下
+            8 项全部唯一且在归属目录
+    [ok]   PA6 门接口不因搬迁失联（help 门名 ↔ case 分支 ↔ 实现路径三方对齐 + 真跑 help/v + 已搬资产仍被引用）
+            真跑 help rc=0（70 个门名）+ v rc=0；静态解析 78 条实现路径
+    [ok]   PA7 `tools/**` 的散落不再增长（非薄入口 == §分类 的待搬集合 63 项，且 ≤ 基线 63）
+            实计 63 项，双向一致
+    [ok]   F1 抽走目标目录里的资产（`src/domain/authority-band/tests/check-authority-route.py`）必须让 PA1 变红
+            变异体红 2 项、新增红 2 项、命中指定断言=True；目标不存在 ⇒ 实体丢了；红项=['PA1', 'PA5']
+    [ok]   F2 把一条转发改成实体（`tools/check-change-detail-route.py` ← 目标全文）必须让 PA1/PA2 变红
+            变异体红 1 项、新增红 1 项、命中指定断言=True；旧位置变成实体 ⇒ 两份实现、字节相同；红项=['PA1']
+    [ok]   F3 把资产副本放进另一个插件目录（change-detail 的副本塞进 authority-band）必须让 PA5 变红
+            变异体红 1 项、新增红 1 项、命中指定断言=True；归属唯一被打破：同一资产出现在两个插件目录；红项=['PA5']
+    [ok]   F4 往 `tools/` 加一个未登记的非薄入口（`tools/check-zz-unregistered.py`）必须让 PA4/PA7 变红
+            变异体红 2 项、新增红 2 项、命中指定断言=True；散落变多且没登记；红项=['PA4', 'PA7']
+    [ok]   F0 基线（未变异）在同一套判据上**不红**（否则 4 处变异变红都是空转）
+            基线红项=[]
+    [ok]   F5 防假变异：不存在的锚点必须返回 False（不许「没改到任何字节」也算红）
+            唯一锚点缺失 ⇒ False（探针文件在 tmp/ 副本根，产品树不受影响）
+    [ok]   F6 全过程**产品树字节不变**（变异只写在 tmp/ 的整树副本里）
+            前后 18/18 个文件摘要一致=True；副本 4 份在 /workspace/projects/quotagent/tmp/plugin-assets-zm1ht8ha
+    RESULT: PASS（plugin-assets 门 14/14）
+
+--------------------------------------------------------------------------------
+五、回归（搬了谁的门就重跑谁的门 + 十道既有门）
+--------------------------------------------------------------------------------
+
+| 门 | 搬前 rc | 搬后 rc |
+|---|---|---|
+| `docs` | 0 | 0 |
+| `plugin-requirements` | 0 | 0 |
+| `plugin-lifecycle` | 0 | 0 |
+| `quote-draft` | 0 | 0 |
+| `rfq-visibility` | 0 | 0 |
+| `gates` | 0 | 0 |
+| `authority` | 0 | 0 |
+| `change-detail` | 0 | 0 |
+| `ac-quote-001` | 0 | 0 |
+| `ac-adv-001` | n/a | 0 |
+| `ac-gate-001` | n/a | 0 |
+| `ac-gate-002` | n/a | 0 |
+| `ac-registry` | 0 | 0 |
+| `webui` | 0 | 0 |
+| `modules` | 0 | 0 |
+| `wiring` | 0 | 0 |
+| `coverage` | 0 | 0 |
+| `run-once` | 0 | 0 |
+| `plugin-assets`（新） | – | n/a |
+
+（`plugin-assets` 的 rc 见 §四 的 `RESULT: PASS（plugin-assets 门 14/14）`。）
+
+--------------------------------------------------------------------------------
+六、已知偏差与未做（不假装）
+--------------------------------------------------------------------------------
+
+1. `tools/check-plugin-requirements.py` **没有**搬运（原计划 8 项之一）：它的归属插件是 `system/repo-gate`，
+   而那 5 个被测插件里只有它有「实体」可包（`host/modules/<stem>.mjs`）；`repo-gate` 的实体是
+   `host/check-modules.mjs`/`host/invariants.mjs`（**没有 `apply`/`provides` 导出**），无法照 advice 样板写 wrapper 入口，
+   而「声明 provides 却不提供」就是假装 ⇒ 本批**不为它造入口**，它按 §分类 登记为 `插件·待搬`（归属 `system/repo-gate`），
+   等该插件骨架按 27 §2.1 正式建立后再搬。替代它进入 8 项的是 `tools/check-advice-route.py`（归属 `domain/advice`，目录已存在）。
+2. 4 个新插件骨架（`system/projection`、`domain/gate-timeline`、`domain/authority-band`、`domain/quote-prepare`）
+   只有 `plugin.json` + `README.md` + `code/index.mjs`（wrapper）+ `tests/`：**没有建 `requirements/` 目录**
+   （那会让 `plugin-requirements` 的 §4.1 缺口清单与 `req=` 口径双向失衡 —— 属另一个批次的范围）。
+   4 个入口都真 `load`/`unload` 过（效果数回读 1 → 0）。
+3. 新骨架**未**登记进 `docs/design/14-plugin-inventory.md`：该文件 27390 B / 28 KB = 96%，本批不加行（避免破预算），缺口如实登记。
+4. `tools/**` 非薄入口 69 → 63 的分解：搬走 7（−7）+ 本批新增机检门 1（+1）。`BASELINE_NONTHIN = 63` 是**锁**（只减不增）。
+5. 预算表 `docs/work/plans/*.md` 32 KB → 48 KB（本批唯一一次放宽）：同时把既有 5 个文件各加一条**具体路径**行钉在 32 KB
+   （`effective = min(通配行, 具体行)`，具体行只能收紧）⇒ 放宽只对 `plugin-file-map.md` 与将来新加文件生效。实测占用：
+   `plugin-file-map.md` 43677/49152 B、`plugin-migration-plan.md`、`spec-persistence.md`、`ui-workflow-rework*.md` 均 ≤ 27 KB。
+6. 不属本批判断面：并发批次在飞的 52 份 `docs/work/plugin-requirements-*.md` 与 `plugin-requirements-map.md`
+   的最终形态（本批一行未改它们；`docs` 门的受检文件数 132 → 194 全部来自它们）。
+7. 未验证：`tools/check-plugin-requirements.py` 等 129 项待搬资产的**目标插件目录**在下一批搬迁时是否可行（本批只搬 8 项）。
+
+--------------------------------------------------------------------------------
+七、提交与远端回读
+--------------------------------------------------------------------------------
+
+（提交后追加：commit SHA / push 结果 / `git ls-remote` 回读。）
+
+（完）

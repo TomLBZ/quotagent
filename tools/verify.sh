@@ -312,6 +312,18 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec python3 tools/check-fr-coverage.py "$@"
     ;;
+  plugin-assets)
+    # 「散落的检查/测试资产收进各自插件的 tests|tools」的**归属一致性门**（迁移阶段 4.1）：
+    #   ① 每个已搬资产：目标存在 + 旧位置只剩**薄转发**（标记/行数/字节/指向，且字节 ≤ 目标 1/4、sha256 ≠ 目标）
+    #   ② `docs/work/plans/plugin-file-map.md` §分类 的「已搬」行 == 门内登记（双向）+ 三节表是**全量登记**
+    #      （`tools/` 顶层文件 / `host/*-gate.mjs` / `src/quotagent/qa/checks_*.py` 逐条有行）
+    #   ③ 归属唯一：同一资产的 basename 在 `src/**` 里只出现一次且在**归属插件**目录下
+    #   ④ 门接口不因搬迁失联：`verify.sh help` 门名 ↔ case 分支 ↔ 实现路径三方对齐 + 真跑 help/v
+    #   ⑤ `tools/**` 的非薄入口数 **只减不增**（≤ 63）且集合 == §分类 的「待搬」集合
+    #   反向验证：**4 处单点变异全红**（抽走目标 / 转发改实体 / 副本塞进别的插件 / 加未登记的非薄入口）
+    #   + 防假变异 + 产品树字节不变（变异只写在 tmp/ 的整树副本里）。实现：tools/check-plugin-assets.py
+    exec "$QUOTAGENT_PY" "$ROOT/tools/check-plugin-assets.py" "$@"
+    ;;
   plugin-requirements)
     # 「需求归属到插件」的机检（T-316 批次；规则真源 docs/design/28 §1，归属真源 = 15-requirements-coverage.md）：
     #   把"每条 FR 由哪个插件提供"变成断言 ——

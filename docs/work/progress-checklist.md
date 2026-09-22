@@ -5,7 +5,7 @@
 **当前阶段：P1 mvp demo（S1.1 已完成，S1.2 起按 `roadmap.md` §3 推进）**。设计期与 P0 mock（S0.1–S0.15 备料）任务全部 `done`；
 P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假设通过**，在 `validation/register.json.planning_assumptions` 标注（非结论）。
 任务定义（描述与顺序）在 `roadmap.md`；本文件只维护**状态与证据**。
-较早的行（54 行整行 = 归档里 52 条 `T-` 定义行；`T-215a/b` 不以数字结尾，门不按定义行计）在
+较早的行（66 行整行 = 归档里 64 条 `T-` 定义行；`T-215a/b` 不以数字结尾，门不按定义行计）在
 `progress-checklist-archive.md`（同目录；选入规则见归档头）。
 **归档仍受门校验**：主文件 + 归档 = 门的 **T 定义集合**（`tools/check-docs.py` 的 `DEF_SETS["T"]`）——
 搬进归档的 T 号仍是定义，引用照解析。
@@ -42,18 +42,6 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T | 阶段 | 内容 | FR | AC | status | evidence |
 |---|---|---|---|---|---|---|
 | T-209 | P1 | 场景集 S1..S4 + 反例集 | FR-EVAL-001, FR-EVAL-002, FR-EVAL-004 | AC-EVAL-001, AC-EVAL-002 | todo | – |
-| T-252 | FR-EVIDENCE-004 留存与销毁：设计决策 + ADR-0018 + 判定器 `services/retention.py` + 机检 21/21 | B48 | done | D-047 / EV-087 |
-| T-254b | 留存计划的**刷新钩子**：seed 之后 + 网关探活时刷新（清目录后最多一个探活周期恢复） | B51 | done | EV-090 §5 |
-| T-255 | 谈判轮次/让步：设计与契约落档（`16/17-negotiation-*.md`）+ ADR-0019 | B52 | done | EV-091 |
-| T-257a | FAQ 沉淀与复用（FR-CLARIFY-004）契约落档 + D-051（`docs/design/18-faq-contract.md`） | B54 | done | — |
-| T-258a | 邮件集成（无凭据部分）契约落档 + `AC-MAIL-001` + D-052（`docs/design/19-mail-contract.md`） | B56 | done | — |
-| T-260a | P2 新服务运维可见：快照契约 + `AC-PIPELINE-001`/`AC-UI-002` + D-053（`docs/design/20-…`） | B59 | done | — |
-| T-261a | 三域面板的"演示种子"标注：运维手册补节 + D-054（真流程种真事件、演员可识别、幂等） | B61 | done | — |
-| T-262a | 业务双方视角：`/<view>/api/negotiation`、`/<view>/api/faq` + 页面区块 + 门断言（webui 25/25）+ D-055 | B63 | done | EV-097 |
-| T-263a | 有界与顺序补真数据门（7 条→5 条、seq 倒序、投影哨兵）+ D-056 口径 | B65 | done | EV-098 |
-| T-270 | dashboard 可见性缺陷：清单只在进程启动时读一次 → 按 mtime 重读 + 服务名可点链接（workspace 仓库 `5d00ab6`） | B66 | done | — |
-| T-266 | P3 需求与验收规格落库（`docs/work/plans/p3-spec.json`：41 FR + 42 AC 全文）+ 3 份规划文档 | B66 | done | EV-131 |
-| T-271 | Python 侧 admin 阻塞/进度判定器 + 快照写入器 + 2 条 AC 机检（subagent 产出，父方实跑） | B67 | done | EV-132 |
 | T-275 | agent 运行期插件（上下文/记忆四层/harness）+ 围栏门 22/22 + 四类反例与 4 处变异自证 | B74 | done | EV-140 |
 | T-275b | 父方复核：自跑门、静态零写面断言、挂 `verify.sh agent-runtime`、清单标『未接线』 | B74 | done | EV-140 |
 | T-276 | 项目记忆=账本可重建投影（真账本 11 条/9 类；丢缓存不丢事实；只读重放；`citations` 齐） | B75 | done | EV-141 |
@@ -122,6 +110,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-317 | P2 | **运行期装卸 + `user-space` 单一源 + `./run logs\|config init`（本批）**：① **运行中的服务能真的装卸插件**：`tools/plugin.sh <动词> <插件> --live`（或 `./run plugin …`）把插件挂进**长驻 WebUI 进程自身的 ctx**（`src/system/runtime/code/live-control.mjs` + 客户端 `plugin-live.mjs`，控制通道经**路由注册面** `host/lib/ui-route.mjs` 注册，webui 零业务耦合）——装载后其注册区块**真出现在页面上**（`data-ui-block=…`），卸载后消失且**页面其余部分逐字节不变**（sha256 对比 = 阶段 5.3 那条未验断言）；`reload` 新 uid 且 effects 不泄漏；四道围栅（控制令牌 fail-closed / 显式确认 / system 层锁定 / 只认显式动词与 id）逐条有名 code + next_action；装卸全程**零写面**（`src/**`+`host/**`+数据根逐字节不变）② 修一个**真缺陷**：`host/cli.mjs` webui 装配段用 `inner.provide = …` 抓句柄 ⇒ 污染全树 provide ⇒ 后装载的插件把服务注册在别人 fiber 上、卸载留残注册（运行期再装载必红）；改为装配完 `ctx.get(...)` 读，并把"0 处 monkey-patch"做成门 D5 ③ `user-space/**` → `src/userspace/**` 收敛为**单一源**（`user-space` 改为 tracked 兼容符号链接；两份用户插件产物字节/声明哈希未变，旧实现逐字留档）④ `./run logs`（路径 + 有界尾部，缺日志如实失败）与 `./run config init`（**只含白名单键**、不覆盖已有真配置、打印指纹与逐条 next_action、0600 原子写、不写账本）⑤ 门：`plugin-lifecycle` **59/59**（新增 L1–L13 + D4/D5）、`run-once` **34/34**（新增 R12a-c/R13a-c/R14a-f + **8 处单点变异全红**：4 旧 + 4 新 logs/config-init）、`user-space` 21/21；空 HOME + 断网（`tools/netblock.c` 垫片，含非空转自证）下 up 成功且**不写 HOME** | FR-PLUGIN-003, FR-PLUGIN-005, FR-RUNTIME-001, FR-USERPLUG-001 | AC-PLUGIN-001, AC-PLUGIN-005, AC-PLUGIN-006, AC-RUNTIME-010 | done | EV-168 |
 | T-316 | P2 | **「需求归属到插件」从口号落成完整映射与逐插件需求文档（本批，只动文档 + 一条门）**：① `docs/work/plugin-requirements-map.md`（**63 行**插件一行一表：`插件 id / 负责的 FR 号 / 承载文件 / 状态 / 证据`）—— FR 定义集合 **166 条各出现且仅出现一次**（未认领 0、重复 0），与 28 §2.2/§2.4 家族表的 **13 处偏差逐条登记**（归属真源 = `15-requirements-coverage.md`，ADR-0021 §2），**52** 个插件的需求文档缺口逐条列在 §4.1 ② **9 个插件的独立需求文档**：3 个样板在标准位置（`src/{system/runtime,domain/advice,userspace/demo-ns/hello}/requirements/README.md`）+ 6 个核心（webui/storage/market/evolution/mail/kernel）在 `docs/work/plugin-requirements-<插件>.md` （**位置偏差**逐条登记在 §4.2：先建裸插件目录会让 `plugin-lifecycle` 的 A13/A14 变红，本批不得把门改松）③ `docs/design/14-plugin-inventory.md` **先归档再加行**：库层/Python 侧/工作区/自进化四节 **4348 B 整节逐字**搬入新建 `docs/design/14-plugin-inventory-archive.md`，主文件 28564 → 24865 B，再加 9 行（3 样板 + 6 骨架）⇒ **27390 B ≤ 28 KB（实测）** ④ 新门 `plugin-requirements`（**17/17**：每条 FR 恰好一个归属 / 引用的 FR 都在定义集合内 / `plugin.sh list` 每个插件有行 / `req=` 文档真实存在 / 目录不无主 / 位置偏差与缺口清单双向登记 / 状态与证据；**4 处单点变异全红** + 防假变异 + 产品树字节不变）⑤ `plugins` 门扩成**清单文档集合**（主文件 + `14-plugin-inventory-archive*.md`，归档 0 条登记名 = 硬失败）⑥ 实测：`plugin-lifecycle` 43/44（A13/A14 对裸目录敏感，本批的文档位置选择已避开；剩余 1 项红 = 并发批次在飞的 webui 注册面 `/api/ui/blocks`，本批未改产品代码） | FR-USREQ-007, FR-PLUGIN-004 | AC-DESIGN-001, AC-PLUGIN-004 | done | EV-167 |
 | T-318 | P2 | **52 个插件逐个补齐独立需求文档 + 位置口径定案（本批，只动文档 + 一处门的变异锚点）**：① **52 份**新文档 `docs/work/plugin-requirements-<层>-<插件>.md`（模板与逐段口径见映射表 §4），6 份核心文档改名统一带层前缀 ⇒ **63/63** 插件有 `req=` ② 缺口数 **52 → 0**（映射表 §5 复算命令算出，不手写）③ 位置口径定案进 27 §2.4 + 映射表 §4：**不建裸目录**（裸目录会被 `depsClosure` 当「插件存在」⇒ `plugin-lifecycle` 的 A13/A14 变红），文档落 `docs/work/`、建目录时 `git mv`，§4.2 逐条登记位置偏差 ④ 映射表 §3 偏差表整表拆到 `plugin-requirements-deviations.md`（守住 32 KB）⑤ **互证**：58 份文档的 FR 行集合 == 映射表认领集合（并集 166、缺 0、重复 0；原始行见 EV-169）⑥ **反向验证**：假目录（有 `requirements/`、无 `plugin.json`）⇒ `plugin.sh list` 报 `manifest-missing` + 门 A6b 判红 | FR-USREQ-007, FR-PLUGIN-004 | AC-DESIGN-001, AC-PLUGIN-004 | done | EV-169 |
+| T-319 | P2 | **迁移阶段 4.1 先行 8 项：散落的检查/测试资产收进各自插件的 `tests/`，`tools/**` 瘦成薄入口（本批）**：① 清点 **143 项**（`tools/**` 76 / `host/*-gate.mjs` 20 / `src/quotagent/qa/checks_*.py` 47）**逐项分类**写进 `docs/work/plans/plugin-file-map.md` §分类（归属插件 + 三档：平台薄入口 6 / 插件·已搬 8 / 插件·待搬 129；与磁盘**双向可复算**）② **搬 8 项**（5 条真路由门 + `plugin-lifecycle` + `advice` + `checks_qprep.py`）→ `src/<层>/<插件>/tests/`，旧位置只剩**薄转发**（`runpy`/`importlib`；`tools/verify.sh` 的分支与门名**一行未改**，逐项搬前搬后 rc/关键输出对拍一致）③ 新增门 `plugin-assets`（PA1–PA7：目标在 + 旧位置只剩薄转发 + 分类表双向与全量登记 + 归属唯一 + 门接口不失联 + 散落只减不增；**4 处单点变异全红** + 防假变异 + 产品树字节不变）④ 4 个插件骨架（`system/projection`、`domain/{gate-timeline,authority-band,quote-prepare}`：`plugin.json` + README + wrapper 入口，四者真 `load`/`unload`）⑤ `tools/**` 非薄入口 **69 → 63**（搬走 7 + 本门 1）；预算表 `docs/work/plans/*.md` 32→48 KB 并把既有 5 个文件各钉在 32 KB（具体行只能收紧） | FR-PLUGIN-004, FR-USREQ-007 | AC-DESIGN-001, AC-PLUGIN-004 | done | EV-170 |
 
 ## 缺陷与阻塞
 

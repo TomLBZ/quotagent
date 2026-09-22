@@ -1,0 +1,25 @@
+{
+  "name": "gate-timeline",
+  "version": "1.0.0",
+  "layer": "domain",
+  "provides": ["gateTimeline"],
+  "entry": "code/index.mjs",
+  "description": "领域插件：人工门与变更单的**时间线视图**（「审批等多久 / 变更单到底是谁卡着」），age 只由事实时间戳之差派生。",
+  "inject": [],
+  "depends_on": [],
+  "external_deps": {},
+  "permissions": {
+    "writes": ["own-dir"],
+    "ledger": "none"
+  },
+  "source": "human",
+  "requirements": ["FR-GATE-001", "FR-GATE-002"],
+  "tests": ["tools/verify.sh gates", "tools/verify.sh change-detail"],
+  "migration": {
+    "stage": 4.1,
+    "mode": "skeleton-and-wrapper",
+    "impl": "host/modules/gate-timeline.mjs",
+    "existing_carriers": ["host/modules/gate-timeline.mjs", "tools/gate-nudge.py"],
+    "moves_in_stage": 4.1
+  }
+}

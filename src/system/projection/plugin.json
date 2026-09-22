@@ -1,0 +1,25 @@
+{
+  "name": "projection",
+  "version": "1.0.0",
+  "layer": "system",
+  "provides": ["projection"],
+  "entry": "code/index.mjs",
+  "description": "系统级插件：私域投影（收件人作用域 + 字段级白名单）——决定「哪一本账本里的哪一行、哪几个字段可以被谁看到」。",
+  "inject": [],
+  "depends_on": [],
+  "external_deps": {},
+  "permissions": {
+    "writes": ["own-dir"],
+    "ledger": "none"
+  },
+  "source": "human",
+  "requirements": ["FR-RFQ-009", "FR-UX-002"],
+  "tests": ["tools/verify.sh rfq-visibility"],
+  "migration": {
+    "stage": 4.1,
+    "mode": "skeleton-and-wrapper",
+    "impl": "host/modules/projection.mjs",
+    "existing_carriers": ["host/modules/projection.mjs", "host/lib/ledger-view.mjs", "src/quotagent/services/realm.py"],
+    "moves_in_stage": 4.1
+  }
+}

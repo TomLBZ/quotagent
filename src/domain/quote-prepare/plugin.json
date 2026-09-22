@@ -1,0 +1,25 @@
+{
+  "name": "quote-prepare",
+  "version": "1.0.0",
+  "layer": "domain",
+  "provides": ["quotePrepare"],
+  "entry": "code/index.mjs",
+  "description": "领域插件：报价草稿的写闭环（浏览器只落 0600 待办件，唯一写账本者是 Python 侧；签名只能由人）。",
+  "inject": [],
+  "depends_on": [],
+  "external_deps": {},
+  "permissions": {
+    "writes": ["own-dir", "request-file"],
+    "ledger": "none"
+  },
+  "source": "human",
+  "requirements": ["FR-QUOTE-001"],
+  "tests": ["tools/verify.sh quote-draft"],
+  "migration": {
+    "stage": 4.1,
+    "mode": "skeleton-and-wrapper",
+    "impl": "host/modules/quote-prepare.mjs",
+    "existing_carriers": ["host/modules/quote-prepare.mjs", "tools/quote-draft.py", "tools/quote-sign.py"],
+    "moves_in_stage": 4.1
+  }
+}

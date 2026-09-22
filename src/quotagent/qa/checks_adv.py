@@ -16,7 +16,7 @@ from .registry import Assertion, register
 ROOT = Path(__file__).resolve().parents[3]
 MOD = ROOT / 'host' / 'modules' / 'advice-panel.mjs'
 GATE = ROOT / 'host' / 't281-advice-gate.mjs'
-ROUTE = ROOT / 'tools' / 'check-advice-route.py'
+ROUTE = ROOT / 'src' / 'domain' / 'advice' / 'tests' / 'check-advice-route.py'
 
 #: 一次真执行探针（空载荷 → 降级；正常载荷 → 五条规则 + 逐条 basis + 确定性 + 哨兵零影响）。
 PROBE = r"""

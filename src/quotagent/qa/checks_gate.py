@@ -21,7 +21,7 @@ from .registry import Assertion, register
 ROOT = Path(__file__).resolve().parents[3]
 MOD = ROOT / 'host' / 'modules' / 'gate-timeline.mjs'
 GATE = ROOT / 'host' / 't282-gate-timeline-gate.mjs'
-ROUTE = ROOT / 'tools' / 'check-gate-timeline-route.py'
+ROUTE = ROOT / 'src' / 'domain' / 'gate-timeline' / 'tests' / 'check-gate-timeline-route.py'
 NUDGE = ROOT / 'tools' / 'gate-nudge.py'
 
 #: 一次真执行探针：口径（不取墙钟）/ 空投影不编 / basis 可溯源 / 催办只产 nudge 载荷。
@@ -319,7 +319,7 @@ def check_detail() -> list[Assertion]:
     src = MOD.read_text(encoding='utf-8') if MOD.is_file() else ''
     gate = (ROOT / 'host' / 't283-change-detail-gate.mjs')
     gate_src = gate.read_text(encoding='utf-8') if gate.is_file() else ''
-    route = (ROOT / 'tools' / 'check-change-detail-route.py')
+    route = (ROOT / 'src' / 'domain' / 'gate-timeline' / 'tests' / 'check-change-detail-route.py')
     route_src = route.read_text(encoding='utf-8') if route.is_file() else ''
     webui = (ROOT / 'host' / 'modules' / 'webui.mjs').read_text(encoding='utf-8')
     verify = (ROOT / 'tools' / 'verify.sh').read_text(encoding='utf-8')

@@ -1,0 +1,25 @@
+{
+  "name": "authority-band",
+  "version": "1.0.0",
+  "layer": "domain",
+  "provides": ["authorityBand"],
+  "entry": "code/index.mjs",
+  "description": "领域插件：授权区间（「谁能批到多少 / 越界怎么办 / 下一个能批的人是谁」），金额一律用整数分比较，插件自己**不能批准**。",
+  "inject": [],
+  "depends_on": [],
+  "external_deps": {},
+  "permissions": {
+    "writes": ["own-dir"],
+    "ledger": "none"
+  },
+  "source": "human",
+  "requirements": ["FR-AUTH-001"],
+  "tests": ["tools/verify.sh authority"],
+  "migration": {
+    "stage": 4.1,
+    "mode": "skeleton-and-wrapper",
+    "impl": "host/modules/authority-band.mjs",
+    "existing_carriers": ["host/modules/authority-band.mjs", "host/lib/config-keys.mjs"],
+    "moves_in_stage": 4.1
+  }
+}

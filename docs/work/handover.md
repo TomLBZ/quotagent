@@ -4,11 +4,11 @@
 
 ## 现在在哪
 
-P2 中，①–④见 EV-160…167（T-288/313/314/315/316）。⑤ **本批**（EV-169/T-318，只动文档）：**逐插件需求文档补齐到 63/63**（52 份新写 + 6 份改名，见映射表 §4），缺口 **52 → 0**（§5 复算）；位置口径定案 27 §2.4：**不建裸目录**（`depsClosure` 把「目录存在」当「插件存在」）⇒ 后续 `git mv` 进 `requirements/README.md`；六道门在本批提交树上全绿。
+P2 中，①–④见 EV-160…167。并发批次 EV-169/T-318（只动文档）：逐插件需求文档补齐 63/63，缺口 52→0。**本批**（EV-170/T-319）：8 项散落的检查资产搬进各自插件 `tests/`（旧位置只剩薄转发；门名与 `tools/verify.sh` 一行未改，逐项对拍一致）+ 4 个插件骨架 + 新门 `plugin-assets` 14/14；`tools/**` 非薄入口 69→63；分类表 143 行在 `plugin-file-map.md` §分类。
 
 ## 下一步唯一动作
 
-`plans/plugin-migration-plan.md` §2 续做**阶段 2**（services → `code/`，逐个搬 + 跑 AC）；建目录时同步 `plugin-lifecycle` 的 A13/A14，并 `git mv` 需求文档进 `requirements/README.md`。
+`plans/plugin-migration-plan.md` §2 续做**阶段 2**（services → `code/`，逐个搬 + 跑 AC）；建目录同步 `plugin-lifecycle` 的 A13/A14；§分类 的 129 项`待搬`按同一套继续搬。
 
 ## 不变量与阻塞
 
