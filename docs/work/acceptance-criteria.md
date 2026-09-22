@@ -52,6 +52,9 @@ tools/verify.sh docs                         # 文档门（当前阶段即可运
 | AC-EVT-002 | P0 | waterfall 监听器不调 `next()` 时下游不被执行；该短路在 `../design/05-events.md` §5 拦截点总表有登记，且默认事件表的每个 waterfall 事件都在表内 | `qa ac AC-EVT-002` |
 | AC-PLUGIN-001 | P0 | 装载后 `effects()` 非空；卸载后 `effects()` 为空且无残留定时器/订阅 | `qa ac AC-PLUGIN-001` |
 | AC-PLUGIN-002 | P0 | 使某依赖失活后，消费者转为非激活；恢复后自动重载且不迁移草稿 | `qa ac AC-PLUGIN-002` |
+| AC-PLUGIN-005 | P2 | 六动词真跑：`list/status/load/reload/unload/deps`（一行一条 JSON）；装载真 import 入口（导出键为证）、`reload` 得**新实例**（新 uid + 新 instance）、`unload` 后 effects **回读归零**且可重复；未知插件 / 非法层名 / 未知动词 / 依赖成环 / 坏清单各有名 code | `tools/verify.sh plugin-lifecycle` |
+| AC-PLUGIN-006 | P2 | 注入式 UI 注册面：两个样板插件各注册一个只读区块并**在真页面上真出现**（两页 0 内联脚本）；`/api/ui/blocks` 只回执元数据；只读路由 POST ⇒ 405 + `Allow: GET`；`host/modules/webui.mjs` 里 0 次出现它们的 id/标题（webui 不懂业务） | `tools/verify.sh plugin-lifecycle` |
+| AC-RUNTIME-010 | P2 | 一键运行契约：`./run up|down|status|doctor` 真跑（健康 200 真可达 / 二次 `up` 幂等且 pid 不变 / 两次 `status` **逐字节一致** / `down` 后端口真释放）；`doctor` 7 项逐条 `next_action` 且退出码 0；**凭据缺失不阻塞 `up`**（受影响项报 `available:false` + 有名 reason） | `tools/verify.sh run-once` |
 | AC-QEP-001 | P0 | 信封构造后可验签；改动任一字段导致验签失败 | `qa ac AC-QEP-001` |
 | AC-QEP-002 | P0 | 同一报文投递 3 次只产生 1 条事实；重发不改变 `msg_id` 与 `body_hash` | `qa ac AC-QEP-002` |
 

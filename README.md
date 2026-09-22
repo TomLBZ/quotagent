@@ -29,6 +29,29 @@ docs/work/roadmap.md                       mock → mvp demo → product 路线�
 docs/work/handover.md                      接手文档（每轮次更新，≤ 1024 B）
 ```
 
+## 一键运行
+
+```bash
+git clone <repo-url> quotagent && cd quotagent && ./run up   # 幂等启动 → 健康检查 → 打印 URL
+./run status   # 一行 JSON：{ok, service, pid, port, url, healthy, ready_ms, degraded[]}
+./run doctor   # 只读体检 7 项，逐条 next_action；退出码 0 = 这机器能跑
+./run down     # 停服务并回收本次启动的进程（不删数据）
+```
+
+外部凭据缺失**不阻塞启动**（受影响项在 `status.degraded[]` 报 `available:false` + 原因 + 下一步）；
+完整用法见 `src/system/runtime/docs/one-command-run.md`，契约原文见 `docs/design/28-plugin-requirements-and-run.md` §3.1。
+
+## 插件生命周期
+
+```bash
+tools/plugin.sh list --json                  # 枚举三层插件
+tools/plugin.sh status domain/advice         # 装载状态 / 依赖 / effects 计数
+tools/plugin.sh load|reload|unload domain/advice   # 装载 / 热重载（新 uid）/ 卸载（effects 归零）
+tools/plugin.sh deps domain/advice           # 依赖闭包（有环给环上的 id）
+```
+
+契约见 `src/system/runtime/docs/lifecycle-contract.md`；规范 `docs/design/27-plugin-architecture.md` §4。
+
 ## 给 agent 的最小操作序列
 
 ```bash

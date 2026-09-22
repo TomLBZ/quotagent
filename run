@@ -1,0 +1,466 @@
+#!/bin/sh
+# quotagent 一键运行入口（一键运行契约 QUOTAGENT-ONE-COMMAND v1，规范原文见
+# docs/design/28-plugin-requirements-and-run.md §3.1；本文件是它的实现）。
+#
+#   git clone <repo-url> quotagent && cd quotagent && ./run up
+#
+#   ./run up      [--port N] [--host H] [--prefix P] [--data-dir DIR] [--no-seed]
+#                 幂等启动：解析解释器 → 准备仓库内 .venv（缺失才建）→ 装宿主依赖（缺失才装）→
+#                 起服务 → 健康检查 → 打印 URL 与端口；重复执行不重建、不覆盖数据。
+#   ./run down    [--port N]        停服务并回收**本次启动的**进程（不删数据）
+#   ./run status  [--port N]        一行 JSON：{ok, service, pid, port, url, healthy, ready_ms, degraded[]}
+#   ./run doctor  [--port N]        只读体检（解释器/Node/cordis/端口/配置与凭据指纹/门是否可跑），
+#                                   逐项给 next_action；退出码 0 = 这机器能跑，非 0 = 不能跑。
+#
+# 为什么是 POSIX sh（28 §5 未决 1 的取舍）：`doctor` 必须在"还没有 Python 解释器"时也能给出可读输出，
+# 所以本文件不 import 任何项目代码；HTTP 探活用 curl → node → /dev/tcp 逐级回退，全都没有就如实报
+# `no-http-client`（不假装 healthy）。
+#
+# 纪律：只写 `tmp/run/**`（pid/日志）与 `--data-dir` 下的运行期数据根；不写账本、不写仓库外文件。
+set -u
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# 仓库根默认 = 本脚本所在目录；`$QUOTAGENT_RUN_ROOT` 允许"同一份脚本跑在指定仓库根上"
+# （门 `run-once` 用它跑变异体：变异只写在临时副本里，产品树字节不变）。
+ROOT=${QUOTAGENT_RUN_ROOT:-$HERE}
+QUOTAGENT_ROOT=$ROOT
+export QUOTAGENT_ROOT
+
+ACTION=${1:-}
+[ -n "$ACTION" ] || { echo "用法: ./run up|down|status|doctor [--port N] [+见文件头]" >&2; exit 2; }
+shift
+
+PORT=8093
+HOST=127.0.0.1
+PREFIX=/quotagent
+DATA_DIR=""
+SEED=1
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --port) [ $# -ge 2 ] || { echo './run: --port 需要一个值' >&2; exit 2; }; PORT=$2; shift 2 ;;
+    --host) [ $# -ge 2 ] || { echo './run: --host 需要一个值' >&2; exit 2; }; HOST=$2; shift 2 ;;
+    --prefix) [ $# -ge 2 ] || { echo './run: --prefix 需要一个值' >&2; exit 2; }; PREFIX=$2; shift 2 ;;
+    --data-dir) [ $# -ge 2 ] || { echo './run: --data-dir 需要一个值' >&2; exit 2; }; DATA_DIR=$2; shift 2 ;;
+    --no-seed) SEED=0; shift ;;
+    --seed) SEED=1; shift ;;
+    *) echo "./run: 未知参数 $1" >&2; exit 2 ;;
+  esac
+done
+[ -n "$DATA_DIR" ] || DATA_DIR="$ROOT/tmp/run-shared"
+RUN_DIR="$ROOT/tmp/run"
+PID_FILE="$RUN_DIR/webui-$PORT.pid"
+LOG_FILE="$RUN_DIR/webui-$PORT.log"
+HEALTH_PATH="$PREFIX/api/health"
+
+# ---------------------------------------------------------------------------------------------
+# 小工具（纯 sh；JSON 只需能容纳路径/版本/指纹这三类安全字符）
+# ---------------------------------------------------------------------------------------------
+jesc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/ /g'; }
+say() { printf '%s\n' "$1"; }
+fail_json() { printf '{"ok":false,"action":"%s","code":"%s","reason":"%s","next_action":"%s"}\n' \
+  "$(jesc "$1")" "$(jesc "$2")" "$(jesc "$3")" "$(jesc "$4")"; }
+
+sha8() {
+  # 指纹（前 8 位十六进制）：只报指纹，永不回显内容
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" 2>/dev/null | cut -c1-8
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" 2>/dev/null | cut -c1-8
+  else
+    printf 'unavailable'
+  fi
+}
+
+probe_health() {
+  # 返回 0 = 健康（HTTP 200）；回退链 curl → node → /dev/tcp（bash 才有）；全无 ⇒ 非 0
+  _ph_url="http://$HOST:$PORT$HEALTH_PATH"
+  if command -v curl >/dev/null 2>&1; then
+    _ph_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$_ph_url" 2>/dev/null || true)
+    [ "$_ph_code" = "200" ] && return 0
+    return 1
+  fi
+  if [ -n "${QUOTAGENT_NODE:-}" ] || command -v node >/dev/null 2>&1; then
+    _ph_node=${QUOTAGENT_NODE:-node}
+    "$_ph_node" -e '
+      const http = require("node:http");
+      const req = http.get(process.argv[1], (res) => { process.exit(res.statusCode === 200 ? 0 : 1) });
+      req.on("error", () => process.exit(1));
+      req.setTimeout(3000, () => { req.destroy(); process.exit(1) });
+    ' "$_ph_url" >/dev/null 2>&1 && return 0
+    return 1
+  fi
+  return 2   # 没有 HTTP 客户端
+}
+
+port_open() {
+  # 端口上有没有人在听（不判断是谁）：node 做一次真 TCP 连接；没有 node 就退回 curl 的根路径探测
+  if [ -n "${NODE_BIN:-}" ]; then
+    "$NODE_BIN" -e '
+      const net = require("node:net");
+      const socket = net.connect(Number(process.argv[1]), process.argv[2]);
+      socket.on("connect", () => { socket.destroy(); process.exit(0) });
+      socket.on("error", () => process.exit(1));
+      socket.setTimeout(2000, () => { socket.destroy(); process.exit(1) });
+    ' "$PORT" "$HOST" >/dev/null 2>&1 && return 0
+    return 1
+  fi
+  if command -v curl >/dev/null 2>&1; then
+    curl -s -o /dev/null --max-time 2 "http://$HOST:$PORT/" 2>/dev/null && return 0
+    return 1
+  fi
+  return 2
+}
+
+# 端口状态：ours（本服务在应答）/ other（别人占着）/ free（空闲）/ unknown（判不了）
+port_probe() {
+  if probe_health; then printf 'ours'; return 0; fi
+  port_open
+  case $? in
+    0) printf 'other' ;;
+    1) printf 'free' ;;
+    *) printf 'unknown' ;;
+  esac
+}
+
+port_pid() {
+  # 该端口上监听的 pid（尽力而为；拿不到就空）
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp 2>/dev/null | grep -E "[:.]$PORT\b" | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -n1
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | head -n1
+  fi
+}
+
+read_pid_file() { [ -f "$PID_FILE" ] && sed -n '1p' "$PID_FILE" 2>/dev/null || true; }
+read_meta() { sed -n "${2}p" "$PID_FILE" 2>/dev/null || true; }
+process_alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
+
+# 解释器解析（复用 tools/runtime.sh：唯一真源，不在本文件里再写一套顺序）
+resolve_python() {
+  QUOTAGENT_PY=${QUOTAGENT_PY:-}
+  if [ -f "$ROOT/tools/runtime.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/tools/runtime.sh" >/dev/null 2>&1 || true
+  fi
+  PY_BIN=${QUOTAGENT_PY:-}
+  PY_VER=""
+  if [ -n "$PY_BIN" ]; then
+    PY_VER=$("$PY_BIN" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null || true)
+  fi
+}
+
+resolve_node() {
+  NODE_BIN=""
+  if [ -n "${QUOTAGENT_NODE:-}" ] && [ -x "${QUOTAGENT_NODE}" ]; then NODE_BIN=$QUOTAGENT_NODE
+  elif command -v node >/dev/null 2>&1; then NODE_BIN=$(command -v node)
+  else
+    for _cand in "${WS_RUNTIME:-/workspace/runtime}"/node/*/bin/node; do
+      [ -x "$_cand" ] && NODE_BIN=$_cand && break
+    done
+  fi
+  NODE_VER=$([ -n "$NODE_BIN" ] && "$NODE_BIN" --version 2>/dev/null || true)
+}
+
+cordis_version() {
+  CORDIS_JSON="$ROOT/host/node_modules/cordis/package.json"
+  if [ -f "$CORDIS_JSON" ]; then
+    sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CORDIS_JSON" | head -n1
+  fi
+}
+
+config_path() {
+  printf '%s' "${QUOTAGENT_CONFIG_FILE:-/workspace/config.yaml}"
+}
+
+# 外部凭据（**只报"有没有"与指纹，永不回显值**）；缺失**不阻塞 up**（契约：受影响的插件报 available=false）
+credentials_report() {
+  CR_TOKENS=""
+  CR_DEGRADED=""
+  _cfg=$(config_path)
+  if [ -f "$_cfg" ]; then CR_CONFIG_STATE="present:$(sha8 "$_cfg")"; else CR_CONFIG_STATE="absent"; fi
+  if [ -f "$_cfg" ]; then
+    for _key in smtp.host imap.host mail.transport jev typesafe cloudflare vercel admin.token; do
+      grep -q -e "$_key" "$_cfg" 2>/dev/null && CR_TOKENS="$CR_TOKENS,$_key"
+    done
+  fi
+  CR_TOKENS=$(printf '%s' "$CR_TOKENS" | sed 's/^,//')
+  # 管理员 token：只报来源与权限，不报值
+  _tokfile=${QUOTAGENT_ADMIN_TOKEN_FILE:-$(dirname "$ROOT")/config/quotagent-admin-token}
+  if [ -n "${QUOTAGENT_ADMIN_TOKEN:-}" ]; then CR_ADMIN="env"
+  elif [ -f "$_tokfile" ]; then
+    _mode=$(stat -c '%a' "$_tokfile" 2>/dev/null || printf '?')
+    [ "$_mode" = "600" ] && CR_ADMIN="file:0600" || CR_ADMIN="file:mode-$_mode-refused"
+  else CR_ADMIN="absent"; fi
+}
+
+# ---------------------------------------------------------------------------------------------
+# up / down / status / doctor
+# ---------------------------------------------------------------------------------------------
+do_up() {
+  resolve_python
+  if [ -z "$PY_BIN" ]; then
+    fail_json up interpreter-missing "找不到 Python 3.9+ 解释器" \
+      "设 QUOTAGENT_PY=/path/to/python3 或运行 tools/bootstrap.sh"
+    return 2
+  fi
+  probe_health
+  HEALTH=$?
+  if [ "$HEALTH" = "0" ]; then
+    _pid=$(read_pid_file)
+    printf '{"ok":true,"action":"up","state":"already-up","service":"quotagent-webui","port":%s,"url":"http://%s:%s%s/","pid":%s,"idempotent":true,"note":"端口上已经有健康的本服务：不重建、不覆盖数据"}\n' \
+      "$PORT" "$HOST" "$PORT" "$PREFIX" "${_pid:-null}"
+    return 0
+  fi
+  if [ "$HEALTH" = "2" ]; then
+    fail_json up no-http-client "没有 curl 也没有 node：无法做健康检查" \
+      "装 curl（或有 node）再跑：不允许『起了但其实是坏的』"
+    return 2
+  fi
+  resolve_node
+  if [ -z "$NODE_BIN" ]; then
+    fail_json up node-missing "宿主内核需要 Node，但找不到" \
+      "装 Node 或 source /workspace/bin/activate.sh（设置 QUOTAGENT_NODE）"
+    return 2
+  fi
+  if [ ! -d "$ROOT/.venv/bin" ]; then
+    "$ROOT/tools/bootstrap.sh" >/dev/null 2>&1 || true
+  fi
+  if [ ! -d "$ROOT/host/node_modules/cordis" ]; then
+    "$ROOT/tools/cordis.sh" install >/dev/null 2>&1 || {
+      fail_json up host-deps-install-failed "宿主依赖装不上（host/node_modules/cordis 仍缺失）" \
+        "在能联网的机器上跑 tools/cordis.sh install，或把 host/node_modules 一起带过来"
+      return 1
+    }
+  fi
+  mkdir -p "$RUN_DIR" "$DATA_DIR" 2>/dev/null || true
+  START_MS=$(date +%s%3N 2>/dev/null || date +%s)
+  QUOTAGENT_WEBUI_PORT=$PORT \
+  QUOTAGENT_WEBUI_HOST=$HOST \
+  QUOTAGENT_WEBUI_PREFIX=$PREFIX \
+  QUOTAGENT_WEBUI_SEED=$SEED \
+  QUOTAGENT_WEBUI_SEED_PIPELINE=$SEED \
+  QUOTAGENT_UI_SHARED=$DATA_DIR \
+  QUOTAGENT_UI_LEDGER_CONTRACTOR=$DATA_DIR/contractor/ledger.jsonl \
+  QUOTAGENT_UI_LEDGER_SUPPLIER=$DATA_DIR/supplier/ledger.jsonl \
+  QUOTAGENT_UI_RETENTION_PLAN=$DATA_DIR/retention-plan.json \
+  QUOTAGENT_UI_PIPELINE=$DATA_DIR/pipeline.json \
+  QUOTAGENT_UI_MAIL=$DATA_DIR/mail.json \
+  QUOTAGENT_UI_ADMIN=$DATA_DIR/admin.json \
+  QUOTAGENT_UI_ADMIN_INBOX=$DATA_DIR/admin-submissions \
+  QUOTAGENT_UI_RFQ_DELIVERY=$DATA_DIR/contractor/01-package.json \
+    nohup "$PY_BIN" "$ROOT/tools/webui-serve.py" >>"$LOG_FILE" 2>&1 &
+  SERVICE_PID=$!
+  { printf '%s\n' "$SERVICE_PID"; printf '%s\n' "$START_MS"; printf '%s\n' "pending"; printf 'data=%s\n' "$DATA_DIR"; } \
+    >"$PID_FILE" 2>/dev/null || true
+  sleep 1
+  _waited=0
+  while [ "$_waited" -lt 60 ]; do
+    if probe_health; then
+      _ready=$(( $(date +%s%3N 2>/dev/null || date +%s) - START_MS ))
+      # ready_ms 是**启动时量到的常值**：写回 pid 文件，status 每次回读同一个数
+      # （否则 status 会带一个不断增长的 uptime，破坏"第二次 up 幂等 ⇒ status 逐字节一致"）。
+      { printf '%s\n' "$SERVICE_PID"; printf '%s\n' "$START_MS"; printf '%s\n' "$_ready"; printf 'data=%s\n' "$DATA_DIR"; } \
+        >"$PID_FILE" 2>/dev/null || true
+      printf '{"ok":true,"action":"up","state":"started","service":"quotagent-webui","pid":%s,"port":%s,"url":"http://%s:%s%s/","healthy":true,"ready_ms":%s,"log":"%s","data_dir":"%s"}\n' \
+        "$SERVICE_PID" "$PORT" "$HOST" "$PORT" "$PREFIX" "$_ready" "$(jesc "$LOG_FILE")" "$(jesc "$DATA_DIR")"
+      return 0
+    fi
+    process_alive "$SERVICE_PID" || break
+    sleep 1
+    _waited=$((_waited + 1))
+  done
+  printf '{"ok":false,"action":"up","code":"unhealthy","reason":"起了但健康检查连续 60 秒不通","log":"%s","pid":%s,"next_action":"看上面那份日志的尾部；端口被占/配置错会在那里指名报出"}\n' \
+    "$(jesc "$LOG_FILE")" "$SERVICE_PID"
+  return 1
+}
+
+do_down() {
+  _pid=$(read_pid_file)
+  if [ -z "$_pid" ]; then
+    printf '{"ok":true,"action":"down","state":"not-managed","port":%s,"stopped":false,"next_action":"本端口没有『本次启动』的记录：服务若由工作区网关托管，请在网关侧停它（./run 不碰不是自己起的进程）"}\n' "$PORT"
+    return 0
+  fi
+  if ! process_alive "$_pid"; then
+    rm -f "$PID_FILE" 2>/dev/null || true
+    printf '{"ok":true,"action":"down","state":"process-gone","pid":%s,"port":%s,"stopped":false,"next_action":"进程已不在（记录已清）；端口若仍被占，说明占用者是别的进程"}\n' "$_pid" "$PORT"
+    return 0
+  fi
+  kill -TERM "$_pid" 2>/dev/null || true
+  _waited=0
+  while [ "$_waited" -lt 15 ]; do
+    process_alive "$_pid" || break
+    sleep 1
+    _waited=$((_waited + 1))
+  done
+  if process_alive "$_pid"; then kill -KILL "$_pid" 2>/dev/null || true; sleep 1; fi
+  rm -f "$PID_FILE" 2>/dev/null || true
+  resolve_node
+  _state=$(port_probe)
+  if [ "$_state" != "free" ]; then
+    printf '{"ok":false,"action":"down","code":"port-still-open","pid":%s,"port":%s,"port_state":"%s","next_action":"端口仍有人在听（state=%s）：确认是谁（ours=本服务没停干净、other=别的进程）"}\n' \
+      "$_pid" "$PORT" "$_state" "$_state"
+    return 1
+  fi
+  printf '{"ok":true,"action":"down","state":"stopped","pid":%s,"port":%s,"stopped":true,"released":true,"next_action":"数据没删；再起用 ./run up"}\n' \
+    "$_pid" "$PORT"
+  return 0
+}
+
+degraded_json() {
+  # 非阻塞的降级项（凭据缺失等）：一行一条，逗号分隔
+  credentials_report
+  _out=""
+  case "$CR_CONFIG_STATE" in
+    absent) _out="${_out}{\"plugin\":\"system/config\",\"available\":false,\"reason\":\"config-file-absent\",\"next_action\":\"放 /workspace/config.yaml（或设 QUOTAGENT_CONFIG_FILE）后重跑\"}" ;;
+  esac
+  if [ "$CR_ADMIN" = "absent" ]; then
+    _out="$_out,{\"plugin\":\"system/admin\",\"available\":false,\"reason\":\"admin-token-absent\",\"next_action\":\"把随机 token 写到 0600 文件后重跑（token 只存指针与指纹，永不回显）\"}"
+  elif [ "$CR_ADMIN" = "file:mode-0600-refused" ]; then
+    _out="$_out,{\"plugin\":\"system/admin\",\"available\":false,\"reason\":\"admin-token-mode-not-0600\",\"next_action\":\"chmod 600 那个 token 文件（fail-closed 是刻意的）\"}"
+  fi
+  printf '%s' "$_out" | sed 's/^,//'
+}
+
+do_status() {
+  resolve_node
+  _pid=$(read_pid_file)
+  _ready=""
+  if [ -n "$_pid" ]; then _ready=$(read_meta "$PID_FILE" 3); fi
+  probe_health && _healthy=true || _healthy=false
+  if [ -z "$_pid" ]; then _pidj=null; else _pidj=$_pid; fi
+  if [ -z "$_ready" ]; then _readyj=null; else _readyj=$_ready; fi
+  _degraded=$(degraded_json)
+  printf '{"ok":true,"service":"quotagent-webui","pid":%s,"port":%s,"url":"http://%s:%s%s/","healthy":%s,"ready_ms":%s,"managed":%s,"degraded":[%s]}\n' \
+    "$_pidj" "$PORT" "$HOST" "$PORT" "$PREFIX" "$_healthy" \
+    "$([ -n "$_ready" ] && printf '%s' "$_ready" || printf 'null')" \
+    "$([ -n "$_pid" ] && printf true || printf false)" "$_degraded"
+  [ "$_healthy" = true ] && return 0 || return 1
+}
+
+do_doctor() {
+  resolve_python
+  resolve_node
+  CORDIS=$(cordis_version)
+  credentials_report
+  _cfg=$(config_path)
+  BLOCKING=0
+  ITEMS=0
+
+  # ① 解释器
+  ITEMS=$((ITEMS + 1))
+  if [ -n "$PY_BIN" ]; then
+    printf '[ok]       interpreter  %s (Python %s)\n' "$PY_BIN" "$PY_VER"
+    J_INTERP=$(printf '{"item":"interpreter","status":"ok","detail":"%s","version":"%s","next_action":""}' "$(jesc "$PY_BIN")" "$(jesc "$PY_VER")")
+  else
+    printf '[FAIL]     interpreter  找不到 Python 3.9+\n'
+    printf '           next_action: 设 QUOTAGENT_PY=/path/to/python3 或运行 tools/bootstrap.sh\n'
+    BLOCKING=$((BLOCKING + 1))
+    J_INTERP=$(printf '{"item":"interpreter","status":"failed","detail":"not-found","next_action":"设 QUOTAGENT_PY=/path/to/python3 或运行 tools/bootstrap.sh"}')
+  fi
+
+  # ② Node
+  ITEMS=$((ITEMS + 1))
+  if [ -n "$NODE_BIN" ]; then
+    printf '[ok]       node         %s (%s)\n' "$NODE_BIN" "$NODE_VER"
+    J_NODE=$(printf '{"item":"node","status":"ok","detail":"%s","version":"%s","next_action":""}' "$(jesc "$NODE_BIN")" "$(jesc "$NODE_VER")")
+  else
+    printf '[FAIL]     node         找不到（宿主内核需要 Node）\n'
+    printf '           next_action: 装 Node 或 source /workspace/bin/activate.sh\n'
+    BLOCKING=$((BLOCKING + 1))
+    J_NODE=$(printf '{"item":"node","status":"failed","detail":"not-found","next_action":"装 Node 或 source /workspace/bin/activate.sh"}')
+  fi
+
+  # ③ cordis
+  ITEMS=$((ITEMS + 1))
+  if [ -n "$CORDIS" ]; then
+    printf '[ok]       cordis       %s（host/node_modules，仓库内）\n' "$CORDIS"
+    J_CORDIS=$(printf '{"item":"cordis","status":"ok","detail":"host/node_modules/cordis","version":"%s","next_action":""}' "$(jesc "$CORDIS")")
+  else
+    printf '[FAIL]     cordis       未安装（host/node_modules/cordis 缺失）\n'
+    printf '           next_action: tools/cordis.sh install（只在缺失时装；锁文件已在库内）\n'
+    BLOCKING=$((BLOCKING + 1))
+    J_CORDIS=$(printf '{"item":"cordis","status":"failed","detail":"missing","next_action":"tools/cordis.sh install"}')
+  fi
+
+  # ④ 端口
+  ITEMS=$((ITEMS + 1))
+  _mypid=$(read_pid_file)
+  PORT_STATE=$(port_probe)
+  case "$PORT_STATE" in
+    ours)
+      printf '[ok]       port %s     健康的本服务在应答（pid=%s）\n' "$PORT" "${_mypid:-?}"
+      J_PORT=$(printf '{"item":"port","status":"ok","detail":"healthy-service","port":%s,"pid":%s,"next_action":""}' "$PORT" "${_mypid:-null}") ;;
+    other)
+      _ppid=$(port_pid)
+      printf '[FAIL]     port %s     被别的进程占用（pid=%s）\n' "$PORT" "${_ppid:-未知}"
+      printf '           next_action: ./run up --port <另一个端口>（或先停掉那个进程）\n'
+      BLOCKING=$((BLOCKING + 1))
+      J_PORT=$(printf '{"item":"port","status":"failed","detail":"occupied-by-other","port":%s,"pid":%s,"next_action":"./run up --port <另一个端口>"}' "$PORT" "${_ppid:-null}") ;;
+    free)
+      printf '[ok]       port %s     空闲（up 会占用它）\n' "$PORT"
+      J_PORT=$(printf '{"item":"port","status":"ok","detail":"free","port":%s,"pid":null,"next_action":""}' "$PORT") ;;
+    *)
+      printf '[degraded] port %s     判不了占用（既没有 node 也没有 curl）\n' "$PORT"
+      printf '           next_action: 装 node 或 curl 后再跑 doctor（否则端口冲突只能靠 up 失败发现）\n'
+      J_PORT=$(printf '{"item":"port","status":"degraded","detail":"unknown","port":%s,"pid":null,"next_action":"装 node 或 curl 后再跑 doctor"}' "$PORT") ;;
+  esac
+
+  # ⑤ 配置指纹（只报指纹与"有没有"，永不回显值）
+  ITEMS=$((ITEMS + 1))
+  if [ "$CR_CONFIG_STATE" = "absent" ]; then
+    printf '[degraded] config       %s 不存在（**不阻塞 up**：受影响的插件报 available=false）\n' "$_cfg"
+    printf '           next_action: 生成 config.yaml 白名单键（./run 不代写；见 docs/design/28 §3.1）\n'
+    J_CONFIG=$(printf '{"item":"config","status":"degraded","detail":"absent","path":"%s","fingerprint":null,"next_action":"生成 config.yaml（只含白名单键）"}' "$(jesc "$_cfg")")
+  else
+    printf '[ok]       config       %s 指纹 %s；命中凭据键 [%s]\n' "$_cfg" "$(printf '%s' "$CR_CONFIG_STATE" | sed 's/present://')" "${CR_TOKENS:-无}"
+    J_CONFIG=$(printf '{"item":"config","status":"ok","detail":"present","path":"%s","fingerprint":"%s","credential_keys":["%s"],"next_action":""}' \
+      "$(jesc "$_cfg")" "$(printf '%s' "$CR_CONFIG_STATE" | sed 's/present://')" "${CR_TOKENS:-}")
+  fi
+
+  # ⑥ 凭据（管理员 token 只是一例；缺凭据一律 degraded，**绝不当成失败**）
+  ITEMS=$((ITEMS + 1))
+  case "$CR_ADMIN" in
+    env|file:0600)
+      printf '[ok]       credentials  admin token：%s（只报来源与权限，不回显值）\n' "$CR_ADMIN"
+      J_CRED=$(printf '{"item":"credentials","status":"ok","detail":"%s","next_action":""}' "$CR_ADMIN") ;;
+    *)
+      printf '[degraded] credentials  admin token：%s（受影响插件 available=false + reason；**不阻塞 up**）\n' "$CR_ADMIN"
+      printf '           next_action: 0600 文件 /workspace/config/quotagent-admin-token（token 只存指针与指纹）\n'
+      J_CRED=$(printf '{"item":"credentials","status":"degraded","detail":"%s","next_action":"放 0600 token 文件（fail-closed）"}' "$CR_ADMIN") ;;
+  esac
+  if [ -z "$CR_TOKENS" ]; then
+    printf '[degraded] credentials  邮件/模型凭据：0 条命中（mail 传输 available=false；发信会如实拒绝，不假装能发）\n'
+    printf '           next_action: 在 config.yaml 里补 SMTP/IMAP（键名见 docs/design/19-mail-contract.md）\n'
+  fi
+
+  # ⑦ 门是否可跑（只读检查，不真跑门）
+  ITEMS=$((ITEMS + 1))
+  _gates=0
+  [ -x "$ROOT/tools/verify.sh" ] && _gates=1
+  if [ "$_gates" = "1" ] && [ -n "$PY_BIN" ]; then
+    printf '[ok]       gates        tools/verify.sh 可执行（docs|coverage|... 离线可跑）\n'
+    J_GATES=$(printf '{"item":"gates","status":"ok","detail":"tools/verify.sh","next_action":""}')
+  else
+    printf '[FAIL]     gates        tools/verify.sh 不可执行或缺解释器\n'
+    printf '           next_action: chmod +x tools/verify.sh（并确保解释器可解析）\n'
+    BLOCKING=$((BLOCKING + 1))
+    J_GATES=$(printf '{"item":"gates","status":"failed","detail":"not-runnable","next_action":"chmod +x tools/verify.sh"}')
+  fi
+
+  if [ "$BLOCKING" -eq 0 ]; then
+    printf '{"ok":true,"action":"doctor","port":%s,"blocking":0,"items":%s,"checks":[%s,%s,%s,%s,%s,%s,%s],"next_action":"这机器能跑：./run up"}\n' \
+      "$PORT" "$ITEMS" "$J_INTERP" "$J_NODE" "$J_CORDIS" "$J_PORT" "$J_CONFIG" "$J_CRED" "$J_GATES"
+    return 0
+  fi
+  printf '{"ok":false,"action":"doctor","port":%s,"blocking":%s,"items":%s,"checks":[%s,%s,%s,%s,%s,%s,%s],"next_action":"按上面逐条的 next_action 修；修完再跑 ./run doctor"}\n' \
+    "$PORT" "$BLOCKING" "$ITEMS" "$J_INTERP" "$J_NODE" "$J_CORDIS" "$J_PORT" "$J_CONFIG" "$J_CRED" "$J_GATES"
+  return 1
+}
+
+case "$ACTION" in
+  up) do_up ;;
+  down) do_down ;;
+  status) do_status ;;
+  doctor) do_doctor ;;
+  help|-h|--help) sed -n '2,20p' "$0" ;;
+  *) echo "用法: ./run up|down|status|doctor [--port N]" >&2; exit 2 ;;
+esac

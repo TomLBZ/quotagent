@@ -190,8 +190,10 @@ const main = async () => {
     await ctx.plugin({ name: 'bid-heuristics', inject: [], Config: bhConfig,
       apply: (inner, cfg) => bhApply(inner, cfg) }, bhConfig.parse({}))
     // 决策建议层（本批）：确定性规则层，只吃调用方给的白名单载荷（纯函数插件）
-    const { apply: advApply, Config: advConfig } = await import('./modules/advice-panel.mjs')
-    await ctx.plugin({ name: 'advice-panel', inject: [], Config: advConfig,
+    // 阶段 1：装配点改指**插件自己的入口** `src/domain/advice/code/index.mjs`（wrapper/重导出 →
+    // host/modules/advice-panel.mjs，阶段 4.1 实体搬迁）；入口额外向 WebUI 注册面提交一个只读区块。
+    const { apply: advApply, Config: advConfig } = await import('../src/domain/advice/code/index.mjs')
+    await ctx.plugin({ name: 'domain/advice', inject: [], Config: advConfig,
       apply: (inner, cfg) => advApply(inner, cfg) }, advConfig.parse({}))
     // 审批等多久 / 变更单谁卡着（本批）：同规格的纯函数插件（不读账本、不取墙钟、不能批准）
     const { apply: gtApply, Config: gtConfig } = await import('./modules/gate-timeline.mjs')
@@ -284,6 +286,17 @@ const main = async () => {
       rfq_delivery: String(args['rfq-delivery'] ?? process.env.QUOTAGENT_UI_RFQ_DELIVERY ?? ''),
     })
     // 注意：这里**不能**用 emit()（它写完就 process.exit）——UI 是常驻服务
+    // 用户空间样板（阶段 1）：注入式 UI 的第二个注册者（证明机制与业务无关：webui 不知道它是什么）。
+    // 阶段 1 暂时挂进平台 ctx（独立 Context 装载由阶段 5.1/5.2 收敛，见该插件 README 的已知偏差）。
+    const { apply: helloApply, Config: helloConfig } = await import('../src/userspace/demo-ns/hello/code/index.mjs')
+    const helloCfg = typeof helloConfig?.parse === 'function' ? helloConfig.parse({}) : undefined
+    if (helloCfg === undefined) {
+      await ctx.plugin({ name: 'userspace/demo-ns/hello', inject: [], Config: helloConfig,
+        apply: (inner, cfg) => helloApply(inner, cfg ?? {}) })
+    } else {
+      await ctx.plugin({ name: 'userspace/demo-ns/hello', inject: [], Config: helloConfig,
+        apply: (inner, cfg) => helloApply(inner, cfg) }, helloCfg)
+    }
     process.stdout.write(JSON.stringify({ ok: true, action: 'webui', profile: profileName, pid: process.pid,
            url: box.handle?.url, port: box.handle?.port, prefix: box.handle?.prefix,
            views: Object.keys(VIEW_RULES), routes: (box.handle ? Object.keys(VIEW_RULES) : [])

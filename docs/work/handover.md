@@ -4,13 +4,13 @@
 
 ## 现在在哪
 
-P2 进行中。本批消掉两个迁移阻塞（EV-164）：① 门缺陷 **D-073 根因**（`AC-AGENTRT-002` 哨兵扫描改「**契约源集合**」口径 + 反向断言 ⇒ 有 `tmp/` 整树副本也不再红）② **文档预算**（AC 主文件 32645→26355 B、进度清单 31843→25339 B；最老的行**整行**搬入 `acceptance-criteria-archive-b.md` / `progress-checklist-archive.md`，门的 **T 定义集合先扩到归档**再搬）。
+P2 中。三批：① T-288 真写闭环（EV-160/161）；② 硬规范 27/28 + ADR-0020/0021 + 迁移计划（EV-162）；③ **迁移阶段 1**（EV-165/166，T-314/315）：三层骨架 + 样板插件（各层 1 个）+ `tools/plugin.sh` 六动词（真装载；reload 新实例、unload effects 归零）+ 注入式 UI 注册面（区块真出现在页面上，webui 零业务耦合）+ `./run up|down|status|doctor`；新门 `plugin-lifecycle` 43/43、`run-once` 18/18（变异全红）。
 
 ## 下一步唯一动作
 
-跑 `docs/work/plans/plugin-migration-plan.md` §2 的**阶段 0**（建 `src/{system,domain,userspace}` 骨架 + `plugin.json` + `tools/plugin.sh list`）。未完成行见 `progress-checklist.md`。
+`docs/work/plans/plugin-migration-plan.md` §2 续做**阶段 2**（`src/quotagent/services/**` 逐个搬进 `code/`，每搬一个跑它的 AC）。未完成行见 `progress-checklist.md`。
 
 ## 不变量与阻塞
 
 内核不可自改 · 账本唯一写者 · 账本行永不销毁 · commit 面不进桥 · 私域不出 realm · V 只能人签 · **门名是接口**。
-待人手：T-224 把 Jev key 放进 `/workspace/config.yaml`；G0/G1 签署。无技术阻塞。
+待人手：T-224 的 Jev key；G0/G1 签署。无技术阻塞。

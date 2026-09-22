@@ -75,7 +75,8 @@
 | FR-NORM-002 | src/quotagent/services/norm.py | Rejection | 映射 |
 | FR-NORM-003 | src/quotagent/services/norm.py | NormService._stage_align() | 映射 |
 | FR-NORM-004 | src/quotagent/services/quotes.py | QuoteBook.on_amended(from_rev,to_rev) | 直引 |
-| FR-PLUGIN-001 | src/quotagent/kernel/plugin.py | PluginHost._activate() | 直引 |
+| FR-PLUGIN-005 | host/lib/ui-slot.mjs、host/modules/webui.mjs | 注入式 UI 注册面：机制只做槽位/排序/装配（webui 零业务耦合、0 内联脚本）；两个样板各注册只读区块（`plugin-lifecycle` 43/43，含 4 处变异全红） | 直引 |
+| FR-PLUGIN-001 | src/quotagent/kernel/plugin.py、src/system/runtime/tools/plugin-lifecycle.mjs | PluginHost._activate()；宿主侧六动词同一套接口（`tools/verify.sh plugin-lifecycle`） | 直引 |
 | FR-PLUGIN-002 | src/quotagent/kernel/plugin.py | PluginHost._reconcile() | 直引 |
 | FR-PLUGIN-003 | src/quotagent/kernel/plugin.py | PluginHost.unmount() | 直引 |
 | FR-PLUGIN-004 | src/quotagent/kernel/plugin.py | PluginHost.update() | 直引 |

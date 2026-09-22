@@ -1,0 +1,25 @@
+{
+  "name": "runtime",
+  "version": "1.0.0",
+  "layer": "system",
+  "provides": ["pluginLifecycle"],
+  "entry": "code/index.mjs",
+  "description": "系统级运行时插件：仓库内自包含运行时（解释器解析 / 一键运行）与「一切皆插件」的六动词生命周期实现（目录即清单 + 真装载/真卸载 + 依赖闭包）。",
+  "inject": [],
+  "depends_on": [],
+  "external_deps": {},
+  "permissions": {
+    "writes": ["own-dir", "runtime-state-file"],
+    "ledger": "none"
+  },
+  "source": "human",
+  "requirements": ["FR-RUNTIME-001", "FR-RUNTIME-002", "FR-PLUGIN-001", "FR-PLUGIN-002", "FR-PLUGIN-003"],
+  "tests": ["tools/verify.sh plugin-lifecycle", "tools/verify.sh run-once"],
+  "migration": {
+    "stage": 1,
+    "mode": "new-and-wrapper",
+    "impl": "code/plugin-registry.mjs + tools/plugin-lifecycle.mjs（阶段 1 新增）",
+    "existing_carriers": ["tools/runtime.sh", "tools/run.sh", "tools/bootstrap.sh", "src/quotagent/paths.py"],
+    "moves_in_stage": 3
+  }
+}

@@ -41,9 +41,10 @@
 | FR-EVT-001 | 事件五模式分发（emit/parallel/serial/bail/waterfall） | must | P0 | AC-EVT-001 |
 | FR-EVT-002 | 监听器注册返回 disposer，卸载后自动注销 | must | P0 | AC-PLUGIN-001 |
 | FR-EVT-003 | waterfall 不调 `next()` 即短路，且短路点必须在文档登记 | must | P0 | AC-EVT-002 |
-| FR-PLUGIN-001 | 插件装载/卸载，依赖未就绪不得激活 | must | P0 | AC-PLUGIN-001 |
+| FR-PLUGIN-001 | 插件装载/卸载，依赖未就绪不得激活；**宿主侧同一套接口**（`tools/plugin.sh` 六动词） | must | P0 | AC-PLUGIN-001、AC-PLUGIN-005 |
 | FR-PLUGIN-002 | 依赖变化自动触发消费者重载/失活，不自动迁移草稿 | must | P0 | AC-PLUGIN-002 |
 | FR-PLUGIN-003 | 卸载后无残留订阅、定时器、外部通知 | must | P0 | AC-PLUGIN-001 |
+| FR-PLUGIN-005 | 插件向 WebUI 的**注入式注册面**提交自己的区块/路由声明；WebUI 只做机制（槽位 / 排序 / 静态资源前缀），不含任何业务语义与插件名 | must | P2 | AC-PLUGIN-006 |
 | FR-QEP-001 | 构造/校验/签名/验签 QEP 信封 | must | P0 | AC-QEP-001 |
 | FR-QEP-002 | 承诺类报文缺人工批准即拒收 | must | P0 | AC-APPROVE-002 |
 | FR-QEP-004 | 至少一次投递 + 幂等去重 | must | P0 | AC-QEP-002 |
@@ -52,7 +53,7 @@
 
 | ID | 需求 | 优先级 | 阶段 | 关联 AC |
 |---|---|---|---|---|
-| FR-RUNTIME-001 | 仓库内自包含运行时：实现仅依赖 Python 3.9+ 标准库；解释器由仓库内脚本解析（仓库 `.venv` 优先，可被 `QUOTAGENT_PY` 覆盖）；运行不写仓库外文件 | must | P0 | AC-RUNTIME-001 |
+| FR-RUNTIME-001 | 仓库内自包含运行时：实现仅依赖 Python 3.9+ 标准库；解释器由仓库内脚本解析（仓库 `.venv` 优先，可被 `QUOTAGENT_PY` 覆盖）；运行不写仓库外文件；**一键运行**（`./run up|down|status|doctor`） | must | P0 | AC-RUNTIME-001、AC-RUNTIME-010 |
 | FR-RUNTIME-002 | CLI 骨架：`python -m quotagent.qa` 提供 `ac`/`suite`/`list` 入口；AC 报告为机器可读 JSON，退出码 0=通过、1=断言失败、2=未知入口 | must | P0 | AC-RUNTIME-002 |
 
 ## 3. 共享能力域

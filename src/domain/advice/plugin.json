@@ -1,0 +1,24 @@
+{
+  "name": "advice",
+  "version": "1.0.0",
+  "layer": "domain",
+  "provides": ["advicePanel"],
+  "entry": "code/index.mjs",
+  "description": "决策建议层（domain）：把「看得到事实但不知道下一步」变成一条条可复制、可溯源的命令/路由；确定性规则引擎（engine=rules），没有可分的数据就不给建议。",
+  "inject": [],
+  "depends_on": ["system/webui"],
+  "external_deps": {},
+  "permissions": {
+    "writes": ["own-dir"],
+    "ledger": "none"
+  },
+  "source": "human",
+  "requirements": ["FR-ADV-001", "FR-USREQ-012"],
+  "tests": ["tools/verify.sh advice", "tools/verify.sh plugin-lifecycle"],
+  "migration": {
+    "stage": 1,
+    "mode": "wrapper",
+    "impl": "host/modules/advice-panel.mjs",
+    "moves_in_stage": 4
+  }
+}

@@ -210,17 +210,26 @@
 |---|---|---|---|
 | 1 | Python 解释器解析 | `tools/runtime.sh`（已实现，含"拒绝同名包装器"的探针） | 无 |
 | 2 | 仓库内 `.venv` | `tools/bootstrap.sh`（`--without-pip`，幂等） | 无 |
-| 3 | 宿主依赖与版本钉死 | `tools/cordis.sh install`（只写仓库内）+ `package-lock.json` 入库 | `./run up` 未串联 |
-| 4 | 服务进程与端口 | `tools/webui-serve.py`（独立进程 + healthz，端口 8093） | 无 `--port` 覆盖与端口占用诊断 |
-| 5 | 数据根 | `tmp/`、`host-root`（默认在 `process.cwd()`） | 默认值分散，未在契约里统一 |
-| 6 | 健康检查 | `/healthz`（已实现） | `up` 未把它作为退出码判据 |
+| 3 | 宿主依赖与版本钉死 | `tools/cordis.sh install`（只写仓库内）+ `package-lock.json` 入库 | 无（`./run up` 已串联：仅在缺失时装） |
+| 4 | 服务进程与端口 | `tools/webui-serve.py`（独立进程 + healthz，端口 8093） | 无（`./run --port` 覆盖 + `doctor` 端口占用诊断） |
+| 5 | 数据根 | `tmp/`、`host-root`（默认在 `process.cwd()`） | 无（`./run --data-dir` 统一运行期数据根，默认 `tmp/run-shared`；pid/日志落 `tmp/run/`） |
+| 6 | 健康检查 | `/healthz`（已实现） | 无（`./run up` 已把它当退出码判据：连续不健康 ⇒ 非 0 + 日志路径） |
 | 7 | 离线可跑的门 | `tools/verify.sh smoke|docs|coverage` | 无 |
-| 8 | 单入口 | **无** | `./run` 本身未实现（登记为 `T-312` 子项） |
+| 8 | 单入口 | 仓库根 `./run`（本批新增，包装既有载体；`logs`/`config init` 未实现） | `./run` 的 `logs` 与 `config init`（阶段 5.4 剩余项） |
 
 ### 3.3 现状差距（诚实）
 
-今天从裸机到服务可访问是**三条命令**（`tools/bootstrap.sh` → `tools/cordis.sh install` → `tools/webui-serve.py`），
-不是一条。本契约是**规范**，实现登记在 `T-312` 的子项里；在本批（只改文档）**不得**声称已实现。
+**已实现（本批，EV-166 / T-315）**：仓库根 `./run up | down | status | doctor` 四个动词 + 门 `tools/verify.sh run-once`；
+`up` 幂等（重复执行不重建、不覆盖数据）、`down` 只回收**本次启动的**进程且真释放端口、
+`status` 一行 JSON（`ready_ms` 是启动时量到的常值 ⇒ 两次 `status` 逐字节一致）、
+`doctor` 只读体检 7 项（解释器/Node/cordis/端口/配置指纹/凭据/门）逐条给 `next_action`，退出码 0 = 这机器能跑；
+**外部凭据缺失不阻塞 `up`**（受影响项在 `status.degraded[]` 里报 `available:false` + 有名 reason + `next_action`）。
+
+**仍未实现**：`logs`（容器里日志在 `tmp/run/webui-<port>.log`，`doctor`/`up` 已把路径写进输出，但没有 `logs` 动词）
+与 `config init`（今天由 `tools/config-apply.py --init` 承担，待做成薄包装）。这两条留在阶段 5.4 收口。
+
+今天从裸机到服务可访问是**一条命令**（`./run up`，内部串起 `tools/bootstrap.sh` → `tools/cordis.sh install`（仅缺失时）→ `tools/webui-serve.py` → 健康检查）。
+本页 §3.1 是规范原文；实现与判据：`src/system/runtime/docs/one-command-run.md`，门 `tools/verify.sh run-once`（EV-166）。
 
 ## 4. 本页的验收
 

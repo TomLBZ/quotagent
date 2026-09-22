@@ -1,0 +1,299 @@
+EV-165 迁移阶段 1：三层骨架 + 六动词契约工具（tools/plugin.sh）+ 注入式 UI 注册面（T-314 / T-315 / D-075）
+
+基线提交：88859c776bced103362ea0961959d3de2a749d9a（本批**尚未提交**时的原始输出；提交 sha 见文末）
+解释器/Node：v24.21.0 / cordis 4.0.0-rc.10（host/node_modules）
+
+## 一、本批文件与字节
+
+新增（全部逐字节量过）：
+
+| 文件 | 字节 |
+|---|---|
+| `host/lib/ui-slot.mjs` | 13179 |
+| `src/system/runtime/plugin.json` | 1009 |
+| `src/system/runtime/README.md` | 3051 |
+| `src/system/runtime/code/index.mjs` | 3716 |
+| `src/system/runtime/code/plugin-registry.mjs` | 19782 |
+| `src/system/runtime/tools/plugin-lifecycle.mjs` | 22784 |
+| `src/system/runtime/docs/lifecycle-contract.md` | 6017 |
+| `src/system/runtime/docs/one-command-run.md` | 3762 |
+| `src/system/runtime/requirements/README.md` | 1711 |
+| `src/system/runtime/tools/.gitkeep` | 0 |
+| `src/system/runtime/tests/.gitkeep` | 0 |
+| `src/system/runtime/data/.gitkeep` | 0 |
+| `src/domain/advice/plugin.json` | 779 |
+| `src/domain/advice/README.md` | 3007 |
+| `src/domain/advice/code/index.mjs` | 4817 |
+| `src/domain/advice/docs/ui-block-contract.md` | 2734 |
+| `src/domain/advice/requirements/README.md` | 1795 |
+| `src/domain/advice/tools/.gitkeep` | 0 |
+| `src/domain/advice/tests/.gitkeep` | 0 |
+| `src/domain/advice/data/.gitkeep` | 0 |
+| `src/userspace/demo-ns/hello/plugin.json` | 1024 |
+| `src/userspace/demo-ns/hello/README.md` | 2841 |
+| `src/userspace/demo-ns/hello/code/index.mjs` | 3573 |
+| `src/userspace/demo-ns/hello/docs/ui-block-contract.md` | 1483 |
+| `src/userspace/demo-ns/hello/requirements/README.md` | 1590 |
+| `src/userspace/demo-ns/hello/tools/.gitkeep` | 0 |
+| `src/userspace/demo-ns/hello/tests/.gitkeep` | 0 |
+| `src/userspace/demo-ns/hello/data/.gitkeep` | 0 |
+| `tools/plugin.sh` | 2435 |
+| `run` | 22635 |
+| `tools/check-plugin-lifecycle.py` | 40989 |
+| `tools/check-run-once.py` | 20866 |
+
+改动（git diff 的行数口径）：
+
+| 文件 | 新增行 | 删除行 |
+|---|---|---|
+| `README.md` | 23 | 0 |
+| `docs/design/15-requirements-coverage.md` | 2 | 1 |
+| `docs/design/27-plugin-architecture.md` | 9 | 7 |
+| `docs/design/28-plugin-requirements-and-run.md` | 16 | 7 |
+| `docs/work/acceptance-criteria.md` | 3 | 0 |
+| `docs/work/decisions.md` | 27 | 0 |
+| `docs/work/functional-requirements.md` | 3 | 2 |
+| `docs/work/handover.md` | 3 | 3 |
+| `docs/work/progress-checklist.md` | 2 | 0 |
+| `.agents/state.json` | 12 | 7 |
+| `host/cli.mjs` | 15 | 2 |
+| `host/modules/webui.mjs` | 35 | 4 |
+| `tools/verify.sh` | 16 | 0 |
+
+## 二、六动词真跑（原始输出，未经修饰）
+
+```
+$ tools/plugin.sh list --json
+{"ok":true,"verb":"list","root":"/workspace/projects/quotagent","layer":null,"count":3,"plugins":[{"id":"system/runtime","layer":"system","ns":null,"name":"runtime","version":"1.0.0","description":"系统级运行时插件：仓库内自包含运行时（解释器解析 / 一键运行）与「一切皆插件」的六动词生命周期实现（目录即清单 + 真装载/真卸载 + 依赖闭包）。","provides":["pluginLifecycle"],"entry":"code/index.mjs","kind":"esm","migration":{"stage":1,"mode":"new-and-wrapper","impl":"code/plugin-registry.mjs + tools/plugin-lifecycle.mjs（阶段 1 新增）","existing_carriers":["tools/runtime.sh","tools/run.sh","tools/bootstrap.sh","src/quotagent/paths.py"],"moves_in_stage":3},"valid":true,"reason":null,"next_action":null,"status":"not-loaded","uid":null,"deps_ready":true,"deps_direct":[],"deps_missing":[],"deps_unresolved":[],"cycle":null},{"id":"domain/advice","layer":"domain","ns":null,"name":"advice","version":"1.0.0","description":"决策建议层（domain）：把「看得到事实但不知道下一步」变成一条条可复制、可溯源的命令/路由；确定性规则引擎（engine=rules），没有可分的数据就不给建议。","provides":["advicePanel"],"entry":"code/index.mjs","kind":"esm","migration":{"stage":1,"mode":"wrapper","impl":"host/modules/advice-panel.mjs","moves_in_stage":4},"valid":true,"reason":null,"next_action":null,"status":"not-loaded","uid":null,"deps_ready":false,"deps_direct":["system/webui"],"deps_missing":["system/webui"],"deps_unresolved":[],"cycle":null},{"id":"userspace/demo-ns/hello","layer":"userspace","ns":"demo-ns","name":"hello","version":"1.0.0","description":"用户空间演示插件（demo-ns.hello）：在自己命名空间里提供一个只读问候/计数服务，并向 WebUI 注册面提交一个只读区块；不改平台、不碰保留名、零写面。","provides":["bucket","status"],"entry":"code/index.mjs","kind":"esm","migration":{"stage":1,"mode":"migrated","from":"user-space/demo-ns/hello/","impl":"code/index.mjs","note":"用户空间插件体量小：本批**实体搬迁**（不是 wrapper）。运行时副本 user-space/demo-ns/hello/ 保持不动，阶段 5.1 收敛"},"valid":true,"reason":null,"next_action":null,"status":"not-loaded","uid":null,"deps_ready":false,"deps_direct":["system/webui"],"deps_missing":["system/webui"],"deps_unresolved":[],"cycle":null}],"degraded":[]}
+
+$ tools/plugin.sh list --layer domain
+{"id":"domain/advice","layer":"domain","ns":null,"name":"advice","version":"1.0.0","description":"决策建议层（domain）：把「看得到事实但不知道下一步」变成一条条可复制、可溯源的命令/路由；确定性规则引擎（engine=rules），没有可分的数据就不给建议。","provides":["advicePanel"],"entry":"code/index.mjs","kind":"esm","migration":{"stage":1,"mode":"wrapper","impl":"host/modules/advice-panel.mjs","moves_in_stage":4},"valid":true,"reason":null,"next_action":null,"status":"not-loaded","uid":null,"deps_ready":false,"deps_direct":["system/webui"],"deps_missing":["system/webui"],"deps_unresolved":[],"cycle":null}
+
+$ tools/plugin.sh status domain/advice（未装载）
+{"ok":true,"op":"status","id":"domain/advice","layer":"domain","ns":null,"name":"advice","version":"1.0.0","description":"决策建议层（domain）：把「看得到事实但不知道下一步」变成一条条可复制、可溯源的命令/路由；确定性规则引擎（engine=rules），没有可分的数据就不给建议。","provides":["advicePanel"],"entry":"code/index.mjs","kind":"esm","migration":{"stage":1,"mode":"wrapper","impl":"host/modules/advice-panel.mjs","moves_in_stage":4},"valid":true,"reason":null,"next_action":null,"status":"not-loaded","uid":null,"deps_ready":false,"deps_direct":["system/webui"],"deps_missing":["system/webui"],"deps_unresolved":[],"cycle":null,"runtime":{"pid":114720,"uptime_ms":81,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":[]},"last_error":null}
+
+$ tools/plugin.sh load domain/advice
+{"ok":true,"verb":"load","id":"domain/advice","layer":"domain","uid":"2","from_uid":null,"instance":"domain/advice#1","fiber_state":"ACTIVE","entry":"code/index.mjs","kind":"esm","keys":["BLOCK","COMMIT_SCOPES","Config","DEGRADED_REASONS","ENGINE","ENGINE_NOTE","GATE_COMMANDS","GATE_COMMAND_FALLBACK","RULES","SECTIONS","SEVERITIES","adviseOf","apply","builtin","disposer","fixture","inject","isoMs","name","provides","renderBlock","usedServices"],"provides":["advicePanel"],"effects":{"count":2,"labels":["ctx.plugin()","ctx.provide(\"advicePanel\")"]},"depends_on":["system/webui"],"missing_targets":["system/webui"],"unresolved_services":[],"next_action":"装载后再 `status` 可回读 uid/effects；要热替换用 `reload`（新 uid，不迁移内存状态）","runtime":{"pid":114720,"uptime_ms":122,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":["domain/advice"]}}
+rc=0
+
+$ tools/plugin.sh load domain/advice（第二次：幂等路径）
+{"ok":false,"verb":"load","id":"domain/advice","code":"already-loaded","reason":"已在装载：domain/advice","next_action":"要得到新实例用 `tools/plugin.sh reload <插件>`（reload = 先卸后装）","runtime":{"pid":114720,"uptime_ms":156,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":["domain/advice"]}}
+rc=1
+
+$ tools/plugin.sh status domain/advice（已装载）
+{"ok":true,"op":"status","id":"domain/advice","layer":"domain","ns":null,"name":"advice","version":"1.0.0","description":"决策建议层（domain）：把「看得到事实但不知道下一步」变成一条条可复制、可溯源的命令/路由；确定性规则引擎（engine=rules），没有可分的数据就不给建议。","provides":["advicePanel"],"entry":"code/index.mjs","kind":"esm","migration":{"stage":1,"mode":"wrapper","impl":"host/modules/advice-panel.mjs","moves_in_stage":4},"valid":true,"reason":null,"next_action":null,"status":"loaded","uid":"2","deps_ready":false,"deps_direct":["system/webui"],"deps_missing":["system/webui"],"deps_unresolved":[],"cycle":null,"runtime":{"pid":114720,"uptime_ms":187,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":["domain/advice"]},"last_error":null}
+
+$ tools/plugin.sh reload domain/advice（新实例）
+{"ok":true,"verb":"reload","id":"domain/advice","layer":"domain","uid":"4","from_uid":"2","instance":"domain/advice#2","fiber_state":"ACTIVE","entry":"code/index.mjs","kind":"esm","keys":["BLOCK","COMMIT_SCOPES","Config","DEGRADED_REASONS","ENGINE","ENGINE_NOTE","GATE_COMMANDS","GATE_COMMAND_FALLBACK","RULES","SECTIONS","SEVERITIES","adviseOf","apply","builtin","disposer","fixture","inject","isoMs","name","provides","renderBlock","usedServices"],"provides":["advicePanel"],"effects":{"count":2,"labels":["ctx.plugin()","ctx.provide(\"advicePanel\")"]},"depends_on":["system/webui"],"missing_targets":["system/webui"],"unresolved_services":[],"next_action":"装载后再 `status` 可回读 uid/effects；要热替换用 `reload`（新 uid，不迁移内存状态）","runtime":{"pid":114720,"uptime_ms":220,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":["domain/advice"]}}
+rc=0
+
+$ tools/plugin.sh unload domain/advice（effects 归零）
+{"ok":true,"verb":"unload","id":"domain/advice","from_uid":"4","disposed":true,"effects_before":2,"effects_after":0,"zero_effects":true,"runtime":{"pid":114720,"uptime_ms":256,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":[]},"next_action":"已卸载且 effects 归零（可再次 load 得到新实例）"}
+rc=0
+
+$ tools/plugin.sh unload domain/advice（第二次：not-loaded）
+{"ok":false,"verb":"unload","id":"domain/advice","code":"not-loaded","reason":"未装载：domain/advice","next_action":"先 `tools/plugin.sh load …`（本动词可重复：重复 unload 就是这条 not-loaded）","runtime":{"pid":114720,"uptime_ms":292,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":[]}}
+rc=1
+
+$ tools/plugin.sh deps domain/advice
+{"ok":true,"verb":"deps","id":"domain/advice","code":null,"direct":["system/webui"],"closure":[],"order":["domain/advice"],"cycle":null,"unresolved_services":[],"missing_targets":["system/webui"],"next_action":"依赖闭包已给出（顺序即拓扑序）"}
+
+$ tools/plugin.sh status domain/nope（未知插件）
+{"ok":false,"code":"unknown-plugin","id":"domain/nope","reason":"没有这个插件：domain/nope","next_action":"用 `tools/plugin.sh list --json` 看有哪些；目录里没有 plugin.json 的目录不是插件","candidates":["domain/advice"],"verb":"status","runtime":{"pid":114720,"uptime_ms":358,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":[]}}
+rc=1
+
+$ tools/plugin.sh load foo/bar（非法层名）
+{"ok":false,"code":"illegal-layer","id":"foo/bar","reason":"插件 id 形状非法：\"foo/bar\"","next_action":"写 `层次/插件`（system|domain|userspace；userspace 写 `userspace/<ns>/<plugin>`）","candidates":[],"verb":"load","runtime":{"pid":114720,"uptime_ms":392,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":[]}}
+rc=1
+
+$ tools/plugin.sh list --layer nope（非法层名过滤）
+{"ok":false,"verb":"list","id":null,"code":"illegal-layer","reason":"层名非法：nope","next_action":"层只认 system | domain | userspace","candidates":["system","domain","userspace"]}
+rc=1
+
+$ tools/plugin.sh frobnicate domain/advice（未知动词）
+{"ok":false,"verb":null,"id":null,"code":"usage","reason":"未知动词：frobnicate","next_action":"tools/plugin.sh --help 看用法"}
+rc=2
+
+$ tools/plugin.sh load userspace/demo-ns/hello
+{"ok":true,"verb":"load","id":"userspace/demo-ns/hello","layer":"userspace","uid":"6","from_uid":null,"instance":"userspace/demo-ns/hello#1","fiber_state":"ACTIVE","entry":"code/index.mjs","kind":"esm","keys":["BLOCK","Config","NAMESPACE","apply","inject","name","provides","renderBlock"],"provides":["bucket","status"],"effects":{"count":3,"labels":["ctx.plugin()","ctx.provide(\"demo-ns.hello.bucket\")","ctx.provide(\"demo-ns.hello.status\")"]},"depends_on":["system/webui"],"missing_targets":["system/webui"],"unresolved_services":[],"next_action":"装载后再 `status` 可回读 uid/effects；要热替换用 `reload`（新 uid，不迁移内存状态）","runtime":{"pid":114720,"uptime_ms":490,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":["userspace/demo-ns/hello"]}}
+
+$ tools/plugin.sh load system/runtime
+{"ok":true,"verb":"load","id":"system/runtime","layer":"system","uid":"8","from_uid":null,"instance":"system/runtime#1","fiber_state":"ACTIVE","entry":"code/index.mjs","kind":"esm","keys":["CODES","Config","EXISTING_CARRIERS","LAYERS","MANIFEST","MANIFEST_REASONS","MAX_MANIFEST_BYTES","NAME_RE","PLUGIN_ID_RE","REPO_ROOT","REQUIRED_FIELDS","VERBS","apply","builtin","candidateIds","createRootContext","depsClosure","disposer","entryKind","findPlugin","inject","loadCordis","mount","name","parsePluginId","pluginDir","pluginDirs","provides","repoRootOf","runtimeFacts","scan","serviceIndex","unmount","usedServices","validate"],"provides":["pluginLifecycle"],"effects":{"count":1,"labels":["ctx.provide(\"pluginLifecycle\")"]},"depends_on":[],"missing_targets":[],"unresolved_services":[],"next_action":"装载后再 `status` 可回读 uid/effects；要热替换用 `reload`（新 uid，不迁移内存状态）","runtime":{"pid":114720,"uptime_ms":523,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":["system/runtime","userspace/demo-ns/hello"]}}
+
+$ tools/plugin.sh unload userspace/demo-ns/hello
+{"ok":true,"verb":"unload","id":"userspace/demo-ns/hello","from_uid":"6","disposed":true,"effects_before":3,"effects_after":0,"zero_effects":true,"runtime":{"pid":114720,"uptime_ms":555,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":["system/runtime"]},"next_action":"已卸载且 effects 归零（可再次 load 得到新实例）"}
+
+$ tools/plugin.sh unload system/runtime
+{"ok":true,"verb":"unload","id":"system/runtime","from_uid":"8","disposed":true,"effects_before":1,"effects_after":0,"zero_effects":true,"runtime":{"pid":114720,"uptime_ms":589,"socket":"/workspace/projects/quotagent/tmp/plugin-runtime/runtime.sock","loaded":[]},"next_action":"已卸载且 effects 归零（可再次 load 得到新实例）"}
+
+$ tools/plugin.sh --runtime stop（收摊）
+{"ok":true,"op":"runtime.stop","runtime":{"running":false,"pid":114720,"pid_file":114720},"stopped":true,"next_action":"运行时已停（下次 load 会重新拉起）"}
+```
+
+## 三、注入式 UI 注册面：真起服务 + 真请求（原始输出）
+
+```
+$ ./run up --port 8117 --data-dir tmp/ev-capture/shared --no-seed
+{"ok":true,"action":"up","state":"started","service":"quotagent-webui","pid":114926,"port":8117,"url":"http://127.0.0.1:8117/quotagent/","healthy":true,"ready_ms":1014,"log":"/workspace/projects/quotagent/tmp/run/webui-8117.log","data_dir":"tmp/ev-capture/shared"}
+rc=0
+
+$ curl -s http://127.0.0.1:8117/quotagent/api/ui/blocks
+{
+  "service": "quotagent-webui",
+  "route_prefix": "/quotagent",
+  "source": "host/lib/ui-slot.mjs",
+  "mechanism": "注入式 UI 注册面：插件提交区块（槽位 + 排序 + 标题 + render），webui 只做机制、不懂业务语义",
+  "slots": [
+    "page.home",
+    "page.contractor",
+    "page.supplier",
+    "page.ops",
+    "page.admin"
+  ],
+  "count": 2,
+  "blocks": [
+    {
+      "plugin_id": "domain/advice",
+      "slot": "page.contractor",
+      "order": 20,
+      "title": "决策建议（domain/advice 插件注册的只读区块）",
+      "key": "page.contractor\u0000domain/advice"
+    },
+    {
+      "plugin_id": "userspace/demo-ns/hello",
+      "slot": "page.supplier",
+      "order": 30,
+      "title": "用户空间插件区块（demo-ns.hello 注册的只读区块）",
+      "key": "page.supplier\u0000userspace/demo-ns/hello"
+    }
+  ],
+  "next_action": "插件侧注册见 docs/design/27-plugin-architecture.md §6 与各插件 docs/；本表只列注册元数据，不含区块正文"
+}
+
+$ curl -s http://127.0.0.1:8117/quotagent/contractor/ | grep -o 'data-ui-block="[^"]*"[^>]*'
+data-ui-block="domain/advice" data-ui-block-slot="page.contractor" data-ui-block-order="20"
+$ curl -s .../supplier/ 同上
+data-ui-block="userspace/demo-ns/hello" data-ui-block-slot="page.supplier" data-ui-block-order="30"
+
+$ 两页 <script> 计数与内联事件计数（必须 0 / 0）
+contractor: script=0 inline_event=0 block_error=0
+supplier: script=0 inline_event=0 block_error=0
+
+$ curl -s -X POST http://127.0.0.1:8117/quotagent/api/ui/blocks -o /dev/null -w '%{http_code} allow=%header{allow}'
+405 allow=GET
+
+$ ./run down --port 8117
+{"ok":true,"action":"down","state":"stopped","pid":114926,"port":8117,"stopped":true,"released":true,"next_action":"数据没删；再起用 ./run up"}
+```
+
+## 四、门 `tools/verify.sh plugin-lifecycle` 的完整原始输出
+
+```
+[ok]   C1 `GET /api/ui/blocks` 真返回两个样板插件的注册元数据（只回执元数据，不含正文）
+        count=2 blocks=[{"plugin_id": "domain/advice", "slot": "page.contractor", "order": 20, "title": "决策建议（domain/advice 插件注册的只读区块）", "key": "page.contractor\u0000domain/advice"}, {"plugin_id": "userspace/demo-ns/hello", "slot": "page.supplier", "order": 30, "title": "用户空间插件区块（demo-ns.hello 注册的只读区块）", "key": "page.supp
+[ok]   C2 承包商页面上**真出现** domain/advice 注册的只读区块（原始行见门输出）
+        原始行: data-ui-block="domain/advice" data-ui-block-slot="page.contractor" data-ui-block-order="20"
+[ok]   C3 供应商页面上**真出现** userspace/demo-ns/hello 注册的只读区块
+        原始行: data-ui-block="userspace/demo-ns/hello" data-ui-block-slot="page.supplier" data-ui-block-order="30"
+[ok]   C4 两个页面仍然 **0 行 `<script>`、0 个内联事件属性**（SSR 契约不因注入面而松动）
+        contractor_bytes=6611 supplier_bytes=8028
+[ok]   C5 注册面自述是**只读**路由：POST ⇒ 405 + `method-not-allowed` + `Allow: GET`
+        POST→405 allow=GET
+[ok]   C6 新路由**在路由表里登记了**（`/api/routes` 里 method=GET），没登记的接口抓得到
+        routes 命中=1 [{'path': '/quotagent/api/ui/blocks', 'method': 'GET', 'auth': 'none', 'what': '注入式 UI 注册面自述（槽位闭合集合 + 已注册区块的 plugin_id/slot/order/title；webui 不懂业务语义）'}]
+[ok]   A1 `list --json` 枚举三层插件（真扫 src/{system,domain}/ 与 src/userspace/<ns>/）
+        rc=0 count=3 ids=['domain/advice', 'system/runtime', 'userspace/demo-ns/hello']
+[ok]   A2 每项给 id/layer/version/provides/entry/description/status（清单是唯一登记真源）
+        advice={"layer": "domain", "version": "1.0.0", "provides": ["advicePanel"], "entry": "code/index.mjs", "status": "not-loaded"}
+[ok]   A3 目录里没有 plugin.json 的目录**不是插件**（不枚举、不假装）
+        ids=['domain/advice', 'system/runtime', 'userspace/demo-ns/hello']
+[ok]   A4 `load domain/advice` 真装载：真 import 入口（keys 里出现只有实体实现才有的导出名）
+        uid=2 state=ACTIVE effects={'count': 2, 'labels': ['ctx.plugin()', 'ctx.provide("advicePanel")']} keys=['BLOCK', 'COMMIT_SCOPES', 'Config', 'DEGRADED_REASONS', 'ENGINE', 'ENGINE_NOTE', 'GATE_COMMANDS', 'GATE_COMMAND_FALLBACK', 'RULES', 'SECTIONS', 'SEVERITIES', 'adviseOf', 'apply', 'builtin', 'disposer', 'fixture', 'inject', 'isoMs', 'name', 'provides', 'renderBlock', 'usedServices']
+[ok]   A5 `status` 回读装载事实（loaded + 同一个 uid + effects 来自内核实测）
+        status=loaded uid=2 load_uid=2
+[ok]   A6 重复 `load` ⇒ `already-loaded`（幂等路径，不是静默成功）
+        code=already-loaded
+[ok]   A7 `reload` = 先卸后装 ⇒ **新实例（新 uid + 新 instance）**，不迁移任何内存状态
+        from_uid=2 uid=4 code=None instance=domain/advice#2 vs 旧 domain/advice#1
+[ok]   A8 `unload` 真移除：`dispose()` 后**回读** effects 归零（不留残订阅/定时器）
+        effects_before=2 effects_after=0
+[ok]   A9 卸载后 `status` 如实报 not-loaded；再次 `unload` ⇒ `not-loaded`（动作可重复）
+        status=not-loaded again=not-loaded
+[ok]   A10 卸载后可以再 `load`，且拿到**又一个新实例**（可重复装载 ⇒ 可重复卸载）
+        uid=6（曾见 2, 4）
+[ok]   A11 用户空间插件同一条接口（`userspace/demo-ns/hello`：命名空间服务 + 区块声明）
+        uid=8 provides=['bucket', 'status'] keys=['BLOCK', 'Config', 'NAMESPACE', 'apply', 'inject', 'name', 'provides', 'renderBlock']
+[ok]   A12 `system/runtime` 自己也走同一条接口（`provides=[pluginLifecycle]`）
+        uid=10
+[ok]   A13 `deps` 给依赖闭包：`depends_on` + `inject`（服务键 → 提供者）；未迁移的目标如实记 missing
+        direct=['system/webui'] missing=['system/webui'] unresolved=[]
+[ok]   A14 依赖未就绪 ⇒ **非激活**（不是崩）：`deps_ready=false` 且语义有名字（`depends_on` 指向未迁移的 webui）
+        deps_ready=False deps_missing=['system/webui']
+[ok]   B1 未知插件 ⇒ `unknown-plugin` + 候选列表（rc=1）
+        rc=1 code=unknown-plugin candidates=['domain/advice']
+[ok]   B2 非法层名 ⇒ `illegal-layer`（rc=1；`foo/bar` 这种形状不接受）
+        rc=1 code=illegal-layer
+[ok]   B3 `list --layer <非法>` ⇒ `illegal-layer`（rc=1；过滤参数也要拒绝）
+        rc=1 code=illegal-layer
+[ok]   B4 未知动词 ⇒ `usage`（rc=2：用法/环境错误，不当成『通过』）
+        rc=2 code=usage
+[ok]   B5 依赖成环 ⇒ `dependency-cycle` + **环上的 id**（不是笼统『有环』）
+        rc=1 cycle=['domain/a', 'domain/b', 'domain/a']
+[ok]   B6 清单不合法 ⇒ 进 `degraded` 并给**有名 reason**（缺字段 / 入口不存在）
+        degraded={'domain/broken': 'manifest-missing-fields', 'domain/not-a-plugin': 'manifest-missing'}
+[ok]   B7 装载不合法清单 ⇒ `not-a-plugin`（rc=1；坏清单不许装进来）
+        rc=1 code=not-a-plugin
+[ok]   D1 `host/modules/webui.mjs` 里 **0 次**出现两个样板插件的 id/标题（webui 不知道它们是什么）
+        命中=[]（webui.mjs 不含这些字符串）
+[ok]   D2 注入面**机制行**逐行扫业务名词 ⇒ 0 命中（机制不懂业务）
+        机制行 9 行；业务名词命中=[]
+[ok]   D3 机制实现 `host/lib/ui-slot.mjs` 自身也 0 命中插件 id/标题/业务名词
+        命中=[]
+[ok]   E1 非法 id / 非法层 / 未知槽位 / order 越界 / 空标题 / render 非函数 ⇒ 各有名 code
+        codes={'illegal_id': 'illegal-plugin-id', 'illegal_id_layer': 'illegal-plugin-id', 'unknown_slot': 'unknown-slot', 'bad_order': 'invalid-order', 'bad_title': 'invalid-title', 'bad_render': 'invalid-render'}
+[ok]   E2 同一 `(slot, plugin_id)` 完全相同 ⇒ 幂等；形状不同 ⇒ `duplicate-registration`（不许悄悄覆盖）
+        once=registered again=already-registered conflict=duplicate-registration size=1
+[ok]   E3 带 `<script>` 的区块 HTML **被拒收**（页面 0 内联脚本由机制结构性保证）
+        render={"ok": false, "slot": "page.ops", "html": "\n<section data-ui-block-error=\"domain/inline\" data-ui-block-slot=\"page.ops\"><h3>区块被拒收（domain/inline）</h3><p>code: <code>inline-script-refused</code> · r
+[ok]   E4 `render` 抛错 ⇒ 该块**不渲染**，但页面出有名错误块（不静默吞、也不编替代块）
+        blocks=0 errors=[{"ok": false, "code": "block-render-failed", "reason": "domain/boom @ page.ops：boom", "next_action": "让 render 返回 {ok:true, html}；拿不到数据时返回 {ok:true, html:\"…如实
+[ok]   E5 真插件入口：装载即注册（1 块）、**卸载即反注册**（0 块，零残留）、区块内容来自实体实现
+        facts={'before': 0, 'afterProvide': 1, 'afterDispose': 0, 'blocked': 0, 'renderOk': True} stderr=
+[ok]   F1 变异：变异1：load 不把插件记入位（去掉装载登记）（必须让指定断言变红）
+        变异体 rc=0 有效载荷=True payload={"ok": true, "op": "status", "id": "domain/advice", "layer": "domain", "ns": null, "name": "advice", "version": "1.0.0", "description": "决策建议层（domain）：把「看得到事实但不知道下一步」变成一条条可复制、可溯源的命令/路由；确定性规则引擎（engine=
+[ok]   F2 变异：变异2：unload 不真移除（去掉装载表的删除）（必须让指定断言变红）
+        变异体 rc=0 有效载荷=True payload={"ok": true, "verb": "unload", "id": "domain/advice", "from_uid": "2", "disposed": true, "effects_before": 0, "effects_after": 0, "zero_effects": true, "runtime": {"pid": 115613, "uptime_ms": 152, "so
+[ok]   F3 变异：变异3：重载复用同一个实例号（instance 恒为 #1）（必须让指定断言变红）
+        变异体 rc=1 有效载荷=True payload={"ok": false, "verb": "reload", "id": "domain/advice", "layer": "domain", "uid": "4", "from_uid": "2", "instance": "domain/advice#1", "fiber_state": "ACTIVE", "entry": "code/index.mjs", "kind": "esm",
+[ok]   F4 变异：变异4：`list --layer` 不再拒绝非法层名（必须让指定断言变红）
+        变异体 rc=0 有效载荷=True payload={"ok": true, "verb": "list", "root": "/workspace/projects/quotagent/tmp/pl-root-m4-i357ofac", "layer": "nope", "count": 0, "plugins": [], "degraded": []}
+[ok]   F0 基线（未变异）在同一序列上**不红**（否则四条变异变红都是空转）
+        #1 基线红=False；#2 基线红=False；#3 基线红=False；#4 基线红=False
+[ok]   F5 防假变异：不存在的锚点必须返回 None（否则『变异变红』说明不了任何事）
+        fake=None
+[ok]   F6 全过程**产品树字节不变**（变异只写在临时副本里）
+        before=8306adab9100 after=8306adab9100
+[ok]   C0 真 HTTP 前置：`./run up` 起得来（否则 C1–C6 是空转）
+        up_rc=0 healthy=True out={"ok":true,"action":"up","state":"started","service":"quotagent-webui","pid":115126,"port":48911,"url":"http://127.0.0.1:48911/quotagent/","healthy":true,"ready err=
+RESULT: PASS（plugin-lifecycle 门 43/43）
+rc=0
+```
+
+## 五、未搬迁的东西（本批**故意不动**，逐条）
+
+- `src/quotagent/**`（kernel/services/qa）与 `host/**`（cordis + 模块 + 门）与 `tools/**` 的既有实现：阶段 1 只建骨架与契约工具，
+  实体搬迁按 `docs/work/plans/plugin-migration-plan.md` 的阶段 2/3/4 做；阶段 1 的入口一律是 **wrapper/重导出**（`plugin.json.migration` 记着搬到哪一阶段）。
+- `user-space/**`（运行时副本）与 `src/userspace/demo-ns/hello` 的收敛（独立 Context 装载 + gitignore 语义）：阶段 5.1。
+- `tools/plugin.sh` 的三层接口**已收敛**，但**宿主长驻进程（WebUI）里的逐插件装卸**（今天仍由 `host/profiles.mjs` 启动期静态装配）与
+  `./run logs` / `./run config init` 两个动词：阶段 5.2 / 5.4 剩余项（`docs/design/27` §4.3、`docs/design/28` §3.3 已如实标注）。
+- `docs/design/14-plugin-inventory.md`（模块清单真源）**未加行**：该文件 28564/28672 B（预算 100%），加行需先搬行归档；
+  本批 3 个样板插件不在 `host/modules/`（`plugins` 门的口径是 host 模块），故不影响该门。
+
+## 六、没验证的东西（诚实清单）
+
+- 未在**干净克隆**（`git archive HEAD` 解包）上重跑这两道门：本批两道门都真起服务/真起运行时进程，且依赖 `host/node_modules`（宿主依赖不在库里）。
+- 未验证"卸载一个业务插件后页面其余部分**逐字节不变**"（27 §6.3 第 3 条）：本批只证明了区块注册/反注册与页面出现，
+  逐字节不变要等 `webui` 与业务插件都搬进插件目录（阶段 5.3）才谈得上。
+- 未验证 `tools/plugin.sh load` 对 **Python 入口**（`entry: code/__init__.py`）的路径：本批 3 个样板插件入口都是 `.mjs`；
+  装载器里 `.py` 分支（importlib）**写了但没被任何真实插件走过**。
+- 未在并发压力下重复跑两道门（只做了单次全绿 + 各自的变异自证）。

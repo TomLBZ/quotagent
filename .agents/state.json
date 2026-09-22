@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-22T08:30:00Z",
+  "updated_at": "2026-09-22T08:34:27Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "阶段 0（插件迁移第一步）：建 `src/{system,domain,userspace}` 骨架 + `plugin.json` + `tools/plugin.sh list`（见 `docs/work/plans/plugin-migration-plan.md` §2）",
-  "next_action": "两个迁移阻塞已消掉（EV-164 / 决策 D-074）：① D-073 根因（`AC-AGENTRT-002` 哨兵扫描改「契约源集合」口径 + ⑤b 反向断言，仓库内有 `tmp/` 整树副本也不再红）② 文档预算（AC 主文件 32645→26355 B、进度清单 31843→25339 B，均 ≤ 28 KB）。下一步按 `docs/work/plans/plugin-migration-plan.md` 推**阶段 0**（骨架 + `plugin.json` + `tools/plugin.sh list`）。",
-  "last_verified_command": "tools/verify.sh docs | ac-registry | coverage | p0-no-node | g1（跑在「本批提交树」上：HEAD + 本批改动，且树里**存在** `tmp/` 源码副本 —— D-073 的验收条件）",
-  "last_verified_result": "PASS：五道门全绿。docs（AC 定义集合 主文件 51 条 + archives=[archive-b:20, archive:62]；T 定义集合 主文件 63 条 + t_archives=[progress-checklist-archive.md:52]；617 个定义 / 3084 处引用 / 0 未解析；预算最高占用 100% = docs/design/14-plugin-inventory.md 28564/28672 B，非本批）；ac-registry（133 条 AC，P0 29 条全部已注册）；coverage 8/8；p0-no-node（无 Node 下 63 条 AC 全绿、无瞬时命中）；g1（全量 AC 85/85 + 走查报告通过）。**且树里放着 tmp/ 源码副本** ⇒ D-073 的验收成立。注 1：g1 第一次跑出现不可复现的瞬时红（三条 agent-runtime AC，随后两次重跑 85/85），见 EV-164 §6。注 2：共享工作树的 docs 门当前红，原因是**另一个并发批次**的未跟踪文件引用了尚未定义的 AC-PLUGIN-005/006（非本批改动），见 EV-164 §6。",
-  "last_verified_evidence": "docs/work/evidence/EV-164-D073-doc-budget.txt",
+  "next_task": "阶段 2（插件迁移）：把 `src/quotagent/services/**` 逐个搬进各自 `src/{domain,system}/<plugin>/code/`，每搬一个立刻跑它自己的 AC；阶段 1 的 wrapper 随实体搬迁撤销（见 `docs/work/plans/plugin-migration-plan.md` §2 阶段 2）",
+  "next_action": "迁移阶段 1 已完成（EV-165/EV-166 / T-314/T-315）：三层骨架 + 3 样板插件 + `tools/plugin.sh` 六动词（真 import + 真挂进常驻运行时进程）+ 注入式 UI 注册面（两个样板区块在真页面上真出现，webui 零业务耦合）+ `./run up|down|status|doctor`；新门 `plugin-lifecycle` 与 `run-once` 各含 4 处单点变异全红。下一步按迁移计划推**阶段 2**（`src/quotagent/services/**` → 各插件 `code/`，逐个搬 + 逐个跑该插件的 AC）。",
+  "last_verified_command": "tools/verify.sh docs | ac-registry | plugin-lifecycle | run-once | webui | modules | wiring | plugins | coverage（跑在本批提交树上）",
+  "last_verified_result": "PASS：九道门全绿。docs（FR 166 条 / AC 136 条 / 0 未解析 / 预算最高 100%）；ac-registry；plugin-lifecycle 43/43（六动词真跑 + 注入式 UI 注册面真 HTTP + 机制负控 + 4 处单点变异全红 + 产品树字节不变）；run-once 18/18（doctor 7 项逐条 next_action / up 幂等且两次 status 逐字节一致 / down 真释放端口 / 凭据缺失不阻塞 up / 4 处变异全红）；webui；modules；wiring；plugins；coverage 8/8。阶段 1 的 wrapper：`src/domain/advice/code/index.mjs` → `host/modules/advice-panel.mjs`（阶段 4.1 实体搬迁）。",
+  "last_verified_evidence": "docs/work/evidence/EV-165-plugin-lifecycle.txt",
   "last_verified_commit": "477b2bf9c31c9aadca737c59e51926e870dd88a0",
   "blockers": [],
   "human_required": [
@@ -64,7 +64,10 @@
     "invariants": "tools/check-invariants.py（H1/H2/H3）+ host/invariants.mjs（H5/H6），入口 verify.sh invariants",
     "evolution": "host/lib/evolution.mjs（makeProposal/PatchJournal/shadowMount/gate/promote/rollback）、host/evolution.mjs（冒烟）、tools/evolve-record.py（Python 唯一写入者）、verify.sh evolution",
     "modules": "host/modules/{kernel-bridge,norm,compare}.mjs（manifest）、host/check-modules.mjs、tools/check-modules.py、tools/export-events.py、host/lib/std-schema.mjs；入口 verify.sh modules",
-    "rfq_visibility": "投递事实可见性：`host/modules/projection.mjs` 的 `projectDeliveries`（收件人作用域 + 字段级白名单，恰 9 键）+ `host/lib/ledger-view.mjs` 的 `realms()` 身份 + `host/modules/webui.mjs` 的只读装配与首页投递块 + `--rfq-delivery`（缺省 tmp/ui-shared/contractor/01-package.json）；契约 docs/design/26-rfq-delivery-visibility.md；门 verify.sh rfq-visibility"
+    "rfq_visibility": "投递事实可见性：`host/modules/projection.mjs` 的 `projectDeliveries`（收件人作用域 + 字段级白名单，恰 9 键）+ `host/lib/ledger-view.mjs` 的 `realms()` 身份 + `host/modules/webui.mjs` 的只读装配与首页投递块 + `--rfq-delivery`（缺省 tmp/ui-shared/contractor/01-package.json）；契约 docs/design/26-rfq-delivery-visibility.md；门 verify.sh rfq-visibility",
+    "plugins": "tools/plugin.sh（六动词 list/status/load/reload/unload/deps）→ src/system/runtime/tools/plugin-lifecycle.mjs；规则真源 docs/design/27 §4；契约 src/system/runtime/docs/lifecycle-contract.md；装载落在一个**常驻运行时进程**（tmp/plugin-runtime/，真 import + 真 cordis ctx.plugin；uid/state/effects 都是内核实测）；门 verify.sh plugin-lifecycle（43/43）",
+    "one_command": "仓库根 ./run（up|down|status|doctor，POSIX sh）→ tools/bootstrap.sh + tools/cordis.sh install + tools/webui-serve.py + 健康检查；doctor 只读体检 7 项逐条 next_action；契约 docs/design/28 §3.1；用法 src/system/runtime/docs/one-command-run.md；门 verify.sh run-once（18/18）",
+    "ui_slots": "host/lib/ui-slot.mjs（注入式 UI 的**机制**：槽位闭合集合 / 排序 / 装配 / 拒收内联脚本 / 指名报错）+ host/modules/webui.mjs 的注册面（uiSlots 服务 + GET /api/ui/blocks）；样板注册者：src/domain/advice、src/userspace/demo-ns/hello"
   },
   "last_verified_commit_semantics": "指向最近一次通过 tools/verify.sh docs 的提交；其后的提交只追加证据/状态",
   "done_p2": [
@@ -82,6 +85,8 @@
     "T-234"
   ],
   "notes": {
+    "t314": "done：迁移阶段 1 的骨架与契约工具（EV-165 / D-075）：三层骨架 + 3 样板插件（system/runtime、domain/advice wrapper、userspace/demo-ns/hello）+ tools/plugin.sh 六动词（目录即清单 / 最小契约校验 / 依赖闭包含环 / 真 import + 真挂进常驻运行时进程；reload 新实例、unload 回读 effects 归零）；拒绝路径逐条有名 code；门 plugin-lifecycle 43/43",
+    "t315": "done：注入式 UI 注册面 + 一键运行（EV-165/EV-166 / D-075）：host/lib/ui-slot.mjs（机制 0 插件 id、0 业务名词）+ webui 只提供注册面与通用拼接；两个样板插件各注册只读区块并真出现在页面上（两页仍 0 内联脚本）；仓库根 ./run up|down|status|doctor；门 run-once 18/18（含凭据缺失不阻塞 up 与 4 处变异全红）",
     "t235": "done：canary 探针 + 退化自动回滚已接真实命令路径（EV-070 / D-030）",
     "t237": "done：自进化真实产出第一个进树插件 price-history（EV-072 / D-032）",
     "t238": "done：price-history 已接进 WebUI 双方视角（EV-073 / D-033）",

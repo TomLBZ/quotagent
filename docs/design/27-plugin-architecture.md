@@ -143,11 +143,13 @@ tools/plugin.sh deps  domain/bid-heuristics    # 依赖闭包（可视化插件 
 
 | 能力 | system | domain | userspace |
 |---|---|---|---|
-| list/status | `host/modules/index.mjs` + `tools/verify.sh plugins`（清单级） | 同左 | `user-plugin-manager` 的 `list`（已实现） |
-| load/reload/unload | 今日由 `host/profiles.mjs` **静态装配**（启动即装，无逐插件接口） | 同左 | 已实现（独立 `Context`、新 uid、零残留，`AC-USERPLUG-003/004`） |
-| 依赖闭包 | `tools/verify.sh wiring` + `modules` 的 `inject` 断言 | 同左 | `user-space` 门 |
+| list/status | `tools/plugin.sh list/status`（真扫 `src/{system,domain}/*/plugin.json`；目录即清单） | 同左 | 同左（`src/userspace/<ns>/<plugin>/plugin.json`） |
+| load/reload/unload | `tools/plugin.sh load/reload/unload`：**真 import 入口 + 真挂进常驻运行时进程**（`uid`/`state`/`effects` 都是 cordis 内核实测；`reload` 新实例、`unload` 回读 effects 归零） | 同左 | 同左（接口同一套；独立 `Context` 装载仍是 `user-plugin-manager` 的既有实现） |
+| 依赖闭包 | `tools/plugin.sh deps`（`depends_on` + `inject` 服务键的传递闭包；有环给环上的 id） | 同左 | 同左 |
 
-⇒ §4.2 的六动词中，`list/status/deps` 已有等价机检，`load/reload/unload` 对 system/domain **待建**（登记为 `T-312` 的子项）。
+⇒ §4.2 的六动词**已全部落地**（实现 `src/system/runtime/`，门 `tools/verify.sh plugin-lifecycle`，EV-165）。
+**仍未做**（诚实标注）：① 宿主**长驻服务（WebUI 进程）里逐插件装卸**（今天由 `host/profiles.mjs` 启动期静态装配；收口见阶段 5.2）；
+② `./run` 的 `logs` 与 `config init` 两个动词（阶段 5.4 的剩余项）；③ 依赖闭包**自动拓扑装配**（今天只回答闭包，不代装）。
 本规范要求的是**接口收敛**：三个层最终都由 `tools/plugin.sh` 一个入口驱动。
 
 ## 5. 依赖规则
@@ -256,9 +258,9 @@ Python 内核（必须保持仅标准库可运行，ADR-0007）与账本写路�
 | 预算与路径一致（$2.1 的布局不把文档挤出预算） | `tools/verify.sh docs` |
 | 插件↔清单↔装配双向一致 | `tools/verify.sh plugins`；`tools/verify.sh modules`；`tools/verify.sh wiring` |
 | 每个插件至少归属 1 条 FR/AC | `tools/verify.sh coverage` |
-| 生命周期六动词可达（终态） | `tools/plugin.sh list --json`（待建，见 §4.3） |
-| 卸载零残留（三层同一判据） | `tools/verify.sh user-space`（已实现侧）；system/domain 待建 |
-| webui 零业务耦合 | §6.3 的四条（迁移后加入 `webui` 门） |
+| 生命周期六动词可达 | `tools/plugin.sh list --json`（已实现）；门 `tools/verify.sh plugin-lifecycle`（EV-165） |
+| 卸载零残留（三层同一判据） | `tools/verify.sh user-space`（用户空间既有实现）；`plugin-lifecycle` 门对三层同一套接口断言 effects 归零 |
+| webui 零业务耦合 | §6.3 的四条**已加入** `tools/verify.sh plugin-lifecycle`（`host/modules/webui.mjs` 0 次出现样板插件 id/标题 + 机制行 0 业务名词 + 两页 0 内联脚本 + 注册面只读路由 405） |
 | cordis 边界不漂移 | §7 的包名/版本与 `src/system/runtime/package.json`、锁文件一致 |
 
 ## 9. 未决

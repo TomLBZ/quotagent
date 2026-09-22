@@ -128,6 +128,22 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-plugin-inventory.py" "$@"
     ;;
+  plugin-lifecycle)
+    # 「一切皆插件」的骨架与契约工具（迁移阶段 1）：① 六动词真跑（list/status/load/reload/unload/deps，
+    # 含幂等与拒绝路径：未知插件/非法层名/未知动词/依赖成环/坏清单）② 注入式 UI 注册面（真 HTTP：两个
+    # 样板插件注册的只读区块在页面上真出现、`/api/ui/blocks` 只回执元数据、只读路由 POST ⇒ 405、
+    # 两页 0 内联脚本，且 `host/modules/webui.mjs` 里 0 次出现它们的 id/标题 = webui 不懂业务）
+    # ③ 机制层拒绝语义（负控）④ **4 处单点变异全红**且产品树字节不变。
+    exec "$QUOTAGENT_PY" "$ROOT/tools/check-plugin-lifecycle.py" "$@"
+    ;;
+  run-once)
+    # 一键运行契约（QUOTAGENT-ONE-COMMAND v1，28 §3.1）的真跑验收：`./run up|down|status|doctor`
+    #   · doctor 只读体检 7 项 + 逐项 next_action；凭据缺失只降级（**不阻塞 up**）；端口被别的进程占则非 0
+    #   · up 真起服务 + 健康 200 + 二次 up 幂等（pid 不变、两次 status 逐字节一致）+ down 真释放端口
+    #   · 凭据缺失下 up 仍成功（临时空配置）且 status 报 available:false + reason
+    #   · `run` 的 **4 处单点变异全红**（每处先在未变异基线上确认不红）+ 产品树字节不变
+    exec "$QUOTAGENT_PY" "$ROOT/tools/check-run-once.py" "$@"
+    ;;
   supplier-scorecard)
     shift
     exec node host/t247-scorecard-gate.mjs "$@"

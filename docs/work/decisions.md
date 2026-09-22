@@ -281,3 +281,30 @@ D-071 第 3 条（判据不得覆盖无关写入者）在**文档门**上的落�
 **实测（EV-164）**：仓库内有 `tmp/` 整树副本时该 AC 绿、`p0-no-node` 全绿；整仓副本里往 `src/` 真源码注入哨兵 ⇒ 红（exit 1，指名命中文件）；
 把排除集撤空 ⇒ 红（复现 D-073 原貌）；把哨兵写回连续字面量 ⇒ ⑤/⑤c 红。
 **同类口径第三次落地**：判据的"影响面"必须 ≤ 本用例自己的写入面（D-071 → D-072 → D-074）。
+
+## D-075 迁移阶段 1：六动词的"装载"落在一个常驻运行时进程里；注入式 UI 只提供机制（2026-09-22）
+
+**背景**：`tools/plugin.sh` 每调一次就是一个新进程，而"装载"必须活在一个**常驻**进程里才谈得上"入位"与"unload 真移除"。
+
+**决定**：
+1. `list`/`deps` 是**只读目录扫描**（不 import 任何插件，不需要运行时）；`load/reload/unload/status` 通过 unix socket
+   让一个**常驻运行时进程**做真事（真 `import` 入口 → 真 `ctx.plugin()`；`uid`/`state`/`getEffects()` 都是 cordis 内核实测）。
+   运行时进程**按需拉起**、**零写面**（状态只在内存里 ⇒ 不存在"记录说已装载但其实没有"）；
+   socket/pid/log 在 `tmp/plugin-runtime/`，唯一写入者是 `tools/plugin-lifecycle.mjs`。
+2. 全部插件挂进**同一个 root Context**：cordis 的 `fiber.uid` 计数器是**每个 registry 各自从 1 开始**的，
+   每次 `new Context()` 会让两个实例拿到同一个数字（`host/lib/user-space.mjs` 已记过这个坑）⇒ `reload` 拿不到"新 uid"。
+3. 注入式 UI：`host/lib/ui-slot.mjs` 只做**机制**（槽位闭合集合 / 排序 / 装配 / 拒收内联脚本 / 指名报错），
+   `host/modules/webui.mjs` 只提供注册面与通用拼接；**机制文件与机制行里 0 个插件 id、0 个业务名词**（门逐行扫）。
+4. 插件注册用 `ctx.inject(['uiSlots'], …)`（**动态依赖**）而不是 `inject: ['uiSlots']`：
+   `uiSlots` 由 `webui` 提供，而 `webui` 的静态 `inject` 里有业务插件 ⇒ 静态 inject 会成环。
+
+**实测踩到并已修的三条（都写进了实现注释与门）**：
+① 给 `ctx.provide` **赋值**（本仓既有 idiom）会让该 context 在 dispose 之后再也挂不上插件
+（`cannot create effect on inactive context`）⇒ 改成用动态 inject 拿自己提供的服务（并**装载期快照** service 对象：
+渲染期再读会抛 `cannot get required service … in inactive context`）；
+② `scope.effect()` 的回调必须返回**函数**；返回"带 `dispose` 字段的对象"会被 cordis 当普通值丢掉 ⇒
+卸载后留下指向已死实例的区块（门 E5 就是查这条：装载即注册、卸载即反注册，0 残留）；
+③ fixture 根里必须让 `host/` 出现在同一个相对位置（样板 wrapper 是相对 path 指向 `host/modules/*.mjs` 的）⇒ 用符号链接。
+
+**判据**：`tools/verify.sh plugin-lifecycle`（43/43，含 4 处单点变异全红 + 产品树字节不变）与 `tools/verify.sh run-once`
+（15→18/18，含 4 处变异全红 + 双击 `status` 逐字节一致）；证据 EV-165 / EV-166。

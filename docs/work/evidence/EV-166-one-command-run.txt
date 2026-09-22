@@ -1,0 +1,82 @@
+EV-166 迁移阶段 1：一键运行契约（./run up|down|status|doctor）真跑（T-315 / D-075）
+
+基线提交：88859c776bced103362ea0961959d3de2a749d9a（本批尚未提交时的原始输出）
+契约原文：docs/design/28-plugin-requirements-and-run.md §3.1；用法：src/system/runtime/docs/one-command-run.md
+
+## 一、`./run doctor` 原始输出（只读体检 7 项 + 逐条 next_action）
+
+```
+$ ./run doctor
+[ok]       interpreter  /workspace/projects/quotagent/.venv/bin/python (Python 3.13.13)
+[ok]       node         /usr/local/bin/node (v26.5.1)
+[ok]       cordis       4.0.0-rc.10（host/node_modules，仓库内）
+[ok]       port 8093     健康的本服务在应答（pid=?）
+[ok]       config       /workspace/config.yaml 指纹 6cf43d02；命中凭据键 [admin.token]
+[degraded] credentials  admin token：absent（受影响插件 available=false + reason；**不阻塞 up**）
+           next_action: 0600 文件 /workspace/config/quotagent-admin-token（token 只存指针与指纹）
+[ok]       gates        tools/verify.sh 可执行（docs|coverage|... 离线可跑）
+{"ok":true,"action":"doctor","port":8093,"blocking":0,"items":7,"checks":[{"item":"interpreter","status":"ok","detail":"/workspace/projects/quotagent/.venv/bin/python","version":"3.13.13","next_action":""},{"item":"node","status":"ok","detail":"/usr/local/bin/node","version":"v26.5.1","next_action":""},{"item":"cordis","status":"ok","detail":"host/node_modules/cordis","version":"4.0.0-rc.10","next_action":""},{"item":"port","status":"ok","detail":"healthy-service","port":8093,"pid":null,"next_action":""},{"item":"config","status":"ok","detail":"present","path":"/workspace/config.yaml","fingerprint":"6cf43d02","credential_keys":["admin.token"],"next_action":""},{"item":"credentials","status":"degraded","detail":"absent","next_action":"放 0600 token 文件（fail-closed）"},{"item":"gates","status":"ok","detail":"tools/verify.sh","next_action":""}],"next_action":"这机器能跑：./run up"}
+rc=0
+```
+
+## 二、门 `tools/verify.sh run-once` 的完整原始输出
+
+```
+[ok]   R1 `./run doctor` 只读体检：7 项齐全（解释器/Node/cordis/端口/配置/凭据/门）+ 逐项 next_action + 退出码 0
+        rc=0 items=['interpreter', 'node', 'cordis', 'port', 'config', 'credentials', 'gates'] 逐项行=7 blocking=0
+[ok]   R1b 配置项只报**指纹**（前 8 位十六进制），永不回显内容；凭据项只报来源与权限
+        fingerprint=6cf43d02 credentials=absent
+[ok]   R2 外部凭据缺失**不阻塞**：空配置 + 无 token 下 `doctor` 仍退出 0（相关项只降级，且有 next_action）
+        rc=0 blocking=0 credentials={'item': 'credentials', 'status': 'degraded', 'detail': 'absent', 'next_action': '放 0600 token 文件（fail-closed）'} config=ok
+[ok]   R3 端口被**别的进程**占用 ⇒ `doctor` 退出码非 0，端口项 failed 且给 next_action（负控非空转）
+        rc=1 port={'item': 'port', 'status': 'failed', 'detail': 'occupied-by-other', 'port': 54233, 'pid': None, 'next_action': './run up --port <另一个端口>'}
+[ok]   R4 `up` 幂等启动：真起服务 + `/api/health` 真 200 + URL 真可达
+        rc=0 payload={"ok": true, "action": "up", "state": "started", "service": "quotagent-webui", "pid": 116005, "port": 41265, "url": "http://127.0.0.1:41265/quotagent/", "healthy": true, "ready_ms": 1014, "log": "/workspace/projects/quot err=
+[ok]   R5 `status` 一行 JSON：`healthy/pid/port/url/ready_ms/degraded[]`；缺 token ⇒ `available:false` + 有名 reason + next_action
+        rc=0 payload={"ok": true, "service": "quotagent-webui", "pid": 116005, "port": 41265, "url": "http://127.0.0.1:41265/quotagent/", "healthy": true, "ready_ms": 1014, "managed": true, "degraded": [{"plugin": "system/admin", "available": false, "reason": "admin-token-absent",
+[ok]   R6 第二次 `up` 幂等：`state=already-up`、pid 不变（不重建、不覆盖数据）
+        rc=0 state=already-up pid=116005 vs 116005
+[ok]   R7 两次 `status` **逐字节一致**（摘要口径里不掺墙钟：ready_ms 是启动时量到的常值）
+        identical=True 第一次={"ok":true,"service":"quotagent-webui","pid":116005,"port":41265,"url":"http://127.0.0.1:41265/quotagent/","healthy":tru
+[ok]   R8 `down` 真回收：退出码 0 + 端口**真释放**（连接被拒）
+        rc=0 payload={"ok": true, "action": "down", "state": "stopped", "pid": 116005, "port": 41265, "stopped": true, "released": true, "next_action": "数据没删；再起用 ./run up"} released=True
+[ok]   R8b 再 `down` 幂等（`state=not-managed`，退出码 0；不动不是自己起的进程）
+        rc=0 state=not-managed
+[ok]   R9 凭据缺失下 `up` **仍成功**（空配置 + 无 token）：退出码 0 + 健康 200；受影响项在 `degraded[]` 里报 `available:false` + reason + next_action
+        up_rc=0 healthy=True degraded=[{"plugin": "system/admin", "available": false, "reason": "admin-token-absent", "next_action": "把随机 token 写到 0600 文件后重跑（token 只存指针与指纹，永不回显）"}] err=
+[ok]   R10 端口被占时 `up` **退出码非 0**，并把日志路径写进错误体（不允许『起了但其实是坏的』）
+        rc=1 payload={"ok": false, "action": "up", "code": "unhealthy", "reason": "起了但健康检查连续 60 秒不通", "log": "/workspace/projects/quotagent/tmp/run/webui-36303.log", "pid": 116249, "next_action": "看上面那份日志的尾部；端口被占/配置错会在那里指 log=/workspace/projects/quotagent/tmp/run/webui-36303.log
+[ok]   R11-1 变异：变异1：去掉 up 的幂等判断（已健康也重启）（必须让指定断言变红）
+        红=True health_after=200 | up rc=0 {"ok": true, "action": "up", "state": "started", "service": "quotagent-webui", "; up rc=0 {"ok": true, "action": "up", "state": "started", "service": "quotagent-webui", "
+[ok]   R11-2 变异：变异2：健康探针永不通过（up 起不来也报成功）（必须让指定断言变红）
+        红=True health_after=200 | up rc=1 {"ok": false, "action": "up", "code": "unhealthy", "reason": "起了但健康检查连续 60 秒不通",
+[ok]   R11-3 变异：变异3：status 里的 ready_ms 改成墙钟（不再冻结）（必须让指定断言变红）
+        红=True health_after=200 | up rc=0 {"ok": true, "action": "up", "state": "started", "service": "quotagent-webui", "; status rc=0 {"ok": true, "service": "quotagent-webui", "pid": 117362, "port": 38219, "url": ; status rc=0 {"ok": true, "service": "quotagent-webui", "pid": 117362, "port": 38219, "url": 
+[ok]   R11-4 变异：变异4：status 读不到 pid（装载记录读面失效）（必须让指定断言变红）
+        红=True health_after=200 | up rc=0 {"ok": true, "action": "up", "state": "started", "service": "quotagent-webui", "; status rc=0 {"ok": true, "service": "quotagent-webui", "pid": null, "port": 37621, "url": "h
+[ok]   R11-0 基线（未变异）在同一序列上**不红**（否则四处变异变红都是空转）
+        #1 基线红=False；#2 基线红=False；#3 基线红=False；#4 基线红=False
+[ok]   R11-5 全过程**产品树字节不变**（变异只写在 tmp/ 的副本里）
+        before=4e7794400f9c after=4e7794400f9c
+RESULT: PASS（run-once 门 18/18）
+rc=0
+```
+
+## 三、覆盖的判据 → 断言（逐条对应门里的行）
+
+| 契约条款 | 门里的断言 |
+|---|---|
+| up 幂等启动 / 不重建不覆盖数据 | R4（真起 + 健康 200 + URL 可达）、R6（二次 up：`state=already-up`、pid 不变） |
+| status 一行 JSON（`{ok,service,pid,port,url,healthy,ready_ms,degraded[]}`） | R5（一行 + 字段齐 + degraded 项带 reason/next_action）、R7（两次 status **逐字节一致**） |
+| down 回收本次启动的进程、不删数据 | R8（`stopped/released` + 端口真释放）、R8b（重复 down 幂等） |
+| doctor 只读、逐项 next_action、退出码 0 = 能跑 | R1（7 项 + 逐项 next_action + 退出码 0）、R1b（只报指纹，不回显内容） |
+| 外部凭据不阻塞启动 | R2（空配置 + 无 token 下 doctor 仍 0）、R9（凭据缺失下 up **仍成功** + status 报 `available:false`） |
+| 端口被占必须报出来 | R3（别的进程占端口 ⇒ doctor 非 0 + next_action）、R10（up 非 0 + 日志路径） |
+| —— | R11（`run` 的 **4 处单点变异全红**，每处先在未变异基线上确认"不红"；产品树字节不变） |
+
+## 四、没验证的东西
+
+- 未在"**空 HOME + 断网**"条件下跑（28 §3.1【验收】的原始口径）：本机跑的是"仓库内自包含 + 不装包"路径，
+  断网需容器级隔离，本批没做（登记为阶段 5.4 的验收项）。
+- 未验证 `logs` 与 `config init`（**未实现**，见 `docs/design/28` §3.3）。
+- 未在**干净克隆**上跑 `./run up`（依赖 `host/node_modules`；`up` 会在缺失时调 `tools/cordis.sh install`，那条路径没被走过）。

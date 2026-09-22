@@ -16,6 +16,9 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync
 import { join } from 'node:path'
 import { array, number, object, string } from '../lib/std-schema.mjs'
 import { openLedger } from '../lib/ledger-view.mjs'
+// 注入式 UI 注册面（**机制**，见 host/lib/ui-slot.mjs）：本文件不知道任何区块是什么、由谁注册。
+// 用户原话（逐字）："不需要让 webui 耦合展示其他插件的 UI 或者耦合某种具体的业务逻辑。"
+import { createSlotRegistry, SLOTS as UI_SLOTS } from '../lib/ui-slot.mjs'
 
 export const name = 'webui'
 
@@ -25,7 +28,7 @@ export const builtin = []   // 本模块不使用事件：声明即事实（D-01
 
 export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare']
 
-export const provides = ['webui']
+export const provides = ['webui', 'uiSlots']    // `uiSlots` = 注入式 UI 的注册面（机制；不含业务语义）
 
 export const Config = object({
   route_prefix: string().default('/quotagent'),
@@ -48,6 +51,8 @@ export const Config = object({
   // 缺省空 = 没有投递来源（视图如实报 degraded + reason，不编数据）。
   rfq_delivery: string().default(''),
   rfq_delivery_max: number().default(8),    // 每视角最多展示几个包（有界；超出如实报 omitted）
+  // 注入式 UI 的槽位闭合集合（机制层）：插件只能注册到这些槽位；新增槽位改 host/lib/ui-slot.mjs。
+  ui_slots: array(string()).default([...UI_SLOTS]),
 })
 
 const html = (title, body, prefix) => `<!doctype html><html lang="zh"><head><meta charset="utf-8">
@@ -99,7 +104,7 @@ const LIMIT_CHOICES = [10, 20, 50, 200]
 const GET_ONLY_PATTERNS = [
   /^\/?$/,                                                     // 总览
   /^\/start\/?$/,
-  /^\/api\/(health|status|obs|ops|mail|pipeline|retention|routes|ui-feedback)\/?$/,
+  /^\/api\/(health|status|obs|ops|mail|pipeline|retention|routes|ui-feedback|ui\/blocks)\/?$/,
   /^\/ops\/?$/,
   /^\/ops\/mail\/?$/,
   /^\/ops\/ui-feedback\/?$/,
@@ -266,6 +271,14 @@ export function apply(ctx, config) {
   const projection = ctx.projection            // 投影服务（真源在 host/modules/projection.mjs）
   const rules = projection.rules
   const prefix = config.route_prefix.replace(/\/$/, '')
+  // ---- 注入式 UI 注册面（**机制**） ------------------------------------------------
+  // 本文件只做两件通用的事：① 把注册面 `uiSlots` 提供出去（谁都可以注册区块/路由声明）；
+  // ② 在页面的**槽位**上把"别人注册的区块"按 `order` 拼进去。它**不知道**任何区块是什么、
+  // 属于哪个插件、里面是业务还是别的 —— 那一层由 `host/lib/ui-slot.mjs` 的校验与插件自己的 render 决定。
+  // 纪律：注册失败**不静默吞**（页面出现指名错误块）、插件提交的 HTML 带脚本一律**拒收**。
+  const uiSlots = createSlotRegistry({ slots: config.ui_slots })
+  ctx.effect(() => () => uiSlots.dispose())      // 卸载即释放注册表（零残留）
+  const slotsHtmlOf = (view) => uiSlots.render(`page.${view}`)
   // 视角 → 账本：配了自有账本就用它（结构性隔离），否则退回注入的只读视图（fixture/单账本模式）
   const ledgerOf = (view) => {
     const own = view === 'contractor' ? config.ledger_contractor : config.ledger_supplier
@@ -2184,7 +2197,9 @@ ${sortForm('events', '筛查事件')}
       + `供应商视角显式拒收私域键 <code>${rules.supplier.privateKeys.join(' ')}</code>。</p>`
       + `<p>JSON：<code>${prefix}/${view}/api/events</code> · <code>${prefix}/${view}/api/history</code> · <code>${prefix}/${view}/api/evidence</code></p>`
       + pendingBlock + inProgressBlock + healthBlock
-      + scoreHtml + domainHtml + priceHtml + rawHtml + elevateHtml, prefix)
+      + scoreHtml + domainHtml + priceHtml + rawHtml + elevateHtml
+      // 注入式 UI：本槽位上"别人注册的区块"（通用机制；本文件不知道它们是什么）
+      + slotsHtmlOf(view).html, prefix)
   }
   // ==========================================================================================
   // 配置与凭据（P0 配置/凭据 UI 化）：**数据与判定在 `host/modules/config-view.mjs` 与 Python 侧
@@ -2398,6 +2413,18 @@ ${sortForm('events', '筛查事件')}
         { allow: 'GET' })
     }
 
+    if (path === '/api/ui/blocks') {
+      // 注册面自述（**只回执元数据**）：谁注册了什么槽位 —— 本文件只把注册表读出来，不解读内容。
+      const described = uiSlots.describe()
+      return json(200, {
+        service: 'quotagent-webui', route_prefix: prefix, source: 'host/lib/ui-slot.mjs',
+        mechanism: '注入式 UI 注册面：插件提交区块（槽位 + 排序 + 标题 + render），webui 只做机制、不懂业务语义',
+        slots: described.slots, count: described.count, blocks: described.blocks,
+        next_action: '插件侧注册见 docs/design/27-plugin-architecture.md §6 与各插件 docs/；'
+          + '本表只列注册元数据，不含区块正文',
+      })
+    }
+
     if (path === '/api/routes') {
       // 路由表（**静态声明**，只列本模块真的在服务的路由；新增路由必须同步这里）
       return json(200, {
@@ -2465,6 +2492,9 @@ ${sortForm('events', '筛查事件')}
           { path: `${prefix}/supplier/quotes/prepare/`, method: 'POST', auth: 'none',
             what: '提交报价草稿（**只落 0600 待办件**、账本零新增；202 + next_action；校验失败 400 + 字段级 errors）' },
           { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
+          // 注入式 UI 注册面（机制；`host/lib/ui-slot.mjs`）：只回执"谁注册了哪个槽位"，不解读区块内容
+          { path: `${prefix}/api/ui/blocks`, method: 'GET', auth: 'none',
+            what: '注入式 UI 注册面自述（槽位闭合集合 + 已注册区块的 plugin_id/slot/order/title；webui 不懂业务语义）' },
           // WebUI 反馈闭环（ui-feedback 插件）：SSR 表单页（**0 内联脚本**）+ 只落 0600 待办件 + 只读观察面
           ...config.views.flatMap((v) => [
             { path: `${prefix}/${v}/feedback`, method: 'GET', auth: 'none',
@@ -3091,7 +3121,7 @@ ${sortForm('events', '筛查事件')}
       if (!Object.prototype.hasOwnProperty.call(rules, to)) return json(400, { error: 'unknown-view', hint: Object.keys(rules).join(' / ') })
       return send(302, 'text/plain; charset=utf-8', '', { location: `${prefix}/${to}/` })
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/advice/ / ${prefix}/<view>/api/advice / ${prefix}/<view>/gates/ / ${prefix}/<view>/api/gates / ${prefix}/<view>/changes/<id>/ / ${prefix}/<view>/api/changes/<id> / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/pipeline / ${prefix}/api/mail / ${prefix}/api/ui/blocks / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / ${prefix}/<view>/api/negotiation / ${prefix}/<view>/api/faq / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/advice/ / ${prefix}/<view>/api/advice / ${prefix}/<view>/gates/ / ${prefix}/<view>/api/gates / ${prefix}/<view>/changes/<id>/ / ${prefix}/<view>/api/changes/<id> / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）
@@ -3102,6 +3132,7 @@ ${sortForm('events', '筛查事件')}
     server.listen(config.port, config.listen_host, () => {
       // port=0 → 由内核分配临时端口；实际端口**必须**从 server.address() 读（fixture 靠它做 HTTP 检查）
       const port = server.address().port
+      ctx.provide('uiSlots', uiSlots)      // 注入式 UI 注册面（机制）：插件据此提交自己的区块
       ctx.provide('webui', {
         url: `http://${config.listen_host}:${port}${prefix}/`,
         port,
