@@ -7,7 +7,7 @@
 - ID：`FR-<域>-<NNN>`；优先级：`must`（不做则阶段不成立）· `should`（阶段内应做）· `could`（可延后）。
 - 阶段：P0 mock · P1 mvp demo · P2 product（定义见 `roadmap.md`）。
 - 每条需求都引用 `acceptance-criteria.md` 中的 AC；**AC 未定义的需求不得实现**（AGENTS.md 规则 6）。
-- 较早的一批**非 P0** 行（引入时间 ≤ 2026-09-21T04:34:36Z）在 `functional-requirements-archive.md`（同目录）；**归档仍受门校验**：主文件 + 同目录 `functional-requirements-archive*.md` = 门的 **FR 定义集合**。
+- 较早的非 P0 行在 `functional-requirements-archive*.md`（同目录；批次与选入规则见各归档头）。**归档仍受门校验**：主文件 + 归档 = 门的 **FR 定义集合**。
 - 服务与事件细节见 `../design/04-services-catalog.md` 与 `../design/05-events.md`，本文件不重复定义。
 
 ## 1. 验证清单（V）：未验证的假设
@@ -102,55 +102,9 @@
 | FR-NEGO-002 | 任何价格让步必须人工批准 | must | P2 | AC-NEGO-001 、AC-NEGO-003 |
 | FR-EVAL-003 | 指标采集与基线报告 | must | P0 | AC-EVAL-002 |
 | FR-INTEG-001 | 文件投递绑定（原子写 + 命名约定） | must | P0 | AC-INTEG-001 |
-| FR-RUNTIME-003 | 提供宿主运行期决策留痕：按事件前缀订阅、有界环形流水、去重键与账本同形；**不写账本、不写文件** | must | P2 | AC-RUNTIME-003 |
-| FR-RUNTIME-004 | 提供运行期窗口成本预算准入：整数微元记账、窗口滚动、超预算拒绝**可解释**（区分"等窗口有用"与"等也没用"） | must | P2 | AC-RUNTIME-004 |
-| FR-RUNTIME-005 | 提供运行期熔断：连续失败达阈值即快速失败，冷却后半开有界试探，拒绝带状态与重试时间 | must | P2 | AC-RUNTIME-005 |
-| FR-RUNTIME-006 | 提供运行期准入与等待：可解释的限流/背压拒绝、显式超时（超时是错误不是静默重试）、有界重试、判定不依赖墙钟 | must | P2 | AC-RUNTIME-006 |
-| FR-RUNTIME-007 | 提供运行期观测的**只读聚合**（准入/留痕/分流三源合一）：只给聚合数字与阶段，不出条目正文、不写账本 | must | P2 | AC-RUNTIME-007 |
-| FR-RUNTIME-008 | 提供按 realm 的**有界**事件时间线（幂等去重、卸载即注销、零残留），供 UI 与排障读取 | must | P2 | AC-RUNTIME-008 |
-| FR-RUNTIME-009 | 提供运行期请求**幂等判重**：同请求不重复打下游；失败结果是 replay 而非复用成成功 | must | P2 | AC-RUNTIME-009 |
-| FR-EVIDENCE-006 | 提供账本证据面的只读统计（按类型计数、关联数、带引用行数、时间跨度），只输出计数不输出正文 | must | P2 | AC-EVIDENCE-003 |
 | FR-EVOLVE-007 | 提供自进化流水的只读归纳（提案/影子/门两态/晋升/回滚/canary 进出 + 最近事件），只出计数不出正文 | must | P2 | AC-EVOLVE-005 |
-| FR-PRICE-003 | 提供按供应商的历史价格描述统计（次数、最低/中位/最高、最新、离散趋势），只读且**不参与决策** | must | P2 | AC-PRICE-002 |
-| FR-RFQ-007 | 提供按采购包的应标覆盖率与缺口清单（未应标名单、低于下限的包、临期/逾期包），只读且**不猜名单** | must | P2 | AC-RFQ-005 |
 | FR-RFQ-008 | **「来不及回 RFQ：谁还没回 / 还差多久 / 催了没有」**（domain 插件 `rfq-deadline`，正面回答 P-10「截止时间与催报**没有入口**」与 P-04「被迫「等回到电脑前再算」、**错过截止**」）：吃调用方给的白名单事实载荷（本视角 `rfq/published`、`rfq/distributed`、`quote/submitted`、`rfq/promised` 行 + `as_of` + 邮件通道事实），每条 RFQ 派生 `{rfq_id, subject, due_ts, due_basis, responded, silent, overdue, remaining_seconds, severity, next_action, blocked_by}`（**恰 11 键**）。**回文时限来自事实行**（`rfq/published.quote_by` 或 `rfq/promised.due_at`，取事实 ts 最晚的那条）、**`remaining_seconds = due_ts − as_of`（绝不取墙钟）**：两个墙钟入口读都不读 ⇒ 同一份快照在任何「当前时间」下输出**逐字节一致**。**没凭据不得假装能发**：通道 `available=false` 时 `blocked_by` 写清「**无法代发**」与通道 reason，输出里不出现任何「发过了」的表述（`can_send=false`）。**竞标人名册是业主私域**：非业主视角对 `invited`/`quotes` **读都不读**（带名单与不带名单输出逐字节一致），`responded` 与 `sourcing.coverage()` **同一口径**。无数据 ⇒ `degraded` + 有名 reason + 条目为空；有界（`max_items` 夹取 + 如实报 `omitted`）；确定性；零写面（不读账本、不发信、不取墙钟）。路由 `GET /quotagent/<view>/deadlines/`（SSR，**0 行 `<script>` / 0 内联事件**）、`GET /quotagent/<view>/api/deadlines`、`POST /quotagent/<view>/deadlines/promise`（宿主**只落一条 0600 待办件**：发言人 + 承诺回文时限 + RFQ id + 原话 sha256，**账本零新增**；202 + `next_action`），并挂进四道页面子导航；`tools/rfq-promise.py` 是**唯一落账本者**（落 `rfq/promised`，body **恰 6 键**、不含原话正文与凭据；待办件移入 `applied/`；幂等 `duplicates`；拒绝码各自给 code + next_action） | must | P2 | AC-RFQ-006 |
-| FR-EVAL-005 | 提供按供应商的绩效记分卡（次数、价格分布、交期均值、偏差标记），只读且**不产出评分或排名** | must | P2 | AC-EVAL-003 |
-| FR-UX-004 | 提供运维视角的只读快照（中间件状态 + 熔断 + 证据面聚合 + 人可读摘要），**不属于任何一方**、不出正文与私域键 | must | P2 | AC-RUNTIME-010 |
-| FR-UX-005 | 提供运维快照的定期落盘（谈判/FAQ/邮件三域计数与最近事件），供宿主**只读**展示；快照不得含正文与私域键，且不含 `generated_at` 之外的时间键 | must | P2 | AC-UI-002 、AC-UI-003 |
-| FR-ADMIN-001 | 新增第四道 UI 道 `/quotagent/admin/`（系统管理）：未提权时不得输出任何面板内容，只给与失败同形的统一拒绝体 | should | P2 | AC-ADMIN-001 |
-| FR-ADMIN-002 | 任一道 UI 都提供管理员 token 提权入口；token 只经当次表单请求体提交，不回显、不写前端存储、不进 HTML/JS、不入账本、不出现在 URL 与日志 | should | P2 | AC-ADMIN-002 |
-| FR-ADMIN-003 | 提权后可切换到任意一道 UI（含回切）；切换只改导航与道可见性，不改变任何字段白名单——管理员身份不得成为看到私域键的新路径 | should | P2 | AC-ADMIN-003 |
-| FR-ADMIN-004 | 系统管理面板可见 agent 进度与阻塞（含插件需求与缺凭据两类），清单由 Python 判定器从真来源生成，计数只读并标注口径 | should | P2 | AC-ADMIN-004 |
-| FR-ADMIN-006 | 阻塞状态机只允许 `blocked→pending→resolved/rejected/expired`，转移只能由 Python 侧写账本产生；宿主只读；非法转移一律拒绝且不留部分效果 | must | P2 | AC-ADMIN-006 |
-| FR-ADMIN-007 | 提权粒度两档：会话级决定道可见性与切换，请求级决定一切写类提交（缺 token 即拒）；两档都无超时自动批准/自动解除，过期只减权不增权 | must | P2 | AC-ADMIN-007 |
-| FR-ADMIN-008 | 提权失败一律统一响应（缺 token/错 token/过期会话/未启用/冷却五类同形），不含 token 及其可逆派生；连续失败达阈值进入有界冷却，冷却期不产生任何成功 | must | P2 | AC-ADMIN-008 |
-| FR-ADMIN-009 | 反例：无 token 不得提权；非 admin token 一律被拒且不泄露（无 oracle）；被拒不产生会话，也不在宿主留下任何提交文件 | must | P2 | AC-ADMIN-009 |
-| FR-ADMIN-010 | token 校验只在服务端：来源限于环境变量或 0600 文件，先 sha256 归一再用恒定时间比较；token 不得出现在 HTML/JS 响应、快照文件、账本行与宿主日志四处 | must | P2 | AC-ADMIN-010 |
-| FR-ADMIN-005 | 阻塞可在 UI 内解除：提交落为宿主侧「待处理项」（0600），由 Python 侧消费并落账完成；**提交瞬间宿主侧账本零新增**，宿主永不写账本 | should | P2 | AC-ADMIN-005 |
-| FR-MARKET-001 | 插件列表本身由插件提供：只读聚合三真源（目录/清单/用户空间），逐项给 source 与 wired；未装配显式 unwired 不得隐藏；空列表报 degraded | must | P2 | AC-MARKET-001、AC-MARKET-006 |
-| FR-MARKET-002 | 市场目录与已装载项必须分开；未过门/未晋升产物不得进"可安装项"；每条可安装带 install_ref，无引用一律拒 | must | P2 | AC-MARKET-002 |
-| FR-MARKET-003 | 三源不一致即报 inconsistent + 逐项差异，不得取其一静默 | must | P2 | AC-MARKET-003 |
-| FR-MARKET-004 | 市场只读零副作用：不装载/不下载/不写文件/不起子进程/不写账本；"安装/提权"只产指向既有门的引用 | must | P2 | AC-MARKET-004 |
-| FR-MARKET-005 | 有界且确定性：条数上界、稳定排序、不含正文与私域键；超界截断并报被丢条数 | should | P2 | AC-MARKET-005 |
-| FR-MARKET-006 | 不可用不得伪装：degraded + reason + next_action，不得返回"看起来健康的零插件清单" | must | P2 | AC-MARKET-006 |
-| FR-USERPLUG-002 | 写面只有 `user-space/<ns>/<plugin>/`：写 `host/modules/`、`src/`、`tools/`、别人 ns、仓库外一律拒且目标不存在 | must | P2 | AC-USERPLUG-002、AC-USERPLUG-012 |
-| FR-USERPLUG-003 | 自动重载：产物/清单变化只重载该插件（pid 不变、新 uid），不迁移旧内存状态 | must | P2 | AC-USERPLUG-003 |
-| FR-USERPLUG-004 | 自动卸载零残留：effects 归零、不影响其它用户空间与平台插件 | must | P2 | AC-USERPLUG-004 |
-| FR-USERPLUG-006 | 隔离四件套：独立 instance / 独立服务命名空间（含保留名禁用）/ 独立文件根（挂载期绑定）/ 独立凭据作用域 | must | P2 | AC-USERPLUG-006 |
-| FR-USERPLUG-007 | 四类反例必须结构性拒绝并留痕（写别人目录 / 跨 instance 共享状态 / 未提权被他人加载 / 无凭据自称已连接） | must | P2 | AC-USERPLUG-007 |
-| FR-USERPLUG-008 | 管理本身也是插件（list/load/unload/reload/请求/提权请求）；卸载管理面后已装载插件照常运行，新装载被拒且不伪装成功 | must | P2 | AC-USERPLUG-008 |
-| FR-USERPLUG-009 | 不耦合进平台：不得改内核/服务层与已晋升产物，只能经已登记服务面 inject；未登记服务名即拒 | must | P2 | AC-USERPLUG-009 |
-| FR-USERPLUG-011 | 未提权不可被他人加载（跨 ns → `user-plugin-not-elevated` 且未载入） | must | P2 | AC-USERPLUG-011 |
-| FR-USERPLUG-012 | 两个方向都封死：自进化 target→`user-space/` 拒；用户空间 target→`host/modules/` 拒 | must | P2 | AC-USERPLUG-012 |
-| FR-USERPLUG-001 | 自然语言需求 → 产出用户空间插件 → **完成即自动进列表**（无人工搬运）；真源 `user-space/<ns>/<plugin>/plugin.json`；落 `userplugin/created`（含 `source_prompt_digest` 与产物哈希），同哈希幂等 | must | P2 | AC-USERPLUG-001 |
-| FR-USERPLUG-005 | P2 | 用户空间插件的**迭代与回滚**：版本号递增才允许产物变更（同版本不能对应两个产物）；回滚只能回到历史里真实存在过的版本，且**只有磁盘内容已还原成该版本**时才登记 —— 账本不记不真的事 | AC-USERPLUG-005 |
 | FR-USERPLUG-010 | P2 | 用户空间插件**提权**为系统级插件：管理面只产待办载荷（零写面）；真正写树由 `tools/userplugin-elevate.py` 执行 —— 必须**人类 actor** + `ap-NNNN` 人工门引用 + **影子哈希与现算产物哈希一致**（陈旧载荷/被改产物一律拒绝）；目标只能是 `<name>.mjs`，**已存在即拒绝（不覆盖）**，越界写面不可达 | AC-USERPLUG-010 |
-| FR-AGENTRT-006 | P2 | **有界 + 显式降级**（运行期插件）：上下文切片条数/记忆条目数/单条字节数上界必须声明；超界**截断并报被丢条数**（不得静默丢）；无法组装时 `degraded:true` + `reason` + `next_action`；**空上下文不得报 `ok:true`**（"确实没内容"与"没组装出来"必须可区分） | AC-AGENTRT-006 |
-| FR-AGENTRT-007 | P2 | **各自独立装卸、卸载零残留**：三件运行期插件可分别装载/卸载/重载；卸载后无订阅/定时器/句柄残留（各件都有 `*-disposed` 留痕）；**卸载记忆插件不丢事实** —— 项目记忆的来源是账本（Python 侧重放），与插件是否在跑无关 | AC-AGENTRT-007 |
-| FR-AGENTRT-002 | P2 | **记忆四层边界**（运行期插件）：①会话记忆只在进程内、**永不落盘**；②项目记忆是**账本的可重建投影**（丢缓存不丢事实：删掉快照重建后逐字节一致），重放**只读**账本；③策略记忆**只人类可写**；④跨方共识**只走协议**（不得由本插件合并） | AC-AGENTRT-002 |
-| FR-STORAGE-001 | P2 | **文件管理由插件提供**（Python 侧 `tools/storage.py` 唯一写入者；宿主侧只读观察面 `storage-view`）：按 ns 分区根、append-only 日志、`stat` 返回与磁盘一致的 `sha256`；`..`/绝对路径/符号链逃逸一律拒且**根外目标不存在**；读取必须有界并诚实报破 | AC-STORAGE-001 |
-| FR-STORAGE-004 | P2 | 存储**跨租户隔离**：`ns` 逃逸与 `rel` 跨根一律拒（`storage-outside-ns`），且越权尝试后**哨兵在磁盘上不存在**；存储写不产生账本行、账本字节零改动（不得成为第二条事实写路径） | AC-STORAGE-004 |
-| FR-STORAGE-006 | P2 | 存储提供**只读观察面**（容量/计数/失败次数）供自进化 `observe` 使用：有界、确定性、不出正文与私域键；**读它不改任何状态** | AC-STORAGE-006 |
 | FR-UXWEB-001 | P2 | **GUI 必须能做事，不是一篇纯文字**：承包商/供应商第一屏固定三块（待批事项 / 进行中 / 健康），其余下沉可展开区；每块里的动作是**可点的表单或链接**；页面**保持 0 行 `<script>` / 0 内联事件**（交互只用 `<form method=get>`，可机检） | AC-UXWEB-001 |
 | FR-UXWEB-002 | P2 | **子视图与真交互**：双方各自的事件流 / 报价 / 待批 / 证据（供应商侧为澄清）子视图，带 `limit/page/sort/q` 筛选排序翻页；参数越界**夹取并回显 applied**；分页不重叠不丢行；空结果**显式说明**（不许看起来像故障）；每页有道内子导航与「上手（token／配置放哪里）」入口 | AC-UXWEB-001 |
 | FR-CONFIG-001 | P2 | **插件/项目配置可 UI 更改并持久化**：宿主侧只读总览（每键 `source`(`default|file|env|runtime`) / `shadowed_by` / `editable`）+ **干跑预览**（零落盘零生效）；保存只落 **0600 待处理项**（宿主零写面），由 `tools/config-apply.py` **原子写** `/workspace/config.yaml`（临时文件 + rename，失败回滚）并落账本 `config/changed|refused`；支持 `--init` 从模板生成配置文件（即"支持配置文件初始化"） | AC-CONFIG-001 |
@@ -163,6 +117,24 @@
 | FR-GATE-001 | P2 | **「审批等多久 / 变更单到底是谁卡着」**（domain 插件 `gate-timeline`，正面回答两条 human problem：「审批人等不到」与「变更单扯皮」）：吃调用方给的**白名单事实载荷**（本视角的 `approval/*` / `change/*` 行 + `as_of`），派生 ① **还在等的人工门** `{id,kind,subject,owner,age_seconds,age_basis,consequence,next_action,blocked_by}`（挂了多久 / **口径** / 卡在谁手里（队列里的真审批人，没有就如实说 `unassigned`）/ 再等下去会发生什么（`remind|escalate|abort` 各自说清，**没有"超时自动批准"这一项**）/ 下一步）与 ② **变更单时间线** `{id,state,owed_by,waiting_since,basis,next_action}`（状态 / **谁欠谁一个动作** / 从哪条事件起在等 / 以账本事件与计数引用为凭）。**`age_seconds` 的口径 = `as_of − approval/requested 事实 ts`（绝不取墙钟）**：两个墙钟入口（`payload.now` / `config.now`）**读都不读**，所以同一份快照在任何"当前时间"下输出逐字节一致。**本插件永远不能批准**：服务面里没有 `approve/decide/grant/submit` 这类方法（`meta.can_approve=false`），`nudge()` 只产催办载荷（`requested_action="nudge"`）→ 路由 `GET /quotagent/<view>/gates/`（SSR，**0 行 `<script>`**）、`GET /quotagent/<view>/api/gates`、`POST /quotagent/<view>/gates/nudge`（宿主**只落一条 0600 待办件**：用户原话 + 目标门 id + sha256，**账本零新增**；202 + `next_action`），并挂进四道页面子导航；`tools/gate-nudge.py` 是**唯一落账本者**（校验目标门在本视图投影里且**尚未被决定** → 落 `gate/nudged`，body 恰 5 键、**不含理由正文**；待办件移入 `applied/`；幂等 `duplicates`；四种拒绝码各给 code + next_action）；**空投影 → `degraded:true` + 有名 reason + 两个列表都为 0**（不编）；有界、确定性、私域零泄漏 | AC-GATE-001 |
 | FR-GATE-002 | P2 | **变更单逐行明细**（`gate-timeline` 规则 ⑤）：`/<view>/changes/<id>/` 与 `/<view>/api/changes/<id>` 逐行给原量×原价→新量×新价→差额（整数分）、行小计与总计差额、每行 `basis`；缺依据的行**不计入小计**（列 `basis_missing`）；无可用行 ⇒ degraded+reason+明细空；未知 id ⇒ 404+`next_action`；私域列仅业主侧可见 | AC-GATE-002 |
 | FR-AUTH-001 | P2 | **「授权区间」**（domain 插件 `authority-band`，正面回答 P-12「谈判让步的授权区间不可见」：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁）：吃调用方给的**白名单载荷**（`view` + **金额（整数分）** + 角色 + **只读配置快照**里的 `authority.*` 键；**不读账本、不读文件、不联网、不调模型、不取墙钟**），输出 `{amount, unit:"cents", within[{role,limit_cents,remaining_cents}], bands[], required_role, next_role, over_by, escalate_cmd, inside_band, blocked_by, unconfigured, basis, engine:"rules", degraded, reason}`：① **谁能批到多少** = 区间全表 + 覆盖本金额的角色（least privilege 的 `required_role`）；② **下一个能批的人是谁** = 比当前角色限额更高且**真的批得到**本金额的最小限额角色；③ **越界必须走人工门**：越界时给**可直接复制**的升级命令（`tools/verify.sh gates` **真存在** + 终端人工签署命令），并明说**本插件不能批准、不能放行**（`can_approve=false`，服务面无 `approve/decide/submit` 这类方法）；④ **未配置不得编限额**：`authority.bands.<角色>` 未登记 / 为 `null` / 快照缺失 / 单位声明非 `cents` ⇒ `unconfigured=true` + 有名 `reason` + `required_role`/`next_role` **都为空**（`null`（未配置）与 `0`（人明确登记"一分也不能批"）是两件事）；⑤ 金额非法（负数 / 非整数 / 超上限）⇒ 具体 `code` + `next_action`；配置进白名单（`authority.unit` / `authority.currency` / `authority.bands.<角色>` / `authority.fallback_role` / `authority.escalation_note`，**人工专属键** ⇒ 既有配置 UI 可直接改并持久化、YAML 可直接初始化）；路由 `GET /quotagent/<view>/authority/`（SSR，**0 行 `<script>`**）与 `GET /quotagent/<view>/api/authority`，并挂进四道页面子导航；有界、确定性、私域零泄漏 | AC-AUTH-001 |
+
+## 6.1 用户诉求（12 条；可追溯表见同目录 `requirements-traceability.md`）
+
+| ID | 需求 | 优先级 | 阶段 | 关联 AC |
+|---|---|---|---|---|
+| FR-USREQ-001 | **UI 不得只做信息聚合：每一步都要在 APP 内闭环（含写操作）**。原话：「…不离开 APP 就能完成**每一步**工作（含写操作）」。写操作有真落点（202 + 0600 待办件，账本零新增）。验收: webui / config-route / gates / rfq-deadline / ui-feedback 门（现存**四类**写各 202）。缺:「步骤→路由→动作」登记表。 | must | P2 | AC-UXWEB-001、AC-CONFIG-001、AC-RFQ-006 |
+| FR-USREQ-002 | **视觉不得像「上世纪的表单」，要像现代 app**。原话：「视觉不得像『上世纪的表单』，要像现代 app」。含义: 布局/密度/组件/状态可见性达现代 Web app 水平，不是裸表格堆叠。验收: **暂无机检**（只有结构切片：0 内联脚本 / 三块 `data-block` 顺序 / `data-empty`）。缺: 可机检视觉基线（design token + `data-*` 断言）或人工评审（V + 签署人）；**不得**标 done。 | must | P2 | AC-UXWEB-001 |
+| FR-USREQ-003 | **模拟真正的员工（承包商采购员 / 供应商报价员），不是「上帝视角的检察员」**。原话：「模拟**真正的员工**…而非『上帝视角的检察员』」。含义: 两侧以岗位身份各自跑日常工作流（读包→澄清→报价→比价/审批），用各自的账本。验收: g1 门（两真进程 + 走查 14 判据）只覆盖「各自跑完工作流」+ 私域互不可见。缺: 每侧「员工的一天」任务清单。 | must | P2 | AC-EVAL-001、AC-INTEG-006 |
+| FR-USREQ-004 | **dashboard 接线**。原话：「服务列表不堆链接；**projects & routes** 下要有项目路由入口；项目 webui 是**独立运行的 app**」。含义: 项目 UI 是独立进程（自有端口/健康）；projects & routes 区有项目路由入口，只认服务自述 `GET <prefix>/api/routes`。载体（**跨仓**）: `services/services.json`、`services/dashboard/dashboard.py`、`tools/webui-serve.py`。验收: webui 门（自述路由 + 双方视角不同路由）；dashboard 侧本仓无门。缺: 跨仓机检。 | must | P2 | AC-UXWEB-001 |
+| FR-USREQ-005 | **webui 是面向用户的 app（一般用户不熟 CLI），不是一堆报告**。原话：「webui 的定位是**面向用户的 app**（一般用户不熟 CLI），不是一堆报告」。含义: 页面按用户任务组织（待批/进行中/健康三块 + 子视图 + 上手入口）。验收: webui 门（三块顺序 + 8 子视图 + `data-subnav` + 上手入口 + `data-empty`）。缺:「用户不需要 CLI」的端到端机检。 | must | P2 | AC-UXWEB-001、AC-UIFB-001 |
+| FR-USREQ-006 | **cron 没待处理反馈时不得发垃圾消息**。原话：「cron **没待处理反馈时不得发垃圾消息**」。含义: 反馈闭环 cron 只认**确定性探测器**（`ui-feedback-monitor.sh`：输出与上次相同 ⇒ 调度器跳过、不发消息），待办 0 时输出恰一行 `pending=0`。验收: `qa ac AC-USREQ-006`（确定性 + 两 TZ 一致 + 空待办恰一行 + 非空转）。缺: 调度器真跳过的跨仓机检。 | must | P2 | AC-USREQ-006 |
+| FR-USREQ-007 | **需求必须持久化进合同文档**。原话：「需求必须**持久化进合同文档**（不是『记住』）」。含义: 每条需求在合同文档里有 FR 行（原话引用 + 可验收含义 + 验收方式），并配需求→实现→证据可追溯表。验收: docs 门 + coverage 门 + `requirements-traceability.md` 逐行状态带证据列。缺: 可追溯表自身的门。 | must | P2 | AC-DESIGN-001、AC-DESIGN-003 |
+| FR-USREQ-008 | **UI 上必须看得到：插件市场、agent panel、可交互业务逻辑插件、自进化**。原话：「UI 上必须看得到：**插件市场、agent panel、可交互业务逻辑插件、自进化**」。含义: 四类都真页面可见 —— `plugin-market` 页；`/quotagent/admin/` 阻塞与进度区；`gate-timeline`/`authority-band`/`rfq-deadline`/`advice-panel` 的 `/<view>/...` 页；`evolve-journal` + `/api/ops`。验收: plugin-market / admin-route / webui 门。缺: 四类同一屏的汇总入口机检。 | must | P2 | AC-MARKET-001、AC-ADMIN-001、AC-EVOLVE-005 |
+| FR-USREQ-009 | **插件一律由插件提供（含需凭据的邮件插件）；配置要能 UI 更改 + 持久化 + YAML 初始化**。原话：「插件一律由插件提供…插件配置要能 **UI 更改 + 持久化 + 配置文件（YAML）初始化**」。含义: 能力面（含邮件收发）由插件提供；配置有 UI 读写路径（干跑 → 0600 待办件 → 原子写 `config.yaml`）+ `--init` 生成 YAML。验收: config-route / mail-transport 门。缺:「每件插件都有配置面」的双向机检。 | must | P2 | AC-CONFIG-001、AC-MAIL-002 |
+| FR-USREQ-010 | **每个功能模块可独立演进（自进化）；cordis 能做的直接用 cordis 最新版，不重造轮子**。原话：「每个功能模块可**独立演进**（自进化）；cordis 能做的直接用 cordis 最新版，不重造轮子」。含义: 插件各自装卸、独立演进（提案→影子→门→canary→晋升/回滚）；宿主能力优先用 cordis（钉住 4.0.0-rc.10）。验收: evolution / cordis / modules / user-space 门。缺:「cordis 已有而我方重造」的反向机检。 | must | P2 | AC-EVOLVE-001、AC-USERPLUG-003 |
+| FR-USREQ-011 | **webui 可从 dashboard 访问；不同 routes 提供双方各自视角，而不是只有一条 route**。原话：「…**不同 routes 提供双方各自视角**，而不是只有一条 route」。含义: gateway 把 `/quotagent` 路由到独立 webui 服务，且 `/<view>/...` 多道多路由。验收: webui 门（**双方视角各自可达且是不同路由** + 两视角事件集合不同 + 私域负控）+ admin-route 门。缺: 从 dashboard 点进 `/quotagent` 的跨仓机检。 | must | P2 | AC-UXWEB-001、AC-ADMIN-001 |
+| FR-USREQ-012 | **「AI agent 的决策建议」由 subagent 模拟双方交互需求并做成系统级插件供应**。原话：「AI agent 的决策建议」由 subagent…做成**系统级插件供应**。含义: 建议层是系统级插件（subagent 产出 → 既有提权路径进树），且**不能批准、不假装能发**。载体 `advice-panel.mjs`、`userplugin-elevate.py`。验收: advice / user-space 门。缺:「建议→动作」一键闭环机检。 | must | P2 | AC-ADV-001、AC-USERPLUG-010 |
+
 ## 7. 阶段分布（用于排期）
 
 | 阶段 | must 数 | 核心内容 |

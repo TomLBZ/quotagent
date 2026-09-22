@@ -43,6 +43,10 @@
 
 引用一律写 ID 或相对路径链接（可机检），不写"见上文"。
 
+**用户诉求的落点**（本仓不靠"记住"）：用户原话对应的需求 = `docs/work/functional-requirements.md` §6.1 的
+`FR-USREQ-<NNN>` 行（每行含**原话短引 + 可验收含义 + 验收方式**），其 需求→实现→证据 状态表在
+`docs/work/requirements-traceability.md`（状态只能 `done`/`partial`/`missing`，且必须有证据列支撑）。
+
 ## 3. 写作规则
 
 1. **一处一事实**：同一事实只在一处定义，其余位置用链接或 ID 引用。

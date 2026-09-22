@@ -1,0 +1,229 @@
+EV-159 —— 12 条用户诉求持久化进合同（FR/AC/可追溯表/归档批次 B）
+时间（UTC）: 2026-09-22T07:05:49Z
+提交: 见 §7（本文件先落盘、后追加提交 sha 与远端回读）
+命令前缀: 一律 `cd /workspace/projects/quotagent`，Python 走 `tools/run.sh`/`.venv`。
+
+§1 预算与搬行（用户指令 ①：先腾预算到 ≤ 28 KB，再落表）
+
+HEAD（搬行前）: 0a6b63bf81cc73fe1aec4d88e8363e64a61a6d5d
+搬行前 主文件字节: 31695   （96.7% of 32768）
+搬行后: 28235 docs/work/functional-requirements.md
+11764 docs/work/functional-requirements-archive-b.md
+39999 total
+归档 B 的 FR 定义行数: 46（应与搬走行数相等）
+逐字校验：搬走的行与它在 HEAD 主文件里**逐字节相同**的行数 = 46（= 归档里的 46 行 ⇒ 交集=46 即逐字相同）
+**被搬走但归档里找不到的行数（必须为 0）**: 0
+口径: `comm -23 <(HEAD 的 FR 行) <(当前主文件 FR 行)` = 搬走的行；再与归档 B 的 FR 行求 `comm -23` ⇒ 0 = 一行都没丢。
+
+新增 §6.1 的 12 行（行号）:
+125 126 127 128 129 130 131 132 133 134 135 136
+
+**≤ 28 KB 断言**: 主文件 28235 B ≤ 28672 B ⇒ PASS
+
+§2 新号与查重（用户指令 ②：新号、纯字母家族、先查重）
+
+HEAD 里已有的 `FR-USREQ-*` 行数: 0（应为 0 ⇒ 新家族，无重号）
+HEAD 里已有的 `AC-USREQ-*` 行数: 0（应为 0）
+新增 FR（12）: FR-USREQ-001 FR-USREQ-002 FR-USREQ-003 FR-USREQ-004 FR-USREQ-005 FR-USREQ-006 FR-USREQ-007 FR-USREQ-008 FR-USREQ-009 FR-USREQ-010 FR-USREQ-011 FR-USREQ-012
+新增 AC（1）: AC-USREQ-006
+`T-311` 定义行数: 1（应为 1）
+家族查重命令: `git grep -n 'USREQ' $(git rev-parse HEAD)` → 上面两行的 0 即结论。
+
+§3 门结果（EV-159 落盘后重跑，原样贴）
+[docs] rc=0
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描范围: 契约文档 106 个 markdown 文件（已排除 .git/.venv/__pycache__/node_modules/tmp 下的 169 个临时/派生 .md），仓库根 /workspace/projects/quotagent
+扫描读取: 成功 250 次读取，读窗口里消失 0 个契约文档（消失 ⇒ 判红，不跳过）
+[ok]   AC 定义集合: 主文件 docs/work/acceptance-criteria.md 定义 69 条；archives=[docs/work/acceptance-criteria-archive.md:62]（归档文件共 62 条 AC 定义行，受同一套门校验）
+[ok]   FR 定义集合: 主文件 docs/work/functional-requirements.md 定义 70 条；fr_archives=[docs/work/functional-requirements-archive-b.md:46, docs/work/functional-requirements-archive.md:47]（归档文件共 93 条 FR 定义行，受同一套门校验）
+[ok]   ID 完整性: 603 个定义，2988 处引用，0 未解析
+[ok]   占位符: 无
+[ok]   预算: 103 个文件受检，最高占用 99%（docs/work/evidence/INDEX.md 8076/8192 B）
+[ok]   FR↔AC 覆盖: 163 条 FR 均关联 AC，131 条 AC 无孤儿（FR 定义文件 3 个：主文件 + 2 个归档；AC 定义文件 2 个：主文件 + 1 个归档）
+RESULT: PASS
+
+[coverage] rc=0
+{
+  "checks": [
+    {
+      "name": "矩阵文件存在",
+      "ok": true,
+      "detail": "docs/design/15-requirements-coverage.md"
+    },
+    {
+      "name": "FR 定义集合非空且归档被读到（主文件 + 同目录归档；归档 0 条 FR 行 = 空读）",
+      "ok": true,
+      "detail": "FR 行 163 条；归档 ['docs/work/functional-requirements-archive-b.md', 'docs/work/functional-requirements-archive.md']；空读 []"
+    },
+    {
+      "name": "矩阵对 FR 文档**双向全覆盖**（定义集合 = 主文件 + 归档，共 163 条）",
+      "ok": true,
+      "detail": "缺 0 条[]；伪造 0 条[]"
+    },
+    {
+      "name": "矩阵对插件目录**双向全覆盖**（39 个插件）",
+      "ok": true,
+      "detail": "缺 0 个[]；伪造 0 个[]"
+    },
+    {
+      "name": "每条 FR 的承载体**在仓库里真实存在**（防矩阵瞎写）",
+      "ok": true,
+      "detail": "不存在的承载体 0 处：[]"
+    },
+    {
+      "name": "状态合法；【缺口】【存疑】**逐条登记**（不许悄悄留洞）",
+      "ok": true,
+      "detail": "问题 0 处：[]；登记表 3 条"
+    },
+    {
+      "name": "每个插件至少归属 1 条 FR 或 AC（'功能由插件提供'的落点）",
+      "ok": true,
+      "detail": "无归属插件 0 个：[]"
+    },
+    {
+      "name": "内建负控：三种篡改（假承载体/删 FR 行/删插件行）**都必须让门变红**",
+      "ok": true,
+      "detail": "承载体改成本不存在的文件→红; 删掉一条 FR 行→红; 删掉一条插件行→红"
+    }
+  ],
+  "passed": 8,
+  "total": 8,
+  "failures": 0
+}
+
+[ac-registry] rc=0
+[ok]   定义文件 2 个（主文件 1 + archives=[docs/work/acceptance-criteria-archive.md:62]，归档共 62 条 AC 行）
+[ok]   定义集合 131 条 AC（其中 P0 29 条），注册表 84 条
+[info] 尚未到期（P1/P2 等）未注册 47 条：AC-ADMIN-001(P2)、AC-ADMIN-002(P2)、AC-ADMIN-003(P2)、AC-ADMIN-007(P2)、AC-ADMIN-008(P2)、AC-ADMIN-009(P2)、AC-ADMIN-010(P2)、AC-AUTH-001(P2)…
+[ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查）
+
+[ac AC-USREQ-006] rc=0
+{
+  "ac": "AC-USREQ-006",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "① 探测器与 tick 都在仓库里（实现载体存在）",
+      "ok": true,
+      "detail": "monitor=tools/ui-feedback-monitor.sh tick=tools/ui-feedback-tick.sh"
+    },
+    {
+      "name": "② 探测器根目录可被 `QUOTAGENT_ROOT` 覆盖（⇒ 机检能在隔离根上真跑两态，而不是读源码猜）",
+      "ok": true,
+      "detail": "override=QUOTAGENT_ROOT"
+    },
+    {
+      "name": "③ 探测器无时间/随机源（否则「输出相同 ⇒ 跳过」不成立）",
+      "ok": true,
+      "detail": "命中=[]"
+    },
+    {
+      "name": "④ 空待办：输出**恰一行** `pending=0`（没有第二条内容 ⇒ cron 无东西可投递）",
+      "ok": true,
+      "detail": "stdout='pending=0\\n' rc=0"
+    },
+    {
+      "name": "⑤ 确定性：同一状态两次运行（换 TZ）逐字节一致 ⇒ 调度器能判「无变化」并跳过",
+      "ok": true,
+      "detail": "UTC='pending=0\\n' Shanghai='pending=0\\n'"
+    },
+    {
+      "name": "⑥ 空待办时输出里没有任何「已经发了东西」的措辞（不发垃圾消息）",
+      "ok": true,
+      "detail": "命中=[] stderr=''"
+    },
+    {
+      "name": "⑦ 非空转（负控的反面）：真造 2 条待办 ⇒ 输出 `pending=2` + ids（不是恒为 0 的假探测器）",
+      "ok": true,
+      "detail": "stdout='pending=2\\nids=a.json,b.json,\\n'"
+    },
+    {
+      "name": "⑧ 待办变化 ⇒ 探测器输出**跟着变**（否则调度器永远跳过，反馈永远不被处理）",
+      "ok": true,
+      "detail": "empty='pending=0\\n' two='pending=2\\nids=a.json,b.json,\\n'"
+    },
+    {
+      "name": "⑨ tick 的静默半边：无变化时 `[ $n -eq 0 ] && exit 0` 在最后一条 echo **之前**",
+      "ok": true,
+      "detail": "guard@944 last_echo@967"
+    },
+    {
+      "name": "⑩ tick 输出只在真应用了反馈时才打印（`echo` 的出现次数 ≤ 2，且都带 `$n` 判据）",
+      "ok": true,
+      "detail": "echo 行数=2"
+    }
+  ],
+  "evidence_refs": [],
+  "command": "tools/verify.sh ac AC-USREQ-006",
+  "phase": "P2",
+  "title": "cron 没待处理反馈时不得发垃圾消息：探测器确定性（两次/跨 TZ 一致）+ 空待办恰一行 `pending=0` + 非空转",
+  "first_failure": "",
+  "exit_code": 0
+}
+[PASS] AC-USREQ-006 — cron 没待处理反馈时不得发垃圾消息：探测器确定性（两次/跨 TZ 一致）+ 空待办恰一行 `pending=0` + 非空转
+  ok   ① 探测器与 tick 都在仓库里（实现载体存在）
+  ok   ② 探测器根目录可被 `QUOTAGENT_ROOT` 覆盖（⇒ 机检能在隔离根上真跑两态，而不是读源码猜）
+  ok   ③ 探测器无时间/随机源（否则「输出相同 ⇒ 跳过」不成立）
+  ok   ④ 空待办：输出**恰一行** `pending=0`（没有第二条内容 ⇒ cron 无东西可投递）
+  ok   ⑤ 确定性：同一状态两次运行（换 TZ）逐字节一致 ⇒ 调度器能判「无变化」并跳过
+  ok   ⑥ 空待办时输出里没有任何「已经发了东西」的措辞（不发垃圾消息）
+  ok   ⑦ 非空转（负控的反面）：真造 2 条待办 ⇒ 输出 `pending=2` + ids（不是恒为 0 的假探测器）
+  ok   ⑧ 待办变化 ⇒ 探测器输出**跟着变**（否则调度器永远跳过，反馈永远不被处理）
+  ok   ⑨ tick 的静默半边：无变化时 `[ $n -eq 0 ] && exit 0` 在最后一条 echo **之前**
+  ok   ⑩ tick 输出只在真应用了反馈时才打印（`echo` 的出现次数 ≤ 2，且都带 `$n` 判据）
+
+§4 负控（注入时间源必须变红；还原后 sha256 一致）
+命令: append `echo "run at $(date -u +%s)"` 到 tools/ui-feedback-monitor.sh → 跑 AC
+结果节选（完整跑法见上文命令）:
+  first_failure: ③ 探测器无时间/随机源（否则「输出相同 ⇒ 跳过」不成立）: 命中=['date ']
+  exit_code: 1；其余 8 条仍 ok（定位到具体断言，不是整门崩）
+还原: `cp tmp/mon.bak tools/ui-feedback-monitor.sh && sha256sum -c tmp/mon.sha` → OK
+    tools/ui-feedback-monitor.sh: OK
+
+§5 实跑证据（用户指令 ③ 的证据列；跨仓部分只有实跑，没有门）
+
+--- dashboard /api/status 的 projects[0]（projects & routes 区的项目路由入口）
+命令: curl -s -m 5 http://127.0.0.1:8090/api/status  →  .projects[0]
+
+--- dashboard /api/status 的 routes（gateway 路由表）
+命令: curl -s -m 5 http://127.0.0.1:8090/api/status  →  .routes
+
+--- 项目 webui 的服务自述（单一真源：入口只认它）
+命令: curl -s -m 5 http://127.0.0.1:8093/quotagent/api/routes
+
+--- 经 gateway 真到达（8081 → dashboard 8090 / quotagent 8093）
+命令: curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/quotagent/ 与 …:8081/
+
+（原样响应见 tmp/ev159-curls.txt；下方为节选）
+### curl -s -m 5 http://127.0.0.1:8090/api/status   (节选 projects[0] 与 routes)
+{"projects": [{"name": "quotagent-webui", "service": "quotagent", "kind": "webui-app", "prefix": "/quotagent", "entry": "/quotagent/", "entry_source": "service:/api/routes", "name_source": "service:/api/routes", "declared_by": "host/modules/webui.mjs", "views": ["contractor", "supplier"], "healthy": true, "ports": [8093], "routes_source": "service:/api/routes", "pages": [{"label": "总览", "path": "/quotagent/", "kind": "page", "full_label": "总览（各视图健康与账本校验）"}, {"label": "上手", "path": "/quotagent/start/", "kind": "page", "full_label": "上手：三步 + token/配置/凭据放哪里"}, {"label": "contractor 视角首页", "path": "/quotagent/contractor/", "kind": "page", "full_label": "contractor 视角首页"}, {"label": "supplier 视角首页", "path": "/quotagent/supplier/", "kind": "page", "full_label": "supplier 视角首页"}, {"label": "邮件域只读页", "path": "/quotagent/ops/mail/", "kind": "page", "full_label": "邮件域只读页（队列计数 / 最近一次尝试与 reason / available / next_action；零内联脚本）"}, {"label": "contractor 道的比价…", "path": "/quotagent/contractor/heuristics/", "kind": "page", "full_label": "contractor 道的比价 heuristics 页（权重输入 + 名次 + 每项贡献分解 + 如何提升排名；w_price 等五个参数）"}, {"label": "supplier 道的比价 heuristics…", "path": "/quotagent/supplier/heuristics/", "kind": "page", "full_label": "supplier 道的比价 heuristics 页（权重输入 + 名次 + 每项贡献分解 + 如何提升排名；w_price 等五个参数）"}, {"label": "contractor 道的决策建议页", "path": "/quotagent/contractor/advice/", "kind": "page", "full_label": "contractor 道的决策建议页（严重度 / 依据 / 溯源键 / 可复制的命令或路由；engine=rules，不含模型推测）"}, {"label": "supplier 道的决策建议页
+
+### curl -s -m 5 http://127.0.0.1:8093/quotagent/api/routes   (前 400 字节)
+{
+  "service": "quotagent-webui",
+  "route_prefix": "/quotagent",
+  "source": "host/modules/webui.mjs",
+  "views": [
+    "contractor",
+    "supplier"
+  ],
+  "routes": [
+    {
+      "path": "/quotagent/",
+      "method": "GET",
+      "auth": "none",
+      "what": "总览（各视图健康与账本校验）"
+    },
+    {
+      "path": "/quotagent/start/",
+      "method": "GET",
+      "auth": "none",
+### curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/quotagent/
+200
+### curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/   (dashboard via gateway)
+200
+### cron job（仓库外，如实登记）: /opt/data/cron/jobs.json 里的 quotagent-ui-feedback-loop
+{"name": "quotagent-ui-feedback-loop", "monitor_script": "ui-feedback-monitor.sh", "no_agent": false, "schedule_display": "every 15m", "enabled": true}
+
+§6 g1（阶段门）: 见本文件追加段
+§7 提交与远端回读: 见本文件追加段

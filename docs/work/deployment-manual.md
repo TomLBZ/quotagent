@@ -311,6 +311,11 @@ ac-registry  approval-digest  audit-hook  breaker  breaker-route  bridge  bridge
    `code` + `next_action` 如实拒绝）。因此自动闭环由平台 cron 触发 agent：
    `quotagent-ui-feedback-loop`（每 15 分钟）读待办件 → 产出新版本 → 跑门与真回读 → 才 apply → 提交推送。
 
+   **没待处理反馈时不得发消息**（用户原话）：该 cron 的 `monitor_script` 是 `tools/ui-feedback-monitor.sh` ——
+   只输出待办清单的**确定性**指纹（`pending=<N>`；N>0 时追加一行 ids），与上一次输出相同 ⇒ 调度器**跳过**本次
+   agent 运行、**不发任何消息**；待办为 0 时输出**恰一行** `pending=0`。契约由 `AC-USREQ-006` 机检
+   （同状态两次运行 + 换 TZ 逐字节一致 / 无时间与随机源 / 空待办恰一行 / 真造 2 条待办验证非空转）。
+
 **验证闭环**：`curl -s http://127.0.0.1:8093/quotagent/contractor/ | grep -oE 'data-ui-revision="r[0-9]+"|data-ui-stale="true"'`
 —— 版本递增且出现 stale 横幅，即为"已完成新版本、请刷新"。点横幅里的「我已刷新」（带 `?seen=rM`）后横幅消失。
 

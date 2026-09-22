@@ -77,6 +77,7 @@ analysis/  Cordis 代码级分析、可发扬优势、领域痛点、agent 仓�
 design/    00 总览 · 01 架构 · 02 领域模型 · 03 QEP · 04 服务目录 · 05 事件表
            06 agent 与提示词 · 07 自进化 · 08 信任与安全 · 09 可观测与评测
            10 非功能 · 11 集成图 · 12 文档标准 · adr/
-work/      roadmap · functional-requirements · acceptance-criteria
+work/      roadmap · functional-requirements（+ `-archive*`） · acceptance-criteria
+           requirements-traceability（用户诉求 → 实现 → 证据）
            progress-checklist · handover · evidence/
 ```

@@ -10,7 +10,7 @@
 |---|---|---|---|
 | FR-GATE-001 | host/modules/gate-timeline.mjs、tools/gate-nudge.py | 「审批等多久 / 变更单谁卡着」围栏门 33/33 + 真路由门 11/11（`verify.sh gates`）：**age 不随两个不同 `now` 入口变化**（不取墙钟）/ 空投影两列表为 0 / 插件不能批准 / 每条有 basis / 催办 POST 只落 0600 待办件且账本零新增 / 真跑 `gate-nudge.py` 落 `gate/nudged` 且 ops 计数 +1 / 幂等 duplicates / 两条拒绝路径 / 四道页面子导航入口 + 页面 0 内联脚本 | 直引 |
 | FR-GATE-002 | host/modules/gate-timeline.mjs、host/t283-change-detail-gate.mjs、tools/check-change-detail-route.py | 变更单**逐行明细**：围栏门 22/22 + 真路由门 9/9（`verify.sh change-detail`）：**逐行手算金额对账**（整数分；`delta = after − before`；`delta_pct` 整数分位 half-up）／缺依据的行**不入小计**（`basis_missing`）／无可用行 ⇒ degraded + 明细空 + 小计记 null／供应商侧哨兵逐字节一致 0 命中／未知 id 页面与 JSON 都 404 + next_action／只读（账本零新增）＋ 4 处单点变异全红 | 直引 |
-| FR-AUTH-001 | host/modules/authority-band.mjs、host/t284-authority-gate.mjs、tools/check-authority-route.py | 「授权区间」围栏门 22/22 + 真路由门 12/12（`verify.sh authority`）：**三例边界值手算对账**（恰等于限额 / 超一分 / 差一分）、**未配置不得编限额**（`required_role`/`next_role` 留空，`null` ≠ `0`）、**越界必出可复制升级命令**（真跑 `verify.sh help` 找门名）、插件**不能批准**（无审批类方法）、金额非法三类拒绝（code+next_action）、确定性、有界（`roles_omitted`/`truncated` 如实报）、私域哨兵 0 命中、零写面、四道页面子导航入口 + 页面 0 内联脚本；真 HTTP 含**改配置前后同一金额结论不同**（`--config-file` 临时配置；真 `config.yaml` 指纹不变）+ 4 处单点变异全红 | 直引 |
+| FR-AUTH-001 | host/modules/authority-band.mjs、host/t284-authority-gate.mjs、tools/check-authority-route.py | 见 §2 的 `authority-band` 行（围栏门 22/22 + 真路由门 12/12 的逐条计数与断言在那个格子里，避免两处重复） | 直引 |
 | FR-ADV-001 | host/modules/advice-panel.mjs | 决策建议层围栏门 30/30 + 真路由门 14/14（`verify.sh advice`）；四道页面子导航入口 + 页面 0 内联脚本 | 直引 |
 | FR-APPROVE-001 | src/quotagent/services/approval.py | ApprovalService.request() | 直引 |
 | FR-APPROVE-002 | src/quotagent/services/approval.py | ApprovalService.require(scope, ref, approval | 直引 |
@@ -103,7 +103,6 @@
 | FR-UX-002 | src/quotagent/services/realm.py | RealmProjector.project(record, to_realm) | 映射 |
 | FR-UX-003 | src/quotagent/services/export.py | ExportService.to_csv(rows, bom=True) | 直引 |
 
-> 本节之外还有 **14 条 P2 新增 FR**（见 §4）同样在本矩阵管辖内（§1 与本文件同步更新）。
 | FR-RUNTIME-003 | host/modules/audit-hook.mjs | AC-RUNTIME-003（见 §4 的机检命令） | 映射 |
 | FR-RUNTIME-004 | host/modules/budget-guard.mjs | AC-RUNTIME-004（见 §4 的机检命令） | 映射 |
 | FR-RUNTIME-005 | host/modules/circuit-breaker.mjs | AC-RUNTIME-005（见 §4 的机检命令） | 映射 |
@@ -115,7 +114,7 @@
 | FR-EVOLVE-007 | host/modules/evolve-journal.mjs | AC-EVOLVE-005（见 §4 的机检命令） | 映射 |
 | FR-PRICE-003 | host/modules/price-history.mjs | AC-PRICE-002（见 §4 的机检命令） | 映射 |
 | FR-RFQ-007 | host/modules/sourcing.mjs | AC-RFQ-005（见 §4 的机检命令） | 映射 |
-| FR-RFQ-008 | host/modules/rfq-deadline.mjs、tools/rfq-promise.py | 「来不及回 RFQ」围栏门 23/23 + 真路由门 11/11（`verify.sh rfq-deadline`）：**期限不随窗口变化**（两个墙钟入口各给两个不同值 ⇒ 输出逐字节一致；`remaining_seconds` == 手算 `due_ts − as_of`）／**同一包多条发布事实合成一行**（due 取事实 ts 最晚者、名册取并集 —— 真实账本里同一包发过两次也只列一行）／**没凭据不得假装能发**（`available=false` ⇒ `blocked_by` 写「无法代发」，输出里「已通知/已提醒/已发送」0 命中，`can_send=false`）／**名册白名单（非业主视角读都不读）**＋与 `sourcing.coverage()` 同一口径／空投影必降级且条目为空／有界＋`omitted` 如实报／私域哨兵带与不带逐字节一致／零写面；真 HTTP 含登记承诺 POST → **0600 待办件** → 真跑 `rfq-promise.py` 落 `rfq/promised`（body 恰 6 键）→ **计数 5 → 6 回读** → **承诺改变页面口径**；4 处单点变异全红 | 直引 |
+| FR-RFQ-008 | host/modules/rfq-deadline.mjs、tools/rfq-promise.py | 见 §2 的 `rfq-deadline` 行（围栏门 23/23 + 真路由门 11/11 的逐条计数与断言在那个格子里，避免两处重复） | 直引 |
 | FR-EVAL-005 | host/modules/supplier-scorecard.mjs | AC-EVAL-003（见 §4 的机检命令） | 映射 |
 | FR-UX-004 | host/modules/ops-view.mjs | AC-RUNTIME-010（见 §4 的机检命令） | 映射 |
 
@@ -167,6 +166,20 @@
 | FR-MAIL-002 | host/modules/mail-view.mjs + host/lib/config-keys.mjs | 见 AC-MAIL-002 | 直引 |
 | FR-VIZ-001 | host/modules/bid-heuristics.mjs | 见 AC-VIZ-001 | 直引 |
 | FR-UIFB-001 | host/modules/ui-feedback.mjs + tools/ui-feedback-apply.py | 见 AC-UIFB-001 | 直引 |
+| FR-USREQ-006 | host/modules/ui-feedback.mjs + tools/ui-feedback-apply.py | AC-USREQ-006 10/10（探测器确定性 / 空待办恰一行 / 非空转；负控注入 `date` 即红） | 直引 |
+| FR-USREQ-007 | docs/work/requirements-traceability.md | `verify.sh docs` + `verify.sh coverage`（本表与 §6.1 是同一批的落点） | 直引 |
+| FR-USREQ-009 | host/modules/config-view.mjs + tools/config-apply.py | 见 AC-CONFIG-001（含 `--init` / 原子写 / 401 同形）；邮件侧 AC-MAIL-002 | 直引 |
+| FR-USREQ-012 | host/modules/advice-panel.mjs + tools/userplugin-elevate.py | 见 AC-ADV-001；提权路径见 AC-USERPLUG-010 | 直引 |
+| FR-USREQ-004 | host/modules/webui.mjs | 自述 `/api/routes`（`verify.sh webui`）；dashboard 侧为跨仓（见可追溯表） | 映射 |
+| FR-USREQ-005 | host/modules/webui.mjs | 第一屏三块 + 子视图 + 上手入口（`verify.sh webui`） | 映射 |
+| FR-USREQ-008 | host/modules/plugin-market.mjs + host/modules/admin-view.mjs + host/modules/evolve-journal.mjs | 市场/管理/自进化各自有门（plugin-market / admin-route / webui 的 `/api/ops`） | 映射 |
+| FR-USREQ-010 | host/lib/evolution.mjs + host/modules/canary.mjs + host/lib/user-space.mjs | evolution / cordis / modules / user-space 门 | 映射 |
+| FR-USREQ-011 | host/modules/webui.mjs | 双方视角各自可达且是不同路由（`verify.sh webui`） | 映射 |
+| FR-USREQ-001 | host/modules/webui.mjs + host/modules/config-view.mjs | 四类写操作各有门（config-route / gates / rfq-deadline / ui-feedback），但「每一步」完整性无机检 | 缺口 |
+| FR-USREQ-002 | host/modules/webui.mjs | 只有结构切片（0 内联脚本 / 三块顺序 / `data-empty`），视觉本身**零判据** | 缺口 |
+| FR-USREQ-003 | host/profiles.mjs + src/quotagent/g1side.py | `verify.sh g1` 只覆盖「两侧各自跑完工作流」；「像员工」无机检 | 缺口 |
+
+> 末段 12 行 = **用户诉求批次**（`FR-USREQ-001..012`，契约见 `../../work/functional-requirements.md` §6.1；状态真源 `../../work/requirements-traceability.md`）。
 
 ## 2. 插件归属
 
@@ -212,21 +225,9 @@
 | ui-feedback | FR-UIFB-001（宿主只落 0600 待办件 + 服务端可判的 `data-ui-revision`/"请刷新"横幅；本批反馈闭环） | 强 |
 | webui | FR-UX-001、FR-UX-002、FR-INTEG-001 | 强 |
 
-> 更新（T-253）：`FR-EVIDENCE-004` **已完整落地（计划侧 + 执行侧）**，`AC-AUDIT-003`/`AC-AUDIT-005` 均有机检。
-> 原注（T-252）：`FR-EVIDENCE-004` 已从【缺口】转为**部分实现** —— 判定器入库并有机检（`verify.sh retention`），
-> 但**执行侧**（删除派生副本、读侧封存）尚未实现；`AC-AUDIT-003` 因此**不标绿**，执行侧见清单 T-253。
-
-> 更新（T-256）：`FR-NEGO-001/002` 已落地（服务层 + 机检 `AC-NEGO-003`）。
-
-> 更新（T-257）：`FR-CLARIFY-004` 已落地（`services/faq.py` + `AC-FAQ-001`）。
-
-> 更新（T-258）：`FR-INTEG-003` 拆两半 —— **无凭据部分已落地**（`services/mail.py` + `AC-MAIL-001`）；**发信/收信仍待 SMTP/IMAP 凭据**（登记为 T-259，属人工输入）。
-
-> 更新（本批）：`FR-INTEG-003` 的**发信/收信已落地**：`services/mail_transport.py`（SMTP/IMAP，纯标准库）
-> 在凭据就位时真收发、没凭据时**分得清**「没配 / 配了没试过 / 连不上」（不同 reason + next_action），
-> 凭据不进账本/响应/日志（`mail/sent` 是事实行，body 无凭据无正文），收信有界并报截断；
-> 运维道可见面为 `mail-view` 插件 + `GET /quotagent/ops/mail/`（0 行 `<script>`）与 `GET /quotagent/api/mail`。
-> 机检：`tools/verify.sh mail-transport`（27 条，含回环假 SMTP/IMAP 真收发与哨兵零泄漏）。
+> 本批之前的落地批次（细节与证据见 `../../work/progress-checklist.md` 与 `../../work/evidence/`）：
+> `FR-EVIDENCE-004` = T-253（计划侧 + 执行侧）；`FR-NEGO-001/002` = T-256；`FR-CLARIFY-004` = T-257；
+> `FR-INTEG-003` = T-258（无凭据部分）+ 本批之前（真收发，见 `verify.sh mail-transport`）。
 
 ## 3. 缺口与存疑登记
 
@@ -234,11 +235,9 @@
 
 | ID | 类型 | 说明 | 计划 |
 |---|---|---|---|
-| FR-CLARIFY-004 | src/quotagent/services/faq.py | FaqService.reuse（AC-FAQ-001；跨版本必须不命中） | 直引 |
-| FR-EVIDENCE-004 | src/quotagent/services/retention.py、src/quotagent/services/retention_exec.py | 计划侧（AC-AUDIT-003）+ 执行侧（AC-AUDIT-005），两侧均有门 | 直引 |
-| FR-NEGO-001 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |
-| FR-NEGO-002 | src/quotagent/services/negotiation.py | NegotiationService（AC-NEGO-003，15+ 断言） | 直引 |
-| FR-INTEG-003 | src/quotagent/services/mail.py、src/quotagent/services/mail_transport.py | MailService.compose/enqueue/parse（AC-MAIL-001）+ MailTransport.send/fetch_recent/probe（真收发，`tools/verify.sh mail-transport` 27 条） | 直引 |
+| FR-USREQ-001 | 缺口 | 「每一步都能在 APP 内闭环」的**完整性**无机检（现只有四类写操作各有机检）；缺「步骤 → 路由 → 动作」登记表 | `../../work/requirements-traceability.md` §2 |
+| FR-USREQ-002 | 缺口 | 视觉（「像现代 app」）**零判据**（只有结构切片）；缺可机检视觉基线或人工评审记录 | 规格见 `../../work/plans/ui-workflow-rework-part3.md` §4（未实现） |
+| FR-USREQ-003 | 缺口 | 「模拟员工而非上帝视角检察员」无机检（`g1` 只覆盖各自跑完工作流）；缺每侧「员工的一天」清单 | 同上（工作流规格 §3） |
 
 ## 4. 本次新增的 P2 需求（12 件无归属插件 + 1 条总纲）
 
@@ -259,7 +258,5 @@
 | FR-UX-004 | ops-view | AC-RUNTIME-010 | ops-view 门 9/9 + webui 21/21 | `EV-079` |
 | FR-PLUGIN-004 | (全部插件) | AC-PLUGIN-004 | coverage 门 + plugins 门 + evolve-module 门 | `EV-086` |
 
-> 新增理由：这 12 件插件（其中 7 件为**自进化产出**）此前**没有任何需求归属** ——
-> 也就是说"功能已实现、门全绿"，但需求体系里没有它的位置。补登记后，
-> 「插件 ↔ 需求」双向可核对，`verify.sh coverage` 不会再有孤儿。
+> 新增理由：这 12 件插件（7 件为自进化产出）此前无需求归属 —— 补登记后「插件 ↔ 需求」双向可核对、无孤儿。
 

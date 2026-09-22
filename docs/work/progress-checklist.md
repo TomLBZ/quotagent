@@ -161,6 +161,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-308 | P2 | 运维手册与 SLA、告警落地 | NFR-UX-001..004 | manual | todo | – |
 | T-309 | P2 | 谈判辅助 | FR-NEGO-001, FR-NEGO-002 | AC-NEGO-001 | todo | – |
 | T-310 | P2 | 澄清 FAQ 沉淀与复用（本 realm 内） | FR-CLARIFY-004 | AC-CLARIFY-004 | todo | – |
+| T-311 | P2 | 12 条用户诉求**持久化进合同**：`FR-USREQ-001..012`（§6.1，每行含原话短引 + 可验收含义 + 验收方式）+ 可追溯表 `docs/work/requirements-traceability.md`（2 done / 9 partial / 1 missing）+ FR 归档批次 B（46 行逐字；主文件 31695→28235 B）+ `AC-USREQ-006`（cron 没待处理反馈时不得发垃圾消息，10/10） | FR-USREQ-001..012 | AC-USREQ-006 | done | EV-159 |
 
 ## 缺陷与阻塞
 
@@ -173,4 +174,5 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | GATE-FLAKE-2 | 门维护（本批）：① storage 门对无关写入者**解耦**（第 8 条收窄为"本用例自己触及的目标"+ 新增第 19 条全局层白名单断言；白名单外变化如实计数但**不判红**，负控+变异自证齐全）② `p0-no-node` **失败可诊断**（子进程输出不丢 + 连续两次红才算真红 + 原样回显）；**真因已量出**：文档门 `tools/check-docs.py` 的 `md_files()` 扫 `tmp/**`（267 个 .md 里 166 个在 tmp/），与整树副本门 TOCTOU → 16 次里 2 次 `FileNotFoundError`（未改文档门，见 EV-151 §三/§四） | 九道门全绿 | done | EV-151 / D-071 |
 | GATE-FLAKE-3 | 门维护（本批，D-071 收口）：文档门扫描范围收窄为**契约文档集合**（决策 D-072：临时副本不进判据，`SCAN_EXCLUDE_DIRS` 与 AC-RUNTIME-001 的干净副本 IGNORE_DIRS 同口径；267 → 98）② 契约文档在**读窗口里消失仍判红**（`read_md` 不跳过；仪表化把窗口拉长后删真文档 → exit 1 且失败行指名该文件）③ `AC-RUNTIME-001` 那条断言语义改为「**契约文档集合**不变」+ 门自报数对账 + 定义文件仍在范围内 + 只断言本用例自己的 scratch（10 → 13 条） | 九道门全绿；并发 12/12 绿 | done | EV-152 / D-071 / D-072 |
 | DOC-FR1 | FR 归档合法化：门把 `functional-requirements-archive*.md` 并入 **FR 定义集合**（`tools/check-docs.py` 的 FR↔AC 覆盖同步扩到集合 + 归档 0 条 FR 行硬断言 + `fr_archives=[...]`；`tools/check-fr-coverage.py` 同集合判矩阵双向全覆盖 + 归档空读守卫）；47 条最老非 P0 行**逐字**搬入新建归档，主文件 32583→27645 B；handover 1015→796 B；反向验证 3 例（整仓副本：归档抽行→红、主文件抽行→红（ID 未解析 + AC 孤儿两处）、0 条 FR 行的归档→红；还原 sha256 一致）；12 次连续 docs 全绿 | B83 | done | EV-155 |
+| PERSIST-USREQ | **12 条用户诉求持久化进合同**（用户严厉指出「需求从未落进合同，因为你忘了」）：① `FR-USREQ-001..012` 写入主文件 §6.1（**原话短引 + 可验收含义 + 验收方式**；家族先查重，纯字母）② `docs/work/requirements-traceability.md`（需求→实现→证据；状态 **2 done / 9 partial / 1 missing**，无证据即 missing）③ FR 归档**批次 B**（46 行逐字，选入规则可复核；主文件 31695→28235 B ≤ 28 KB）④ 覆盖矩阵同步 12 行 + 3 条【缺口】登记（并清掉 §3 里 5 行重复登记与叙事，压回预算内）⑤ 新机检 `AC-USREQ-006`（cron 探测器 10/10；负控注入 `date` 即红）⑥ `tools/ui-feedback-monitor.sh` 纳入版本控制（需求 6 的载体，此前**未跟踪**） | B84 | done | EV-159 |
 | DOC-BUDGET-FLAKE | 未验证 | 父方在**别处**实测 `tools/verify.sh docs` 同批连续 5 次里 2 次 `exit=1`（当时 `docs/work/functional-requirements.md` = 32583/32768 B，即 99.4%）。本轮同机 12 次连续**全绿**（搬行后 27645/32768 B = 84.4%），且这 12 次的窗口内 `docs/work/*.md` 逐字节未变、`pgrep` 无并发写入者 ⇒ **本机未复现**（不排除父方当时确有并发写入者/半写读）。复现命令：`for i in $(seq 1 12); do tools/verify.sh docs; echo rc=$?; done`。**本批不擅自修门**（避免一次改两件事） | 门间歇红（未定位；预算 99.4% 时风险最高） | open（待复核） |
