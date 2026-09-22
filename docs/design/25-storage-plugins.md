@@ -70,6 +70,11 @@
   2. 仓库内 `tmp/ui-shared/<realm>/ledger.jsonl`（**绝对构造**与**名字叫 `ledger.jsonl` 的相对构造**
      两个方向都拒 —— 后者是"就近落盘"最常见的形态）；
   3. 仓库 `user-space/` 树里**别人的 ns**：`--root` 指过去即拒；`--root` 是本 ns 却操作别人的 ns 也拒。
+- **判据对符号链接形态同样成立**（`EV-174` / `D-077`）：`user-space` 是**指向 `src/userspace/` 的兼容符号
+  链接**（阶段 5.1 的单一事实源）⇒ 事实区判据必须把**词法路径**（`<root>/user-space/…`）与**真实路径**
+  （`<root>/src/userspace/…`）**两种形态交叉各判一次**（`tools/storage.py` 的 `_inside_zone`）。
+  只比一种形态会让第 3 类拒绝**整条失效**（实测：`--root user-space/<别人的 ns>` 的**写**被放行，
+  真在 `src/userspace/` 下落了文件 —— 收紧前 `_inside(USER_SPACE, <realpath>)` 恒假）。
 - **快照是派生副本**：`snapshot.json` 只放计数与样本（可从存储树重建），丢了不丢事实；
   宿主只读它。**快照本身也不是事实**：不得把账本内容搬进快照来"方便宿主"。
 - **证明方式**：门在跑完这些拒绝构造之后，对事实区做**按事实的核对**：① 每份 `ledger.jsonl`

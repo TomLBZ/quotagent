@@ -1,0 +1,994 @@
+{
+ "batch": "EV-174",
+ "sections": {
+  "ac_after_checks": {
+   "assertion_counts": {
+    "AC-ADMIN-004": 15,
+    "AC-ADMIN-005": 16,
+    "AC-ADMIN-006": 11,
+    "AC-ADV-001": 9,
+    "AC-AGENTRT-002": 10,
+    "AC-AGENTRT-006": 12,
+    "AC-AGENTRT-007": 5,
+    "AC-APPROVE-001": 7,
+    "AC-APPROVE-002": 9,
+    "AC-APPROVE-003": 11,
+    "AC-AUDIT-001": 10,
+    "AC-AUDIT-002": 9,
+    "AC-AUDIT-003": 21,
+    "AC-AUDIT-004": 13,
+    "AC-AUDIT-005": 22,
+    "AC-AWARD-001": 8,
+    "AC-AWARD-002": 7,
+    "AC-CAP-001": 10,
+    "AC-CHANGE-001": 5,
+    "AC-CHANGE-002": 8,
+    "AC-CLARIFY-001": 8,
+    "AC-CLARIFY-002": 3,
+    "AC-CLARIFY-003": 4,
+    "AC-COMPARE-001": 6,
+    "AC-COMPARE-002": 6,
+    "AC-COMPARE-003": 5,
+    "AC-COMPARE-004": 13,
+    "AC-CONFIG-001": 7,
+    "AC-COST-001": 10,
+    "AC-DESIGN-001": 3,
+    "AC-DESIGN-002": 2,
+    "AC-DESIGN-003": 2,
+    "AC-DEV-001": 10,
+    "AC-EVAL-001": 6,
+    "AC-EVAL-002": 7,
+    "AC-EVT-001": 10,
+    "AC-EVT-002": 5,
+    "AC-FAQ-001": 20,
+    "AC-GATE-001": 12,
+    "AC-GATE-002": 8,
+    "AC-GUARD-001": 7,
+    "AC-GUARD-002": 6,
+    "AC-GUARD-003": 6,
+    "AC-INTAKE-001": 9,
+    "AC-INTAKE-002": 7,
+    "AC-INTEG-001": 7,
+    "AC-INTEG-002": 11,
+    "AC-INTEG-004": 12,
+    "AC-INTEG-005": 6,
+    "AC-INTEG-006": 13,
+    "AC-MAIL-001": 20,
+    "AC-MAIL-002": 7,
+    "AC-NEGO-003": 30,
+    "AC-NORM-001": 7,
+    "AC-NORM-002": 12,
+    "AC-NORM-003": 6,
+    "AC-PLUGIN-001": 6,
+    "AC-PLUGIN-002": 8,
+    "AC-PLUGIN-003": 11,
+    "AC-PRICE-001": 7,
+    "AC-QEP-001": 7,
+    "AC-QEP-002": 7,
+    "AC-QEP-003": 14,
+    "AC-QEP-004": 6,
+    "AC-QUOTE-001": 7,
+    "AC-RFQ-001": 6,
+    "AC-RFQ-002": 8,
+    "AC-RFQ-003": 10,
+    "AC-RFQ-004": 10,
+    "AC-RUNTIME-001": 13,
+    "AC-RUNTIME-002": 9,
+    "AC-STORAGE-001": 3,
+    "AC-STORAGE-004": 4,
+    "AC-STORAGE-006": 3,
+    "AC-SYNC-001": 15,
+    "AC-TERMS-001": 13,
+    "AC-TRUST-001": 9,
+    "AC-UI-002": 12,
+    "AC-UIFB-001": 8,
+    "AC-USERPLUG-001": 6,
+    "AC-USERPLUG-005": 10,
+    "AC-USERPLUG-010": 10,
+    "AC-USREQ-006": 10,
+    "AC-UXWEB-001": 6,
+    "AC-VIZ-001": 7
+   },
+   "count": 85,
+   "non_pass": [
+    "AC-COMPARE-004"
+   ]
+  },
+  "ac_after_services": {
+   "assertion_counts": {
+    "AC-ADMIN-004": 15,
+    "AC-ADMIN-005": 16,
+    "AC-ADMIN-006": 11,
+    "AC-ADV-001": 9,
+    "AC-AGENTRT-002": 10,
+    "AC-AGENTRT-006": 12,
+    "AC-AGENTRT-007": 5,
+    "AC-APPROVE-001": 7,
+    "AC-APPROVE-002": 9,
+    "AC-APPROVE-003": 11,
+    "AC-AUDIT-001": 10,
+    "AC-AUDIT-002": 9,
+    "AC-AUDIT-003": 21,
+    "AC-AUDIT-004": 13,
+    "AC-AUDIT-005": 22,
+    "AC-AWARD-001": 8,
+    "AC-AWARD-002": 7,
+    "AC-CAP-001": 10,
+    "AC-CHANGE-001": 5,
+    "AC-CHANGE-002": 8,
+    "AC-CLARIFY-001": 8,
+    "AC-CLARIFY-002": 3,
+    "AC-CLARIFY-003": 4,
+    "AC-COMPARE-001": 6,
+    "AC-COMPARE-002": 6,
+    "AC-COMPARE-003": 5,
+    "AC-COMPARE-004": 13,
+    "AC-CONFIG-001": 7,
+    "AC-COST-001": 10,
+    "AC-DESIGN-001": 3,
+    "AC-DESIGN-002": 2,
+    "AC-DESIGN-003": 2,
+    "AC-DEV-001": 10,
+    "AC-EVAL-001": 6,
+    "AC-EVAL-002": 7,
+    "AC-EVT-001": 10,
+    "AC-EVT-002": 5,
+    "AC-FAQ-001": 20,
+    "AC-GATE-001": 12,
+    "AC-GATE-002": 8,
+    "AC-GUARD-001": 7,
+    "AC-GUARD-002": 6,
+    "AC-GUARD-003": 6,
+    "AC-INTAKE-001": 9,
+    "AC-INTAKE-002": 7,
+    "AC-INTEG-001": 7,
+    "AC-INTEG-002": 11,
+    "AC-INTEG-004": 12,
+    "AC-INTEG-005": 6,
+    "AC-INTEG-006": 13,
+    "AC-MAIL-001": 20,
+    "AC-MAIL-002": 7,
+    "AC-NEGO-003": 30,
+    "AC-NORM-001": 7,
+    "AC-NORM-002": 12,
+    "AC-NORM-003": 6,
+    "AC-PLUGIN-001": 6,
+    "AC-PLUGIN-002": 8,
+    "AC-PLUGIN-003": 11,
+    "AC-PRICE-001": 7,
+    "AC-QEP-001": 7,
+    "AC-QEP-002": 7,
+    "AC-QEP-003": 14,
+    "AC-QEP-004": 6,
+    "AC-QUOTE-001": 7,
+    "AC-RFQ-001": 6,
+    "AC-RFQ-002": 8,
+    "AC-RFQ-003": 10,
+    "AC-RFQ-004": 10,
+    "AC-RUNTIME-001": 13,
+    "AC-RUNTIME-002": 9,
+    "AC-STORAGE-001": 3,
+    "AC-STORAGE-004": 4,
+    "AC-STORAGE-006": 3,
+    "AC-SYNC-001": 15,
+    "AC-TERMS-001": 13,
+    "AC-TRUST-001": 9,
+    "AC-UI-002": 12,
+    "AC-UIFB-001": 8,
+    "AC-USERPLUG-001": 6,
+    "AC-USERPLUG-005": 10,
+    "AC-USERPLUG-010": 10,
+    "AC-USREQ-006": 10,
+    "AC-UXWEB-001": 6,
+    "AC-VIZ-001": 7
+   },
+   "count": 85,
+   "non_pass": [
+    "AC-COMPARE-004"
+   ]
+  },
+  "ac_before": {
+   "assertion_counts": {
+    "AC-ADMIN-004": 15,
+    "AC-ADMIN-005": 16,
+    "AC-ADMIN-006": 11,
+    "AC-ADV-001": 9,
+    "AC-AGENTRT-002": 10,
+    "AC-AGENTRT-006": 12,
+    "AC-AGENTRT-007": 5,
+    "AC-APPROVE-001": 7,
+    "AC-APPROVE-002": 9,
+    "AC-APPROVE-003": 11,
+    "AC-AUDIT-001": 10,
+    "AC-AUDIT-002": 9,
+    "AC-AUDIT-003": 21,
+    "AC-AUDIT-004": 13,
+    "AC-AUDIT-005": 22,
+    "AC-AWARD-001": 8,
+    "AC-AWARD-002": 7,
+    "AC-CAP-001": 10,
+    "AC-CHANGE-001": 5,
+    "AC-CHANGE-002": 8,
+    "AC-CLARIFY-001": 8,
+    "AC-CLARIFY-002": 3,
+    "AC-CLARIFY-003": 4,
+    "AC-COMPARE-001": 6,
+    "AC-COMPARE-002": 6,
+    "AC-COMPARE-003": 5,
+    "AC-COMPARE-004": 13,
+    "AC-CONFIG-001": 7,
+    "AC-COST-001": 10,
+    "AC-DESIGN-001": 3,
+    "AC-DESIGN-002": 2,
+    "AC-DESIGN-003": 2,
+    "AC-DEV-001": 10,
+    "AC-EVAL-001": 6,
+    "AC-EVAL-002": 7,
+    "AC-EVT-001": 10,
+    "AC-EVT-002": 5,
+    "AC-FAQ-001": 20,
+    "AC-GATE-001": 12,
+    "AC-GATE-002": 8,
+    "AC-GUARD-001": 7,
+    "AC-GUARD-002": 6,
+    "AC-GUARD-003": 6,
+    "AC-INTAKE-001": 9,
+    "AC-INTAKE-002": 7,
+    "AC-INTEG-001": 7,
+    "AC-INTEG-002": 11,
+    "AC-INTEG-004": 12,
+    "AC-INTEG-005": 6,
+    "AC-INTEG-006": 13,
+    "AC-MAIL-001": 20,
+    "AC-MAIL-002": 7,
+    "AC-NEGO-003": 30,
+    "AC-NORM-001": 7,
+    "AC-NORM-002": 12,
+    "AC-NORM-003": 6,
+    "AC-PLUGIN-001": 6,
+    "AC-PLUGIN-002": 8,
+    "AC-PLUGIN-003": 11,
+    "AC-PRICE-001": 7,
+    "AC-QEP-001": 7,
+    "AC-QEP-002": 7,
+    "AC-QEP-003": 14,
+    "AC-QEP-004": 6,
+    "AC-QUOTE-001": 7,
+    "AC-RFQ-001": 6,
+    "AC-RFQ-002": 8,
+    "AC-RFQ-003": 10,
+    "AC-RFQ-004": 10,
+    "AC-RUNTIME-001": 13,
+    "AC-RUNTIME-002": 9,
+    "AC-STORAGE-001": 3,
+    "AC-STORAGE-004": 4,
+    "AC-STORAGE-006": 3,
+    "AC-SYNC-001": 15,
+    "AC-TERMS-001": 13,
+    "AC-TRUST-001": 9,
+    "AC-UI-002": 12,
+    "AC-UIFB-001": 8,
+    "AC-USERPLUG-001": 6,
+    "AC-USERPLUG-005": 10,
+    "AC-USERPLUG-010": 10,
+    "AC-USREQ-006": 10,
+    "AC-UXWEB-001": 6,
+    "AC-VIZ-001": 7
+   },
+   "count": 85,
+   "non_pass": [
+    "AC-COMPARE-004"
+   ]
+  },
+  "checks_moved": {
+   "count": 25,
+   "rows": [
+    {
+     "new": "src/domain/commitments/tests/checks_award.py",
+     "new_bytes": 11558,
+     "new_sha256": "76c92a8cf96c109f7de6bfb80b2291fffa361a552613000964f302c7fa787cda",
+     "old": "src/quotagent/qa/checks_award.py",
+     "old_bytes": 749,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "460ab993d1be517e41fdc260dd6407ecc4ce1f5e080bb2d8f3e012491ecbc9a7"
+    },
+    {
+     "new": "src/system/kernel-bridge/tests/checks_bridge.py",
+     "new_bytes": 25159,
+     "new_sha256": "6bb24d46eb4ff31dd98a8f8d3555ea5568235a6bded8fb6f6cf62084dd56b0c2",
+     "old": "src/quotagent/qa/checks_bridge.py",
+     "old_bytes": 757,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "630dae9c326be340f89484db8a6c23e9d247eac708d92b2b0402730db145cca6"
+    },
+    {
+     "new": "src/domain/capacity/tests/checks_capacity.py",
+     "new_bytes": 8601,
+     "new_sha256": "163284bd6a76896eb991381c97aa922a550ad5582562ecda8bad17ffd1f04c19",
+     "old": "src/quotagent/qa/checks_capacity.py",
+     "old_bytes": 755,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "50ac9c959d260ea09bd49d4b831ca5f1c90d4c5df8a7f4ba60dcb148b3038f7c"
+    },
+    {
+     "new": "src/domain/change/tests/checks_change.py",
+     "new_bytes": 10547,
+     "new_sha256": "757481cad49fbcf18a05ac5ba8c1c7059207677e0108981680f5ecc5344a92aa",
+     "old": "src/quotagent/qa/checks_change.py",
+     "old_bytes": 743,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "7be8099d0d0a6886ca8b2b232dc98691b8dbf325d2f3e1b9279597d5ee501a92"
+    },
+    {
+     "new": "src/domain/clarify/tests/checks_clarify.py",
+     "new_bytes": 12526,
+     "new_sha256": "4458202cb684ff87c92b22f5e0b9fcbd985a881d2e38ec225c00e81200b77b2c",
+     "old": "src/quotagent/qa/checks_clarify.py",
+     "old_bytes": 749,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "9847359da586cf124c1d10acfbbff4191a625a64791cf4d21958e0cf0cfce932"
+    },
+    {
+     "new": "src/domain/compare/tests/checks_compare.py",
+     "new_bytes": 12275,
+     "new_sha256": "8614ccc9132a30bc1873967c1feacfd2ce8a38b7a8c3b01a933658042991fc00",
+     "old": "src/quotagent/qa/checks_compare.py",
+     "old_bytes": 749,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "5e061cbef1f8c0b9c3b925f680bc60c632b0be7621cf2faac79569328606be04"
+    },
+    {
+     "new": "src/domain/costmodel/tests/checks_cost.py",
+     "new_bytes": 12570,
+     "new_sha256": "c225d2f543b0b5363942c478470eb35bc86f425f22468a69fb8588efaa2ba643",
+     "old": "src/quotagent/qa/checks_cost.py",
+     "old_bytes": 741,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "c070d2d1807aa225e89ba65771523e11cdf11f1216767b217edd21bd34d17f03"
+    },
+    {
+     "new": "src/domain/deviation/tests/checks_deviation.py",
+     "new_bytes": 7247,
+     "new_sha256": "2ffa4f1f4b6030c799c9f21b6f1bafc4f7ef4767818ffff2d8232e8c8d4fc79f",
+     "old": "src/quotagent/qa/checks_deviation.py",
+     "old_bytes": 761,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "fd7fd157ac0615da0438439c3bbd5e583e2403868f8a13c4f1d80e42d10fb117"
+    },
+    {
+     "new": "src/system/eval/tests/checks_eval.py",
+     "new_bytes": 7900,
+     "new_sha256": "f16bf1a8e1bc1cbadf82abc409795d8675c7f88bf0705e09ebc483c871587d7c",
+     "old": "src/quotagent/qa/checks_eval.py",
+     "old_bytes": 731,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "35144948b4f07c4b14a653798b10ef1abce589cf6d321bc8ab582b095a1b42db"
+    },
+    {
+     "new": "src/system/kernel/tests/checks_events.py",
+     "new_bytes": 11392,
+     "new_sha256": "c41be886c97cfcca5de10e1885db8944258e6b9f7ef96a20f3db30ff0c81188e",
+     "old": "src/quotagent/qa/checks_events.py",
+     "old_bytes": 743,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "6796bba5f751bf9554283f68588e42ad1812e44d1d51d5c0ed1e2e8523f85267"
+    },
+    {
+     "new": "src/domain/export/tests/checks_export.py",
+     "new_bytes": 8434,
+     "new_sha256": "e712d1e27998fe250d197cc60ec919a697f7e5dd569191f09fd3e3b8ac10a2c1",
+     "old": "src/quotagent/qa/checks_export.py",
+     "old_bytes": 743,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "1d319543ff115856d96b273f63a6b7abc36bc483b8ff3357467e1fc5a1fd2f50"
+    },
+    {
+     "new": "src/domain/faq/tests/checks_faq.py",
+     "new_bytes": 46304,
+     "new_sha256": "9f80e637158861bf2dc320999056175777cf5d13b760a0e286d4169afe080f72",
+     "old": "src/quotagent/qa/checks_faq.py",
+     "old_bytes": 725,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "8f722149222a0b09c07407b485bee1d61af07a10c7a2dadc5f775a5282f65d64"
+    },
+    {
+     "new": "src/domain/guard/tests/checks_guard.py",
+     "new_bytes": 13907,
+     "new_sha256": "223b73a7dea8b55efbd517e6a007506ff962e79cd14c36dd43cdb42c2d6ef2be",
+     "old": "src/quotagent/qa/checks_guard.py",
+     "old_bytes": 737,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "7798a9f9e68588d3b1c48404396b1ffdc049c66fe2b138501b9d16ea89d9e548"
+    },
+    {
+     "new": "src/domain/intake/tests/checks_intake.py",
+     "new_bytes": 10021,
+     "new_sha256": "b444ced5cbf78aa2090d835bfcf688ef7a6dd08429ee4da461b0ad3747f99583",
+     "old": "src/quotagent/qa/checks_intake.py",
+     "old_bytes": 743,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "ea8d03a0fbac6cc492968c38135433c4fab64a8bc822a7a424b6a2d29f712381"
+    },
+    {
+     "new": "src/domain/negotiation/tests/checks_negotiation.py",
+     "new_bytes": 48857,
+     "new_sha256": "998185ef070d45422fca0b9e99ed204b1a9b23bc3230a1cb4ddd0f575cb88781",
+     "old": "src/quotagent/qa/checks_negotiation.py",
+     "old_bytes": 773,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "94bb6e9c7476c3a5dd13eefb2d9d628869531b59603c269cbd291f9b5c8fe7f8"
+    },
+    {
+     "new": "src/system/norm/tests/checks_norm.py",
+     "new_bytes": 16516,
+     "new_sha256": "9be6badee74e29306fcbffa91e913d0c1f180a1310452939b869528722af36c8",
+     "old": "src/quotagent/qa/checks_norm.py",
+     "old_bytes": 731,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "1b4a23476c028307bf159a8d99400ddcbd69661fe53c9912b3b9edfe93bece76"
+    },
+    {
+     "new": "src/system/kernel/tests/checks_plugin.py",
+     "new_bytes": 17655,
+     "new_sha256": "ca963c638a5f7e9ced62fff1354d61a1f7f6e87b05a988b4dc0eaa13d9876c33",
+     "old": "src/quotagent/qa/checks_plugin.py",
+     "old_bytes": 743,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "80d0c957557b47664499ba83912ae3384ac48b8c3cdabae1ae7985353b478eda"
+    },
+    {
+     "new": "src/domain/pricing/tests/checks_pricing.py",
+     "new_bytes": 25660,
+     "new_sha256": "69ad9507db6408416f13e21ec9d04a61831e16a52c296a0cebe910c053e6df93",
+     "old": "src/quotagent/qa/checks_pricing.py",
+     "old_bytes": 749,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "956cddaff30c78a8ed835020a65666bfab7940832bdb37ee03732f21167d19b2"
+    },
+    {
+     "new": "src/system/kernel/tests/checks_qep.py",
+     "new_bytes": 33842,
+     "new_sha256": "1c2a09d7d423054a66fb771372ca819c2eb1c602fb0792a2e6c9bce1c11b5dd2",
+     "old": "src/quotagent/qa/checks_qep.py",
+     "old_bytes": 731,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "4ed889cd899357abaa454e61cc2416f721926c25b4866f49ab84e1ae1fde9f3b"
+    },
+    {
+     "new": "src/domain/quotes/tests/checks_quotes.py",
+     "new_bytes": 7490,
+     "new_sha256": "8c3f5d4e2f109a1c1e1df19470048d008a6e7131292a37c0e0b8d433433237cf",
+     "old": "src/quotagent/qa/checks_quotes.py",
+     "old_bytes": 743,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "821c7e60a8ba2da4b21f60fb268700901f45fa9f35d643e7b74935e4289e9535"
+    },
+    {
+     "new": "src/domain/rfq/tests/checks_rfq.py",
+     "new_bytes": 17102,
+     "new_sha256": "fff2401408c197999e4324e91f181dfbcc1d16299f86a4797c1496caa0c12bde",
+     "old": "src/quotagent/qa/checks_rfq.py",
+     "old_bytes": 725,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "5d35de97c734313ba22656512bcb951abbad33ed550efbc83633600861c22b41"
+    },
+    {
+     "new": "src/system/runtime/tests/checks_runtime.py",
+     "new_bytes": 17196,
+     "new_sha256": "c48590f58a4fbba242e7e07d72fc46d55bfbdf11e8524f71a2affe006bab990b",
+     "old": "src/quotagent/qa/checks_runtime.py",
+     "old_bytes": 749,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "a7ed6080649d500e80689ddf4ac1456a402fcbb15267ee4cbdb861951b9b14ba"
+    },
+    {
+     "new": "src/domain/sync/tests/checks_sync.py",
+     "new_bytes": 9752,
+     "new_sha256": "bc5ba78ec6dd688e294a4fbcc8c2a92016d4a6e87c99abecfc5f065219551a0e",
+     "old": "src/quotagent/qa/checks_sync.py",
+     "old_bytes": 731,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "e3149ff02e475d45658c1b02a595ab15fe6717d00beaee4f08ad4df49263de4b"
+    },
+    {
+     "new": "src/domain/terms/tests/checks_terms.py",
+     "new_bytes": 9721,
+     "new_sha256": "a3a02bae9e9cab3c7ac26aca8b3b781d42528deea6326821ab7eb70d78f2b974",
+     "old": "src/quotagent/qa/checks_terms.py",
+     "old_bytes": 737,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "b4092c02759217f483d79ad61600fc39b5ddd04aea8a102191f08e6f7e2a37ea"
+    },
+    {
+     "new": "src/system/webui/tests/checks_ui_snapshot.py",
+     "new_bytes": 9426,
+     "new_sha256": "44c92edcfa7c1a3866e999622932d712d3359ac5d425afda1298a4437a5f5cc0",
+     "old": "src/quotagent/qa/checks_ui_snapshot.py",
+     "old_bytes": 761,
+     "old_has_forward_mark": true,
+     "old_head_blob_sha256": null,
+     "old_sha256": "73f870d7a0f0c2f61b2b32f55cd68b28dff6fd9fd7451ff29e0ee38ed863a09b"
+    }
+   ]
+  },
+  "gates": {
+   "ac-registry": {
+    "tail": [
+     "[ok]   定义集合 135 条 AC（其中 P0 29 条），注册表 85 条",
+     "[info] 尚未到期（P1/P2 等）未注册 50 条：AC-ADMIN-001(P2)、AC-ADMIN-002(P2)、AC-ADMIN-003(P2)、AC-ADMIN-007(P2)、AC-ADMIN-008(P2)、AC-ADMIN-009(P2)、AC-ADMIN-010(P2)、AC-AUTH-001(P2)…",
+     "[ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查）"
+    ]
+   },
+   "coverage": {
+    "tail": [
+     "  \"total\": 8,",
+     "  \"failures\": 0",
+     "}"
+    ]
+   },
+   "docs": {
+    "tail": [
+     "[ok]   预算: 197 个文件受检，最高占用 100%（docs/design/15-requirements-coverage.md 28665/28672 B）",
+     "[ok]   FR↔AC 覆盖: 166 条 FR 均关联 AC，136 条 AC 无孤儿（FR 定义文件 3 个：主文件 + 2 个归档；AC 定义文件 3 个：主文件 + 2 个归档）",
+     "RESULT: FAIL (1 项)"
+    ]
+   },
+   "events": {
+    "tail": [
+     "[ok]   规划中（阶段未到，允许未登记）: invoice/matched",
+     "事件: 文档声明 122 条，事件表登记 120 条，取交集 120 条",
+     "[ok]   文档与事件表完全一致（名称与模式）"
+    ]
+   },
+   "invariants": {
+    "tail": [
+     "        counters={\"timers\":1,\"subscriptions\":0}（>0 才算检出）",
+     "------------------------------------------------------------------------",
+     "宿主强制不变量：22/22 通过"
+    ]
+   },
+   "modules": {
+    "tail": [
+     "------------------------------------------------------------------------",
+     "模块：41 个（admin-guard, admin-view, advice-panel, agent-context, agent-harness, agent-memory, approval-digest, audit-hook, authority-band, bid-heuristics, bridge-canary, budget-guard, canary, circuit-breaker, compare, config-view, evidence-summary, evolve-journal, gate-timeline, governor, idempotency-guard, kernel-bridge, mail-view, norm, observability, ops-view, pipeline-view, plugin-market, price-history, projection, quote-prepare, retention-view, rfq-deadline, sourcing, storage-view, supplier-scorecard, timeline, ui-feedback, user-plugin-manager, webui, __set__）；事件表 120 条（真源：Python 侧）",
+     "fixture 断言：521/521 通过；报告落 /workspace/projects/quotagent/tmp/modules-report.json"
+    ]
+   },
+   "p0-no-node": {
+    "tail": [
+     "  ok   无占位符 ID",
+     "  首个失败: 文档门退出码为 0: exit=1",
+     "  —— 回显结束；本轮全部日志: /workspace/projects/quotagent/tmp/p0-no-node.kO7mOY ——"
+    ]
+   },
+   "plugin-assets": {
+    "tail": [
+     "[ok]   F6 全过程**产品树字节不变**（变异只写在 tmp/ 的整树副本里）",
+     "        前后 150/150 个文件摘要一致=True；副本 4 份在 /workspace/projects/quotagent/tmp/plugin-assets-giazppc5",
+     "RESULT: PASS（plugin-assets 门 14/14）"
+    ]
+   },
+   "plugin-lifecycle": {
+    "tail": [
+     "[ok]   C0 真 HTTP 前置：`./run up` 起得来（否则 C1–C6 是空转）",
+     "        up_rc=0 healthy=True out={\"ok\":true,\"action\":\"up\",\"state\":\"started\",\"service\":\"quotagent-webui\",\"pid\":332682,\"port\":56599,\"url\":\"http://127.0.0.1:56599/quotagent/\",\"healthy\":true,\"ready err=",
+     "RESULT: PASS（plugin-lifecycle 门 66/66）"
+    ]
+   },
+   "plugin-requirements": {
+    "tail": [
+     "[ok]   F7 全过程**产品树字节不变**（变异只写在 tmp/ 的临时副本里）",
+     "        before=b95309c68611 after=b95309c68611；变异副本 5 份在 tmp/",
+     "RESULT: PASS（plugin-requirements 门 18/18）"
+    ]
+   },
+   "plugins": {
+    "tail": [
+     "[ok]   P3 Python 功能归属：每个 `services/*.py` 在清单里出现（功能有归属）",
+     "        服务 30 个；未归属=[]",
+     "RESULT: PASS（插件清单门 5/5）"
+    ]
+   },
+   "run-once": {
+    "tail": [
+     "[ok]   R11-5 全过程**产品树字节不变**（变异只写在 tmp/ 的副本里）",
+     "        before=54a507fff328 after=54a507fff328",
+     "RESULT: PASS（run-once 门 34/34）"
+    ]
+   },
+   "storage": {
+    "tail": [
+     "{\"checks\":[{\"name\":\"1 契约正控：`tools/storage.py` 能编译 + 上界表与拒绝码闭合集合（每条码都有 next_action）；`storage-view` manifest 齐备（name/provides/inject=[]/usedServices=[]/Config/apply/fixture）；打印两件产物的路径/字节/sha256（变异自证靠这一行）\",\"ok\":true,\"detail\":\"storage.py=tools/storage.py（58259 字节，sha256=5472b5b0fc1829fc…）py_compile=0；storage-view.mjs=host/modules/storage-view.mjs（17381 字节，sha256=5799d2b064eb28e5…）；上界差异=[]；码表一致=true（7 条）；缺 next_action=[]；manifest 问题键=[]；默认根=/workspace/projects/quotagent/tmp/storage\"},{\"name\":\"2 storage-view 挂载：provide 拦截拿得到句柄（键**恰好** config/headline/snapshot）；effect 已注册（>0）、服务可在 ctx 里取到、config() 报的是夹取后的配置\",\"ok\":true,\"detail\":\"句柄键=[\\\"config\\\",\\\"headline\\\",\\\"snapshot\\\"]；ctx.get 一致=true；effect=2；config={\\\"snapshot\\\":\\\"\\\",\\\"max_tenants\\\":64,\\\"max_bytes\\\":128}\"},{\"name\":\"3 Python 侧正控（真跑）：open-append 两行 → read-tail 回读；put 两次 → 版本号递增到 2；get 回读最新值；scan 出键但 `values_included:false`；delete 写**墓碑**（版本 3、键仍不再出现）；stat/list-files 的计数与磁盘一致；每次写都 `ledger_written:false`（存储不落账本）\",\"ok\":true,\"detail\":\"open-append={\\\"ok\\\":true,\\\"lines\\\":2,\\\"bytes\\\":20}；read-tail={\\\"broken_lines\\\":0,\\\"bytes_returned\\\":18,\\\"bytes_total\\\":20,\\\"clipped_lines\\\":0,\\\"invalid_utf8_lines\\\":0,\\\"lines_ok\\\":2,\\\"lines_omitted\\\":0,\\\"lines_returned\\\":2,\\\"lines_seen\\\":2}；put 版本=[1,2,1]；get={\\\"value\\\":\\\"v2\\\",\\\"version\\\":2}；scan={\\\"keys\\\":2,\\\"values_included\\\":false}；delete={\\\"deleted\\\":true,\\\"version\\\":3,\\\"revision\\\":4}；get(删后)={\\\"ok\\\":true,\\\"found\\\":false,\\\"reason\\\":\\\"key-not-found\\\"}；stat={\\\"bytes\\\":20,\\\"lines\\\":2}；list-files={\\\"bytes\\\":332,\\\"escaped\\\":0,\\\"files\\\":2,\\\"hashed\\\":2,\\\"tables\\\":1,\\\"unreadable\\\":0}；空租户={\\\"ok\\\":true,\\\"reason\\\":\\\"namespace-empty\\\"}；磁盘上落了=true\"},{\"name\":\"4 反例①（**跨租户读写被拒**）：`../<别的 ns>/...` 的写与读、非法 ns 名（`../alpha`/`Alpha`）、跨租户 stat 一律 `storage-outside-ns` + next_action；**且磁盘零新文件、跨租户哨兵在整棵树里检索不到、alpha 的 own.log 一个字节没变**（只断言返回错误不算通过）\",\"ok\":true,\"detail\":\"本租户正控={\\\"ns\\\":\\\"alpha\\\",\\\"ok\\\":true}；跨租户码=[\\\"storage-outside-ns\\\",\\\"storage-outside-ns\\\",\\\"storage-outside-ns\\\",\\\"storage-outside-ns\\\",\\\"storage-outside-ns\\\"]；next_action 齐=true；树未变=true（3 个文件）；哨兵命中=[]；alpha/own.log 未变=true\"},{\"name\":\"5 反例②（**`../` / 绝对路径 / 符号链越界被拒**）：逃出存储根、绝对路径、`..`（`logs/../deep.log` 即使解析后仍在根里也拒）、经符号链写到根外、经符号链读到根外 五个形态全 `storage-path-escape` + next_action；**越界符号链不被跟随**（`list-files` 把它只报名、计数 `counts.escaped`，外部文件正文/sha256 一个都不出）；根外的目标文件**事后不存在**\",\"ok\":true,\"detail\":\"符号链可构造=true；五形态码=[\\\"storage-path-escape\\\",\\\"storage-path-escape\\\",\\\"storage-path-escape\\\",\\\"storage-path-escape\\\",\\\"storage-path-escape\\\"]；根外目标存在=false；树未变=true；list-files escaped={\\\"counts\\\":{\\\"bytes\\\":332,\\\"escaped\\\":2,\\\"files\\\":2,\\\"hashed\\\":2,\\\"tables\\\":1,\\\"unreadable\\\":0},\\\"escaped_symlinks\\\":[\\\"link\\\",\\\"linkfile\\\"],\\\"reason\\\":\\\"symlinks-escaped-ns-root\\\"}；外部正文泄漏=false；外部 sha256 泄漏=false\"},{\"name\":\"6 反例③（**超界读取被截断且报破条数**）：42 行（40 正常 + 1 超长 + 1 半写）→ `--limit 5` 出 5 行、`omitted=36`、**`broken_lines=1`**（半写行被丢且**报数**）、`clipped_lines=1`（被夹行 `bytes` 仍是真值 6000、夹后 ≤ 4096）、`truncated:true`、`degraded:true`；`--limit` 缺失/0 → `storage-unbounded-read`；`--limit 999` → `storage-limit-exceeded`；`--max-line-bytes 0`（夹取窗口本身越界）→ `storage-limit-exceeded`（否则会静默夹成空正文）；超长 append → `storage-limit-exceeded`（报 bytes/limit）且**文件字节未变**\",\"ok\":true,\"detail\":\"tail={\\\"lines\\\":5,\\\"omitted\\\":36,\\\"broken\\\":1,\\\"clipped\\\":1,\\\"counts\\\":{\\\"broken_lines\\\":1,\\\"bytes_returned\\\":6024,\\\"bytes_total\\\":6306,\\\"clipped_lines\\\":1,\\\"invalid_utf8_lines\\\":0,\\\"lines_ok\\\":41,\\\"lines_omitted\\\":36,\\\"lines_returned\\\":5,\\\"lines_seen\\\":42},\\\"truncated\\\":true,\\\"degraded\\\":true,\\\"reason\\\":\\\"log-torn-tail\\\"}；超长行={\\\"bytes\\\":6000,\\\"clipped\\\":true,\\\"clipped_bytes\\\":4096}；无 limit={\\\"code\\\":\\\"storage-unbounded-read\\\",\\\"reason\\\":\\\"limit-missing\\\"}；夹取窗口越界={\\\"code\\\":\\\"storage-limit-exceeded\\\",\\\"reason\\\":\\\"max-line-bytes-out-of-range\\\"}；limit 0={\\\"code\\\":\\\"storage-unbounded-read\\\",\\\"reason\\\":\\\"limit-not-positive\\\"}；limit 999={\\\"code\\\":\\\"storage-limit-exceeded\\\"}；超长 append={\\\"code\\\":\\\"storage-limit-exceeded\\\",\\\"bytes\\\":5001,\\\"limit\\\":4096}；over.log 字节=0（写前 0）\"},{\"name\":\"7 反例④（**host 模块零写面**）：静态扫描 `storage-view.mjs` 零写文件 / 零子进程 / 零网络 / 零随机 / 零墙钟 / 零定时器 / 零事件订阅 / 零账本调用，且**只 import（读 API + 配置构造器）**（`node:fs` 与 `../lib/std-schema.mjs`）—— 宿主**不调 Python**、不自己遍历存储树；扫描器**非空转**（合成坏源码命中 ≥5 处）\",\"ok\":true,\"detail\":\"模块命中=[]；import 白名单=[\\\"../lib/std-schema.mjs\\\",\\\"node:fs\\\"]；非空转对照命中 9 处=[\\\"writeFileSync\\\",\\\"spawnSync\\\",\\\"spawn(\\\",\\\"fetch(\\\",\\\"Date.now\\\",\\\"setInterval(\\\",\\\"Math.random\\\",\\\"process.env\\\"]；模块字节=17381\"},{\"name\":\"8 拒写事实三类：①`--ledger` 声明的路径（含当目标与当 snapshot 输出）②仓库内 `tmp/ui-shared/<realm>/ledger.jsonl`（绝对构造 + 名字叫 `ledger.jsonl` 的相对构造）③`user-space/` 里别人的 ns（root 指过去 / 或 root 是本 ns 却操作别人的 ns）—— 七种构造全 `storage-fact-path` + next_action；**且本用例自己触及的事实区目标（白名单）保持原样**（`--ledger` 指的那份账本与绝对路径构造的那份账本**只增不改**、无本门哨兵；构造的 snapshot 输出目标与\\\"别人的 ns\\\"**必须不存在**）、哨兵检索不到。**前提：事实区可能被无关写入者（运行中服务 / 定时任务）改动 ⇒ 本断言只覆盖本用例触及的目标，全程快照对比**（不拿\\\"整个事实区清单/字节不变\\\"当判据，那是把无关写入者算成本工具写的假红；白名单外的变化由第 19 条如实计数并打印）。**反向自证（不空转）**：把 `_inside_zone` 的两层形态循环各回退成**只取词法形态**（= `user-space` 为符号链接时的旧失效形态）写进 tmp 下的变体副本 ⇒ f5/f6 必须被放行（代码为空）⇒ 本断言在那种形态下**必红**；对照实体（本仓 `tools/storage.py`）则一律拒。\",\"ok\":true,\"detail\":\"七种构造码=[\\\"storage-fact-path\\\",\\\"storage-fact-path\\\",\\\"storage-fact-path\\\",\\\"storage-fact-path\\\",\\\"storage-fact-path\\\",\\\"storage-fact-path\\\",\\\"storage-fact-path\\\"]；白名单目标违规=0 条；白名单目标=[\\\"contractor/ledger.jsonl\\\",\\\"supplier/ledger.jsonl\\\",\\\"contractor/bogus.json\\\",\\\"zz-t277-other\\\"]；哨兵命中=[]；bogus.json 存在=false；别人 ns 目录存在=false；默认存储根指纹一致=true；反向自证：锚点唯一=true、变体副本的根正确=true、词法变体下的 f5/f6 码=[\\\"\\\",\\\"\\\"]（必须为空 ⇒ 对照下本断言必红；对照实体实测 rc=0/0）；0 处白名单外变化（不判红，如实计数）：无\"},{\"name\":\"9 快照 → 只读聚合正控（真跑）：`snapshot --out` 写出快照 → storage-view 读它，`counts`（租户/文件/字节/表/键）与本门**独立遍历**树的手算一致、`degraded:false`；两次 `snapshot()` 字节一致、跨实例一致；租户按名字稳定排序\",\"ok\":true,\"detail\":\"快照={\\\"ok\\\":true,\\\"out_bytes\\\":2593,\\\"counts\\\":{\\\"file_bytes\\\":181,\\\"files\\\":3,\\\"keys\\\":2,\\\"tables\\\":1,\\\"tenants\\\":2},\\\"degraded\\\":false}；独立遍历={\\\"files\\\":3,\\\"bytes\\\":181}；视图 counts={\\\"tenants\\\":2,\\\"files\\\":3,\\\"file_bytes\\\":181,\\\"tables\\\":1,\\\"keys\\\":2,\\\"invalid_tenants\\\":0}；租户=[{\\\"ns\\\":\\\"acme\\\",\\\"files\\\":2,\\\"file_bytes\\\":168,\\\"tables\\\":1,\\\"keys\\\":2,\\\"last_write\\\":\\\"2026-09-22T11:42:57Z\\\"},{\\\"ns\\\":\\\"beta\\\",\\\"files\\\":1,\\\"file_bytes\\\":13,\\\"tables\\\":0,\\\"keys\\\":0,\\\"last_write\\\":\\\"2026-09-22T11:42:57Z\\\"}]；两次一致=true；跨实例一致=true\"},{\"name\":\"10 按键白名单投影（负控）：快照里塞满正文 / 路径原文 / 凭据与额外键 → 输出里**一个都不出现**；租户键集**恰好**六格、顶层键集**恰好**固定表；畸形租户（非法 ns / 非对象）被丢并**计数** `invalid_tenants`；数字类型不对归 0 并计入 `clipped`（不静默改值）\",\"ok\":true,\"detail\":\"租户=[\\\"alpha\\\",\\\"gamma\\\"]（丢 2 条）；顶层键=[\\\"clipped\\\",\\\"counts\\\",\\\"degraded\\\",\\\"limits\\\",\\\"next_action\\\",\\\"omitted_tenants\\\",\\\"reason\\\",\\\"scope\\\",\\\"source\\\",\\\"tenants\\\",\\\"truncated\\\"]；gamma={\\\"ns\\\":\\\"gamma\\\",\\\"files\\\":0,\\\"file_bytes\\\":0,\\\"tables\\\":0,\\\"keys\\\":0,\\\"last_write\\\":\\\"\\\"}；clipped=5；凭据哨兵出现=false；正文哨兵=false；路径哨兵=false；limits={\\\"max_line_bytes\\\":4096,\\\"max_tables\\\":32}\"},{\"name\":\"11 有界与截断诚实：12 租户 + `max_tenants=4` → 出 4、`omitted_tenants=8`、`truncated:true`，而 `counts.tenants`/`counts.files` 仍是**夹取前真值**（`tenants.length + omitted === counts.tenants`）；`max_tenants=0` → 一条都不出但计数值不变；字符串超 `max_bytes` 被夹并计入 `clipped`\",\"ok\":true,\"detail\":\"max_tenants=4：{\\\"shown\\\":4,\\\"omitted\\\":8,\\\"counts\\\":{\\\"tenants\\\":12,\\\"files\\\":66,\\\"file_bytes\\\":660,\\\"tables\\\":12,\\\"keys\\\":66,\\\"invalid_tenants\\\":0},\\\"truncated\\\":true}（手算 files=66）；max_tenants=0：{\\\"shown\\\":0,\\\"omitted\\\":12,\\\"counts_tenants\\\":12}；max_bytes=8：{\\\"ns\\\":\\\"long-lon\\\",\\\"last_write\\\":\\\"2026-09-\\\",\\\"clipped\\\":1,\\\"ns_bytes\\\":8}\"},{\"name\":\"12 降级与\\\"空 ≠ 读不到\\\"：未配 / 路径不存在 / 坏 JSON / 顶层不是对象 / 注入源没 tenants →`degraded:true` + 有名 reason + next_action；合法的**零租户** → `degraded:false` 且`reason='storage-empty'`（\\\"确实没有\\\"与\\\"读不到\\\"可区分）；六种情形**同形状**（键集合一致）、且都不带任何\\\"健康绿\\\"字段\",\"ok\":true,\"detail\":\"未配={\\\"degraded\\\":true,\\\"reason\\\":\\\"storage-snapshot-unconfigured\\\"}；路径不存在=storage-snapshot-unreadable；坏 JSON=storage-snapshot-malformed；非对象=storage-snapshot-malformed；注入源无 tenants=storage-snapshot-malformed；零租户={\\\"degraded\\\":false,\\\"reason\\\":\\\"storage-empty\\\",\\\"tenants\\\":0}；同形状=true；键集=[\\\"clipped\\\",\\\"counts\\\",\\\"degraded\\\",\\\"limits\\\",\\\"next_action\\\",\\\"omitted_tenants\\\",\\\"reason\\\",\\\"scope\\\",\\\"source\\\",\\\"tenants\\\",\\\"truncated\\\"]\"},{\"name\":\"13 租户范围：`{ns}` 只出本租户（**别的租户的名字一个字都不出现**），而 `counts` 仍是**全体真值** + `omitted_tenants` 报出被挡掉多少；范围指到不存在的 ns → `storage-scope-empty`（**不是**降级）；范围形状非法 → `degraded:true` + `storage-scope-invalid`；磁盘模式也吃 scope\",\"ok\":true,\"detail\":\"scope=alpha：{\\\"tenants\\\":[\\\"alpha\\\"],\\\"counts\\\":{\\\"tenants\\\":2,\\\"files\\\":3,\\\"file_bytes\\\":30,\\\"tables\\\":1,\\\"keys\\\":3,\\\"invalid_tenants\\\":2},\\\"omitted\\\":1,\\\"truncated\\\":true}；别的租户名泄漏=false；磁盘 scope=beta：{\\\"tenants\\\":[\\\"beta\\\"],\\\"degraded\\\":false}；scope 不存在={\\\"reason\\\":\\\"storage-scope-empty\\\",\\\"degraded\\\":false}；scope 非法={\\\"reason\\\":\\\"storage-scope-invalid\\\",\\\"degraded\\\":true}\"},{\"name\":\"14 确定性：同输入两次 `snapshot()` 字节一致、**租户顺序颠倒不改输出**、跨实例一致、冻结输入不抛、入参不被改写；源码里**没有任何取墙钟/随机**的调用（注释不算，静态扫一遍代码行）\",\"ok\":true,\"detail\":\"两次一致=true（454 字节）；顺序颠倒一致=true；跨实例一致=true；冻结输入不抛=true；入参未被改写=true；源码无墙钟/随机=true\"},{\"name\":\"15 配置负控：未知键 / 错类型 / 非对象入参一律被拒（不得静默放行）；默认值 snapshot='' / max_tenants=64 / max_bytes=128；越界夹取（1e9→上限、-5→0、NaN→默认）\",\"ok\":true,\"detail\":\"未知键=refused；错类型=refused；非对象=refused/refused；默认={\\\"snapshot\\\":\\\"\\\",\\\"max_tenants\\\":64,\\\"max_bytes\\\":128}；夹取=[1000,0,64,4096]\"},{\"name\":\"16 卸载零残留：全部实例 dispose 后 `ctx.get` 取不到、effect 归零，且**新动作一律拒**（`storage-view-disposed` + next_action）且不抛（拒绝不伪装成功）\",\"ok\":true,\"detail\":\"effect [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2] → [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]；ctx.get 全消失=true；dispose 后={\\\"degraded\\\":true,\\\"reason\\\":\\\"storage-view-disposed\\\"}；headline 抛错=false\"},{\"name\":\"17 Python 侧可用性不伪装：未配 root / root 不是目录 → `storage-unavailable` + 有名 reason + next_action（**不得**用\\\"看起来健康的空\\\"冒充可用）；\\\"确实没有\\\"（空租户 / 没这个键 / 路径缺席）→ `ok:true` + 有名 reason —— 两种情形必须可区分；且默认存储根没被碰过\",\"ok\":true,\"detail\":\"未配={\\\"code\\\":\\\"storage-unavailable\\\",\\\"reason\\\":\\\"root-unconfigured\\\"}；不是目录={\\\"code\\\":\\\"storage-unavailable\\\",\\\"reason\\\":\\\"root-not-a-directory\\\"}；路径缺席={\\\"ok\\\":true,\\\"exists\\\":false,\\\"reason\\\":\\\"path-absent\\\"}；键缺席={\\\"ok\\\":true,\\\"found\\\":false,\\\"reason\\\":\\\"key-not-found\\\"}；空租户={\\\"ok\\\":true,\\\"reason\\\":\\\"namespace-empty\\\"}；默认存储根未变=true\"},{\"name\":\"18 拒绝留痕汇总：整轮跑下来的**每一条**拒绝（本门真跑出来的，不是声明）都在闭合码集合里，且都带非空 `next_action`；四类反例各自的码都在其中（①跨租户 ②越界 ③无界/超界读 ④事实路径）\",\"ok\":true,\"detail\":\"本轮拒绝 24 次；码集合=[\\\"storage-outside-ns\\\",\\\"storage-path-escape\\\",\\\"storage-limit-exceeded\\\",\\\"storage-unbounded-read\\\",\\\"storage-fact-path\\\",\\\"storage-unavailable\\\"]；越界码=[]；缺 next_action=0 条；模块树未变=true\"},{\"name\":\"19 全局层（**事实区零写入**，白名单口径）：本用例运行期间**没有任何写入落到事实区** —— 白名单内（本用例触及的目标：`--ledger` 指的那份账本、绝对构造的那份账本、构造的 snapshot 输出目标、\\\"别人的 ns\\\"）逐字节不变 / 账本类只增不改 + 无本门哨兵；**白名单外的变化不判红，但如实计数并打印**（无关写入者：运行中服务 / 定时任务）。**前提：事实区可能被无关写入者改动 ⇒ 本判据只覆盖本用例触及的目标，全程快照对比**（改写/截断/凭空出现/消失/哨兵 都必须变红）；判据**非空转自证**：8 组合成样本（追加/改写/截断/哨兵/改写非账本/无变化/凭空出现/消失）逐条核对期望的红绿\",\"ok\":true,\"detail\":\"白名单目标违规=0 条；事实区哨兵命中=[]；0 处白名单外变化（不判红，如实计数）：无；非空转自证=8/8 与预期一致（追加不判红 / 改写·截断·哨兵·凭空出现·消失 判红）；全程对比的树规模=tmp/ui-shared 34 个文件 / user-space 26 个文件\"}],\"passed\":19,\"total\":19,\"failures\":0}"
+    ]
+   },
+   "summary": {
+    "tail": [
+     "plugin-lifecycle     rc=0          根 13 个，停掉 13 个 [ok]   C0 真 HTTP 前置：`./run up` 起得来（否则 C1–C6 是空转）         up_rc=0 healthy=True out={\"ok\":true,\"action\":\"up\",\"state\":\"started\",\"service\":\"quotagent-webui\",\"pid\":332682,\"port\":56599,\"url\":\"http://127.0.0.1:56599/quotagent/\",\"healthy\":true,\"ready err= RESULT: PASS（plugin-lifecycle 门 66/66） ",
+     "run-once             rc=0          #1 基线红=False；#2 基线红=False；#3 基线红=False；#4 基线红=False；#5 基线红=False；#6 基线红=False；#7 基线红=False；#8 基线红=False [ok]   R11-5 全过程**产品树字节不变**（变异只写在 tmp/ 的副本里）         before=54a507fff328 after=54a507fff328 RESULT: PASS（run-once 门 34/34） ",
+     "p0-no-node           rc=1    FAIL 所有 ID 引用均可解析 — [FAIL] 未解析的 ID 引用 2 个（共 4491 处引用） /        - EV-174  ← docs/design/25-storage-plugins.md, docs/work/plans/plugin-file-map-batches.md, docs/work/plans/plugin-file-map.md /        - T-323  ← docs/work/plans/plugin-file-map-batches.md, docs/work/plans/plugin-file-map.md   ok   无占位符 ID   首个失败: 文档门退出码为 0: exit=1   —— 回显结束；本轮全部日志: /workspace/projects/quotagent/tmp/p0-no-node.kO7mOY ——"
+    ]
+   },
+   "webui": {
+    "tail": [
+     "[ok]   零残留：dispose 后 HTTP 服务关闭且**端口释放**（可被重新监听）",
+     "        port=43907 可重监听=true",
+     "RESULT: PASS（webui 门 51/51）"
+    ]
+   },
+   "wiring": {
+    "tail": [
+     "    \"userPluginManager\"",
+     "  ]",
+     "}"
+    ]
+   }
+  },
+  "gates_summary": "docs                 rc=1  [ok]   占位符: 无 [ok]   预算: 197 个文件受检，最高占用 100%（docs/design/15-requirements-coverage.md 28665/28672 B） [ok]   FR↔AC 覆盖: 166 条 FR 均关联 AC，136 条 AC 无孤儿（FR 定义文件 3 个：主文件 + 2 个归档；AC 定义文件 3 个：主文件 + 2 个归档） RESULT: FAIL (1 项) \ncoverage             rc=0    \"passed\": 8,   \"total\": 8,   \"failures\": 0 } \nac-registry          rc=0  [ok]   定义文件 3 个（主文件 1 + archives=[docs/work/acceptance-criteria-archive-b.md:20, docs/work/acceptance-criteria-archive.md:62]，归档共 82 条 AC 行） [ok]   定义集合 135 条 AC（其中 P0 29 条），注册表 85 条 [info] 尚未到期（P1/P2 等）未注册 50 条：AC-ADMIN-001(P2)、AC-ADMIN-002(P2)、AC-ADMIN-003(P2)、AC-ADMIN-007(P2)、AC-ADMIN-008(P2)、AC-ADMIN-009(P2)、AC-ADMIN-010(P2)、AC-AUTH-001(P2)… [ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查） \nplugins              rc=0          profile 引用=['admin-guard', 'admin-view', 'advice-panel', 'agent-context', 'agent-harness', 'agent-memory', 'approval', 'approval-digest', 'audit-hook', 'authority-band', 'bid-heuristics', 'bridge-canary', 'budget-guard', 'canary', 'circuit-breaker', 'compare', 'config', 'config-view', 'cost', 'evidence-summary', 'evolve-journal', 'frozen', 'gate-timeline', 'governor', 'guard', 'idempotency-guard', 'kernel-bridge', 'mail-view', 'norm', 'observability', 'ops-view', 'pipeline-view', 'plugin-market', 'price-history', 'pricing', 'projection', 'queue', 'quote-prepare', 'retention-view', 'rfq-deadline', 'sourcing', 'storage-view', 'supplier-scorecard', 'timeline', 'transport', 'ui-feedback', 'user-plugin-manager', 'webui']；未接线=[]（已显式标注=[]） [ok]   P3 Python 功能归属：每个 `services/*.py` 在清单里出现（功能有归属）         服务 30 个；未归属=[] RESULT: PASS（插件清单门 5/5） \nwebui                rc=0          before=6cf43d027a612244… after=6cf43d027a612244… 存在=true [ok]   零残留：dispose 后 HTTP 服务关闭且**端口释放**（可被重新监听）         port=43907 可重监听=true RESULT: PASS（webui 门 51/51） \nmodules              rc=0          const 键：advice-panel.deterministic, authority-band.deterministic, bid-heuristics.deterministic, compare.deterministic, gate-timeline.deterministic, kernel-bridge.credit_window, norm.enforce_tolerance, rfq-deadline.deterministic, sourcing.deterministic, timeline.deterministic, ui-feedback.deterministic ------------------------------------------------------------------------ 模块：41 个（admin-guard, admin-view, advice-panel, agent-context, agent-harness, agent-memory, approval-digest, audit-hook, authority-band, bid-heuristics, bridge-canary, budget-guard, canary, circuit-breaker, compare, config-view, evidence-summary, evolve-journal, gate-timeline, governor, idempotency-guard, kernel-bridge, mail-view, norm, observability, ops-view, pipeline-view, plugin-market, price-history, projection, quote-prepare, retention-view, rfq-deadline, sourcing, storage-view, supplier-scorecard, timeline, ui-feedback, user-plugin-manager, webui, __set__）；事件表 120 条（真源：Python 侧） fixture 断言：521/521 通过；报告落 /workspace/projects/quotagent/tmp/modules-report.json \nwiring               rc=0      \"uiFeedback\",     \"userPluginManager\"   ] } \ninvariants           rc=0  [ok] H6 负控：泄漏定时器的插件被检出（资源计数差分非 0 → 检查器必须报红）         counters={\"timers\":1,\"subscriptions\":0}（>0 才算检出） ------------------------------------------------------------------------ 宿主强制不变量：22/22 通过 \nevents               rc=0  [ok]   规划中（阶段未到，允许未登记）: acceptance/recorded [ok]   规划中（阶段未到，允许未登记）: invoice/matched 事件: 文档声明 122 条，事件表登记 120 条，取交集 120 条 [ok]   文档与事件表完全一致（名称与模式） \nstorage              rc=0  {\"checks\":[{\"name\":\"1 契约正控：`tools/storage.py` 能编译 + 上界表与拒绝码闭合集合（每条码都有 next_action）；`storage-view` manifest 齐备（name/provides/inject=[]/usedServices=[]/Config/apply/fixture）；打印两件产物的路径/字节/sha256（变异自证靠这一行）\",\"ok\":true,\"detail\":\"storage.py=tools/storage.py（58259 字节，sha256=5472b5b0fc1829fc…）py_compile=0；storage-view.mjs=host/modules/storage-view.mjs（17381 字节，sha256=5799d2b064eb28e5…）；上界差异=[]；码表一致=true（7 条）；缺 next_action=[]；manifest 问题键=[]；默认根=/workspace/projects/quotagent/tmp/storage\"},{\"name\":\"2 storage-view 挂载：provide 拦截拿得到句柄（键**恰好** config/headline/snapshot）；effect 已注册（>0）、服务可在 ctx 里取到、config() 报的是夹取后的配置\",\"ok\":true,\"detail\":\"句柄键=[\\\"config\\\",\\\"headline\\\",\\\"snapshot\\\"]；ctx.get 一致=true；effect=2；config={\\\"snapshot\\\":\\\"\\\",\\\"max_tenants\\\":64,\\\"max_bytes\\\":128}\"},{\"name\":\"3 Python 侧正控（真跑）：open-append 两行 → read-tail 回读；put 两次 → 版本号递增到 2；get 回读最新值；scan 出键但 `values_included:false`；delete 写**墓碑**（版本 3、键仍不再出现）；stat/list-files 的计数与磁盘一致；每次写都 `ledger_written:false`（存储不落账本）\",\"ok\":true,\"detail\":\"open-append={\\\"ok\\\":true,\\\"lines\\\":2,\\\"bytes\\\":20}；read-tail={\\\"broken_lines\\\":0,\\\"bytes_returned\\\":18,\\\"bytes_total\\\":20,\\\"clipped_lines\\\":0,\\\"invalid_utf8_lines\\\":0,\\\"lines_ok\\\":2,\\\"lines_omitted\\\":0,\\\"lines_returned\\\":2,\\\"lines_seen\\\":2}；put 版本=[1,2,1]；get={\\\"value\\\":\\\"v2\\\",\\\"version\\\":2}；scan={\\\"keys\\\":2,\\\"values_included\\\":false}；delete={\\\"deleted\\\":true,\\\"version\\\":3,\\\"revision\\\":4}；get(删后)={\\\"ok\\\":true,\\\"found\\\":false,\\\"reason\\\":\\\"key-not-found\\\"}；stat={\\\"bytes\\\":20,\\\"lines\\\":2}；list-files={\\\"bytes\\\":332,\\\"escaped\\\":0,\\\"files\\\":2,\\\"hashed\\\":2,\\\"tables\\\":1,\\\"unreadable\\\":0}；空租户={\\\"ok\\\":true,\\\"reason\\\":\\\"namespace-empty\\\"}；磁盘上落了=true\"},{\"name\":\"4 反例①（**跨租户读写被拒**）：`../<别的 ns>/...` 的写与读、非法 ns 名（`../alpha`/`Alpha`）、跨租户 stat 一律 `storage-outside-ns` + next_action；**且磁盘零新文件、跨租户哨兵在整棵树里检索不到、alpha 的 own.log 一个字节没变**（只断言返回错误不算通过）\",\"ok\":true,\"detail\":\"本租户正控={\\\"ns\\\":\\\"alpha\\\",\\\"ok\\\":true}；跨租户码=[\\\"storage-outside-ns\\\",\\\"storage-outside-ns\\\",\\\"storage-outside-ns\\\",\\\"storage-outside-ns\\\",\\\"storage-outside-ns\\\"]；next_action 齐=true；树未变=true（3 个文件）；哨兵命中=[]；alpha/own.log 未变=true\"},{\"name\":\"5 反例②（**`../` / 绝对路径 / 符号链越界被拒**）：逃出存储根、绝对路径、`..`（`logs/../deep.log` 即使解析后仍在根里也拒）、经符号链写到根外、经符号链读到根外 五个形态全 `storage-path-escape` + next_action；**越界符号链不被跟随**（`list-files` 把它只报名、计数 `counts.escaped`，外部文件正文/sha256 一个都不出）；根外的目标文件**事后不存在**\",\"ok\":true,\"detail\":\"符号链可构造=true；五形态码=[\\\"storage-path-escape\\\",\\\"storage-path-escape\\\",\\\"storage-path-escape\\\",\\\"storage-path-escape\\\",\\\"storage-path-escape\\\"]；根外目标存在=false；树未变=true；list-files escaped={\\\"counts\\\":{\\\"bytes\\\":332,\\\"escaped\\\":2,\\\"files\\\":2,\\\"hashed\\\":2,\\\"tables\\\":1,\\\"unreadable\\\":0},\\\"escaped_symlinks\\\":[\\\"link\\\",\\\"linkfile\\\"],\\\"reason\\\":\\\"symlinks-escaped-ns-root\\\"}；外部正文泄漏=false；外部 sha256 泄漏=false\"},{\"name\":\"6 反例③（**超界读取被截断且报破条数**）：42 行（40 正常 + 1 超长 + 1 半写）→ `--limit 5` 出 5 行、`omitted=36`、**`broken_lines=1`**（半写行被丢且**报数**）、`clipped_lines=1`（被夹行 `bytes` 仍是真值 6000、夹后 ≤ 4096）、`truncated:true`、`degraded:true`；`--limit` 缺失/0 → `storage-unbounded-read`；`--limit 999` → `storage-limit-exceeded`；`--max-line-bytes 0`（夹取窗口本身越界）→ `storage-limit-exceeded`（否则会静默夹成空正文）；超长 append → `storage-limit-exceeded`（报 bytes/limit）且**文件字节未变**\",\"ok\":true,\"detail\":\"tail={\\\"lines\\\":5,\\\"omitted\\\":36,\\\"broken\\\":1,\\\"clipped\\\":1,\\\"counts\\\":{\\\"broken_lines\\\":1,\\\"bytes_returned\\\":6024,\\\"bytes_total\\\":6306,\\\"clipped_lines\\\":1,\\\"invalid_utf8_lines\\\":0,\\\"lines_ok\\\":41,\\\"lines_omitted\\\":36,\\\"lines_returned\\\":5,\\\"lines_seen\\\":42},\\\"truncated\\\":true,\\\"degraded\\\":true,\\\"reason\\\":\\\"log-torn-tail\\\"}；超长行={\\\"bytes\\\":6000,\\\"clipped\\\":true,\\\"clipped_bytes\\\":4096}；无 limit={\\\"code\\\":\\\"storage-unbounded-read\\\",\\\"reason\\\":\\\"limit-missing\\\"}；夹取窗口越界={\\\"code\\\":\\\"storage-limit-exceeded\\\",\\\"reason\\\":\\\"max-line-bytes-out-of-range\\\"}；limit 0={\\\"code\\\":\\\"storage-unbounded-read\\\",\\\"reason\\\":\\\"limit-not-positive\\\"}；limit 999={\\\"code\\\":\\\"storage-limit-exceeded\\\"}；超长 append={\\\"code\\\":\\\"storage-limit-exceeded\\\",\\\"bytes\\\":5001,\\\"limit\\\":4096}；over.log 字节=0（写前 0）\"},{\"name\":\"7 反例④（**host 模块零写面**）：静态扫描 `storage-view.mjs` 零写文件 / 零子进程 / 零网络 / 零随机 / 零墙钟 / 零定时器 / 零事件订阅 / 零账本调用，且**只 import（读 API + 配置构造器）**（`node:fs` 与 `../lib/std-schema.mjs`）—— 宿主**不调 Python**、不自己遍历存储树；扫描器**非空转**（合成坏源码命中 ≥5 处）\",\"ok\":true,\"detail\":\"模块命中=[]；import 白名单=[\\\"../lib/std-schema.mjs\\\",\\\"node:fs\\\"]；非空转对照命中 9 处=[\\\"writeFileSync\\\",\\\"spawnSync\\\",\\\"spawn(\\\",\\\"fetch(\\\",\\\"Date.now\\\",\\\"setInterval(\\\",\\\"Math.random\\\",\\\"process.env\\\"]；模块字节=17381\"},{\"name\":\"8 拒写事实三类：①`--ledger` 声明的路径（含当目标与当 snapshot 输出）②仓库内 `tmp/ui-shared/<realm>/ledger.jsonl`（绝对构造 + 名字叫 `ledger.jsonl` 的相对构造）③`user-space/` 里别人的 ns（root 指过去 / 或 root 是本 ns 却操作别人的 ns）—— 七种构造全 `storage-fact-path` + next_action；**且本用例自己触及的事实区目标（白名单）保持原样**（`--ledger` 指的那份账本与绝对路径构造的那份账本**只增不改**、无本门哨兵；构造的 snapshot 输出目标与\\\"别人的 ns\\\"**必须不存在**）、哨兵检索不到。**前提：事实区可能被无关写入者（运行中服务 / 定时任务）改动 ⇒ 本断言只覆盖本用例触及的目标，全程快照对比**（不拿\\\"整个事实区清单/字节不变\\\"当判据，那是把无关写入者算成本工具写的假红；白名单外的变化由第 19 条如实计数并打印）。**反向自证（不空转）**：把 `_inside_zone` 的两层形态循环各回退成**只取词法形态**（= `user-space` 为符号链接时的旧失效形态）写进 tmp 下的变体副本 ⇒ f5/f6 必须被放行（代码为空）⇒ 本断言在那种形态下**必红**；对照实体（本仓 `tools/storage.py`）则一律拒。\",\"ok\":true,\"detail\":\"七种构造码=[\\\"storage-fact-path\\\",\\\"storage-fact-path\\\",\\\"storage-fact-path\\\",\\\"storage-fact-path\\\",\\\"storage-fact-path\\\",\\\"storage-fact-path\\\",\\\"storage-fact-path\\\"]；白名单目标违规=0 条；白名单目标=[\\\"contractor/ledger.jsonl\\\",\\\"supplier/ledger.jsonl\\\",\\\"contractor/bogus.json\\\",\\\"zz-t277-other\\\"]；哨兵命中=[]；bogus.json 存在=false；别人 ns 目录存在=false；默认存储根指纹一致=true；反向自证：锚点唯一=true、变体副本的根正确=true、词法变体下的 f5/f6 码=[\\\"\\\",\\\"\\\"]（必须为空 ⇒ 对照下本断言必红；对照实体实测 rc=0/0）；0 处白名单外变化（不判红，如实计数）：无\"},{\"name\":\"9 快照 → 只读聚合正控（真跑）：`snapshot --out` 写出快照 → storage-view 读它，`counts`（租户/文件/字节/表/键）与本门**独立遍历**树的手算一致、`degraded:false`；两次 `snapshot()` 字节一致、跨实例一致；租户按名字稳定排序\",\"ok\":true,\"detail\":\"快照={\\\"ok\\\":true,\\\"out_bytes\\\":2593,\\\"counts\\\":{\\\"file_bytes\\\":181,\\\"files\\\":3,\\\"keys\\\":2,\\\"tables\\\":1,\\\"tenants\\\":2},\\\"degraded\\\":false}；独立遍历={\\\"files\\\":3,\\\"bytes\\\":181}；视图 counts={\\\"tenants\\\":2,\\\"files\\\":3,\\\"file_bytes\\\":181,\\\"tables\\\":1,\\\"keys\\\":2,\\\"invalid_tenants\\\":0}；租户=[{\\\"ns\\\":\\\"acme\\\",\\\"files\\\":2,\\\"file_bytes\\\":168,\\\"tables\\\":1,\\\"keys\\\":2,\\\"last_write\\\":\\\"2026-09-22T11:42:57Z\\\"},{\\\"ns\\\":\\\"beta\\\",\\\"files\\\":1,\\\"file_bytes\\\":13,\\\"tables\\\":0,\\\"keys\\\":0,\\\"last_write\\\":\\\"2026-09-22T11:42:57Z\\\"}]；两次一致=true；跨实例一致=true\"},{\"name\":\"10 按键白名单投影（负控）：快照里塞满正文 / 路径原文 / 凭据与额外键 → 输出里**一个都不出现**；租户键集**恰好**六格、顶层键集**恰好**固定表；畸形租户（非法 ns / 非对象）被丢并**计数** `invalid_tenants`；数字类型不对归 0 并计入 `clipped`（不静默改值）\",\"ok\":true,\"detail\":\"租户=[\\\"alpha\\\",\\\"gamma\\\"]（丢 2 条）；顶层键=[\\\"clipped\\\",\\\"counts\\\",\\\"degraded\\\",\\\"limits\\\",\\\"next_action\\\",\\\"omitted_tenants\\\",\\\"reason\\\",\\\"scope\\\",\\\"source\\\",\\\"tenants\\\",\\\"truncated\\\"]；gamma={\\\"ns\\\":\\\"gamma\\\",\\\"files\\\":0,\\\"file_bytes\\\":0,\\\"tables\\\":0,\\\"keys\\\":0,\\\"last_write\\\":\\\"\\\"}；clipped=5；凭据哨兵出现=false；正文哨兵=false；路径哨兵=false；limits={\\\"max_line_bytes\\\":4096,\\\"max_tables\\\":32}\"},{\"name\":\"11 有界与截断诚实：12 租户 + `max_tenants=4` → 出 4、`omitted_tenants=8`、`truncated:true`，而 `counts.tenants`/`counts.files` 仍是**夹取前真值**（`tenants.length + omitted === counts.tenants`）；`max_tenants=0` → 一条都不出但计数值不变；字符串超 `max_bytes` 被夹并计入 `clipped`\",\"ok\":true,\"detail\":\"max_tenants=4：{\\\"shown\\\":4,\\\"omitted\\\":8,\\\"counts\\\":{\\\"tenants\\\":12,\\\"files\\\":66,\\\"file_bytes\\\":660,\\\"tables\\\":12,\\\"keys\\\":66,\\\"invalid_tenants\\\":0},\\\"truncated\\\":true}（手算 files=66）；max_tenants=0：{\\\"shown\\\":0,\\\"omitted\\\":12,\\\"counts_tenants\\\":12}；max_bytes=8：{\\\"ns\\\":\\\"long-lon\\\",\\\"last_write\\\":\\\"2026-09-\\\",\\\"clipped\\\":1,\\\"ns_bytes\\\":8}\"},{\"name\":\"12 降级与\\\"空 ≠ 读不到\\\"：未配 / 路径不存在 / 坏 JSON / 顶层不是对象 / 注入源没 tenants →`degraded:true` + 有名 reason + next_action；合法的**零租户** → `degraded:false` 且`reason='storage-empty'`（\\\"确实没有\\\"与\\\"读不到\\\"可区分）；六种情形**同形状**（键集合一致）、且都不带任何\\\"健康绿\\\"字段\",\"ok\":true,\"detail\":\"未配={\\\"degraded\\\":true,\\\"reason\\\":\\\"storage-snapshot-unconfigured\\\"}；路径不存在=storage-snapshot-unreadable；坏 JSON=storage-snapshot-malformed；非对象=storage-snapshot-malformed；注入源无 tenants=storage-snapshot-malformed；零租户={\\\"degraded\\\":false,\\\"reason\\\":\\\"storage-empty\\\",\\\"tenants\\\":0}；同形状=true；键集=[\\\"clipped\\\",\\\"counts\\\",\\\"degraded\\\",\\\"limits\\\",\\\"next_action\\\",\\\"omitted_tenants\\\",\\\"reason\\\",\\\"scope\\\",\\\"source\\\",\\\"tenants\\\",\\\"truncated\\\"]\"},{\"name\":\"13 租户范围：`{ns}` 只出本租户（**别的租户的名字一个字都不出现**），而 `counts` 仍是**全体真值** + `omitted_tenants` 报出被挡掉多少；范围指到不存在的 ns → `storage-scope-empty`（**不是**降级）；范围形状非法 → `degraded:true` + `storage-scope-invalid`；磁盘模式也吃 scope\",\"ok\":true,\"detail\":\"scope=alpha：{\\\"tenants\\\":[\\\"alpha\\\"],\\\"counts\\\":{\\\"tenants\\\":2,\\\"files\\\":3,\\\"file_bytes\\\":30,\\\"tables\\\":1,\\\"keys\\\":3,\\\"invalid_tenants\\\":2},\\\"omitted\\\":1,\\\"truncated\\\":true}；别的租户名泄漏=false；磁盘 scope=beta：{\\\"tenants\\\":[\\\"beta\\\"],\\\"degraded\\\":false}；scope 不存在={\\\"reason\\\":\\\"storage-scope-empty\\\",\\\"degraded\\\":false}；scope 非法={\\\"reason\\\":\\\"storage-scope-invalid\\\",\\\"degraded\\\":true}\"},{\"name\":\"14 确定性：同输入两次 `snapshot()` 字节一致、**租户顺序颠倒不改输出**、跨实例一致、冻结输入不抛、入参不被改写；源码里**没有任何取墙钟/随机**的调用（注释不算，静态扫一遍代码行）\",\"ok\":true,\"detail\":\"两次一致=true（454 字节）；顺序颠倒一致=true；跨实例一致=true；冻结输入不抛=true；入参未被改写=true；源码无墙钟/随机=true\"},{\"name\":\"15 配置负控：未知键 / 错类型 / 非对象入参一律被拒（不得静默放行）；默认值 snapshot='' / max_tenants=64 / max_bytes=128；越界夹取（1e9→上限、-5→0、NaN→默认）\",\"ok\":true,\"detail\":\"未知键=refused；错类型=refused；非对象=refused/refused；默认={\\\"snapshot\\\":\\\"\\\",\\\"max_tenants\\\":64,\\\"max_bytes\\\":128}；夹取=[1000,0,64,4096]\"},{\"name\":\"16 卸载零残留：全部实例 dispose 后 `ctx.get` 取不到、effect 归零，且**新动作一律拒**（`storage-view-disposed` + next_action）且不抛（拒绝不伪装成功）\",\"ok\":true,\"detail\":\"effect [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2] → [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]；ctx.get 全消失=true；dispose 后={\\\"degraded\\\":true,\\\"reason\\\":\\\"storage-view-disposed\\\"}；headline 抛错=false\"},{\"name\":\"17 Python 侧可用性不伪装：未配 root / root 不是目录 → `storage-unavailable` + 有名 reason + next_action（**不得**用\\\"看起来健康的空\\\"冒充可用）；\\\"确实没有\\\"（空租户 / 没这个键 / 路径缺席）→ `ok:true` + 有名 reason —— 两种情形必须可区分；且默认存储根没被碰过\",\"ok\":true,\"detail\":\"未配={\\\"code\\\":\\\"storage-unavailable\\\",\\\"reason\\\":\\\"root-unconfigured\\\"}；不是目录={\\\"code\\\":\\\"storage-unavailable\\\",\\\"reason\\\":\\\"root-not-a-directory\\\"}；路径缺席={\\\"ok\\\":true,\\\"exists\\\":false,\\\"reason\\\":\\\"path-absent\\\"}；键缺席={\\\"ok\\\":true,\\\"found\\\":false,\\\"reason\\\":\\\"key-not-found\\\"}；空租户={\\\"ok\\\":true,\\\"reason\\\":\\\"namespace-empty\\\"}；默认存储根未变=true\"},{\"name\":\"18 拒绝留痕汇总：整轮跑下来的**每一条**拒绝（本门真跑出来的，不是声明）都在闭合码集合里，且都带非空 `next_action`；四类反例各自的码都在其中（①跨租户 ②越界 ③无界/超界读 ④事实路径）\",\"ok\":true,\"detail\":\"本轮拒绝 24 次；码集合=[\\\"storage-outside-ns\\\",\\\"storage-path-escape\\\",\\\"storage-limit-exceeded\\\",\\\"storage-unbounded-read\\\",\\\"storage-fact-path\\\",\\\"storage-unavailable\\\"]；越界码=[]；缺 next_action=0 条；模块树未变=true\"},{\"name\":\"19 全局层（**事实区零写入**，白名单口径）：本用例运行期间**没有任何写入落到事实区** —— 白名单内（本用例触及的目标：`--ledger` 指的那份账本、绝对构造的那份账本、构造的 snapshot 输出目标、\\\"别人的 ns\\\"）逐字节不变 / 账本类只增不改 + 无本门哨兵；**白名单外的变化不判红，但如实计数并打印**（无关写入者：运行中服务 / 定时任务）。**前提：事实区可能被无关写入者改动 ⇒ 本判据只覆盖本用例触及的目标，全程快照对比**（改写/截断/凭空出现/消失/哨兵 都必须变红）；判据**非空转自证**：8 组合成样本（追加/改写/截断/哨兵/改写非账本/无变化/凭空出现/消失）逐条核对期望的红绿\",\"ok\":true,\"detail\":\"白名单目标违规=0 条；事实区哨兵命中=[]；0 处白名单外变化（不判红，如实计数）：无；非空转自证=8/8 与预期一致（追加不判红 / 改写·截断·哨兵·凭空出现·消失 判红）；全程对比的树规模=tmp/ui-shared 34 个文件 / user-space 26 个文件\"}],\"passed\":19,\"total\":19,\"failures\":0} \nplugin-assets        rc=0          唯一锚点缺失 ⇒ False（探针文件在 tmp/ 副本根，产品树不受影响） [ok]   F6 全过程**产品树字节不变**（变异只写在 tmp/ 的整树副本里）         前后 150/150 个文件摘要一致=True；副本 4 份在 /workspace/projects/quotagent/tmp/plugin-assets-giazppc5 RESULT: PASS（plugin-assets 门 14/14） \nplugin-requirements  rc=0          apply_mutation / drop_line 都对不存在的锚点返回 None [ok]   F7 全过程**产品树字节不变**（变异只写在 tmp/ 的临时副本里）         before=b95309c68611 after=b95309c68611；变异副本 5 份在 tmp/ RESULT: PASS（plugin-requirements 门 18/18） \nplugin-lifecycle     rc=0          根 13 个，停掉 13 个 [ok]   C0 真 HTTP 前置：`./run up` 起得来（否则 C1–C6 是空转）         up_rc=0 healthy=True out={\"ok\":true,\"action\":\"up\",\"state\":\"started\",\"service\":\"quotagent-webui\",\"pid\":332682,\"port\":56599,\"url\":\"http://127.0.0.1:56599/quotagent/\",\"healthy\":true,\"ready err= RESULT: PASS（plugin-lifecycle 门 66/66） \nrun-once             rc=0          #1 基线红=False；#2 基线红=False；#3 基线红=False；#4 基线红=False；#5 基线红=False；#6 基线红=False；#7 基线红=False；#8 基线红=False [ok]   R11-5 全过程**产品树字节不变**（变异只写在 tmp/ 的副本里）         before=54a507fff328 after=54a507fff328 RESULT: PASS（run-once 门 34/34） \np0-no-node           rc=1    FAIL 所有 ID 引用均可解析 — [FAIL] 未解析的 ID 引用 2 个（共 4491 处引用） /        - EV-174  ← docs/design/25-storage-plugins.md, docs/work/plans/plugin-file-map-batches.md, docs/work/plans/plugin-file-map.md /        - T-323  ← docs/work/plans/plugin-file-map-batches.md, docs/work/plans/plugin-file-map.md   ok   无占位符 ID   首个失败: 文档门退出码为 0: exit=1   —— 回显结束；本轮全部日志: /workspace/projects/quotagent/tmp/p0-no-node.kO7mOY —— \n",
+  "old_import_proof": {
+   "count": 12,
+   "ok": true,
+   "rows": [
+    {
+     "co_filenames": [
+      "src/domain/commitments/code/commitments.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/domain/commitments/code/commitments.py",
+     "getsourcefile": "src/quotagent/services/commitments.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.commitments",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "CommitmentGate"
+    },
+    {
+     "co_filenames": [
+      "src/domain/capacity/code/capacity.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/domain/capacity/code/capacity.py",
+     "getsourcefile": "src/quotagent/services/capacity.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.capacity",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "CapacityService"
+    },
+    {
+     "co_filenames": [
+      "src/domain/change/code/change.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/domain/change/code/change.py",
+     "getsourcefile": "src/quotagent/services/change.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.change",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "ChangeService"
+    },
+    {
+     "co_filenames": [
+      "src/domain/clarify/code/clarify.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/domain/clarify/code/clarify.py",
+     "getsourcefile": "src/quotagent/services/clarify.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.clarify",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "ClarificationService"
+    },
+    {
+     "co_filenames": [
+      "src/domain/compare/code/compare.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/domain/compare/code/compare.py",
+     "getsourcefile": "src/quotagent/services/compare.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.compare",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "CompareService"
+    },
+    {
+     "co_filenames": [
+      "src/domain/costmodel/code/costmodel.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/domain/costmodel/code/costmodel.py",
+     "getsourcefile": "src/quotagent/services/costmodel.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.costmodel",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "CostModelService"
+    },
+    {
+     "co_filenames": [
+      "src/domain/deviation/code/deviation.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/domain/deviation/code/deviation.py",
+     "getsourcefile": "src/quotagent/services/deviation.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.deviation",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "DeviationService"
+    },
+    {
+     "co_filenames": [
+      "src/domain/export/code/export.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/domain/export/code/export.py",
+     "getsourcefile": "src/quotagent/services/export.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.export",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "ExportService"
+    },
+    {
+     "co_filenames": [
+      "src/domain/guard/code/guard.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/domain/guard/code/guard.py",
+     "getsourcefile": "src/quotagent/services/guard.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.guard",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "GuardService"
+    },
+    {
+     "co_filenames": [
+      "src/domain/intake/code/intake.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/domain/intake/code/intake.py",
+     "getsourcefile": "src/quotagent/services/intake.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.intake",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "IntakeService"
+    },
+    {
+     "co_filenames": [
+      "src/system/norm/code/norm.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/system/norm/code/norm.py",
+     "getsourcefile": "src/quotagent/services/norm.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.norm",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "NormService"
+    },
+    {
+     "co_filenames": [
+      "src/system/measures/code/measures.py"
+     ],
+     "dunder_preserved": true,
+     "entity": "src/system/measures/code/measures.py",
+     "getsourcefile": "src/quotagent/services/measures.py",
+     "getsourcefile_is_thin_expected": true,
+     "module": "quotagent.services.measures",
+     "no_co_filename_on_old_path": true,
+     "old_import_rc": "ok",
+     "runs_entity": true,
+     "symbol": "MeasureBook"
+    }
+   ]
+  },
+  "services_moved": {
+   "byte_conserved": 12,
+   "count": 12,
+   "rows": [
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 12800,
+     "head_blob_sha256": "9da4dddb7673139d80e9a7fcf04686ce1b78a1334cdb254aefd9f990a8136266",
+     "new": "src/domain/commitments/code/commitments.py",
+     "new_sha256": "9da4dddb7673139d80e9a7fcf04686ce1b78a1334cdb254aefd9f990a8136266",
+     "old": "src/quotagent/services/commitments.py",
+     "thin_bytes": 952
+    },
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 13483,
+     "head_blob_sha256": "fd1c8ab99918553d24643e7727f080d949eac6e05060e2c40190091e83626330",
+     "new": "src/domain/capacity/code/capacity.py",
+     "new_sha256": "fd1c8ab99918553d24643e7727f080d949eac6e05060e2c40190091e83626330",
+     "old": "src/quotagent/services/capacity.py",
+     "thin_bytes": 928
+    },
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 12547,
+     "head_blob_sha256": "d1742aded5d90a25807995373d440f229390938fe7f19506937aa56b3ebbd37c",
+     "new": "src/domain/change/code/change.py",
+     "new_sha256": "d1742aded5d90a25807995373d440f229390938fe7f19506937aa56b3ebbd37c",
+     "old": "src/quotagent/services/change.py",
+     "thin_bytes": 912
+    },
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 14230,
+     "head_blob_sha256": "38a8bca5ceacc86ff2e2008ec8f9bb938d9291d0140219e556f54ba9a38bf633",
+     "new": "src/domain/clarify/code/clarify.py",
+     "new_sha256": "38a8bca5ceacc86ff2e2008ec8f9bb938d9291d0140219e556f54ba9a38bf633",
+     "old": "src/quotagent/services/clarify.py",
+     "thin_bytes": 920
+    },
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 16325,
+     "head_blob_sha256": "40512e21c11a2e9a9441e453a5b1bb0b11c24a539d47cc16f7d7f29f8f3199ef",
+     "new": "src/domain/compare/code/compare.py",
+     "new_sha256": "40512e21c11a2e9a9441e453a5b1bb0b11c24a539d47cc16f7d7f29f8f3199ef",
+     "old": "src/quotagent/services/compare.py",
+     "thin_bytes": 920
+    },
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 10481,
+     "head_blob_sha256": "35f6b4de3fed007726e18c0d07c0b50dddb6e75d5bef5fa03ff88ce95d4002ba",
+     "new": "src/domain/costmodel/code/costmodel.py",
+     "new_sha256": "35f6b4de3fed007726e18c0d07c0b50dddb6e75d5bef5fa03ff88ce95d4002ba",
+     "old": "src/quotagent/services/costmodel.py",
+     "thin_bytes": 936
+    },
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 9431,
+     "head_blob_sha256": "1ed2a8b088f8706fc5641639e50f8f1072740a688067c70545dd30d6386689ba",
+     "new": "src/domain/deviation/code/deviation.py",
+     "new_sha256": "1ed2a8b088f8706fc5641639e50f8f1072740a688067c70545dd30d6386689ba",
+     "old": "src/quotagent/services/deviation.py",
+     "thin_bytes": 936
+    },
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 11977,
+     "head_blob_sha256": "ffba514283aeb3f225b5241f73de8486ca5ed08d3855b9ab45d2f81bf722477c",
+     "new": "src/domain/export/code/export.py",
+     "new_sha256": "ffba514283aeb3f225b5241f73de8486ca5ed08d3855b9ab45d2f81bf722477c",
+     "old": "src/quotagent/services/export.py",
+     "thin_bytes": 912
+    },
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 13217,
+     "head_blob_sha256": "6ba3750c57c5ea8b299362d479d3f81bbc5a083d5074bcdeef2a392114197aa6",
+     "new": "src/domain/guard/code/guard.py",
+     "new_sha256": "6ba3750c57c5ea8b299362d479d3f81bbc5a083d5074bcdeef2a392114197aa6",
+     "old": "src/quotagent/services/guard.py",
+     "thin_bytes": 904
+    },
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 10856,
+     "head_blob_sha256": "aed00fbe323adac5e549c9323cda021d8c9410eae78d51aac26baf0fb3cdc9f8",
+     "new": "src/domain/intake/code/intake.py",
+     "new_sha256": "aed00fbe323adac5e549c9323cda021d8c9410eae78d51aac26baf0fb3cdc9f8",
+     "old": "src/quotagent/services/intake.py",
+     "thin_bytes": 912
+    },
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 19153,
+     "head_blob_sha256": "8d2420079f35272db8c8be3d3ea043e6c73f4fd7ef77e5d3cf5dae06bbb43040",
+     "new": "src/system/norm/code/norm.py",
+     "new_sha256": "8d2420079f35272db8c8be3d3ea043e6c73f4fd7ef77e5d3cf5dae06bbb43040",
+     "old": "src/quotagent/services/norm.py",
+     "thin_bytes": 896
+    },
+    {
+     "byte_conserved": true,
+     "head_blob_bytes": 5618,
+     "head_blob_sha256": "028794d8674e419a3a6504e26f13d614100d7bf420220440064ce370238c39a6",
+     "new": "src/system/measures/code/measures.py",
+     "new_sha256": "028794d8674e419a3a6504e26f13d614100d7bf420220440064ce370238c39a6",
+     "old": "src/quotagent/services/measures.py",
+     "thin_bytes": 928
+    }
+   ]
+  },
+  "storage_fix": {
+   "fixed_runs": [
+    {
+     "cmd": "python3 tools/storage.py --root user-space/zz-t277-other list-files --ns acme",
+     "label": "f5 root 指到 user-space 里别人的 ns（list-files）",
+     "rc": 1,
+     "stdout": "{\"code\": \"storage-fact-path\", \"next_action\": \"事实只进账本（Python 内核独占写入）：把目标改到非事实区（缓存/中间产物/索引/附件）\", \"ns\": \"acme\", \"ok\": false, \"reason\": \"root-in-user-space-other-ns\", \"root\": \"/workspace/projects/quotagent/user-space/zz-t277-other\"}"
+    },
+    {
+     "cmd": "python3 tools/storage.py --root user-space/acme list-files --ns beta",
+     "label": "f6 root 是本 ns 却操作别人的 ns（list-files）",
+     "rc": 1,
+     "stdout": "{\"code\": \"storage-fact-path\", \"next_action\": \"事实只进账本（Python 内核独占写入）：把目标改到非事实区（缓存/中间产物/索引/附件）\", \"ns\": \"beta\", \"ok\": false, \"reason\": \"root-in-user-space-other-ns\", \"root\": \"/workspace/projects/quotagent/user-space/acme\"}"
+    },
+    {
+     "cmd": "python3 tools/storage.py --root user-space/zz-t277-other open-append --ns acme --rel logs/x.log --text S",
+     "label": "写形态：root 指到 user-space 里别人的 ns（open-append）",
+     "rc": 1,
+     "stdout": "{\"code\": \"storage-fact-path\", \"next_action\": \"事实只进账本（Python 内核独占写入）：把目标改到非事实区（缓存/中间产物/索引/附件）\", \"ns\": \"acme\", \"ok\": false, \"reason\": \"root-in-user-space-other-ns\", \"root\": \"/workspace/projects/quotagent/user-space/zz-t277-other\"}"
+    }
+   ],
+   "git_status_porcelain_src_userspace": "",
+   "leak_dir_exists_now": false,
+   "prefix_runs": [
+    {
+     "cmd": "python3 <HEAD 版 storage.py> --root user-space/zz-t277-other list-files --ns acme",
+     "label": "f5 root 指到 user-space 里别人的 ns（list-files）",
+     "rc": 0,
+     "stdout": "{\"clipped\": 0, \"code\": \"\", \"counts\": {\"bytes\": 0, \"escaped\": 0, \"files\": 0, \"hashed\": 0, \"tables\": 0, \"unreadable\": 0}, \"counts_exact\": true, \"degraded\": false, \"escaped_symlinks\": [], \"files\": [], \"next_action\": \"本租户还没有任何文件：先 open-append 或 put（存储不会凭空造租户）\", \"ns\": \"acme\", \"ok\": true, \"omitted\": 0, \"reason\": \"namespace-empty\", \"truncated\": false}"
+    },
+    {
+     "cmd": "python3 <HEAD 版 storage.py> --root user-space/acme list-files --ns beta",
+     "label": "f6 root 是本 ns 却操作别人的 ns（list-files）",
+     "rc": 0,
+     "stdout": "{\"clipped\": 0, \"code\": \"\", \"counts\": {\"bytes\": 0, \"escaped\": 0, \"files\": 0, \"hashed\": 0, \"tables\": 0, \"unreadable\": 0}, \"counts_exact\": true, \"degraded\": false, \"escaped_symlinks\": [], \"files\": [], \"next_action\": \"本租户还没有任何文件：先 open-append 或 put（存储不会凭空造租户）\", \"ns\": \"beta\", \"ok\": true, \"omitted\": 0, \"reason\": \"namespace-empty\", \"truncated\": false}"
+    },
+    {
+     "cmd": "python3 <HEAD 版 storage.py> --root user-space/zz-t277-other open-append --ns acme --rel logs/x.log --text S",
+     "label": "写形态：root 指到 user-space 里别人的 ns（open-append）",
+     "leaked_then_removed": [
+      {
+       "bytes": 2,
+       "path": "src/userspace/zz-t277-other/acme/logs/x.log",
+       "sha256": "7aa397df66304bab4fe275afe0507a01844e7fda848b4e194a9402d010721839"
+      }
+     ],
+     "rc": 0,
+     "stdout": "{\"at\": \"\", \"atomic_line_write\": true, \"bytes_written\": 2, \"code\": \"\", \"file_bytes\": 2, \"ledger_written\": false, \"limit_bytes\": 1048576, \"lines\": 1, \"next_action\": \"\", \"ns\": \"acme\", \"ok\": true, \"path\": \"/workspace/projects/quotagent/user-space/zz-t277-other/acme/logs/x.log\", \"reason\": \"\", \"rel\": \"logs/x.log\"}"
+    }
+   ],
+   "pristine_sha256": "53e947f056b66654714ddc662b43beb5cf88ff71c129af18dcb06e49ccfb4d6e",
+   "working_sha256": "5472b5b0fc1829fcd2ed42f307806f7802cefcb816f64acb3d0341212dd200cb"
+  }
+ },
+ "task": "T-323"
+}

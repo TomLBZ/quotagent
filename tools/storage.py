@@ -133,6 +133,33 @@ def _inside(root: Path, target: Path) -> bool:
     return target_s.startswith(root_s.rstrip(os.sep) + os.sep)
 
 
+def _zone_forms(path) -> tuple:
+    """一个路径的**两种形态**：词法（原样）与真实路径（跟随符号链接）。
+
+    为什么要两种：`user-space` 是**指向 `src/userspace/` 的符号链接**（阶段 5.1 的单一事实源）
+    ⇒ 词法形态（`<root>/user-space`）与真实形态（`<root>/src/userspace`）**指向同一片事实区**；
+    只比一种形态会漏判。返回元组去重后保持顺序（真实 = 词法时只留一种，比较次数不变）。
+    """
+    lexical = Path(str(path))
+    real = Path(os.path.realpath(str(lexical)))
+    return (lexical, real) if real != lexical else (lexical,)
+
+
+def _inside_zone(zone, target) -> bool:
+    """目标是否落在**事实区** `zone` 里 —— 词法/真实两种形态**交叉各判一次**（任一命中即命中）。
+
+    **收紧方向**（相对旧版只做一次词法比较，见 STORAGE-SYMLINK-FACT-ZONE）：
+    旧版 `_inside(USER_SPACE, <realpath>)` 在 `user-space` 是符号链接时**恒假** ⇒ 事实区判据失效
+    （实测：`--root user-space/<别人的 ns>` 与 `--root user-space/<本 ns>` 操作别人的 ns 都被放行）。
+    本函数把"两种形态 × 两种形态"全判一遍 ⇒ 只可能**多**判成事实区，不可能少判。
+    """
+    for root in _zone_forms(zone):
+        for item in _zone_forms(target):
+            if _inside(root, item):
+                return True
+    return False
+
+
 def _resolve_root(root):
     """`--root` 归一化：`None` = **没给**（用默认 `tmp/storage/`）；给了空串 = **未配**（见 `_root_path`）。"""
     if root is None:
@@ -170,8 +197,8 @@ def _root_path(root, ns, ledgers):
         if _inside(path_real, real) or str(real) == str(path_real):
             return None, _refuse("storage-fact-path", "root-is-ledger-path", root=_posix(rp),
                                  ledger=_posix(path))
-    if (USER_SPACE.exists() or USER_SPACE.parent.exists()) and _inside(USER_SPACE, real):
-        if not (isinstance(ns, str) and NS_RE.match(ns) and _inside(USER_SPACE / ns, real)):
+    if (USER_SPACE.exists() or USER_SPACE.parent.exists()) and _inside_zone(USER_SPACE, real):
+        if not (isinstance(ns, str) and NS_RE.match(ns) and _inside_zone(USER_SPACE / ns, real)):
             return None, _refuse("storage-fact-path", "root-in-user-space-other-ns", root=_posix(rp),
                                  ns=ns)
     if rp.exists() and not rp.is_dir():
@@ -212,10 +239,10 @@ def _target(root_path: Path, ns: str, rel, ledgers):
         if _inside(path, candidate) or _inside(path_real, cand_real) or str(candidate) == str(path):
             return None, _refuse("storage-fact-path", "ledger-path-refused", ns=ns, rel=rel,
                                  ledger=_posix(path))
-    if _inside(UI_SHARED, candidate) or _inside(UI_SHARED, cand_real):
+    if _inside_zone(UI_SHARED, candidate) or _inside_zone(UI_SHARED, cand_real):
         return None, _refuse("storage-fact-path", "inside-ledger-area", ns=ns, rel=rel)
-    if (USER_SPACE.exists() or USER_SPACE.parent.exists()) and _inside(USER_SPACE, cand_real) \
-            and not _inside(USER_SPACE / ns, cand_real):
+    if (USER_SPACE.exists() or USER_SPACE.parent.exists()) and _inside_zone(USER_SPACE, cand_real) \
+            and not _inside_zone(USER_SPACE / ns, cand_real):
         return None, _refuse("storage-fact-path", "user-space-other-ns", ns=ns, rel=rel)
     # ② 绝对路径一律拒
     if os.path.isabs(raw):
@@ -975,8 +1002,10 @@ def snapshot(ns_list=None, *, root=None, ledgers=(), out=None, at="", max_tenant
                   deterministic=True)
     target = Path(os.path.abspath(str(out))) if out else rp / "snapshot.json"
     for path, path_real in _ledger_set(ledgers):
-        if str(target) == str(path) or _inside(path, target) or _inside(UI_SHARED, target):
+        if _inside_zone(path, target) or _inside_zone(path_real, target) or _inside_zone(UI_SHARED, target):
             return _refuse("storage-fact-path", "snapshot-target-is-fact-path", out=_posix(target))
+    if (USER_SPACE.exists() or USER_SPACE.parent.exists()) and _inside_zone(USER_SPACE, target):
+        return _refuse("storage-fact-path", "snapshot-target-in-user-space", out=_posix(target))
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         temp = target.parent / (target.name + ".tmp")

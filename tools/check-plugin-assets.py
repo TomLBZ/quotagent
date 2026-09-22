@@ -154,6 +154,59 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "system/retention", "src/system/retention/tests/checks_retention.py"),
     "src/quotagent/qa/checks_retention_exec.py": (
         "system/retention", "src/system/retention/tests/checks_retention_exec.py"),
+    # --- 阶段 4.2 终批（EV-174 / T-323）：`src/quotagent/qa/checks_*.py` **剩下的 25 个**搬进各自插件的
+    # `tests/`，旧位置留薄转发（`importlib` 按文件路径装载实体；`quotagent.qa` 包的导入面与 AC 注册不变）。
+    # 至此 `qa/checks_*.py`：实体 0 / 旧位置薄转发 47（47/47 搬完）。
+    "src/quotagent/qa/checks_award.py": (
+        "domain/commitments", "src/domain/commitments/tests/checks_award.py"),
+    "src/quotagent/qa/checks_bridge.py": (
+        "system/kernel-bridge", "src/system/kernel-bridge/tests/checks_bridge.py"),
+    "src/quotagent/qa/checks_capacity.py": (
+        "domain/capacity", "src/domain/capacity/tests/checks_capacity.py"),
+    "src/quotagent/qa/checks_change.py": (
+        "domain/change", "src/domain/change/tests/checks_change.py"),
+    "src/quotagent/qa/checks_clarify.py": (
+        "domain/clarify", "src/domain/clarify/tests/checks_clarify.py"),
+    "src/quotagent/qa/checks_compare.py": (
+        "domain/compare", "src/domain/compare/tests/checks_compare.py"),
+    "src/quotagent/qa/checks_cost.py": (
+        "domain/costmodel", "src/domain/costmodel/tests/checks_cost.py"),
+    "src/quotagent/qa/checks_deviation.py": (
+        "domain/deviation", "src/domain/deviation/tests/checks_deviation.py"),
+    "src/quotagent/qa/checks_eval.py": (
+        "system/eval", "src/system/eval/tests/checks_eval.py"),
+    "src/quotagent/qa/checks_events.py": (
+        "system/kernel", "src/system/kernel/tests/checks_events.py"),
+    "src/quotagent/qa/checks_export.py": (
+        "domain/export", "src/domain/export/tests/checks_export.py"),
+    "src/quotagent/qa/checks_faq.py": (
+        "domain/faq", "src/domain/faq/tests/checks_faq.py"),
+    "src/quotagent/qa/checks_guard.py": (
+        "domain/guard", "src/domain/guard/tests/checks_guard.py"),
+    "src/quotagent/qa/checks_intake.py": (
+        "domain/intake", "src/domain/intake/tests/checks_intake.py"),
+    "src/quotagent/qa/checks_negotiation.py": (
+        "domain/negotiation", "src/domain/negotiation/tests/checks_negotiation.py"),
+    "src/quotagent/qa/checks_norm.py": (
+        "system/norm", "src/system/norm/tests/checks_norm.py"),
+    "src/quotagent/qa/checks_plugin.py": (
+        "system/kernel", "src/system/kernel/tests/checks_plugin.py"),
+    "src/quotagent/qa/checks_pricing.py": (
+        "domain/pricing", "src/domain/pricing/tests/checks_pricing.py"),
+    "src/quotagent/qa/checks_qep.py": (
+        "system/kernel", "src/system/kernel/tests/checks_qep.py"),
+    "src/quotagent/qa/checks_quotes.py": (
+        "domain/quotes", "src/domain/quotes/tests/checks_quotes.py"),
+    "src/quotagent/qa/checks_rfq.py": (
+        "domain/rfq", "src/domain/rfq/tests/checks_rfq.py"),
+    "src/quotagent/qa/checks_runtime.py": (
+        "system/runtime", "src/system/runtime/tests/checks_runtime.py"),
+    "src/quotagent/qa/checks_sync.py": (
+        "domain/sync", "src/domain/sync/tests/checks_sync.py"),
+    "src/quotagent/qa/checks_terms.py": (
+        "domain/terms", "src/domain/terms/tests/checks_terms.py"),
+    "src/quotagent/qa/checks_ui_snapshot.py": (
+        "system/webui", "src/system/webui/tests/checks_ui_snapshot.py"),
 }
 
 #: 平台级薄入口（27 §9 未决 3 + 阶段 5.2 的 `plugin.sh`）：不搬、留名。

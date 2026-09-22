@@ -43,6 +43,9 @@
  *     名字叫 `ledger.jsonl` 的相对构造）、`user-space/` 里别人的 ns → 全 `storage-fact-path`；
  *     且**本用例自己触及的事实区目标**（白名单：`--ledger` 指的那份账本、它构造的 snapshot 输出目标、
  *     它指过去的"别人的 ns"）保持原样、目标不存在。
+ *     **反向自证（不空转）**：把事实区判据（`_inside_zone`）的两层形态循环各回退成只取词法形态
+ *     （= `user-space` 为符号链接时的旧失效形态）写进 `tmp/` 下的变体副本 ⇒ f5/f6 必须被放行
+ *     ⇒ 本断言在那种形态下**必红**；`--mutate 5` 就是这条的反向对照（改产品树后跑本门必须 exit 1）。
  *     **前提（实测踩到，必须写在判据里）**：事实区可能被**无关写入者**（运行中服务 / 定时任务：
  *     线上 webui 会按需重写 `pipeline.json`/`admin.json`/`retention-plan.json`，平台反馈会往
  *     `ui-feedback/` 落回执，内核账本由服务自己追加）在**任何时刻**改写 ⇒ 本断言**只覆盖本用例
@@ -73,7 +76,7 @@
  *     追加/改写/截断/哨兵/凭空出现/消失/无变化，期望的红绿逐条核对）
  *   20 空集合守卫（一条都没跑 = 红）
  *
- * 变异模式（单点变异自证，自带防假变异）：`node host/t277-storage-gate.mjs --mutate <1..4>`
+ * 变异模式（单点变异自证，自带防假变异）：`node host/t277-storage-gate.mjs --mutate <1..5>`
  *   ① `tools/storage.py`：跨租户分支被短路（`../<别的 ns>/x` 不再拒）
  *   ② `tools/storage.py`：符号链越界判定被短路（越界符号链被放行 → 写到根外）
  *   ③ `tools/storage.py`：`read_tail` 不再夹取 limit、`omitted` 恒 0（截断计数不诚实）
@@ -195,6 +198,28 @@ const pyRun = (args) => {
     } catch { /* 不是 JSON 行就继续往前找 */ }
   }
   if (payload && payload.ok === false && typeof payload.code === 'string') REFUSALS.push(payload)
+  return { status: proc.status, payload, stdout, stderr: String(proc.stderr ?? '') }
+}
+
+/**
+ * 真跑**指定脚本**（反向自证用）：与 `pyRun` 同形状，但**不记入 REFUSALS**
+ * —— 变异体/对照实体的输出不得污染第 18 条的拒绝码汇总。
+ */
+const pyRunVariant = (scriptPath, args) => {
+  const proc = spawnSync(PY, [scriptPath, ...args], { cwd: ROOT, encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024 })
+  const stdout = String(proc.stdout ?? '')
+  const lines = stdout.trim().split('\n').filter(Boolean)
+  let payload = null
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const parsed = JSON.parse(lines[index])
+      if (isPlain(parsed) && 'code' in parsed) {
+        payload = parsed
+        break
+      }
+    } catch { /* 不是 JSON 行就继续往前找 */ }
+  }
   return { status: proc.status, payload, stdout, stderr: String(proc.stderr ?? '') }
 }
 
@@ -375,13 +400,18 @@ const MUTATIONS = [
   { id: 4, target: MODULE_PATH, label: '宿主模块偷加写面（`node:fs` 的写 API 进了源码）',
     anchor: "export const name = 'storage-view'",
     replace: "import { writeFileSync } from 'node:fs'\nexport const name = 'storage-view'" },
+  // ⑤ 本题修的那个真缺陷的**反向对照**：把事实区判据回退成搬迁前的**词法形态**（`user-space` 是指向
+  // `src/userspace/` 的符号链接 ⇒ `_inside(USER_SPACE, <realpath>)` 恒假）。变异后第 8 条必红。
+  { id: 5, target: PY_PATH, label: '事实区判据退回词法形态（`user-space` 符号链接下第 8 条失效）',
+    anchor: '    for root in _zone_forms(zone):\n        for item in _zone_forms(target):',
+    replace: '    for root in _zone_forms(zone)[:1]:\n        for item in _zone_forms(target)[:1]:' },
 ]
 
 const emitMutation = (payload, code) => { writeSync(1, json(payload) + '\n'); process.exit(code) }
 
 const runMutation = (id) => {
   const spec = MUTATIONS.find((item) => item.id === id)
-  if (!spec) emitMutation({ ok: false, mutation: id, error: `未知变异编号 ${id}（只支持 1..4）` }, 2)
+  if (!spec) emitMutation({ ok: false, mutation: id, error: `未知变异编号 ${id}（只支持 1..5）` }, 2)
   const pristine = readFileSync(spec.target, 'utf8')
   const pristineSha = sha256(pristine)
   const anchorHits = pristine.split(spec.anchor).length - 1
@@ -755,6 +785,34 @@ try {
   const DEFAULT_ROOT_AFTER = treeDigest(DEFAULT_ROOT_DIR)
   const factCodes = [f1, f2, f3, f4, f5, f6, f7].map((item) => item.payload?.code)
   const ledgerSentinel = scanTreeText(UI_SHARED, BODY_SENTINEL)
+  // ---- 反向自证（**不空转**）：把事实区判据回退成搬迁前的**词法形态**（`user-space` 是符号链接 ⇒
+  // `_inside(USER_SPACE, <realpath>)` 恒假的旧行为），写进 `tmp/` 下的**变体副本**（产品树不动）。
+  // 副本放在 `tmp/` 顶层是**必须的**：实体的 `ROOT = Path(__file__).resolve().parents[1]` 要靠
+  // 「父目录的父目录 = 仓库根」=> 只有这样 UI_SHARED / USER_SPACE 才与对照实体同一片事实区。
+  // 回退后 f5/f6 必须**不再**返回 `storage-fact-path` ⇒ 证明这两条绿是真判出来的（不是"没跑到"）。
+  const LEXICAL_FROM = '    for root in _zone_forms(zone):\n        for item in _zone_forms(target):\n'
+  const LEXICAL_TO = '    for root in _zone_forms(zone)[:1]:\n        for item in _zone_forms(target)[:1]:\n'
+  const entitySource = readFileSync(PY_PATH, 'utf8')
+  const mutantAnchorUnique = entitySource.split(LEXICAL_FROM).length === 2
+  const MUTANT = join(ROOT, 'tmp', `t277-storage-lexical-only-${process.pid}.py`)
+  if (mutantAnchorUnique) {
+    mkdirSync(join(ROOT, 'tmp'), { recursive: true })
+    writeFileSync(MUTANT, entitySource.replace(LEXICAL_FROM, LEXICAL_TO))
+  }
+  const m5 = mutantAnchorUnique
+    ? pyRunVariant(MUTANT, ['--root', join(USER_SPACE, 'zz-t277-other'), 'list-files', '--ns', 'acme'])
+    : null
+  const m6 = mutantAnchorUnique
+    ? pyRunVariant(MUTANT, ['--root', join(USER_SPACE, 'acme'), 'list-files', '--ns', 'beta'])
+    : null
+  const mutantCodes = [m5, m6].map((item) => (item ? item.payload?.code : '<未跑>'))
+  const mutantProbe = mutantAnchorUnique
+    ? pyRunVariant(MUTANT, ['limits'])   // 探测副本真的从**仓库根**起算（否则"放行"会因为路径算错而不是判据失效）
+    : null
+  const mutantRootOk = String(mutantProbe?.payload?.user_space ?? '') === posix(USER_SPACE)
+  if (mutantAnchorUnique) rmSync(MUTANT, { force: true })
+  // 变体把事实区判据回退成词法形态 ⇒ f5/f6 必须被**放行**（码为空）⇒ 「七种构造全 storage-fact-path」必红。
+  const mutantMustPass = mutantAnchorUnique && mutantRootOk && mutantCodes.every((code) => code === '')
   check('8 拒写事实三类：①`--ledger` 声明的路径（含当目标与当 snapshot 输出）②仓库内 '
     + '`tmp/ui-shared/<realm>/ledger.jsonl`（绝对构造 + 名字叫 `ledger.jsonl` 的相对构造）'
     + '③`user-space/` 里别人的 ns（root 指过去 / 或 root 是本 ns 却操作别人的 ns）'
@@ -763,12 +821,16 @@ try {
     + '构造的那份账本**只增不改**、无本门哨兵；构造的 snapshot 输出目标与"别人的 ns"**必须不存在**）、'
     + '哨兵检索不到。**前提：事实区可能被无关写入者（运行中服务 / 定时任务）改动 ⇒ 本断言只覆盖'
     + '本用例触及的目标，全程快照对比**（不拿"整个事实区清单/字节不变"当判据，那是把无关写入者'
-    + '算成本工具写的假红；白名单外的变化由第 19 条如实计数并打印）',
+    + '算成本工具写的假红；白名单外的变化由第 19 条如实计数并打印）。'
+    + '**反向自证（不空转）**：把 `_inside_zone` 的两层形态循环各回退成**只取词法形态**'
+    + '（= `user-space` 为符号链接时的旧失效形态）写进 tmp 下的变体副本 ⇒ f5/f6 必须被放行'
+    + '（代码为空）⇒ 本断言在那种形态下**必红**；对照实体（本仓 `tools/storage.py`）则一律拒。',
   factCodes.every((code) => code === 'storage-fact-path')
   && [f1, f2, f3, f4, f5, f6, f7].every((item) => String(item.payload?.next_action ?? '').length > 0)
   && v8.violations.length === 0 && ledgerSentinel.length === 0
   && !existsSync(join(UI_SHARED, 'contractor', 'bogus.json')) && !existsSync(userSpaceOther)
-  && json(DEFAULT_ROOT_BEFORE) === json(DEFAULT_ROOT_AFTER),
+  && json(DEFAULT_ROOT_BEFORE) === json(DEFAULT_ROOT_AFTER)
+  && mutantAnchorUnique && mutantMustPass,
   `七种构造码=${json(factCodes)}；白名单目标违规=${v8.violations.length} 条`
   + `${v8.violations.length ? `（${json(v8.violations)}）` : ''}；`
   + `白名单目标=${json([...WHITELIST.get(UI_SHARED), ...WHITELIST.get(USER_SPACE)])}；`
@@ -776,6 +838,9 @@ try {
   + `bogus.json 存在=${existsSync(join(UI_SHARED, 'contractor', 'bogus.json'))}；`
   + `别人 ns 目录存在=${existsSync(userSpaceOther)}；`
   + `默认存储根指纹一致=${json(DEFAULT_ROOT_BEFORE) === json(DEFAULT_ROOT_AFTER)}；`
+  + `反向自证：锚点唯一=${mutantAnchorUnique}、变体副本的根正确=${mutantRootOk}、`
+  + `词法变体下的 f5/f6 码=${json(mutantCodes)}`
+  + `（必须为空 ⇒ 对照下本断言必红；对照实体实测 rc=${m5 ? m5.status : '<未跑>'}/${m6 ? m6.status : '<未跑>'}）；`
   + `${v8.text}`)
 
   // ---------- 9. 快照 → 只读聚合正控（独立遍历对照） ----------
