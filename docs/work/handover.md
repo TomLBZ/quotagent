@@ -4,11 +4,11 @@
 
 ## 现在在哪
 
-P2 中。①–④见 EV-160…167（T-288/313/314/315/316）。⑤ **本批**（EV-168/T-317）：**运行中的服务真能装卸**（`tools/plugin.sh … --live`／`./run plugin …`：真挂进 webui 自身 ctx，区块真上页面、卸载后其余逐字节不变；四道围栅；零写面）+ `user-space`→`src/userspace` 收敛为唯一源（兼容符号链接）+ `./run logs|config init`；门 `plugin-lifecycle` 59/59、`run-once` 34/34（8 处变异全红）、`user-space` 21/21。
+P2 中，①–④见 EV-160…167（T-288/313/314/315/316）。⑤ **本批**（EV-169/T-318，只动文档）：**逐插件需求文档补齐到 63/63**（52 份新写 + 6 份改名，见映射表 §4），缺口 **52 → 0**（§5 复算）；位置口径定案 27 §2.4：**不建裸目录**（`depsClosure` 把「目录存在」当「插件存在」）⇒ 后续 `git mv` 进 `requirements/README.md`；六道门在本批提交树上全绿。
 
 ## 下一步唯一动作
 
-`docs/work/plans/plugin-migration-plan.md` §2 续做**阶段 2**（services → `code/`，逐个搬 + 跑 AC）；建插件目录时同步 `plugin-lifecycle` 的 A13/A14。
+`plans/plugin-migration-plan.md` §2 续做**阶段 2**（services → `code/`，逐个搬 + 跑 AC）；建目录时同步 `plugin-lifecycle` 的 A13/A14，并 `git mv` 需求文档进 `requirements/README.md`。
 
 ## 不变量与阻塞
 

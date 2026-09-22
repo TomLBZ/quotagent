@@ -209,3 +209,35 @@ RESULT: PASS（插件清单门 5/5）
   tools/verify.sh coverage → rc=0
   tools/verify.sh ac-registry → rc=0
   tools/verify.sh plugins → rc=0
+
+五之补、在**本批提交树的干净副本**上复跑六道门（不受同工作树并发批次影响）
+--------------------------------------------------------------------------------
+提交：822d430d3c77455d05a0e6f4507bd99b660eaf71（本批主提交）。取证方式：`git archive 822d430 | tar -x -C tmp/mine-verify`，
+把 gitignored 的 `host/node_modules`、`.venv` 以符号链接接上，然后逐门真跑
+（命令里 `env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN` 去掉本会话注入的控制令牌，理由见上一节）：
+
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN QUOTAGENT_PY=/workspace/venvs/py/bin/python3 tools/verify.sh plugin-requirements
+RESULT: PASS（plugin-requirements 门 17/17）
+
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN QUOTAGENT_PY=/workspace/venvs/py/bin/python3 tools/verify.sh docs
+RESULT: PASS
+
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN QUOTAGENT_PY=/workspace/venvs/py/bin/python3 tools/verify.sh plugin-lifecycle
+RESULT: PASS（plugin-lifecycle 门 59/59）
+
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN QUOTAGENT_PY=/workspace/venvs/py/bin/python3 tools/verify.sh coverage    → rc=0（"passed": 8）
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN QUOTAGENT_PY=/workspace/venvs/py/bin/python3 tools/verify.sh ac-registry → rc=0（P0 的 AC 全部已注册）
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN QUOTAGENT_PY=/workspace/venvs/py/bin/python3 tools/verify.sh plugins     → rc=0（插件清单门 5/5）
+
+五之补二、本批第二提交（只追加证据/状态）的树也逐门复跑过
+--------------------------------------------------------------------------------
+tree=7629f0b9a36800362c3a29080e724c9f05fcd8b6（`git write-tree` 于提交前导出，含 state.json / 交接 / 证据索引三页 + 本文件；
+比提交 B 只少下面这段追加的文字）。取证方式：`git archive <tree> | tar -x -C tmp/verify-b` + 接 gitignored
+`host/node_modules`、`.venv`，`env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN`：
+
+  tools/verify.sh plugin-requirements  rc=0  RESULT: PASS（plugin-requirements 门 17/17）
+  tools/verify.sh docs                 rc=0  RESULT: PASS
+  tools/verify.sh coverage             rc=0  "failures": 0（coverage 口径）
+  tools/verify.sh ac-registry          rc=0  （无 RESULT 行：全 [ok]，rc=0）
+  tools/verify.sh plugins              rc=0  RESULT: PASS（插件清单门 5/5）
+  tools/verify.sh plugin-lifecycle     rc=0  RESULT: PASS（plugin-lifecycle 门 59/59）
