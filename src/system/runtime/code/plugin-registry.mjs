@@ -6,9 +6,13 @@
  *
  * 分工（本文件 = 纯逻辑 + 真装载；**不写任何文件**）：
  *   · `scan(root)`      ：扫 `src/{system,domain}/*​/plugin.json` 与 `src/userspace/<ns>/<plugin>/plugin.json`
- *                        （目录即清单；目录里没有 `plugin.json` 的目录**不是插件**，不枚举）；
+ *                        （目录即清单：目录里没有 `plugin.json` 的目录**不是插件** —— 不进 `plugins`、
+ *                        不计数、不参与服务索引与依赖闭包；只在 `not_plugins` 与 `degraded` 里如实报一行，
+ *                        免得「有个目录没人认领」变成看不见的事）；
  *   · `validate(p)`     ：最小契约校验（§3.1）⇒ 缺字段/层不一致/名字不一致/入口不存在，逐条给原因码；
- *   · `depsClosure()`   ：`depends_on` + `inject`（服务键 → 提供者）的传递闭包；**有环给环上的 id**；
+ *                        **合法** = 目录里有 `plugin.json` 且最小契约齐备（含 `entry` 文件真实存在）；
+ *   · `depsClosure()`   ：`depends_on` + `inject`（服务键 → 提供者）的传递闭包；**已知插件集合只含合法清单**
+ *                        （清单不合法/缺清单的目录**不算依赖已就绪**，进 `missing`）；**有环给环上的 id**；
  *   · `mount()`         ：**真装载**：动态 `import` 入口 → `cordis` 的 `ctx.plugin()` 拿到 `fiber`
  *                        （`uid` / `state` / `getEffects()` 都是内核实测值，不是本文件编的）；
  *   · `unmount()`       ：`fiber.dispose()` 后**回读** effects 是否为 0（卸载不留残订阅/定时器）。
@@ -67,7 +71,10 @@ export function pluginDir(root, id) {
     : join(root, 'src', parsed.layer, parsed.plugin)
 }
 
-/** 枚举全部插件**目录**（目录即清单的前半句：没有 `plugin.json` 的目录会被 `scan` 标 `manifest-missing`）。 */
+/**
+ * 枚举全部**候选目录**（`src/{system,domain}/<名字>/` 与 `src/userspace/<ns>/<插件>/`）。
+ * **目录只是候选**：`scan` 只把「目录里存在 `plugin.json`」的那些当插件（目录即清单）。
+ */
 export function pluginDirs(root) {
   const out = []
   for (const layer of ['system', 'domain']) {
@@ -95,20 +102,27 @@ const idOf = ({ layer, ns, plugin }) => (layer === 'userspace' ? `userspace/${ns
 
 /**
  * 扫一层/三层插件（**只读、有界**；单条坏清单不拖倒整次扫描）。
- * @returns `{root, plugins, degraded}`：`plugins[].manifest` = 解析后的对象或 `null`（配 `reason`）。
+ * @returns `{root, plugins, degraded, not_plugins}`：`plugins[].manifest` = 解析后的对象或 `null`（配 `reason`）。
+ *   · `plugins`     = **目录里有 `plugin.json`** 的那些（清单不合法仍在列，带 `invalid:true` + 有名 `reason`）；
+ *   · `degraded`    = 需要人处理的逐条（reason + next_action）；
+ *   · `not_plugins` = **只有目录、没有 `plugin.json`** 的那些 —— **不是插件**（不进 `plugins`、不计数、
+ *     不参与服务索引与依赖闭包），但如实列出来，好让「谁建了个裸目录」看得到。
  */
 export function scan(root) {
   const plugins = []
   const degraded = []
+  const notPlugins = []
   for (const item of pluginDirs(root)) {
     const id = idOf(item)
     const manifestPath = join(item.dir, MANIFEST)
     const base = { id, layer: item.layer, ns: item.ns, plugin: item.plugin, dir: item.dir,
       manifest_path: manifestPath, manifest: null, reason: null, invalid: false }
     if (!existsSync(manifestPath)) {
-      plugins.push({ ...base, reason: 'manifest-missing', invalid: true })
-      degraded.push({ id, reason: 'manifest-missing',
-        next_action: `给 ${id} 写 ${MANIFEST}（最小契约见 docs/design/27-plugin-architecture.md §3.1）` })
+      // 目录存在但没有 `plugin.json` ⇒ **不是插件**（不是"降级插件"）：不进 plugins，也不参与依赖闭包。
+      notPlugins.push({ id, dir: item.dir, reason: 'manifest-missing' })
+      degraded.push({ id, reason: 'manifest-missing', not_a_plugin: true,
+        next_action: `给 ${id} 写 ${MANIFEST}（最小契约见 docs/design/27-plugin-architecture.md §3.1）；` +
+          '在那之前该目录不算插件（不进六动词的 list，也不满足任何 depends_on）' })
       continue
     }
     let raw = ''
@@ -143,7 +157,7 @@ export function scan(root) {
       next_action: verdict.ok ? null : verdict.next_action })
     if (!verdict.ok) degraded.push({ id, reason: verdict.reason, next_action: verdict.next_action })
   }
-  return { root, plugins, degraded }
+  return { root, plugins, degraded, not_plugins: notPlugins }
 }
 
 /**
@@ -232,8 +246,10 @@ export function serviceIndex(scanned) {
 
 /**
  * 依赖闭包（`depends_on` + `inject` 服务键）：返回 `{ok, direct, closure, order, cycle, unresolved, missing}`。
+ * **已知插件集合 = 合法清单的插件**（27 §3.1 的最小契约齐备，含 `entry` 文件存在）：目录里没有
+ * `plugin.json`、或清单不合法的目录**不算依赖已就绪**，一律如实记进 `missing`（不假装满足）。
  * 有环 ⇒ `ok:false` + `cycle`（**环上的 id**，不是笼统"有环"）。
- * 目标插件尚未迁移（没有清单）⇒ 记进 `missing`（**不是错误**：诚实标注"依赖方还没搬"）。
+ * 目标插件尚未迁移（没有清单/清单还没合法）⇒ 记进 `missing`（**不是错误**：诚实标注"依赖方还没搬"）。
  */
 export function depsClosure(scanned, id) {
   const services = serviceIndex(scanned)
@@ -250,7 +266,8 @@ export function depsClosure(scanned, id) {
     }
     direct.set(item.id, [...deps].sort())
   }
-  const known = new Set(scanned.plugins.map((item) => item.id))
+  // 只认**合法清单**的插件（收紧点：目录存在 ≠ 插件存在；非法/缺失清单的目录在这里不算"在"）。
+  const known = new Set(scanned.plugins.filter((item) => !item.invalid).map((item) => item.id))
   // DFS 三色：白色未访问 / 灰色在栈上 / 黑色已完成；灰色再入栈 = 环。
   const state = new Map()
   const stack = []

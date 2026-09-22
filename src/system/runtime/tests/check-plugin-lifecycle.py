@@ -7,6 +7,9 @@
 这个门断言什么（每条都是**真跑**，不是读代码猜）：
   A. 六动词真跑：`list/status/load/reload/unload/deps` 各自真执行一次；装载真 import 入口（`keys` 里必须
      出现**只有实体实现才有**的导出名）、重载真拿新实例（新 uid + 新 instance）、卸载后 effects 归零且可重复；
+     **A3/A15/A16/A17 = 「目录存在 ≠ 插件存在」的收紧**（真跑夹具，逐条给原始行）：没有 `plugin.json` 的目录
+     不算插件（不枚举、不计数）、清单**不合法**的目录也不算「依赖已就绪」（一律进 `missing`）、合法清单的
+     目录正常识别为就绪；F5 变异把这一条改回去必须变红。
   B. 拒绝路径：未知插件（`unknown-plugin` + 候选）、非法层名（`illegal-layer`）、未知动词（`usage`）、
      依赖成环（`dependency-cycle` + 环上的 id）、清单不合法（`not-a-plugin`）；
   C. 注册面证明（真 HTTP）：两个样板插件各自注册的**只读区块**在真页面上真出现、
@@ -16,8 +19,9 @@
      机制行（含 `uiSlots`/`slots.render` 的每一行）0 命中业务名词；`host/lib/ui-slot.mjs` 同样 0 命中；
   E. 机制层的拒绝语义（负控，直接驱动 `host/lib/ui-slot.mjs`）：非法 id / 未知槽位 / order 越界 / 空标题 /
      render 非函数 / 同槽位不同形状重复注册 / 内联脚本 ⇒ 各有名 code；render 抛错 ⇒ 该块不渲染但页面有名错误块；
-  F. **4 处单点变异全红**：变异只写在临时副本里（产品树字节不变，门会前后比 sha256）；每处变异必须让
-     **指定的**断言变红；找不到唯一锚点 = 假变异 = 判红。
+  F. **6 处单点变异全红**（F1–F6；变异 5/6 锚在 `code/plugin-registry.mjs` 的两处收紧点，本批新增）：
+     变异只写在临时副本里（产品树字节不变，门会前后比 sha256）；每处变异必须让**指定的**断言变红；
+     找不到唯一锚点 = 假变异 = 判红。收尾两条：F7 防假变异 / F8 产品树字节不变（因新增变异 5/6，号后移）。
 
 退出码：0 全通过 / 1 有断言失败 / 2 环境错误。
 """
@@ -131,6 +135,33 @@ def make_fixture_root() -> Path:
     }, ensure_ascii=False) + "\n", encoding="utf-8")
     # 目录里没有 plugin.json 的目录：**不是插件**（不枚举、不假装）
     (fixture / "src" / "domain" / "not-a-plugin").mkdir(parents=True, exist_ok=True)
+    # 「目录存在 ≠ 插件存在」的三组对照（A15/A16/A17 用；都在夹具根里，产品树一个字不动）：
+    #   ① bare-dep → bare-target：目标**只有裸目录**（无 plugin.json）⇒ 必须如实记 missing；
+    #   ② invalid-dep → invalid-target：目标有 plugin.json 但**不合法**（缺必填字段）⇒ 同样记 missing；
+    #   ③ real-dep → real-target：目标是**合法清单**的真插件 ⇒ 正常识别为已就绪（正向对照）。
+    def fixture_plugin(name: str, depends_on: list[str]) -> Path:
+        plugin = fixture / "src" / "domain" / name
+        (plugin / "code").mkdir(parents=True, exist_ok=True)
+        (plugin / "plugin.json").write_text(json.dumps({
+            "name": name, "version": "1.0.0", "layer": "domain", "provides": [f"{name}Service"],
+            "entry": "code/index.mjs", "description": f"夹具插件 {name}（只用于门）",
+            "depends_on": depends_on,
+        }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        (plugin / "code" / "index.mjs").write_text(
+            "export const name = %r\nexport const inject = []\nexport const provides = [%r]\n"
+            "export const Config = undefined\nexport const apply = (ctx) => { ctx.provide(%r, { ok: true }) }\n"
+            % (name, f"{name}Service", f"{name}Service"), encoding="utf-8")
+        return plugin
+
+    fixture_plugin("bare-dep", ["domain/bare-target"])
+    (fixture / "src" / "domain" / "bare-target").mkdir(parents=True, exist_ok=True)   # 裸目录（无清单）
+    fixture_plugin("invalid-dep", ["domain/invalid-target"])
+    invalid_target = fixture / "src" / "domain" / "invalid-target"
+    invalid_target.mkdir(parents=True, exist_ok=True)
+    (invalid_target / "plugin.json").write_text(json.dumps({"name": "invalid-target"}, ensure_ascii=False) + "\n",
+                                                encoding="utf-8")
+    fixture_plugin("real-dep", ["domain/real-target"])
+    fixture_plugin("real-target", [])
     return fixture
 
 
@@ -203,11 +234,15 @@ def stage_mutant_plugin_dir(tag: str) -> Path:
     return target
 
 
-def make_mutant_root(tag: str) -> Path:
+def make_mutant_root(tag: str, bare_dirs: tuple = (), invalid_dirs: tuple = ()) -> Path:
     """变异跑在**独立根**上：把三个样板插件复制进去（这样它的 socket/pid 不与主根冲突）。
 
     `host/` 用**符号链接**指回真实宿主目录：样板插件的 wrapper 是相对 path 指向 `host/modules/*.mjs`
     的（阶段 1 的形态），夹具根里必须有同一个相对位置；链接而不是复制，避免把 node_modules 拷一遍。
+
+    `bare_dirs`：额外造出**只有目录、没有 `plugin.json`** 的假插件目录；`invalid_dirs`：额外造出
+    **有 `plugin.json` 但最小契约不合法**（只有 `name`）的目录 —— 两者都只用于变异的反向对照，
+    真实仓库里不许有这种东西（只在 tmp/ 的夹具根里出现）。
     """
     root = Path(tempfile.mkdtemp(prefix=f"pl-root-{tag}-", dir=str(ROOT / "tmp")))
     CREATED_ROOTS.append(root)
@@ -219,6 +254,12 @@ def make_mutant_root(tag: str) -> Path:
     shutil.copytree(ROOT / "src" / "domain" / "advice", root / "src" / "domain" / "advice")
     shutil.copytree(ROOT / "src" / "userspace" / "demo-ns" / "hello",
                     root / "src" / "userspace" / "demo-ns" / "hello")
+    for rel in bare_dirs:
+        (root / rel).mkdir(parents=True, exist_ok=True)
+    for rel in invalid_dirs:
+        (root / rel).mkdir(parents=True, exist_ok=True)
+        (root / rel / "plugin.json").write_text(
+            json.dumps({"name": Path(rel).name}, ensure_ascii=False) + "\n", encoding="utf-8")
     os.symlink(ROOT / "host", root / "host")
     return root
 
@@ -316,9 +357,9 @@ def assert_lifecycle(facts: dict) -> None:
           and isinstance(advice.get("description"), str) and advice.get("description") != ""
           and advice.get("status") == "not-loaded",
           f"advice={json.dumps({k: advice.get(k) for k in ('layer','version','provides','entry','status')}, ensure_ascii=False)}")
-    check("A3 目录里没有 plugin.json 的目录**不是插件**（不枚举、不假装）",
-          "not-a-plugin" not in " ".join(ids),
-          f"ids={ids}")
+    check("A3 真根扫描里**没有**「只有目录、没有 plugin.json」的项（`not_plugins` 为空；夹具上的反向对照见 A3c）",
+          listing.get("not_plugins") == [] and "not-a-plugin" not in " ".join(ids),
+          f"not_plugins={listing.get('not_plugins')} ids={ids}")
 
     check("A4 `load domain/advice` 真装载：真 import 入口（keys 里出现只有实体实现才有的导出名）",
           facts.get("load", {}).get("ok") is True
@@ -403,15 +444,18 @@ def assert_lifecycle(facts: dict) -> None:
 
 def assert_fixture_refusals(fixture: Path) -> None:
     env = {"QUOTAGENT_CORDIS": str(CORDIS)}
-    code, out, _err = run_plugin(["deps", "domain/a", "--root", str(fixture)], env_extra=env)
-    payload = json_line(out)
-    check("B5 依赖成环 ⇒ `dependency-cycle` + **环上的 id**（不是笼统『有环』）",
-          code == 1 and payload.get("code") == "dependency-cycle"
-          and set(payload.get("cycle") or []) >= {"domain/a", "domain/b"},
-          f"rc={code} cycle={payload.get('cycle')}")
     code, out, _err = run_plugin(["list", "--json", "--root", str(fixture)], env_extra=env)
     listing = json_line(out)
+    fixture_ids = [item.get("id") for item in listing.get("plugins", [])]
+    not_plugins = [item.get("id") for item in listing.get("not_plugins", [])]
     degraded = {item.get("id"): item.get("reason") for item in listing.get("degraded", [])}
+    check("A3c 夹具的**裸目录**（`src/domain/not-a-plugin/`，无 `plugin.json`）**不是插件**：不进 `list`、不计数，"
+          "但在 `not_plugins` 里如实报一行（收紧：目录存在 ≠ 插件存在）",
+          "domain/not-a-plugin" not in fixture_ids
+          and "domain/not-a-plugin" in {item.get("id") for item in listing.get("not_plugins", [])}
+          and listing.get("count") == len(fixture_ids),
+          f"原始行: count={listing.get('count')} not_plugins={json.dumps(listing.get('not_plugins'), ensure_ascii=False)} "
+          f"ids={fixture_ids}")
     check("B6 清单不合法 ⇒ 进 `degraded` 并给**有名 reason**（缺字段 / 入口不存在）",
           degraded.get("domain/broken") == "manifest-missing-fields",
           f"degraded={degraded}")
@@ -420,6 +464,40 @@ def assert_fixture_refusals(fixture: Path) -> None:
     check("B7 装载不合法清单 ⇒ `not-a-plugin`（rc=1；坏清单不许装进来）",
           code == 1 and payload.get("code") == "not-a-plugin",
           f"rc={code} code={payload.get('code')}")
+
+    # --- 「目录存在 ≠ 插件存在」的三组对照（**这是本批的收紧**，逐条贴原始行）-------------------------
+    def deps_of(pid: str) -> tuple[int, dict]:
+        rc, text, _e = run_plugin(["deps", pid, "--root", str(fixture)], env_extra=env)
+        return rc, json_line(text)
+
+    rc, payload = deps_of("domain/bare-dep")
+    check("A15 依赖目标**只有裸目录**（`src/domain/bare-target/` 无 `plugin.json`）⇒ 不算存在："
+          "`missing_targets` 如实给出该 id（收紧前这里会变成 `[]`，正是已登记的那个坑）",
+          rc == 0 and payload.get("missing_targets") == ["domain/bare-target"]
+          and payload.get("closure") == [],
+          f"原始行: rc={rc} missing_targets={payload.get('missing_targets')} closure={payload.get('closure')}")
+    rc, payload = deps_of("domain/invalid-dep")
+    check("A16 依赖目标有 `plugin.json` 但**不合法**（缺必填字段）⇒ 同样不算存在（只认**合法**清单，不是「有文件就算」）",
+          rc == 0 and payload.get("missing_targets") == ["domain/invalid-target"]
+          and payload.get("closure") == [],
+          f"原始行: rc={rc} missing_targets={payload.get('missing_targets')} closure={payload.get('closure')}")
+    rc, payload = deps_of("domain/real-dep")
+    check("A17 **正向对照**：目标是合法清单的真插件目录 ⇒ 正常识别为已就绪（`missing_targets` 空、闭包含该 id）",
+          rc == 0 and payload.get("missing_targets") == [] and payload.get("closure") == ["domain/real-target"],
+          f"原始行: rc={rc} missing_targets={payload.get('missing_targets')} closure={payload.get('closure')}")
+
+    code, out, _err = run_plugin(["deps", "domain/not-a-plugin", "--root", str(fixture)], env_extra=env)
+    payload = json_line(out)
+    check("A18 直接问一个裸目录的依赖闭包 ⇒ `unknown-plugin`（rc=1，**不存在**；候选里给同层插件）",
+          code == 1 and payload.get("code") == "unknown-plugin" and payload.get("candidates"),
+          f"原始行: rc={code} code={payload.get('code')} candidates={payload.get('candidates')}")
+
+    code, out, _err = run_plugin(["deps", "domain/a", "--root", str(fixture)], env_extra=env)
+    payload = json_line(out)
+    check("B5 依赖成环 ⇒ `dependency-cycle` + **环上的 id**（不是笼统『有环』）",
+          code == 1 and payload.get("code") == "dependency-cycle"
+          and set(payload.get("cycle") or []) >= {"domain/a", "domain/b"},
+          f"rc={code} cycle={payload.get('cycle')}")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -893,6 +971,23 @@ MUTATIONS = [
      "replace": "    if (false) {",
      "sequence": [["list", "--layer", "nope", "--json"]],
      "must_red": lambda payload: payload.get("code") != "illegal-layer"},
+    # 变异 5/6 锚在**产品代码** `code/plugin-registry.mjs`（本批收紧的两处，逐处一条）：
+    #   变异 5 = `scan` 把「没有 plugin.json 的目录」退回成插件 ⇒ 裸目录又被枚举/计数；
+    #   变异 6 = `depsClosure` 的已知集合退回含 invalid ⇒ 清单不合法的目录又被当成「依赖已就绪」。
+    {"name": "变异5：`scan` 把「只有目录、没有 plugin.json」退回成插件（裸目录又被枚举、又被计数）",
+     "file": "code/plugin-registry.mjs",
+     "find": "      notPlugins.push({ id, dir: item.dir, reason: 'manifest-missing' })",
+     "replace": "      plugins.push({ ...base, reason: 'manifest-missing', invalid: true })",
+     "bare_dirs": ("src/system/webui",),
+     "sequence": [["list", "--json"]],
+     "must_red": lambda payload: "system/webui" in [item.get("id") for item in payload.get("plugins", [])]},
+    {"name": "变异6：依赖闭包把「目录存在」当「插件存在」（已知集合退回含 invalid 的目录）",
+     "file": "code/plugin-registry.mjs",
+     "find": "  const known = new Set(scanned.plugins.filter((item) => !item.invalid).map((item) => item.id))",
+     "replace": "  const known = new Set(scanned.plugins.map((item) => item.id))",
+     "invalid_dirs": ("src/system/webui",),
+     "sequence": [["deps", "domain/advice"]],
+     "must_red": lambda payload: payload.get("missing_targets") != ["system/webui"]},
 ]
 
 
@@ -910,12 +1005,18 @@ def run_mutant_sequence(cli_path: Path, root: Path, sequence: list[list[str]]) -
 
 def assert_mutations() -> None:
     original_cli = CLI.read_text(encoding="utf-8")
-    cli_sha_before = sha256(CLI)
+    touched = {mutation.get("file", "tools/plugin-lifecycle.mjs") for mutation in MUTATIONS}
+    sha_before = {rel: sha256(ROOT / "src" / "system" / "runtime" / rel) for rel in touched}
     baselines_ok = True
     baseline_notes = []
     for index, mutation in enumerate(MUTATIONS, start=1):
+        relative = mutation.get("file", "tools/plugin-lifecycle.mjs")
+        source_path = ROOT / "src" / "system" / "runtime" / relative
+        source = source_path.read_text(encoding="utf-8")
+        bare = tuple(mutation.get("bare_dirs", ()))
+        invalid = tuple(mutation.get("invalid_dirs", ()))
         # ① 基线（未变异）跑同一序列：**必须不是红的**，否则"变异变红"说明不了任何事
-        base_root = make_mutant_root(f"b{index}")
+        base_root = make_mutant_root(f"b{index}", bare, invalid)
         staged_base = stage_mutant_plugin_dir(f"b{index}")
         payload, legible, rc = run_mutant_sequence(staged_base / "runtime" / "tools" / "plugin-lifecycle.mjs",
                                                   base_root, mutation["sequence"])
@@ -924,26 +1025,26 @@ def assert_mutations() -> None:
         if base_red:
             baselines_ok = False
         # ② 变异体：同一序列必须**变红**
-        mutated = apply_mutation(original_cli, mutation["find"], mutation["replace"])
-        if mutated is None or mutated == original_cli:
+        mutated = apply_mutation(source, mutation["find"], mutation["replace"])
+        if mutated is None or mutated == source:
             check(f"F{index} 变异：{mutation['name']}", False,
-                  f"假变异：锚点唯一性={mutated is not None} 字节已变={mutated != original_cli}")
+                  f"假变异：锚点唯一性={mutated is not None} 字节已变={mutated != source}")
             continue
         staged = stage_mutant_plugin_dir(f"m{index}")
         mutant_cli = staged / "runtime" / "tools" / "plugin-lifecycle.mjs"
-        mutant_cli.write_text(mutated, encoding="utf-8")
-        mutant_root = make_mutant_root(f"m{index}")
+        (staged / "runtime" / relative).write_text(mutated, encoding="utf-8")
+        mutant_root = make_mutant_root(f"m{index}", bare, invalid)
         payload, legible, rc = run_mutant_sequence(mutant_cli, mutant_root, mutation["sequence"])
         red = bool(mutation["must_red"](payload)) if legible else False
         check(f"F{index} 变异：{mutation['name']}（必须让指定断言变红）", red,
-              f"变异体 rc={rc} 有效载荷={legible} payload={json.dumps(payload, ensure_ascii=False)[:200]}")
-    check("F0 基线（未变异）在同一序列上**不红**（否则四条变异变红都是空转）",
+              f"变异体 rc={rc} 有效载荷={legible} 锚在 {relative} payload={json.dumps(payload, ensure_ascii=False)[:200]}")
+    check("F0 基线（未变异）在同一序列上**不红**（否则六条变异变红都是空转）",
           baselines_ok, "；".join(baseline_notes))
     fake = apply_mutation(original_cli, "这一段源码里根本不存在-MUTATION-ANCHOR", "x")
-    check("F5 防假变异：不存在的锚点必须返回 None（否则『变异变红』说明不了任何事）", fake is None, f"fake={fake!r}")
-    check("F6 全过程**产品树字节不变**（变异只写在临时副本里）",
-          sha256(CLI) == cli_sha_before,
-          f"before={cli_sha_before[:12]} after={sha256(CLI)[:12]}")
+    check("F7 防假变异：不存在的锚点必须返回 None（否则『变异变红』说明不了任何事）", fake is None, f"fake={fake!r}")
+    check("F8 全过程**产品树字节不变**（变异只写在临时副本里）",
+          all(sha256(ROOT / "src" / "system" / "runtime" / rel) == digest for rel, digest in sha_before.items()),
+          "；".join(f"{rel}={digest[:12]}" for rel, digest in sorted(sha_before.items())))
 
 
 # ---------------------------------------------------------------------------------------------

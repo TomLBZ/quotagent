@@ -12,15 +12,18 @@
   A5 每条 FR **只被一个插件认领**（唯一指针；一条 FR 出现两次即红）。
   A6a 每个 `req=` 指向的需求文档**真实存在**（不得指向不存在的文件）。
   A6b `src/<层>/<插件>/requirements/` **存在**的插件**都在映射表里有行**（目录不无主）。
-  A6c 需求文档**不在标准布局位置**（非 `src/<层>/<插件>/requirements/`）的插件**逐条登记**（双向）。
+  A6c 需求文档位置（**三条双向**）：① 不在标准布局位置（非 `src/<层>/<插件>/requirements/`）的插件逐条登记；
+     ② §4.2 **归位台账**逐条核对（原位置已清空、现位置真实存在且与 §1 的 `req=` 同一文件）；
+     ③ 台账 ∪ 「原生就在标准位置」名单 == **全部有 `req=` 的插件**（一条不漏、一条不多）。
   A7 没有需求文档的插件**逐条列在** §4.1 缺口清单（双向：清单里也不得多出插件）。
   A8 状态取值合法（done/partial/missing）；`done` 行必须有真证据（门名 / `ac <AC-ID>` / `EV-`）。
 
   F0 基线（未变异）在同一套断言上**不红**（否则"变异变红"说明不了任何事）。
-  F1..F4 **4 处单点变异全红**：① 抽掉一行插件 ② 把一条 FR 改成不存在的号 ③ 把一条 FR 重复认领 ④ 抽掉一条 `req=` 标记。
+  F1..F5 **5 处单点变异全红**：① 抽掉一行插件 ② 把一条 FR 改成不存在的号 ③ 把一条 FR 重复认领
+     ④ 抽掉一条 `req=` 标记 ⑤ 把台账一行的「现位置」改成不存在的路径。
      变异只写在 `tmp/` 的临时副本里。
-  F5 防假变异：不存在的锚点必须返回 None（不许"变异"没改到任何字节还判红）。
-  F6 全过程**产品树字节不变**（映射表 sha256 前后一致）。
+  F6 防假变异：不存在的锚点必须返回 None（不许"变异"没改到任何字节还判红）。
+  F7 全过程**产品树字节不变**（映射表 sha256 前后一致）。
 
 退出码：0 全通过 / 1 有断言失败 / 2 环境错误。
 """
@@ -165,26 +168,58 @@ def gap_list_ids(text: str) -> set[str]:
     return ids
 
 
-def nonstandard_list_ids(text: str) -> set[str]:
-    """映射表 §4.2「文档不在标准布局位置」表里逐条列出的插件 id。"""
-    ids: set[str] = set()
+def old_requirements_path(pid: str) -> str:
+    """某个插件在 `T-318` 过渡形态下的需求文档路径（由**规则**推出，不手写 58 条）。"""
+    parts = pid.split("/")
+    if parts[0] == "userspace":
+        return f"docs/work/plugin-requirements-userspace-{parts[1]}-{parts[2]}.md"
+    return f"docs/work/plugin-requirements-{parts[0]}-{parts[1]}.md"
+
+
+def ledger_section(text: str) -> tuple[set[str], list[dict]]:
+    """§4.2 **归位台账**：返回（台账里逐条列出的插件 id，台账行）。
+
+    台账口径（机检 A6c）：一行一插件，列 = `插件 id | 现位置（标准布局）| 状态`；
+    原位置由 `old_requirements_path()` 的**规则**推出（不写进表里，表因此不会与规则漂移）。
+    """
     in_sec = False
+    ids: set[str] = set()
+    rows: list[dict] = []
     for line in text.splitlines():
         stripped = line.strip()
         if stripped.startswith("## "):
             in_sec = False
             continue
         if stripped.startswith("### "):
-            in_sec = "不在标准布局位置" in stripped
+            in_sec = "归位台账" in stripped
             continue
         if not in_sec or not stripped.startswith("|"):
             continue
         cells = [c.strip() for c in stripped.strip("|").split("|")]
-        if cells and cells[0].startswith("`") and cells[0].endswith("`"):
-            candidate = cells[0].strip("`").strip()
-            if PLUGIN_ID_RE.match(candidate):
-                ids.add(candidate)
-    return ids
+        if not cells or not (cells[0].startswith("`") and cells[0].endswith("`")):
+            continue
+        pid = cells[0].strip("`").strip()
+        if not PLUGIN_ID_RE.match(pid):
+            continue
+        rows.append({"id": pid,
+                     "to": cells[1].strip("`").strip() if len(cells) > 1 else "",
+                     "state": cells[2].strip("`* ").strip() if len(cells) > 2 else ""})
+        ids.add(pid)
+    return ids, rows
+
+
+def native_standard_ids(text: str) -> set[str]:
+    """§4.2 里标明的「原生就在标准位置（从未搬动，故不入台账）」名单。"""
+    found: set[str] = set()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(">") or "原生就在标准位置" not in stripped.replace("*", ""):
+            continue
+        for token in re.findall(r"`([^`]+)`", stripped):
+            token = token.strip()
+            if PLUGIN_ID_RE.match(token):
+                found.add(token)
+    return found
 
 
 def evaluate(text: str, cli_ids: set[str], cli_note: str, label: str) -> list[tuple[str, bool, str]]:
@@ -225,13 +260,42 @@ def evaluate(text: str, cli_ids: set[str], cli_note: str, label: str) -> list[tu
     add("A6b 有 `src/<层>/<插件>/requirements/` 目录的插件**都在映射表里有行**（目录不无主）",
         req_dirs <= set(ids), f"目录侧 {sorted(req_dirs)}；无行的={sorted(req_dirs - set(ids))}")
 
-    nonstd_expect = {pid for pid, paths in req_rows.items()
-                     if any(not path.startswith(f"src/{pid}/requirements/") for path in paths)}
-    nonstd_listed = nonstandard_list_ids(text)
-    add("A6c 需求文档**不在标准布局位置**（非 `src/<层>/<插件>/requirements/`）的插件逐条登记（双向）",
-        nonstd_expect == nonstd_listed,
-        f"实际 {sorted(nonstd_expect)}；登记 {sorted(nonstd_listed)}；"
-        f"未登记={sorted(nonstd_expect - nonstd_listed)}；多登记={sorted(nonstd_listed - nonstd_expect)}")
+    # A6c（`T-321` 收紧）：未归位逐条登记 + **归位台账**逐条核对（原位置已清 / 现位置真实存在且 == `req=`）+
+    # 台账 ∪ 原生标准位置名单 == 全部有 `req=` 的插件 —— 三条都是双向，任一侧多写少写即红。
+    std_ids = {pid for pid, paths in req_rows.items()
+               if all(path.startswith(f"src/{pid}/requirements/") for path in paths)}
+    nonstd_expect = set(req_rows) - std_ids
+    ledger_ids, ledger_rows = ledger_section(text)
+    native_ids = native_standard_ids(text)
+    registered_nonstd = {row["id"] for row in ledger_rows if row["state"] != "已归位"}
+    problems: list[str] = []
+    if nonstd_expect != registered_nonstd:
+        problems.append(f"未归位集合与台账不符：未登记={sorted(nonstd_expect - registered_nonstd)}；"
+                        f"多登记={sorted(registered_nonstd - nonstd_expect)}")
+    if ledger_ids & native_ids:
+        problems.append(f"同一插件同时进了台账与「原生标准位置」名单：{sorted(ledger_ids & native_ids)}")
+    if ledger_ids | native_ids != set(req_rows):
+        problems.append(f"台账 ∪ 原生名单 != 全部有 req= 的插件：缺="
+                        f"{sorted(set(req_rows) - ledger_ids - native_ids)}；"
+                        f"多={sorted((ledger_ids | native_ids) - set(req_rows))}")
+    for row in ledger_rows:
+        if row["state"] != "已归位":
+            problems.append(f"台账状态只允许 `已归位`（未归位的行必须同时出现在未归位集合里）："
+                            f"{row['id']}={row['state']!r}")
+            continue
+        old_rel = old_requirements_path(row["id"])
+        if (ROOT / old_rel).exists():
+            problems.append(f"标了已归位但原位置还在：{old_rel}")
+        if not row["to"] or not (ROOT / row["to"]).is_file():
+            problems.append(f"台账的现位置不存在：{row['id']} → {row['to']!r}")
+        if row["to"] not in req_rows.get(row["id"], []):
+            problems.append(f"台账现位置与 §1 的 `req=` 不一致：{row['id']} 台账={row['to']!r} "
+                            f"req={req_rows.get(row['id'])}")
+    add(f"A6c 需求文档位置（双向）：未归位 {len(nonstd_expect)} 个逐条登记 + **归位台账** {len(ledger_rows)} 条逐条核对"
+        f"（原位置已清 / 现位置真实存在且 == `req=`）+ 台账 ∪ 原生名单({len(native_ids)}) == 全部有 `req=` 的插件"
+        f"（{len(req_rows)}）",
+        not problems,
+        "; ".join(problems[:6]) or f"未归位 0；台账 {len(ledger_rows)} 条与规则逐条一致（原位置均已不存在）")
 
     gaps = gap_list_ids(text)
     no_req = {r["id"] for r in rows if not r["reqs"]}
@@ -294,10 +358,16 @@ def main() -> int:
          "mutate": lambda text: apply_mutation(text, "FR-MARKET-006", "FR-MARKET-005"),
          "must_red": "A5 每条 FR **只被一个插件**认领",
          "why": "唯一指针被打破：同一条 FR 出现在两处"},
-        {"name": "F4 抽掉一条 `req=` 标记（system/mail）必须让 A6c 变红",
-         "mutate": lambda text: apply_mutation(text, " · `req=docs/work/plugin-requirements-system-mail.md`", ""),
-         "must_red": "A6c 需求文档**不在标准布局位置**",
-         "why": "§4.2 登记了 system/mail 却不再声明文档 ⇒ 两侧不一致"},
+        {"name": "F4 抽掉一条 `req=` 标记（system/mail，标准位置）必须让 A6c 变红",
+         "mutate": lambda text: apply_mutation(text, " · `req=src/system/mail/requirements/README.md`", ""),
+         "must_red": "A6c 需求文档位置",
+         "why": "台账里有 system/mail（已归位）却没有 `req=` ⇒ 台账 ∪ 原生名单 != 全部有 req= 的插件"},
+        {"name": "F5 把台账一行的「现位置」改成不存在的路径（`domain/rfq`）必须让 A6c 变红",
+         "mutate": lambda text: apply_mutation(
+             text, "| `domain/rfq` | `src/domain/rfq/requirements/README.md` | 已归位 |",
+             "| `domain/rfq` | `src/domain/rfq/requirements/MISSING.md` | 已归位 |"),
+         "must_red": "A6c 需求文档位置",
+         "why": "台账必须指向**真实存在**且与该插件 `req=` 一致的文件（不许指到不存在的路径）"},
     ]
     staged: list[str] = []
     for index, mutation in enumerate(MUTATIONS, start=1):
@@ -319,13 +389,13 @@ def main() -> int:
               f"红项={[n.split('] ')[-1][:34] for n, _ in reds][:6]}")
 
     add_baseline_ok = not baseline_red
-    check("F0 基线（未变异）在同一套断言上**不红**（否则 4 处变异变红都是空转）",
+    check("F0 基线（未变异）在同一套断言上**不红**（否则 5 处变异变红都是空转）",
           add_baseline_ok, f"基线红项={baseline_red}")
-    check("F5 防假变异：不存在的锚点必须返回 None（否则『变异变红』说明不了任何事）",
+    check("F6 防假变异：不存在的锚点必须返回 None（否则『变异变红』说明不了任何事）",
           apply_mutation(original, "这一段映射表里根本不存在-MUTATION-ANCHOR", "x") is None
           and drop_line(original, "根本不存在的行锚点") is None,
           "apply_mutation / drop_line 都对不存在的锚点返回 None")
-    check("F6 全过程**产品树字节不变**（变异只写在 tmp/ 的临时副本里）",
+    check("F7 全过程**产品树字节不变**（变异只写在 tmp/ 的临时副本里）",
           sha256(MAP) == sha_before and MAP.read_text(encoding="utf-8") == original,
           f"before={sha_before[:12]} after={sha256(MAP)[:12]}；变异副本 {len(staged)} 份在 tmp/")
 

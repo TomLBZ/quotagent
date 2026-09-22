@@ -326,7 +326,8 @@
    并**新增 1 个**（本节的机检门 `tools/check-plugin-assets.py` 自己，也登记为 `插件·待搬`）⇒ **63**；
    一键运行的干净副本验收门 `tools/check-run-clone.py`（EV-171）再 **+1** ⇒ **64**（同样是本类的平台门，登记为 `插件·待搬`）。
    门把 64 冻结为下界锁（`tools/check-plugin-assets.py` 的 `BASELINE_NONTHIN`）：**只减不增**，且集合必须与下表逐条相等。
-5. **薄转发**：旧位置那几行只做转发（`runpy`/`importlib`，把 `__file__` 指到新位置），**不含任何实现**；
+5. **薄转发**：旧位置那几行只做转发（Python 用 `runpy`/`importlib` 指到新位置；`.mjs` 围栅门用 `import './../src/…'`，
+   实现只在 `src/<层>/<插件>/tests/` 那一份），**不含任何实现**；
    改实现只改新位置那一份。留下的理由：`tools/verify.sh` 的门名与分支、`src/quotagent/qa/*.py` 里按路径读实现的判据、
    以及 `docs/**` 的既有引用都指向旧路径 —— 转发让它们**一行都不用改**（门名是接口）。
 
@@ -342,6 +343,24 @@
 | `tools/check-plugin-lifecycle.py` | `system/runtime` | `src/system/runtime/tests/check-plugin-lifecycle.py` | `tools/verify.sh plugin-lifecycle` |
 | `tools/check-advice-route.py` | `domain/advice` | `src/domain/advice/tests/check-advice-route.py` | `tools/verify.sh advice` |
 | `src/quotagent/qa/checks_qprep.py` | `domain/quote-prepare` | `src/domain/quote-prepare/tests/checks_qprep.py` | `tools/verify.sh ac AC-QUOTE-001` |
+
+### 阶段 4.2 已搬的 10 个围栅门（`EV-172` / `T-321`）
+
+口径与上面 8 项相同：实体进 `src/<层>/<插件>/tests/`，旧位置 `host/` 只剩 5 行薄转发，`tools/verify.sh <门名>` 的**退出码与输出形状逐项对拍一致**（原始行见 `docs/work/evidence/EV-172-*`）。
+剩下的 10 个（`t260/t267/t268/t271/t275/t277/t279/t281/t282/t283`）**登记为下批**，仍在 `host/`。
+
+| 资产（旧位置） | 归属插件 | 新位置 | 门名（行为搬前搬后一致） |
+|---|---|---|---|
+| `host/t247-idem-gate.mjs` | `system/idempotency-guard` | `src/system/idempotency-guard/tests/t247-idem-gate.mjs` | `tools/verify.sh idempotency-guard` |
+| `host/t247-scorecard-gate.mjs` | `domain/supplier-scorecard` | `src/domain/supplier-scorecard/tests/t247-scorecard-gate.mjs` | `tools/verify.sh supplier-scorecard` |
+| `host/t250-budget-gate.mjs` | `system/budget-guard` | `src/system/budget-guard/tests/t250-budget-gate.mjs` | `tools/verify.sh budget-guard` |
+| `host/t250-approval-gate.mjs` | `system/approval` | `src/system/approval/tests/t250-approval-gate.mjs` | `tools/verify.sh approval-digest` |
+| `host/t286-quote-draft-gate.mjs` | `domain/quote-prepare` | `src/domain/quote-prepare/tests/t286-quote-draft-gate.mjs` | `tools/verify.sh retention-view` |
+| `host/t280-ui-feedback-gate.mjs` | `system/ui-feedback` | `src/system/ui-feedback/tests/t280-ui-feedback-gate.mjs` | `tools/verify.sh ui-feedback` |
+| `host/t254-retention-view-gate.mjs` | `system/retention` | `src/system/retention/tests/t254-retention-view-gate.mjs` | `tools/verify.sh authority` |
+| `host/t287-rfq-visibility-gate.mjs` | `system/projection` | `src/system/projection/tests/t287-rfq-visibility-gate.mjs` | `tools/verify.sh rfq-deadline` |
+| `host/t285-rfq-deadline-gate.mjs` | `domain/rfq-deadline` | `src/domain/rfq-deadline/tests/t285-rfq-deadline-gate.mjs` | `tools/verify.sh quote-draft` |
+| `host/t284-authority-gate.mjs` | `domain/authority-band` | `src/domain/authority-band/tests/t284-authority-gate.mjs` | `tools/verify.sh rfq-visibility` |
 
 ### 全量分类表（144 行 = 77 + 20 + 47）
 
@@ -427,15 +446,15 @@
 | `tools/webui-serve.py` | `system/webui` | 插件·待搬 | `tools/` |
 | `tools/ws-integrate.py` | `system/runtime` | 插件·待搬 | `tools/` |
 
-### B. `host/*-gate.mjs`（20 个，全部待搬）
+### B. `host/*-gate.mjs`（20 个，其中阶段 4.2 已搬 10 + 待搬 10）
 
 | 资产 | 归属插件 | 分类 | 子目录 |
 |---|---|---|---|
-| `host/t247-idem-gate.mjs` | `system/idempotency-guard` | 插件·待搬 | `tests/` |
-| `host/t247-scorecard-gate.mjs` | `domain/supplier-scorecard` | 插件·待搬 | `tests/` |
-| `host/t250-approval-gate.mjs` | `system/approval` | 插件·待搬 | `tests/` |
-| `host/t250-budget-gate.mjs` | `system/budget-guard` | 插件·待搬 | `tests/` |
-| `host/t254-retention-view-gate.mjs` | `system/retention` | 插件·待搬 | `tests/` |
+| `host/t247-idem-gate.mjs` | `system/idempotency-guard` | 插件·已搬 | `tests/` |
+| `host/t247-scorecard-gate.mjs` | `domain/supplier-scorecard` | 插件·已搬 | `tests/` |
+| `host/t250-approval-gate.mjs` | `system/approval` | 插件·已搬 | `tests/` |
+| `host/t250-budget-gate.mjs` | `system/budget-guard` | 插件·已搬 | `tests/` |
+| `host/t254-retention-view-gate.mjs` | `system/retention` | 插件·已搬 | `tests/` |
 | `host/t260-pipeline-gate.mjs` | `system/pipeline-view` | 插件·待搬 | `tests/` |
 | `host/t267-market-gate.mjs` | `system/market` | 插件·待搬 | `tests/` |
 | `host/t268-user-space-gate.mjs` | `system/user-plugin-manager` | 插件·待搬 | `tests/` |
@@ -443,14 +462,14 @@
 | `host/t275-runtime-gate.mjs` | `system/agent-runtime` | 插件·待搬 | `tests/` |
 | `host/t277-storage-gate.mjs` | `system/storage` | 插件·待搬 | `tests/` |
 | `host/t279-heuristics-gate.mjs` | `domain/bid-heuristics` | 插件·待搬 | `tests/` |
-| `host/t280-ui-feedback-gate.mjs` | `system/ui-feedback` | 插件·待搬 | `tests/` |
+| `host/t280-ui-feedback-gate.mjs` | `system/ui-feedback` | 插件·已搬 | `tests/` |
 | `host/t281-advice-gate.mjs` | `domain/advice` | 插件·待搬 | `tests/` |
 | `host/t282-gate-timeline-gate.mjs` | `domain/gate-timeline` | 插件·待搬 | `tests/` |
 | `host/t283-change-detail-gate.mjs` | `domain/gate-timeline` | 插件·待搬 | `tests/` |
-| `host/t284-authority-gate.mjs` | `domain/authority-band` | 插件·待搬 | `tests/` |
-| `host/t285-rfq-deadline-gate.mjs` | `domain/rfq-deadline` | 插件·待搬 | `tests/` |
-| `host/t286-quote-draft-gate.mjs` | `domain/quote-prepare` | 插件·待搬 | `tests/` |
-| `host/t287-rfq-visibility-gate.mjs` | `system/projection` | 插件·待搬 | `tests/` |
+| `host/t284-authority-gate.mjs` | `domain/authority-band` | 插件·已搬 | `tests/` |
+| `host/t285-rfq-deadline-gate.mjs` | `domain/rfq-deadline` | 插件·已搬 | `tests/` |
+| `host/t286-quote-draft-gate.mjs` | `domain/quote-prepare` | 插件·已搬 | `tests/` |
+| `host/t287-rfq-visibility-gate.mjs` | `system/projection` | 插件·已搬 | `tests/` |
 
 ### C. `src/quotagent/qa/checks_*.py`（47 个，其中平台薄入口 0 + 本批已搬 1 + 待搬 46）
 

@@ -149,7 +149,8 @@ async function handleRequest(request, { root, loaded, startedAt, socketPath, sta
     if (op === 'list') {
       const items = scanned.plugins.filter((item) => request.layer === null || item.layer === request.layer)
       return { ok: true, op, runtime: runtime(),
-        plugins: items.map((item) => describe(item, loaded, scanned)) , degraded: scanned.degraded }
+        plugins: items.map((item) => describe(item, loaded, scanned)), degraded: scanned.degraded,
+        not_plugins: scanned.not_plugins }
     }
     const found = findPlugin(scanned, request.id)
     if (!found.ok) return { ...found, verb: op, runtime: runtime() }
@@ -389,7 +390,7 @@ async function main(argv) {
         .map((item) => describe(item, null, scanned))
       if (args.json) {
         out({ ok: true, verb: 'list', root, layer: args.layer, count: items.length, plugins: items,
-          degraded: scanned.degraded })
+          degraded: scanned.degraded, not_plugins: scanned.not_plugins })
       } else {
         for (const item of items) out(item)
       }

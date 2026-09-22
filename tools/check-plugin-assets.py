@@ -65,6 +65,28 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "domain/advice", "src/domain/advice/tests/check-advice-route.py"),
     "src/quotagent/qa/checks_qprep.py": (
         "domain/quote-prepare", "src/domain/quote-prepare/tests/checks_qprep.py"),
+    # --- 阶段 4.2（EV-172 / T-321）：`host/*-gate.mjs` 20 个里的**前 10 个**搬进各自插件的 `tests/`，
+    # 旧位置留薄转发（`import './../src/…'`；门名与 `tools/verify.sh` 的分支一行未改）。剩下 10 个登记为下批。
+    "host/t247-idem-gate.mjs": (
+        "system/idempotency-guard", "src/system/idempotency-guard/tests/t247-idem-gate.mjs"),
+    "host/t247-scorecard-gate.mjs": (
+        "domain/supplier-scorecard", "src/domain/supplier-scorecard/tests/t247-scorecard-gate.mjs"),
+    "host/t250-budget-gate.mjs": (
+        "system/budget-guard", "src/system/budget-guard/tests/t250-budget-gate.mjs"),
+    "host/t250-approval-gate.mjs": (
+        "system/approval", "src/system/approval/tests/t250-approval-gate.mjs"),
+    "host/t254-retention-view-gate.mjs": (
+        "system/retention", "src/system/retention/tests/t254-retention-view-gate.mjs"),
+    "host/t280-ui-feedback-gate.mjs": (
+        "system/ui-feedback", "src/system/ui-feedback/tests/t280-ui-feedback-gate.mjs"),
+    "host/t284-authority-gate.mjs": (
+        "domain/authority-band", "src/domain/authority-band/tests/t284-authority-gate.mjs"),
+    "host/t285-rfq-deadline-gate.mjs": (
+        "domain/rfq-deadline", "src/domain/rfq-deadline/tests/t285-rfq-deadline-gate.mjs"),
+    "host/t286-quote-draft-gate.mjs": (
+        "domain/quote-prepare", "src/domain/quote-prepare/tests/t286-quote-draft-gate.mjs"),
+    "host/t287-rfq-visibility-gate.mjs": (
+        "system/projection", "src/system/projection/tests/t287-rfq-visibility-gate.mjs"),
 }
 
 #: 平台级薄入口（27 §9 未决 3 + 阶段 5.2 的 `plugin.sh`）：不搬、留名。

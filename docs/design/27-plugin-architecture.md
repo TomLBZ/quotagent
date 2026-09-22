@@ -76,24 +76,29 @@ src/<层>/<plugin>/
 3. `requirements/README.md` 有归属行且能在覆盖矩阵里对上；4. `tests/` 全绿且至少一条负控见过红；
 5. `docs/` 有对外契约（若对外）；6. 在 `docs/design/14-plugin-inventory.md` 有一行（模块清单真源）。
 
-### 2.4 需求文档的位置（迁移未完成时的口径，`T-318` 定案）
+### 2.4 需求文档的位置（`T-318` 定案；`T-321` 起**全部归位**到标准布局）
 
-插件目录建出（`plugin.json` + `code/`）之前，逐插件需求文档一律落在
-`docs/work/plugin-requirements-<层>-<插件>.md`（**带层前缀**，与插件 id `层次/插件` 同形；
-内容与 §2.1 的标准形态**同形**：用途一句话 / 归属行（FR 号 + 承载体 + 关联 AC + 可跑命令）/ provides 与依赖 / 门 / 现状与缺口），
-建目录时 `git mv` 进 `src/<层>/<插件>/requirements/README.md`。归属与状态的唯一指针仍是
-`docs/work/plugin-requirements-map.md`（其 §4 写口径、§4.2 逐条登记这批位置偏差）。
+**标准位置 = `src/<层>/<插件>/requirements/README.md`**（§2.1）。迁移未完成的过渡形态（`T-318`）曾把逐插件
+需求文档临时放在 `docs/work/plugin-requirements-<层>-<插件>.md`（带层前缀，与插件 id `层次/插件` 同形）；
+**`T-321` 起 63/63 全部 `git mv` 进标准位置**（58 份归位），`docs/work/` 下不再有逐插件需求文档。
+归属与状态的唯一指针仍是 `docs/work/plugin-requirements-map.md`（其 §4.2 = **归位台账**：逐条记
+「原位置 → 现在的位置」，并有 `plugin-requirements` 门的 A6c 双向断言）。
 
-**为什么不选「先建裸目录 + 文档直接放标准位置」**（实测，不是推测）：`plugin-registry` 的 `depsClosure`
-把「目录存在」当「插件存在」（`scan()` 对没有 `plugin.json` 的目录仍给出 id），所以先建出 `src/system/webui/`
+**为什么当初不选「先建裸目录 + 文档直接放标准位置」**（实测，不是推测）：`plugin-registry` 的 `depsClosure`
+当时把「目录存在」当「插件存在」（`scan()` 对没有 `plugin.json` 的目录仍给出 id），所以先建出 `src/system/webui/`
 这类裸目录会让 `plugin-lifecycle` 的 A13/A14 变红（该门断言 `domain/advice` 的依赖 `system/webui` 未就绪 ⇒
-`deps_ready=false`、`deps_missing=["system/webui"]`）。本仓铁律是**不得把门改松**，本批也不动产品代码
-（`src/system/runtime/code/plugin-registry.mjs`）与迁移批次的判据 ⇒ 等阶段 2–4 建目录时再 `git mv`，
-并把 `depsClosure` 收紧为「没有 `plugin.json` 的目录不算已知插件」（与 §3.3 对齐）。
+`deps_ready=false`、`deps_missing=["system/webui"]`）。**`T-321` 已把这处收紧落成产品代码**（与 §3.3 对齐）：
 
-**机检**：`tools/verify.sh plugin-requirements` 的 A6a/A6c/A7（`req=` 指向的文档真实存在 / 非标准位置逐条登记 / 缺口清单双向）。
-**反向验证**：造一个「目录存在但没有 `plugin.json`」的假插件 ⇒ `tools/plugin.sh list` 报 `manifest-missing` 降级，
-且 `plugin-requirements` 的 A6b 判红（无主的 `requirements/` 目录不被接受）；原始行见 `docs/work/evidence/EV-169-*`。
+- `scan()`：目录里**没有 `plugin.json`** ⇒ **不是插件**（不进 `plugins`、不计数、不参与服务索引与依赖闭包），
+  只在 `not_plugins` 与 `degraded` 里如实报一行（`reason=manifest-missing` + `not_a_plugin:true`）；
+- `depsClosure()`：**已知插件集合只含「清单合法」的插件**（§3.1 最小契约齐备，含 `entry` 文件存在）⇒
+  目标目录存在但清单缺失/不合法时，一律如实进 `missing_targets`，**不假装依赖已就绪**；
+- 这是**收紧**（改前：假目录让 `missing_targets` 从 `["system/webui"]` 变 `[]`；改后：仍为 `["system/webui"]`），
+  门的断言只增不减：`plugin-lifecycle` 新增 A3c/A15/A16/A17/A18 与变异 5/6（反向对照 + 单点变异全红）。
+
+**机检**：`tools/verify.sh plugin-requirements` 的 A6a/A6c/A7（`req=` 指向的文档真实存在 / 非标准位置逐条登记 /
+缺口清单双向）+ `tools/verify.sh plugin-lifecycle` 的 A3c/A15–A18（裸目录不算插件、清单不合法不算依赖已就绪、
+合法清单正常识别）；原始行见 `docs/work/evidence/EV-172-*` 与 `EV-169-*`（改前的反向验证）。
 
 ## 3. 插件自述清单（manifest）与最小契约
 

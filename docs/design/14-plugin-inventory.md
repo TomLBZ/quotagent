@@ -59,8 +59,10 @@
 ## 2. 三层插件（`src/<层>/<插件>/`）
 
 目录布局与最小契约见 `docs/design/27-plugin-architecture.md` §2/§3；需求归属见 `docs/work/plugin-requirements-map.md`。
-前 3 行 = 阶段 1 落地**样板**；后 6 行 = T-316 新建的**骨架**（目前只有 `requirements/README.md`，
-故 `tools/plugin.sh list` 报 `degraded: manifest-missing`；清单与 `code/` 随阶段 2–4 的实体搬迁一起落）。
+**`T-321` 起 63/63 插件目录均已建出**（`plugin.json` + `requirements/README.md`；测试/围栅门按阶段 4.1/4.2 搬进 `tests/`）：
+其中 **9 个是"清单合法"的实体**（`code/` 入口真实存在），**54 个是"清单先行"**——只有最小契约字段，
+`entry` 指向的 `code/index.mjs` 尚未随实体搬迁落地，故 `tools/plugin.sh list` **如实**报 `degraded: artifact-missing`
+（不假装已实现，也不再把这种目录当成"不存在的插件"以外的东西）。
 
 | 插件（目录 / id） | 提供的能力 | 提供者服务名 | 被哪些装配 | 独立演进时改哪里 |
 |---|---|---|---|---|

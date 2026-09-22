@@ -1,0 +1,960 @@
+{
+ "task": "T-321 / EV-172：每个插件自带测试与需求 → 实体标准布局",
+ "docs_relocated": 58,
+ "docs_bytes_conserved": true,
+ "minimal_plugin_json_created": 54,
+ "documents": [
+  {
+   "id": "system/kernel",
+   "from": "docs/work/plugin-requirements-system-kernel.md",
+   "to": "src/system/kernel/requirements/README.md",
+   "sha": "84c87d5fbb9c422889d30663fcf9028df9c195ab47ccbc4fb85e0a36c62ed739",
+   "bytes": 5180,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 6,
+    "bytes_before": 5180,
+    "bytes_after": 4946,
+    "sha_before": "84c87d5fbb9c422889d30663fcf9028df9c195ab47ccbc4fb85e0a36c62ed739",
+    "sha_after": "e36bb44d5f13e58ee49c89689522d7d6bdc5a569ef3fed4cf7170bd3770108bd"
+   }
+  },
+  {
+   "id": "system/evidence",
+   "from": "docs/work/plugin-requirements-system-evidence.md",
+   "to": "src/system/evidence/requirements/README.md",
+   "sha": "1aaadbbf1e87b0d6c93509ff5664bc635347709a82f7800cd582e5cbaef7651b",
+   "bytes": 4020,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 4020,
+    "bytes_after": 3975,
+    "sha_before": "1aaadbbf1e87b0d6c93509ff5664bc635347709a82f7800cd582e5cbaef7651b",
+    "sha_after": "ec07b59ef1f4a6f1c76e4cc49b9064772bef7739114a298c22ede236b1bdccd2"
+   }
+  },
+  {
+   "id": "system/retention",
+   "from": "docs/work/plugin-requirements-system-retention.md",
+   "to": "src/system/retention/requirements/README.md",
+   "sha": "b916d02ca285d047b2b1e289d465c8d83e4d15107688d1858125eb924a16c3b2",
+   "bytes": 3410,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3410,
+    "bytes_after": 3365,
+    "sha_before": "b916d02ca285d047b2b1e289d465c8d83e4d15107688d1858125eb924a16c3b2",
+    "sha_after": "04c1b27723e97bbf754cc9759530895697534e5976fa2d52d39fad53550823bb"
+   }
+  },
+  {
+   "id": "system/norm",
+   "from": "docs/work/plugin-requirements-system-norm.md",
+   "to": "src/system/norm/requirements/README.md",
+   "sha": "401b1358d9d1c234c975c1584668f18ae6ec35b20130284799dff4194ec5342e",
+   "bytes": 3331,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3331,
+    "bytes_after": 3286,
+    "sha_before": "401b1358d9d1c234c975c1584668f18ae6ec35b20130284799dff4194ec5342e",
+    "sha_after": "a8e667e85698a34fcbe316f9169bfaa650a30ee3cad016b46a3f44f63bfb33bf"
+   }
+  },
+  {
+   "id": "domain/quotes",
+   "from": "docs/work/plugin-requirements-domain-quotes.md",
+   "to": "src/domain/quotes/requirements/README.md",
+   "sha": "247705395f4e319cf6e600fd35aebc795cf15fc9631f2967991ad53d40669d10",
+   "bytes": 3072,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3072,
+    "bytes_after": 3027,
+    "sha_before": "247705395f4e319cf6e600fd35aebc795cf15fc9631f2967991ad53d40669d10",
+    "sha_after": "4f222be4332a0b9bb65afa36a04123034ef745633cf6ad1449a8598cd950aacd"
+   }
+  },
+  {
+   "id": "domain/sync",
+   "from": "docs/work/plugin-requirements-domain-sync.md",
+   "to": "src/domain/sync/requirements/README.md",
+   "sha": "0245e87eabc7cb997ff4d8db6956718e6f40eebc31b8a3b375e42f20f917841a",
+   "bytes": 2834,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 2834,
+    "bytes_after": 2789,
+    "sha_before": "0245e87eabc7cb997ff4d8db6956718e6f40eebc31b8a3b375e42f20f917841a",
+    "sha_after": "587f1f8cb6af9477d268dfdd14f74cf420abd470650b936b943163784d44e943"
+   }
+  },
+  {
+   "id": "system/audit-hook",
+   "from": "docs/work/plugin-requirements-system-audit-hook.md",
+   "to": "src/system/audit-hook/requirements/README.md",
+   "sha": "77d509be208440478089240a077f96d82a2ccb2a28e14e17f849f330d36b66d8",
+   "bytes": 3094,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3094,
+    "bytes_after": 3049,
+    "sha_before": "77d509be208440478089240a077f96d82a2ccb2a28e14e17f849f330d36b66d8",
+    "sha_after": "a8cddb1447e37e890cc3a94e870911175f7f4e75a3a7dfe29f478ee0a4e459ae"
+   }
+  },
+  {
+   "id": "system/budget-guard",
+   "from": "docs/work/plugin-requirements-system-budget-guard.md",
+   "to": "src/system/budget-guard/requirements/README.md",
+   "sha": "ec454b8a0c7ddc0e0777d5796650bc35524e3d92816b20736b44c92f40bc45f9",
+   "bytes": 3256,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3256,
+    "bytes_after": 3211,
+    "sha_before": "ec454b8a0c7ddc0e0777d5796650bc35524e3d92816b20736b44c92f40bc45f9",
+    "sha_after": "9b2f09c2c84678d55681c423f781ae0212387d339bc1eda5be4d2a5d87c1ef3b"
+   }
+  },
+  {
+   "id": "system/circuit-breaker",
+   "from": "docs/work/plugin-requirements-system-circuit-breaker.md",
+   "to": "src/system/circuit-breaker/requirements/README.md",
+   "sha": "fd27b58597131eacb013341b59d0a71afcc9e71801470e11ec76c2604c982bc1",
+   "bytes": 3224,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3224,
+    "bytes_after": 3179,
+    "sha_before": "fd27b58597131eacb013341b59d0a71afcc9e71801470e11ec76c2604c982bc1",
+    "sha_after": "afbfa6cba6e11663dfaa0e11b153177ddf28285fb6233b503f8d3088d08e01c6"
+   }
+  },
+  {
+   "id": "system/governor",
+   "from": "docs/work/plugin-requirements-system-governor.md",
+   "to": "src/system/governor/requirements/README.md",
+   "sha": "474c49a414d4c9761f129035b9d08a227d9e2c8815dd66a339bc1ec92f4b58a3",
+   "bytes": 3077,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3077,
+    "bytes_after": 3032,
+    "sha_before": "474c49a414d4c9761f129035b9d08a227d9e2c8815dd66a339bc1ec92f4b58a3",
+    "sha_after": "ff6184a1bedd0dd42491da696221338386876d4a04c0f2788ace35219c9e6ca6"
+   }
+  },
+  {
+   "id": "system/observability",
+   "from": "docs/work/plugin-requirements-system-observability.md",
+   "to": "src/system/observability/requirements/README.md",
+   "sha": "bf50bfd4f2974f3362b7dbf751bdd54ac857018c96a768d5cf5d5a2052967306",
+   "bytes": 3134,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3134,
+    "bytes_after": 3089,
+    "sha_before": "bf50bfd4f2974f3362b7dbf751bdd54ac857018c96a768d5cf5d5a2052967306",
+    "sha_after": "e2efc9dfe28e582a870ba6737020449ba9ba5b74b730b38cf36b299ffa463540"
+   }
+  },
+  {
+   "id": "system/timeline",
+   "from": "docs/work/plugin-requirements-system-timeline.md",
+   "to": "src/system/timeline/requirements/README.md",
+   "sha": "d65db386d4cb94ede89cc5af8abebc5b19c877c097f50d57570658e0c7e93431",
+   "bytes": 3030,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3030,
+    "bytes_after": 2985,
+    "sha_before": "d65db386d4cb94ede89cc5af8abebc5b19c877c097f50d57570658e0c7e93431",
+    "sha_after": "286145c2ad8b13d6cfb93206df1bd729e0fed87ed61be95848af4b65dae69909"
+   }
+  },
+  {
+   "id": "system/idempotency-guard",
+   "from": "docs/work/plugin-requirements-system-idempotency-guard.md",
+   "to": "src/system/idempotency-guard/requirements/README.md",
+   "sha": "9d710a93aa3d3851dd7d3c09465d135c1b52b345e6dd2f1bcee07208e4a33309",
+   "bytes": 3259,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3259,
+    "bytes_after": 3214,
+    "sha_before": "9d710a93aa3d3851dd7d3c09465d135c1b52b345e6dd2f1bcee07208e4a33309",
+    "sha_after": "8fe0978b73a86d203c3c146517a8425221895243ed159d1b0abbe0b37b5ef11f"
+   }
+  },
+  {
+   "id": "system/approval",
+   "from": "docs/work/plugin-requirements-system-approval.md",
+   "to": "src/system/approval/requirements/README.md",
+   "sha": "96621335bd008932d53379a04793d0ad80a34db3e75362394cb37863288c736d",
+   "bytes": 3563,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3563,
+    "bytes_after": 3518,
+    "sha_before": "96621335bd008932d53379a04793d0ad80a34db3e75362394cb37863288c736d",
+    "sha_after": "1074b72af80ef55c60d9f96a98c654405218d61fa8850d6821fa42af9a3925af"
+   }
+  },
+  {
+   "id": "system/eval",
+   "from": "docs/work/plugin-requirements-system-eval.md",
+   "to": "src/system/eval/requirements/README.md",
+   "sha": "236872b6efa8e5551e70409264ebb72a76f668b270143eb076744f56e7dd38f4",
+   "bytes": 3636,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3636,
+    "bytes_after": 3591,
+    "sha_before": "236872b6efa8e5551e70409264ebb72a76f668b270143eb076744f56e7dd38f4",
+    "sha_after": "4cc3d210c8614a3cbf61a371b3a49efde0c983a442ca2a3f41b7e4c643def441"
+   }
+  },
+  {
+   "id": "domain/supplier-scorecard",
+   "from": "docs/work/plugin-requirements-domain-supplier-scorecard.md",
+   "to": "src/domain/supplier-scorecard/requirements/README.md",
+   "sha": "f0137930b6c9206a41e6a655386c937921975bd10f603d689511b634e39b14f1",
+   "bytes": 3283,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3283,
+    "bytes_after": 3238,
+    "sha_before": "f0137930b6c9206a41e6a655386c937921975bd10f603d689511b634e39b14f1",
+    "sha_after": "e631eebf46933a11fa5c9dbde3748b2c6a7500c6ba8af9d8a0fbba18f2bf1901"
+   }
+  },
+  {
+   "id": "system/admin",
+   "from": "docs/work/plugin-requirements-system-admin.md",
+   "to": "src/system/admin/requirements/README.md",
+   "sha": "80e27d7979c4885cde1581ecc7a1deee3eef7a789e002391e57e279f09f98a0a",
+   "bytes": 5611,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 5611,
+    "bytes_after": 5566,
+    "sha_before": "80e27d7979c4885cde1581ecc7a1deee3eef7a789e002391e57e279f09f98a0a",
+    "sha_after": "85bb659df4c89467a6b37e1e7989d0005731320cbe4970ff0a845d9efa57caef"
+   }
+  },
+  {
+   "id": "system/config",
+   "from": "docs/work/plugin-requirements-system-config.md",
+   "to": "src/system/config/requirements/README.md",
+   "sha": "eed0f2b7126c21244024287eb8f59c28b66e05f5f63280a500c916556f82adc1",
+   "bytes": 3704,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3704,
+    "bytes_after": 3659,
+    "sha_before": "eed0f2b7126c21244024287eb8f59c28b66e05f5f63280a500c916556f82adc1",
+    "sha_after": "284bb552a2b2cc713cfc7b222d68a8c249b65ce88fe57d10f891014cb835d850"
+   }
+  },
+  {
+   "id": "system/storage",
+   "from": "docs/work/plugin-requirements-system-storage.md",
+   "to": "src/system/storage/requirements/README.md",
+   "sha": "6772f36b940e8e07b1560f06e6f05df4b6b44d3ac6dec6d2d56bc10ea43fb267",
+   "bytes": 3275,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 6,
+    "bytes_before": 3275,
+    "bytes_after": 3043,
+    "sha_before": "6772f36b940e8e07b1560f06e6f05df4b6b44d3ac6dec6d2d56bc10ea43fb267",
+    "sha_after": "2bb58a8db6cc642a9c1ade50792ee9fffd7fd7f243b20e12ca324d06c4dfa9f3"
+   }
+  },
+  {
+   "id": "system/market",
+   "from": "docs/work/plugin-requirements-system-market.md",
+   "to": "src/system/market/requirements/README.md",
+   "sha": "fdb37f427b0bfb2d7d879413071d480a4a52345594f53c42d4b0ac566adf0147",
+   "bytes": 3891,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 6,
+    "bytes_before": 3891,
+    "bytes_after": 3657,
+    "sha_before": "fdb37f427b0bfb2d7d879413071d480a4a52345594f53c42d4b0ac566adf0147",
+    "sha_after": "76fbdb1813eb02445c2505ee7370208f45719badfaa6abc9bd12a19d006b1218"
+   }
+  },
+  {
+   "id": "system/user-plugin-manager",
+   "from": "docs/work/plugin-requirements-system-user-plugin-manager.md",
+   "to": "src/system/user-plugin-manager/requirements/README.md",
+   "sha": "c568468ae129029fa54e17ab1bfdfdd56cf021168e31500f69de1405ce8f187d",
+   "bytes": 6470,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 6470,
+    "bytes_after": 6425,
+    "sha_before": "c568468ae129029fa54e17ab1bfdfdd56cf021168e31500f69de1405ce8f187d",
+    "sha_after": "bc5a784e6a6e8ef1fe2212452227fba0ed75f3f52bf52449661da4c429e49b3f"
+   }
+  },
+  {
+   "id": "system/agent-runtime",
+   "from": "docs/work/plugin-requirements-system-agent-runtime.md",
+   "to": "src/system/agent-runtime/requirements/README.md",
+   "sha": "f97d38a777b31c1bc6624ba53b089894d28c0181425fc0b64c897cf7debbc85d",
+   "bytes": 3792,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3792,
+    "bytes_after": 3747,
+    "sha_before": "f97d38a777b31c1bc6624ba53b089894d28c0181425fc0b64c897cf7debbc85d",
+    "sha_after": "bb3dd6258d5e839071287216f0dd5f7a36c3871ac821bc1b4fed472c1faea39c"
+   }
+  },
+  {
+   "id": "system/ui-feedback",
+   "from": "docs/work/plugin-requirements-system-ui-feedback.md",
+   "to": "src/system/ui-feedback/requirements/README.md",
+   "sha": "806d38b7e0cb42181ede56e2df95d123a96e2c6dfc0d1beaccf6fddc5e471178",
+   "bytes": 3348,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3348,
+    "bytes_after": 3303,
+    "sha_before": "806d38b7e0cb42181ede56e2df95d123a96e2c6dfc0d1beaccf6fddc5e471178",
+    "sha_after": "93dc0c3be050c17e3c8df48db557f91b02ed2526f4600cea0f41025bb35b975a"
+   }
+  },
+  {
+   "id": "system/webui",
+   "from": "docs/work/plugin-requirements-system-webui.md",
+   "to": "src/system/webui/requirements/README.md",
+   "sha": "6014c5bcaebbe76f22b9bceb5770c00f1bfb3a3a157c0015868147787df48828",
+   "bytes": 4209,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 6,
+    "bytes_before": 4209,
+    "bytes_after": 3973,
+    "sha_before": "6014c5bcaebbe76f22b9bceb5770c00f1bfb3a3a157c0015868147787df48828",
+    "sha_after": "874cc33dd6a00062e3a1de47595b938026bf02e5f10613118c9db80d89fd0093"
+   }
+  },
+  {
+   "id": "system/evolution",
+   "from": "docs/work/plugin-requirements-system-evolution.md",
+   "to": "src/system/evolution/requirements/README.md",
+   "sha": "b465993aaccd7fef033d62b71f0a71eb27c0d0af9b653d0da27a2ce94f6bd7c4",
+   "bytes": 3813,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 6,
+    "bytes_before": 3813,
+    "bytes_after": 3585,
+    "sha_before": "b465993aaccd7fef033d62b71f0a71eb27c0d0af9b653d0da27a2ce94f6bd7c4",
+    "sha_after": "9af6dfdfa650278c1e6ac1eaec05592eadc544654f0c4edac71168715e957f21"
+   }
+  },
+  {
+   "id": "system/canary",
+   "from": "docs/work/plugin-requirements-system-canary.md",
+   "to": "src/system/canary/requirements/README.md",
+   "sha": "ae67c6d4e9a06f018a8fb1ce07f84be66a4175a580ffdf2fb8d22243fec78f15",
+   "bytes": 3391,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3391,
+    "bytes_after": 3346,
+    "sha_before": "ae67c6d4e9a06f018a8fb1ce07f84be66a4175a580ffdf2fb8d22243fec78f15",
+    "sha_after": "89640c1deac70233c2bc9fc2e4d039ad12b9f7a65cf79c97a081d3911b81971c"
+   }
+  },
+  {
+   "id": "system/mail",
+   "from": "docs/work/plugin-requirements-system-mail.md",
+   "to": "src/system/mail/requirements/README.md",
+   "sha": "cdb143d0a2403b32db760b62d6fdc5760a8535ad8888d9b9b9a79085a022d404",
+   "bytes": 3703,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 6,
+    "bytes_before": 3703,
+    "bytes_after": 3465,
+    "sha_before": "cdb143d0a2403b32db760b62d6fdc5760a8535ad8888d9b9b9a79085a022d404",
+    "sha_after": "d1323b1c9eb8e2f96088d1259eba561f6e65d4ca48c32f6ca04c3415292626ea"
+   }
+  },
+  {
+   "id": "system/relay",
+   "from": "docs/work/plugin-requirements-system-relay.md",
+   "to": "src/system/relay/requirements/README.md",
+   "sha": "514f404230abc606bb82639223ea9b04f14cd27d070affaf12a797117052b83b",
+   "bytes": 2821,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 2821,
+    "bytes_after": 2776,
+    "sha_before": "514f404230abc606bb82639223ea9b04f14cd27d070affaf12a797117052b83b",
+    "sha_after": "e974817879b07136260546b22df5132eeb15ec4368bc86ee40bff015236c1485"
+   }
+  },
+  {
+   "id": "system/kernel-bridge",
+   "from": "docs/work/plugin-requirements-system-kernel-bridge.md",
+   "to": "src/system/kernel-bridge/requirements/README.md",
+   "sha": "70d661459b21d6276d4daa57d09fd5e6e7b0109aa4773cf565ced00e5e86e4db",
+   "bytes": 3201,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3201,
+    "bytes_after": 3156,
+    "sha_before": "70d661459b21d6276d4daa57d09fd5e6e7b0109aa4773cf565ced00e5e86e4db",
+    "sha_after": "46277281d0007525145589ade3ebb29226dfeee02a5638d31e29634493526d9e"
+   }
+  },
+  {
+   "id": "system/repo-gate",
+   "from": "docs/work/plugin-requirements-system-repo-gate.md",
+   "to": "src/system/repo-gate/requirements/README.md",
+   "sha": "1fbc2bdb97317924e901320ee29cfb3bc25f1234f0794b6c9add8e64590ce390",
+   "bytes": 3209,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3209,
+    "bytes_after": 3164,
+    "sha_before": "1fbc2bdb97317924e901320ee29cfb3bc25f1234f0794b6c9add8e64590ce390",
+    "sha_after": "cf0326c3415601aff895eef048d1c03f5f6d867ca5e173c20c924b9f998c209a"
+   }
+  },
+  {
+   "id": "system/ops-view",
+   "from": "docs/work/plugin-requirements-system-ops-view.md",
+   "to": "src/system/ops-view/requirements/README.md",
+   "sha": "7a793c5be2c88360ce1ad05cee6ac2d3ecde6f5d5c091512676916fc22896b6c",
+   "bytes": 3063,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3063,
+    "bytes_after": 3018,
+    "sha_before": "7a793c5be2c88360ce1ad05cee6ac2d3ecde6f5d5c091512676916fc22896b6c",
+    "sha_after": "caeacaef187ba6ad63d0e2e0e8d47a046fc700ae85510cbbe2c2b57fcab3ba84"
+   }
+  },
+  {
+   "id": "system/pipeline-view",
+   "from": "docs/work/plugin-requirements-system-pipeline-view.md",
+   "to": "src/system/pipeline-view/requirements/README.md",
+   "sha": "7683557975cda251e32b401d176e26ed6dbef729b9a592f50a46b4bc9b2b3556",
+   "bytes": 3403,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3403,
+    "bytes_after": 3358,
+    "sha_before": "7683557975cda251e32b401d176e26ed6dbef729b9a592f50a46b4bc9b2b3556",
+    "sha_after": "187b62ca359a31cfc85a1d9027393ea765724de117c6ef2f0f279131a1ee1eb4"
+   }
+  },
+  {
+   "id": "system/projection",
+   "from": "docs/work/plugin-requirements-system-projection.md",
+   "to": "src/system/projection/requirements/README.md",
+   "sha": "da9756eb335feb44e7381a24b5c9b1807bb130ce3d2b807e37d07b73ec6b67ea",
+   "bytes": 3651,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3651,
+    "bytes_after": 3606,
+    "sha_before": "da9756eb335feb44e7381a24b5c9b1807bb130ce3d2b807e37d07b73ec6b67ea",
+    "sha_after": "2d3798a2b86ec33359b5f1834915de40f3763a82276f29e11fd859057e90f6aa"
+   }
+  },
+  {
+   "id": "domain/rfq",
+   "from": "docs/work/plugin-requirements-domain-rfq.md",
+   "to": "src/domain/rfq/requirements/README.md",
+   "sha": "10e2ca5d7900ec360a40848e338d27661018500eaf38908bdddf602bb2234bdb",
+   "bytes": 3287,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3287,
+    "bytes_after": 3242,
+    "sha_before": "10e2ca5d7900ec360a40848e338d27661018500eaf38908bdddf602bb2234bdb",
+    "sha_after": "087b5333d113647bd3c39c0e5e9dacdb48150876dc6f3ca0008990d1b8780367"
+   }
+  },
+  {
+   "id": "domain/rfq-deadline",
+   "from": "docs/work/plugin-requirements-domain-rfq-deadline.md",
+   "to": "src/domain/rfq-deadline/requirements/README.md",
+   "sha": "31ae007058db064795e609164ab768fe994deddfeaf595a41c178ad01fb5f322",
+   "bytes": 3247,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3247,
+    "bytes_after": 3202,
+    "sha_before": "31ae007058db064795e609164ab768fe994deddfeaf595a41c178ad01fb5f322",
+    "sha_after": "807d616d54274c5a1489a55a3b0520c6d1f2d87e7dfd1374be57c2db378d266c"
+   }
+  },
+  {
+   "id": "domain/sourcing",
+   "from": "docs/work/plugin-requirements-domain-sourcing.md",
+   "to": "src/domain/sourcing/requirements/README.md",
+   "sha": "bbb39ff2e302fc5aad7415990724cdfa98fd5f3c778377fb8a26484bdc333d75",
+   "bytes": 3099,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3099,
+    "bytes_after": 3054,
+    "sha_before": "bbb39ff2e302fc5aad7415990724cdfa98fd5f3c778377fb8a26484bdc333d75",
+    "sha_after": "f6fd61ba7d2b1d059ef284d2a5b1e61adcfb6719b86ce49db2cf5144067102d4"
+   }
+  },
+  {
+   "id": "domain/compare",
+   "from": "docs/work/plugin-requirements-domain-compare.md",
+   "to": "src/domain/compare/requirements/README.md",
+   "sha": "0b82429a9d2ec470492b729e8ff9147f422fe633455e1d956de368a17a69e2c3",
+   "bytes": 3362,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3362,
+    "bytes_after": 3317,
+    "sha_before": "0b82429a9d2ec470492b729e8ff9147f422fe633455e1d956de368a17a69e2c3",
+    "sha_after": "0e88b2e5a8984d545d4a368fe04be9accda0b3be45c150735913461819f38e3e"
+   }
+  },
+  {
+   "id": "domain/export",
+   "from": "docs/work/plugin-requirements-domain-export.md",
+   "to": "src/domain/export/requirements/README.md",
+   "sha": "73c6426b5609fdfb3523c9def917cca450c429b9f26e24bfd40e30906073bd64",
+   "bytes": 2957,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 2957,
+    "bytes_after": 2912,
+    "sha_before": "73c6426b5609fdfb3523c9def917cca450c429b9f26e24bfd40e30906073bd64",
+    "sha_after": "2e2a4f8ebe3ecc8e516763deaf578b10dddcf551d081238f38690dba26f046cc"
+   }
+  },
+  {
+   "id": "domain/guard",
+   "from": "docs/work/plugin-requirements-domain-guard.md",
+   "to": "src/domain/guard/requirements/README.md",
+   "sha": "f27d51f92d6da248351f84e4a68f8d3b506732ee0697fc659ef4080bea49df96",
+   "bytes": 3437,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3437,
+    "bytes_after": 3392,
+    "sha_before": "f27d51f92d6da248351f84e4a68f8d3b506732ee0697fc659ef4080bea49df96",
+    "sha_after": "056e4b62e07ac1270a1ce065904ddbdadf4b9b359aec3910564bac8e523f1292"
+   }
+  },
+  {
+   "id": "domain/intake",
+   "from": "docs/work/plugin-requirements-domain-intake.md",
+   "to": "src/domain/intake/requirements/README.md",
+   "sha": "2f0a13eca9b7f349adbff5f0cb38dec5ab74516e7d443a392891380b70085f94",
+   "bytes": 3141,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3141,
+    "bytes_after": 3096,
+    "sha_before": "2f0a13eca9b7f349adbff5f0cb38dec5ab74516e7d443a392891380b70085f94",
+    "sha_after": "de07142364819ba344bad8a8453b93503355f7b8c373a81b1da093caa848532e"
+   }
+  },
+  {
+   "id": "domain/clarify",
+   "from": "docs/work/plugin-requirements-domain-clarify.md",
+   "to": "src/domain/clarify/requirements/README.md",
+   "sha": "626be7182c1bc415253d2fef128d02dee5d3c9940cd7da14d5347bc7793b6c71",
+   "bytes": 3167,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3167,
+    "bytes_after": 3122,
+    "sha_before": "626be7182c1bc415253d2fef128d02dee5d3c9940cd7da14d5347bc7793b6c71",
+    "sha_after": "fd837e4169beec0d564c45f68a06da99f2114f3b84587d633ed935732c9272e6"
+   }
+  },
+  {
+   "id": "domain/faq",
+   "from": "docs/work/plugin-requirements-domain-faq.md",
+   "to": "src/domain/faq/requirements/README.md",
+   "sha": "adddd5ffd0f5b8b1ae707c773b46062c1be6c4cbf55362ce6d75e07a24ee26cd",
+   "bytes": 2969,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 2969,
+    "bytes_after": 2924,
+    "sha_before": "adddd5ffd0f5b8b1ae707c773b46062c1be6c4cbf55362ce6d75e07a24ee26cd",
+    "sha_after": "ec29866cb508239ef5be6eec8d5776104dde42c8dcddaf782e914a0ea5af2add"
+   }
+  },
+  {
+   "id": "domain/commitments",
+   "from": "docs/work/plugin-requirements-domain-commitments.md",
+   "to": "src/domain/commitments/requirements/README.md",
+   "sha": "09235592ba0326eea64fd66e7d7e5b8f6c50a93be59331ae0933e96530e11a38",
+   "bytes": 3152,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3152,
+    "bytes_after": 3107,
+    "sha_before": "09235592ba0326eea64fd66e7d7e5b8f6c50a93be59331ae0933e96530e11a38",
+    "sha_after": "7bd0b335b6b4f31440164bc9a4e2c1cb3718092dda600f89d4f7f3c249bf019a"
+   }
+  },
+  {
+   "id": "domain/costmodel",
+   "from": "docs/work/plugin-requirements-domain-costmodel.md",
+   "to": "src/domain/costmodel/requirements/README.md",
+   "sha": "66d5813aa813b218591318a4ec6584f621d26b34a1b43b38d104329db46ae469",
+   "bytes": 3186,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3186,
+    "bytes_after": 3141,
+    "sha_before": "66d5813aa813b218591318a4ec6584f621d26b34a1b43b38d104329db46ae469",
+    "sha_after": "1267a77b82e27cc54837d88887661e158ec6bd4a456e1db2d636e8b6289fd1df"
+   }
+  },
+  {
+   "id": "domain/pricing",
+   "from": "docs/work/plugin-requirements-domain-pricing.md",
+   "to": "src/domain/pricing/requirements/README.md",
+   "sha": "2eb57cb9913a9c513e12b90d0583afadd1c6b32f1d9ce6430be434c903cea4bd",
+   "bytes": 2953,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 2953,
+    "bytes_after": 2908,
+    "sha_before": "2eb57cb9913a9c513e12b90d0583afadd1c6b32f1d9ce6430be434c903cea4bd",
+    "sha_after": "59bba6915b95ad9466d90322d892d3bd7982cfa3a8169b4eb4d0ad8c11b7fc8f"
+   }
+  },
+  {
+   "id": "domain/price-history",
+   "from": "docs/work/plugin-requirements-domain-price-history.md",
+   "to": "src/domain/price-history/requirements/README.md",
+   "sha": "3004fbd0d97c5edf9b8a7355719af39a8f2cb8004e4ad88d521f45a1d87d86c5",
+   "bytes": 3238,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3238,
+    "bytes_after": 3193,
+    "sha_before": "3004fbd0d97c5edf9b8a7355719af39a8f2cb8004e4ad88d521f45a1d87d86c5",
+    "sha_after": "70c40a75a4f5dac94c7f334326a068ccd6add296fdcab2ae2a91e45feac3e4f9"
+   }
+  },
+  {
+   "id": "domain/deviation",
+   "from": "docs/work/plugin-requirements-domain-deviation.md",
+   "to": "src/domain/deviation/requirements/README.md",
+   "sha": "c5ba6b12866182a5dbf36bba2ea5237b421761853b2ccd5b03ef1d3e0f503473",
+   "bytes": 2958,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 2958,
+    "bytes_after": 2913,
+    "sha_before": "c5ba6b12866182a5dbf36bba2ea5237b421761853b2ccd5b03ef1d3e0f503473",
+    "sha_after": "0fd56628a2803d228c02e5ec3f50d97a4785b031fa7b4b3c533365b1503e3108"
+   }
+  },
+  {
+   "id": "domain/capacity",
+   "from": "docs/work/plugin-requirements-domain-capacity.md",
+   "to": "src/domain/capacity/requirements/README.md",
+   "sha": "a54650e4423e25e196ecb72c18375fbf92eb7890c20841855395c8fc6292e81b",
+   "bytes": 2920,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 2920,
+    "bytes_after": 2875,
+    "sha_before": "a54650e4423e25e196ecb72c18375fbf92eb7890c20841855395c8fc6292e81b",
+    "sha_after": "c7d37f6a90e01b1af6c3cd99c1c1095b7e99d8f071150b8b9880b253a929800a"
+   }
+  },
+  {
+   "id": "domain/change",
+   "from": "docs/work/plugin-requirements-domain-change.md",
+   "to": "src/domain/change/requirements/README.md",
+   "sha": "0659ad6456da42f49e0db8b05d2f2fd125565305b5feb0bfa918f622d42c1f34",
+   "bytes": 2982,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 2982,
+    "bytes_after": 2937,
+    "sha_before": "0659ad6456da42f49e0db8b05d2f2fd125565305b5feb0bfa918f622d42c1f34",
+    "sha_after": "bcf0e6df8b60fccafa9c8925649409f727cb7c367bc6c2fa5dad1d635c7def82"
+   }
+  },
+  {
+   "id": "domain/terms",
+   "from": "docs/work/plugin-requirements-domain-terms.md",
+   "to": "src/domain/terms/requirements/README.md",
+   "sha": "6f49da100dcb41154c6bc2d86e049060853ac39d9bf6a9507adcb28bdcac2aab",
+   "bytes": 2858,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 2858,
+    "bytes_after": 2813,
+    "sha_before": "6f49da100dcb41154c6bc2d86e049060853ac39d9bf6a9507adcb28bdcac2aab",
+    "sha_after": "7d1c6a2d250ae0035694a59b403d17be215ed7105a31c0853b80db938bd2fc09"
+   }
+  },
+  {
+   "id": "domain/negotiation",
+   "from": "docs/work/plugin-requirements-domain-negotiation.md",
+   "to": "src/domain/negotiation/requirements/README.md",
+   "sha": "cf50a8898af8cb0a8f7da540ad9bd430efc6f993cbcfcb27eaa8df351e7bb18c",
+   "bytes": 3255,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3255,
+    "bytes_after": 3210,
+    "sha_before": "cf50a8898af8cb0a8f7da540ad9bd430efc6f993cbcfcb27eaa8df351e7bb18c",
+    "sha_after": "38ed09c31b95385b81b4f859c0d475fdabee57aa4827df556af851db208134ea"
+   }
+  },
+  {
+   "id": "domain/gate-timeline",
+   "from": "docs/work/plugin-requirements-domain-gate-timeline.md",
+   "to": "src/domain/gate-timeline/requirements/README.md",
+   "sha": "22be4ea91fe7af829a037b1bf8fba5e096c6399336da39d8a6538eaf8ad5b936",
+   "bytes": 3293,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3293,
+    "bytes_after": 3248,
+    "sha_before": "22be4ea91fe7af829a037b1bf8fba5e096c6399336da39d8a6538eaf8ad5b936",
+    "sha_after": "eb792c8411d16e6d61b57ef7254743bd93e15c3aa214d780e96b85322caad972"
+   }
+  },
+  {
+   "id": "domain/authority-band",
+   "from": "docs/work/plugin-requirements-domain-authority-band.md",
+   "to": "src/domain/authority-band/requirements/README.md",
+   "sha": "d16e23382f450309dc72dbf19a6174acba41af0e2ab6d5683273550d8a85ec01",
+   "bytes": 3239,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3239,
+    "bytes_after": 3194,
+    "sha_before": "d16e23382f450309dc72dbf19a6174acba41af0e2ab6d5683273550d8a85ec01",
+    "sha_after": "a5c62583be54d0567b7946d578648ff32c760590ce3c858b6dac56999d575ac9"
+   }
+  },
+  {
+   "id": "domain/bid-heuristics",
+   "from": "docs/work/plugin-requirements-domain-bid-heuristics.md",
+   "to": "src/domain/bid-heuristics/requirements/README.md",
+   "sha": "3e1f6883536ab30459f964df09dd3edb62efa0820a58f34273199d43e0a7468a",
+   "bytes": 2925,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 2925,
+    "bytes_after": 2880,
+    "sha_before": "3e1f6883536ab30459f964df09dd3edb62efa0820a58f34273199d43e0a7468a",
+    "sha_after": "41bb421518c50863b60a16b15504ca892883d66f7be51ef98d616403a18fbba9"
+   }
+  },
+  {
+   "id": "domain/quote-prepare",
+   "from": "docs/work/plugin-requirements-domain-quote-prepare.md",
+   "to": "src/domain/quote-prepare/requirements/README.md",
+   "sha": "d043f0edc347e151efe0e7542b5ef57ba5d5918074952fa58b84fe18a313e3e4",
+   "bytes": 3206,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3206,
+    "bytes_after": 3161,
+    "sha_before": "d043f0edc347e151efe0e7542b5ef57ba5d5918074952fa58b84fe18a313e3e4",
+    "sha_after": "b541028ecd79dab2f683156763a2a267817b10342b73bc437d511ba9fe2c4b79"
+   }
+  },
+  {
+   "id": "system/measures",
+   "from": "docs/work/plugin-requirements-system-measures.md",
+   "to": "src/system/measures/requirements/README.md",
+   "sha": "b1264f85b0d11e6dbf64f4208f0a0d724fece98f2cccef13d7242d15b98ac588",
+   "bytes": 3051,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3051,
+    "bytes_after": 3006,
+    "sha_before": "b1264f85b0d11e6dbf64f4208f0a0d724fece98f2cccef13d7242d15b98ac588",
+    "sha_after": "bac7c2e0ed32e20aa35bd873a3958c2a6f2734a44b74ad66151354b1beac34a7"
+   }
+  },
+  {
+   "id": "system/qa-runner",
+   "from": "docs/work/plugin-requirements-system-qa-runner.md",
+   "to": "src/system/qa-runner/requirements/README.md",
+   "sha": "9a898cc41d08fd337e410bb971ac61772a6025853f268c2014c172a8cbadab8d",
+   "bytes": 3320,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 3320,
+    "bytes_after": 3275,
+    "sha_before": "9a898cc41d08fd337e410bb971ac61772a6025853f268c2014c172a8cbadab8d",
+    "sha_after": "cee6d7ab31be130bac572e0771720a01cca22a533e8b2d440fe7f2836134b871"
+   }
+  },
+  {
+   "id": "system/realm",
+   "from": "docs/work/plugin-requirements-system-realm.md",
+   "to": "src/system/realm/requirements/README.md",
+   "sha": "32918dffb983a8bd437b9f8d75bd831a48d4c4a43eba618ff18f62fe55e935b2",
+   "bytes": 2998,
+   "conserved": true,
+   "header_edit": {
+    "lines_replaced": 5,
+    "bytes_before": 2998,
+    "bytes_after": 2953,
+    "sha_before": "32918dffb983a8bd437b9f8d75bd831a48d4c4a43eba618ff18f62fe55e935b2",
+    "sha_after": "82b6b23951c38cc745efda977cd1457439dd4446531362a5758e1bcb65a1e62e"
+   }
+  }
+ ],
+ "gates_moved": [
+  {
+   "gate": "host/t247-idem-gate.mjs",
+   "owner": "system/idempotency-guard",
+   "target": "src/system/idempotency-guard/tests/t247-idem-gate.mjs",
+   "forwarder_bytes": 339,
+   "target_bytes": 17411,
+   "forwarder_lines": 5
+  },
+  {
+   "gate": "host/t247-scorecard-gate.mjs",
+   "owner": "domain/supplier-scorecard",
+   "target": "src/domain/supplier-scorecard/tests/t247-scorecard-gate.mjs",
+   "forwarder_bytes": 351,
+   "target_bytes": 22940,
+   "forwarder_lines": 5
+  },
+  {
+   "gate": "host/t250-budget-gate.mjs",
+   "owner": "system/budget-guard",
+   "target": "src/system/budget-guard/tests/t250-budget-gate.mjs",
+   "forwarder_bytes": 333,
+   "target_bytes": 25306,
+   "forwarder_lines": 5
+  },
+  {
+   "gate": "host/t250-approval-gate.mjs",
+   "owner": "system/approval",
+   "target": "src/system/approval/tests/t250-approval-gate.mjs",
+   "forwarder_bytes": 329,
+   "target_bytes": 29904,
+   "forwarder_lines": 5
+  },
+  {
+   "gate": "host/t286-quote-draft-gate.mjs",
+   "owner": "domain/quote-prepare",
+   "target": "src/domain/quote-prepare/tests/t286-quote-draft-gate.mjs",
+   "forwarder_bytes": 345,
+   "target_bytes": 35722,
+   "forwarder_lines": 5
+  },
+  {
+   "gate": "host/t280-ui-feedback-gate.mjs",
+   "owner": "system/ui-feedback",
+   "target": "src/system/ui-feedback/tests/t280-ui-feedback-gate.mjs",
+   "forwarder_bytes": 341,
+   "target_bytes": 38949,
+   "forwarder_lines": 5
+  },
+  {
+   "gate": "host/t254-retention-view-gate.mjs",
+   "owner": "system/retention",
+   "target": "src/system/retention/tests/t254-retention-view-gate.mjs",
+   "forwarder_bytes": 343,
+   "target_bytes": 39162,
+   "forwarder_lines": 5
+  },
+  {
+   "gate": "host/t287-rfq-visibility-gate.mjs",
+   "owner": "system/projection",
+   "target": "src/system/projection/tests/t287-rfq-visibility-gate.mjs",
+   "forwarder_bytes": 345,
+   "target_bytes": 41593,
+   "forwarder_lines": 5
+  },
+  {
+   "gate": "host/t285-rfq-deadline-gate.mjs",
+   "owner": "domain/rfq-deadline",
+   "target": "src/domain/rfq-deadline/tests/t285-rfq-deadline-gate.mjs",
+   "forwarder_bytes": 345,
+   "target_bytes": 47397,
+   "forwarder_lines": 5
+  },
+  {
+   "gate": "host/t284-authority-gate.mjs",
+   "owner": "domain/authority-band",
+   "target": "src/domain/authority-band/tests/t284-authority-gate.mjs",
+   "forwarder_bytes": 343,
+   "target_bytes": 62979,
+   "forwarder_lines": 5
+  }
+ ]
+}

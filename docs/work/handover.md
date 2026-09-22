@@ -3,15 +3,15 @@
 <!-- budget: 1024 bytes, hard -->
 ## 现在在哪
 
-P2，①–④见 EV-160…167，迁移 4.1 见 EV-170；**本批**（EV-171/T-320）一键跑落成**只含已提交内容**的
-干净副本验收——新门 `run-clone` 真跑正路 + 两条**反向对照** + 4 处单点变异；
-**实测真缺陷并修复**：`tools/*.sh` 索引里是 `100644`（`core.filemode=false`）⇒ 干净克隆 `./run up` 报
-`host-deps-install-failed`；依赖失败改为可诊断（`log`+`log_tail`）；README 快速开始补全。
+P2。本批（EV-172 / T-321）把「每个插件自带测试与需求」推到**实体标准布局**：① **收紧** `depsClosure`/`scan`
+（目录里没有**合法** `plugin.json` ⇒ 不算插件；见 EV-172 §一）② **58 份需求文档** `git mv` 进
+`src/<层>/<插件>/requirements/README.md`+54 个插件补最小 `plugin.json` ③ **10 个围栅门**搬进各自 `tests/`
+（旧处薄转发，rc/输出逐项对拍一致）。
 
 ## 下一步唯一动作
 
-`plans/plugin-migration-plan.md` §2 续做**阶段 2**（services → `code/`，逐个搬 + 跑 AC；建目录同步
-`plugin-lifecycle` A13/A14）；§分类 **64 项**`待搬`照旧。
+`plans/plugin-migration-plan.md` §2 续做**阶段 2**（services → `code/`）；阶段 4.2 剩 **10 个围栅门**
+（`t260/t267/t268/t271/t275/t277/t279/t281/t282/t283`）；§分类 **64 项**`待搬`照旧。
 
 ## 不变量
 
