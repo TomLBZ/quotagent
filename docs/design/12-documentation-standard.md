@@ -14,6 +14,10 @@
 | `docs/analysis/*.md` | 24 KB |
 | `docs/design/adr/*.md` | 8 KB |
 | `docs/work/*.md` | 32 KB |
+| `docs/work/plans/*.md` | 32 KB |
+| `src/*/*/README.md` | 4 KB |
+| `src/*/*/docs/*.md` | 16 KB |
+| `src/*/*/requirements/*.md` | 16 KB |
 | `docs/work/validation/*.md` | 16 KB |
 | `docs/work/reviews/*.md` | 16 KB |
 | `docs/work/validation/templates/*.md` | 8 KB |
@@ -23,6 +27,10 @@
 | `.agents/skills/*/references/*.md` | 8 KB |
 
 超预算时的处理顺序：**删重复 → 删叙述 → 拆文件 → 才考虑提高预算**（提高预算需在提交信息里说明）。
+
+预算表新增行（2026-09-22 架构规范批次）：`docs/work/plans/*.md`、`src/*/*/README.md`、`src/*/*/docs/*.md`、`src/*/*/requirements/*.md`。
+理由：`docs/work/plans/` 此前**没有任何预算行**（`docs/work/*.md` 只匹配该层，不匹配子目录）= 门的盲区；插件子目录是本批新增的目录族，
+必须在**第一次写入之前**就有预算行，否则"新目录逃出预算"就是把门改松。规则见 `docs/design/27-plugin-architecture.md` §2.1。
 
 **门的扫描范围（D-072）= 契约文档集合**：全仓 `.md` 减去 `.git/ .venv/ tmp/ node_modules/ __pycache__/`
 下的临时/派生文件。临时副本（`tmp/ac/**`、`tmp/clean-copy/**` 这类整树副本）**不是判据**；

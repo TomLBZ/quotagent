@@ -1,0 +1,237 @@
+EV-162 —— 「一切皆插件」架构规范持久化 + 逐文件迁移计划 + 一键运行契约（本批：只改文档）
+时间（UTC）: 2026-09-22T08:00:40Z
+提交: 见 §8（本文件先落盘、后追加提交 sha 与远端回读）
+命令前缀: 一律 `cd /workspace/projects/quotagent`；Python 走 `tools/run.sh`/`.venv`。
+本批边界（铁律）：只新增/修改 `docs/**`；不改代码、不改门、不改测试。
+
+§1 交付物（文档路径与字节）
+
+  23275 B  docs/design/27-plugin-architecture.md
+  16929 B  docs/design/28-plugin-requirements-and-run.md
+   6039 B  docs/design/adr/0020-everything-is-a-plugin.md
+   5999 B  docs/design/adr/0021-requirements-owned-by-plugins.md
+  14755 B  docs/work/plans/plugin-migration-plan.md
+  25712 B  docs/work/plans/plugin-file-map.md
+  10814 B  docs/work/plans/spec-persistence.md
+   4926 B  docs/design/12-documentation-standard.md
+  12996 B  docs/work/requirements-traceability.md
+  30742 B  docs/work/progress-checklist.md
+
+§2 量出来的数字（不引用文档的说法，全部当场实测）
+
+$ git ls-files src host tools user-space | wc -l
+250
+(exit=0)
+
+$ python3 tmp/arch-batch/gen_map.py
+total files: 256 mapped: 251 kept: 5 unmapped: 0
+unmapped: []
+kept: ['tools/bootstrap.sh', 'tools/cordis.sh', 'tools/run.sh', 'tools/runtime.sh', 'tools/verify.sh']
+system plugins: 0 
+domain plugins: 0 
+userspace ns: []
+table bytes: 20205
+(exit=0)
+
+$ python3 tmp/arch-batch/count.py
+system plugins: 34
+admin agent-runtime approval audit-hook budget-guard canary circuit-breaker config eval evidence evolution governor idempotency-guard kernel kernel-bridge mail market measures norm observability ops-view pipeline-view projection qa-runner realm relay repo-gate retention runtime storage timeline ui-feedback user-plugin-manager webui
+domain plugins: 25
+advice authority-band bid-heuristics capacity change clarify commitments compare costmodel deviation export faq gate-timeline guard intake negotiation price-history pricing quotes rfq rfq-deadline sourcing supplier-scorecard sync terms
+userspace: ['userspace/README.txt', 'userspace/con-a', 'userspace/demo-ns']
+files per layer: 182 63 6
+total 251
+(exit=0)
+
+$ python3 tmp/arch-batch/fr_families.py
+FR def files: ['functional-requirements.md', 'functional-requirements-archive-b.md', 'functional-requirements-archive.md'] rows: 165 unique: 165
+AC def files: ['acceptance-criteria.md', 'acceptance-criteria-archive.md'] rows: 133 unique: 133
+FR families: 40
+{'ADMIN': 10, 'ADV': 1, 'AGENTRT': 3, 'APPROVE': 3, 'AUTH': 1, 'AWARD': 3, 'CAP': 2, 'CHANGE': 2, 'CLARIFY': 4, 'COMPARE': 4, 'CONFIG': 2, 'COST': 3, 'DEV': 2, 'EVAL': 5, 'EVIDENCE': 6, 'EVOLVE': 7, 'EVT': 3, 'GATE': 2, 'GUARD': 5, 'INTAKE': 3, 'INTEG': 4, 'LEDGER': 4, 'MAIL': 2, 'MARKET': 6, 'NEGO': 2, 'NORM': 4, 'PLUGIN': 4, 'PRICE': 3, 'QEP': 8, 'QUOTE': 1, 'RFQ': 9, 'RUNTIME': 9, 'STORAGE': 3, 'TERMS': 2, 'UIFB': 1, 'USERPLUG': 12, 'USREQ': 12, 'UX': 5, 'UXWEB': 2, 'VIZ': 1}
+AC families: 45
+{'ADMIN': 10, 'ADV': 1, 'AGENTRT': 3, 'APPROVE': 3, 'AUDIT': 5, 'AUTH': 1, 'AWARD': 2, 'CAP': 1, 'CHANGE': 2, 'CLARIFY': 4, 'COMPARE': 4, 'CONFIG': 1, 'COST': 1, 'DESIGN': 3, 'DEV': 1, 'EVAL': 3, 'EVIDENCE': 1, 'EVOLVE': 5, 'EVT': 2, 'FAQ': 1, 'GATE': 2, 'GUARD': 3, 'INTAKE': 2, 'INTEG': 6, 'MAIL': 2, 'MARKET': 6, 'NEGO': 2, 'NORM': 3, 'PIPELINE': 1, 'PLUGIN': 4, 'PRICE': 2, 'QEP': 4, 'QUOTE': 1, 'RFQ': 7, 'RUNTIME': 10, 'STORAGE': 3, 'SYNC': 1, 'TERMS': 1, 'TRUST': 1, 'UI': 2, 'UIFB': 1, 'USERPLUG': 12, 'USREQ': 1, 'UXWEB': 1, 'VIZ': 1}
+p3 requirements: 41 landed in FR defset: 34 missing: ['FR-STORAGE-002', 'FR-STORAGE-003', 'FR-STORAGE-005', 'FR-AGENTRT-001', 'FR-AGENTRT-003', 'FR-AGENTRT-004', 'FR-AGENTRT-005']
+p3 acceptance: 42 landed in AC defset: 34 missing: ['AC-ADMIN-011', 'AC-AGENTRT-001', 'AC-AGENTRT-003', 'AC-AGENTRT-004', 'AC-AGENTRT-005', 'AC-STORAGE-002', 'AC-STORAGE-003', 'AC-STORAGE-005']
+p3 landed flags: {'True': 26, 'False': 15}
+p3 acc landed flags: {'True': 26, 'False': 16}
+ux2 landed: {"P0a": "f3e76b8（/start/ 上手页 + /api/routes 路由表）", "P0-2_P0-3": "进行中（subagent 实现中）"}
+ux2 naming: 落地时必须把草稿编号 `FR-UX2-00x`/`AC-UX2-00x` **转成纯字母家族**（本次用 `UXWEB`）：门的 ID 正则是 `[A-Z]+-\d{3}`，带数字的家族门认不出（见 D-069）。已落地：FR-UXWEB-001/002、AC-UXWEB-001。
+ux2 discipline: 按 D-059：只把已实现且可验证的 FR/AC 迁进正式表；其余留在本索引与三份规格里（landed=false），不假标 done。
+(exit=0)
+
+
+包名冲突实测（迁移目标 `src/system|domain|userspace` 作为顶层包名）：
+$ python3 -c "import sys, importlib.util as u; print(sys.version.split()[0]); print('system', u.find_spec('system')); print('domain', u.find_spec('domain')); print('userspace', u.find_spec('userspace'))"
+3.13.13
+system None
+domain None
+userspace None
+(exit=0)
+
+
+§3 cordis 边界核实（版本 + 用法来源）
+
+本地实测（宿主侧唯一第三方依赖）：
+$ grep -n 'cordis' host/package.json
+6:  "description": "quotagent P1 宿主层：直接依赖 cordis（组合/插件/事件），不重复造轮子（ADR-0012）",
+11:    "cordis": "4.0.0-rc.10"
+(exit=0)
+
+$ python3 -c "import json;p=json.load(open('host/node_modules/cordis/package.json'));print('installed cordis', p['version']);print('deps', p['dependencies']);print('peerDependencies', p['peerDependencies'])"
+installed cordis 4.0.0-rc.10
+deps {'@standard-schema/spec': '^1.1.0', 'cosmokit': '^1.8.1'}
+peerDependencies {'@cordisjs/plugin-include': '^1.1.0', '@cordisjs/plugin-loader': '^1.0.0-rc.7'}
+(exit=0)
+
+$ ls host/node_modules/
+@standard-schema
+cordis
+cosmokit
+(exit=0)
+
+$ grep -l 'declare class' host/node_modules/cordis/lib/*.d.ts | tr '\n' ' '
+host/node_modules/cordis/lib/context.d.ts host/node_modules/cordis/lib/events.d.ts host/node_modules/cordis/lib/fiber.d.ts host/node_modules/cordis/lib/logger.d.ts host/node_modules/cordis/lib/reflect.d.ts host/node_modules/cordis/lib/registry.d.ts host/node_modules/cordis/lib/utils.d.ts (exit=0)
+
+$ grep -n 'waterfall\|emit(\|parallel\|serial\|bail' host/node_modules/cordis/lib/events.d.ts | head -8
+8:export type DispatchMode = 'emit' | 'parallel' | 'serial' | 'bail' | 'waterfall';
+11:        parallel<K extends keyof Events>(name: K, ...args: Parameters<Events[K]>): Promise<void>;
+12:        parallel<K extends keyof Events>(thisArg: NoInfer<ThisType<Events[K]>>, name: K, ...args: Parameters<Events[K]>): Promise<void>;
+15:        serial<K extends keyof Events>(name: K, ...args: Parameters<Events[K]>): Promisify<ReturnType<Events[K]>>;
+16:        serial<K extends keyof Events>(thisArg: NoInfer<ThisType<Events[K]>>, name: K, ...args: Parameters<Events[K]>): Promisify<ReturnType<Events[K]>>;
+17:        bail<K extends keyof Events>(name: K, ...args: Parameters<Events[K]>): ReturnType<Events[K]>;
+18:        bail<K extends keyof Events>(thisArg: NoInfer<ThisType<Events[K]>>, name: K, ...args: Parameters<Events[K]>): ReturnType<Events[K]>;
+19:        waterfall<K extends keyof Events>(name: K, ...args: Parameters<Events[K]>): ReturnType<Events[K]>;
+(exit=0)
+
+$ grep -n 'update(config' host/node_modules/cordis/lib/fiber.d.ts
+79:    update(config: any, noSave?: boolean): Awaitable<void>;
+(exit=0)
+
+
+cordis 生态（npm registry 查询，2026-09-22；原始 JSON 落在 tmp/arch-batch/npm-cordis.json）：
+@cordisjs/plugin-loader             @ 1.0.0-rc.7 :: Loader for cordis
+@cordisjs/plugin-include            @ 1.1.0 ::
+@cordisjs/plugin-hmr                @ 1.1.0 :: Hot Module Replacement Plugin for Cordis
+@cordisjs/plugin-database           @ 4.1.1 :: Type Driven Database Framework
+@cordisjs/plugin-database-sqlite    @ 5.1.1 :: SQLite Driver for Minato
+@cordisjs/plugin-database-memory    @ 4.1.1 :: In-memory Driver for Minato
+@cordisjs/plugin-server             @ 1.7.0 :: Server plugin for cordis
+@cordisjs/plugin-server-acl         @ 1.0.1 :: Access control list plugin for cordis server
+@cordisjs/plugin-http               @ 1.5.2 :: Fetch-based axios-style HTTP client
+@cordisjs/plugin-notifier           @ 0.8.0 :: Notifier service for Cordis
+@cordisjs/mail                      @ 0.2.1 :: Abstract Mail Service for Cordis
+@cordisjs/plugin-mail-smtp          @ 0.2.1 :: SMTP mail provider (nodemailer) for @cordisjs/mail
+@cordisjs/plugin-market             @ 0.5.1 :: Plugin market for Cordis
+@cordisjs/plugin-webui              @ 0.8.2 :: Web User Interface for Koishi
+@cordisjs/plugin-insight            @ 4.5.1 :: Show plugin dependency graph for Cordis
+@cordisjs/plugin-timer              @ 1.1.3 :: Timer service for cordis
+@cordisjs/plugin-env                @ 1.0.1 :: Environment variables service for cordis
+@cordisjs/plugin-cli                @ 1.1.2 :: CLI service for Cordis
+@cordisjs/schema                    @ 0.1.1 :: Schema service for cordis
+@cordisjs/fs                        @ 1.3.7 :: Node.js fs module ponyfill for browser
+@cordisjs/logger                    @ 0.3.3 :: Logger service for cordis
+
+查询口径：`curl 'https://registry.npmjs.org/-/v1/search?text=%40cordisjs&size=100'`（共 100 条命中）。
+标注：**包名与版本**是一手元数据（本次查询）；**API 用法**为 [假设]（未安装未运行，见 §7）。
+
+§4 可复算/对账命令
+
+$ tools/verify.sh help | sed -n '2p'
+  --help|-h|ac|ac-registry|admin-route|advice|agent-runtime|approval-digest|audit-hook|authority|bid-heuristics|breaker|breaker-route|bridge|bridge-canary|budget-guard|budget-route|canary|canary-route|change-detail|clean-copy|config-route|cordis|coverage|docs|events|evolution|evolve-journal|evolve-module|faq|g0|g1|g2|gates|governor|help|idem-route|idempotency-guard|invariants|mail|mail-transport|modules|negotiation|observability|ops-view|p0-no-node|pipeline-route|pipeline-view|plugin-market|plugins|quote-draft|retention|retention-view|rfq-deadline|rfq-visibility|smoke|storage|suite|supplier-scorecard|ui-feedback|ui-mutate|ui-seed|user-space|v|webui|wiring
+(exit=0)
+
+$ grep -chE '^\| FR-' docs/work/functional-requirements.md docs/work/functional-requirements-archive.md docs/work/functional-requirements-archive-b.md
+72
+47
+46
+(exit=0)
+
+$ grep -chE '^\| AC-' docs/work/acceptance-criteria.md docs/work/acceptance-criteria-archive.md
+71
+62
+(exit=0)
+
+$ cmp tmp/ux-双方痛点与交互需求.md.txt 'docs/work/plans/ux-双方痛点与交互需求.md.txt' && echo 'ux 副本逐字节相同'
+ux 副本逐字节相同
+(exit=0)
+
+$ cmp tmp/gui-交互规格.md.txt 'docs/work/plans/gui-交互规格.md.txt' && echo 'gui 副本逐字节相同'
+gui 副本逐字节相同
+(exit=0)
+
+$ cmp tmp/config-凭据UX规格.md.txt 'docs/work/plans/config-凭据UX规格.md.txt' && echo 'config 副本逐字节相同'
+config 副本逐字节相同
+(exit=0)
+
+
+§5 预算（`docs/design/12-documentation-standard.md` §1 新增 4 行后，受影响文件的占用）
+
+$ python3 - <<'PY'
+import pathlib
+root=pathlib.Path('.')
+for pat,lim in [('docs/work/plans/*.md',32768),('docs/design/*.md',28672),('docs/design/adr/*.md',8192),('docs/work/*.md',32768)]:
+    for p in sorted(root.glob(pat)):
+        s=p.stat().st_size
+        if s>lim*0.8: print(f'{p} {s}/{lim} B = {s/lim:.1%}')
+PY
+docs/work/plans/ui-workflow-rework.md 27821/32768 B = 84.9%
+docs/design/04-services-catalog.md 25832/28672 B = 90.1%
+docs/design/14-plugin-inventory.md 28564/28672 B = 99.6%
+docs/design/15-requirements-coverage.md 28272/28672 B = 98.6%
+docs/design/16-negotiation-design.md 25542/28672 B = 89.1%
+docs/design/27-plugin-architecture.md 23275/28672 B = 81.2%
+docs/design/adr/0007-p0-runtime-and-ledger-format.md 7033/8192 B = 85.9%
+docs/design/adr/0009-p0-norm-versioning-intake-semantics.md 6954/8192 B = 84.9%
+docs/design/adr/0010-p0-approval-and-realm-filtering.md 7601/8192 B = 92.8%
+docs/design/adr/0011-p0-compare-guard-eval-semantics.md 6994/8192 B = 85.4%
+docs/design/adr/0013-cordis-bridge-protocol.md 7502/8192 B = 91.6%
+docs/design/adr/0014-p1-under-assumed-validations.md 6840/8192 B = 83.5%
+docs/design/adr/0015-host-profiles-and-config-veto.md 6812/8192 B = 83.2%
+docs/work/acceptance-criteria.md 32645/32768 B = 99.6%
+docs/work/decisions-archive.md 32023/32768 B = 97.7%
+docs/work/decisions.md 31074/32768 B = 94.8%
+docs/work/functional-requirements.md 32090/32768 B = 97.9%
+docs/work/progress-checklist.md 30742/32768 B = 93.8%
+(exit=0)
+
+
+§6 本页引用的 ID 都是已定义的（评测口径：把本页提到的 FR/AC 逐个拿去定义集合里找）
+
+$ python3 - <<'PY'
+import re, pathlib
+root=pathlib.Path('.')
+ROW=re.compile(r'^\|\s*((?:FR|AC)-[A-Z0-9-]*\d)\s*\|', re.M)
+def ids(pre):
+    m=root/('docs/work/functional-requirements.md' if pre=='FR' else 'docs/work/acceptance-criteria.md')
+    out=set()
+    for f in [m,*sorted(m.parent.glob(m.stem+'-archive*.md'))]:
+        out|={x.group(1) for x in ROW.finditer(f.read_text(encoding='utf-8'))}
+    return out
+D=ids('FR')|ids('AC')
+for f in ['docs/design/27-plugin-architecture.md','docs/design/28-plugin-requirements-and-run.md','docs/design/adr/0020-everything-is-a-plugin.md','docs/design/adr/0021-requirements-owned-by-plugins.md','docs/work/plans/plugin-migration-plan.md','docs/work/plans/plugin-file-map.md','docs/work/plans/spec-persistence.md']:
+    t=pathlib.Path(f).read_text(encoding='utf-8')
+    refs=set(re.findall(r'\b(?:FR|AC)-[A-Z0-9]+(?:-[A-Z0-9]+)*\d\b', t))
+    bad=sorted(r for r in refs if r not in D)
+    print(f'{f}: refs={len(refs)} unresolved={bad}')
+PY
+docs/design/27-plugin-architecture.md: refs=4 unresolved=[]
+docs/design/28-plugin-requirements-and-run.md: refs=38 unresolved=[]
+docs/design/adr/0020-everything-is-a-plugin.md: refs=0 unresolved=[]
+docs/design/adr/0021-requirements-owned-by-plugins.md: refs=4 unresolved=[]
+docs/work/plans/plugin-migration-plan.md: refs=0 unresolved=[]
+docs/work/plans/plugin-file-map.md: refs=0 unresolved=[]
+docs/work/plans/spec-persistence.md: refs=18 unresolved=[]
+(exit=0)
+
+
+§7 本批**没有**验证的东西
+
+1. cordis 生态包的 API/用法（未安装未运行）：`@cordisjs/plugin-loader|hmr|database|server|http|notifier|mail-smtp|market|webui|insight|timer|env|cli`；
+2. 迁移尚未执行：`src/system|domain|userspace` 目录、`tools/plugin.sh`、`./run` 一键运行、`A7` 判据均**不存在**（本批只写规范与计划）；
+3. 目标结构下 `import system.kernel` 的真实可用性（只验证了"包名无 stdlib 冲突"，未验证 PYTHONPATH 下的装载）；
+4. 迁移后的门全绿（只验证了**迁移前**的门：见 §8）；
+5. `docs/work/plans/spec-persistence.md` 的落点是**主题级**归口（按文件 × 章节组），不是逐行（逐行的草案仍在事实源里，缺口见该页 §2）。
+
+§8 门与提交
+
+（本节由本批次在门跑完后追加：docs/coverage/ac-registry/g1 的原始尾部输出 + commit sha + `git ls-remote` 回读）
