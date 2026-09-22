@@ -231,10 +231,14 @@ def _cmd_list(args: argparse.Namespace) -> int:
 
 def _cmd_selftest(args: argparse.Namespace) -> int:
     from ..paths import scratch_root
-    from .checks_runtime import _third_party_imports
+    # `checks_runtime` 已按迁移阶段 4.1 变成**薄转发**：实体在 `src/system/runtime/tests/checks_runtime.py`，
+    # 由薄转发按文件路径装载成模块对象 `_M`，**不再**把名字导进本模块的命名空间。
+    # 因此这里只能经 `_M` 取那个函数（`from .checks_runtime import _third_party_imports` 是 T-323 搬迁后的
+    # 残留引用：薄转发不转发符号 ⇒ 一跑就 ImportError）。判据不变，仍真跑同一份实现。
+    from . import checks_runtime as _checks_runtime
     from .registry import REGISTRY
 
-    third_party = _third_party_imports()
+    third_party = _checks_runtime._M._third_party_imports()
     checks = [
         {"name": "Python >= 3.9", "ok": sys.version_info[:2] >= (3, 9), "detail": sys.version.split()[0]},
         {"name": "仓库根可解析", "ok": (repo_root() / "tools" / "verify.sh").is_file(), "detail": str(repo_root())},

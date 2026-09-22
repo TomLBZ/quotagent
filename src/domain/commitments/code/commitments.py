@@ -184,9 +184,12 @@ class CommitmentGate:
         self._pos = getattr(self, "_pos", {})
         self._pos[record["po_id"]] = record
         self._append(PO_ISSUED_EVENT, record, event_class="commitment", ref=award_id)
+        # 返回**含逐行**（`ref_line/qty/unit_price/basis/trace`）：投递登记与导出都要这份逐行事实，
+        # 由服务自己给（调用方不必再去账本里捞一次，也不会因为拿到摘要而丢掉 basis）。
         return {"po_id": record["po_id"], "award_id": award_id, "intent_id": award.get("intent_id"),
-                "quote_id": award.get("quote_id"), "line_count": len(traced), "trace_mode": trace_mode,
-                "total_amount": record["total_amount"], "chain": record["chain"],
+                "quote_id": award.get("quote_id"), "package_id": award.get("package_id"),
+                "line_count": len(traced), "lines": [dict(line) for line in traced],
+                "trace_mode": trace_mode, "total_amount": record["total_amount"], "chain": record["chain"],
                 "issued_at": record["issued_at"]}
 
     def trace(self, po_id: str) -> dict:

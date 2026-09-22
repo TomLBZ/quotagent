@@ -266,7 +266,21 @@ const e2e = async ({ weightBps, candidate }) => {
     },
   }, webuiConfig.parse({ port: 0, route_prefix: '/quotagent' }))
   const base = wbox.handle.url.replace(/\/$/, '')
-  const body = await (await fetch(`${base}/supplier/api/events`)).text()
+  // 业务路由有**路由级身份门槛**（P3 起 `/supplier/**` 未登录 ⇒ 401，见 `host/webui.mjs` 的同款夹具）：
+  // 不让会话就等于打不到投影，`lane` 会是 undefined（那不是"接线坏了"，是**没登录**）。
+  // 走真入口 `POST /identity/login?format=json`（200 + `Set-Cookie: qa_identity=…`），判据不放松。
+  const login = await fetch(`${base}/identity/login?format=json`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ name: 'gate-canary-supplier', side: 'supplier' }).toString(),
+  })
+  const cookie = String(login.headers.get('set-cookie') ?? '').split(';')[0]
+  if (login.status !== 200 || !cookie.startsWith('qa_identity=')) {
+    throw new Error(`canary-route 端到端夹具登录失败：status=${login.status} `
+      + `body=${(await login.text()).slice(0, 200)}`)
+  }
+  const events = await fetch(`${base}/supplier/api/events`, { headers: { cookie } })
+  const body = await events.text()
   const lane = pbox.lastLane
   const stats = cbox.handle.stats()
   const decision = cbox.handle.decide()

@@ -111,6 +111,8 @@
 | `award/commit-requested` | serial | live | `ctx.award` → 人工门 | 需 `approval/granted` 才能推进（名称与事件表一致：`award/committed` 与 `commit-requested` 成对） |
 | `award/committed` | emit | ✔ | 人工签署 → po | 承诺，缺批准即抛错（INV-005） |
 | `po/issued` | emit | ✔ | `ctx.award` → 履约 | 只能由 `AwardCommitment` 派生 |
+| `po/distributed` | emit | ✔ | `ctx.award` → 对方 | 投递记录：这张 PO 在何时投给谁（**两侧账本各一条**，与 `rfq/distributed` 同形） |
+| `po/acknowledged` | emit | ✔ | 供应商 → `ctx.award` | 回签（收到采购单）：**人签**，署名 == 会话身份；两侧各一条 |
 | `change/proposed` | serial | ✔ | 双侧 → 结算 | 变更议题（`ref_quote_lines[]` + `delta` + `basis_unit_price_ref`） |
 | `change/priced` | serial | ✔ | 双侧 → 结算 | 差额按**原报价单价**复算（`delta_amount` + 逐行明细） |
 | ↳ 字段口径 | – | – | – | `basis_unit_price_refs` 恒为逐行基准引用**列表**（单行也是单元素），`basis_unit_price_ref` 为首元素；引用不可验证即 `change/rejected` |

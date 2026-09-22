@@ -99,7 +99,7 @@ quote/*             drafted, priced, submitted, revised, withdrawn, rejected-by-
                     cost-built, price-drafted(waterfall), deviation-captured, deviation-quantified
 compare/*           ranked, flag-raised, conflict-with-terms
 award/*             intent, withdrawn, confirmed, declined, committed
-po/*                issued, amended
+po/*                issued, distributed, acknowledged, amended
 change/*            proposed, priced, approved, applied, settled
 acceptance/*        recorded, deficiency-raised
 invoice/*           matched, mismatch-raised

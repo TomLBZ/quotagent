@@ -8,9 +8,13 @@
      `quote-draft.py` / `quote-sign.py` 才能往它追加）：供应商侧 3 行（`rfq/published` 带两个行项目 +
      `quote/submitted` 带参考单价（元）+ 一行**带哨兵的私域行**）；承包商侧 2 行；
   ② 起真 `cli.mjs webui` 进程（随机端口、私有前缀、私有 `--ui-shared`）；
-  ③ **假成功杀死**（本门最核心的一条）：拿 `/api/routes` 里**每一条 `method=GET` 且没有同路径 POST 行**
-     的只读路由发 POST ⇒ 状态码非 200（**405**）且体含 `method-not-allowed`、响应头 `Allow: GET`；
-     **反向对照**：每一条 `method=POST` 的写路由发 POST ⇒ **不得**返回该 code（非空转）；
+  ③ **假成功杀死**（本门最核心的一条）：拿 `/api/routes` 里**每一条只读路由**（`method=GET` 且没有
+     同路径 POST 行）发 POST ⇒ 状态码非 200（**405**）且体含 `method-not-allowed`、响应头 `Allow: GET`；
+     **动态注册面**（`source=uiRoutes`）上"同路径既有 GET 又有 POST"的路由**逐条实测**：带 `Allow: GET`
+     的（例如 `/api/attachments/{list,file,store}` 的 POST 孪生）按**同一（更强的）只读判据**判，
+     没带的（例如 `/mail/config/` 这类 GET 页面 + POST 真提交）**仍是写路由**、按写判据判；
+     **反向对照**：每一条**写路由**发 POST ⇒ **不得**返回该 code（非空转）；围栏不是被豁免，而是
+     从写判据换到更严的只读判据，**没有一条 POST 行免检**；
      并且实测「改前那条假成功」已经死了：同一路径 GET 与 POST 的响应体**不同**（改前两者逐字节相同）；
   ④ 准备页 `GET /supplier/quotes/prepare/` 200 且是**真页面**（行项目目录 + 字段与校验规则 +
      「下一步（签署）」`data-signature-required="1"` + 可复制的 `tools/quote-sign.py` 命令）；
@@ -299,17 +303,34 @@ ROUTE_SUBS = {"<view>": "supplier", "<id>": "pkg-g1", "<name>": "mail_smtp", "<n
               "<plugin>": "demo-plugin", "<block_id>": "blk-1", "<load|unload|reload>": "load"}
 
 
-def route_paths(routes: list[dict], prefix: str) -> tuple[list[str], list[str]]:
-    """返回 `(只读路由, 写路由)`（**前缀已剥离**）；同路径既有 GET 又有 POST 的归到写路由。"""
+def route_paths(routes: list[dict], prefix: str) -> tuple[list[str], list[str], list[str]]:
+    """返回 `(只读 GET 路由, 全部 POST 路由, 动态围栏**候选**)`（**前缀已剥离**）。
+
+    - **只读 GET 路由** = `method=GET` 且**同路径没有 POST 行**（静态只读路由）；
+    - **POST 路由** = 全部 `method=POST` 行（写路由与围栏候选都在这里，逐条都要判）；
+    - **动态围栏候选** = **路由注册面**（`source=uiRoutes`）上"同路径既有 GET 又有 POST"的那些：
+      插件经 `uiRoutes` 注册只读路径时**自带一条 POST 孪生**返回 `405 + Allow: GET`
+      （`docs/design/29-webui-gui-app.md` §9.3/§10.4）—— 它们在 `/api/routes` 里长得像写路由。
+
+    「是不是围栏」**不由结构猜、由实测的 `Allow: GET` 定**（见 `main()` 的 ③）：候选收到 POST 且
+    响应头带 `Allow: GET` ⇒ 走**只读判据**（405 + `method-not-allowed`）；否则**仍是写路由**
+    （例如 `/mail/config/` 这类 GET 页面 + POST 真提交的动态路由），走写判据（**不得**是该 code）。
+    判据只收紧不放松：围栏不是被豁免，而是从写判据换成**更严的**只读判据 —— **没有一条 POST 行免检**。
+    """
     def fill(path: str) -> str:
         out = str(path)
         for key, value in ROUTE_SUBS.items():
             out = out.replace(key, value)
         return out[len(prefix):] if out.startswith(prefix) else out
-    gets = [fill(item.get("path", "")) for item in routes if item.get("method") == "GET"]
-    writes = [fill(item.get("path", "")) for item in routes if item.get("method") == "POST"]
-    read_only = sorted({path for path in gets if path not in set(writes)})
-    return read_only, sorted(set(writes))
+    rows = [(fill(item.get("path", "")), str(item.get("method") or "").upper(), item.get("source"))
+            for item in routes]
+    gets = [path for path, method, _src in rows if method == "GET"]
+    posts = [path for path, method, _src in rows if method == "POST"]
+    dynamic_gets = {path for path, method, src in rows if method == "GET" and src == "uiRoutes"}
+    fence_candidates = {path for path, method, src in rows
+                        if method == "POST" and src == "uiRoutes" and path in dynamic_gets}
+    read_only = sorted({path for path in gets if path not in set(posts)})
+    return read_only, sorted(set(posts)), sorted(fence_candidates)
 
 
 def main() -> int:  # noqa: C901
@@ -363,31 +384,43 @@ def main() -> int:  # noqa: C901
 
         # ---- ③ 假成功杀死 + 反向对照 ----
         routes = parse_json(get(f"{base}/api/routes")[1]).get("routes", [])
-        read_only, writes = route_paths(routes, prefix)
+        read_only, posts, fence_candidates = route_paths(routes, prefix)
         bad_read = []
         for path in read_only:
             code, body, headers = post_form(f"{base}{path}", {"probe": "1"})
             if code == 200 or METHOD_CODE not in body or str(headers.get("allow") or "").upper() != "GET":
                 bad_read.append(f"POST {path}→{code}/{body[:40]}")
         bad_write = []
-        for path in writes:
-            code, body, _headers = post_form(f"{base}{path}", {})
-            if METHOD_CODE in body:
-                bad_write.append(f"POST {path}→{code} 竟然返回 {METHOD_CODE}")
+        fences = []
+        for path in posts:
+            code, body, headers = post_form(f"{base}{path}", {})
+            allow = str(headers.get("allow") or "").upper()
+            if path in fence_candidates and allow == "GET":
+                # 动态只读路径的 POST 孪生（`source=uiRoutes` 且实测 `Allow: GET`）⇒ **只读判据**（更严）
+                fences.append(path)
+                if code == 200 or METHOD_CODE not in body:
+                    bad_read.append(f"POST {path}→{code}/{body[:40]}")
+            elif METHOD_CODE in body:
+                # 真写路由（含"同路径有 GET 孪生、但没给 `Allow: GET`"的动态路由，如 `/mail/config/`）
+                bad_write.append(f"POST {path}→{code} 竟然返回 {METHOD_CODE}（Allow={allow or '无'}）")
         # 实测「改前那条假成功」已经死了：同一路径 GET 与 POST 的响应体**不同**
         fake_before_get = get(f"{base}/contractor/quotes/")
         fake_before_post = post_form(f"{base}/contractor/quotes/", {"item": "L-001", "price": "80"})
-        check("③ **假成功杀死**：`/api/routes` 里**每一条只读 GET 路由**（{n} 条）收到 POST ⇒ 状态码非 200"
-              "（**405**）、体含 `method-not-allowed`、响应头 `Allow: GET`；**反向对照**：**每一条写路由**"
-              "（{m} 条）收到 POST ⇒ **不得**返回该 code（非空转）；并且实测「改前那条假成功」已死："
-              "同一路径 GET 与 POST 的响应体**不同**（改前两者逐字节相同、bytes=3935、sha256 相同）"
-              .format(n=len(read_only), m=len(writes)),
-              len(read_only) > 20 and len(writes) >= 8 and not bad_read and not bad_write
+        check("③ **假成功杀死**：`/api/routes` 里**每一条只读路由**（{n} 条）收到 POST ⇒ 状态码非 200"
+              "（**405**）、体含 `method-not-allowed`、响应头 `Allow: GET`；**动态注册面**（`source=uiRoutes`）上"
+              "只读路径的 POST 孪生**方法围栏**（实测带 `Allow: GET` 的 {f} 条）按**同一（更强的）只读判据**判；"
+              "**反向对照**：**每一条真写路由**（{m} 条 = 全部 {p} 条 POST − 围栏）收到 POST ⇒ **不得**返回该 code"
+              "（非空转）；并且实测「改前那条假成功」已死：同一路径 GET 与 POST 的响应体**不同**"
+              "（改前两者逐字节相同、bytes=3935、sha256 相同）"
+              .format(n=len(read_only), m=len(posts) - len(fences), f=len(fences), p=len(posts)),
+              len(read_only) > 20 and len(posts) - len(fences) >= 8 and not bad_read and not bad_write
               and fake_before_get[0] == 200 and fake_before_post[0] == 405
               and fake_before_get[1] != fake_before_post[1]
               and METHOD_CODE in fake_before_post[1]
               and str(fake_before_post[2].get("allow") or "").upper() == "GET",
-              f"只读路由={len(read_only)} 写路由={len(writes)}；不合规只读={bad_read[:4]}；"
+              f"只读路由={len(read_only)} 动态围栏={len(fences)}{fences} "
+              f"写路由={len(posts) - len(fences)}/{len(posts)}·POST；"
+              f"不合规只读={bad_read[:4]}；"
               f"写路由误报={bad_write[:4]}；假成功对照 GET={fake_before_get[0]}/{len(fake_before_get[1])}B "
               f"POST={fake_before_post[0]}/{len(fake_before_post[1])}B 体不同={fake_before_get[1] != fake_before_post[1]}")
 

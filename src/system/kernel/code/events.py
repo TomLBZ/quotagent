@@ -149,6 +149,11 @@ class EventBus:
         "award/commit-requested": ("serial", False, ""),
         "award/committed": ("emit", True, ""),
         "po/issued": ("emit", True, ""),
+        # 采购单的投递与回签（P8）：`po/distributed` = 谁在何时收到这张 PO（两侧账本各一条，与 rfq/distributed
+        # 同形）；`po/acknowledged` = 供应商**人签**确认收到（两侧各一条）。登记口径与使用见 05-events.md §3
+        # 与 docs/design/29-webui-gui-app.md §13。
+        "po/distributed": ("emit", True, ""),
+        "po/acknowledged": ("emit", True, ""),
         "evidence/pack-exported": ("emit", True, ""),
         "evidence/retention-archived": ("emit", True, ""),
         "admin/block-pending": ("emit", True, ""),

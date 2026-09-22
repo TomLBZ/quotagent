@@ -25,7 +25,15 @@
   · `po`（承包商侧，**人签**：`--actor` 必须 `human:`）
       门①：**PO 只能由承诺派生**（`award/committed` 的 `award_id` 必须存在）；门②：逐行引用中标条目、不得改价
       （既有 `CommitmentGate.issue_po` 的 `po-line-not-derived` / `po-line-price-mismatch`）；门③：人工门
-      （`scope=po.issue`）。落 `po/issued`（带 `po → award → intent → quote` 的追溯链）。
+      （`scope=po.issue`）；门④：**投递**——收件人（供应商侧 realm）与中标报价的提交者必须对得上
+      （`po-recipient-*`，账本零新增）。
+      落：`po/issued`（带 `po → award → intent → quote` 的追溯链）+ **投递两条登记**
+      （承包商账本 `po/distributed`（谁在何时收到哪个 `po_id`，与 `rfq/distributed` 同形）+
+      供应商账本 `po/distributed`（收件人侧那条：本侧收到的采购单与逐行）+ 共享交换目录的**投递信封**）。
+  · `acknowledge`（供应商侧，**人签**：`--actor` 必须 `human:`）
+      门①：这条 PO 必须真的**投递到了本侧**（本侧账本里有 `po/distributed` 且 `po_id` 对上）——
+      只确认投递给自己的那份；门②：承包商账本里该 `po_id` 的 `po/issued` 必须在（两侧对得上，不凭空回签）。
+      落：自己账本 `po/acknowledged` + 承包商账本一条同名登记（与 `award/confirmed` 的双向登记同一模式）。
 
 纪律（与 `quote-draft.py` / `quote-sign.py` / `rfq-publish.py` 同规格）：
   · 用法/环境错误在**构造 Ledger 之前**返回（拒绝时连空账本文件都不创建）；
@@ -59,11 +67,14 @@ REALM_RE = re.compile(r"^[a-z][a-z0-9-]*:[A-Za-z0-9._-]{1,64}$")
 
 SCHEMA = "quotagent/pending/v1"
 KIND = "commitment-apply"
-STEPS = ("propose", "confirm", "commit", "po")
+STEPS = ("propose", "confirm", "commit", "po", "acknowledge")
+HUMAN_STEPS = ("confirm", "commit", "po", "acknowledge")
 MAX_LINES = 64
 MAX_FILE_BYTES = 262144
 IGNORED_KEYS = ("payload_sha256", "bytes", "submitted_at")
 EVENT_CONFIRMED = "award/confirmed"
+EVENT_PO_DISTRIBUTED = "po/distributed"
+EVENT_PO_ACKNOWLEDGED = "po/acknowledged"
 SCOPE_AWARD = "award.commit"
 SCOPE_PO = "po.issue"
 
@@ -296,6 +307,129 @@ def issued_in(rows: list[dict], award_id: str) -> dict | None:
     return None
 
 
+def issued_po_in(rows: list[dict], po_id: str) -> dict | None:
+    for row in rows:
+        body = body_of(row)
+        if str(row.get("type")) == "po/issued" and str(body.get("po_id") or "") == po_id:
+            return body
+    return None
+
+
+def delivered_in(rows: list[dict], po_id: str) -> dict | None:
+    """本侧（收件人或发件人）账本里这条 PO 的投递登记（`po/distributed`）。"""
+    for row in rows:
+        body = body_of(row)
+        if str(row.get("type")) == EVENT_PO_DISTRIBUTED and str(body.get("po_id") or "") == po_id:
+            return body
+    return None
+
+
+def acknowledged_in(rows: list[dict], po_id: str) -> dict | None:
+    for row in rows:
+        body = body_of(row)
+        if str(row.get("type")) == EVENT_PO_ACKNOWLEDGED and str(body.get("po_id") or "") == po_id:
+            return body
+    return None
+
+
+def bidder_realm(s_rows: list[dict], quote_id: str) -> str:
+    """提交了 `quote_id` 的那一家的 realm（**只能从被投递方自己的账本读**，不猜、不从信封读）。"""
+    for row in s_rows:
+        body = body_of(row)
+        if str(row.get("type")) == "quote/submitted" and str(body.get("quote_id") or "") == quote_id:
+            return realm_of(s_rows, "")
+    return ""
+
+
+def clip(value: object, limit: int = 120) -> str:
+    """人工自由输入的一行字（交期窗口/送货地址）：去控制字符、压空白、有界——**不改语义、只防脏**。"""
+    return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", str(value or "")).replace("\n", " ").strip()[:limit]
+
+
+def write_delivery_envelope(target: Path, entry: dict) -> str:
+    """投递信封（交换面，与 `exchange/award-intents.json` 同一份纪律）：按 `po_id` 合并，原子写。"""
+    try:
+        existing = json.loads(target.read_text(encoding="utf-8")) if target.exists() else []
+        existing = existing if isinstance(existing, list) else []
+    except ValueError:
+        existing = []
+    merged = [item for item in existing if str(item.get("po_id")) != str(entry.get("po_id"))] + [entry]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    tmp.write_text(json.dumps(merged, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, target)
+    return str(target)
+
+
+def deliver_po(*, po_body: dict, led_contractor: Path, c_rows: list[dict], led_supplier: Path,
+               s_rows: list[dict], delivery_out: str, now: str, actor: str,
+               premises: dict | None = None) -> tuple[dict | None, dict | None]:
+    """把**已签发**的 PO 投递给中标供应商：① 收件人 = 中标报价的提交者；② 两侧账本各一条 `po/distributed`；
+    ③ 共享交换目录的投递信封。任何一条判据不成立 ⇒ **不写任何东西**（账本与信封都零新增），返回拒绝。
+
+    `po/issued` 只落承包商账本（承包商的事实）；收件人侧必须有自己的那条**投递登记**，否则
+    「供应商看不到 PO」——那不是收件人的错，而是投递没有留痕（与 `rfq-publish.py` 的收件人登记同因）。
+    """
+    po_id = str(po_body.get("po_id") or "")
+    quote_id = str(po_body.get("quote_id") or "")
+    s_realm = realm_of(s_rows, "")
+    if s_realm == "":
+        return None, refusal("po-recipient-unknown",
+                             "被投递方账本里读不出 realm：投递给谁不猜（PO 投递必须有收件人）",
+                             "让被投递方先在本侧产生一条带 realm 的事实（登录 + 一次动作即产生）")
+    bidder = bidder_realm(s_rows, quote_id)
+    if bidder == "":
+        return None, refusal("po-recipient-not-the-bidder",
+                             f"被投递方账本里没有中标报价 {quote_id} 的提交记录：PO 只投给提交这份报价的那一家",
+                             "先让中标供应商把报价送到本侧（APP 供应商道「提交报价」），或核对 award 的 quote_id")
+    envelope = {"po_id": po_id, "award_id": str(po_body.get("award_id") or ""),
+                "intent_id": str(po_body.get("intent_id") or ""), "quote_id": quote_id,
+                "package_id": str(po_body.get("package_id") or ""),
+                "lines": [dict(line) for line in (po_body.get("lines") or [])],
+                "total_amount": po_body.get("total_amount"), "chain": str(po_body.get("chain") or ""),
+                "trace_mode": str(po_body.get("trace_mode") or ""),
+                "approved_by": str(po_body.get("approved_by") or ""),
+                "issued_at": str(po_body.get("issued_at") or ""),
+                "delivered_to": [s_realm], "delivered_at": now, "channel": "relay"}
+    # 执行前提（发 PO 的人给的）：**只出非空值**——空着就如实缺（界面照实显示"对方没给"，不编）。
+    for key in ("delivery_window", "ship_to"):
+        value = clip((premises or {}).get(key))
+        if value:
+            envelope[key] = value
+    out: list[dict] = []
+    try:
+        c_ledger = Ledger(led_contractor, realm=realm_of(c_rows, "contractor:gui"))
+        c_ledger.append(EVENT_PO_DISTRIBUTED,
+                        {"po_id": po_id, "award_id": envelope["award_id"], "quote_id": quote_id,
+                         "package_id": envelope["package_id"], "channel": "relay", "recipients": [s_realm],
+                         "sent_at": now, "line_count": len(envelope["lines"]),
+                         "envelope": envelope, "view": "contractor",
+                         "note": "分发记录：这张 PO 在此时投给了谁（收件人侧另有一条同名的投递登记）"},
+                        correlation_id=po_id, actor=actor, ts=now, event_class="fact",
+                        refs={"po_id": po_id, "package_id": envelope["package_id"]})
+        s_ledger = Ledger(led_supplier, realm=s_realm)
+        s_ledger.append(EVENT_PO_DISTRIBUTED,
+                        {**envelope, "view": "recipient", "recipients": [s_realm], "sent_at": now,
+                         "note": "投递登记：本侧收到的采购单（逐行 + 追溯链）——由签发方的唯一写者写，"
+                                 "回签（po/acknowledged）据此成立"},
+                        correlation_id=po_id, actor=actor, ts=now, event_class="fact",
+                        refs={"po_id": po_id, "package_id": envelope["package_id"]})
+    except LedgerError as exc:
+        return None, refusal("ledger-frozen", str(exc)[0:200], "先修账本（本脚本不往坏账本追加）")
+    out.append({"event": EVENT_PO_DISTRIBUTED, "view": "contractor", "recipients": [s_realm],
+                "po_id": po_id, "sent_at": now})
+    out.append({"event": EVENT_PO_DISTRIBUTED, "view": "recipient", "recipients": [s_realm],
+                "po_id": po_id, "ledger": str(led_supplier), "lines": len(envelope["lines"])})
+    envelope_path = ""
+    if delivery_out:
+        try:
+            envelope_path = write_delivery_envelope(Path(delivery_out), envelope)
+        except OSError as exc:            # 交换面写不出来**不改事实**：账本两条已落，如实报路径没写成
+            envelope_path = f"（信封未写成：{exc}）"
+    return {"applied": out, "envelope": envelope_path, "recipient": s_realm, "ledger_added": 2,
+            "premises": {key: envelope[key] for key in ("delivery_window", "ship_to") if key in envelope}}, None
+
+
 def main(argv: list[str] | None = None) -> int:  # noqa: C901
     parser = argparse.ArgumentParser(description="授标链的唯一落账本者（GUI 动作的服务端一半）")
     parser.add_argument("--step", required=True, choices=STEPS)
@@ -306,6 +440,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     parser.add_argument("--ledger-supplier", default="")
     parser.add_argument("--intent-out", dest="intent_out", default="",
                         help="意向投递信封（propose 用；默认 <ui-shared>/exchange/award-intents.json）")
+    parser.add_argument("--delivery-out", dest="delivery_out", default="",
+                        help="PO 投递信封（po 用；默认 <ui-shared>/exchange/po-deliveries.json）")
     parser.add_argument("--actor", default="", help="署名（confirm/commit/po 三步**必须** human:<人名>）")
     parser.add_argument("--now", default="", help="落账时间（**必填**；本脚本不读墙钟）")
     parser.add_argument("--dry-run", action="store_true")
@@ -343,7 +479,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     if error is not None or s_rows is None:
         return usage_error("ledger-unreadable", str(error), "先修供应商账本（不往坏账本追加）")
     actor = str(record.get("actor") or args.actor).strip() or args.actor
-    if step in ("confirm", "commit", "po") and not actor.startswith("human:"):
+    if step in HUMAN_STEPS and not actor.startswith("human:"):
         return usage_error("human-required", f"--step {step} 的署名必须是 human:（收到 {actor!r}）",
                            "人工门不接受 agent 代签：给 --actor human:<人名>")
     lines, deny_ = lines_of(record)
@@ -557,17 +693,94 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             "next_action": f"发 PO：APP 承包商道「发 PO」（award_id={committed['award_id']}，另一次人签）",
             "note": "承诺已成立（承诺类事件）：award/committed 只由本脚本落，且必须有人工批准记录"}, 0)
 
+    # ------------------------------------------------------------------ acknowledge（供应商侧回签）
+    # 这一段必须在**发 PO 那一段之前**：发 PO 的代码假定 `record` 里有 `award_id`（回签请求里没有）。
+    if step == "acknowledge":
+        po_id = str(record.get("po_id") or "").strip()
+        if not ID_RE.match(po_id):
+            return deny("po-id-malformed", f"po_id 形状非法：{po_id!r}", "用账本里的真 po_id（po-…）",
+                        step, str(request))
+        delivered = delivered_in(s_rows, po_id)
+        if delivered is None:
+            return deny("po-not-delivered-to-you",
+                        f"本侧账本里没有 po_id={po_id} 的投递登记（po/distributed）：只能确认投递给自己的采购单",
+                        "等承包商在 APP 里发 PO（投递会在本侧留一条登记），或核对 po_id", step, str(request))
+        issued = issued_po_in(c_rows, po_id)
+        if issued is None:
+            return deny("po-not-found-in-contractor",
+                        f"承包商账本里没有 po_id={po_id} 的 po/issued：两侧对不上，不回签",
+                        "核对 po_id；本侧不凭空回签一张承包商没有的采购单", step, str(request))
+        previous = acknowledged_in(s_rows, po_id)
+        if previous is not None and str(previous.get("acknowledged_by") or "") == actor:
+            return emit({"ok": True, "step": step, "applied": [], "request": str(request),
+                         "duplicates": [{"po_id": po_id, "reason": "already-acknowledged",
+                                         "acknowledged_by": actor}],
+                         "ledger_added": 0, "refusal": None, "po_id": po_id,
+                         "note": "这张 PO 已经由同一人回签过：账本零新增（回签是幂等动作）"}, 0)
+        body = {"po_id": po_id, "award_id": str(issued.get("award_id") or delivered.get("award_id") or ""),
+                "quote_id": str(issued.get("quote_id") or delivered.get("quote_id") or ""),
+                "package_id": str(issued.get("package_id") or delivered.get("package_id") or ""),
+                "chain": str(issued.get("chain") or delivered.get("chain") or ""),
+                "line_count": len(issued.get("lines") or delivered.get("lines") or []),
+                "total_amount": issued.get("total_amount"),
+                "supplier": realm_of(s_rows, ""), "acknowledged_by": actor, "acknowledged_at": args.now,
+                "note": str(record.get("note") or ""), "source": "webui-gui"}
+        if args.dry_run:
+            return emit({"ok": True, "step": step, "dry_run": True, "applied": [], "duplicates": [],
+                         "ledger_added": 0, "refusal": None, "po_id": po_id, "acknowledged_by": actor,
+                         "note": "干跑：本侧投递登记与承包商 po/issued 都核过了，账本零新增"}, 0)
+        contractor_note = {**body, "view": "contractor"}
+        try:
+            s_ledger = Ledger(led_supplier, realm=realm_of(s_rows, "supplier:gui"))
+            s_ledger.append(EVENT_PO_ACKNOWLEDGED, body, correlation_id=po_id, actor=actor, ts=args.now)
+            c_ledger = Ledger(led_contractor, realm=realm_of(c_rows, "contractor:gui"))
+            c_ledger.append(EVENT_PO_ACKNOWLEDGED, contractor_note, correlation_id=po_id, actor=actor,
+                            ts=args.now)
+        except LedgerError as exc:
+            return deny("ledger-frozen", str(exc)[0:200], "先修账本（本脚本不往坏账本追加）", step,
+                        str(request))
+        archived = archive(inbox, request) if request.resolve().parent == inbox.resolve() else ""
+        return emit({"ok": True, "step": step, "applied": [
+            {"view": "supplier", "event": EVENT_PO_ACKNOWLEDGED, "po_id": po_id, "acknowledged_by": actor},
+            {"view": "contractor", "event": EVENT_PO_ACKNOWLEDGED, "po_id": po_id, "acknowledged_by": actor}],
+            "duplicates": [], "ledger_added": 2, "refusal": None, "request": str(request),
+            "archived": archived, "po_id": po_id, "acknowledged_by": actor,
+            "next_action": "回承包商侧：「采购单（PO）」与授标链上这张 PO 的「对方确认」列会显示回签人与时刻；"
+                           "回签件由对方挂在这张 PO 的附件面板里",
+            "note": "回签是**供应商自己的**动作（只确认投递给本侧的那张 PO）；它不是承诺、也不改 PO 的任何行与价"}, 0)
+
     # ------------------------------------------------------------------ po
+    # 走到这里 ⇒ step == "po"（其余步骤在上面都 return 了）。
     award_id = str(record.get("award_id") or "").strip()
     if not ID_RE.match(award_id):
         return deny("award-id-malformed", f"award_id 形状非法：{award_id!r}", "用账本里的真 award_id",
                     step, str(request))
     already = issued_in(c_rows, award_id)
     if already is not None:
+        # 幂等：这份承诺已经发过 PO。但「已签发」不等于「已投递」——投递登记缺失时**补齐投递**
+        # （同一个唯一写者、同一个形状），否则这张 PO 在收件人侧永远不存在（这正是本批要消除的缺口）。
+        po_id = str(already.get("po_id") or "")
+        if po_id and delivered_in(s_rows, po_id) is None:
+            repaired, deny_ = deliver_po(po_body=already, led_contractor=led_contractor, c_rows=c_rows,
+                                         led_supplier=led_supplier, s_rows=s_rows,
+                                         delivery_out=args.delivery_out or str(
+                                             ui_shared / "exchange" / "po-deliveries.json"),
+                                         now=args.now, actor=actor, premises=record)
+            if deny_ is not None:
+                return deny(deny_["code"], deny_["reason"], deny_["next_action"], step, str(request))
+            assert repaired is not None
+            return emit({"ok": True, "step": step, "applied": repaired["applied"], "request": str(request),
+                         "duplicates": [{"award_id": award_id, "reason": "already-issued", "po_id": po_id},
+                                        {"po_id": po_id, "reason": "delivery-completed-now"}],
+                         "ledger_added": repaired["ledger_added"], "refusal": None, "po_id": po_id,
+                         "award_id": award_id, "delivered_to": [repaired["recipient"]],
+                         "delivery": repaired["envelope"],
+                         "note": "这张 PO 此前只签发了、没有投递登记：本次补上投递（两侧各一条 po/distributed）"}, 0)
         return emit({"ok": True, "step": step, "applied": [], "request": str(request),
-                     "duplicates": [{"award_id": award_id, "reason": "already-issued", "po_id": already.get("po_id")}],
-                     "ledger_added": 0, "refusal": None, "po_id": already.get("po_id"),
-                     "note": "这份承诺已经发过 PO：账本零新增"}, 0)
+                     "duplicates": [{"award_id": award_id, "reason": "already-issued", "po_id": po_id},
+                                    {"po_id": po_id, "reason": "already-delivered"}],
+                     "ledger_added": 0, "refusal": None, "po_id": po_id,
+                     "note": "这份承诺已经发过 PO、也已投递：账本零新增"}, 0)
     award = None
     for row in c_rows:
         body = body_of(row)
@@ -576,6 +789,18 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     if award is None:
         return deny("po-not-derived", f"PO 只能由承诺派生：{award_id} 不是本侧已成立的承诺",
                     "先在 APP 里把意向承诺掉（人签），再发 PO", step, str(request))
+    # 投递的收件人判据跑在**任何写动作之前**（拒绝时账本零新增）：PO 只投给提交中标报价的那一家。
+    # 这里只做**预检**（真正写投递的是 `deliver_po`，判据同一处、不重抄）。
+    delivery_out = args.delivery_out or str(ui_shared / "exchange" / "po-deliveries.json")
+    s_realm = realm_of(s_rows, "")
+    if s_realm == "":
+        return deny("po-recipient-unknown", "被投递方账本里读不出 realm：投递给谁不猜（PO 投递必须有收件人）",
+                    "让被投递方先在本侧产生一条带 realm 的事实（登录 + 一次动作即产生）", step, str(request))
+    if bidder_realm(s_rows, str(award.get("quote_id") or "")) == "":
+        return deny("po-recipient-not-the-bidder",
+                    f"被投递方账本里没有中标报价 {award.get('quote_id')} 的提交记录：PO 只投给提交这份报价的那一家",
+                    "先让中标供应商把报价送到本侧（APP 供应商道「提交报价」），或核对 award 的 quote_id",
+                    step, str(request))
     po_lines = lines or [{**line, "unit_price_cents": round(float(line.get("unit_price") or 0) * 100)}
                          for line in (award.get("lines") or [])]
     if not po_lines:
@@ -601,8 +826,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         return emit({"ok": True, "step": step, "dry_run": True, "applied": [], "duplicates": [],
                      "ledger_added": 0, "refusal": None, "seeded": seeded,
                      "approval_id": shadow_request["approval_id"], "lines": len(po_lines),
-                     "trace_mode": shadow_po["trace_mode"],
-                     "note": "干跑：派生依据与人工门都过，账本零新增"}, 0)
+                     "trace_mode": shadow_po["trace_mode"], "delivered_to": [s_realm],
+                     "note": "干跑：派生依据、人工门与投递收件人都过，账本零新增（信封也未写）"}, 0)
     try:
         request_row = approvals.request(SCOPE_PO, {"award_id": award_id}, ref=award_id, approvers=[actor],
                                         reason=str(record.get("reason") or "APP 人工门"))
@@ -614,19 +839,40 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     except Exception as exc:  # noqa: BLE001
         return deny("po-refused", f"{type(exc).__name__}: {exc}",
                     "PO 行必须引用中标条目、且不得改价（改价要走变更单 + 人工门）", step, str(request))
+    # 投递：**签发之后立刻投给中标供应商**（两侧账本各一条 `po/distributed` + 交换面的投递信封）。
+    # 判据已在上面预检过（同一处判据、`deliver_po` 里再跑一遍）；这里失败只会是账本写不进去。
+    po_body = issued_po_in(c_rows, str(issued["po_id"])) or {
+        "po_id": issued["po_id"], "award_id": award_id, "intent_id": issued.get("intent_id"),
+        "quote_id": issued.get("quote_id"), "package_id": issued.get("package_id"),
+        "lines": issued.get("lines") or [], "total_amount": issued.get("total_amount"),
+        "chain": issued.get("chain"), "trace_mode": issued.get("trace_mode"),
+        "approved_by": actor, "issued_at": issued.get("issued_at")}
+    delivery, deny_ = deliver_po(po_body=po_body, led_contractor=led_contractor, c_rows=c_rows,
+                                led_supplier=led_supplier, s_rows=s_rows, delivery_out=delivery_out,
+                                now=args.now, actor=actor, premises=record)
+    if deny_ is not None:
+        return deny(deny_["code"], deny_["reason"], deny_["next_action"], step, str(request))
+    assert delivery is not None
     archived = archive(inbox, request) if request.resolve().parent == inbox.resolve() else ""
     return emit({"ok": True, "step": step, "applied": [
         {"event": "approval/requested", "approval_id": request_row["approval_id"], "scope": SCOPE_PO},
         {"event": "approval/granted", "approval_id": request_row["approval_id"], "decided_by": actor},
         {"event": "po/issued", "po_id": issued["po_id"], "award_id": award_id,
          "trace_mode": issued["trace_mode"], "total_amount": issued["total_amount"],
-         "chain": issued["chain"]}],
-        "duplicates": [], "ledger_added": 3, "refusal": None, "request": str(request),
+         "chain": issued["chain"]}] + delivery["applied"],
+        "duplicates": [], "ledger_added": 3 + delivery["ledger_added"], "refusal": None,
+        "request": str(request),
         "archived": archived, "po_id": issued["po_id"], "award_id": award_id,
         "approval_id": request_row["approval_id"], "seeded": seeded,
         "trace_mode": issued["trace_mode"], "total_amount": issued["total_amount"],
-        "chain": issued["chain"],
-        "note": "PO 逐行可追溯（ref_line → 中标条目 → 报价）：行与价都由承诺派生，不由界面自由输入"}, 0)
+        "chain": issued["chain"], "delivered_to": [delivery["recipient"]],
+        "delivery": delivery["envelope"], "premises": delivery["premises"],
+        "next_action": "PO 已投给中标供应商（对方侧「发给我的采购单」里逐行、含追溯链；可下载/打印/挂回签件）；"
+                       "等对方在 APP 供应商道「确认收到采购单（人签）」回签",
+        "note": "PO 逐行可追溯（ref_line → 中标条目 → 报价）：行与价都由承诺派生，不由界面自由输入；"
+                "投递是**账本事实**（两侧各一条 po/distributed），不是界面副作用"}, 0)
+
+
 
 
 

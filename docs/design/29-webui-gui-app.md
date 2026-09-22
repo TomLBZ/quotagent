@@ -273,3 +273,22 @@
    `main`/`banner`/`contentinfo` 地标齐备；实测可访问性树里 118 个交互节点**零无名**。
 5. **对比度 ≥ WCAG AA**：主题 token 按 WCAG 2.1 算过（`--accent`/`--bad` 本批上调以过 `--accent-soft` 上的 4.5），
    实测 390/1440 两宽度共 800+ 处可见文字**零不达标**（最低 5.5）。
+
+## 13. 采购单的**投递**与**回签**（供应商真正收到并处理 PO）
+
+**判据真源**（用法见 `src/system/webui/docs/files-and-exports.md`；复跑 `python3 tmp/p8-verify.py`）：
+
+1. **发 PO 即投递**：唯一写者 `commitment-apply.py --step po` 落 `po/issued` 后写**两侧各一条 `po/distributed`**
+   （承包商侧=分发登记，与 `rfq/distributed` 同形；供应商侧=收件登记，带逐行 `lines`+追溯链+签发人+执行前提）
+   + 交换面信封 `exchange/po-deliveries.json`。**无第二条写路径**（宿主只落 0600 待办件）。
+2. **收件人判据在写之前**（拒绝 ⇒ 账本与信封零新增）：被投递方账本要读得出 realm 且**就是中标报价的提交者**
+   （`po-recipient-unknown` / `po-recipient-not-the-bidder`）。交期窗口/送货地址由发 PO 的人给，没给就照实缺。
+3. **供应商侧视图**：`po.inbox` + 对象页上的 `po.object-received` / `po.object-lines-received` / `po.prereqs`；
+   行只来自**本侧账本**的投递登记（投给别家的 PO 不在本侧账本里）；导出 `po.export-received` + 声明
+   `report.po-received`；附件面板因此能挂**回签件**（P6 那条边界已闭合）。
+4. **回签 = 人签人工门**：`po.acknowledge` → `--step acknowledge`；门①本侧要有投递登记
+   （`po-not-delivered-to-you`）②承包商要有同 `po_id` 的 `po/issued` ③署名==会话身份（§7.4）**且侧只能来自会话**
+   （`cross-side-action`）。落两侧各一条 `po/acknowledged`（重签幂等）；不改 PO 行与价。
+5. **沙盘**：`demo.procurement` 第 12 步 = 供应商回签（`optional: true`）；沙盘两侧由机制生成的演示身份驱动
+   （§11.5），侧判据在沙盘里按 `host.sandbox.actors[side]` 判，**真实面无此替换**。
+6. **登记**：`po/distributed` / `po/acknowledged` 进 `02-domain-model.md` §4 与 `05-events.md` §3。

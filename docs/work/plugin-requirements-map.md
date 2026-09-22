@@ -73,6 +73,7 @@
 | `domain/advice` | FR-ADV-001、FR-USREQ-012 | `src/domain/advice/code/index.mjs`（阶段 1 wrapper → `host/modules/advice-panel.mjs`） | done | `advice`(30/30 + 真路由 14/14) · `plugin-lifecycle` · `req=src/domain/advice/requirements/README.md` |
 | `domain/bid-heuristics` | FR-VIZ-001 | `host/modules/bid-heuristics.mjs` | done | `bid-heuristics`（围栏 4 变异 + 真 HTTP） · `req=src/domain/bid-heuristics/requirements/README.md` |
 | `domain/quote-prepare` | FR-QUOTE-001 | `host/modules/quote-prepare.mjs`、`tools/{quote-draft,quote-sign}.py` | done | `quote-draft`(17 断言 + 真路由) · `EV-161`（`T-288`） · `req=src/domain/quote-prepare/requirements/README.md` |
+| `system/attachments` | —（无 FR 归属） | `src/system/attachments/code/{index.mjs,attachments.mjs,ui.mjs}` | missing | **无 FR 归属**（P6 新增的**对象级附件 / 文件交换与导出**面：路由经注册面 `uiRoutes` 注册，正文落 0600 存储，**账本零新增**；其 `plugin.json` 与 `requirements/README.md` 对 `FR-UXWEB-001`、`FR-USREQ-001`、`FR-USREQ-011` 是**部分承载**，主归属 `system/webui`） · `plugin-lifecycle` · `quote-draft`（③ 逐条拿 `/api/routes` 反查其只读路径的 POST 孪生 ⇒ 405 + `Allow: GET`） · `req=src/system/attachments/requirements/README.md` |
 | `system/measures` | —（无 FR 归属） | `src/quotagent/services/measures.py`（口径数据层） | missing | **无 FR 归属**（矩阵 §2 亦无归属行）；被各口径 AC 间接覆盖 · `ac AC-NORM-001` · `req=src/system/measures/requirements/README.md` |
 | `system/qa-runner` | —（无 FR 归属） | `src/quotagent/qa/{registry.py,__main__.py,checks_*.py}` | missing | **无 FR 归属**；`ac-registry` + `ac <AC-ID>`（运行器自身） · `req=src/system/qa-runner/requirements/README.md` |
 | `system/realm` | —（无 FR 归属） | `src/quotagent/services/realm.py` | missing | **无 FR 归属**；私域投影的**执行件**（`FR-UX-002` 主归属 `system/projection`） · `ac AC-TRUST-001` · `req=src/system/realm/requirements/README.md` |
@@ -100,7 +101,7 @@
 **无**（缺口数 **0**：63 个插件全部有 `req=`；数字由 §5 复算命令算出，不手写）。
 机检 A7 是**双向**断言：「没有需求文档的插件集合 == 本清单里的插件集合」，任一侧多写/少写即红。
 
-### 4.2 归位台账（58 份从 `docs/work/` 搬到标准布局，逐条登记）
+### 4.2 归位台账（`T-321` 从 `docs/work/` 搬到标准布局的 58 份，逐条登记；现 **57** 条 —— P7 退役 `system/pipeline-view`，它的 1 条同批移除）
 
 > 机检 **A6c**（三条都**双向**）：① **不在标准布局位置**的 `req=` 逐条登记（状态写 `未归位`），台账不许多出；
 > ② **台账 ∪ 本节「原生就在标准位置」名单 == 全部有 `req=` 的插件**（63；一条不漏、一条不多）；
@@ -108,7 +109,7 @@
 > `plugin-requirements-userspace-<ns>-<插件>.md`）—— 状态 `已归位` 要求**原位置已不存在**、现位置**真实存在**
 > 且与 §1 的 `req=` 同一文件。为什么当初放 `docs/work/`：那时 `depsClosure` 把「目录存在」当「插件存在」，
 > 先建插件目录会让 `plugin-lifecycle` 的 A13/A14 变红；`T-321` 已**收紧**该处（27 §2.4）⇒ 目录可以建了。
-> **原生就在标准位置（从未搬动，故不入台账）的 5 个**：`system/runtime`、`domain/advice`、`userspace/demo-ns/hello`、`userspace/demo-ns/badge`、`userspace/con-a/quote-trend`。
+> **原生就在标准位置（从未搬动，故不入台账）的 6 个**：`system/runtime`、`domain/advice`、`system/attachments`、`userspace/demo-ns/hello`、`userspace/demo-ns/badge`、`userspace/con-a/quote-trend`。
 
 | 插件 id | 现位置（标准布局） | 状态 |
 |---|---|---|
@@ -175,9 +176,9 @@
 ```bash
 # 状态计数：只数 §1 的数据行（§4.2 是另一张表，用区间切出来，避免"69 行"的误读）
 sed -n '/^## 1\./,/^## 2\./p' docs/work/plugin-requirements-map.md | grep -c '^| `'       # 63（插件全集）
-sed -n '/^## 1\./,/^## 2\./p' docs/work/plugin-requirements-map.md | grep -c ' done '      # 55
+sed -n '/^## 1\./,/^## 2\./p' docs/work/plugin-requirements-map.md | grep -c ' done '      # 54
 sed -n '/^## 1\./,/^## 2\./p' docs/work/plugin-requirements-map.md | grep -c ' partial '   # 1（system/runtime）
-sed -n '/^## 1\./,/^## 2\./p' docs/work/plugin-requirements-map.md | grep -c ' missing '   # 7
+sed -n '/^## 1\./,/^## 2\./p' docs/work/plugin-requirements-map.md | grep -c ' missing '   # 8
 grep -oE 'req=[a-zA-Z0-9_./-]+' docs/work/plugin-requirements-map.md | sort -u | wc -l     # 63（= 插件全集）
 # FR 定义集合规模（**定义行**口径：主文件 + 同目录归档）
 grep -chE '^\| FR-' docs/work/functional-requirements*.md | awk '{s+=$1} END {print s}'    # 166
@@ -209,14 +210,14 @@ tools/verify.sh plugin-requirements
 ```
 
 > 注意两个**易误读**的口径：① §1 的**证据列**会提到别的插件的 FR（"部分承载"注释），所以"全文 grep FR" 会多出 8 处重复 —— 唯一指针只看**第 3 个 pipe 字段**；
-> ② `grep -c '^| \`'` 全文数是 121（63 + §4.2 的 58 行台账），插件全集是 **63**。
+> ② `grep -c '^| \`'` 全文数是 119（63 + §4.2 的 57 行台账），插件全集是 **63**。
 
 | 计数 | 值 |
 |---|---|
 | 插件行 | 63（system 34 + domain 26 + userspace 3） |
 | 认领 FR | 166 / 166（未认领 0） |
-| 状态 | done 55 · partial 1 · missing 7 |
-| 已建需求文档 | 63（**全部在标准布局** `src/<层>/<插件>/requirements/README.md`；`T-321` 归位 58 份） |
+| 状态 | done 54 · partial 1 · missing 8 |
+| 已建需求文档 | 63（**全部在标准布局** `src/<层>/<插件>/requirements/README.md`；`T-321` 归位 58 份，现台账 57 条） |
 | 缺需求文档（§4.1） | 0 |
-| 文档位置偏差（§4.2 未归位） | **0**（归位台账 58 条逐条指向真实文件；未归位集合与台账里的「未归位」行双向一致） |
+| 文档位置偏差（§4.2 未归位） | **0**（归位台账 57 条逐条指向真实文件；未归位集合与台账里的「未归位」行双向一致） |
 | 机检 | `tools/verify.sh plugin-requirements` |
