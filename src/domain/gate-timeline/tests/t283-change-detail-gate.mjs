@@ -31,7 +31,7 @@
  *      + 四道页面子导航仍带 `data-gates-link`；页面模板 0 内联脚本 / 0 内联事件（静态扫描）
  *   12 **真 HTTP**：两视角明细页/JSON 200（合约商侧还带自己的私域列）、**页面上的数字与手算一致**、
  *      未知 id 页面与 JSON 都 **404 + `next_action`**、供应商侧明细页/JSON 哨兵 0 命中（夹具文件里
- *      确实有哨兵 ⇒ 非空转）、4 份响应 0 行脚本 / 0 内联事件、`/api/routes` 登记四条新路由且 auth=none
+ *      确实有哨兵 ⇒ 非空转）、4 份响应 0 行脚本 / 0 内联事件、`/api/routes` 登记四条新路由且 auth=identity-session
  *   13 **单点变异**：4 处变异各自必须让**指定的**场景变红（且变异必须真的改了字节）
  *   14 防假变异自检 + 还原：找不到唯一锚点/自我替换必须判假变异；全程 `gate-timeline.mjs` 与
  *      `webui.mjs` 字节不变（变异只写在临时目录的副本里）
@@ -740,14 +740,14 @@ try {
     && text.includes('data-subtotal-delta') && text.includes('data-subnav=')
     && text.includes('data-gates-link="1"') && text.includes('data-detail-back="1"')
     && !text.includes(scriptNeedle) && !inlineEvent2.test(text))
-  check('12 真 HTTP 正控：两视角明细页/JSON 各自 **200**、`/api/routes` 登记四条新路由且 `auth=none`、'
+  check('12 真 HTTP 正控：两视角明细页/JSON 各自 **200**、`/api/routes` 登记四条新路由且 `auth=identity-session`（业务路由要身份会话）、'
     + '变更单列表每一行有 `data-change-detail-link="CO-0001"`；页面/JSON 的数字与**手算一致**'
     + '（账本里的**元**由宿主按 half-up 折算成整数分：60 元 → 6000 分、10.01 元 → 1001 分；4 行、'
     + 'L-003 在「未纳入小计的行」里、小计 66000→82501 差 16501）；**明细真源是带行清单的那条事件**'
     + '（夹具里它**之后**还有一条不带行的 `change/approved`，明细不得因此变空）；'
     + '4 份响应 **0 行脚本 / 0 内联事件**；**与账本自己的声明对齐**：账本行 `delta_amount=165.01` 元 '
     + '⇒ 本页复算的总计差额 16501 分',
-  changeRoutes.length === 4 && changeRoutes.every((row) => row.auth === 'none')
+  changeRoutes.length === 4 && changeRoutes.every((row) => row.auth === 'identity-session')
   && cPage.status === 200 && cJson.status === 200 && sPage.status === 200 && sJson.status === 200
   && pagesOk && linesOk(cj) && linesOk(sj)
   && cj.subtotal.amount_before === HAND_SUBTOTAL.before && cj.subtotal.amount_after === HAND_SUBTOTAL.after

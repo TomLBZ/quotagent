@@ -326,13 +326,17 @@ export function createIdentity({ root, prefix, config, shell, services, log } = 
         const body = bodyOf(row)
         const draftId = String(body.quote_draft_id ?? '')
         if (draftId === '' || signedDrafts.has(draftId)) continue
+        const lineCount = Number(body.line_count) > 1 ? Number(body.line_count) : 1
         push({ kind: 'quote-to-sign', owed_by: String(body.prepared_by ?? ''), ref: draftId,
-          title: `报价草稿 ${draftId}（${body.rfq_id ?? '—'} / ${body.item_id ?? '—'}）`,
+          title: `报价草稿 ${draftId}（${body.rfq_id ?? '—'} / ${body.item_id ?? '—'}`
+            + `${lineCount > 1 ? `，共 ${lineCount} 行` : ''}）`,
           fact: { type: row.type, seq: row.seq, ts: row.ts }, stage: 'ledger',
-          money: { unit_price_cents: body.unit_price_cents ?? null, currency: body.currency ?? '' },
+          money: { unit_price_cents: body.unit_price_cents ?? null, currency: body.currency ?? '',
+            line_count: lineCount },
           detail: { payload_sha256: body.lines_sha256 ?? null, note_sha256: body.note_sha256 ?? null,
-            item_id: body.item_id ?? null },
-          next_action: `在 ${pfx}/sign/ 人签提交（署名必须与登录身份一致）` })
+            item_id: body.item_id ?? null, line_count: lineCount },
+          next_action: `${pfx}/sign/ 人签提交（**一次签完整份${lineCount > 1 ? ` ${lineCount} 行` : ''}**；`
+            + '署名必须与登录身份一致）' })
       }
       for (const item of readPending('quote-drafts')) {
         const rec = item.record
@@ -841,8 +845,11 @@ export function createIdentity({ root, prefix, config, shell, services, log } = 
       const field = isQuote ? 'draft_id' : 'intent_id'
       return `<h3>${esc(item.title)}</h3>`
         + `<p>签什么：<code>${esc(field)}=${esc(item.ref)}</code>`
-        + `${item.money ? ` · 金额（整数分）<code>${esc(item.money.unit_price_cents ?? '—')}</code> `
-          + `币种 <code>${esc(item.money.currency || '—')}</code>` : ''}`
+        + `${item.money ? (item.money.line_count > 1
+          ? ` · **共 <code>${esc(item.money.line_count)}</code> 行**（这一签就提交整份；逐行单价在提交后的`
+            + `「我的报价」对象页上回读；币种 <code>${esc(item.money.currency || '—')}</code>）`
+          : ` · 金额（整数分）<code>${esc(item.money.unit_price_cents ?? '—')}</code> `
+            + `币种 <code>${esc(item.money.currency || '—')}</code>`) : ''}`
         + ` · 事实：<code>${esc(item.fact.type)} seq=${esc(item.fact.seq)} ts=${esc(item.fact.ts)}</code>`
         + `${item.detail?.payload_sha256 ? ` · 载荷指纹 <code>${esc(item.detail.payload_sha256)}</code>` : ''}</p>`
         + `<p>我是谁：<code>${esc(meOf(who))}</code>（取自**会话**）；后果：产生对外义务，不可撤销。</p>`
@@ -883,6 +890,7 @@ export function createIdentity({ root, prefix, config, shell, services, log } = 
       + `<table data-mail="keys"><thead><tr><th>键</th><th>source</th><th>值</th><th>门</th></tr></thead>`
       + `<tbody>${rows || '<tr><td colspan="4">（登记表里暂无邮件键）</td></tr>'}</tbody></table>`
       + `<h2>改配置</h2><form method="post" action="${pfx}/mail/config/">`
+      + `<input type="hidden" name="next" value="${esc(`${pfx}/mail/config/`)}">`
       + `<label>SMTP 主机 <input name="mail.smtp.host" size="24"></label><br>`
       + `<label>SMTP 端口 <input name="mail.smtp.port" size="6" value="587"></label><br>`
       + `<label>发件人 <input name="mail.smtp.from" size="24"></label><br>`
@@ -1051,13 +1059,18 @@ export function createIdentity({ root, prefix, config, shell, services, log } = 
     add('POST', '/mail/config/', (request) => request.readBody((body) => {
       const input = readInput(body, request.req.headers['content-type'])
       const out = applyMailConfig(request.req, input)
+      // `next`：改完**回到你来的那个界面**（GUI 工作台的「邮件通道」面板也提交到本页；只接受本站路径，
+      // 防止开放重定向）。缺省回本页 —— 与既有行为一致。
+      const wanted = text(input.next)
+      const back = wanted.startsWith('/') && !wanted.startsWith('//') ? wanted : `${pfx}/mail/config/`
       if (wantsJson(request.url, request.req)) return request.json(out.status, out)
       if (out.ok) {
-        return request.send(303, 'text/plain; charset=utf-8', '', { location: `${pfx}/mail/config/` })
+        return request.send(303, 'text/plain; charset=utf-8', '', { location: back })
       }
       return request.send(out.status, 'text/html; charset=utf-8',
         htmlPage('邮件配置被拒', `<p data-mail-refused="${esc(out.code)}">${esc(out.code)}：${esc(out.reason)} → `
-          + `${esc(out.next_action)}</p><p><a href="${pfx}/mail/config/">返回</a></p>`))
+          + `${esc(out.next_action)}</p><p><a href="${esc(back)}">返回</a> · `
+          + `<a href="${esc(pfx)}/mail/config/">邮件配置页</a></p>`))
     }), '提交邮件配置（干跑 → 0600 待办件 → Python 侧落 YAML）', 'identity')
     // ⑤ DEF-026：我的用户空间插件（自助装卸，只限自己命名空间）
     add('GET', '/plugins/', (request) => {

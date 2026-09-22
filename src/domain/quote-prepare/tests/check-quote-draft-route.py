@@ -424,11 +424,13 @@ def main() -> int:  # noqa: C901
         check("④ 准备页 `GET /quotagent/supplier/quotes/prepare/`：**200 且是真页面**"
               "（行项目目录 `data-prep-item` + RFQ 引用 + 字段与校验规则表 `data-prep-field` + "
               "`data-prep-limits` + `GET|POST` 同路径表单 + 「下一步（签署）」`data-signature-required=\"1\"` "
-              "+ 可复制的 `tools/quote-sign.py` 命令）；路由表登记两条且 `write_surface` 含该路径；"
+              "+ 可复制的 `tools/quote-sign.py` 命令）；路由表登记两条、`auth` 是**真实值** "
+              "`identity-session`（业务路由要身份会话：台账不再写 `none` 撒谎）、`write_surface` 含该路径；"
               "**0 行脚本 / 0 内联事件**（扫描器非空转）",
               prepare_page[0] == 200 and len(prepare_json_routes) == 2
               and sorted(item.get("method") for item in prepare_json_routes) == ["GET", "POST"]
-              and all(item.get("auth") == "none" for item in prepare_json_routes)
+              and all(item.get("auth") == "identity-session" for item in prepare_json_routes)
+              and bool((parse_json(get(f"{base}/api/routes")[1]).get("auth_basis") or {}).get("identity-session"))
               and f"{prefix}/supplier/quotes/prepare/" in (write_surface.get("browser_writable") or [])
               and 'data-prep-item="L-001"' in text and 'data-prep-item="L-002"' in text
               and 'data-prep-rfq="pkg-g1"' in text and 'data-prep-field="unit_price_cents"' in text

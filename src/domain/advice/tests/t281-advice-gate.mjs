@@ -28,7 +28,7 @@
  *  17. 配置不得静默放行（未知键/错类型/非对象/翻转 const）+ 阈值夹取
  *  18. fixture 纯读取 + 冻结输入不抛错
  *  19-21. **真 HTTP**（in-process 挂真 `webui` + 真依赖模块 + 夹具账本 + 夹具通道快照）：
- *      两视角 advice 页/JSON 200；四条路由登记且 `auth=none`；四道页面子导航都有 `data-advice-link`；
+ *      两视角 advice 页/JSON 200；四条路由登记且 `auth=identity-session`；四道页面子导航都有 `data-advice-link`；
  *      页面 **0 行脚本 / 0 内联事件**；**两视角建议确实不同**（一边成表、一边 `data-degraded=1` 且 items 0）；
  *      响应里没有私域键名、夹具文件里**确实有**哨兵（非空转对照）
  *  22-25. **单点变异**：4 处变异各自必须让**指定的**场景变红（且变异必须真的改了字节），
@@ -722,11 +722,12 @@ try {
   const layeringOnPage = contractorPage.text.includes('data-engine="rules"')
     && contractorPage.text.includes('engine=rules') && contractorPage.text.includes(mod.ENGINE_NOTE)
   check('19 真 HTTP 正控：`/t281/<view>/advice/` 与 `/<view>/api/advice` 两视角各自 200；`/api/routes` 登记了'
-    + '页面与 JSON 两条路由且 `auth=none`；页面含道内子导航与「决策建议」入口、`data-engine="rules"`'
+    + '页面与 JSON 两条路由且 `auth=identity-session`（业务路由要身份会话——台账不再写 `none` 撒谎）；'
+    + '页面含道内子导航与「决策建议」入口、`data-engine="rules"`'
     + '与"不含模型推测"那句、建议条带 `data-advice-id`/`data-basis`；JSON 契约齐备（engine/items/counts/'
     + 'bounds/absent/notes/degraded/reason）',
   contractorPage.status === 200 && supplierPage.status === 200 && contractorJson.status === 200 && supplierJson.status === 200
-  && adviceRoutes.length === 4 && adviceRoutes.every((item) => item.auth === 'none')
+  && adviceRoutes.length === 4 && adviceRoutes.every((item) => item.auth === 'identity-session')
   && navOk && layeringOnPage && idsOfPage(contractorPage.text).length >= 4
   && cj.engine === 'rules' && Array.isArray(cj.items) && cj.items.length >= 4 && cj.degraded === false
   && cj.reason === null && typeof cj.omitted === 'number' && typeof cj.truncated === 'boolean'

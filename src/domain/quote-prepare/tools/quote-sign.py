@@ -20,6 +20,11 @@
   另外：`--comment` 会**逐字**落进批准记录（`approval/granted.comment`），
   但**不进** `quote/submitted` 的 body（body 只带结构化字段与哈希）。
 
+**多行报价 = 一次人签提交整份**：草稿里带 `lines`（逐行单价/交期）时，**一次签名只产生一份报价**，
+`quote/submitted` 的 body 逐行给 `lines`（+ `line_count`），标量 `item_id`/`unit_price_cents`/`lead_time_days`
+留空（多行报价没有「唯一那个行项目」）；签之前会**重算**草稿的 `lines_sha256`：
+对不上 ⇒ `draft-tampered`、某一行不合法 ⇒ `draft-line-invalid`（两种都**账本零新增**）。
+
 幂等：同一份草稿已经签过（供应商账本里已有 `quote/submitted` 且 `quote_id` 与本脚本派生的一致）
 ⇒ 记 `duplicates`、**账本零新增**、`exit 0`。
 
@@ -42,6 +47,7 @@ from quotagent.kernel.ledger import Ledger, LedgerError  # noqa: E402
 
 ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 DRAFT_RE = re.compile(r"^qd-[A-Za-z0-9-]+-[0-9a-f]{12}$")
+REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
 REALM_RE = re.compile(r"^[a-z][a-z0-9-]*:[A-Za-z0-9._-]{1,64}$")
 
 EVENT_DRAFTED = "quote/drafted"
@@ -54,6 +60,10 @@ TIMEOUT_POLICIES = ("remind", "escalate", "abort")
 SUBMITTED_BODY_KEYS = ("approval_id", "approved_by", "currency", "item_id", "lead_time_days",
                        "package_id", "quote_id", "quote_draft_id", "source", "submitted_at",
                        "unit_price_cents")
+# 多行报价在 `quote/submitted` body 里**额外**带这两键（单行报价的 body **逐字节不变**）：
+#   `lines` = 逐行 `{item_id, unit_price_cents, unit_price(元), lead_time_days}`
+#   `line_count` = 行数（供页面与读者一眼看到「这份报价几行」）
+SUBMITTED_BODY_KEYS_MULTI = tuple(sorted(SUBMITTED_BODY_KEYS + ("lines", "line_count")))
 NOTIFICATION_BODY_KEYS = ("approval_id", "approved_by", "currency", "item_id", "lead_time_days",
                           "package_id", "quote_id", "quote_draft_id", "source", "submitted_at",
                           "supplier", "unit_price_cents")
@@ -115,6 +125,45 @@ def already_signed(rows: list[dict], quote_id: str) -> bool:
 def approval_id_for(draft_id: str) -> str:
     value = int(hashlib.sha256(draft_id.encode("utf-8")).hexdigest(), 16) % 10000
     return f"ap-{value:04d}"
+
+
+def canonical_lines(record: dict) -> str:
+    """与唯一落账本者 `quote-draft.py` 的 `canonical_lines()` **逐字节一致**的规范化 JSON
+
+    （单行 5 键；多行 `{currency, lines[], rfq_id}`）。签之前**重算一次**这份草稿的行摘要：
+    对不上 ⇒ `draft-tampered`（账本里的草稿行被改过/自述不可信），**账本零新增**。
+    """
+    raw_lines = record.get("lines")
+    if isinstance(raw_lines, list) and raw_lines:
+        rows = []
+        for entry in raw_lines:
+            row = entry if isinstance(entry, dict) else {}
+            rows.append({"item_id": str(row.get("item_id") or ""),
+                         "lead_time_days": row.get("lead_time_days"),
+                         "unit_price_cents": row.get("unit_price_cents")})
+        payload = {"currency": str(record.get("currency") or ""), "lines": rows,
+                   "rfq_id": str(record.get("rfq_id") or "")}
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    payload = {"currency": str(record.get("currency") or ""),
+               "item_id": str(record.get("item_id") or ""),
+               "lead_time_days": record.get("lead_time_days"),
+               "rfq_id": str(record.get("rfq_id") or ""),
+               "unit_price_cents": record.get("unit_price_cents")}
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def lines_of(draft: dict) -> list[dict]:
+    """草稿的逐行结构（`lines` 里只认三键；空/缺 ⇒ `[]` = 单行报价，沿用标量三键）。"""
+    raw = draft.get("lines")
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for entry in raw:
+        row = entry if isinstance(entry, dict) else {}
+        out.append({"item_id": str(row.get("item_id") or ""),
+                    "unit_price_cents": row.get("unit_price_cents"),
+                    "lead_time_days": row.get("lead_time_days")})
+    return out
 
 
 def quote_id_for(draft_id: str) -> str:
@@ -198,6 +247,15 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     if not REALM_RE.match(supplier_realm):
         return _usage_error("supplier-unknown", "供应商账本的 realm 读不出来（不猜）",
                             "先让一条事实行落进供应商账本（realm 由账本给出）")
+    # 草稿自述必须自洽：账本里的 `lines_sha256` 与**重算**的结构化行一致（被改过 ⇒ 拒、账本零新增）
+    declared_digest = str(draft.get("lines_sha256") or "").split(":", 1)[-1]
+    if declared_digest != hashlib.sha256(canonical_lines(draft).encode("utf-8")).hexdigest():
+        return emit({**base, "ok": False, "event": None, "applied": [], "duplicates": [],
+                     "ledger_added": 0,
+                     "refusal": refusal("draft-tampered",
+                                        f"草稿 {args.draft_id} 的 lines_sha256 与重算结果不符"
+                                        "（行项目/单价/交期被改过？）",
+                                        "这份草稿不可信：回供应商道重新备一份（本脚本账本零新增）")}, 1)
     contractor_rows, contractor_error = load_rows(contractor_ledger)
     if contractor_error is not None or contractor_rows is None:
         return _usage_error("ledger-unreadable", str(contractor_error),
@@ -210,15 +268,44 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     lead_time_days = draft.get("lead_time_days")
     package_id = str(draft.get("rfq_id") or "")
     supplier_id = str(draft.get("supplier") or supplier_realm)
+    # ---- 多行报价：**一份报价 = 一整张表**（一次人签提交整份，不必一行签一次）------------------------
+    # 草稿带 `lines` ⇒ 这次签出来的报价 body 逐行给 `lines`（+ `line_count`），
+    # 标量三键（`item_id`/`unit_price_cents`/`lead_time_days`）**留空**：多行报价没有「唯一那个行项目」，
+    # 编一个首行值当标量会让读者以为这份报价只有一行（`check-quote-draft-route.py` 逐行对账）。
+    draft_lines = lines_of(draft)
+    line_bodies: list[dict] = []
+    for entry in draft_lines:
+        line_item = str(entry.get("item_id") or "")
+        cents = entry.get("unit_price_cents")
+        lead = entry.get("lead_time_days")
+        if not REF_RE.match(line_item) or isinstance(cents, bool) or not isinstance(cents, int) \
+                or cents <= 0 or isinstance(lead, bool) or not isinstance(lead, int) or lead <= 0:
+            return emit({**base, "ok": False, "event": None, "applied": [], "duplicates": [],
+                         "ledger_added": 0,
+                         "refusal": refusal("draft-line-invalid",
+                                            f"草稿 {args.draft_id} 的某一行不合法：{entry!r}",
+                                            "这一份草稿不可信：回供应商道重新备一份（本脚本账本零新增）")}, 1)
+        line_bodies.append({"item_id": line_item, "lead_time_days": lead,
+                            "unit_price": round(cents / 100.0, 6), "unit_price_cents": cents})
+    if line_bodies:
+        item_id = ""
+        unit_price_cents = None
+        lead_time_days = None
     submitted = {"approval_id": approval_id, "approved_by": str(args.actor), "currency": currency,
                  "item_id": item_id, "lead_time_days": lead_time_days, "package_id": package_id,
                  "quote_id": quote_id, "quote_draft_id": str(args.draft_id), "source": "quote-draft",
                  "submitted_at": args.now, "unit_price_cents": unit_price_cents}
+    if line_bodies:
+        submitted["lines"] = line_bodies
+        submitted["line_count"] = len(line_bodies)
     notification = {**submitted, "supplier": supplier_id}
+    what = (f"{len(line_bodies)} 行：" + " / ".join(f"{row['item_id']} {row['unit_price_cents']} 分"
+                                                   for row in line_bodies[:4])) if line_bodies \
+        else f"行项目 {item_id}，{unit_price_cents} 分"
     requested = {"approval_id": approval_id, "scope": SCOPE, "ref": quote_id, "status": "pending",
                  "requested_by": str(args.actor), "submitted_at": args.now,
                  "timeout_policy": str(args.timeout_policy),
-                 "summary": f"提交报价 {quote_id}（行项目 {item_id}，{unit_price_cents} 分）"}
+                 "summary": f"提交报价 {quote_id}（{what}）"}
     granted = {**requested, "status": "granted", "decided_by": str(args.actor), "comment": str(args.comment)}
 
     applied: list[dict] = []
@@ -241,9 +328,10 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         ledger_added = 4
     applied.append({"view": "supplier", "events": [EVENT_REQUESTED, EVENT_GRANTED, EVENT_SUBMITTED],
                     "quote_id": quote_id, "approval_id": approval_id,
-                    "body_keys": sorted(SUBMITTED_BODY_KEYS)})
+                    "line_count": len(line_bodies) or 1,
+                    "body_keys": sorted(SUBMITTED_BODY_KEYS_MULTI if line_bodies else SUBMITTED_BODY_KEYS)})
     applied.append({"view": "contractor", "events": [EVENT_SUBMITTED], "quote_id": quote_id,
-                    "body_keys": sorted(NOTIFICATION_BODY_KEYS)})
+                    "body_keys": sorted(NOTIFICATION_BODY_KEYS + (("lines", "line_count") if line_bodies else ()))})
 
     return emit({**base, "ok": True, "event": EVENT_SUBMITTED, "applied": applied, "duplicates": [],
                  "ledger_added": ledger_added, "refusal": None,

@@ -36,7 +36,7 @@
  *  20  配置不得静默放行（未知键/错类型/非对象/翻转 const）+ bounds 回显
  *  21  fixture 纯读取 + 冻结输入不抛错
  *  22  **真 HTTP**（in-process 挂真 `webui` + 真依赖模块 + 夹具账本）：两视角 gates 页/JSON 200；
- *      `/api/routes` 登记三条路由且 `auth=none`；**四道页面**子导航都有 `data-gates-link`
+ *      `/api/routes` 登记三条路由且 `auth=identity-session`；**四道页面**子导航都有 `data-gates-link`
  *  23  真 HTTP 正控：承包商侧真数据（门 + 变更单 + 逐条 next_action）、**供应商侧空投影** →
  *      页面 `data-gates-degraded="1"` + 两列表计数 0；页面 **0 行脚本 / 0 内联事件**
  *  24  真 HTTP 催办 POST：202 + 待办件 **恰 0600** + 原话逐字 + sha256 + **账本零新增**（夹具逐字节不变）；
@@ -892,12 +892,12 @@ try {
   const navOk = contractorPage.text.includes('data-subnav="contractor"')
     && contractorPage.text.includes('data-gates-link="1"')
   check('22 真 HTTP 正控：`/t282/<view>/gates/` 与 `/<view>/api/gates` 两视角各自 200；`/api/routes` 登记了'
-    + '页面/JSON/催办 POST **三条路由且 `auth=none`**；页面含道内子导航与「审批与变更」入口、'
+    + '页面/JSON/催办 POST **三条路由且 `auth=identity-session`**（业务路由要身份会话）；页面含道内子导航与「审批与变更」入口、'
     + '`data-age-clock="facts-only"` 与口径那句话、逐条 `data-gate-next-action`；JSON 契约齐备'
     + '（engine/age_clock/age_basis_note/ignored_now_inputs/gates/changes/counts/bounds/degraded/reason）',
   contractorPage.status === 200 && supplierPage.status === 200 && contractorJson.status === 200
   && supplierJson.status === 200 && gateRoutes.length === 6
-  && gateRoutes.every((item) => item.auth === 'none')
+  && gateRoutes.every((item) => item.auth === 'identity-session')
   && gateRoutes.filter((item) => item.method === 'GET').length === 4
   && gateRoutes.filter((item) => item.method === 'POST').length === 2
   && navOk && contractorPage.text.includes('data-age-clock="facts-only"')

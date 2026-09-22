@@ -257,8 +257,10 @@ export async function register(surface, host) {
       for (const [id, gate] of last) {
         if (gate.type === 'approval/granted' || gate.type === 'approval/aborted') continue
         items.push({ level: 'warn', title: `人工门 ${id} 还在等（${gate.scope}）`,
-          body: `对象 ${gate.ref}`, next_action: '在承包商道「授标与订单」里人签；界面不代签',
-          ref: gate.scope === 'change.approve' ? { kind: 'change', id: String(gate.ref) } : null,
+          body: `对象 ${gate.ref}`, next_action: '打开这条门看卡在哪/等多久；门本身的人签动作在「授标与订单」里，界面不代签',
+          // 门自己也是一个**可协作的对象**（`/app/<view>/gate/<id>/`）：指派/关注/评论由外壳的协作面提供，
+          // 这里只声明"门后面那个对象是哪一类"（scope→kind 是本插件的领域知识）。
+          ref: { kind: 'gate', id, title: `审批门 ${id}` },
           action: gate.scope === 'change.approve' ? 'change.approve'
             : (gate.scope === 'award.commit' ? 'award.commit' : '') ,
           label: gate.scope === 'change.approve' ? '去批准这条变更' : '去人签' })
@@ -281,6 +283,54 @@ export async function register(surface, host) {
   out.push(surface.shortcut({ plugin_id: me, id: 'shortcut.award-propose', keys: 'a', action: 'award.propose',
     title: '提出授标意向', order: 40 }))
 
+  // ------------------------------------------------------------------ 审批门（对象类 `gate`）
+  // 「门」也是可以被协作的对象：做成**对象页**（`/app/<view>/gate/<approval_id>/`）后，它自动获得外壳的
+  // 协作面（指派/转交、关注、评论与 @同事、我的/我指派的）——**门本身的事实仍由本插件给**（不重述、不发明）。
+  // `scope → 对象类` 是本插件的领域知识，所以由本插件声明（外壳与协作面都不认识任何对象类）。
+  const GATE_SCOPE_KIND = { 'change.approve': 'change', 'award.commit': 'award', 'po.issue': 'po',
+    'quote.submit': 'quote' }
+  for (const view of ['contractor', 'supplier']) {
+    out.push(surface.panel({ plugin_id: me, id: `gate.object-${view}`, title: '审批门（对象页：谁在等、卡在哪）',
+      view, order: 39, kind: 'kv', object_kind: 'gate',
+      hint: '门后面那个对象可点；指派/关注/评论在「协作」面板里（同侧可见，不进账本）',
+      data: (ctx) => {
+        const id = asText(ctx?.route?.id)
+        const rows = host.rows(view).filter((row) => String(row?.type ?? '').startsWith('approval/')
+          && asText(bodyOf(row).approval_id) === id)
+        if (!rows.length) {
+          return { ok: true, kind: 'kv', items: [], object: { found: false, reason: 'gate-not-found',
+            next_action: `这一侧（${view}）的账本里没有审批门 ${id}：门 id 从「审批与变更」页或工作台的`
+              + '待人工门那一行点「打开 →」拿（不要手抄）' } }
+        }
+        const last = rows[rows.length - 1]
+        const body = bodyOf(last)
+        const status = String(last.type).replace('approval/', '')
+        const scope = asText(body.scope)
+        const target = asText(body.ref)
+        const kind = GATE_SCOPE_KIND[scope] ?? ''
+        const decided = status === 'granted' || status === 'aborted'
+        const granted = rows.find((row) => String(row?.type ?? '') === 'approval/granted')
+        const grantedBy = granted ? asText(bodyOf(granted).decided_by) || asText(bodyOf(granted).by) : ''
+        const facts = [
+          { key: '门 id', value: id, code: true },
+          { key: '范围（scope）', value: scope || '（未登记范围）', code: true },
+          { key: '状态', value: status === 'requested' ? '还在等（requested）'
+            : (status === 'granted' ? '已批准（granted）' : `${status}`) },
+          { key: '门后面那个对象', value: kind ? `${kind} ${target}` : `（未登记类别）${target}` },
+          { key: '请求人', value: asText(body.requested_by) || '（未记）' },
+          { key: '事实时刻', value: String(last.ts ?? '') },
+          { key: '批准人', value: grantedBy || '（还没批）' },
+        ]
+        return { ok: true, kind: 'kv', items: facts,
+          object: { title: `审批门 ${id}`, subtitle: `${scope || '（范围未登记）'} · ${decided
+            ? '已决定' : '还在等'}（门的事实来自本侧账本；本页只多给一条协作面）`, found: true, facts,
+            links: kind && target ? [{ kind, id: target, title: `门后面那个对象（${kind} ${target}）` }] : [],
+            next_action: decided ? '这条门已经决定了：要看它挡住了哪一步，点上面的对象链接'
+              : '这条门还在等：在本侧「授标与订单」用对应动作人签（界面不代签）；'
+                + '办不完就在协作面板里「指派 / 转交」给同侧同事' } }
+      } }))
+  }
+
   // ------------------------------------------------------------------ 通知与状态（**待人工门队列**）
   out.push(surface.notificationSource({ plugin_id: me, id: 'notify.gates', title: '待人工门（授标链）',
     order: 30, poll: () => {
@@ -295,10 +345,11 @@ export async function register(surface, host) {
       const items = []
       for (const [id, item] of last) {
         if (item.type === 'approval/granted' || item.type === 'approval/aborted') continue
-        items.push({ id: `gate:${id}`, level: 'warn', at: '', ref: item.ref,
+        items.push({ id: `gate:${id}`, level: 'warn', at: '', ref: { kind: 'gate', id, title: `审批门 ${id}` },
           title: `人工门 ${id} 还在等（${item.scope}）`,
           body: `对象 ${item.ref} —— 承诺类动作没有人工批准就落不了账`,
-          next_action: '在「授标与订单」里用对应的动作（人签）批准；或先看「审批与变更」页等多久' })
+          next_action: '点「打开 审批门 …」进这条门的对象页（可以指派/评论）；'
+            + '人签在「授标与订单」里用对应动作做' })
       }
       // 供应商侧「待确认中标」：读**授标意向信封**（与 award.inbox 面板同一来源；意向不在供应商账本里，
       // 只通过信封投递 —— P3 走查实测：原来这里读的是供应商账本，导致供应商的通知中心里看不到"待你确认"）。

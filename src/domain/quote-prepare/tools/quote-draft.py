@@ -10,6 +10,8 @@
   ① 宿主（`host/modules/webui.mjs` + `host/modules/quote-prepare.mjs`）只落**一条 0600 待办件**
      `<inbox>/qd-<view>-<12hex>.json`：含表单内容（行项目、**单价整数分**、交期、发言人、币种、
      **备注原话**）、`lines_sha256`、`note_sha256`、视角 —— **账本零新增**；
+     · **一次提交可以是一整张表**：多行报价在待办件里带 `lines`（逐行 `{item_id, unit_price_cents,
+       lead_time_days}`，标量三键写第一行的值）⇒ **一份报价 = 一条草稿 = 一次人签**（不必一行签一次）；
   ② 本脚本（**唯一落账本者**）：
      · 权限门（**必须恰为 0600、必须是普通文件**）→ 形状门（schema/kind/view/动作）→ **重算校验**
        （`lines_sha256` / `note_sha256` / `bytes` 必须与重算一致，`submitted_at` 必须为空 ——
@@ -18,8 +20,9 @@
        `lines[].item_id` / `item_id` / `item_ids[]`），RFQ 引用同理；**数值必须在范围内**（越界不夹取）；
      · 落一条 `quote/drafted`（**非签名动作**：它只表示「报价已准备好」，不是「报价已提交」），
        body **恰 12 键**（`currency / item_id / lead_time_days / lines_sha256 / note_sha256 / ok /
-       prepared_by / quote_draft_id / rfq_id / supplier / unit_price_cents / view`）
-       —— **不含备注正文、不含任何凭据**（正文只留在 0600 待办件里）；
+       prepared_by / quote_draft_id / rfq_id / supplier / unit_price_cents / view`）；
+       多行草稿再额外带 `lines` + `line_count` 两键（共 14 键）—— **单行草稿的 12 键逐字节不变**。
+       **不含备注正文、不含任何凭据**（正文只留在 0600 待办件里）；
      · **两侧登记**（双向可见性）：同一份草稿在**供应商账本**（自己的事实）与**承包商账本**
        （「供应商 X 已准备报价（待签署）」）各落一条，`view` 字段区分是哪一侧的行；
      · 待办件移入 `<inbox>/applied/`（**不删**，幂等可观察）。
@@ -77,10 +80,15 @@ UNIT_PRICE_MAX = 100_000_000
 LEAD_TIME_MIN = 1
 LEAD_TIME_MAX = 3650
 NOTE_BYTES_MAX = 2000
+# **一份草稿最多几行**（与 `host/modules/quote-prepare.mjs` 的 `max_items` 同口径）
+MAX_LINES = 64
 
-# body 键的**闭合集合**（门逐条比对；备注正文与凭据永远不在里面）
+# body 键的**闭合集合**（门逐条比对；备注正文与凭据永远不在里面）。
+# 单行草稿恰这 12 键（**逐字节不变**）；多行草稿额外带 `lines` + `line_count` 两键
+# （`lines` = 逐行 `{item_id, lead_time_days, unit_price_cents}`；标量三键写**第一行**的值，供既有读者兜底）。
 BODY_KEYS = ("currency", "item_id", "lead_time_days", "lines_sha256", "note_sha256", "ok",
              "prepared_by", "quote_draft_id", "rfq_id", "supplier", "unit_price_cents", "view")
+BODY_KEYS_MULTI = tuple(sorted(BODY_KEYS + ("lines", "line_count")))
 
 # 逐条按键读取行项目 / RFQ 引用（**不是**原样透传：只认这几个键的形状，与插件同一规则）
 ITEM_LIST_KEYS = ("items", "item_ids")
@@ -103,7 +111,26 @@ def digest_of(value: object) -> str:
 
 
 def canonical_lines(record: dict) -> str:
-    """行项目的**规范化 JSON**（宿主与脚本各算一次；键排序 + 无空格 + 不转义非 ASCII）。"""
+    """行项目的**规范化 JSON**（宿主与脚本各算一次；键排序 + 无空格 + 不转义非 ASCII）。
+
+    两种形态（**同一份草稿只有一种**，由「有没有 `lines`」决定）：
+
+      · **单行**（无 `lines`）：`{currency, item_id, lead_time_days, rfq_id, unit_price_cents}` ——
+        既有待办件与既有门的期望**逐字节不变**；
+      · **多行**（`lines` 非空）：`{currency, lines:[{item_id, lead_time_days, unit_price_cents}], rfq_id}`
+        —— **一份草稿 = 一整张表**（多行报价一次人签提交整份，不必一行签一次）。
+    """
+    raw_lines = record.get("lines")
+    if isinstance(raw_lines, list) and raw_lines:
+        lines = []
+        for entry in raw_lines:
+            row = entry if isinstance(entry, dict) else {}
+            lines.append({"item_id": str(row.get("item_id") or ""),
+                          "lead_time_days": row.get("lead_time_days"),
+                          "unit_price_cents": row.get("unit_price_cents")})
+        payload = {"currency": str(record.get("currency") or ""), "lines": lines,
+                   "rfq_id": str(record.get("rfq_id") or "")}
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     lines = {
         "currency": str(record.get("currency") or ""),
         "item_id": str(record.get("item_id") or ""),
@@ -202,6 +229,66 @@ def ledger_drafts(rows: list[dict]) -> set[tuple[str, str, str]]:
 # ---------------------------------------------------------------------------
 # 待办件读取（权限门 → 形状门 → 重算校验；拒绝理由里**不出现备注正文**）
 # ---------------------------------------------------------------------------
+def lines_of(record: dict) -> tuple[list[dict] | None, dict | None]:
+    """**多行草稿**的逐行门（一份草稿 = 一整张表；一行不合规就整份拒、账本零新增）。
+
+    逐行校验与单行同口径（`item_id` 形状 / 单价整数分 + 范围 / 交期整数天 + 范围），
+    并额外守三条结构规则：`lines` 必须是**非空数组**、最多 `MAX_LINES` 行、**同一个行项目不许出现两次**
+    （重复行会让「这份报价总共多少」这件事没有唯一答案）。
+    标量三键（`item_id`/`unit_price_cents`/`lead_time_days`）必须与**第一行**逐字一致：
+    不一致说明这份待办件自述互相矛盾 ⇒ 按 `pending-tampered` 拒（不猜哪一份是对的）。
+    """
+    raw = record.get("lines")
+    if raw is None:
+        return [], None
+    if not isinstance(raw, list) or not raw:
+        return None, {"code": "lines-empty",
+                      "reason": "给了 lines 但它是空数组/不是数组（不猜成单行）",
+                      "next_action": "要么不给 lines（单行报价），要么给至少一行逐行报价"}
+    if len(raw) > MAX_LINES:
+        return None, {"code": "lines-too-many",
+                      "reason": f"lines {len(raw)} 行超过上限 {MAX_LINES}",
+                      "next_action": "拆成多份草稿，或按页面上写的上限重提"}
+    out: list[dict] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            return None, {"code": "line-not-an-object", "reason": f"lines[{index}] 不是对象",
+                          "next_action": "每一行给 {item_id, unit_price_cents, lead_time_days}"}
+        item = str(entry.get("item_id") or "").strip()
+        if not REF_RE.match(item):
+            return None, {"code": "line-item-malformed",
+                          "reason": f"lines[{index}].item_id 形状非法：{entry.get('item_id')!r}",
+                          "next_action": "行项目取本视角行项目目录里的真 id"}
+        if item in seen:
+            return None, {"code": "line-duplicate", "reason": f"行项目 {item} 在 lines 里出现了两次",
+                          "next_action": "同一行项目只留一行（重复会让总价没有唯一答案）"}
+        seen.add(item)
+        price = entry.get("unit_price_cents")
+        if isinstance(price, bool) or not isinstance(price, int) \
+                or not (UNIT_PRICE_MIN <= price <= UNIT_PRICE_MAX):
+            return None, {"code": "line-price-out-of-range",
+                          "reason": f"lines[{index}].unit_price_cents 必须是 {UNIT_PRICE_MIN}..{UNIT_PRICE_MAX} "
+                                    f"的整数分（越界不夹取），收到 {price!r}",
+                          "next_action": "把该行单价换算成整数分后重提"}
+        lead = entry.get("lead_time_days")
+        if isinstance(lead, bool) or not isinstance(lead, int) \
+                or not (LEAD_TIME_MIN <= lead <= LEAD_TIME_MAX):
+            return None, {"code": "line-lead-out-of-range",
+                          "reason": f"lines[{index}].lead_time_days 必须是 {LEAD_TIME_MIN}..{LEAD_TIME_MAX} "
+                                    f"的整数天，收到 {lead!r}",
+                          "next_action": "改该行交期后重提"}
+        out.append({"item_id": item, "unit_price_cents": price, "lead_time_days": lead})
+    first = out[0]
+    if (str(record.get("item_id") or "").strip() != first["item_id"]
+            or record.get("unit_price_cents") != first["unit_price_cents"]
+            or record.get("lead_time_days") != first["lead_time_days"]):
+        return None, {"code": "pending-tampered",
+                      "reason": "标量三键（item_id/unit_price_cents/lead_time_days）与 lines 的第一行不一致",
+                      "next_action": "丢掉这条自相矛盾的待办件、重新提交（提交面会重算哈希）"}
+    return out, None
+
+
 def load_item(path: Path, views: list[str]) -> tuple[dict | None, dict | None]:
     try:
         info = os.stat(path)
@@ -301,10 +388,15 @@ def load_item(path: Path, views: list[str]) -> tuple[dict | None, dict | None]:
     if not isinstance(draft_id, str) or not REF_RE.match(draft_id):
         return None, {"code": "pending-tampered", "reason": "quote_draft_id 缺或形状非法",
                       "next_action": "丢掉它、重新提交"}
+    lines, line_refusal = lines_of(record)
+    if line_refusal is not None:
+        return None, line_refusal
+    assert lines is not None
     return {"file": path.name, "path": path, "view": view, "supplier": supplier,
             "prepared_by": prepared_by, "rfq_id": rfq_id, "item_id": item_id,
             "currency": currency, "unit_price_cents": price, "lead_time_days": lead,
             "note": note, "note_sha256": digest_of(note), "quote_draft_id": draft_id,
+            "lines": lines, "line_count": len(lines),
             "lines_sha256": digest_of(canonical_lines(record))}, None
 
 
@@ -437,8 +529,16 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     for item in items:
         view = item["view"]
         key = (view, item["quote_draft_id"], item["lines_sha256"])
-        # 行项目必须真的存在（本视角事实里读到过）
-        if item_catalogue and item["item_id"] not in item_catalogue:
+        # 行项目必须真的存在（本视角事实里读到过）——多行**逐行判**（一行错就整份拒），单行沿用原拒绝码
+        if item["lines"]:
+            missing = [line["item_id"] for line in item["lines"]
+                       if item_catalogue and line["item_id"] not in item_catalogue]
+            if item_catalogue and missing:
+                refused.append({"file": item["file"], "view": view, "code": "line-item-not-found",
+                                "reason": f"行项目 {', '.join(missing)} 不在本视角事实里（已读到 {len(item_catalogue)} 个）",
+                                "next_action": "看 /quotagent/supplier/quotes/prepare/ 的「行项目目录」后重提（账本零新增）"})
+                continue
+        elif item_catalogue and item["item_id"] not in item_catalogue:
             refused.append({"file": item["file"], "view": view, "code": "item-not-found",
                             "reason": f"行项目 {item['item_id']} 不在本视角事实里（已读到 {len(item_catalogue)} 个）",
                             "next_action": "看 /quotagent/supplier/quotes/prepare/ 的「行项目目录」后重提（账本零新增）"})
@@ -466,6 +566,12 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 "note_sha256": item["note_sha256"], "ok": True, "prepared_by": item["prepared_by"],
                 "quote_draft_id": item["quote_draft_id"], "rfq_id": item["rfq_id"],
                 "supplier": supplier_id, "unit_price_cents": item["unit_price_cents"]}
+        # 多行草稿：body 额外带 `lines`（逐行 `{item_id, lead_time_days, unit_price_cents}`）+ `line_count`
+        # —— 标量三键写第一行的值（既有读者兜底），逐行的真值在 `lines` 里。
+        if item["lines"]:
+            base["lines"] = [dict(line) for line in item["lines"]]
+            base["line_count"] = len(item["lines"])
+        body_keys = BODY_KEYS_MULTI if item["lines"] else BODY_KEYS
         if not args.dry_run:
             ledger = supplier_handles.get(view) or Ledger(supplier_ledger, realm=supplier_realm or f"{view}:quote-draft")
             supplier_handles[view] = ledger
@@ -489,8 +595,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         added_supplier[key] = True
         applied.append({"file": item["file"], "view": view, "quote_draft_id": item["quote_draft_id"],
                         "rfq_id": item["rfq_id"], "item_id": item["item_id"],
+                        "line_count": item["line_count"],
                         "unit_price_cents": item["unit_price_cents"],
-                        "body_keys": sorted(BODY_KEYS), "ledger": str(supplier_ledger),
+                        "body_keys": sorted(body_keys), "ledger": str(supplier_ledger),
                         "notified": "contractor"})
         if not args.dry_run:
             archive(inbox, item["path"])

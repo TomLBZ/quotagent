@@ -7,7 +7,7 @@
      两份真哈希链账本、临时 `ui-shared`；并记下**真** `/workspace/config.yaml` 的 sha256（本门只读它）；
   ② 起真 `cli.mjs webui` 进程（随机端口、私有前缀 `/qa`、`--config-file` 指向**临时**夹具 —— 不碰真配置）；
   ③ 两视角 `GET <prefix>/<view>/authority/?amount=..&role=..` 与 `<prefix>/<view>/api/authority?..` 四条都 200，
-     页面是真页面（`data-authority-*` 抓手 + 道内子导航入口 + 回首页链接）；`/api/routes` 登记四条且 `auth=none`；
+     页面是真页面（`data-authority-*` 抓手 + 道内子导航入口 + 回首页链接）；`/api/routes` 登记四条且 `auth=identity-session`；
   ④ **三例边界值**（恰等于限额 / 超一分 / 差一分）逐条与**本脚本自己手算的**整数分对照（页面与 JSON 两个面）；
   ⑤ **未配置不得编限额**：把临时夹具**移走**（配置读不到）⇒ 同一 URL 变成 `unconfigured=true` +
      `band-unconfigured` + `required_role`/`next_role` 空 + `bands` 空 + 页面出「未配置」块；逐字节还原后
@@ -336,9 +336,10 @@ def main() -> int:  # noqa: C901
             'data-authority-engine="rules"', 'data-authority-can-approve="false"', 'data-authority-bands="1"',
             'data-authority-escalate="1"', 'data-authority-config-where="1"',
             f'data-subnav="{view}"', 'data-authority-link="1"', 'data-authority-back="1"'))
-        check("③ 两视角区间页/JSON 四条都 **200**；`/api/routes` 登记四条新路由且 `auth=none`；页面是真页面"
+        check("③ 两视角区间页/JSON 四条都 **200**；`/api/routes` 登记四条新路由且 `auth` 是**真实值**"
+              "`identity-session`（业务路由要身份会话——台账不再写 `none` 撒谎）；页面是真页面"
               "（结论抓手 + 口径 + 区间表 + 越界升级块 + 「在哪里配」+ 道内子导航入口 + 回首页链接）",
-              len(authority_routes) == 4 and all(item.get("auth") == "none" for item in authority_routes)
+              len(authority_routes) == 4 and all(item.get("auth") == "identity-session" for item in authority_routes)
               and all(item.get("method") == "GET" for item in authority_routes)
               and all(pages[view][0] == 200 and jsons[view][0] == 200 for view in pages) and page_contract,
               f"路由={[f'{i.get('method')} {i.get('path')} {i.get('auth')}' for i in authority_routes]}；"

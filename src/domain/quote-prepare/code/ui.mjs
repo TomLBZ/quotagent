@@ -20,10 +20,26 @@
 import { createHash } from 'node:crypto'
 import { validate, LIMITS, FIELDS, MONEY_UNIT } from './quote-prepare.mjs'
 
-/** 与唯一写者 `tools/quote-draft.py` 的 `canonical_lines()` **逐字节一致**的行项目规范化 JSON。 */
-const canonicalLines = (record) => JSON.stringify({ currency: String(record.currency ?? ''),
-  item_id: String(record.item_id ?? ''), lead_time_days: record.lead_time_days,
-  rfq_id: String(record.rfq_id ?? ''), unit_price_cents: record.unit_price_cents })
+/** 与唯一写者 `tools/quote-draft.py` 的 `canonical_lines()` **逐字节一致**的行项目规范化 JSON。
+ *
+ * 两种形态（与写者同一口径）：**单行**（无 `lines`）5 键；**多行**（`lines` 非空）`{currency, lines[], rfq_id}`。
+ * 键序必须是**排序后**的顺序（写者用 `json.dumps(sort_keys=True)`；`JSON.stringify` 只保留插入顺序）。
+ */
+const canonicalLines = (record) => {
+  const rows = Array.isArray(record.lines) && record.lines.length ? record.lines : null
+  if (rows) {
+    // **键序 = 字典序**（`currency` < `lines` < `rfq_id`；行内 `item_id` < `lead_time_days` <
+    // `unit_price_cents`）：写者用 `json.dumps(sort_keys=True)`，而 `JSON.stringify` **只保留插入顺序** ——
+    // 顺序写错就会算出另一个哈希（实测：写成 currency/rfq_id/lines 会被唯一写者按 `pending-tampered` 拒）。
+    return JSON.stringify({ currency: String(record.currency ?? ''),
+      lines: rows.map((line) => ({ item_id: String(line.item_id ?? ''), lead_time_days: line.lead_time_days,
+        unit_price_cents: line.unit_price_cents })),
+      rfq_id: String(record.rfq_id ?? '') })
+  }
+  return JSON.stringify({ currency: String(record.currency ?? ''), item_id: String(record.item_id ?? ''),
+    lead_time_days: record.lead_time_days, rfq_id: String(record.rfq_id ?? ''),
+    unit_price_cents: record.unit_price_cents })
+}
 const sha256 = (text) => createHash('sha256').update(String(text), 'utf8').digest('hex')
 
 export const plugin_id = 'domain/quote-prepare'
@@ -125,6 +141,7 @@ export async function register(surface, host) {
         note: `包 ${spec.package_id ?? '—'} rev${envelope.rev ?? '—'} · 报价截止 ${(spec.deadlines ?? {}).quote_by ?? '—'}`
           + ` · 报价一律**整数分**（8600 = 86.00）；改单价时右边实时算"×量 = 行合计"，底部编辑栏给小计`
           + ` · 键盘：Tab 走格 / Enter 走同列下一行 / Esc 还原 / Ctrl+Enter 提交 —— 备多行报价不用鼠标`
+          + ` · **表里填几行就交几行**：一次「备这份草稿」= 一条草稿（多行），随后**一次人签**提交整份`
           + ` · 标题旁的「打开对象 →」是这个包的深链（可复制分享、刷新不丢）` }
     } }))
 
@@ -231,10 +248,13 @@ export async function register(surface, host) {
         const body = bodyOf(row)
         const id = asText(body.quote_draft_id) || asText(row?.correlation_id)
         if (!id) continue
+        const lines = Array.isArray(body.lines) ? body.lines : []
         drafts.set(id, { id, quote_draft_id: id, draft_id: id, rfq_id: body.rfq_id ?? body.package_id ?? '',
           item_id: body.item_id ?? '', unit_price_cents: body.unit_price_cents ?? '',
           lead_time_days: body.lead_time_days ?? '', prepared_by: body.prepared_by ?? '',
-          ts: row.ts ?? '' })
+          line_count: lines.length || 1,
+          lines_text: lines.length > 1 ? lines.map((line) => `${line.item_id}@${line.unit_price_cents}分`).join(' ')
+            : '', ts: row.ts ?? '' })
       }
       const submitted = new Set(typeRows(host.rows('supplier'), 'quote/submitted')
         .map((row) => asText(bodyOf(row).quote_draft_id)))
@@ -242,15 +262,18 @@ export async function register(surface, host) {
         status: submitted.has(draft.quote_draft_id) ? '已签署提交' : '待签署' }))
       if (!rows.length) {
         return { ok: true, kind: 'table', degraded: true, reason: 'no-drafts',
-          next_action: '在上面的「发给我的 RFQ 包」里填单价与交期，然后「备这份草稿」',
+          next_action: '在上面的「发给我的 RFQ 包」里填单价与交期，然后「备这份草稿」（整张表一次提交）',
           columns: [{ key: 'quote_draft_id', label: '草稿' }], rows: [] }
       }
       return { ok: true, kind: 'table',
         columns: [{ key: 'quote_draft_id', label: '草稿', type: 'code' }, { key: 'rfq_id', label: '包', type: 'code' },
-          { key: 'item_id', label: '行项目', type: 'code' }, { key: 'unit_price_cents', label: '单价（整数分）' },
-          { key: 'lead_time_days', label: '交期（天）' }, { key: 'status', label: '状态' }],
+          { key: 'line_count', label: '行数' }, { key: 'item_id', label: '首行项目', type: 'code' },
+          { key: 'lines_text', label: '逐行（条目@单价分）' },
+          { key: 'unit_price_cents', label: '首行单价（整数分）' },
+          { key: 'lead_time_days', label: '首行交期（天）' }, { key: 'status', label: '状态' }],
         rows, row_actions: ['quote.submit'], counts: { drafts: rows.length },
-        note: '草稿**不是报价**：只有人签提交（quote/submit）之后才算对外报价（AGENTS.md 规则 3）' }
+        note: '草稿**不是报价**：只有人签提交（quote/submit）之后才算对外报价（AGENTS.md 规则 3）；'
+          + '**一份草稿 = 一整张表**（行数 > 1 的草稿签一次就提交全部行）' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'quote.submitted', title: '已提交的报价（提交结果回读）',
@@ -264,14 +287,22 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table',
         columns: [{ key: 'quote_id', label: '报价', type: 'code' }, { key: 'package_id', label: '包', type: 'code' },
-          { key: 'item_id', label: '行项目', type: 'code' }, { key: 'unit_price_cents', label: '单价（整数分）' },
-          { key: 'lead_time_days', label: '交期（天）' }, { key: 'approved_by', label: '签署人', type: 'code' },
+          { key: 'line_count', label: '行数' }, { key: 'item_id', label: '首行项目', type: 'code' },
+          { key: 'lines_text', label: '逐行（条目@单价分）' },
+          { key: 'unit_price_cents', label: '首行单价（整数分）' },
+          { key: 'lead_time_days', label: '首行交期（天）' }, { key: 'approved_by', label: '签署人', type: 'code' },
           { key: 'approval_id', label: '人工门', type: 'code' }, { key: 'submitted_at', label: '提交时刻' }],
-        rows: rows.map((row) => ({ id: row.quote_id, ...row,
-          ref: { kind: 'quote', id: asText(row.quote_id), title: `报价 ${asText(row.quote_id)}` } })),
+        rows: rows.map((row) => {
+          const lines = Array.isArray(row.lines) ? row.lines : []
+          return { id: row.quote_id, ...row, line_count: lines.length || 1,
+            item_id: asText(row.item_id) || asText(lines[0]?.item_id),
+            lines_text: lines.length > 1 ? lines.map((line) => `${line.item_id}@${line.unit_price_cents}分`).join(' ')
+              : '',
+            ref: { kind: 'quote', id: asText(row.quote_id), title: `报价 ${asText(row.quote_id)}` } }
+        }),
         counts: { quotes: rows.length },
         note: '每一行都对应一次人签的人工门（approval/requested → granted → quote/submitted，顺序不可颠倒）；'
-          + '行内「打开 →」是该报价的对象页深链（可复制发给对方核对）' }
+          + '**一份报价 = 一次人签**：行数 > 1 的报价是一次签完整份的（逐行在 `lines` 里，标量列只是首行）' }
     } }))
 
   // ---- **对象页**：`/app/supplier/quote/<q-…>/`（我提交的那份报价的全链事实） ----
@@ -312,7 +343,7 @@ export async function register(surface, host) {
           + `（提交入口在「我的草稿」面板）。` }
     } }))
 
-  out.push(surface.action({ plugin_id: me, id: 'quote.draft', title: '备报价草稿（可批量）', views: ['supplier'],
+  out.push(surface.action({ plugin_id: me, id: 'quote.draft', title: '备报价草稿（整张表一次提交）', views: ['supplier'],
     group: '报价', order: 10, input: {
       bulk: 'rows',
       fields: [
@@ -329,7 +360,8 @@ export async function register(surface, host) {
           help: 'human:<你的名字>（登录后会按会话身份自动填）' },
         { name: 'note', label: '备注（可选）', type: 'textarea' },
       ] },
-    hint: '草稿是**非签名动作**：它只表示"报价已准备好"，不产生对外义务；签名提交另一步（人签）',
+    hint: '**一份草稿 = 一整张表**：表里填几行就交几行，落**一条**草稿（`lines`）；'
+      + '草稿是**非签名动作**（不产生对外义务），随后「人签提交」一次签完整份',
     server: async (ctx, input) => {
       const rows = Array.isArray(input.rows) && input.rows.length ? input.rows : [input]
       const payload = payloadOf(host, 'supplier')
@@ -339,7 +371,8 @@ export async function register(surface, host) {
         return { ok: false, code: 'human-required', reason: '草稿也要有人认领：prepared_by 必须以 human: 开头',
           next_action: '写 human:<你的名字>' }
       }
-      const applied = []
+      // ① 逐行字段校验（沿用插件自己的字段级规则与拒绝码；行号进 `field` 让人知道是哪一行错）
+      const lines = []
       const failures = []
       for (const row of rows.slice(0, LIMITS.max_items)) {
         const itemId = asText(row.item_id ?? row.id)
@@ -351,46 +384,80 @@ export async function register(surface, host) {
         const verdict = validate({ view: 'supplier', form, payload }, { views: ['supplier'], ...LIMITS })
         if (!verdict.ok) {
           failures.push({ item_id: itemId, code: verdict.errors?.[0]?.code ?? 'validation-failed',
-            reason: (verdict.errors ?? []).map((item) => `${item.field}:${item.message}`).join('；'),
+            reason: (verdict.errors ?? []).map((item) => `第 ${lines.length + failures.length + 1} 行 ${item.field}:`
+              + `${item.message}`).join('；'),
             next_action: verdict.errors?.[0]?.next_action ?? '按字段错误改后重提' })
           continue
         }
-        // 草稿 id / 行哈希 / 备注哈希：与宿主既有那条路由（`webui.mjs` 的 `submitDraft`）**同一算法**，
-        // 唯一写者 `tools/quote-draft.py` 会对它们逐字节重算复核（对不上就拒、账本零新增）。
-        const supplierRealm = asText(rows0?.realm) || 'supplier:gui'
-        const prepared = { ...verdict.record, supplier: supplierRealm, view: 'supplier', submitted_at: '' }
-        prepared.note_sha256 = sha256(prepared.note ?? '')
-        prepared.lines_sha256 = sha256(canonicalLines(prepared))
-        prepared.bytes = Buffer.byteLength(String(prepared.note ?? ''), 'utf8')
-        const draftId = `qd-supplier-` + sha256([prepared.view, supplierRealm, canonicalLines(prepared),
-          String(prepared.note ?? ''), String(prepared.prepared_by ?? '')].join('\n')).slice(0, 12)
-        prepared.quote_draft_id = draftId
-        const staged = host.stage('quote-drafts', prepared, { name: `${draftId}.json` })
-        if (!staged.ok) { failures.push({ item_id: itemId, ...staged }); continue }
-        const run = host.runPython('src/domain/quote-prepare/tools/quote-draft.py',
-          ['--inbox', `${host.sharedDir}/quote-drafts`, '--ui-shared', host.sharedDir, '--view', 'supplier',
-            '--ledger-supplier', supplierLedger(), '--ledger-contractor', contractorLedger(),
-            '--now', host.now()])
-        const json = run.json ?? {}
-        const appliedRow = (json.applied ?? [])[0] ?? {}
-        applied.push({ item_id: itemId, quote_draft_id: draftId,
-          pending: staged.file, ledger_added: json.ledger_added ?? 0,
-          event: appliedRow.event ?? (run.ok ? 'quote/drafted' : null), ok: run.ok && json.ok === true,
-          refusal: json.refusal ?? null, writer_stdout: run.stdout ? run.stdout.slice(-240) : '' })
+        lines.push({ item_id: asText(verdict.record.item_id), unit_price_cents: verdict.record.unit_price_cents,
+          lead_time_days: verdict.record.lead_time_days })
       }
-      const okAll = applied.length > 0 && applied.every((row) => row.ok) && failures.length === 0
-      return { ok: okAll, code: okAll ? 'drafted' : (failures.length ? 'partial-failure' : 'writer-refused'),
-        reason: failures.length ? failures.map((item) => `${item.item_id}: ${item.reason}`).join('；') : '',
-        next_action: okAll
-          ? '草稿已落账（quote/drafted，两侧各一条）：在「我的草稿」里点「人签提交」把它签成真报价'
-          : '看 failures 里每条的 next_action；被拒时账本零新增',
-        result: { applied, failures, drafts: applied.filter((row) => row.ok).length } }
+      // ② 结构门：重复行项目会让「这份报价总共多少」没有唯一答案 ⇒ 明确拒（不悄悄去重）
+      const seen = new Set()
+      for (const line of lines) {
+        if (seen.has(line.item_id)) {
+          failures.push({ item_id: line.item_id, code: 'line-duplicate',
+            reason: `行项目 ${line.item_id} 在表里出现了两次`,
+            next_action: '同一个行项目只留一行（重复会让总价没有唯一答案）' })
+        }
+        seen.add(line.item_id)
+      }
+      if (failures.length || !lines.length) {
+        return { ok: false, code: failures.length ? 'validation-failed' : 'no-lines',
+          reason: failures.map((item) => `${item.item_id}: ${item.reason}`).join('；')
+            || '表里没有可提交的行（一行都没有 ⇒ 不落任何草稿）',
+          next_action: '按每条的 next_action 改后重提（本次**什么都没落盘**）',
+          result: { applied: [], failures, drafts: 0, lines: 0 } }
+      }
+      // ③ **一整张表 → 一条草稿**：多行带 `lines`（标量三键写第一行，供既有读者兜底），单行沿用旧形状
+      const supplierRealm = asText(rows0?.realm) || 'supplier:gui'
+      const first = lines[0]
+      const prepared = { schema: 1, kind: 'quote-draft', view: 'supplier', requested_action: 'draft',
+        rfq_id: asText(input.rfq_id), item_id: first.item_id, unit_price_cents: first.unit_price_cents,
+        lead_time_days: first.lead_time_days, currency: asText(input.currency) || 'CNY',
+        prepared_by: preparedBy, note: String(input.note ?? ''), supplier: supplierRealm, submitted_at: '' }
+      if (lines.length > 1) prepared.lines = lines
+      // 草稿 id / 行哈希 / 备注哈希：与宿主既有那条路由（`webui.mjs` 的 `submitDraft`）**同一算法**，
+      // 唯一写者 `tools/quote-draft.py` 会对它们逐字节重算复核（对不上就拒、账本零新增）。
+      prepared.note_sha256 = sha256(prepared.note ?? '')
+      prepared.lines_sha256 = sha256(canonicalLines(prepared))
+      prepared.bytes = Buffer.byteLength(String(prepared.note ?? ''), 'utf8')
+      const draftId = `qd-supplier-` + sha256([prepared.view, supplierRealm, canonicalLines(prepared),
+        String(prepared.note ?? ''), String(prepared.prepared_by ?? '')].join('\n')).slice(0, 12)
+      prepared.quote_draft_id = draftId
+      const staged = host.stage('quote-drafts', prepared, { name: `${draftId}.json` })
+      if (!staged.ok) {
+        return { ok: false, code: staged.code ?? 'pending-write-failed', reason: staged.reason ?? '',
+          next_action: staged.next_action ?? '先修待办件目录权限（宿主只落 0600 待办件）',
+          result: { applied: [], failures: [], drafts: 0, lines: 0 } }
+      }
+      const run = host.runPython('src/domain/quote-prepare/tools/quote-draft.py',
+        ['--inbox', `${host.sharedDir}/quote-drafts`, '--ui-shared', host.sharedDir, '--view', 'supplier',
+          '--ledger-supplier', supplierLedger(), '--ledger-contractor', contractorLedger(),
+          '--now', host.now()])
+      const json = run.json ?? {}
+      const appliedRow = (json.applied ?? [])[0] ?? {}
+      const ok = run.ok && json.ok === true && Number(appliedRow.line_count ?? 0) === lines.length
+      const refused = (json.refused ?? [])[0] ?? null
+      return { ok, code: ok ? 'drafted' : (refused?.code ?? 'writer-refused'),
+        reason: refused?.reason ?? (ok ? '' : (run.reason ?? '')),
+        next_action: ok
+          ? `草稿已落账（quote/drafted，**${lines.length} 行**，两侧各一条）：在「我的草稿」里点「人签提交」`
+            + '一次签完整份（不必一行签一次）'
+          : (refused?.next_action ?? '看 files/failures 里每条的 next_action；被拒时账本零新增'),
+        result: { applied: [{ item_id: first.item_id, quote_draft_id: draftId, line_count: lines.length,
+          lines, pending: staged.file, ledger_added: json.ledger_added ?? 0,
+          event: appliedRow.event ?? (run.ok ? 'quote/drafted' : null), ok,
+          refusal: refused, writer_stdout: run.stdout ? run.stdout.slice(-240) : '' }],
+        failures, drafts: ok ? 1 : 0, lines: lines.length } }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'quote.submit', title: '人签提交报价', views: ['supplier'],
     group: '报价', order: 20, permission: 'human-signature',
     confirm: { required: true, message: '提交报价是**对外承诺**：确认以你的署名提交？' },
-    hint: '人工门：署名会写进批准记录；落账本的是唯一写者 tools/quote-sign.py（界面不代签、不写账本）',
+    hint: '人工门：**一份草稿签一次**就提交整份（草稿里有几行就提交几行，不必一行签一次）；'
+      + '服务端会校验**署名 == 会话身份**，不一致一律拒（`signer-mismatch`，账本零新增）；'
+      + '落账本的是唯一写者 tools/quote-sign.py（界面不代签、不写账本）',
     input: { fields: [
       { name: 'draft_id', label: '草稿 id', type: 'text', required: true,
         pattern: '^qd-[A-Za-z0-9-]+-[0-9a-f]{12}$', help: '从「我的草稿」一列复制（qd-supplier-…）' },
@@ -400,20 +467,32 @@ export async function register(surface, host) {
         default: 'remind' },
     ] },
     server: async (ctx, input) => {
+      // 服务端一半**再核一遍**署名 == 会话身份（机制层已在动作总线上拦一次；这里在插件侧留痕，
+      // 免得有人绕过外壳直接调这个服务端一半时少一道门）。
+      const session = ctx.session && typeof ctx.session === 'object' ? ctx.session : null
+      const typed = asText(input.signature)
+      if (session && session.human && typed !== session.human) {
+        return { ok: false, code: 'signer-mismatch',
+          reason: `署名 ${typed} 与会话身份 ${session.human} 不一致`,
+          next_action: `人签只能本人签：用 ${session.human} 署名，或切换到该身份的会话（账本零新增）` }
+      }
       const run = host.runPython('src/domain/quote-prepare/tools/quote-sign.py',
         ['--ui-shared', host.sharedDir, '--draft-id', asText(input.draft_id),
-          '--actor', asText(input.signature), '--now', host.now(),
+          '--actor', typed, '--now', host.now(),
           '--comment', String(input.comment ?? ''), '--timeout-policy', asText(input.timeout_policy) || 'remind',
           '--ledger-supplier', supplierLedger(), '--ledger-contractor', contractorLedger()])
       const json = run.json ?? {}
+      const applied = json.applied ?? []
+      const lines = Number((applied[0] ?? {}).line_count ?? 0)
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (run.ok ? 'submitted' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action ?? (run.ok
-          ? '已提交：本侧账本多了 approval/requested、approval/granted、quote/submitted 三条；'
+          ? `已提交：本侧账本多了 approval/requested、approval/granted、quote/submitted 三条`
+            + `${lines > 1 ? `（这一份报价 **${lines} 行**，一次签完）` : ''}；`
             + '承包商账本多了「供应商已提交报价」一条（下面两个面板都能回读）'
           : '看 stdout/stderr 定位唯一写者的拒绝原因（拒绝时账本零新增）'),
         result: { quote_id: json.quote_id ?? null, approval_id: json.approval_id ?? null,
-          applied: json.applied ?? [], ledger_added: json.ledger_added ?? 0,
+          applied, ledger_added: json.ledger_added ?? 0,
           duplicates: json.duplicates ?? [], supplier: json.supplier ?? null,
           contractor: json.contractor ?? null, writer: json } }
     } }))
@@ -442,9 +521,16 @@ export async function register(surface, host) {
       const items = []
       for (const [id, body] of drafts) {
         if (signed.has(id)) continue
+        const lines = Array.isArray(body.lines) ? body.lines : []
         items.push({ id: `q:pending:${id}`, level: 'warn', at: String(body.submitted_at ?? ''),
-          title: `草稿待签署：${id}`, body: `行项目 ${body.item_id ?? '—'} · 单价 ${body.unit_price_cents ?? '—'} 分`,
-          next_action: '人签提交报价（署名 = 你的会话身份）',
+          title: `草稿待签署：${id}${lines.length > 1 ? `（${lines.length} 行）` : ''}`,
+          body: lines.length > 1
+            ? `${lines.length} 行：` + lines.slice(0, 3).map((line) => `${line.item_id}@${line.unit_price_cents}分`)
+              .join(' / ') + (lines.length > 3 ? ' …' : '')
+            : `行项目 ${body.item_id ?? '—'} · 单价 ${body.unit_price_cents ?? '—'} 分`,
+          next_action: lines.length > 1
+            ? `人签提交报价（**一次签完整份 ${lines.length} 行**；署名 = 你的会话身份）`
+            : '人签提交报价（署名 = 你的会话身份）',
           action: 'quote.submit', preset: { draft_id: id },
           ref: asText(body.rfq_id) === '' ? null : { view: 'supplier', kind: 'package',
             id: asText(body.rfq_id), title: `包 ${asText(body.rfq_id)}` } })
@@ -469,11 +555,11 @@ export async function register(surface, host) {
       const items = []
       items.push({ level: pending.length ? 'warn' : 'info',
         title: pending.length ? `${pending.length} 份草稿待你人签提交` : '没有待签署的草稿',
-        body: '提交报价是对外承诺：要人签（human:<你的名字>）',
+        body: '提交报价是对外承诺：要人签（human:<你的名字>）；**一份草稿签一次就提交整份**',
         action: pending.length ? 'quote.submit' : 'quote.draft',
         label: pending.length ? '人签提交报价' : '备一份草稿',
-        next_action: pending.length ? '点按钮直接开签名弹层；也可以在「我的草稿」里逐条签'
-          : '先在供应商道「发给我的 RFQ 包」里填单价与交期' })
+        next_action: pending.length ? '点按钮直接开签名弹层（一次签完整份）；也可以在「我的草稿」里逐条签'
+          : '先把表里的单价与交期填完，再「备这份草稿」（整张表一次提交）' })
       items.push({ level: mine.ok ? 'info' : 'warn',
         title: mine.ok ? `发给我的包：${(mine.envelope.spec?.items ?? []).length} 条行项目（rev${mine.envelope.rev}）`
           : '还没有发给我的 RFQ 包',

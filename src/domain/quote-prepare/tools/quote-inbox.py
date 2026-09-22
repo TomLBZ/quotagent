@@ -103,9 +103,25 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         if type_ != "quote/submitted":
             continue
         quote_id = str(body.get("quote_id") or "")
+        if not quote_id:
+            continue
+        # 一行 = 一个条目（单行报价：标量 `item_id`/`unit_price_cents`；多行报价：`lines[]` 逐行）
+        cells: list[tuple[str, float, object]] = []
         item_id = str(body.get("item_id") or "")
         cents = body.get("unit_price_cents")
-        if not quote_id or not item_id or not isinstance(cents, (int, float)):
+        if item_id and isinstance(cents, (int, float)):
+            cells.append((item_id, float(cents), body.get("lead_time_days")))
+        for entry_line in (body.get("lines") or []):
+            if not isinstance(entry_line, dict):
+                continue
+            line_item = str(entry_line.get("item_id") or "")
+            line_cents = entry_line.get("unit_price_cents")
+            if not isinstance(line_cents, (int, float)):
+                price = entry_line.get("unit_price")
+                line_cents = float(price) * 100.0 if isinstance(price, (int, float)) else None
+            if line_item and isinstance(line_cents, (int, float)):
+                cells.append((line_item, float(line_cents), entry_line.get("lead_time_days")))
+        if not cells:
             continue
         entry = quotes.setdefault(quote_id, {"quote_id": quote_id, "package_id": str(body.get("package_id") or ""),
                                              "supplier": str(body.get("supplier") or ""),
@@ -113,8 +129,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                                              "submitted_at": str(row.get("ts") or ""),
                                              "approval_id": body.get("approval_id"),
                                              "approved_by": body.get("approved_by"), "items": {}})
-        entry["items"][item_id] = {"unit_price_cents": float(cents),
-                                   "lead_time_days": body.get("lead_time_days")}
+        for line_item, line_cents, line_lead in cells:
+            entry["items"][line_item] = {"unit_price_cents": line_cents, "lead_time_days": line_lead}
 
     reviews: dict[str, dict] = {}
     latest_ts = ""

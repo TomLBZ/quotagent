@@ -340,10 +340,11 @@ def main() -> int:  # noqa: C901
         parsed = {view: parse_json(jsons[view][1]) for view in jsons}
         list_page = get(f"{base}/contractor/gates/")[1]
         cpage, spage = pages["contractor"][1], pages["supplier"][1]
-        check("③ 两视角明细页/JSON 各自 **200**；`/api/routes` 登记了 4 条新路由且 `auth` 全是 `none`；"
-              "页面是真页面（`data-money-unit=\"cents\"` + `data-rounding=\"half-up-to-cent\"` + 口径人话 + "
+        check("③ 两视角明细页/JSON 各自 **200**；`/api/routes` 登记了 4 条新路由且 `auth` 全是**真实值**"
+              "`identity-session`（业务路由要身份会话——台账不再写 `none` 撒谎）；"
+              "页面是真页面（`data-money-unit=\\\"cents\\\"` + `data-rounding=\\\"half-up-to-cent\\\"` + 口径人话 + "
               "道内子导航 + 回列表链接）；变更单列表**每一行链到自己的明细页**",
-              len(change_routes) == 4 and all(item.get("auth") == "none" for item in change_routes)
+              len(change_routes) == 4 and all(item.get("auth") == "identity-session" for item in change_routes)
               and len([i for i in change_routes if i.get("method") == "GET"]) == 4
               and pages["contractor"][0] == 200 and jsons["contractor"][0] == 200
               and pages["supplier"][0] == 200 and jsons["supplier"][0] == 200

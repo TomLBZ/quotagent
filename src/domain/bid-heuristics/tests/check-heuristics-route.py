@@ -10,7 +10,7 @@
   ⑤ **私域哨兵 0 次**（供应商侧页面/JSON 里搜不到承包商私域键与哨兵串），并有非空转对照
      （同一批私域数据在**承包商侧自己的夹具**里确实存在；供应商侧带私域的那条候选**根本不进排名**）。
 
-额外断言：`/api/routes` 里两条新路由的 `auth` 都是 `none`（**不涉未提权的 admin**）、
+额外断言：`/api/routes` 里两条新路由的 `auth` 都是 `identity-session`（业务路由要身份会话；**不涉未提权的 admin**）、
 既有路由没被弄坏、跑完之后夹具账本与目录**逐字节不变**（宿主零写面在 HTTP 层的机检形态）。
 
 退出码：0 全通过 / 1 有断言失败 / 2 环境错误。
@@ -246,8 +246,10 @@ def main() -> int:  # noqa: C901
         except json.JSONDecodeError:
             routes = []
         heur_routes = [item for item in routes if "heuristics" in str(item.get("path", ""))]
-        check("③ `/api/routes` 登记了页面与 JSON 两条新路由，且 `auth` 都是 `none`（不涉未提权的 admin）",
-              code == 200 and len(heur_routes) == 4 and all(item.get("auth") == "none" for item in heur_routes)
+        check("③ `/api/routes` 登记了页面与 JSON 两条新路由，且 `auth` 是**真实值** `identity-session`"
+              "（业务路由要身份会话；不涉未提权的 admin）",
+              code == 200 and len(heur_routes) == 4 and all(item.get("auth") == "identity-session"
+                                                            for item in heur_routes)
               and any(str(item["path"]).endswith("/heuristics/") for item in heur_routes)
               and any(str(item["path"]).endswith("/api/heuristics") for item in heur_routes),
               f"status={code} 命中={json.dumps([i.get('path') for i in heur_routes], ensure_ascii=False)}")

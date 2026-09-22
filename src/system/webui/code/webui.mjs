@@ -13,7 +13,7 @@ import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync,
   writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { array, number, object, string } from '../lib/std-schema.mjs'
 import { openLedger } from '../lib/ledger-view.mjs'
 // 注入式 UI 注册面（**机制**，见 host/lib/ui-slot.mjs）：本文件不知道任何区块是什么、由谁注册。
@@ -159,6 +159,7 @@ const WRITE_PATTERNS = [
   /^\/[a-z]+\/deadlines\/promise\/?$/,
   /^\/[a-z]+\/feedback\/?$/,
   /^\/[a-z]+\/quotes\/prepare\/?$/,                            // 报价草稿（只有准备视角有这一步）
+  /^\/api\/ui\/notif-state\/?$/,                                // 通知偏好/已读的服务端化（0600 落盘，按会话身份）
   // 身份与会话 + 自助面（`identity.mjs` 注册到路由注册面的那几条；**只落待办件/委托唯一写者**）
   /^\/identity\/(login|logout)\/?$/,                           // 登录/登出（服务端会话 0600 + cookie）
   /^\/sign\/(quote|award)\/?$/,                                // 人签（署名必须等于会话身份）
@@ -170,6 +171,19 @@ const WRITE_PATTERNS = [
 const isGetOnlyRoute = (path) => GET_ONLY_PATTERNS.some((pattern) => pattern.test(path))
 /** 该路径是不是**真的会处理写**的（收到 POST ⇒ 放行；其余落到各自的处理器）。 */
 const isWriteRoute = (path) => WRITE_PATTERNS.some((pattern) => pattern.test(path))
+
+/**
+ * **业务路由的 `auth` 真实值**（`/api/routes` 台账口径；D-… 与 `code/identity.mjs#gateBusinessRoute` 同源）。
+ *
+ * 为什么要有这个名字：身份门槛（DEF-001）落地后，`/contractor/**` 与 `/supplier/**` 的静态业务路由**不再免鉴权**
+ * —— 未登录 ⇒ 401 `identity-required`（API）/ `303 → /identity/?next=…`（浏览器），登录了不是这一侧 ⇒ 403
+ * `side-mismatch`。台账里继续写 `auth: 'none'` 就是**对身份面撒谎**（读台账的人会以为它们公开）。
+ * 所以：凡落在**两条业务道**前缀下的路由，`auth` 一律标成下面这个真实值（在 `/api/routes` 输出时按路径推导，
+ * 新增业务路由不会漏标 —— 不必也不会有人去手抄一遍）。
+ */
+export const AUTH_BUSINESS = 'identity-session'
+/** 业务道（**与路由级身份门槛同一集合**：`identity.mjs#gateBusinessRoute` 只对这两侧表态）。 */
+export const BUSINESS_SIDES = ['contractor', 'supplier']
 
 /** ops / admin 两道的道内导航（本步不新增子路由，用**页内锚点**：一跳可达这件事本身保留）。 */
 const OPS_SECTIONS = [['runtime', '运行期'], ['pipeline', '三域流水'], ['mail', '邮件（SMTP/IMAP）'], ['retention', '留存计划'],
@@ -342,6 +356,114 @@ export function apply(ctx, config) {
   const identity = createIdentity({ root: repoRoot, prefix, config, shell,
     services: { userPluginManager: ctx.userPluginManager, configView: ctx.configView }, log: (msg) => console.error(msg) })
   const identityRoutes = identity.register(uiRoutes)
+  // ---- **同侧协作**（指派/转交、关注、评论与 @同事、活动流、我的/我指派的/全部）的装配 -------------------
+  // 外壳先建、身份面后建 ⇒ 协作面要的两样东西（会话文件 ⇒ 本侧同事名单；合法侧 ⇒ 哪些视图是业务侧视图）
+  // 只能在这里补上。协作数据落 `<ui_shared>/collab/<side>.json`（0600，按侧隔离），**不进账本**：
+  // 它是人对界面的协同痕迹，不是合同事实（逐条理由见 `src/system/webui/code/collab.mjs` 文件头）。
+  const collabWiring = shell.configureCollab({ sessionsFile: identity.paths.sessions_file,
+    sides: identity.sides.map((side) => side.id), views: config.views })
+  console.error(`[webui] 协作面：视图 ${collabWiring.views.join('/') || '（无）'}`
+    + ` · 对象类 ${collabWiring.kinds.join('/') || '（暂无）'} · 对象面板 ${collabWiring.object_panels} 组`
+    + ` · 存储 ${shell.collab.describe().dir}（0600，按侧隔离，不进账本）`)
+  // ---- 通知偏好与已读的**服务端化**（机制）------------------------------------------------------
+  // 为什么：已读集合 / 静音 / 级别门槛原先只存在浏览器 localStorage 里（`quotagent.notif`）⇒
+  // 换浏览器、换设备就重来（P3 走查如实登记的第 4 条摩擦）。
+  // 落点：`<ui_shared>/webui/notif-state.json`（目录 0700 / 文件 **0600**、原子写、有界）。
+  // 归属：**按会话身份**（`human:<名字>`，由身份 cookie 解析）—— 未登录 ⇒ 401 `identity-required`：
+  // 不落盘、不伪造身份、不把「谁读过什么」记到别人名下。它**不是账本事实**（偏好不是业务承诺）。
+  const NOTIF_SCHEMA = 'quotagent/webui-notif-state/v1'
+  const NOTIF_LEVELS = ['info', 'warn', 'bad']
+  const NOTIF_BOUNDS = { read: 1000, muted: 50, id_bytes: 200, muted_bytes: 64 }
+  // `resolve`（不是 `join`）：`ui_shared` 可能是**绝对路径**（生产就是），`join` 会把绝对路径拼在后面
+  // —— 实测踩过：写成 join 会落出 `<repo>/workspace/projects/<repo>/tmp/...` 这种鬼路径（写成 `resolve` 才是
+  // 「绝对路径覆盖前缀」的语义，与 `identity.mjs` 的 `sharedDir` 同一口径）。
+  const notifDir = resolve(repoRoot, String(config.ui_shared ?? 'tmp/ui-shared'), 'webui')
+  const notifFile = join(notifDir, 'notif-state.json')
+  const notifEmpty = () => ({ schema: NOTIF_SCHEMA, identities: {} })
+  const notifRead = () => {
+    try {
+      const doc = JSON.parse(readFileSync(notifFile, 'utf8'))
+      if (doc && typeof doc === 'object' && !Array.isArray(doc) && typeof doc.identities === 'object'
+        && doc.identities !== null && !Array.isArray(doc.identities)) return { schema: NOTIF_SCHEMA,
+        identities: doc.identities }
+    } catch (err) { /* 缺失/坏文件 ⇒ 空文档（不猜、不抛） */ }
+    return notifEmpty()
+  }
+  /** 有界 + 洗净：id 只留字符串（≤ 200 字节，超出**丢掉**并如实计入 `dropped`）、去重、截到上限。 */
+  const notifSanitize = (raw) => {
+    const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+    const rawRead = Array.isArray(source.read) ? source.read : []
+    const cut = rawRead.filter((item) => typeof item !== 'string'
+      || Buffer.byteLength(item, 'utf8') > NOTIF_BOUNDS.id_bytes).length
+    const read = [...new Set(rawRead.filter((item) => typeof item === 'string'
+      && item.trim() !== '' && Buffer.byteLength(item, 'utf8') <= NOTIF_BOUNDS.id_bytes))]
+    const over = Math.max(0, read.length - NOTIF_BOUNDS.read)
+    const muted = [...new Set((Array.isArray(source.muted) ? source.muted : [])
+      .filter((item) => typeof item === 'string' && item.trim() !== ''
+        && Buffer.byteLength(item, 'utf8') <= NOTIF_BOUNDS.muted_bytes))]
+      .slice(0, NOTIF_BOUNDS.muted)
+    const level = NOTIF_LEVELS.includes(source.min_level) ? source.min_level : 'info'
+    return { state: { read: read.slice(-NOTIF_BOUNDS.read), muted, min_level: level },
+      dropped: { malformed: cut, over: over + Math.max(0,
+        (Array.isArray(source.muted) ? source.muted.length : 0) - muted.length) } }
+  }
+  const notifWrite = (doc) => {
+    try {
+      mkdirSync(notifDir, { recursive: true, mode: 0o700 })
+      try { chmodSync(notifDir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
+      const tmp = join(notifDir, `.notif-state.${process.pid}.tmp`)
+      writeFileSync(tmp, JSON.stringify({ schema: NOTIF_SCHEMA, identities: doc.identities }, null, 1) + '\n',
+        { encoding: 'utf8', mode: 0o600 })
+      chmodSync(tmp, 0o600)                          // 显式：不受 umask 影响（偏好文件必须**恰为** 0600）
+      renameSync(tmp, notifFile)
+      return { ok: true, file: notifFile, mode: '0600' }
+    } catch (err) {
+      return { ok: false, code: 'notif-state-write-failed', reason: String(err).slice(0, 160),
+        next_action: '先修 <ui_shared>/webui 目录权限（通知偏好文件必须 0600）' }
+    }
+  }
+  /** 读一个身份的服务端通知状态（没有 ⇒ 空状态；**不伪造**别的身份的记录）。 */
+  const notifStateOf = (req) => {
+    const who = identity.whoOf(req)
+    if (!who.ok) {
+      return { status: 401, body: { ok: false, code: who.code, reason: who.reason,
+        next_action: who.next_action, source: 'none',
+        note: '未登录时通知偏好只在本浏览器里有效（localStorage）；登录后**落服务端**（0600），跨设备仍在' } }
+    }
+    const doc = notifRead()
+    const stored = doc.identities[who.human]
+    return { status: 200, body: { ok: true, identity: who.human, side: who.side, source: stored ? 'server' : 'empty',
+      state: stored ?? { read: [], muted: [], min_level: 'info' },
+      file: notifFile, mode: '0600', bounds: NOTIF_BOUNDS,
+      note: '通知偏好/已读按**会话身份**落在服务端（0600 文件）：换浏览器、换设备仍在；'
+        + '它不是账本事实（偏好不是业务承诺）。' } }
+  }
+  /** 写一个身份的服务端通知状态（整体替换：标为已读/未读都要能生效）。 */
+  const notifSave = (req, payload) => {
+    const who = identity.whoOf(req)
+    if (!who.ok) {
+      return { status: 401, body: { ok: false, code: who.code, reason: who.reason,
+        next_action: who.next_action } }
+    }
+    const raw = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? (payload.state && typeof payload.state === 'object' ? payload.state : payload) : {}
+    const { state, dropped } = notifSanitize({ read: raw.read, muted: raw.muted,
+      min_level: raw.min_level ?? raw.minLevel })
+    const doc = notifRead()
+    doc.identities[who.human] = { ...state, saved_at: new Date().toISOString() }
+    // 有界：最多留 64 个身份（丢最久没更新的 —— 丢的是偏好，不是事实）
+    const names = Object.keys(doc.identities)
+    if (names.length > 64) {
+      names.sort((left, right) => String(doc.identities[left]?.saved_at ?? '')
+        .localeCompare(String(doc.identities[right]?.saved_at ?? '')))
+      for (const old of names.slice(0, names.length - 64)) delete doc.identities[old]
+    }
+    const written = notifWrite(doc)
+    if (!written.ok) return { status: 500, body: { ok: false, ...written } }
+    return { status: 200, body: { ok: true, identity: who.human, side: who.side, source: 'server',
+      state, dropped, file: written.file, mode: written.mode,
+      note: '已写到服务端（0600）：换浏览器/换设备后仍在（读回同一份文件）' } }
+  }
   console.error(`[webui] 身份与会话路由：${identityRoutes.routes.filter((row) => row.ok).length} 条已注册`
     + `${identityRoutes.ok ? '' : `（有被拒：${identityRoutes.routes.filter((row) => !row.ok)
       .map((row) => `${row.method} ${row.path}=${row.code}`).join(',')}）`}`)
@@ -529,8 +651,11 @@ export function apply(ctx, config) {
       + `<h3 id="views">按视角（账本计数）</h3>`
       + (rows ? `<table data-mail="views"><thead><tr><th>视角</th><th>排队</th><th>被拒</th><th>已发</th>`
         + `<th>入站解析</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>本份快照里没有视角计数。</p>')
-      + `<p><small>本页 **0 行 <code>&lt;script&gt;</code>、0 内联事件**：读用链接，改配置用已登记的 
-<code>${prefix}/admin/config/</code> 表单（宿主只落 0600 待处理项，由 Python 侧消费）。</small></p>`
+      + `<p><small><b>改配置不用跳 admin 道</b>：邮件（SMTP/IMAP）配置的界面入口在 `
+      + `<a href="${prefix}/mail/config/" data-mail-config-link="1">${prefix}/mail/config/</a>`
+      + `（**运维侧身份**登录后可改并持久化：干跑 → 0600 待办件 → <code>config-apply.py</code> 落 YAML；`
+      + `凭据只写不回显）；GUI 工作台首屏也有一块「邮件通道」面板指向它。`
+      + `本页 **0 行 <code>&lt;script&gt;</code>、0 内联事件**：读用链接，写面在身份页。</small></p>`
   }
 
   /**
@@ -1790,7 +1915,7 @@ export function apply(ctx, config) {
   /** 白名单事实键（多出来的键读都不读）。 */
   const PREP_FACT_KEYS = ['package_id', 'quote_id', 'supplier', 'item_id', 'item_ids', 'items', 'lines',
     'quote_draft_id', 'rfq_id', 'ok', 'currency', 'prepared_by', 'note_sha256', 'lines_sha256',
-    'unit_price_cents', 'lead_time_days']
+    'unit_price_cents', 'lead_time_days', 'line_count']
   /** 只读这两类事实行（草稿的目录与报价都从它们派生）。 */
   const PREP_ROW_TYPES = ['rfq/', 'quote/']
   /** 「准备报价」这一步属于哪个视角（真源在插件配置里；默认 `supplier`）。 */
@@ -1838,10 +1963,23 @@ export function apply(ctx, config) {
   const prepPayload = (view) => ({ view, as_of: lastTsOf(ledgerOf(view).rows()), facts: prepFacts(view) })
   const prepRun = (view) => prepare.prepare(prepPayload(view))
 
-  /** 结构化行的**规范化 JSON**：与 `tools/quote-draft.py` 的 `canonical_lines()` 逐字节一致。 */
-  const PREP_CANON = (record) => JSON.stringify({ currency: String(record.currency ?? ''),
-    item_id: String(record.item_id ?? ''), lead_time_days: record.lead_time_days,
-    rfq_id: String(record.rfq_id ?? ''), unit_price_cents: record.unit_price_cents })
+  /** 结构化行的**规范化 JSON**：与 `tools/quote-draft.py` 的 `canonical_lines()` 逐字节一致。
+   *  单行（无 `lines`）5 键；**多行**（`lines` 非空）`{currency, lines[], rfq_id}` —— 键序必须是排序后的顺序
+   *  （写者用 `json.dumps(sort_keys=True)`；`JSON.stringify` 只保留插入顺序）。 */
+  const PREP_CANON = (record) => {
+    const rows = Array.isArray(record.lines) && record.lines.length ? record.lines : null
+    if (rows) {
+      // 键序 = **字典序**（currency < lines < rfq_id）：写者 `json.dumps(sort_keys=True)`，
+      // `JSON.stringify` 只保留插入顺序 —— 顺序写错就是另一个哈希（会被写者按 pending-tampered 拒）。
+      return JSON.stringify({ currency: String(record.currency ?? ''),
+        lines: rows.map((line) => ({ item_id: String(line.item_id ?? ''), lead_time_days: line.lead_time_days,
+          unit_price_cents: line.unit_price_cents })),
+        rfq_id: String(record.rfq_id ?? '') })
+    }
+    return JSON.stringify({ currency: String(record.currency ?? ''), item_id: String(record.item_id ?? ''),
+      lead_time_days: record.lead_time_days, rfq_id: String(record.rfq_id ?? ''),
+      unit_price_cents: record.unit_price_cents })
+  }
   const prepSha = (text) => createHash('sha256').update(String(text), 'utf8').digest('hex')
   const prepBytes = (text) => Buffer.byteLength(String(text ?? ''), 'utf8')
 
@@ -1883,8 +2021,10 @@ export function apply(ctx, config) {
       return `<p data-prep-drafts="empty" data-prep-drafts-count="0">还没有报价草稿：本视角投影里没有 `
         + `<code>quote/drafted</code> 行。</p>`
     }
-    const rows = run.drafts.map((draft) => `<tr data-prep-draft="${esc(draft.quote_draft_id)}">`
-      + `<td><code>${esc(draft.item_id)}</code></td>`
+    const rows = run.drafts.map((draft) => `<tr data-prep-draft="${esc(draft.quote_draft_id)}"`
+      + ` data-prep-draft-lines="${esc(String(draft.line_count ?? 1))}">`
+      + `<td><code>${esc(draft.item_id)}</code>${(draft.line_count ?? 1) > 1
+        ? ` <b data-prep-draft-multi="1">（共 ${esc(String(draft.line_count))} 行）</b>` : ''}</td>`
       + `<td>${draft.unit_price_cents === null ? '—' : esc(String(draft.unit_price_cents))}</td>`
       + `<td>${draft.lead_time_days === null ? '—' : esc(String(draft.lead_time_days))}</td>`
       + `<td>${esc(draft.status_text)}（<code>${esc(draft.status)}</code>）</td>`
@@ -2575,6 +2715,9 @@ ${sortForm('events', '筛查事件')}
       return send(200, type, found.body)
     }
     if (path === '/api/ui/surface') return json(200, shell.surfaceJson())
+    // 面板/对象/通知/状态都要**会话身份**（`identity.whoOf`）：协作类贡献从 `ctx.identity` 才知道"同侧是谁"；
+    // 不按身份过滤数据（业务投影仍按视角隔离），但**侧的判定只认会话**，不认请求体/表单。
+    const whom = identity.whoOf(req)
     if (path === '/api/ui/panels') {
       const view = String(url.searchParams.get('view') ?? 'home')
       if (!['home', ...config.views].includes(view)) {
@@ -2584,7 +2727,8 @@ ${sortForm('events', '筛查事件')}
       // `kind`/`id` 非空 ⇒ **对象页**的面板（只出声明了该 object_kind 的面板；插件从 ctx.route 读对象身份）
       const kind = String(url.searchParams.get('kind') ?? '')
       const id = String(url.searchParams.get('id') ?? '')
-      return json(200, { ok: true, view, kind, id, panels: shell.panelsOf(view, { view, kind, id }),
+      return json(200, { ok: true, view, kind, id, panels: shell.panelsOf(view, { view, kind, id }, whom),
+        identity: whom.ok ? { human: whom.human, side: whom.side } : null,
         mechanism: '面板数据由插件自己的 data() 产出（通用形状：table/form/list/kv/metrics/html）；'
           + '外壳只按形状渲染，不解读语义' })
     }
@@ -2600,11 +2744,59 @@ ${sortForm('events', '筛查事件')}
         return json(400, { ok: false, code: 'object-address-incomplete', view, kind, id,
           next_action: `对象地址要写全：${prefix}/app/<view>/<kind>/<id>/；JSON 侧同样要 kind 与 id` })
       }
-      return json(200, shell.objectOf(view, kind, id))
+      return json(200, shell.objectOf(view, kind, id, whom))
     }
     if (path === '/api/ui/plugins') return json(200, shell.pluginsJson())
-    if (path === '/api/ui/notifications') return json(200, { ok: true, items: shell.notifications() })
-    if (path === '/api/ui/status') return json(200, { ok: true, items: shell.statusItems() })
+    if (path === '/api/ui/notifications') return json(200, { ok: true, items: shell.notifications(whom) })
+    // 通知偏好/已读的**服务端化**（0600 落盘，按会话身份）：GET 读、POST 写；未登录 ⇒ 401（不落盘）
+    if (path === '/api/ui/notif-state' && method === 'POST') {
+      return readBody((body) => {
+        let parsed = {}
+        if (String(body ?? '').trim() !== '') {
+          try { parsed = JSON.parse(body) } catch (err) {
+            return json(400, { ok: false, code: 'invalid-json', detail: String(err).slice(0, 120),
+              next_action: 'POST JSON：{"state":{"read":[…],"muted":[…],"min_level":"info"}}' })
+          }
+        }
+        const out = notifSave(req, parsed)
+        return json(out.status, out.body)
+      })
+    }
+    if (path === '/api/ui/notif-state') {
+      const out = notifStateOf(req)
+      return json(out.status, out.body)
+    }
+    if (path === '/api/ui/status') return json(200, { ok: true, items: shell.statusItems(whom) })
+    // ---- **同侧协作**（指派/转交、关注、评论与 @同事、活动流、已读）-------------------------------------
+    // 三条只读自述/查询路由：**侧一律取会话**（请求体/查询串改不动它）⇒ 一侧的身份读不到另一侧的协作数据
+    // （结构性隔离：一侧一个 0600 文件）。协作数据**不进账本**（理由见 `code/collab.mjs` 文件头）。
+    if (path === '/api/collab/store') {
+      if (!whom.ok) return json(401, { ok: false, code: whom.code, reason: whom.reason,
+        next_action: whom.next_action })
+      return json(200, { ok: true, identity: { human: whom.human, side: whom.side }, collab: shell.collab.describe(),
+        contributions: shell.collabSurface.contributions, object_panels: shell.collabSurface.objectPanels,
+        next_action: `对象级协作读接口：${prefix}/api/collab/object?view=<view>&kind=<kind>&id=<id>` })
+    }
+    if (path === '/api/collab/object') {
+      if (!whom.ok) {
+        return json(401, { ok: false, code: whom.code, reason: whom.reason, next_action: whom.next_action,
+          side_scoped: '协作按**会话所属侧**隔离：未登录时读不到任何一侧的指派与评论' })
+      }
+      const kind = String(url.searchParams.get('kind') ?? '')
+      const id = String(url.searchParams.get('id') ?? '')
+      const out = shell.collab.view({ side: whom.side, actor: whom.human, kind, id })
+      return json(out.ok ? 200 : 400, { ...out, view: String(url.searchParams.get('view') ?? ''),
+        identity: { human: whom.human, side: whom.side },
+        note: '协作数据按侧隔离、不进账本；`view` 只做回显（数据归属只看会话所属侧）' })
+    }
+    if (path === '/api/collab/hub') {
+      if (!whom.ok) {
+        return json(401, { ok: false, code: whom.code, reason: whom.reason, next_action: whom.next_action })
+      }
+      const out = shell.collab.hub({ side: whom.side, actor: whom.human,
+        bucket: String(url.searchParams.get('bucket') ?? '') })
+      return json(out.ok ? 200 : 400, { ...out, identity: { human: whom.human, side: whom.side } })
+    }
     if (path === '/api/ui/plugins/unload-all') {
       return json(400, { ok: false, code: 'explicit-plugin-required',
         next_action: `POST ${prefix}/api/ui/plugins/<plugin_id>/unload（plugin_id 形如 domain%2Fcompare）` })
@@ -2651,7 +2843,26 @@ ${sortForm('events', '筛查事件')}
               next_action: '动作总线收 JSON 请求体：{"view":"<视图>","input":{…}}' })
           }
         }
-        const promise = shell.runAction(actionMatch[1], parsed)
+        // ---- 人签动作的**服务端身份门**（机制；`docs/design/29-webui-gui-app.md` §3 的「唯一写者不变」前提）----
+        // 声明 `permission: 'human-signature'` 的动作：① 必须已登录（否则 401 `identity-required`）；
+        // ② 入参里的 `signature` 必须**等于会话身份**（否则 403 `signer-mismatch`）。
+        // 「署名取自会话」这条不因界面而放宽：界面与终端走**同一个**唯一写者，界面不代签、不写账本。
+        const wanted = shell.surface.findAction(actionMatch[1])
+        const who = identity.whoOf(req)
+        if (wanted && wanted.permission === 'human-signature') {
+          if (!who.ok) {
+            return json(401, { ok: false, code: who.code, reason: who.reason, next_action: who.next_action,
+              action: wanted.id, permission: wanted.permission })
+          }
+          const typed = String((parsed.input ?? {}).signature ?? '').trim()
+          if (typed !== who.human) {
+            return json(403, { ok: false, code: 'signer-mismatch', action: wanted.id,
+              reason: `署名 ${typed || '(空)'} 与会话身份 ${who.human} 不一致`,
+              next_action: `人签只能本人签：在 ${prefix}/identity/ 切换到该身份，或用 ${who.human} 署名`
+                + '（账本零新增）' })
+          }
+        }
+        const promise = shell.runAction(actionMatch[1], parsed, whom)
         promise.then((out) => json(out.ok ? 200 : 400, out))
           .catch((err) => {
             console.error(`[webui] 动作执行异常 ${actionMatch[1]}：${String(err).slice(0, 160)}`)
@@ -2781,11 +2992,30 @@ ${sortForm('events', '筛查事件')}
           { path: `${prefix}/api/ui/panels`, method: 'GET', auth: 'none',
             what: '面板数据（参数 view=home|<视图>）：通用形状 table/form/list/kv/metrics/html，由插件自己的 data() 产出' },
           { path: `${prefix}/api/ui/notifications`, method: 'GET', auth: 'none',
-            what: '通知中心（插件通知源 + 动作结果队列：进度 / 失败原因 / next_action / 待人工门）' },
+            what: '通知中心（插件通知源 + 动作结果队列：进度 / 失败原因 / next_action / 待人工门）',
+            auth_note: '本路由**不强制**身份：未登录也能调（返回匿名视图）；带会话时按会话身份过滤' },
+          { path: `${prefix}/api/ui/notif-state`, method: 'GET', auth: 'identity',
+            what: '通知偏好与已读的**服务端状态**（按会话身份；0600 文件 `<ui_shared>/webui/notif-state.json`）'
+              + '：换浏览器/换设备仍在；未登录 ⇒ 401（那时只在本浏览器有效）' },
+          { path: `${prefix}/api/ui/notif-state`, method: 'POST', auth: 'identity',
+            what: '写通知偏好与已读（整体替换：标已读/标未读都要生效；有界 + 洗净；**只写 0600 偏好文件**，'
+              + '不写账本）' },
           { path: `${prefix}/api/ui/status`, method: 'GET', auth: 'none', what: '状态栏项（插件注册的状态读数）' },
           { path: `${prefix}/api/action/<id>`, method: 'POST', auth: 'none',
-            what: '动作总线（JSON 入参）：校验 → 调用插件自己的**服务端一半**；写动作只落 0600 待办件，'
-              + '落账本仍由 Python 侧唯一写者（GUI 不是第二条事实写路径）' },
+            what: '动作总线（JSON 入参）：校验 → 调用插件自己的**服务端一半**；`permission: human-signature` 的'
+              + '动作**服务端校验署名 == 会话身份**（未登录 401 / 不一致 403 signer-mismatch）；'
+              + '写动作只落 0600 待办件，落账本仍由 Python 侧唯一写者（GUI 不是第二条事实写路径）',
+            auth_note: '**按动作分档**：普通动作不需要身份；声明 `permission: human-signature` 的动作必须有身份'
+              + '会话且**署名 == 会话身份**（否则 401/403，账本零新增）' },
+          // **同侧协作**（指派/转交、关注、评论与 @同事、活动流、已读）：侧一律取**会话身份**；
+          // 数据落 `<ui_shared>/collab/<side>.json`（0600，按侧隔离）——不是合同事实，**不进账本**。
+          { path: `${prefix}/api/collab/object`, method: 'GET', auth: 'identity',
+            what: '一个对象上的协作面：当前指派/原因/截止、关注者名单、评论（含 @同事）、活动流、我的未读'
+              + '（`?kind=&id=`；按**会话所属侧**读，对方侧读不到）' },
+          { path: `${prefix}/api/collab/hub`, method: 'GET', auth: 'identity',
+            what: '「我的 / 我指派的 / 全部」：指派给我的、@我的、我关注的、我指派出去的进展（工作台与通知中心用它筛选）' },
+          { path: `${prefix}/api/collab/store`, method: 'GET', auth: 'identity',
+            what: '协作存储自述（文件/0600/规模 + **为什么不能进账本**）；用来对账"它没进账本、没进投影"' },
           { path: `${prefix}/api/ui/plugins/<plugin_id>/unload`, method: 'POST', auth: 'none',
             what: '撤销一个插件的**全部** UI 贡献（视图/面板/动作/快捷键/通知源/状态项/校验器 + 它注册的区块）；'
               + '页面其余部分不变（`AGENTS.md` 规则 1）' },
@@ -2823,11 +3053,27 @@ ${sortForm('events', '筛查事件')}
           { path: `${prefix}/admin/api/config/plugins`, method: 'POST', auth: 'admin-session', what: '提交插件配置（target = <ns>/<plugin>；只落待处理项）' },
           { path: `${prefix}/admin/api/config/audit`, method: 'GET', auth: 'admin-session', what: '配置变更审计（只读；来源 Python 侧账本）' },
           { path: `${prefix}/admin/api/credentials`, method: 'GET', auth: 'admin-session', what: '凭据状态（configured/source/required_mode/指纹前 8/next_action；**不出值**）' },
-          { path: `${prefix}/admin/api/credentials/<name>`, method: 'POST', auth: 'admin-session', what: '提交/轮换凭据（只写不回显：响应只有 ok + next_action）' }],
+          { path: `${prefix}/admin/api/credentials/<name>`, method: 'POST', auth: 'admin-session', what: '提交/轮换凭据（只写不回显：响应只有 ok + next_action）' }]
+          // **业务路由的 `auth` 取真实值**（不再写 `none`）：凡落在 `${prefix}/contractor|supplier/` 下的路由，
+          // 一律 `identity-session` —— 与路由级身份门槛（`identity.mjs#gateBusinessRoute`）**同一判据**，
+          // 按路径推导（新增业务路由不会漏标；`none` 只留给**真的公开**的入口）。
+          .map((row) => (row.auth === 'none'
+            && BUSINESS_SIDES.some((side) => String(row.path).startsWith(`${prefix}/${side}`))
+            ? { ...row, auth: AUTH_BUSINESS, auth_note: '需要身份会话，且会话必须属于该路径那一侧' }
+            : row)),
+        auth_basis: {
+          none: '公开入口：总览/上手/健康/自述 JSON/GUI 外壳资源与注册面/运维与系统管理页（它们自己判权限）',
+          [AUTH_BUSINESS]: '业务路由：登录 + 会话必须属于该侧（未登录 401 identity-required / 浏览器 303 去登录；越侧 403 side-mismatch）',
+          identity: '身份与自助面（identity.mjs 注册的动态路由，自己判身份）',
+          'admin-session': '需要管理员会话（cookie 只对 admin 前缀生效）',
+          token: '需要管理员 token（POST /admin/api/elevate 换会话）',
+        },
         write_surface: { browser_writable: [`${prefix}/admin/**`, `${prefix}/<view>/gates/nudge`,
-          `${prefix}/<view>/deadlines/promise`, `${prefix}/supplier/quotes/prepare/`],
-          note: '浏览器永远不能签的五个动作：批准 / 提交报价 / 定标 / 发 PO / 变更批准（人工门在终端）；'
-            + '宿主也不发信（`rfq-deadline` 的 `can_send=false`）：登记承诺只落 0600 待办件' },
+          `${prefix}/<view>/deadlines/promise`, `${prefix}/supplier/quotes/prepare/`,
+          `${prefix}/api/action/<id>`, `${prefix}/api/ui/notif-state`, `${prefix}/mail/config/`],
+          note: '浏览器能**发起**的写面都在这里（动作总线/待办件/自助面）：一律只落 0600 待办件或**委托**'
+            + '既有唯一写者；`permission: human-signature` 的动作还要**服务端校验署名 == 会话身份**'
+            + '（`/api/action/<id>`），界面不代签、不写账本' },
       })
     }
     // ---- 报价草稿（`quote-prepare` domain 插件，本批）：唯一写面 = POST **只落一条 0600 待办件** ----

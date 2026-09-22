@@ -205,6 +205,7 @@ function readFacts(payload) {
     quote_draft_id: text(fact.quote_draft_id), rfq_id: text(fact.rfq_id),
     correlation_id: text(fact.correlation_id), ok: fact.ok,
     unit_price_cents: fact.unit_price_cents, lead_time_days: fact.lead_time_days,
+    line_count: fact.line_count,
     currency: text(fact.currency), prepared_by: text(fact.prepared_by), note_sha256: text(fact.note_sha256),
   } : {}))
 }
@@ -256,6 +257,9 @@ export function buildDrafts(payload) {
       item_id: fact.item_id,
       unit_price_cents: cents,
       lead_time_days: Number.isFinite(Number(fact.lead_time_days)) ? Number(fact.lead_time_days) : null,
+      // **一份草稿 = 一整张表**：多行草稿的行数（事实行里没有 `line_count` ⇒ 按单行算）
+      line_count: Number.isFinite(Number(fact.line_count)) && Number(fact.line_count) > 0
+        ? Number(fact.line_count) : 1,
       currency: fact.currency || DEFAULT_CURRENCY,
       prepared_by: fact.prepared_by,
       supplier: fact.supplier,

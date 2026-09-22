@@ -38,7 +38,7 @@
  *   13 宿主侧契约（静态）：两条新路由 + **四道页面**子导航入口（`subNav` 与 `anchorNav` 两处声明、
  *      运维/系统管理两道各传两个入口）+ 上手页有「授权区间在哪里配」段 + 模板 0 内联脚本 / 0 内联事件
  *   14 **真 HTTP 正控**（in-process 挂真 `webui` + 真依赖模块 + **临时配置夹具**）：两视角页面/JSON 四条 URL
- *      都 200、`/api/routes` 登记两条新路由且 `auth=none`；页面/JSON 的结论与**手算**一致
+ *      都 200、`/api/routes` 登记两条新路由且 `auth=identity-session`；页面/JSON 的结论与**手算**一致
  *   15 **真 HTTP 负控 + 改配置前后结论不同**：未配置实例（配置指向不存在的文件）⇒ `unconfigured=true`、
  *      `required_role`/`next_role` 空、`bands` 空；把**临时**配置里的 buyer 限额从 500000 改成 500001
  *      ⇒ **同一个金额**的结论从「越界」翻成「在区间内」（同一进程、同一 URL）；只读 ⇒ 夹具文件前后
@@ -775,11 +775,11 @@ try {
     && text.includes('data-authority-config-where="1"') && !text.includes(scriptNeedle)
     && !inlineEvent.test(text))
   check('14 **真 HTTP 正控**（in-process 挂真 `webui` + 真依赖模块 + **临时配置夹具**）：两视角页面/JSON '
-    + '**四条** URL 都 **200**；`/api/routes` 登记这四条新路由且 `auth=none`；'
+    + '**四条** URL 都 **200**；`/api/routes` 登记这四条新路由且 `auth=identity-session`（业务路由要身份会话）；'
     + '页面/JSON 的结论与**手算一致**（500000 ⇒ 在区间内、越界 0；500001 ⇒ 越界 1 分、要求角色 lead、'
     + '下一个 lead；499999 ⇒ 在区间内）；页面有口径/结论/区间表/「在哪里配」/子导航入口；'
     + '**0 行脚本 / 0 内联事件**',
-  authRoutes.length === 4 && authRoutes.every((row) => row.auth === 'none')
+  authRoutes.length === 4 && authRoutes.every((row) => row.auth === 'identity-session')
   && pageExact.status === 200 && jsonExact.status === 200 && pageOver.status === 200 && jsonOver.status === 200
   && jExact.inside_band === true && jExact.over_by === 0 && jExact.escalate_cmd === ''
   && jOver.inside_band === false && jOver.over_by === 1 && jOver.required_role === 'lead' && jOver.next_role === 'lead'

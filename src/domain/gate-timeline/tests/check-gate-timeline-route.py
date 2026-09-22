@@ -345,9 +345,9 @@ def main() -> int:  # noqa: C901
         pages = {view: get(f"{base}/{view}/gates/") for view in ("contractor", "supplier")}
         jsons = {view: get(f"{base}/{view}/api/gates") for view in ("contractor", "supplier")}
         parsed = {view: parse_json(jsons[view][1]) for view in jsons}
-        check("③ `/api/routes` 登记了两视角 ×（页面 + JSON + 催办 POST）**六条路由**，`auth` 都是 `none`"
-              "（看等待时长不需要管理员身份）",
-              len(gate_routes) == 6 and all(item.get("auth") == "none" for item in gate_routes)
+        check("③ `/api/routes` 登记了两视角 ×（页面 + JSON + 催办 POST）**六条路由**，`auth` 是**真实值**"
+              "`identity-session`（业务路由要身份会话——台账不再写 `none` 撒谎）",
+              len(gate_routes) == 6 and all(item.get("auth") == "identity-session" for item in gate_routes)
               and len([i for i in gate_routes if i.get("method") == "GET"]) == 4
               and len([i for i in gate_routes if i.get("method") == "POST"]) == 2,
               f"命中={json.dumps([f'{i.get('method')} {i.get('path')}' for i in gate_routes], ensure_ascii=False)}")

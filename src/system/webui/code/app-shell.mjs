@@ -17,6 +17,8 @@ import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { join, relative, resolve } from 'node:path'
 import { createUiSurface, PANEL_KINDS } from './ui-surface.mjs'
+import { createCollabStore } from './collab.mjs'
+import { createCollabSurface, COLLAB_PLUGIN_ID } from './collab-ui.mjs'
 
 export const SURFACE_VERSION = 1
 /** 外壳自己的键盘快捷键（机制；插件注册的在注册面里）。 */
@@ -73,10 +75,20 @@ function readBody(req, done) {
  * @param {(view: string) => object[]} options.rowsOf 本视角**公开投影后**的行（宿主只给白名单行）
  * @param {object} options.slots 旧的槽位注册表（`ui-slot.mjs`；用来嵌入插件注册的区块与撤销）
  * @param {(msg: string) => void} options.log 日志（stderr）
+ * @param {string} [options.sessionsFile] 身份会话文件（**只读**：协作面用它算"本侧同事名单"）——见 `collab.mjs`
+ * @param {string[]} [options.sides] 允许的侧（由身份面传入；外壳不硬编码任何侧名）
  */
-export function createAppShell({ root, prefix, views, config, rowsOf, publicRowsOf, slots, services, log }) {
+export function createAppShell({ root, prefix, views, config, rowsOf, publicRowsOf, slots, services, log,
+  sessionsFile = '', sides = [] }) {
   const surface = createUiSurface({ slots: slots?.slots?.() ?? [], views })
   const sharedDir = resolve(root, String(config.ui_shared ?? 'tmp/ui-shared'))
+  /**
+   * **同侧人类之间的协作**（指派/转交、关注、评论与 `@同事`、活动流、已读）：它是**机制**，不是业务语义 ——
+   * 对象类由插件声明（`collab-ui.mjs` 按 `surface.objectKindsFor(view)` 自动挂协作面），本文件不认识任何
+   * 对象类。数据落 `<ui_shared>/collab/<side>.json`（0600），**不写账本**（理由见 `collab.mjs` 文件头：
+   * 写进账本会破坏审计语义，并让"人对界面的协同痕迹"变成模型可见输入）。
+   */
+  const collab = createCollabStore({ root, sharedDir, sessionsFile, sides, log: (msg) => log?.(msg) })
   const pythonBin = DEFAULT_PYTHON
   const contributions = new Map()        // plugin_id → {module, file, entries: [{kind,id}], error}
   const actionLog = []                   // 机制层动作流水（通知中心用；有界）
@@ -214,11 +226,42 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     rows: (view) => (typeof rowsOf === 'function' ? rowsOf(view) : []),
     publicRows: (view) => (typeof publicRowsOf === 'function' ? publicRowsOf(view) : []),
     runPython, stage, readJson, sharedFile,
+    /** **同侧协作**句柄（指派/转交、关注、评论与 `@同事`、活动流、已读）：机制，不认识对象类。
+     *  插件可以拿它把协作挂到自己的对象上；`side`/`actor` 必须来自 `ctx.identity`（会话），不由表单给。 */
+    collab,
     /** 宿主自己注入的**服务句柄**（机制：按名字取；不知道任何服务的业务含义）。 */
     service: (name) => (services && typeof services === 'object' ? services[name] : undefined) ?? null,
     services: () => Object.keys(services ?? {}),
     note: noteStore,
     log: say,
+  }
+
+  /**
+   * 协作面（`collab-ui.mjs`）：把协作挂到**插件声明的对象类**上（视图/对象类都由插件声明，外壳不认识）。
+   * 注册面在装载/卸载后会变 ⇒ `syncCollab()` 在每次变动后重新对账（新对象类出现就挂上，消失就撤销）。
+   */
+  const collabSurface = createCollabSurface({ surface, host, views: views.filter((view) => view !== 'home'),
+    log: (msg) => say(msg) })
+  const syncCollab = () => {
+    const out = collabSurface.sync()
+    if (out && out.object_panels !== undefined) {
+      say(`协作面：视图 ${out.views.join('/') || '（无）'} · 对象类 ${out.kinds.join('/') || '（暂无）'}`
+        + ` · 对象面板 ${out.object_panels} 组`)
+    }
+    return out
+  }
+
+  /**
+   * 装配期后补：协作面需要**身份面**的两样东西（会话文件 ⇒ 本侧同事名单；合法侧 ⇒ 哪些视图是业务侧视图）。
+   * 建立顺序是"外壳 → 身份面"，所以由 `webui.mjs` 在建好身份面后调用它（外壳不硬编码任何侧名）。
+   */
+  const configureCollab = ({ sessionsFile: file, sides: nextSides, views: nextViews } = {}) => {
+    const store = collab.configure({ sessionsFile: file, sides: nextSides })
+    const list = Array.isArray(nextViews) && nextViews.length
+      ? nextViews.filter((view) => view !== 'home' && store.sides.includes(view)) : null
+    const synced = list ? collabSurface.configure({ views: list }) : syncCollab()
+    return { ok: true, sessions_file: store.sessions_file, sides: store.sides,
+      views: list ?? collabSurface.viewsOf(), object_panels: synced.object_panels, kinds: synced.kinds }
   }
 
   // ------------------------------------------------------------------ 插件贡献装载（发现式：任何插件放 code/ui.mjs 就会被装载）
@@ -254,6 +297,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       const verdict = await loadOne(item)
       summary.push(verdict)
     }
+    syncCollab()          // 对象类都声明完了：把协作面挂到它们上面（并撤掉已经不存在的）
     return summary
   }
 
@@ -307,6 +351,16 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    * 已经装载过 ⇒ 拒绝（`already-loaded`）并指向 `reload`（不静默重装：重装会先撤掉它的贡献）。
    */
   const loadPlugin = async (pluginId) => {
+    // 协作面是**外壳自带的机制贡献**（`collab-ui.mjs`，不是磁盘上的插件文件）：它只有"装着/撤掉"两种状态。
+    if (pluginId === COLLAB_PLUGIN_ID) {
+      const before = collabSurface.contributions
+      const synced = syncCollab()
+      return { ok: true, code: before ? 'already-loaded' : 'loaded', plugin_id: pluginId,
+        file: 'src/system/webui/code/collab-ui.mjs', built_in: true, registered: synced.object_panels,
+        next_action: before
+          ? '协作面本来就在（外壳自带）：要撤掉用 POST .../unload，要重建用 POST .../reload'
+          : '协作面已挂到所有插件声明的对象类上（刷新页面即可看到指派/关注/评论）' }
+    }
     const item = scanContributions().find((row) => row.plugin_id === pluginId)
     if (!item) {
       return { ok: false, code: 'plugin-not-found', plugin_id: pluginId,
@@ -320,6 +374,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     const started = Date.now()
     const verdict = await loadOne(item)
     clearReadCache()               // 新贡献可能带来新的只读读取：缓存一律作废
+    syncCollab()                   // 它可能声明了新的对象类 ⇒ 协作面跟着长出来
     return { ok: verdict.ok === true, code: verdict.ok ? 'loaded' : (verdict.code ?? 'register-failed'),
       plugin_id: pluginId, file: relative(root, item.file), ms: Date.now() - started,
       registered: verdict.registered ?? 0, refused: verdict.refused ?? [], reason: verdict.reason ?? null,
@@ -333,6 +388,16 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    * 这是"改 `code/ui.mjs` 不用重启进程"的那条路；**不改**其它插件的任何贡献。
    */
   const reloadPlugin = async (pluginId) => {
+    // 协作面（外壳自带）：reload = 撤掉它的全部贡献后按当前代码重建（并重新挂到最新声明的对象类上）。
+    if (pluginId === COLLAB_PLUGIN_ID) {
+      collabSurface.dispose()
+      const synced = syncCollab()
+      return { ok: true, code: 'reloaded', plugin_id: pluginId, built_in: true,
+        file: 'src/system/webui/code/collab-ui.mjs', module_version: `collab.${Date.now()}`,
+        registered: synced.object_panels,
+        next_action: '协作面已重建（指派/关注/评论/@同事 与「我的 / 我指派的 / 全部」筛选都在）；'
+          + '协作**数据**不受影响（它落在 <ui_shared>/collab/ 下的 0600 文件里，不是贡献）' }
+    }
     const item = scanContributions().find((row) => row.plugin_id === pluginId)
     if (!item) {
       return { ok: false, code: 'plugin-not-found', plugin_id: pluginId,
@@ -343,6 +408,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     const started = Date.now()
     const verdict = await loadOne(item)
     clearReadCache()
+    syncCollab()                   // 重载可能改了它声明的对象类
     let mtime = null
     try { mtime = new Date(statSync(item.file).mtimeMs).toISOString() } catch (err) { mtime = null }
     return { ok: verdict.ok === true, code: verdict.ok ? 'reloaded' : (verdict.code ?? 'register-failed'),
@@ -357,17 +423,28 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   /** 插件装载清单（`GET /api/ui/plugins`）：谁在磁盘上、装载没装载、mtime 多少。 */
   const pluginsJson = () => ({
     ok: true, prefix,
-    plugins: scanContributions().map((item) => {
+    plugins: [...scanContributions().map((item) => {
       const known = contributions.get(item.plugin_id) ?? {}
       let mtime = null
       try { mtime = new Date(statSync(item.file).mtimeMs).toISOString() } catch (err) { mtime = null }
       return { plugin_id: item.plugin_id, file: relative(root, item.file), mtime,
         loaded: Array.isArray(known.entries) && known.entries.length > 0 && known.unloaded !== true,
         contributions: known.entries ?? [], refused: known.refused ?? [], error: known.error ?? null }
-    }),
+    }), {
+      // 外壳自带的**协作面**（不是磁盘上的插件文件）：一样列在这里，一样可卸载/重建（规则 1）
+      plugin_id: COLLAB_PLUGIN_ID, file: 'src/system/webui/code/collab-ui.mjs', built_in: true,
+      mtime: null, loaded: collabSurface.contributions > 0,
+      contributions: surface.byKind('action').filter((item) => item.plugin_id === COLLAB_PLUGIN_ID)
+        .map((item) => ({ kind: 'action', id: item.id, title: item.title }))
+        .concat(surface.byKind('panel').filter((item) => item.plugin_id === COLLAB_PLUGIN_ID)
+          .map((item) => ({ kind: 'panel', id: item.id, title: item.title }))),
+      refused: [], error: null,
+      note: '同侧协作（指派/转交、关注、评论与 @同事、活动流、我的/我指派的/全部）：外壳自带的机制贡献',
+    }],
     mechanism: '装载面是**机制**：按磁盘上的 `code/ui.mjs` 发现式装载；`reload` = 撤掉这个插件的全部贡献后按'
       + '当前文件内容重新 import（带 ?v=<mtime> 击穿模块缓存）⇒ 改插件 UI 不必重启进程。'
-      + '卸载后它的视图/面板/动作/快捷键/通知源/状态项一起消失（AGENTS.md 规则 1）',
+      + '卸载后它的视图/面板/动作/快捷键/通知源/状态项一起消失（AGENTS.md 规则 1）；'
+      + '标了 `built_in` 的那条（协作面）是外壳自己的贡献，同样可卸载/重建',
     next_action: `POST ${prefix}/api/ui/plugins/<plugin_id>/reload 让磁盘上的新代码在**当前进程**里生效`,
   })
 
@@ -376,9 +453,22 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const normRoute = (route) => ({ view: String(route?.view ?? 'home'), panel: String(route?.panel ?? ''),
     kind: String(route?.kind ?? ''), id: String(route?.id ?? '') })
 
-  const panelCtx = (view, route = { view }) => {
+  /**
+   * **会话身份**（机制）：只有"这次请求是谁"这一件事，没有任何业务含义。侧与 `human:<名字>` 都来自服务端
+   * 会话（cookie 解析在身份面），**不由**请求体/表单决定 ⇒ 协作类贡献拿到的永远是同一个侧的人。
+   */
+  const normIdentity = (who) => {
+    if (!who || who.ok !== true) return null
+    const human = String(who.human ?? '')
+    const side = String(who.side ?? '')
+    if (human === '' || side === '') return null
+    return { human, name: String(who.name ?? ''), side }
+  }
+
+  const panelCtx = (view, route = { view }, who = null) => {
     const normalized = normRoute({ ...route, view })
     return { view: normalized.view, route: normalized, host, now: host.now(), rows: host.rows(normalized.view),
+      identity: normIdentity(who),
       panels: surface.panelsOf(normalized.view).map((panel) => panel.id),
       actions: surface.byKind('action').map((action) => action.id) }
   }
@@ -387,12 +477,13 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    * 某视图上面板的数据。
    * `route.kind` 非空 ⇒ **对象页**：只渲染声明了该 `object_kind` 的面板（其余面板在这一页上不出现），
    * 且 `ctx.route` 带上 `kind/id` 供插件渲染那一个对象；没声明过该对象类 ⇒ 返回空数组（调用方报未命中）。
+   * `who` = 本次请求的会话（可选；插件从 `ctx.identity` 拿"同侧人类之间"的协作身份与侧）。
    */
-  const panelsOf = (view, route = {}) => {
+  const panelsOf = (view, route = {}, who = null) => {
     const normalized = normRoute({ ...route, view })
     const picked = normalized.kind === '' ? surface.panelsFor(view, '')
       : surface.panelsFor(view, normalized.kind)
-    const ctx = panelCtx(view, normalized)
+    const ctx = panelCtx(view, normalized, who)
     // 一次渲染的作用域：这一页上的多块面板读同一个只读工具时**只起一个进程**（缓存见 `runPython`）。
     return withRenderScope(() => picked.map((panel) => {
       const base = { id: panel.id, title: panel.title, plugin_id: panel.plugin_id, order: panel.order,
@@ -427,10 +518,10 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    * 把它声明的 `data.object` 页头（标题/摘要/事实/链接）按通用形状摊平、附上该对象类的动作与可用对象类清单。
    * 没有任何插件声明这个对象类 ⇒ `found:false` + 有名 reason + 下一步（**不编内容**）。
    */
-  const objectOf = (view, kind, id) => {
+  const objectOf = (view, kind, id, who = null) => {
     const kinds = surface.objectKindsFor(view)
     const claimed = kinds.includes(kind)
-    const panels = claimed ? panelsOf(view, { view, kind, id }) : []
+    const panels = claimed ? panelsOf(view, { view, kind, id }, who) : []
     const header = panels.map((panel) => (panel.data ?? {}).object).find((item) => item && typeof item === 'object')
       ?? null
     const found = claimed && panels.length > 0 && (header ? header.found !== false : true)
@@ -466,16 +557,24 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     return { kind, id, view: views.includes(view) ? view : '', title: String(ref.title ?? '').trim() }
   }
 
-  const notifications = () => withRenderScope(() => {
+  /**
+   * 通知源给的**标签**（机制：只搬运，不解读）：用来在通知中心做「我的 / 我指派的 / …」这类筛选片。
+   * 形状约束在这里：最多 6 个、每个 ≤ 24 字符、非空字符串 —— 界面上不会出现一条点不动/看不懂的筛选。
+   */
+  const normTags = (value) => (Array.isArray(value) ? value.map((item) => String(item ?? '').trim())
+    .filter((item) => item !== '').slice(0, 6).map((item) => item.slice(0, 24)) : [])
+
+  const notifications = (who = null) => withRenderScope(() => {
     const items = []
     for (const source of surface.byKind('notification-source')) {
       try {
-        const out = source.poll(panelCtx(source.view || 'home')) || []
+        const out = source.poll(panelCtx(source.view || 'home', undefined, who)) || []
         for (const item of Array.isArray(out) ? out : []) {
           items.push({ id: String(item.id ?? `${source.plugin_id}:${items.length}`), level: String(item.level ?? 'info'),
             title: String(item.title ?? ''), body: String(item.body ?? ''),
             next_action: String(item.next_action ?? ''), action: item.action ? String(item.action) : '',
             ref: normRef(item.ref), at: String(item.at ?? ''), plugin_id: source.plugin_id,
+            tags: normTags(item.tags),
             // `preset`：点通知上的「去处理」时，用这些键值预填动作表单（如那条通知讲的是哪个报价）
             preset: item.preset && typeof item.preset === 'object' && !Array.isArray(item.preset)
               ? item.preset : null })
@@ -483,19 +582,24 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       } catch (err) {
         items.push({ id: `${source.plugin_id}:poll-failed`, level: 'bad', title: '通知源读取失败',
           body: flat(err), next_action: '修该通知源的 poll()', plugin_id: source.plugin_id,
-          at: host.now(), ref: null, action: '' })
+          at: host.now(), ref: null, action: '', tags: [] })
       }
     }
-    // 动作流水：只保留 `{kind,id}` 形状的对象引用（动作回执是任意 JSON，不能当深链用）
-    for (const entry of actionLog.slice(0, 20)) items.push({ ...entry, ref: normRef(entry.ref) })
+    // 动作流水：只保留 `{kind,id}` 形状的对象引用（动作回执是任意 JSON，不能当深链用）；
+    // 并且**只给自己看**（`actor` 全会话身份；未登录时看不到任何人的动作流水）。
+    const me = normIdentity(who)
+    for (const entry of actionLog.slice(0, 20)) {
+      if (entry.actor !== (me ? me.human : '')) continue
+      items.push({ ...entry, ref: normRef(entry.ref) })
+    }
     return items.slice(0, 200)
   })
 
-  const statusItems = () => withRenderScope(() => {
+  const statusItems = (who = null) => withRenderScope(() => {
     const out = []
     for (const item of surface.byKind('status-item')) {
       try {
-        const read = item.read(panelCtx('home')) || {}
+        const read = item.read(panelCtx('home', undefined, who)) || {}
         out.push({ id: item.id, title: item.title, text: String(read.text ?? ''), level: String(read.level ?? 'ok'),
           next_action: String(read.next_action ?? ''), plugin_id: item.plugin_id })
       } catch (err) {
@@ -568,7 +672,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     return errors
   }
 
-  const runAction = async (actionId, request) => {
+  const runAction = async (actionId, request, who = null) => {
     const action = surface.findAction(actionId)
     if (!action) {
       return { ok: false, code: 'unknown-action', reason: `注册面里没有动作 ${actionId}`,
@@ -584,6 +688,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     }
     const ctx = { view: String(request?.view ?? action.view), route: normRoute({ view: request?.view ?? action.view,
       kind: request?.route?.kind, id: request?.route?.id }), input, host, now: host.now(),
+      // **会话身份**（机制）：插件可以据此判定"同侧人类之间"的协作；表单里的字段改不动它。
+      identity: normIdentity(who),
       action: { id: action.id, title: action.title, plugin_id: action.plugin_id, permission: action.permission } }
     let out = null
     try {
@@ -593,10 +699,13 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     }
     const result = out && typeof out === 'object' ? out : { ok: false, code: 'invalid-result',
       reason: '服务端一半没有返回对象', next_action: '返回 {ok, code, reason, next_action, result}' }
+    const actor = normIdentity(who)
     const entry = { id: `act-${Date.now()}-${action.id}`, level: result.ok ? 'ok' : 'bad',
       title: `${action.title} → ${result.ok ? 'ok' : (result.code ?? 'refused')}`,
       body: flat(result.reason ?? result.note ?? ''), next_action: flat(result.next_action ?? ''),
-      ref: result.result ?? null, at: host.now(), plugin_id: action.plugin_id, action: action.id }
+      ref: result.result ?? null, at: host.now(), plugin_id: action.plugin_id, action: action.id,
+      // 动作流水**按会话身份隔离**：同侧别人做的事不该出现在你的通知中心里（多人在同一侧时的隐私与噪声）
+      actor: actor ? actor.human : '' }
     actionLog.unshift(entry)
     if (actionLog.length > 100) actionLog.length = 100
     clearReadCache()   // 动作可能改了事实（写者刚跑过）⇒ 只读缓存作废：下一屏读到的一定是新状态
@@ -607,6 +716,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 
   // ------------------------------------------------------------------ 撤销（卸载一个插件的全部贡献）
   const unload = (pluginId) => {
+    // 协作面（外壳自带）：撤掉它的贡献时把机制侧的账也清干净（否则再 load 会说"已经装着"）
+    if (pluginId === COLLAB_PLUGIN_ID) collabSurface.dispose()
     const removed = surface.disposePlugin(pluginId)
     const slotRows = []
     if (slots && typeof slots.describe === 'function') {
@@ -695,6 +806,12 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     shortcuts: surface.shortcuts().map((item) => ({ keys: item.keys, action: item.action, title: item.title,
       plugin_id: item.plugin_id })),
     shell_shortcuts: SHELL_SHORTCUTS,
+    // **同侧协作**（指派/转交、关注、评论与 @同事、活动流、已读）：外壳机制的一部分，同样按注册面撤销。
+    // 这里给出它的存储自述 —— 用来对账"它没进账本、也没进投影"（`why_not_ledger` 是判据本身）。
+    collab: { ...collab.describe(), contributions: collabSurface.contributions,
+      object_panels: collabSurface.objectPanels, plugin_id: COLLAB_PLUGIN_ID,
+      http: { object: `${prefix}/api/collab/object?view=<view>&kind=<kind>&id=<id>`,
+        hub: `${prefix}/api/collab/hub`, store: `${prefix}/api/collab/store` } },
     plugins: [...contributions.entries()].map(([plugin_id, info]) => ({ plugin_id,
       entries: info.entries ?? [], error: info.error ?? null, unloaded: info.unloaded === true })),
     next_action: '动作一律 POST ' + `${prefix}/api/action/<id>` + '（含 JSON 入参）；'
@@ -703,5 +820,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 
   return { surface, host, loadContributions, unload, loadPlugin, reloadPlugin, pluginsJson, runAction,
     panelsOf, objectOf, notifications, statusItems, normalizeRoute: normRoute, ioStats, clearReadCache,
-    surfaceJson, shellHtml, asset, scanContributions, runPython, stage, get contributions() { return contributions } }
+    surfaceJson, shellHtml, asset, scanContributions, runPython, stage,
+    // **同侧协作**（机制）：HTTP 路由（`webui.mjs`）按会话身份拿侧与 actor，再调这里的四件事。
+    collab, collabSurface, syncCollab, configureCollab, collabPluginId: COLLAB_PLUGIN_ID,
+    get contributions() { return contributions } }
 }

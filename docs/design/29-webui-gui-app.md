@@ -77,3 +77,32 @@
 - `FR-UXWEB-*` / `FR-USREQ-001`（每一步都能在 APP 内闭环，含写操作）是**硬需求**；本文件是它们的口径真源。
 - 旧判据（`AC-UXWEB-001` 的三块锚点 + 0 JS、UI 快照 hash、seed 门）与本文冲突 ⇒ 连同其实体与门一起删除。
 - 本文件与 `27-plugin-architecture.md` §6 若冲突，**以本文件为准**，并立即修正 27 §6。
+
+## 7. 台账与持久化（本批收口；口径以本节为准）
+
+本节的五条都是**机制/口径**，不是新功能；它们各自回答「界面上的东西存在哪里、谁在判权限」：
+
+1. **`/api/routes` 的 `auth` 是真实值**（不再写 `none` 撒谎）。凡落在 `${prefix}/contractor/` 或
+   `${prefix}/supplier/` 下的**业务路由**一律标 `identity-session`——与路由级身份门槛
+   （`code/identity.mjs#gateBusinessRoute`）**同一判据、按路径推导**（新增业务路由不会漏标）；`none`
+   只留给**真的公开**的入口（总览/上手/健康/自述 JSON/GUI 外壳资源与注册面/运维与系统管理页自己判权限）。
+   表里同时给 `auth_basis` 逐值解释。**别**再手抄一遍 `auth`：抄的会漂，推导的不会。
+2. **通知偏好与已读在服务端**：`GET|POST ${prefix}/api/ui/notif-state`，按**会话身份**落
+   `<ui_shared>/webui/notif-state.json`（目录 0700 / 文件 **0600**、原子写、有界：read ≤ 1000、静音 ≤ 50、
+   身份 ≤ 64）。未登录 ⇒ 401（那时浏览器 localStorage 仍能用，但界面**如实说明**只在本浏览器有效）。
+   它**不是账本事实**（偏好不是业务承诺）：换浏览器/换设备仍在，是因为读回同一份 0600 文件。
+3. **邮件（SMTP/IMAP）通道有界面入口**：GUI 工作台首屏的「邮件通道」面板（`system/mail` 注册，
+   `code/ui.mjs`）给出状态读数 + **界内配置表单**（表单 POST 到 `${prefix}/mail/config/`）；运维专页
+   `${prefix}/ops/mail/` 也指向同一个入口。权限与落盘都不新造：运维侧身份 + 署名 == 会话身份 →
+   `identity-mail-apply.py` → 唯一落盘者 `config-apply.py` 写 YAML（干跑 → 0600 待办件 → 落盘；
+   凭据永不回显）。**`/workspace/config.yaml` 只读**（夹具验证时改的永远是夹具文件）。
+4. **人签动作的服务端身份门**：`POST ${prefix}/api/action/<id>` 上，凡声明
+   `permission: 'human-signature'` 的动作，**服务端**校验「已登录 + 入参 `signature` == 会话身份」
+   （未登录 401 `identity-required` / 不一致 403 `signer-mismatch`，账本零新增）。界面**不代签、不写账本**：
+   落账本的仍是既有唯一写者（`tools/quote-sign.py` 等）。
+5. **一份报价 = 一次人签**（供应商侧）：可编辑表格**整张表一次提交** ⇒ 落**一条**草稿
+   （`quote/drafted` 带逐行 `lines[]` + `line_count`），人签**一签提交整份**（`quote/submitted` 逐行给
+   `lines[]`；多行报价没有「唯一那个行项目」，标量 `item_id`/`unit_price_cents` 留空/`null`）。
+   单行报价的 body **逐字节不变**（仍 12 键）。缺行/改行一律**有名拒绝**：待办件被改 ⇒ `pending-tampered`、
+   行项目不在事实里 ⇒ `line-item-not-found`、账本里的草稿自述与重算不符 ⇒ `draft-tampered`（三者账本零新增）。
+

@@ -239,6 +239,10 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
         // `from_route: true` = 这个字段由**当前对象地址**的 id 预填（插件声明"它就是那个对象的 id"）：
         // 于是 `/app/<view>/<kind>/<id>/` 对象页工具栏上的动作可以一键打开，不用手抄 id。
         from_route: field.from_route === true,
+        // `from_route_kind: true` = 这个字段由**当前对象地址的对象类**（`route.kind`）预填；与 `from_route`
+        // 配对使用 ⇒ 一份**视图级动作**（不带 `object_kind`）对任何对象类都成立：对象类由插件声明，
+        // 声明 `from_route`/`from_route_kind` 字段的动作在对象页上也进主工具栏（客户端按这条声明摆位）。
+        from_route_kind: field.from_route_kind === true,
         // `identity: true` = 这个字段由**当前会话身份**预填（`human:<名字>`；机制只知道"会话里是谁"，
         // 不知道这个字段在业务上叫什么）。人签动作的 `signature` 字段自动按这条处理。
         identity: field.identity === true })

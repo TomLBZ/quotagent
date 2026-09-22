@@ -86,9 +86,9 @@
 | `terms/applied` | emit | ✔ | `ctx.terms` | 默认条款补入缺失键（标 `library-default`） |
 | `terms/conflict` | emit | ✔ | `ctx.terms` | 条款冲突标注（并列双方值 + 提请人工，绝不自动选值） |
 | `quote/human-approved` | emit | ✔ | 人工 → qep | 批准记录（不可由 agent 产生） |
-| `quote/submitted` | emit | ✔ | `ctx.qep` → compare | 报价事实（含 `rfq_rev`） |
+| `quote/submitted` | emit | ✔ | `ctx.qep` → compare | 报价事实（含 `rfq_rev`）；**一份报价 = 一次人签**：多行报价的逐行真值在 `lines[]`（+ `line_count`），标量 `item_id`/`unit_price_cents` 为空串/`null`（多行没有「唯一那个行项目」） |
 | `quote/superseded` | emit | ✔ | `ctx.quotes` | 包升版后基于旧版本的报价标记过期并可重报（FR-RFQ-006） |
-| `quote/drafted` | emit | ✔ | `host/modules/quote-prepare.mjs` → `tools/quote-draft.py`（**唯一落账本者**） | 报价草稿「已准备好」（**非签名动作**：不是 `quote/submitted`）；两侧登记（供应商自己的事实 + 承包商侧的「供应商已准备报价（待签署）」）；body 不含备注正文 |
+| `quote/drafted` | emit | ✔ | `host/modules/quote-prepare.mjs` → `tools/quote-draft.py`（**唯一落账本者**） | 报价草稿「已准备好」（**非签名动作**：不是 `quote/submitted`）；两侧登记（供应商自己的事实 + 承包商侧的「供应商已准备报价（待签署）」）；body 不含备注正文；**一份草稿 = 一整张表**：多行草稿 body 恰 14 键（多 `lines[]`+`line_count`），单行仍是 12 键 |
 | `capacity/committed` | emit | ✔ | `ctx.capacity` | 交期/产能承诺建立与修订（含 binding 与 revision） |
 | `capacity/firm-change-refused` | emit | ✔ | `ctx.capacity` | `firm` 交期在有效期内被模型改动 → 拒绝留痕 |
 | `capacity/conflict` | emit | ✔ | `ctx.capacity` | 产能/交期不可行 → 只提请人工（不否决、不改交期） |

@@ -15,7 +15,7 @@
   ⑦ **空投影必须降级且建议数为 0**：第二个真进程，两本账本都是 0 行 + 无快照 →
      页面 `data-degraded="1"`、JSON `items == []` + `degraded:true` + 有名 reason（**不编建议**）。
 
-额外断言：`/api/routes` 里四条新路由的 `auth` 都是 `none`（**不涉未提权的 admin**）、
+额外断言：`/api/routes` 里四条新路由的 `auth` 都是 `identity-session`（业务路由要身份会话；**不涉未提权的 admin**）、
 既有路由没被弄坏、跑完之后夹具账本与目录**逐字节不变**（宿主零写面在 HTTP 层的机检形态）。
 
 退出码：0 全通过 / 1 有断言失败 / 2 环境错误。
@@ -297,9 +297,10 @@ def main() -> int:  # noqa: C901
         code, routes_body = get(f"{base}/api/routes")
         routes = parse_json(routes_body).get("routes", [])
         advice_routes = [item for item in routes if "advice" in str(item.get("path", ""))]
-        check("③ `/api/routes` 登记了两视角 ×（页面 + JSON）四条新路由，且 `auth` 都是 `none`"
-              "（不需要管理员身份就能看建议）",
-              code == 200 and len(advice_routes) == 4 and all(item.get("auth") == "none" for item in advice_routes)
+        check("③ `/api/routes` 登记了两视角 ×（页面 + JSON）四条新路由，且 `auth` 是**真实值**"
+              "`identity-session`（业务路由要身份会话——台账不再写 `none` 撒谎；不涉未提权的 admin）",
+              code == 200 and len(advice_routes) == 4 and all(item.get("auth") == "identity-session"
+                                                              for item in advice_routes)
               and any(str(item["path"]).endswith("/advice/") for item in advice_routes)
               and any(str(item["path"]).endswith("/api/advice") for item in advice_routes),
               f"status={code} 命中={json.dumps([i.get('path') for i in advice_routes], ensure_ascii=False)}")

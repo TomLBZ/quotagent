@@ -368,11 +368,12 @@ def main() -> int:  # noqa: C901
         scripty = [name for name, text in (("page:c", cpage), ("page:s", spage),
                                            ("json:c", jsons["contractor"][1]), ("json:s", jsons["supplier"][1]))
                    if SCRIPT_NEEDLE in text or INLINE_EVENT.search(text)]
-        check("③ 三条新路由登记（两视角 ×「页面 GET / JSON GET / 登记承诺 POST」六条），`auth` 都是 `none`；"
+        check("③ 三条新路由登记（两视角 ×「页面 GET / JSON GET / 登记承诺 POST」六条），`auth` 是**真实值**"
+              "`identity-session`（业务路由要身份会话——台账不再写 `none` 撒谎）；"
               "`write_surface` 含登记承诺路由；承包商页 200 且是**真页面**"
               "（`data-due-clock=\"facts-only\"` + 口径文案 + 逐条 `data-deadline-next-action`）；"
               "四份响应 **0 行脚本 / 0 内联事件**（扫描器非空转）",
-              len(deadline_routes) == 6 and all(item.get("auth") == "none" for item in deadline_routes)
+              len(deadline_routes) == 6 and all(item.get("auth") == "identity-session" for item in deadline_routes)
               and len([i for i in deadline_routes if i.get("method") == "GET"]) == 4
               and len([i for i in deadline_routes if i.get("method") == "POST"]) == 2
               and f"{prefix}/<view>/deadlines/promise" in (write_surface.get("browser_writable") or [])

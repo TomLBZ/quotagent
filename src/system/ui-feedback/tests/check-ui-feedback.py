@@ -5,7 +5,7 @@
 
   ① 起一个真 `cli.mjs webui` 进程（私有前缀 `/qfb`、私有 `--ui-shared` 夹具目录、夹具账本），
      未提权下 11 条 admin 路径仍是**同一个 401 固定体**（本功能不引入任何提权口子），
-     而**两侧反馈页 200**（反馈页对双方都开放，且是 `/api/routes` 里 `auth: none` 的真路由）；
+     而**两侧反馈页 200**（反馈页对双方都开放，且是 `/api/routes` 里 `auth: identity-session` 的真路由）；
   ② 两侧反馈页各自 200、含 `<textarea name="text"` + `<form method="post"`，**0 行脚本 / 0 内联事件**；
   ③ 两侧各提交一次 → **202 + 待办件 id + next_action**；待办件 **0600**、原话逐字落盘；
      观察面待处理计数 **0 → 1 → 2**（每次提交 +1）；提交**不改版本号**、**不写账本**；
@@ -311,10 +311,10 @@ def main() -> int:  # noqa: C901
         fb_routes = [row for row in routes if str(row.get("path", "")).endswith("/feedback")]
         route_desc = json.dumps([f"{row.get('method')} {row.get('path')}" for row in fb_routes], ensure_ascii=False)
         check("① 未提权下 admin 的 10 条 GET 路径 + 1 条 POST 写路径仍是**同一个 401 固定体**"
-              "（本功能不引入提权口子），而**两侧反馈页 200**（`auth: none` 的真路由）",
+              "（本功能不引入提权口子），而**两侧反馈页 200**（`auth: identity-session` 的真路由）",
               same_401 and len(distinct) == 1 and distinct == {'{"error":"unauthorized"}'}
               and all(code == 200 for code, _ in feedback_pages.values())
-              and len(fb_routes) == 4 and all(row.get("auth") == "none" for row in fb_routes),
+              and len(fb_routes) == 4 and all(row.get("auth") == "identity-session" for row in fb_routes),
               f"401 同形={same_401} 不同体={len(distinct)}；反馈页={ {v: c for v, (c, _) in feedback_pages.items()} }；"
               f"路由={route_desc}")
 

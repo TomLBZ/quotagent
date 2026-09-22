@@ -451,11 +451,12 @@ try {
   try { routeRows = JSON.parse(routesRes.text).routes ?? [] } catch { routeRows = [] }
   const feedbackRoutes = routeRows.filter((row) => String(row.path).endsWith('/feedback'))
   check('11 真 HTTP 正控：`/t280/<view>/feedback` 200 且是真 SSR 页面（`<textarea name="text"` + '
-    + '`<form method="post"` 提交），路由表登记了反馈/观察面路由且 `auth` 全是 `none`',
+    + '`<form method="post"` 提交），两视角反馈路由 `auth` 是**真实值** `identity-session`（业务路由要身份会话；'
+    + '观察面/首页仍是 `none`）',
   feedbackPage.status === 200 && feedbackPage.text.includes('<textarea name="text"')
   && feedbackPage.text.includes('<form method="post" action="/t280/contractor/feedback">')
   && feedbackPage.text.includes('data-ui-revision="r0"')
-  && feedbackRoutes.length === 4 && feedbackRoutes.every((row) => row.auth === 'none')
+  && feedbackRoutes.length === 4 && feedbackRoutes.every((row) => row.auth === 'identity-session')
   && feedbackRoutes.some((row) => row.method === 'POST')
   && routeRows.some((row) => String(row.path).endsWith('/ops/ui-feedback/') && row.auth === 'none')
   && routeRows.some((row) => String(row.path).endsWith('/api/ui-feedback') && row.auth === 'none'),

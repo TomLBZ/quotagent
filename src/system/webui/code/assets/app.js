@@ -61,6 +61,109 @@
   const saveNotif = () => store.set(KEYS.notif, { read: [...state.notif.read].slice(-500),
     muted: state.notif.muted, minLevel: state.notif.minLevel })
 
+  /**
+   * **通知偏好与已读的服务端化**（跨浏览器/跨设备仍在；0600 落盘在服务端）。
+   *
+   * 为什么：原先只写 localStorage ⇒ 换浏览器/换设备就重来（P3 走查如实登记的摩擦）。
+   * 口径：登录后有 `GET/POST /api/ui/notif-state`（按**会话身份**落 0600 文件）⇒ 它成为真源，
+   * localStorage 降为**离线镜像**（未登录 / 服务端不可写时仍能用，但会**如实说明**只在本浏览器有效）。
+   * 服务端还没有这个人的记录时，把本浏览器里攒下的状态**一次性推上去**（迁移，不丢用户标过的已读）。
+   */
+  let notifSource = 'local'          // 'server' | 'local'
+  let notifStateNote = '未登录：只在本浏览器有效'
+  let notifPushTimer = null
+  const notifPayload = () => ({ state: { read: [...state.notif.read].slice(-500), muted: state.notif.muted,
+    min_level: state.notif.minLevel } })
+  async function loadNotifState() {
+    const out = await getJson('/api/ui/notif-state')
+    if (!out.ok) {
+      notifSource = 'local'
+      notifStateNote = `只在本浏览器有效（${out.code || 'identity-required'}）：登录后落服务端，跨设备仍在`
+      return out
+    }
+    notifSource = 'server'
+    notifStateNote = `存在服务端（按会话身份 ${out.identity || ''}）：换浏览器、换设备仍在`
+    const localRead = [...state.notif.read]
+    const localMuted = [...state.notif.muted]
+    const localLevel = state.notif.minLevel
+    state.notif.read = new Set(Array.isArray(out.state?.read) ? out.state.read : [])
+    state.notif.muted = Array.isArray(out.state?.muted) ? out.state.muted : []
+    if (['info', 'warn', 'bad'].includes(out.state?.min_level)) state.notif.minLevel = out.state.min_level
+    saveNotif()
+    const serverEmpty = state.notif.read.size === 0 && state.notif.muted.length === 0
+      && state.notif.minLevel === 'info'
+    if (serverEmpty && (localRead.length || localMuted.length || localLevel !== 'info')) {
+      state.notif.read = new Set(localRead)
+      state.notif.muted = localMuted
+      state.notif.minLevel = localLevel
+      saveNotif()
+      pushNotifState(true)
+    }
+    return out
+  }
+  /** 把当前偏好推到服务端（有 300ms 去抖：打开通知中心会连续标已读，不必每次都打一次）。 */
+  function pushNotifState(immediate = false) {
+    if (notifSource !== 'server') return
+    if (notifPushTimer) clearTimeout(notifPushTimer)
+    const send = async () => {
+      notifPushTimer = null
+      const out = await postJson('/api/ui/notif-state', notifPayload())
+      if (!out.ok) {
+        notifSource = 'local'      // 写失败就**如实降级**（不假装已经跨设备了）
+        notifStateNote = `写服务端失败（${out.code || 'write-failed'}）：仍只在本浏览器有效`
+        banner('warn', '通知偏好没能写到服务端', [out.code, out.reason].filter(Boolean).join(' · '),
+          out.next_action || '偏好仍写在本浏览器（localStorage）；服务恢复后再点一次「标为已读」即可')
+        paintBadge()
+      }
+    }
+    if (immediate) { send(); return }
+    notifPushTimer = setTimeout(send, 300)
+  }
+
+  // ---------------------------------------------------------------- 协作类的「我的 / 我指派的 / 全部」筛选
+  /**
+   * 条目/行可以声明 `bucket`（桶键）+ `bucket_label`（人话标签），面板可以在 `data.buckets` 里声明桶清单；
+   * 通知可以声明 `tags`（标签数组）。外壳只**搬运字符串**、按它出筛选片 —— 不知道"我的"是什么意思。
+   * 筛选状态只存在**本浏览器**（`quotagent.filters`）：它是你个人的看法，不是业务事实，也不进账本。
+   */
+  const FILTER_KEY = 'quotagent.filters'
+  state.filters = store.get(FILTER_KEY, {})
+  if (!state.filters || typeof state.filters !== 'object') state.filters = {}
+  const filterOf = (key) => String(state.filters[key] ?? '')
+  const setFilter = (key, value) => {
+    state.filters = { ...state.filters, [key]: String(value ?? '') }
+    store.set(FILTER_KEY, state.filters)
+  }
+  /** 收集桶：先取面板声明的 `data.buckets`（有计数），再补条目自带但没声明过的 `bucket`。 */
+  function bucketsOf(data, rows) {
+    const out = []
+    for (const item of (Array.isArray(data?.buckets) ? data.buckets : [])) {
+      const key = String(item?.key ?? '')
+      if (key === '' || out.some((known) => known.key === key)) continue
+      out.push({ key, label: String(item?.label ?? key), count: item?.count })
+    }
+    for (const row of (rows || [])) {
+      const key = String(row?.bucket ?? '')
+      if (key === '' || out.some((known) => known.key === key)) continue
+      out.push({ key, label: String(row?.bucket_label ?? key), count: undefined })
+    }
+    return out
+  }
+  const countInBucket = (rows, key) => rows.filter((row) => String(row?.bucket ?? '') === key).length
+  const byBucket = (rows, key) => (key === '' ? rows : rows.filter((row) => String(row?.bucket ?? '') === key))
+  /** 筛选片：`全部 N` + 每个桶（`label N`）。点一下只改"看到哪些"，不改任何事实。 */
+  function bucketBar(scope, buckets, current, rows) {
+    if (!buckets.length) return ''
+    const chip = (key, label, count) => `<span class="q-chip${current === key ? ' on' : ''}"`
+      + ` data-bucket-filter="${attr(scope)}" data-bucket-key="${attr(key)}" role="button" tabindex="0">`
+      + `${esc(label)} ${Number.isFinite(Number(count)) ? Number(count) : countInBucket(rows, key)}</span>`
+    return `<div class="q-bucketbar" data-bucket-bar="${attr(scope)}">`
+      + `<span class="q-bucketbar-label">筛选</span>`
+      + chip('', '全部', rows.length)
+      + buckets.map((item) => chip(item.key, item.label, item.count)).join('')
+      + `<span class="q-hint">只看你关心的那一类（存本浏览器；不改任何事实）</span></div>`
+  }
+
 
   const html = (parts) => parts.join('')
   const badge = (text, level) => `<span class="q-badge ${level || ''}">${esc(text)}</span>`
@@ -509,18 +612,25 @@
   }
 
   function renderList(panel, data) {
-    const items = data.items || []
+    const all = data.items || []
+    const buckets = bucketsOf(data, all)
+    const current = filterOf(panel.id)
+    const bar = bucketBar(panel.id, buckets, current, all)
+    const items = byBucket(all, current)
     if (!items.length) {
-      return stateBlock({ kind: 'empty', title: '没有条目', reason: data.reason || 'no-items',
-        next_action: data.next_action || '' })
+      return bar + stateBlock({ kind: 'empty',
+        title: current === '' ? '没有条目' : '这一桶里没有条目（不是坏了）',
+        reason: current === '' ? (data.reason || 'no-items') : `bucket=${current}`,
+        next_action: data.next_action || (current === '' ? '' : '点筛选片上的「全部」看所有条目') })
     }
-    return `<ul class="q-list">${items.map((item) => {
+    return bar + `<ul class="q-list">${items.map((item) => {
       const action = item.action ? actionOf(item.action) : null
       const href = refLink(item.ref)
-      return `<li data-level="${attr(item.level || 'info')}">`
+      return `<li data-level="${attr(item.level || 'info')}"${item.bucket ? ` data-bucket="${attr(item.bucket)}"` : ''}>`
         + `${item.level ? badge(item.level, item.level === 'bad' ? 'bad' : (item.level === 'warn' ? 'warn'
           : (item.level === 'ok' ? 'ok' : ''))) + ' ' : ''}`
         + `<span class="q-li-title">${esc(item.title || item.label || '')}</span>`
+        + `${item.bucket_label ? ` <span class="q-tag q-bucket-tag">${esc(item.bucket_label)}</span>` : ''}`
         + `${item.body ? `<div class="q-li-body">${esc(item.body)}</div>` : ''}`
         + `${action || href ? `<div class="q-actions">${action
           ? `<button class="primary" data-action="${attr(action.id)}" data-preset='${attr(JSON.stringify(item.ref || {}))}'>`
@@ -695,20 +805,29 @@
     const last = lastRoute()
     const actions = state.surface.actions.filter((action) => !action.inline)
     const groups = [...new Set(actions.map((action) => action.group || '通用'))]
-    const wanted = items.filter((item) => item.level === 'warn' || item.level === 'bad')
-    const headline = wanted.length
-      ? `有 ${wanted.length} 件需要你处理${items.length > wanted.length ? `，另有 ${items.length - wanted.length} 条信息` : ''}`
-      : (items.length ? `眼下没有卡住你的事（${items.length} 条信息）` : '还没有插件报告待办')
+    // 「我的 / 我指派的 / 全部」：条目可以带 `bucket`+`bucket_label`（协作面就是这么标自己的）⇒ 出筛选片。
+    const buckets = bucketsOf({}, items)
+    const current = filterOf('workbench')
+    const shown = byBucket(items, current)
+    const wanted = shown.filter((item) => item.level === 'warn' || item.level === 'bad')
+    const headline = current !== ''
+      ? `按「${esc(String(buckets.find((b) => b.key === current)?.label ?? current))}」筛选：${shown.length} 条`
+        + `（全部 ${items.length} 条；不带分类的待办只在「全部」里出现）`
+      : (wanted.length
+        ? `有 ${wanted.length} 件需要你处理${items.length > wanted.length ? `，另有 ${items.length - wanted.length} 条信息` : ''}`
+        : (items.length ? `眼下没有卡住你的事（${items.length} 条信息）` : '还没有插件报告待办'))
     // 急的排前面，但**信息类也要摆出来**：只显示急的会让"收到几条报价登记"这种线索消失
-    const list = items.slice(0, 8)
-    const rest = items.length - list.length
+    const list = shown.slice(0, 8)
+    const rest = shown.length - list.length
     return `<section class="q-todo" data-workbench="1" data-todo-count="${items.length}"
       data-todo-urgent="${wanted.length}">
   <div class="q-todo-head">
     <h2>你现在该做什么</h2>
-    <p>${esc(headline)}${items.length && wanted.length ? `（另有 ${items.length - wanted.length} 条信息）` : ''}</p>
+    <p>${esc(headline)}${current === '' && items.length && wanted.length
+      ? `（另有 ${items.length - wanted.length} 条信息）` : ''}</p>
     <button class="q-link" data-open="palette">搜全部动作（Ctrl+K）</button>
   </div>
+  ${bucketBar('workbench', buckets, current, items)}
   ${list.length ? `<ul class="q-todo-list">${list.map(todoRow).join('')}</ul>`
     : stateBlock({ kind: 'empty', title: '没有待办（不是坏了）', reason: 'no-todo',
       hint: '工作台上的待办由插件注册；一个插件都没报待办时这里是空的。',
@@ -742,6 +861,7 @@
       + `${item.level ? badge(item.level, item.level === 'bad' ? 'bad' : (item.level === 'warn' ? 'warn'
         : (item.level === 'ok' ? 'ok' : ''))) + ' ' : ''}`
       + `<span class="q-li-title">${esc(item.title || '')}</span>`
+      + `${item.bucket_label ? ` <span class="q-tag q-bucket-tag">${esc(item.bucket_label)}</span>` : ''}`
       + `${item.body ? `<div class="q-li-body">${esc(item.body)}</div>` : ''}`
       + `${item.next_action ? `<div class="q-hint">${esc(item.next_action)}</div>` : ''}`
       + `${action || href ? `<div class="q-actions">${action ? `<button class="primary" data-action="${attr(action.id)}"`
@@ -758,12 +878,23 @@
     return state.surface.actions
       .filter((action) => action.object_kind === kind && (action.views || []).includes(view))
   }
-  function viewActions() {
+  /** 视图级动作里**声明了按当前对象地址预填**的那些（`from_route` / `from_route_kind` 字段）：
+   *  这类动作对**任何对象类**都成立（协作类的「指派 / 转交」「关注」「评论 / @同事」「标为已读」就是这样）
+   *  ⇒ 也摆进对象页主工具栏；否则它们会被折叠进「本视图的其它动作」，等于对象页上没有入口。 */
+  const isRoutePrefilled = (action) => (action.input?.fields || [])
+    .some((field) => field.from_route || field.from_route_kind)
+  function objectRouteActions() {
+    const view = state.route.view
+    return state.surface.actions.filter((action) => !action.object_kind
+      && (action.views || []).includes(view) && isRoutePrefilled(action))
+  }
+  function viewActions({ excludeRoutePrefilled = false } = {}) {
     const view = state.route.view
     // 视图级动作（没有声明 `object_kind` 的）—— 对象页上的那批由 `objectActions()` 单列，这里不重复
     return state.surface.actions
       .filter((action) => (action.views || []).includes(view) && !action.inline)
       .filter((action) => !action.object_kind)
+      .filter((action) => !excludeRoutePrefilled || !isRoutePrefilled(action))
   }
 
   function renderObjectPage() {
@@ -794,12 +925,13 @@
       + `<button class="q-link" data-copy="${attr(linkOf(route.view, route.kind, route.id))}">复制这条深链</button>`
       + `<button class="q-link" data-tab-pin="1" title="把这条对象地址固定成一个标签页，方便来回切">钉成标签页</button></div>`,
       head,
-      toolbarHtml(objectActions(), `${route.view}/${route.kind}`),
+      toolbarHtml([...objectActions(), ...objectRouteActions()], `${route.view}/${route.kind}`),
       layoutBar(laid.list.length),
       `<div class="q-panels">${laid.list.map((item) => panelSection(item.panel, item.collapsed)).join('')}</div>`,
-      toolbarHtml(viewActions(), `${route.view}（视图级动作）`) ? `<details class="q-mech q-more-actions">`
-        + `<summary>本视图的其它动作（${viewActions().length} 个）</summary>`
-        + toolbarHtml(viewActions(), `${route.view}（视图级动作）`) + '</details>' : '',
+      toolbarHtml(viewActions({ excludeRoutePrefilled: true }), `${route.view}（视图级动作）`)
+        ? `<details class="q-mech q-more-actions">`
+        + `<summary>本视图的其它动作（${viewActions({ excludeRoutePrefilled: true }).length} 个）</summary>`
+        + toolbarHtml(viewActions({ excludeRoutePrefilled: true }), `${route.view}（视图级动作）`) + '</details>' : '',
       `<div data-ui-blocks="${attr(`page.${route.view}`)}"></div>`])
     bindPanels()
     bindInteractions()
@@ -918,6 +1050,18 @@
     root.querySelectorAll('[data-copy]').forEach((node) =>
       node.addEventListener('click', () => copyText(node.dataset.copy)))
     root.querySelectorAll('[data-open="palette"]').forEach((node) => node.addEventListener('click', openPalette))
+    // 桶筛选片（「我的 / 我指派的 / 全部」）：只改"看到哪些"，不改任何事实；选择存本浏览器
+    root.querySelectorAll('[data-bucket-filter]').forEach((node) => {
+      const pick = () => {
+        setFilter(node.dataset.bucketFilter, node.dataset.bucketKey)
+        renderMain()
+      }
+      node.addEventListener('click', pick)
+      node.addEventListener('keydown', (ev) => {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return
+        ev.preventDefault(); pick()
+      })
+    })
     root.querySelectorAll('[data-open="recent"]').forEach((node) => node.addEventListener('click', openRecent))
     root.querySelectorAll('[data-open="notify"]').forEach((node) => node.addEventListener('click', openNotify))
     root.querySelectorAll('[data-open="identity"]').forEach((node) => node.addEventListener('click', openIdentity))
@@ -1269,8 +1413,12 @@
     // 于是对象页工具栏上的动作一键打开即可，不用手抄 id。
     const routePreset = {}
     if (state.route.kind && state.route.id) {
-      for (const field of fields) if (field.from_route && !(field.name in (presets || {}))) {
-        routePreset[field.name] = state.route.id
+      for (const field of fields) {
+        if (field.name in (presets || {})) continue
+        if (field.from_route) routePreset[field.name] = state.route.id
+        // `from_route_kind`（注册面声明）：这个字段要的是**对象类**，不是 id —— 于是同一份"视图级动作"
+        // 对任何对象类都成立（协作类的指派/关注/评论就是这么挂到每个对象页上的）。
+        if (field.from_route_kind) routePreset[field.name] = state.route.kind
       }
     }
     // 会话身份预填：`type:'signature'` 的字段与插件标了 `identity:true` 的字段（如"发言人"）——
@@ -1514,6 +1662,7 @@
   function markRead(ids, value = true) {
     for (const id of ids) { if (value) state.notif.read.add(id); else state.notif.read.delete(id) }
     saveNotif()
+    pushNotifState()          // 已读/未读一并落服务端（跨浏览器/跨设备仍在）
     paintBadge()
   }
 
@@ -1527,8 +1676,16 @@
     const shown = all.filter((item) => (filter === 'unread' ? item.unread
       : (filter === 'todo' ? (item.level === 'warn' || item.level === 'bad')
         : (filter === 'bad' ? item.level === 'bad' : true))))
+    // **协作筛选**（「我的 / 我指派的 / @我 / 我关注的」）：通知可以声明 `tags`（外壳只搬运字符串）。
+    // 选中的标签存在本浏览器（`quotagent.filters.notifTag`）；它与上面的级别/未读筛选叠加。
+    const tagCounts = {}
+    for (const item of all) for (const tag of (item.tags || [])) tagCounts[tag] = (tagCounts[tag] || 0) + 1
+    const tags = Object.keys(tagCounts).sort((left, right) => tagCounts[right] - tagCounts[left]
+      || (left < right ? -1 : 1))
+    const tag = tags.includes(filterOf('notifTag')) ? filterOf('notifTag') : ''
+    const picked = tag === '' ? shown : shown.filter((item) => (item.tags || []).includes(tag))
     const cap = state.notifCap || 12
-    const page = shown.slice(0, cap)
+    const page = picked.slice(0, cap)
     const plugins = [...new Set(all.map((item) => item.plugin_id))].sort()
     const groups = [['bad', '失败 / 被拒'], ['warn', '要你处理'], ['info', '进展与信息']]
     const rows = []
@@ -1544,6 +1701,8 @@
             : (item.level === 'warn' ? 'warn' : ''))}</span>`
           + `${item.unread ? '<span class="q-unread-dot" aria-label="未读">●</span> ' : ''}`
           + `<b>${esc(item.title)}</b>${item.count > 1 ? ` <span class="q-tag">×${item.count}</span>` : ''}`
+          + `${(item.tags || []).map((label) => ` <span class="q-tag q-notify-tag" data-tag="${attr(label)}">`
+            + `${esc(label)}</span>`).join('')}`
           + `${item.body ? ` — ${esc(item.body)}` : ''}`
           + `${item.next_action ? `<div class="q-hint">下一步：${esc(item.next_action)}</div>` : ''}`
           + `<div class="q-actions">`
@@ -1554,7 +1713,8 @@
             + `打开 ${esc(refLabel(item.ref) || `${item.ref.kind} ${item.ref.id}`)} →</a>` : ''}`
           + `<button data-notify-read="${attr(item.id)}" data-notify-value="${item.unread ? '1' : '0'}">`
             + `${item.unread ? '标为已读' : '标为未读'}</button>`
-          + `<span class="q-hint">${esc(item.plugin_id || '')} · ${esc(String(item.at || '').slice(0, 19))}</span>`
+          + `<span class="q-hint">${item.actor ? `${esc(item.actor)} · ` : ''}${esc(item.plugin_id || '')}`
+            + ` · ${esc(String(item.at || '').slice(0, 19))}</span>`
           + `</div></li>`)
       }
     }
@@ -1573,10 +1733,17 @@
       + `<label>静音 <select data-notify-mute="1"><option value="">（不静音）</option>`
       + `${plugins.map((plugin) => `<option value="${attr(plugin)}"${state.notif.muted.includes(plugin)
         ? ' selected' : ''}>${esc(plugin)}</option>`).join('')}</select></label>`
-      + `<span class="q-hint">已读存在本浏览器里（换浏览器要重标一次）</span></div>`
+      + `<span class="q-hint" data-notify-state-note="1">${esc(notifStateNote)}</span></div>`
+      + (tags.length ? `<div class="q-notify-tools q-notify-tags" data-notify-tag-bar="1">`
+        + `<span class="q-bucketbar-label">按协作筛选</span>`
+        + `<span class="q-chip${tag === '' ? ' on' : ''}" data-notify-tag="">全部 ${all.length}</span>`
+        + tags.map((label) => `<span class="q-chip${tag === label ? ' on' : ''}"`
+          + ` data-notify-tag="${attr(label)}">${esc(label)} ${tagCounts[label]}</span>`).join('')
+        + `<span class="q-hint">「我的」= 指派给我 / @我 / 我关注的；「我指派的」= 我交出去的活的进展</span></div>`
+        : '')
       + `<ul>${rows.length ? rows.join('') : '<li class="q-empty">这一类里没有通知（不是坏了）</li>'}</ul>`
-      + `${shown.length > page.length ? `<p class="q-hint"><button data-notify-more="1">`
-        + `还有 ${shown.length - page.length} 条（点开继续）</button></p>` : ''}`
+      + `${picked.length > page.length ? `<p class="q-hint"><button data-notify-more="1">`
+        + `还有 ${picked.length - page.length} 条（点开继续）</button></p>` : ''}`
     openModal(body, 'q-notify')
     const modal = el('q-modal')
     modal.querySelectorAll('[data-notify-action]').forEach((node) => node.addEventListener('click', () => {
@@ -1594,9 +1761,14 @@
       openNotify()
     }))
     modal.querySelector('[data-notify-read-all]')?.addEventListener('click', () => {
-      markRead(shown.map((item) => item.id), true)
+      markRead(picked.map((item) => item.id), true)
       openNotify()
     })
+    // 协作标签筛选片（「我的 / 我指派的 / @我 / 我关注的」）：选择存本浏览器，不改任何事实
+    modal.querySelectorAll('[data-notify-tag]').forEach((node) => node.addEventListener('click', () => {
+      setFilter('notifTag', node.dataset.notifyTag || '')
+      openNotify()
+    }))
     modal.querySelectorAll('[data-notify-filter]').forEach((node) => node.addEventListener('click', () => {
       state.notifFilter = node.dataset.notifyFilter
       openNotify()
@@ -1852,7 +2024,9 @@
 
   // 初始化：地址栏就是**唯一**的位置来源（刷新/分享/前进后退都靠它）
   state.route = parsePath(location.pathname)
-  renderChrome(); renderTabs(); loadAll(true); loadIdentity()
+  renderChrome(); renderTabs(); loadAll(true)
+  // 身份先解析（顶栏「身份」徽标 + 人签字段预填都读它），再拉**服务端**通知偏好（0600 文件；未登录则回落到本浏览器）
+  loadIdentity().then(() => loadNotifState()).then(() => paintBadge())
   /**
    * 通知轮询（15s）：只更**徽标**，并且**最多弹一条**汇总提示 —— 一次来 8 条也不刷屏。
    * 首次看到某条 id 时才提示（`state.seenNotifs` 是本次会话的内存集合）。
