@@ -14,7 +14,8 @@ from quotagent.qa.registry import Assertion, register
 
 ROOT = Path(__file__).resolve().parents[4]
 FILES = {'apply': ROOT / 'tools' / 'config-apply.py',
-         'view': ROOT / 'host' / 'modules' / 'config-view.mjs',
+         # 实体已随批 EV-176 搬进插件 `code/`（旧路径只剩薄重导）：静态断言读实体那一份，否则静默判绿。
+         'view': ROOT / 'src' / 'system' / 'config' / 'code' / 'config-view.mjs',
          'ui': ROOT / 'host' / 'lib' / 'config-ui.mjs',
          'keys': ROOT / 'host' / 'lib' / 'config-keys.mjs'}
 

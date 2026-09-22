@@ -40,3 +40,11 @@
 | 私域投影与字段白名单 | `system/projection`（`FR-UX-002`） |
 | 配置键的落盘与初始化 | `system/config`（`FR-CONFIG-001/002`） |
 | 宿主数据库插件 | 未成立（`docs/design/27-plugin-architecture.md` §1.4：宿主侧优先用上游 `@cordisjs/plugin-database`，Python 侧不引） |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 登记：入口 + 实体都在本插件 `code/` 下，`plugin.json` 的 `entry` = `code/index.mjs`。 -->
+
+- `code:` **已落地** —— 实体 `code/storage-view.mjs`（本批随宿主模块搬迁进 `code/`）+ 入口 `code/index.mjs`（只把实体公开面**重导出**：`export *` 的绑定是活的，无业务语义、无写面）。
+- `provides:` `storageView`（实体自述的真实服务键；占位键已改写）。
+- 实测：`tools/plugin.sh status system/storage` ⇒ `valid:true`、`reason:null`；`load` 真进口（`effects` 非 0）、`unload` 后 `effects_after:0`。

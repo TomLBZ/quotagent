@@ -41,3 +41,11 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | 证据（映射表 §1） | `bid-heuristics`（围栏 4 变异 + 真 HTTP） |
 | 缺口 | 无登记缺口（映射表 §1 与该插件名下 FR 的 AC 均已注册）。 |
 | 需求文档位置 | **非标准位置**：本文件 `docs/work/plugin-requirements-domain-bid-heuristics.md` ⇒ 已登记在映射表 §4.2 |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 登记：入口 + 实体都在本插件 `code/` 下，`plugin.json` 的 `entry` = `code/index.mjs`。 -->
+
+- `code:` **已落地** —— 实体 `code/bid-heuristics.mjs`（本批随宿主模块搬迁进 `code/`）+ 入口 `code/index.mjs`（只把实体公开面**重导出**：`export *` 的绑定是活的，无业务语义、无写面）。
+- `provides:` `bidHeuristics`（实体自述的真实服务键；占位键已改写）。
+- 实测：`tools/plugin.sh status domain/bid-heuristics` ⇒ `valid:true`、`reason:null`；`load` 真进口（`effects` 非 0）、`unload` 后 `effects_after:0`。

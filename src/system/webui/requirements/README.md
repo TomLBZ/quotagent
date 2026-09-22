@@ -47,3 +47,9 @@
 | 变更单明细与催办动作 | `domain/gate-timeline`（`FR-GATE-001/002`） |
 | 邮件域运维视图 | `system/mail`（`FR-MAIL-002`） |
 | 视觉基线判据 | 待建（矩阵 §3 的 `FR-USREQ-002` 缺口；规格 `docs/work/plans/ui-workflow-rework-part3.md` §4） |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+
+- `code:` **待实现** —— 实现对**已存在**于 `host/modules/`（`webui.mjs`），本批未给它做入口；`entry` 仍如实报 `degraded: artifact-missing`；**不新造功能**。

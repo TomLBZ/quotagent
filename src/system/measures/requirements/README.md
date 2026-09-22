@@ -41,3 +41,9 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | 证据（映射表 §1） | **无 FR 归属**（矩阵 §2 亦无归属行）；被各口径 AC 间接覆盖 · `ac AC-NORM-001` |
 | 缺口 | **无 FR 归属**（映射表 §1 与 `15` §2 均无归属行）⇒ 满足「每条 FR 有承接插件」但不反过来：本插件是承载体的执行件，不是功能需求的归属方。 |
 | 需求文档位置 | **非标准位置**：本文件 `docs/work/plugin-requirements-system-measures.md` ⇒ 已登记在映射表 §4.2 |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+
+- `code:` 部分落地 —— Python 实体 1 个已在 `code/`（`measures.py`）；宿主 **ESM 入口未接** ⇒ `entry` 仍如实报 `degraded: artifact-missing`。

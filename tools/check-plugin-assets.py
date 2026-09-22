@@ -49,6 +49,33 @@ VERIFY_REL = "tools/verify.sh"
 
 #: 已搬资产登记（**唯一机器登记处**）：旧位置 → (归属插件 id, 新位置)；分类表里必须逐条对上（PA3）。
 RELOCATED: dict[str, tuple[str, str]] = {
+    # --- 本批（EV-176 / T-326）：`tools/**` 非薄入口 **12 个**搬进各自插件的 `tests/`（外圈、归属明确），
+    # 旧位置留薄转发；实现只改一处 —— `ROOT` 推导 `parents[1]`/`parent.parent`（`tools/` 下）→ `parents[4]`
+    # （`src/<层>/<插件>/tests/` 下，深度与既有已搬件一致）。门名与 `tools/verify.sh` 的分支一行未改。
+    "tools/check-docs.py": (
+        "system/repo-gate", "src/system/repo-gate/tests/check-docs.py"),
+    "tools/check-ac-registry.py": (
+        "system/repo-gate", "src/system/repo-gate/tests/check-ac-registry.py"),
+    "tools/check-fr-coverage.py": (
+        "system/repo-gate", "src/system/repo-gate/tests/check-fr-coverage.py"),
+    "tools/check-invariants.py": (
+        "system/repo-gate", "src/system/repo-gate/tests/check-invariants.py"),
+    "tools/check-v-register.py": (
+        "system/repo-gate", "src/system/repo-gate/tests/check-v-register.py"),
+    "tools/check-module-wiring.py": (
+        "system/repo-gate", "src/system/repo-gate/tests/check-module-wiring.py"),
+    "tools/check-plugin-inventory.py": (
+        "system/repo-gate", "src/system/repo-gate/tests/check-plugin-inventory.py"),
+    "tools/check-clean-copy.py": (
+        "system/repo-gate", "src/system/repo-gate/tests/check-clean-copy.py"),
+    "tools/check-events.py": (
+        "system/kernel", "src/system/kernel/tests/check-events.py"),
+    "tools/check-webui.py": (
+        "system/webui", "src/system/webui/tests/check-webui.py"),
+    "tools/check-heuristics-route.py": (
+        "domain/bid-heuristics", "src/domain/bid-heuristics/tests/check-heuristics-route.py"),
+    "tools/check-idem-route.py": (
+        "system/idempotency-guard", "src/system/idempotency-guard/tests/check-idem-route.py"),
     "tools/check-quote-draft-route.py": (
         "domain/quote-prepare", "src/domain/quote-prepare/tests/check-quote-draft-route.py"),
     "tools/check-rfq-visibility-route.py": (
@@ -241,9 +268,9 @@ EXCLUDE_DIRS = frozenset({"__pycache__", ".git", "tmp", "node_modules", ".venv"}
 
 #: `tools/` 下非薄入口文件的**实测值**：阶段 4.1 搬前 69（75 个文件 − 6 个薄入口）− 搬走 7 个 + `plugin-assets.py` 自己 1 个
 #: = 63；一键运行的干净副本验收门 `tools/check-run-clone.py`（EV-171）再 +1 ⇒ 64；**阶段 4.2 续搬（EV-175）再搬走 10 个**
-#: ⇒ **54**（旧位置全部变薄转发）。
+#: ⇒ **54**；**本批（EV-176）再搬走 12 个** ⇒ **42**（旧位置全部变薄转发）。
 #: 锁的语义是"只减不增"：搬走本门或其它项时这个数应随之下调；**上调只允许"新增一个同级平台门"这一种理由**（改这一行是显式动作）。
-BASELINE_NONTHIN = 54
+BASELINE_NONTHIN = 42
 #: 门名数下界（阶段 4.1 搬前 69 + `plugin-assets` = 70；本批新增 `run-clone` ⇒ 71；门名是接口，只增不减）。
 MIN_GATE_NAMES = 71
 #: `--help` 一类的别名不算"实现分支"。

@@ -185,3 +185,70 @@
 A 节计数行与 §分类 口径第 4 条同步为 `已搬 10 + 待搬 54`。10 项的「旧位置 → 归属 → 新位置 → 逐门
 rc/passed-total 对拍」原始行见 `docs/work/evidence/EV-175b-tools-relocation.md`。
 
+### 阶段 4.2 续搬（二）：12 个外圈 `tools/**` 非薄入口进各自插件的 `tests/`（`EV-176`）
+
+| 资产（旧位置） | 归属插件 | 新位置 | 门 |
+|---|---|---|---|
+| `tools/check-docs.py` | `system/repo-gate` | `src/system/repo-gate/tests/check-docs.py` | `tools/verify.sh docs` |
+| `tools/check-ac-registry.py` | `system/repo-gate` | `src/system/repo-gate/tests/check-ac-registry.py` | `tools/verify.sh ac-registry` |
+| `tools/check-fr-coverage.py` | `system/repo-gate` | `src/system/repo-gate/tests/check-fr-coverage.py` | `tools/verify.sh coverage` |
+| `tools/check-invariants.py` | `system/repo-gate` | `src/system/repo-gate/tests/check-invariants.py` | `tools/verify.sh invariants` |
+| `tools/check-v-register.py` | `system/repo-gate` | `src/system/repo-gate/tests/check-v-register.py` | `tools/verify.sh v` |
+| `tools/check-module-wiring.py` | `system/repo-gate` | `src/system/repo-gate/tests/check-module-wiring.py` | `tools/verify.sh wiring` |
+| `tools/check-plugin-inventory.py` | `system/repo-gate` | `src/system/repo-gate/tests/check-plugin-inventory.py` | `tools/verify.sh plugins` |
+| `tools/check-clean-copy.py` | `system/repo-gate` | `src/system/repo-gate/tests/check-clean-copy.py` | `tools/verify.sh clean-copy` |
+| `tools/check-events.py` | `system/kernel` | `src/system/kernel/tests/check-events.py` | `tools/verify.sh events` |
+| `tools/check-webui.py` | `system/webui` | `src/system/webui/tests/check-webui.py` | `tools/verify.sh webui` |
+| `tools/check-heuristics-route.py` | `domain/bid-heuristics` | `src/domain/bid-heuristics/tests/check-heuristics-route.py` | `tools/verify.sh bid-heuristics` |
+| `tools/check-idem-route.py` | `system/idempotency-guard` | `src/system/idempotency-guard/tests/check-idem-route.py` | `tools/verify.sh idem-route` |
+
+**实现只改一处**：`ROOT` 推导 `parent.parent` / `parents[1]`（`tools/` 下）→ `parents[4]`（`src/<层>/<插件>/tests/` 下）；
+门名与 `tools/verify.sh` 的分支一行未改。**逐门搬前/搬后 rc 与 passed/total 逐项不变**（12 门的原始行见 `EV-176`）。
+
+### 阶段 5 第四小片：13 个 `host/modules/*.mjs` 实体进各自插件 `code/`（`EV-176`）
+
+| 实体（旧位置 `host/modules/`） | 归属插件 | 新位置 | blob（HEAD == 现在） |
+|---|---|---|---|
+| `norm.mjs` | `system/norm` | `src/system/norm/code/norm.mjs` | `82279497c6bf` |
+| `sourcing.mjs` | `domain/sourcing` | `src/domain/sourcing/code/sourcing.mjs` | `b569ccd1d048` |
+| `governor.mjs` | `system/governor` | `src/system/governor/code/governor.mjs` | `4fb86f38387c` |
+| `config-view.mjs` | `system/config` | `src/system/config/code/config-view.mjs` | `e276a1b41b9e` |
+| `storage-view.mjs` | `system/storage` | `src/system/storage/code/storage-view.mjs` | `04c0c180678e` |
+| `user-plugin-manager.mjs` | `system/user-plugin-manager` | `src/system/user-plugin-manager/code/user-plugin-manager.mjs` | `65fe92d59369` |
+| `bid-heuristics.mjs` | `domain/bid-heuristics` | `src/domain/bid-heuristics/code/bid-heuristics.mjs` | `44b7206bcfdb` |
+| `agent-context.mjs` | `system/agent-runtime` | `src/system/agent-runtime/code/agent-context.mjs` | `058472646d6d` |
+| `agent-memory.mjs` | `system/agent-runtime` | `src/system/agent-runtime/code/agent-memory.mjs` | `fb4bfd764fa8` |
+| `agent-harness.mjs` | `system/agent-runtime` | `src/system/agent-runtime/code/agent-harness.mjs` | `56369fd5352a` |
+| `canary.mjs` | `system/canary` | `src/system/canary/code/canary.mjs` | `53e9d278763c` |
+| `admin-guard.mjs` | `system/admin` | `src/system/admin/code/admin-guard.mjs` | `abbd3f1e4d90` |
+| `admin-view.mjs` | `system/admin` | `src/system/admin/code/admin-view.mjs` | `cf0230defdbc` |
+
+**旧位置留薄重导，且导入面逐名一致**：`host/modules/<stem>.mjs` → `export * from '../lib/entity-<stem>.mjs'` →
+`export * from 'src/<层>/<插件>/code/<stem>.mjs'`（两跳都是 `export *`，名字绑定是**活的**）。
+为什么中间要过 `host/lib/`：`tools/verify.sh modules` 的 A6 断言**按源码文本**判宿主模块的相对 import
+（只允许同目录 `./` 与库层 `../lib/`）—— 这是"宿主模块对外只依赖库层"这条纪律，搬完实体后仍然成立。
+**实体里的 `../lib/…` 逐字未改**（模块 import 契约不许改：`t271/t275/t277/t279/t285` 等门都按
+`../lib/std-schema.mjs` 判白名单）⇒ 各插件目录加一条**过渡软链** `src/<层>/<插件>/lib -> ../../../host/lib`
+（10 条；`host/lib/**` 将来搬进插件时删掉即可）。
+
+**先改读方再搬 10 处**（否则静态断言在薄重导上**静默判绿**）：`t279`（TARGET）、`t277`（MODULE_PATH）、
+`t275`（三件 PATH）、`t271`（GUARD/VIEW_PATH）、`t268`（MANAGER_PATH）、`checks_agentrt.py` /
+`checks_agentrt_lifecycle.py`（MODULES 表）、`checks_agentrt_memory.py`（MEM）、`checks_viz.py`（MOD）、
+`checks_config.py`（FILES['view']）。**实测旧导入路径可用**：13 项的导出名集合 旧 == 新 == HEAD（逐项 True，TOTAL 13 / FAIL 0）。
+
+### 「清单先行」插件补**真实承载**：7 个（`EV-176`）
+
+| 插件 | 入口 | 实体 | `provides`（真实服务键） |
+|---|---|---|---|
+| `system/norm` | `code/index.mjs` | `code/norm.mjs` | `norm` |
+| `domain/sourcing` | `code/index.mjs` | `code/sourcing.mjs` | `sourcing` |
+| `system/governor` | `code/index.mjs` | `code/governor.mjs` | `governor` |
+| `system/config` | `code/index.mjs` | `code/config-view.mjs` | `configView` |
+| `system/storage` | `code/index.mjs` | `code/storage-view.mjs` | `storageView` |
+| `system/user-plugin-manager` | `code/index.mjs` | `code/user-plugin-manager.mjs` | `userPluginManager` |
+| `domain/bid-heuristics` | `code/index.mjs` | `code/bid-heuristics.mjs` | `bidHeuristics` |
+
+入口只做**重导出 + 透传**（`export *` + `inject/provides/Config/usedServices/apply`），**零业务语义、零写面**。
+其余 **47 个**未接入口的插件，逐个在自己的 `requirements/README.md` 「落地状态（`code/`）」一节**如实标注**
+（`部分落地` / `待实现`；不造功能）。
+

@@ -112,7 +112,8 @@ const CORDIS_URL = process.env.QUOTAGENT_CORDIS
 const { Context, EventsService } = await import(CORDIS_URL)
 const ROOT = join(HERE, '..')
 const GATE_PATH = join(HERE, 't277-storage-gate.mjs')
-const MODULE_PATH = join(HERE, 'modules', 'storage-view.mjs')
+// 实体已随批 `EV-176` 搬进插件 `code/`（旧路径只剩薄重导）：本门读/变异的是实体那一份。
+const MODULE_PATH = join(ROOT, 'src', 'system', 'storage', 'code', 'storage-view.mjs')
 const PY_PATH = join(ROOT, 'tools', 'storage.py')
 const PY = process.env.QUOTAGENT_PYTHON || 'python3'
 const UI_SHARED = join(ROOT, 'tmp', 'ui-shared')

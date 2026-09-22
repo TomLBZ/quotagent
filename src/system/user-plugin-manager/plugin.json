@@ -3,8 +3,15 @@
   "version": "1.0.0",
   "layer": "system",
   "provides": [
-    "user-plugin-manager"
+    "userPluginManager"
   ],
   "entry": "code/index.mjs",
-  "description": "system 插件「user-plugin-manager」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/system/user-plugin-manager/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "description": "用户空间插件的管理面（list/load/unload/reload/requestCreate/elevateRequest）。（本批 EV-176：实体已进 `code/`，`entry` 指真实包装入口 ⇒ 合法清单；`provides` 为实体自述的真实服务键。）",
+  "migration": {
+    "stage": 4.2,
+    "mode": "entity-moved-and-wrapper",
+    "impl": "src/system/user-plugin-manager/code/user-plugin-manager.mjs",
+    "from": "host/modules/user-plugin-manager.mjs",
+    "moves_in_stage": 4.2
+  }
 }

@@ -58,3 +58,9 @@
 | 审计包导出/签名/包含证明 | `system/evidence`（`FR-EVIDENCE-*`） |
 | 留存期与销毁执行 | `system/retention`（`FR-EVIDENCE-004`） |
 | 需求归属合法性判据 | `system/repo-gate`（`docs/design/28` §2.6 的 `T-312` 子项，本批由 `tools/check-plugin-requirements.py` 承担） |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+
+- `code:` 部分落地 —— Python 实体 9 个已在 `code/`（`__init__.py`、`canon.py`、`delivery.py`、`events.py`、`evidence.py`、`ledger.py`…）；宿主 **ESM 入口未接** ⇒ `entry` 仍如实报 `degraded: artifact-missing`。

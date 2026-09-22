@@ -84,9 +84,10 @@ const CORDIS_URL = process.env.QUOTAGENT_CORDIS
 const { Context, EventsService } = await import(CORDIS_URL)
 const ROOT = join(HERE, '..')
 const GATE_PATH = join(HERE, 't275-runtime-gate.mjs')
-const CONTEXT_PATH = join(HERE, 'modules', 'agent-context.mjs')
-const MEMORY_PATH = join(HERE, 'modules', 'agent-memory.mjs')
-const HARNESS_PATH = join(HERE, 'modules', 'agent-harness.mjs')
+// 三个实体已随批 `EV-176` 搬进插件 `code/`（旧路径只剩薄重导）：本门读/变异的是实体那一份。
+const CONTEXT_PATH = join(ROOT, 'src', 'system', 'agent-runtime', 'code', 'agent-context.mjs')
+const MEMORY_PATH = join(ROOT, 'src', 'system', 'agent-runtime', 'code', 'agent-memory.mjs')
+const HARNESS_PATH = join(ROOT, 'src', 'system', 'agent-runtime', 'code', 'agent-harness.mjs')
 
 /** 凭据哨兵（绝不写进任何日志/输出；只用于"检索不到"的断言） */
 const SECRET = 'ZZ-T275-CREDENTIAL-SENTINEL-ZZ'

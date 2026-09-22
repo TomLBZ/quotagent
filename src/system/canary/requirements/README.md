@@ -41,3 +41,9 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | 证据（映射表 §1） | `canary` · `bridge-canary` · `canary-route` · `EV-070` |
 | 缺口 | 名下 1 条 FR（`FR-EVOLVE-005`）的关联 AC 尚未在 `qa` 注册（`tools/verify.sh ac-registry`：P2 未到期）⇒ 这几条现由本插件的门 `tools/verify.sh canary`、`tools/verify.sh bridge-canary` 围栏。 |
 | 需求文档位置 | **非标准位置**：本文件 `docs/work/plugin-requirements-system-canary.md` ⇒ 已登记在映射表 §4.2 |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+
+- `code:` 部分落地 —— 拥有的宿主模块实体 `canary.mjs` 已随本批进 `code/`；宿主 **ESM 入口未接**（不拼装、不造功能）⇒ `plugin.json` 的 `entry` 仍如实报 `degraded: artifact-missing`。

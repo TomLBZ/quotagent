@@ -19,9 +19,10 @@ from quotagent.qa.registry import Assertion, register
 ROOT = Path(__file__).resolve().parents[4]
 GATE = ROOT / 'src' / 'system' / 'agent-runtime' / 'tests' / 't275-runtime-gate.mjs'
 MODULES = {
-    'agent-context': ROOT / 'host' / 'modules' / 'agent-context.mjs',
-    'agent-memory': ROOT / 'host' / 'modules' / 'agent-memory.mjs',
-    'agent-harness': ROOT / 'host' / 'modules' / 'agent-harness.mjs',
+    # 实体已随批 EV-176 搬进插件 `code/`（旧路径只剩薄重导）：静态断言读实体那一份，否则静默判绿。
+    'agent-context': ROOT / 'src' / 'system' / 'agent-runtime' / 'code' / 'agent-context.mjs',
+    'agent-memory': ROOT / 'src' / 'system' / 'agent-runtime' / 'code' / 'agent-memory.mjs',
+    'agent-harness': ROOT / 'src' / 'system' / 'agent-runtime' / 'code' / 'agent-harness.mjs',
 }
 # 宿主模块**不得**有的东西（每一条单独断言，违规要报出命中文本）
 FORBIDDEN = {

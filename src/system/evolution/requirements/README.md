@@ -45,3 +45,9 @@
 | 人工门（谁能签、签什么） | `system/approval`（`FR-APPROVE-*`） |
 | 提案产出的业务插件各自的语义 | 各业务插件（如 `domain/price-history`、`system/ops-view`） |
 | 需求归属与 FR 映射 | `system/repo-gate`（`docs/work/plugin-requirements-map.md`） |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+
+- `code:` **待实现** —— 实现对**已存在**于 `host/modules/`（`evolve-journal.mjs`），本批未给它做入口；`entry` 仍如实报 `degraded: artifact-missing`；**不新造功能**。

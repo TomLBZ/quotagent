@@ -42,3 +42,9 @@
 | 通知（页面横幅等非邮件通道） | `system/ui-feedback`（`FR-UIFB-001`）；独立 `system/notification` 仍未成立（`docs/design/27-plugin-architecture.md` §1.4） |
 | 上游 `@cordisjs/mail` 的替换 | 判为**不可直接替换**（本仓邮件是账本事实；见 27 §7.2），替换需先写 ADR |
 | 需求归属与 FR 映射 | `system/repo-gate`（`docs/work/plugin-requirements-map.md`） |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+
+- `code:` 部分落地 —— Python 实体 2 个已在 `code/`（`mail.py`、`mail_transport.py`）；宿主 **ESM 入口未接** ⇒ `entry` 仍如实报 `degraded: artifact-missing`。

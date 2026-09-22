@@ -6,5 +6,12 @@
     "sourcing"
   ],
   "entry": "code/index.mjs",
-  "description": "domain 插件「sourcing」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/domain/sourcing/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "description": "RFQ 覆盖率与缺口分析（coverage/gaps/expiring，纯函数只读账本行）。（本批 EV-176：实体已进 `code/`，`entry` 指真实包装入口 ⇒ 合法清单；`provides` 为实体自述的真实服务键。）",
+  "migration": {
+    "stage": 4.2,
+    "mode": "entity-moved-and-wrapper",
+    "impl": "src/domain/sourcing/code/sourcing.mjs",
+    "from": "host/modules/sourcing.mjs",
+    "moves_in_stage": 4.2
+  }
 }

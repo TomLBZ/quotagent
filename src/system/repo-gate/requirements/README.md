@@ -41,3 +41,9 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | 证据（映射表 §1） | `docs` · `coverage`(8/8) · `plugin-requirements`（本批新增） · `EV-159` |
 | 缺口 | 无登记缺口（映射表 §1 与该插件名下 FR 的 AC 均已注册）。 |
 | 需求文档位置 | **非标准位置**：本文件 `docs/work/plugin-requirements-system-repo-gate.md` ⇒ 已登记在映射表 §4.2 |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+
+- `code:` **待实现** —— 本插件此刻确无实现产物：不造功能，只如实标注。

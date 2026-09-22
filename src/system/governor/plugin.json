@@ -6,5 +6,12 @@
     "governor"
   ],
   "entry": "code/index.mjs",
-  "description": "system 插件「governor」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/system/governor/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "description": "运行期准入与等待：限流/背压（可解释拒绝）、显式超时、有界重试。（本批 EV-176：实体已进 `code/`，`entry` 指真实包装入口 ⇒ 合法清单；`provides` 为实体自述的真实服务键。）",
+  "migration": {
+    "stage": 4.2,
+    "mode": "entity-moved-and-wrapper",
+    "impl": "src/system/governor/code/governor.mjs",
+    "from": "host/modules/governor.mjs",
+    "moves_in_stage": 4.2
+  }
 }

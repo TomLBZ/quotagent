@@ -45,3 +45,9 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | 证据（映射表 §1） | `audit` · `ac AC-AUDIT-001/002` · `evolve-module`(11/11) · `EV-075` |
 | 缺口 | 名下 1 条 FR（`FR-EVIDENCE-006`）的关联 AC 尚未在 `qa` 注册（`tools/verify.sh ac-registry`：P2 未到期）⇒ 这几条现由本插件的门 `tools/verify.sh evolve-module` 围栏。 |
 | 需求文档位置 | **非标准位置**：本文件 `docs/work/plugin-requirements-system-evidence.md` ⇒ 已登记在映射表 §4.2 |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+
+- `code:` **待实现** —— 实现对**已存在**于 `host/modules/`（`evidence-summary.mjs`），本批未给它做入口；`entry` 仍如实报 `degraded: artifact-missing`；**不新造功能**。

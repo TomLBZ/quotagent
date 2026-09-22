@@ -50,7 +50,9 @@ const CORDIS_URL = process.env.QUOTAGENT_CORDIS
   ? pathToFileURL(process.env.QUOTAGENT_CORDIS).href
   : pathToFileURL(join(HERE, 'node_modules', 'cordis', 'lib', 'index.js')).href
 const { Context, EventsService } = await import(CORDIS_URL)
-const TARGET = join(HERE, 'modules', 'bid-heuristics.mjs')
+// 实体已随批 `EV-176` 搬进插件 `code/`（旧路径 `host/modules/bid-heuristics.mjs` 只剩**薄重导**）：
+// 本门读/变异的是**实体那一份**（否则会静默判绿：变异打在转发上不改变行为）。
+const TARGET = join(HERE, '..', 'src', 'domain', 'bid-heuristics', 'code', 'bid-heuristics.mjs')
 const SCHEMA_URL = pathToFileURL(join(HERE, 'lib', 'std-schema.mjs')).href
 
 // 门自己注入的**假** admin token：只为在夹具里取到第四道页面（`/t279/admin/`，提权后）的 HTML。

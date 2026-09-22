@@ -60,8 +60,9 @@ const CORDIS_URL = process.env.QUOTAGENT_CORDIS
   : pathToFileURL(join(HERE, 'node_modules', 'cordis', 'lib', 'index.js')).href
 const { Context, EventsService } = await import(CORDIS_URL)
 const ROOT = join(HERE, '..')
-const GUARD_PATH = join(HERE, 'modules', 'admin-guard.mjs')
-const VIEW_PATH = join(HERE, 'modules', 'admin-view.mjs')
+// 两个实体已随批 `EV-176` 搬进插件 `code/`（旧路径只剩薄重导）：本门读的是实体那一份。
+const GUARD_PATH = join(ROOT, 'src', 'system', 'admin', 'code', 'admin-guard.mjs')
+const VIEW_PATH = join(ROOT, 'src', 'system', 'admin', 'code', 'admin-view.mjs')
 const FIX = join(ROOT, 'tmp', 't271-admin-gate-fixtures')
 
 const CHECKS = []

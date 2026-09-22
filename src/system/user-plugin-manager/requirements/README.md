@@ -52,3 +52,11 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | 证据（映射表 §1） | `user-space`(AC-USERPLUG-001..012) · `plugin-lifecycle` · `EV-082` |
 | 缺口 | 名下 9 条 FR（`FR-USERPLUG-002`、`FR-USERPLUG-003`、`FR-USERPLUG-004`、`FR-USERPLUG-006`、`FR-USERPLUG-007`、`FR-USERPLUG-008`、`FR-USERPLUG-009`、`FR-USERPLUG-011`、`FR-USERPLUG-012`）的关联 AC 尚未在 `qa` 注册（`tools/verify.sh ac-registry`：P2 未到期）⇒ 这几条现由本插件的门 `tools/verify.sh user-space`、`tools/verify.sh plugin-lifecycle` 围栏。 |
 | 需求文档位置 | **非标准位置**：本文件 `docs/work/plugin-requirements-system-user-plugin-manager.md` ⇒ 已登记在映射表 §4.2 |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 登记：入口 + 实体都在本插件 `code/` 下，`plugin.json` 的 `entry` = `code/index.mjs`。 -->
+
+- `code:` **已落地** —— 实体 `code/user-plugin-manager.mjs`（本批随宿主模块搬迁进 `code/`）+ 入口 `code/index.mjs`（只把实体公开面**重导出**：`export *` 的绑定是活的，无业务语义、无写面）。
+- `provides:` `userPluginManager`（实体自述的真实服务键；占位键已改写）。
+- 实测：`tools/plugin.sh status system/user-plugin-manager` ⇒ `valid:true`、`reason:null`；`load` 真进口（`effects` 非 0）、`unload` 后 `effects_after:0`。

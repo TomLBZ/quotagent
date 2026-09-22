@@ -76,7 +76,8 @@ const CORDIS_URL = process.env.QUOTAGENT_CORDIS
 const { Context, EventsService } = await import(CORDIS_URL)
 const ROOT = join(HERE, '..')
 const LIB_PATH = join(HERE, 'lib', 'user-space.mjs')
-const MANAGER_PATH = join(HERE, 'modules', 'user-plugin-manager.mjs')
+// 实体已随批 `EV-176` 搬进插件 `code/`（旧路径只剩薄重导）：本门读/变异的是实体那一份。
+const MANAGER_PATH = join(ROOT, 'src', 'system', 'user-plugin-manager', 'code', 'user-plugin-manager.mjs')
 const FIX = join(ROOT, 'tmp', 't268-ns-fixture')
 const FIX_MAIN = join(FIX, 'main', 'user-space')
 const FIX_SCAN = join(FIX, 'scan1', 'user-space')

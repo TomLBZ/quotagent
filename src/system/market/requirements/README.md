@@ -45,3 +45,9 @@
 | 用户空间插件的装载/卸载/隔离 | `system/user-plugin-manager`（`FR-USERPLUG-*`） |
 | 自进化提案的晋升与 canary | `system/evolution`、`system/canary`（`FR-EVOLVE-*`） |
 | 需求归属与 FR 映射 | `system/repo-gate`（`docs/work/plugin-requirements-map.md` + `tools/verify.sh plugin-requirements`） |
+
+## 落地状态（`code/`）
+
+<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+
+- `code:` **待实现** —— 实现对**已存在**于 `host/modules/`（`plugin-market.mjs`），本批未给它做入口；`entry` 仍如实报 `degraded: artifact-missing`；**不新造功能**。

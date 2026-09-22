@@ -30,7 +30,8 @@ from quotagent.qa.registry import Assertion, register
 ROOT = Path(__file__).resolve().parents[4]
 TOOL = ROOT / 'tools' / 'refresh-agent-memory.py'
 GATE = ROOT / 'src' / 'system' / 'agent-runtime' / 'tests' / 't275-runtime-gate.mjs'
-MEM = ROOT / 'host' / 'modules' / 'agent-memory.mjs'
+# 实体已随批 EV-176 搬进插件 `code/`（旧路径只剩薄重导）：静态断言读实体那一份，否则静默判绿。
+MEM = ROOT / 'src' / 'system' / 'agent-runtime' / 'code' / 'agent-memory.mjs'
 
 # --- 哨兵扫描的判据口径（D-073，承接 D-071/D-072 第 3 条「判据不得覆盖无关写入者」）--------
 # 「契约源集合」= 全树减去**临时/派生目录**，按**相对扫描根的路径分量**判定（不是绝对路径：
