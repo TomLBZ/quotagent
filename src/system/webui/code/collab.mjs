@@ -19,7 +19,8 @@
  * 隔离与边界：
  *   · **按侧隔离**：一侧一个文件；`side` 只由调用方（外壳按**会话身份**）给，本文件不接受请求体里的 side
  *     ⇒ 供应商进程/身份读不到承包商内部的指派与评论（0 命中，不是"过滤掉"）；
- *   · **同侧人类之间**：`actor` 必须是 `human:<名字>`，且 `to` 必须是**本侧已知同事**（登录过就会进名单）；
+ *   · **同侧人类之间**：`actor` 必须是 `human:<名字>`，且 `to` 必须是**本侧名册在册成员**
+ *     （名册 = `people.mjs` 的 0600 配置：单位里真实有谁、什么角色；登录一次会自动登记为「待指派」）；
  *     跨侧的名字一律拒（`unknown-colleague`）——协作不走这里，跨侧只走 QEP 报文；
  *   · 时间戳是**界面级**的（协作不是事实）⇒ 用调用方给的 `at`（外壳的 `host.now()`），本文件不取墙钟；
  *   · 有界：单对象评论 200 条 / 活动 300 条 / 关注者 64 人；对象数 500（超出按"最久没动过"淘汰并如实报数）。
@@ -41,7 +42,8 @@ export const MAX_TEXT = 2000
 export const MAX_REASON = 500
 export const REFUSAL_CODES = ['identity-required', 'unknown-side', 'kind-malformed', 'id-malformed',
   'colleague-malformed', 'unknown-colleague', 'reason-required', 'reason-too-long', 'due-invalid',
-  'body-required', 'body-too-long', 'cross-side-mentioned', 'not-assigned-to-you', 'collab-write-failed']
+  'body-required', 'body-too-long', 'cross-side-mentioned', 'not-assigned-to-you', 'transfer-not-yours',
+  'collab-write-failed']
 
 const NAME_RE = /^[a-z][a-z0-9._-]{0,31}$/
 const KIND_RE = /^[a-z][a-z0-9-]{0,31}$/
@@ -62,16 +64,19 @@ const keyOf = (kind, id) => `${kind}/${id}`
  * @param {object} options
  * @param {string} options.root 仓库根（路径只用来算相对路径，便于回执里给人看的路径）
  * @param {string} options.sharedDir 共享目录（`<ui_shared>`；协作文件落它下面的 `collab/`）
- * @param {string} [options.sessionsFile] 身份会话文件（**只读**它来算"本侧同事名单"，不写它）
+ * @param {string} [options.sessionsFile] 身份会话文件（**只读**：只用来标"这个人今天登录没有"）
+ * @param {object} [options.people] **人员名册与角色**句柄（`people.mjs`；**同事名单的唯一真源**）
  * @param {string[]} [options.sides] 允许的侧（由外壳从身份面传入，本文件不硬编码）
  * @param {(msg: string) => void} [options.log]
  */
-export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', sides = [], log } = {}) {
+export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', people = null, sides = [], log } = {}) {
   const base = resolve(String(root ?? '.'), String(sharedDir ?? 'tmp/ui-shared'))
   const dir = join(base, COLLAB_DIR)
   let allowedSides = sides.map(text).filter(Boolean)
   /** 会话文件路径（**只读**；装配顺序是"外壳先建、身份面后建" ⇒ 建好后由 `configure()` 补上）。 */
   let sessionsPath = text(sessionsFile) === '' ? '' : resolve(String(root ?? '.'), sessionsFile)
+  /** **名册句柄**（同事名单的唯一真源；同样是后补：`configurePeople` 在身份面建好后调 `configure`）。 */
+  let roster = people
   const say = (msg) => { if (typeof log === 'function') log(`[collab] ${msg}`)
   }
   const fileOf = (side) => join(dir, `${side}.json`)
@@ -80,10 +85,11 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', si
    * 装配期后补配置（外壳与身份面的建立顺序不能反：会话文件与合法侧只有身份面知道）。
    * 只影响"本侧同事名单"与侧校验；**已经落下的协作数据不动**。
    */
-  const configure = ({ sessionsFile: file, sides: nextSides } = {}) => {
+  const configure = ({ sessionsFile: file, sides: nextSides, people: nextPeople } = {}) => {
     if (typeof file === 'string' && file.trim() !== '') sessionsPath = resolve(String(root ?? '.'), file.trim())
     if (Array.isArray(nextSides) && nextSides.length) allowedSides = nextSides.map(text).filter(Boolean)
-    return { ok: true, sessions_file: sessionsPath, sides: allowedSides }
+    if (nextPeople) roster = nextPeople
+    return { ok: true, sessions_file: sessionsPath, sides: allowedSides, roster: Boolean(roster) }
   }
 
   const emptyDoc = (side) => ({ schema: COLLAB_SCHEMA, side, objects: {}, people: {},
@@ -116,7 +122,11 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', si
     }
   }
 
-  // ------------------------------------------------------------------ 名单：本侧同事（会话里登录过 + 协作记录里出现过）
+  // ------------------------------------------------------------------ 名单：本侧同事（**名册是真源**）
+  /**
+   * 会话里登录过的人（**只读**）：它现在**不再**决定"谁是同事"，只用来在名册那一行标注"今天登录过"。
+   * 为什么改：旧口径下"同事 = 登录过的人"⇒ 名单取决于谁碰巧开过页面，单位里真实的人反而进不来。
+   */
   const sessionPeople = (side) => {
     if (sessionsPath === '') return []
     try {
@@ -131,22 +141,38 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', si
           expires_at: Number(row?.expires_at ?? 0) || null })
       }
       return [...out.values()]
-    } catch (err) { return [] }        // 读不到会话文件 ⇒ 名单只靠协作记录（如实降级，不猜人）
+    } catch (err) { return [] }        // 读不到会话文件 ⇒ 一律标"未登录"（如实降级，不猜人）
   }
+  /**
+   * 本侧同事 = **名册**（`people.mjs`）里这一侧的成员 —— 带角色、职务、直属上级与"今天登录过没有"。
+   * 降级（名册机制没装配时，例如单文件单测）：退回旧口径并在每条上标 `source: 'session-fallback'`，
+   * 让界面/接口能如实说明"名单来源不是名册"（不假装）。
+   */
   const colleagues = (side) => {
+    if (roster && typeof roster.members === 'function') {
+      return roster.members(side).map((member) => ({ name: member.name, human: member.human,
+        role: member.role, role_label: member.role_label, title: member.title,
+        reports_to: member.reports_to, logged_in: member.logged_in, source: 'roster' }))
+    }
     const doc = load(side)
     const out = new Map()
-    for (const person of sessionPeople(side)) out.set(person.name, person)
+    for (const person of sessionPeople(side)) out.set(person.name, { ...person, source: 'session-fallback' })
     for (const [human, row] of Object.entries(doc.people)) {
       const name = String(row?.name ?? human.replace(/^human:/, ''))
       if (!NAME_RE.test(name)) continue
-      if (out.has(name)) { out.get(name).source = 'session+collab'; continue }
-      out.set(name, { name, human: `human:${name}`, source: 'collab', first_at: row?.first_at ?? null,
-        last_at: row?.last_at ?? null })
+      if (out.has(name)) { out.get(name).source = 'session-fallback'; continue }
+      out.set(name, { name, human: `human:${name}`, source: 'session-fallback',
+        first_at: row?.first_at ?? null, last_at: row?.last_at ?? null })
     }
     return [...out.values()].sort((left, right) => (left.name < right.name ? -1 : 1))
   }
   const isColleague = (side, human) => colleagues(side).some((person) => person.human === human)
+  /** 「同事名单」的**来源自述**（接口/面板据此如实说明"名单来自名册"还是"降级自登录记录"）。 */
+  const rosterSource = () => (roster && typeof roster.describe === 'function'
+    ? { source: 'roster', file: roster.describe().file, mode: roster.describe().mode,
+      note: '同事名单来自**人员名册**（`people.mjs`，0600 配置）：名字不在名册里会被如实拒（unknown-colleague）' }
+    : { source: 'session-fallback', file: '', mode: '',
+      note: '**降级**：名册机制没有装配，同事名单暂时来自"登录过的人"（外壳装配问题：看日志里 [people]）' })
 
   // ------------------------------------------------------------------ 校验（一切拒绝都有名 + 下一步）
   const guard = (side, actor) => {
@@ -245,7 +271,7 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', si
       read_at: readAtOf(obj, me), unread: unread.length,
       unread_comments: unread.filter((event) => event.type === 'commented').length,
       mine: text(obj?.assignment?.to) === me, watching: (obj?.watchers ?? []).includes(me),
-      colleagues: colleagues(side), me,
+      colleagues: colleagues(side), me, colleague_source: rosterSource(),
       counts: { comments: comments.length, events: (obj?.events ?? []).length,
         watchers: (obj?.watchers ?? []).length, dropped_comments: obj?.dropped_comments ?? 0 },
       storage: { file: relative(resolve(String(root ?? '.')), fileOf(side)), mode: '0600',
@@ -264,10 +290,12 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', si
         '写 `human:<名字>` 或直接写名字（小写字母开头、≤32 位；名字要能被对方登录时对上）')
     }
     if (!isColleague(side, target)) {
-      const list = colleagues(side).map((person) => `@${person.name}`).join(' ')
-      return refusal('unknown-colleague', `${target} 不在本侧（${side}）已知同事名单里`,
-        `协作只在**同侧人类**之间：本侧已知 ${list || '（还没有人登录过本侧）'}；`
-        + '对方登录过一次就会进名单；跨侧不能指派（跨侧只走 QEP 报文）')
+      const list = colleagues(side).map((person) => `@${person.name}`
+        + (person.role_label ? `（${person.role_label}）` : '')).join(' ')
+      return refusal('unknown-colleague', `${target} 不在本侧（${side}）**名册**里`,
+        `协作只在**同侧在册成员**之间：本侧名册 ${list || '（还是空的）'}；`
+        + '先把人加进名册（对方登录一次会自动登记为「待指派」），跨侧不能指派（跨侧只走 QEP 报文）',
+        { roster: colleagues(side).map((person) => person.human) })
     }
     const why = text(reason)
     if (why === '') {
@@ -286,6 +314,23 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', si
     const doc = load(side)
     const obj = ensureObject(doc, kind, id, title, at)
     const before = obj.assignment
+    // ---- **按角色限动作**（不是限视图）：转交**别人的活**要有资格 ------------------------------------
+    // 口径：没有人时 = 指派（谁都能把一件没人认领的事交出去）；**已经有人时 = 转交**，只有
+    //   · 归我（当前指派给我）、或 · 我指派的（当前指派是我下的）才能转交；
+    //   · 否则只有名册里 `policy.transfer.override_roles` 的角色（默认 supervisor/admin）可以转交，
+    //     且必须写明理由（`reason` 本来就必填）—— 越权一律拒（`transfer-not-yours`），账本与协作文件零新增。
+    const transfer = before ? roster && typeof roster.transferOverride === 'function'
+      ? roster.transferOverride(side, me)
+      : { ok: true, role: 'roster-missing', role_label: '（名册未装配）' } : null
+    if (before && before.to !== me && before.by !== me && !(transfer && transfer.ok)) {
+      return refusal('transfer-not-yours',
+        `「${labelOf(obj)}」现在归 ${before.to}（由 ${before.by} 指派）：你既不是接手的人，也不是指派的人`
+          + `（你当前的角色是 ${transfer?.role_label ?? '未知'}）`,
+        '只有**归我**（当前指派给我）或**我指派的**才能转交；要转交别人的活，'
+          + `让有资格的角色来做（名册策略 \`transfer.override_roles\`，默认 supervisor / admin），`
+          + '或者先在评论里跟对方说清楚（评论谁都能发）',
+        { assigned_to: before.to, assigned_by: before.by, role: transfer?.role ?? null })
+    }
     const history = (
       Array.isArray(before?.history) ? before.history : []).slice(-19)
     if (before) {
@@ -294,12 +339,15 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', si
     }
     obj.assignment = { to: target, by: me, reason: why, due: deadline, at, status: 'open', history }
     pushEvent(obj, { at, by: me, type: before ? 'reassigned' : 'assigned', to: target, reason: why, due: deadline,
-      summary: `${me} 把「${labelOf(obj)}」指派给 ${target}（原因：${flat(why, 80)}${deadline ? `；截止 ${deadline}` : ''}）` })
+      summary: `${me} 把「${labelOf(obj)}」${before ? '转交' : '指派'}给 ${target}`
+        + `（原因：${flat(why, 80)}${deadline ? `；截止 ${deadline}` : ''}）` })
     touchPerson(doc, me, at); touchPerson(doc, target, at)
     const saved = save(side, doc)
     if (!saved.ok) return saved
     return { ok: true, code: before ? 'reassigned' : 'assigned', target, reason: why, due: deadline,
       file: saved.file, mode: saved.mode, history_depth: history.length,
+      transfer: transfer ? { role: transfer.role, role_label: transfer.role_label,
+        source: before ? ((before.to === me || before.by === me) ? 'mine' : 'role-override') : 'first' } : null,
       next_action: `${target} 打开工作台/通知中心的「我的」就能看到这一条（同侧可见；对方侧看不到）` }
   }
 
@@ -350,12 +398,14 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', si
     const mentions = []
     const unresolved = []
     const crossSide = []
-    const roster = new Set(colleagues(side).map((person) => person.name))
+    // `@同事` 的解析**与同事名单同一处判据**：名册（本侧在册成员）命中 ⇒ 通知他；跨侧 ⇒ 拒；
+    // 名册里没有、也没在任何一侧 ⇒ 进 `unresolved`（**不假装通知到了**）。
+    const rosterNames = new Set(colleagues(side).map((person) => person.name))
     const otherSides = allowedSides.filter((item) => item !== side)
     const otherNames = new Set(otherSides.flatMap((item) => colleagues(item).map((person) => person.name)))
     for (const name of [...new Set(found)]) {
       const human = `human:${name}`
-      if (roster.has(name)) { mentions.push(human); continue }
+      if (rosterNames.has(name)) { mentions.push(human); continue }
       if (otherNames.has(name)) { crossSide.push(human); continue }
       unresolved.push(human)
     }
@@ -498,7 +548,7 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', si
         objects: Object.keys(doc.objects).length,
         watchers: new Set(Object.values(doc.objects)
           .flatMap((obj) => (plain(obj) && Array.isArray(obj.watchers) ? obj.watchers : []))).size },
-      filter: text(bucket), items: picked, colleagues: colleagues(side),
+      filter: text(bucket), items: picked, colleagues: colleagues(side), colleague_source: rosterSource(),
       storage: { file: relative(resolve(String(root ?? '.')), fileOf(side)), mode: '0600',
         why_not_ledger: COLLAB_WHY_NOT_LEDGER } }
   }
@@ -577,7 +627,7 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', si
         updated_at: text(doc.updated_at) }
     }
     return { schema: COLLAB_SCHEMA, dir: relative(resolve(String(root ?? '.')), dir), sides: allowedSides,
-      per_side: perSide, why_not_ledger: COLLAB_WHY_NOT_LEDGER,
+      per_side: perSide, why_not_ledger: COLLAB_WHY_NOT_LEDGER, colleague_source: rosterSource(),
       bounded: { objects_per_side: MAX_OBJECTS, comments_per_object: MAX_COMMENTS, events_per_object: MAX_EVENTS,
         watchers_per_object: MAX_WATCHERS },
       note: '协作数据按侧分文件、0600：一侧的进程/身份读不到另一侧的（不是"过滤掉"，是结构性隔离）' }

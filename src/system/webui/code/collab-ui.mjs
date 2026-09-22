@@ -81,8 +81,13 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
         ? `${data.unread} 条（其中评论 ${data.unread_comments} 条）—— 标已读只影响你自己`
         : '0 条（没有别人留下的新活动）' },
       { key: '同侧同事（可 @）', value: data.colleagues.length
-        ? data.colleagues.map((person) => `@${person.name}`).join(' ')
-        : '（本侧还没有别人登录过：对方登录过一次就会出现在这里）' },
+        ? data.colleagues.map((person) => `@${person.name}`
+          + (person.role_label ? `（${person.role_label}${person.logged_in ? ' · 在线' : ''}）` : '')).join(' ')
+        : '（本侧名册还是空的：用「名册：加人」加一个，或让对方登录一次自动登记为「待指派」）' },
+      { key: '同事名单来自哪', value: `${data.colleague_source?.source === 'roster'
+        ? `**人员名册**：${data.colleague_source.file}（${data.colleague_source.mode}）`
+        : `**降级**（名册未装配）：${data.colleague_source?.note ?? ''}`}`
+        + '｜名册里没有的名字会被如实拒（`unknown-colleague`）', code: true },
       { key: '协作数据落在哪', value: `${data.storage.file}（${data.storage.mode}；按侧隔离，不进账本）`,
         code: true },
     ]
@@ -202,7 +207,9 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
       hint: '同侧人类之间把活交出去：无人时是指派，已有人时是转交（历史留痕）；跨侧不能指派',
       input: { fields: [...objectFields,
         { name: 'to', label: '交给谁（@同事）', type: 'text', required: true,
-          help: '写 human:<名字> 或直接写名字；本侧同事名单在对象页「协作」面板里' },
+          suggest_url: '/api/people/suggest',
+          help: '取值来自**人员名册**（本侧在册成员 + 角色）；打字时会给出候选（也可以照旧手敲）；'
+            + '名册里没有的名字会被如实拒（unknown-colleague）' },
         { name: 'reason', label: '原因（接手的人靠它判断优先级）', type: 'textarea', required: true },
         { name: 'due', label: '截止（ISO8601，可空）', type: 'text', help: '例：2026-10-01T18:00:00Z' }] },
       server: async (ctx, input) => runCollab(ctx, 'assign', input) }))
@@ -218,7 +225,8 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
       hint: '同侧可见的评论；正文里写 @<名字> 会通知到那位同事（跨侧名字会被拒：跨侧沟通走业务动作）',
       input: { fields: [...objectFields,
         { name: 'body', label: '评论正文（可 @同事）', type: 'textarea', required: true,
-          help: '例：@limin 这条料的量要跟现场再核一遍' }] },
+          mention_suggest_url: '/api/people/suggest',
+          help: '例：@limin 这条料的量要跟现场再核一遍｜在正文里打 `@` 会弹出**名册**里的候选' }] },
       server: async (ctx, input) => runCollab(ctx, 'comment', input) }))
     push(onceDisposers, surface.action({ plugin_id: me, id: 'collab.read', title: '标为已读',
       views: sides, group: '协作', order: 8, placement: ['toolbar', 'inline', 'command'],
@@ -272,16 +280,22 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
     const out = verb === 'assign' ? store.assign({ ...base, to: input.to, reason: input.reason, due: input.due })
       : verb === 'comment' ? store.comment({ ...base, body: input.body })
         : verb === 'watch' ? store.toggleWatch(base) : store.markRead(base)
+    // 被拒时把**可核对的额外读数**一起回执（本侧名册 / 当前指派给谁 / 我是什么角色）：
+    // 界面与脚本据此说明"为什么被拒、该找谁"，而不是只给一句 code。
+    const refusalInfo = out.ok === true ? null : { code: out.code ?? null,
+      roster: Array.isArray(out.roster) ? out.roster : null,
+      assigned_to: out.assigned_to ?? null, assigned_by: out.assigned_by ?? null, role: out.role ?? null }
     return { ok: out.ok === true, code: out.code ?? null, reason: out.reason ?? null,
       next_action: out.next_action ?? null,
       result: out.ok ? { side: who.side, actor: who.human, kind, id, verb,
         ...(out.code === 'commented' ? { cid: out.cid, mentions: out.mentions, unresolved: out.unresolved } : {}),
         ...(out.code === 'assigned' || out.code === 'reassigned'
-          ? { to: out.target, due: out.due, history_depth: out.history_depth } : {}),
+          ? { to: out.target, due: out.due, history_depth: out.history_depth,
+            transfer: out.transfer ?? null } : {}),
         ...(out.code === 'watching' || out.code === 'unwatched' ? { watching: out.watching } : {}),
         ...(out.code === 'read' ? { unread_before: out.unread_before } : {}),
         storage: out.file ? { file: out.file, mode: out.mode } : null,
-        ledger: 'zero-management' } : null }
+        ledger: 'zero-management' } : refusalInfo }
   }
 
   /**

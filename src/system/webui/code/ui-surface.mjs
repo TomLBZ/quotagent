@@ -245,7 +245,23 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
         from_route_kind: field.from_route_kind === true,
         // `identity: true` = 这个字段由**当前会话身份**预填（`human:<名字>`；机制只知道"会话里是谁"，
         // 不知道这个字段在业务上叫什么）。人签动作的 `signature` 字段自动按这条处理。
-        identity: field.identity === true })
+        identity: field.identity === true,
+        // `suggest_url` = 这个字段的值可以从**服务端一个只读建议列表**里取（自动补全；客户端渲染成
+        // `<datalist>`，键盘上下选，也可以照旧手敲）。`mention_suggest_url` = 同样给一份建议列表，
+        // 但用于**长文本里 @ 人**：在正文里打 `@` 就弹这批候选，选一个就插进去。
+        // 机制只认形状（本服务前缀相对路径，`/` 开头），**不认识任何建议内容的语义**（谁来提供由插件/机制自己定）。
+        suggest_url: text(field.suggest_url),
+        mention_suggest_url: text(field.mention_suggest_url) })
+    }
+    // 自动补全的建议列表地址只允许**本服务前缀相对路径**（`/` 开头）：脚本与数据都只来自本服务
+    // （与"脚本只来自 /assets/**"同一口径；外站地址一律拒，免得界面被引去第三方取候选人名单）。
+    for (const field of outFields) {
+      for (const key of ['suggest_url', 'mention_suggest_url']) {
+        if (field[key] !== '' && !field[key].startsWith('/')) {
+          return { error: code('invalid-input', `字段 ${field.name} 的 ${key} 必须是本服务前缀相对路径：${JSON.stringify(field[key])}`,
+            `写 \`${key}: "/api/…"\`（本服务自己的只读建议接口；界面不访问第三方取候选）`) }
+        }
+      }
     }
     const permission = text(entry.permission) || 'none'
     if (!PERMISSIONS.includes(permission)) {

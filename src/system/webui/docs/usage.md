@@ -54,39 +54,27 @@
 6. **发 PO（人签）**：**`po.issue`** 门 = 只能由承诺派生 + 逐行引用中标条目且不得改价 + 人工批准 → `po/issued`
    （`po→award→intent→quote` 链 + 行内 `basis`）。没签的那两列是空的（**不假装已承诺**）。
 
-## 4. 动作与接口清单（机器可读）
+## 4. 动作与接口清单（机器可读；完整表见 `/api/routes` 与 `/api/ui/surface`）
 
 | 路由 | 方法 | 说明 |
 |---|---|---|
-| `/quotagent/`、`/app/<view>/` | GET | GUI 首屏（工作台）/ 视图地址（`home`·`contractor`·`supplier`） |
-| `/app/<view>/<kind>/<id>/`、`/api/ui/object?…` | GET | **对象深链**（`kind` 由插件 `object_kind` 声明）：刷新不丢、可复制；对方视角打开 ⇒ 如实未命中 |
+| `/quotagent/`、`/app/<view>/`、`/app/<view>/<kind>/<id>/` | GET | GUI 首屏（工作台）/ 视图 / **对象深链**（`kind` 由插件 `object_kind` 声明；对方视角 ⇒ 如实未命中） |
 | `/assets/app.js`·`app.css` | GET | 客户端资源（**只来自本服务**） |
-| `/api/ui/surface` | GET | 注册面自述：视图/面板/动作（schema·权限·确认策略）/快捷键/通知源/状态项 + 逐插件贡献 |
-| `/api/ui/panels?view=`、`/api/ui/notifications`、`/api/ui/status`、`/api/ui/blocks?slot=` | GET | 面板数据 / 通知中心 / 状态栏 / 旧槽位区块 |
+| `/api/ui/surface`·`panels`·`notifications`·`status`·`blocks?slot=` | GET | 注册面自述 / 面板数据 / 通知中心 / 状态栏 / 旧槽位区块 |
 | `/api/action/<id>` | POST | **动作总线**：`{"view":"…","input":{…}}`；校验 → 插件自己的服务端一半 |
-| `/api/collab/{object,hub,store}` | GET | **同侧协作**（§10）：对象的指派/关注/评论/活动流 +「我的 / 我指派的 / 全部」+ 存储自述（未登录 ⇒ `401`） |
+| `/api/collab/{object,hub,store}`、`/api/people/{roster,suggest,store}` | GET | 同侧协作（§10）/ 人员名册与角色（§11）：未登录 `401`；非 GET ⇒ **405 + `Allow: GET`** |
+| `/api/ui/notif-state` | GET/POST | 通知偏好 / 已读 / **布局** / 筛选（按身份、0600；§9） |
 | `/api/ui/plugins`；`…/<plugin_id>/{load,reload,unload}` | GET/POST | 装载清单；**热重载**（改 `code/ui.mjs` 不必重启）/ 卸载 |
 
-动作（**服务端一半一律是**：插件校验 → 落 0600 待办件 → spawn 唯一写者；`compare.rank` 例外，它只读）：
-
-| 动作 | 视图 | 权限 | 谁落账本 |
-|---|---|---|---|
-| `rfq.publish` | contractor | 确认 + `human:` 发言人 | `rfq-publish.py`（`rfq/published`、`rfq/distributed` + 信封） |
-| `quote.draft` | supplier | — | `quote-draft.py`（`quote/drafted`，两侧各一条） |
-| `quote.submit` | supplier | **human-signature** | `quote-sign.py`（`approval/requested`+`granted`+`quote/submitted`） |
-| `compare.rank` | contractor | — | **不写账本**（`CompareService(ledger=None)`） |
-| `award.propose` | contractor | — | `commitment-apply.py --step propose`（`award/intent-proposed` + 意向信封） |
-| `award.confirm` | supplier | **human-signature** | 同上 `--step confirm`（`award/confirmed`，两侧各一条） |
-| `award.commit` | contractor | **human-signature** | 同上 `--step commit`（`approval/*` + `award/committed`） |
-| `po.issue` | contractor | **human-signature** | 同上 `--step po`（`approval/*` + `po/issued`） |
-
-协作类动作（`collab.assign`/`collab.toggle-watch`/`collab.comment`/`collab.read`）**不调任何写者、账本零新增**
-（落 `<ui_shared>/collab/<side>.json`，§10）。等价命令行（同一套唯一写者；拒绝时账本零新增）：
+动作的**服务端一半一律是**：插件校验 → 落 0600 待办件 → spawn **唯一写者**（`compare.rank` 例外，只读）。
+`quote.submit` / `award.confirm` / `award.commit` / `po.issue` 是 **human-signature**（署名必须 == 会话身份）。
+写者与账本事件、逐动作入参见各插件 docs 与 `/api/ui/surface` 的动作 `hint`；协作与名册类动作
+（`collab.*` / `people.*`）**不调任何写者、账本零新增**（§10/§11）。等价命令行：
 `python3 src/domain/<插件>/tools/<写者>.py --step <步骤> --request <0600待办件> --now … --ui-shared …`
 
 验收/复现脚本（**都不写账本**）：`src/system/webui/tools/{gui-walkthrough,gui-readback,gui-unload}.py`
-（双闭环走查 / 回读 / 卸载后对照）· `sh tmp/p4-collab-verify.sh`（协作面，§10）。手工复现：改任一 `code/ui.mjs` →
-顶栏「插件」→「重载」。
+（双闭环走查 / 回读 / 卸载后对照）· `sh tmp/p4-collab-verify.sh`（协作面）· `python3 tmp/p5-people-verify.py`（名册/角色）。
+手工复现：改任一 `code/ui.mjs` → 顶栏「插件」→「重载」。
 
 ## 5. 写路径纪律（GUI 不是第二条事实写路径）
 
@@ -148,25 +136,24 @@ curl -s -X POST 'http://127.0.0.1:8093/quotagent/api/ui/plugins/domain%2Frfq/unl
   标已读/未读；筛选 全部/未读/待处理/失败 + 协作标签（§10）；只看 `warn` 以上、按插件静音；同一件事只出一条
   （`×N`），一次先给 12 条 +「还有 N 条」；轮询发现多条只弹**一条汇总**。
 - **面板布局**：拖 `⠿` 换序（键盘 `Alt+↑/↓`）、`▾/▸` 收起、布局条可恢复默认；按「视图+对象类」存
-  `quotagent.layout` ⇒ 刷新后仍在。
+  **服务端**（按身份，0600）⇒ 换浏览器、换设备仍是这套布局（见 `docs/people-and-roles.md` §5）。
 - **可编辑表格**：`Tab/Shift+Tab` 走格 · `Enter`/`↑`/`↓` 走同列上下行 · `Esc` 还原 · `Ctrl/⌘+Enter` 提交；
   列带 `line_total_of` ⇒ 格旁实时 `×量 = 行合计`；面板带 `data.totals` ⇒ 编辑栏实时小计。
-- **对比模式 + 列固定**：列带 `group`+`group_label`、面板带 `data.compare={min,max}` ⇒ 列组勾选（勾 2–3 家并排，
-  无 `group` 的关键列恒显示）；`pin:'left'` ⇒ 横向滚动时关键列不跑掉；`data.group_totals` ⇒ 底部每组合计。
-- **多标签页 / 最近访问**：打开地址即一个标签、`Alt+1..9` 切、`Alt+W` 关、行内「钉成标签页」；顶栏「最近 N」/
-  `Ctrl+E` 给最近 12 条深链 +「继续 →」（`Ctrl+W`/`Ctrl+1..9` 被浏览器占，故用 `Alt`）。
+- **对比模式 + 列固定**：列带 `group`+`group_label`、面板带 `data.compare={min,max}` ⇒ 勾 2–3 组并排；`pin:'left'`
+  ⇒ 横向滚动时关键列不跑掉；`data.group_totals` ⇒ 底部每组合计。
+- **多标签页 / 最近访问**：打开地址即一个标签、`Alt+1..9` 切、`Alt+W` 关；「最近 N」/`Ctrl+E` 给最近 12 条深链。
 - **身份**：顶栏「身份」看当前 `human:<名字>`/侧别，登录后**自动回原页**（`?next=`）；`signature` 与标
-  `identity:true` 的字段按会话预填（身份面细节见 §8）。
+  `identity:true` 的字段按会话预填（细节见 §8）。
 
 ## 10. 多人协作（同侧人类之间；**不写账本**）
 
-同一侧的两个人能把活交出去、叫人看、在对象上说话 —— 全在界面内，且**不进账本**：它们是人对界面的协同痕迹、
-不是合同事实（进账本会改变事件类型目录/证据包哈希与审计取证语义，理由写在 `code/collab.mjs` 文件头）。数据只落
-`<ui_shared>/collab/<side>.json`（目录 0700 / 文件 **0600**，原子写），**按侧隔离**：另一侧身份读同一个对象 id
-只会读到**自己那侧**（0 命中，不是"过滤掉"）。
+同一侧的两个人能把活交出去、叫人看、在对象上说话 —— 全在界面内，且**不进账本**（协同痕迹不是合同事实；理由
+见 `code/collab.mjs` 文件头）。数据落 `<ui_shared>/collab/<side>.json`（目录 0700 / 文件 **0600**，原子写），
+**按侧隔离**：另一侧身份读同一个对象 id 只读到**自己那侧**（0 命中，不是"过滤掉"）。
 
-- **指派 / 转交**：任意对象页（包/报价/授标/PO/变更/审批门）工具栏「指派 / 转交给同事」→ 同侧同事 +
-  **原因（必填）+ 截止**；已有人时同一动作 = 转交（历史留痕）。跨侧或不在本侧名单的人一律拒（`unknown-colleague`）。
+- **指派 / 转交**：任意对象页（包/报价/授标/PO/变更/审批门）工具栏「指派 / 转交给同事」→ **名册**里的人 +
+  **原因（必填）+ 截止**；已有人时同一动作 = 转交（历史留痕），且只有**归我/我指派的**（或有资格的角色）能转（`transfer-not-yours`）；
+  名册外的人一律拒（`unknown-colleague`）。
 - **关注 + 活动流**：「关注 / 取消关注」；对象页「协作：评论与活动流」列出**谁在什么时候做了什么**与
   「关注这个对象的人」；关注**每人一份**，只影响自己的通知。
 - **评论与 @同事**：正文写 `@<名字>` 即通知同侧那位；跨侧 `@` 拒（`cross-side-mentioned`），不存在的名字
@@ -174,5 +161,15 @@ curl -s -X POST 'http://127.0.0.1:8093/quotagent/api/ui/plugins/domain%2Frfq/unl
 - **我的 / 我指派的 / 全部**：协作面板、**工作台待办卡**、**通知中心**都有筛选片；通知带
   `我的 / 我指派的 / @我 / 我关注的` 标签，点「打开 <对象> →」**直接进对象页**；已读**每人一份**。
 - **机制**：协作面是外壳的机制贡献（「插件」面里可卸载/重建），按**插件声明的对象类**自动挂上；插件只需给
-  条目/行加 `bucket`/`bucket_label`、给通知加 `tags`，动作字段标 `from_route_kind`（`from_route` 的兄弟键）。
-  复跑：`sh tmp/p4-collab-verify.sh`（47 条断言：含跨侧 0 命中、账本 md5 全程不变）。
+  条目/行加 `bucket`/`bucket_label`、给通知加 `tags`，动作字段标 `from_route_kind`。
+  复跑：`sh tmp/p4-collab-verify.sh`（47 条断言：跨侧 0 命中、账本 md5 全程不变）。
+
+## 11. 人员名册与角色（「同事」来自名册；**按角色限动作**；不写账本）
+
+名册是**权威取值处**：`<ui_shared>/people/roster.json`（0700/**0600**、按侧隔离），带**角色**与**直属关系**；
+`@提及 / 指派 / 转交`的候选与校验都从它来（未知名字拒）；第一次在某一侧登录 ⇒ 自动进名册（角色「待指派」=
+有名字、**没有权限**）。界面：工作台/两侧视图的**「人员名册与角色」**面板 + **「名册表（逐行可改）」** +
+工具栏「名册」组。**按角色限动作**（不是限视图）：转交别人的活要「归我/我指派的」或在
+`transfer.override_roles` 里；额度规则超过**我角色**的额度 ⇒ `role-limit-exceeded` 并告诉你该找谁。
+**角色不改变签署权**（人签仍要求署名 == 会话身份；越权一律拒且账本零新增）。
+细节、接口、边界与截图见 **`docs/people-and-roles.md`**；复跑 `python3 tmp/p5-people-verify.py`（55 条断言）。

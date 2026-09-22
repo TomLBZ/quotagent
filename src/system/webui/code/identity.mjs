@@ -89,9 +89,11 @@ const refusal = (code, reason, next_action) => ({ ok: false, code, reason, next_
  * @param {object} options.config webui 配置（读 `ui_shared` / `ledger_contractor` / `ledger_supplier`）
  * @param {object} options.shell GUI 外壳（用它的 `runPython` 调 Python 侧唯一写者、`loadContributions` 重扫贡献）
  * @param {object} options.services 宿主注入的服务句柄（`userPluginManager` / `configView`；只按名字取，不解读语义）
+ * @param {object} [options.people] **人员名册与角色**句柄（`people.mjs`）：登录即登记（角色=待指派），
+ *   让"单位里真有人第一次进来"能进得来、但**没有权限**（权限由主管在名册里补）
  * @param {(msg: string) => void} [options.log]
  */
-export function createIdentity({ root, prefix, config, shell, services, log } = {}) {
+export function createIdentity({ root, prefix, config, shell, services, people = null, log } = {}) {
   const pfx = String(prefix ?? '').replace(/\/$/, '')
   const sharedDir = resolve(String(root ?? '.'), String(config?.ui_shared ?? 'tmp/ui-shared'))
   const dir = join(sharedDir, 'identity')
@@ -209,10 +211,26 @@ export function createIdentity({ root, prefix, config, shell, services, log } = 
     }
     const saved = saveSessions(doc)
     if (!saved.ok) return saved
+    // **登录即登记**（名册口径）：名字第一次出现在这一侧 ⇒ 进名册，角色 = 「待指派」（有名字、没有权限）。
+    // 为什么在这里做：名册是**权威取值处**（@提及/指派/转交都从它来），但"单位里真有人第一次进来"不该被
+    // 挡在门外 —— 他进得来、看得到、**没有权限**，等主管在界面上补角色。名册写失败**不影响登录**
+    // （登录是身份面的事；名册是配置）——失败如实回报，不假装登记成功。
+    let roster = null
+    if (people && typeof people.enroll === 'function') {
+      try {
+        roster = people.enroll({ side: sideId, name: wanted, at: new Date(issued).toISOString() })
+      } catch (err) {
+        roster = { ok: false, code: 'people-write-failed', reason: flat(err) }
+      }
+      if (roster && roster.ok === false) say(`登录即登记失败：${wanted}（${sideId}）：${roster.code}`)
+    }
     return { ok: true, session_id: sid, human: `human:${wanted}`, name: wanted, side: sideId,
       expires_at: issued + ttl, ttl_ms: ttl, session_file: saved.file, session_mode: saved.mode,
+      roster: roster ? { enrolled: roster.enrolled ?? false, role: roster.role ?? null,
+        code: roster.code ?? null, file: roster.file ?? null, mode: roster.mode ?? null } : null,
       cookie: cookieOf(sid, Math.floor(ttl / 1000)),
-      next_action: `去 ${pfx}/inbox/ 看「待我处理」，或用 ${pfx}/sign/ 做人签` }
+      next_action: `去 ${pfx}/inbox/ 看「待我处理」，或用 ${pfx}/sign/ 做人签；`
+        + '名册里没有你 ⇒ 先让同侧同事在「人员名册与角色」面板里给你补角色（受额度限制的动作会拒你）' }
   }
 
   /** 登出（只减权：删会话 + 清 cookie）。 */
@@ -994,6 +1012,9 @@ export function createIdentity({ root, prefix, config, shell, services, log } = 
         return request.send(200, 'application/json; charset=utf-8',
           JSON.stringify({ ok: true, human: out.human, side: out.side, session_file: out.session_file,
             session_mode: out.session_mode, expires_at: new Date(out.expires_at).toISOString(),
+            // **登录即登记**（名册口径）：回执如实说明"他进名册了吗、什么角色" —— 有名字没权限，
+            // 等主管在「人员名册与角色」面板里补角色（受额度限制的动作会拒他）。
+            roster: out.roster ?? null,
             next_action: out.next_action }, null, 2) + '\n', { 'set-cookie': out.cookie })
       }
       const next = text(input.next)

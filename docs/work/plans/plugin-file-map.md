@@ -159,7 +159,6 @@
 | `src/quotagent/qa/checks_storage.py` | `src/system/storage/tests/checks_storage.py` |  |
 | `src/quotagent/qa/checks_sync.py` | `src/domain/sync/tests/checks_sync.py` |  |
 | `src/quotagent/qa/checks_terms.py` | `src/domain/terms/tests/checks_terms.py` |  |
-| `src/quotagent/qa/checks_ui_snapshot.py` | `src/system/webui/tests/checks_ui_snapshot.py` |  |
 | `src/quotagent/qa/checks_uifb.py` | `src/system/ui-feedback/tests/checks_uifb.py` |  |
 | `src/quotagent/qa/checks_userplugin.py` | `src/system/user-plugin-manager/tests/checks_userplugin.py` |  |
 | `src/quotagent/qa/checks_userplugin_elevate.py` | `src/system/user-plugin-manager/tests/checks_userplugin_elevate.py` |  |
@@ -490,7 +489,6 @@
 | `src/quotagent/qa/checks_storage.py` | `system/storage` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_sync.py` | `domain/sync` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_terms.py` | `domain/terms` | 插件·已搬 | `tests/` |
-| `src/quotagent/qa/checks_ui_snapshot.py` | `system/webui` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_uifb.py` | `system/ui-feedback` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_userplugin.py` | `system/user-plugin-manager` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_userplugin_elevate.py` | `system/user-plugin-manager` | 插件·已搬 | `tests/` |

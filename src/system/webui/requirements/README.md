@@ -17,7 +17,7 @@
 业务逻辑钩子、通知与状态**），WebUI 自身**不含业务语义与插件名**。
 **判定标准：双方仅通过 GUI 就能走完全部业务流程（含写操作），不需要回终端。**
 口径真源：`docs/design/29-webui-gui-app.md`（与 `27-plugin-architecture.md` §6 同源；冲突以 29 为准）。
-**旧口径已废止**（"把账本投影装配成人能用的页面与只读路由"、三块第一屏 + 0 JS、UI 快照 hash）：见 29 §2。
+**旧口径与旧判据已按 29 §2 整体删除、不留副本**（本文件不再复述它们）：判据一律见 29 §1/§4。
 
 ## 归属行（本插件承载的需求）
 
@@ -29,7 +29,7 @@
 | FR-USREQ-001 | 「每一步都能在 APP 内闭环（含写操作）」的**写入口** | `tools/verify.sh webui` · `config-route` · `gates` · `rfq-deadline` · `ui-feedback` |
 | FR-USREQ-002 | 视觉基线（「像现代 app」） | **暂无机检**（矩阵 §3 登记为缺口；旧结构锚点判据已按 29 §2 删除） |
 | FR-USREQ-004 | 服务自述面 `GET /quotagent/api/routes`（projects & routes 的仓内一半） | `tools/verify.sh webui` |
-| FR-USREQ-005 | 面向用户的 app 定位（三块 + 子视图 + 「上手」入口），不是一堆报告 | `tools/verify.sh webui` |
+| FR-USREQ-005 | 面向用户的 app 定位（GUI 应用外壳：视图/面板/动作 + 「上手」入口），不是一堆报告 | `tools/verify.sh webui` |
 | FR-USREQ-011 | 双方各自视角是**不同路由**，不是一条 route | `tools/verify.sh webui` |
 
 ## 对外契约（provides / 依赖）
@@ -51,6 +51,20 @@
 | 「待我处理」（待签报价/待批准/待确认中标/待回澄清/超期未回；只列本人或本侧） | `code/identity.mjs` 的 `workbench()`（只读本侧账本 + 本侧 0600 待办件；`as_of` = 事实时刻） | 同上（换人/换侧列表变化 + 越侧 `side-mismatch` + 新门只出现在该侧） |
 | `DEF-025` 邮件/SMTP 配置可改可持久化（不必提权） | `tools/identity-mail-apply.py` → `config-apply.py`（唯一落盘者） | 同上（ops 侧可改、落 YAML、凭据不回显、业务身份 `/admin/config/` 仍 401） |
 | `DEF-026` 自助装卸**自己的**用户空间插件 | `code/identity.mjs` → `userPluginManager`（跨命名空间 `not-my-namespace`） | 同上（装载/卸载真变化 + 跨 ns 拒） |
+
+## 人员名册与角色（`P5` 批次；承载 `FR-UXWEB-001/002`、`FR-USREQ-001` 的这部分）
+
+| 面 | 实现 | 可执行验收命令 |
+|---|---|---|
+| **「同事」= 名册里的人**（不是「登录过的人」）：同侧成员 / 角色（可加可改）/ 直属关系 | `code/people.mjs`（`<ui_shared>/people/roster.json`，0700/**0600**、原子写、按侧隔离；**不进账本**，理由在文件头） | `python3 tmp/p5-people-verify.py`（2.x：名册可读 / 按侧隔离 / 未登录 401 / 0600） |
+| 名册/角色/直属/策略**在界面上可维护**（零终端） | `code/people-ui.mjs`（面板「人员名册与角色」+「名册表（逐行可改）」+ 动作 `people.member-add`/`member-save`/`member-remove`/`role-set`/`role-remove`/`policy-set`；本侧无管理员时 bootstrap，有管理员后只有管理员能改 ⇒ `admin-required`） | 同上（3.x：角色配置/新建角色/环拒/role-in-use/跨侧写拒） |
+| `@提及`/指派/转交**从名册取值**（带自动补全；未知名字如实拒） | `collab.mjs#colleagues` 取 `people.members(side)`；`GET /api/people/suggest`（补全的服务端一半）+ 字段声明 `suggest_url`/`mention_suggest_url`（`ui-surface.mjs`）⇒ 客户端 `datalist` / 正文打 `@` 弹候选（`assets/app.js`） | 同上（4.x：候选==名册 / 不含异侧 / `unknown-colleague` / `unresolved` / `cross-side-mentioned`） |
+| **按角色限动作**（不是限视图）：转交别人的活、超额批准 | `collab.mjs#assign`（`transfer-not-yours`：只有归我/我指派的或在 `policy.transfer.override_roles` 里）+ `people.mjs#guardAction`（额度规则读**事实**，`role-limit-exceeded` + 该找哪个角色）—— 都在动作的服务端一半**之前**否决（**账本与待办件零新增**） | 同上（5.x/6.x：越权转交/超额批准/额度可配、**账本 md5 与行数不变**） |
+| **角色不改变签署权** | 额度/角色判据在 `/api/action/<id>` 的「署名 == 会话身份」之后（`webui.mjs` + `app-shell.mjs#runAction`）：只能否决、不能放开 | 同上（6.7/6.8：`403 signer-mismatch` / 未登录 401，账本零新增） |
+| 通知偏好 / 已读 / **布局** / 筛选**整份服务端化**（按身份，跨设备仍在） | `webui.mjs` 的 `/api/ui/notif-state`（`<ui_shared>/webui/notif-state.json`，0700/**0600**、有界、洗净 + `dropped`）+ `assets/app.js` 的 load/push（localStorage 降为离线镜像） | 同上（8.x：换浏览器读回同一份 / 按身份隔离 / 未登录 401 / 洗净计数 / 0600） |
+| 只读路由的**方法围栏**（405 + `Allow: GET`，先判方法再判身份） | `webui.mjs` 的 `GET_ONLY_PATTERNS`（含 `/api/collab/{hub,object,store}`、`/api/people/{roster,suggest,store}`） | `tools/verify.sh quote-draft`（第 ③ 条：`/api/routes` 里 81 条只读路由逐条 POST，反向对照 28 条写路由不误报） |
+
+用法、配置与边界：`docs/people-and-roles.md`（本插件内）；口径真源 `docs/design/29-webui-gui-app.md` §8/§9。
 
 ## 本插件不承载
 

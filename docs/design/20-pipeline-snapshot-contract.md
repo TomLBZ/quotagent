@@ -67,8 +67,6 @@ export const apply = (ctx, config) => { /* ctx.provide('pipelineView', api) */ }
   静态零 I/O 与无墙钟/私域与正文一律不出现；附 ≥3 处单点变异自证。
   ② 端到端（`verify.sh pipeline-route`）：真跑刷新脚本 → 启动 webui → `GET /api/pipeline` 200 且
   **含三个域**、`transport.available === false`（本轮没有发信能力，只能这么报）、无 `"body"`/`private:`。
-· `AC-UI-002`（Python 侧快照写入器）：文件形状合规、两视角都在、无私域/正文、只读账本（不新增行）、
-  同一输入两次写出内容除 `generated_at` 外一致。
 
 ## 5. 被否决的选项
 

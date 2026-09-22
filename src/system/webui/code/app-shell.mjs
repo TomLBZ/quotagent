@@ -19,6 +19,8 @@ import { join, relative, resolve } from 'node:path'
 import { createUiSurface, PANEL_KINDS } from './ui-surface.mjs'
 import { createCollabStore } from './collab.mjs'
 import { createCollabSurface, COLLAB_PLUGIN_ID } from './collab-ui.mjs'
+import { createPeopleStore } from './people.mjs'
+import { createPeopleSurface, PEOPLE_PLUGIN_ID } from './people-ui.mjs'
 
 export const SURFACE_VERSION = 1
 /** 外壳自己的键盘快捷键（机制；插件注册的在注册面里）。 */
@@ -89,6 +91,14 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    * 写进账本会破坏审计语义，并让"人对界面的协同痕迹"变成模型可见输入）。
    */
   const collab = createCollabStore({ root, sharedDir, sessionsFile, sides, log: (msg) => log?.(msg) })
+  /**
+   * **人员名册与角色**（同侧成员 / 角色 / 直属关系 / 按角色限动作）：同样是**机制**，不是业务语义 ——
+   * 它只存"谁在册、什么角色、额度多少、谁归谁"，并回答"这次请求能不能被执行"（只收紧、不放开）。
+   * 数据落 `<ui_shared>/people/roster.json`（0600，按侧隔离），**不写账本**（理由见 `people.mjs` 文件头：
+   * 名册/额度是**可改的配置**，写进账本会改变审计语义并变成模型可见输入）。
+   * 它可以被后补配置（会话文件 ⇒ "今天谁登录过"；合法侧 ⇒ 名册按侧分片）。
+   */
+  const people = createPeopleStore({ root, sharedDir, sessionsFile, sides, log: (msg) => log?.(msg) })
   const pythonBin = DEFAULT_PYTHON
   const contributions = new Map()        // plugin_id → {module, file, entries: [{kind,id}], error}
   const actionLog = []                   // 机制层动作流水（通知中心用；有界）
@@ -229,6 +239,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     /** **同侧协作**句柄（指派/转交、关注、评论与 `@同事`、活动流、已读）：机制，不认识对象类。
      *  插件可以拿它把协作挂到自己的对象上；`side`/`actor` 必须来自 `ctx.identity`（会话），不由表单给。 */
     collab,
+    /** **人员名册与角色**句柄（同侧成员 / 角色 / 直属关系 / 按角色限动作）：机制，不认识业务对象。
+     *  `collab` 从这里取"同事是谁"（不再靠"登录过的人"）；动作总线用它判"这次请求能不能被执行"。 */
+    people,
     /** 宿主自己注入的**服务句柄**（机制：按名字取；不知道任何服务的业务含义）。 */
     service: (name) => (services && typeof services === 'object' ? services[name] : undefined) ?? null,
     services: () => Object.keys(services ?? {}),
@@ -242,6 +255,19 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    */
   const collabSurface = createCollabSurface({ surface, host, views: views.filter((view) => view !== 'home'),
     log: (msg) => say(msg) })
+  /**
+   * 名册面（`people-ui.mjs`）：把**人员名册与角色**搬上界面（面板 + 维护动作 + 状态读数）。与协作面一样是
+   * 外壳自带的机制贡献：视图列表由装配方给（身份面建好之后才知道），对象类与它无关（名册不看对象）。
+   */
+  const peopleSurface = createPeopleSurface({ surface, host, views: views.filter((view) => view !== 'home'),
+    log: (msg) => say(msg) })
+  const syncPeople = () => {
+    const out = peopleSurface.sync()
+    if (out && out.panels !== undefined) {
+      say(`名册面：视图 ${out.views.join('/') || '（无）'} · 面板 ${out.panels} 组`)
+    }
+    return out
+  }
   const syncCollab = () => {
     const out = collabSurface.sync()
     if (out && out.object_panels !== undefined) {
@@ -262,6 +288,20 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     const synced = list ? collabSurface.configure({ views: list }) : syncCollab()
     return { ok: true, sessions_file: store.sessions_file, sides: store.sides,
       views: list ?? collabSurface.viewsOf(), object_panels: synced.object_panels, kinds: synced.kinds }
+  }
+
+  /**
+   * 装配期后补：名册面需要**身份面**的同两样东西（会话文件 ⇒ "今天谁登录过"；合法侧 ⇒ 名册按侧分片）。
+   * 协作面也吃同一份配置（`collab.mjs` 的同一份名册句柄由 `configure` 补进去）。
+   */
+  const configurePeople = ({ sessionsFile: file, sides: nextSides, views: nextViews } = {}) => {
+    const store = people.configure({ sessionsFile: file, sides: nextSides })
+    collab.configure({ people, sides: store.sides })
+    const list = Array.isArray(nextViews) && nextViews.length
+      ? nextViews.filter((view) => view !== 'home' && store.sides.includes(view)) : null
+    const synced = list ? peopleSurface.configure({ views: list }) : syncPeople()
+    return { ok: true, sessions_file: store.sessions_file, sides: store.sides,
+      views: list ?? peopleSurface.viewsOf(), panels: synced.panels }
   }
 
   // ------------------------------------------------------------------ 插件贡献装载（发现式：任何插件放 code/ui.mjs 就会被装载）
@@ -298,6 +338,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       summary.push(verdict)
     }
     syncCollab()          // 对象类都声明完了：把协作面挂到它们上面（并撤掉已经不存在的）
+    syncPeople()          // 名册面不依赖对象类，但视图列表同样以装配方给的为准
     return summary
   }
 
@@ -352,6 +393,15 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    */
   const loadPlugin = async (pluginId) => {
     // 协作面是**外壳自带的机制贡献**（`collab-ui.mjs`，不是磁盘上的插件文件）：它只有"装着/撤掉"两种状态。
+    if (pluginId === PEOPLE_PLUGIN_ID) {
+      const before = peopleSurface.contributions
+      const synced = syncPeople()
+      return { ok: true, code: before ? 'already-loaded' : 'loaded', plugin_id: pluginId,
+        file: 'src/system/webui/code/people-ui.mjs', built_in: true, registered: synced.panels,
+        next_action: before
+          ? '名册面本来就在（外壳自带）：要撤掉用 POST .../unload，要重建用 POST .../reload'
+          : '名册面已挂到各视图上（刷新页面即可看到「人员名册与角色」与维护动作）' }
+    }
     if (pluginId === COLLAB_PLUGIN_ID) {
       const before = collabSurface.contributions
       const synced = syncCollab()
@@ -389,6 +439,15 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    */
   const reloadPlugin = async (pluginId) => {
     // 协作面（外壳自带）：reload = 撤掉它的全部贡献后按当前代码重建（并重新挂到最新声明的对象类上）。
+    if (pluginId === PEOPLE_PLUGIN_ID) {
+      peopleSurface.dispose()
+      const synced = syncPeople()
+      return { ok: true, code: 'reloaded', plugin_id: pluginId, built_in: true,
+        file: 'src/system/webui/code/people-ui.mjs', module_version: `people.${Date.now()}`,
+        registered: synced.panels,
+        next_action: '名册面已重建（「人员名册与角色」+ 维护动作都在）；'
+          + '名册**数据**不受影响（它落在 <ui_shared>/people/ 下的 0600 文件里，不是贡献）' }
+    }
     if (pluginId === COLLAB_PLUGIN_ID) {
       collabSurface.dispose()
       const synced = syncCollab()
@@ -440,11 +499,21 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
           .map((item) => ({ kind: 'panel', id: item.id, title: item.title }))),
       refused: [], error: null,
       note: '同侧协作（指派/转交、关注、评论与 @同事、活动流、我的/我指派的/全部）：外壳自带的机制贡献',
+    }, {
+      // 外壳自带的**名册/角色面**（同样不是磁盘上的插件文件）：一样列在这里，一样可卸载/重建（规则 1）
+      plugin_id: PEOPLE_PLUGIN_ID, file: 'src/system/webui/code/people-ui.mjs', built_in: true,
+      mtime: null, loaded: peopleSurface.contributions > 0,
+      contributions: surface.byKind('action').filter((item) => item.plugin_id === PEOPLE_PLUGIN_ID)
+        .map((item) => ({ kind: 'action', id: item.id, title: item.title }))
+        .concat(surface.byKind('panel').filter((item) => item.plugin_id === PEOPLE_PLUGIN_ID)
+          .map((item) => ({ kind: 'panel', id: item.id, title: item.title }))),
+      refused: [], error: null,
+      note: '人员名册与角色（同侧成员 / 角色 / 直属关系 / 按角色限动作）：外壳自带的机制贡献',
     }],
     mechanism: '装载面是**机制**：按磁盘上的 `code/ui.mjs` 发现式装载；`reload` = 撤掉这个插件的全部贡献后按'
       + '当前文件内容重新 import（带 ?v=<mtime> 击穿模块缓存）⇒ 改插件 UI 不必重启进程。'
       + '卸载后它的视图/面板/动作/快捷键/通知源/状态项一起消失（AGENTS.md 规则 1）；'
-      + '标了 `built_in` 的那条（协作面）是外壳自己的贡献，同样可卸载/重建',
+      + '标了 `built_in` 的那两条（协作面 / 名册面）是外壳自己的贡献，同样可卸载/重建',
     next_action: `POST ${prefix}/api/ui/plugins/<plugin_id>/reload 让磁盘上的新代码在**当前进程**里生效`,
   })
 
@@ -691,6 +760,29 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       // **会话身份**（机制）：插件可以据此判定"同侧人类之间"的协作；表单里的字段改不动它。
       identity: normIdentity(who),
       action: { id: action.id, title: action.title, plugin_id: action.plugin_id, permission: action.permission } }
+    // ---- **按角色限动作**（机制；`people.mjs` 的策略面）：只**收紧**动作，永不放开 ----------------------
+    // 判据在名册的 `policy.amount_limit` 里（配置：哪个动作、金额从哪条事实取、什么单位）：
+    // 动作金额超过**我的角色**额度 ⇒ 在动作的服务端一半执行**之前**拒绝（账本/待办件零新增），并告诉你该找谁。
+    // 位置与纪律：它在人签门（`/api/action/<id>` 的「署名 == 会话身份」）**之后**、插件自己的服务端一半**之前** ——
+    // 角色既不能替签、也不能跳过人工门；它只能否决（"角色不改变签署权"这条在这里是**结构性**的）。
+    const guardVerdict = people.guardAction({ action_id: action.id, input, identity: ctx.identity,
+      view: ctx.view, rows: (view) => host.rows(view) })
+    if (guardVerdict) {
+      // 拒绝回执带上**可核对的读数**（我是什么角色、额度多少、这笔金额多少、该找哪个角色）：
+      // 把 verdict 里的结构化字段（`refusal` 除了 ok/code/reason/next_action 之外的键）原样透到 `result`。
+      const { ok: _ignored, code: guardCode, reason: guardReason, next_action: guardNext, ...guardRest } = guardVerdict
+      const guardDetail = Object.keys(guardRest).length ? guardRest : null
+      const entry = { id: `act-${Date.now()}-${action.id}`, level: 'bad',
+        title: `${action.title} → ${guardCode}`, body: flat(guardReason),
+        next_action: flat(guardNext), ref: null, at: host.now(), plugin_id: action.plugin_id,
+        action: action.id, actor: ctx.identity ? ctx.identity.human : '',
+        guard: { code: guardCode, ...(guardDetail ?? {}) } }
+      actionLog.unshift(entry)
+      if (actionLog.length > 100) actionLog.length = 100
+      return { ok: false, code: guardCode, action: action.id, reason: guardReason,
+        next_action: guardNext, result: guardDetail,
+        guard: 'role-limit', ledger: 'zero-management' }
+    }
     let out = null
     try {
       out = await action.server(ctx, input)
@@ -718,6 +810,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const unload = (pluginId) => {
     // 协作面（外壳自带）：撤掉它的贡献时把机制侧的账也清干净（否则再 load 会说"已经装着"）
     if (pluginId === COLLAB_PLUGIN_ID) collabSurface.dispose()
+    if (pluginId === PEOPLE_PLUGIN_ID) peopleSurface.dispose()
     const removed = surface.disposePlugin(pluginId)
     const slotRows = []
     if (slots && typeof slots.describe === 'function') {
@@ -746,10 +839,10 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       id: safe.id } }).replace(/</g, '\\u003c')
     // **无脚本回退导航**：脚本没跑起来（或禁用 JS / 爬虫 / 屏幕阅读器）时，人也能到达每一道与上手页 ——
     // 这是可访问性与渐进增强，不是"第二套页面"：正式界面仍由客户端按注册面渲染。
-    const fallback = ['', 'contractor/', 'supplier/', 'ops/', 'admin/', 'start/', 'overview/']
-      .map((path) => `<a href="${prefix}/${path}">${esc({ '': '总览（旧页）', 'contractor/': '承包商视角',
-        'supplier/': '供应商视角', 'ops/': '运维视角', 'admin/': '系统管理', 'start/': '上手（token／配置放哪里？）',
-        'overview/': '账本总览' }[path] ?? path)}</a>`).join(' · ')
+    const fallback = ['', 'contractor/', 'supplier/', 'ops/', 'admin/', 'start/']
+      .map((path) => `<a href="${prefix}/${path}">${esc({ '': '工作台', 'contractor/': '承包商视角',
+        'supplier/': '供应商视角', 'ops/': '运维视角', 'admin/': '系统管理',
+        'start/': '上手（token／配置放哪里？）' }[path] ?? path)}</a>`).join(' · ')
     return `<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(config.page_title ?? 'quotagent')} · ${esc(title)}</title>
@@ -812,6 +905,12 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       object_panels: collabSurface.objectPanels, plugin_id: COLLAB_PLUGIN_ID,
       http: { object: `${prefix}/api/collab/object?view=<view>&kind=<kind>&id=<id>`,
         hub: `${prefix}/api/collab/hub`, store: `${prefix}/api/collab/store` } },
+    // **人员名册与角色**（同侧成员 / 角色 / 直属关系 / 按角色限动作）：外壳机制的一部分，同样按注册面撤销。
+    // 这里给出它的存储自述与**策略读数** —— 用来对账"它没进账本、也没进投影"，以及"谁有额度"。
+    people: { ...people.describe(), contributions: peopleSurface.contributions,
+      panels: peopleSurface.panelCount, plugin_id: PEOPLE_PLUGIN_ID,
+      http: { roster: `${prefix}/api/people/roster`, suggest: `${prefix}/api/people/suggest`,
+        store: `${prefix}/api/people/store` } },
     plugins: [...contributions.entries()].map(([plugin_id, info]) => ({ plugin_id,
       entries: info.entries ?? [], error: info.error ?? null, unloaded: info.unloaded === true })),
     next_action: '动作一律 POST ' + `${prefix}/api/action/<id>` + '（含 JSON 入参）；'
@@ -823,5 +922,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     surfaceJson, shellHtml, asset, scanContributions, runPython, stage,
     // **同侧协作**（机制）：HTTP 路由（`webui.mjs`）按会话身份拿侧与 actor，再调这里的四件事。
     collab, collabSurface, syncCollab, configureCollab, collabPluginId: COLLAB_PLUGIN_ID,
+    // **人员名册与角色**（机制）：HTTP 路由按会话身份拿侧；`collab` 的候选名单也从它来。
+    people, peopleSurface, syncPeople, configurePeople, peoplePluginId: PEOPLE_PLUGIN_ID,
     get contributions() { return contributions } }
 }

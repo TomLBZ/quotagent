@@ -88,7 +88,7 @@ items[i]（4 键）= { item_id, code, qty, unit }
 |---|---|
 | `host/modules/projection.mjs` | 白名单与作用域的唯一真源（`projectDeliveries`）；**纯函数**（不读文件、不取墙钟、零写面） |
 | `host/lib/ledger-view.mjs` | `realms()`：身份来自本视角自己的账本 |
-| `host/modules/webui.mjs` | 只读装配投递信封（`rfq_delivery` 配置：文件或目录、按文件名排序、有界）+ 首页投递块（`data-rfq-*` 抓手，**0 行 `<script>` / 0 内联事件**）+ `projectionOf()` 一次请求一次投影 |
+| `host/modules/webui.mjs` | 只读装配投递信封（`rfq_delivery` 配置：文件或目录、按文件名排序、有界）+ 首页投递块（`data-rfq-*` 抓手，**脚本只来自受信来源**）+ `projectionOf()` 一次请求一次投影 |
 | `host/cli.mjs`、`tools/webui-serve.py` | `--rfq-delivery`（缺省指向 g1 走查产出的 `tmp/ui-shared/contractor/01-package.json`） |
 | 门 | `tools/verify.sh rfq-visibility` = 围栏门 `host/t287-rfq-visibility-gate.mjs`（26 条断言 + **4 处单点变异全红**）+ 真路由门 `tools/check-rfq-visibility-route.py`（真起两个进程、两种身份） |
 

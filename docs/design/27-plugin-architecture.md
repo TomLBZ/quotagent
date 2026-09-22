@@ -259,7 +259,7 @@ ADR-0007 定的是"**运行环境仅标准库、不引入第三方运行时依�
 | `@cordisjs/plugin-notifier@0.8.0` | 待建的 `system/notification` | **宿主侧优先直接用**（Python 侧仍自研，因为发信要走账本） |
 | `@cordisjs/mail@0.2.1` + `@cordisjs/plugin-mail-smtp@0.2.1`（nodemailer） | `src/system/mail`（Python：`mail.py`/`mail_transport.py`） | **判为不可直接替换**：本仓邮件是账本事实（`mail/*` 事件 + 唯一写者），MTA 只是它的一种传输；可把 SMTP 传输换成上游（需 ADR） |
 | `@cordisjs/plugin-market@0.5.1` | `host/modules/plugin-market.mjs` | 部分可替换（市场 UI/清单来源不同）；本仓的"三真源一致"是本领域要求，保留 |
-| `@cordisjs/plugin-webui@0.8.2`（+ `-logger-webui`/`-server-webui`/…） | `src/system/webui` 的页面框架 | **可替换候选**（Node 侧 console 框架）；本仓 SSR 契约（0 内联脚本、四道视角）须先对齐才可换 |
+| `@cordisjs/plugin-webui@0.8.2`（+ `-logger-webui`/`-server-webui`/…） | `src/system/webui` 的页面框架 | **可替换候选**（Node 侧 console 框架）；本仓 GUI 外壳契约（受信来源脚本 + 注册面，见 29）须先对齐才可换 |
 | `@cordisjs/plugin-insight@4.5.1` | `tools/check-plugin-inventory.py` 的依赖图能力 | 可复用于可视化；本仓的"清单↔模块双向"仍自研 |
 | `@cordisjs/plugin-timer@1.1.3`、`-env@1.0.1`、`-cli@1.1.2`、`@cordisjs/schema@0.1.1` | 定时/环境/CLI/schema 自研件 | 宿主侧优先直接用 |
 
@@ -287,7 +287,7 @@ Python 内核（必须保持仅标准库可运行，ADR-0007）与账本写路�
 | 每个插件至少归属 1 条 FR/AC | `tools/verify.sh coverage` |
 | 生命周期六动词可达 | `tools/plugin.sh list --json`（已实现）；门 `tools/verify.sh plugin-lifecycle`（EV-165） |
 | 卸载零残留（三层同一判据） | `tools/verify.sh user-space`（用户空间既有实现）；`plugin-lifecycle` 门对三层同一套接口断言 effects 归零 |
-| webui 零业务耦合 | §6.3 的四条**已加入** `tools/verify.sh plugin-lifecycle`（实体 `src/system/webui/code/webui.mjs` 0 次出现样板插件 id/标题 + 机制行 0 业务名词 + 两页 0 内联脚本 + 注册面只读路由 405） |
+| webui 零业务耦合 | §6.3 的四条**已加入** `tools/verify.sh plugin-lifecycle`（实体 `src/system/webui/code/webui.mjs` 0 次出现样板插件 id/标题 + 机制行 0 业务名词 + 两页脚本只来自受信来源 + 注册面只读路由 405） |
 | cordis 边界不漂移 | §7 的包名/版本与 `src/system/runtime/package.json`、锁文件一致 |
 
 ## 9. 未决

@@ -62,18 +62,18 @@
     muted: state.notif.muted, minLevel: state.notif.minLevel })
 
   /**
-   * **通知偏好与已读的服务端化**（跨浏览器/跨设备仍在；0600 落盘在服务端）。
+   * **通知偏好 / 已读 / 面板布局 / 筛选片的服务端化**（跨浏览器、跨设备仍在；0600 落盘在服务端）。
    *
-   * 为什么：原先只写 localStorage ⇒ 换浏览器/换设备就重来（P3 走查如实登记的摩擦）。
+   * 为什么：原先这些只写 localStorage ⇒ 换浏览器/换设备就重来（P3 走查如实登记的摩擦）。
    * 口径：登录后有 `GET/POST /api/ui/notif-state`（按**会话身份**落 0600 文件）⇒ 它成为真源，
    * localStorage 降为**离线镜像**（未登录 / 服务端不可写时仍能用，但会**如实说明**只在本浏览器有效）。
-   * 服务端还没有这个人的记录时，把本浏览器里攒下的状态**一次性推上去**（迁移，不丢用户标过的已读）。
+   * 服务端还没有这个人的记录时，把本浏览器里攒下的状态**一次性推上去**（迁移，不丢用户标过的已读/拖过的面板）。
    */
   let notifSource = 'local'          // 'server' | 'local'
   let notifStateNote = '未登录：只在本浏览器有效'
   let notifPushTimer = null
   const notifPayload = () => ({ state: { read: [...state.notif.read].slice(-500), muted: state.notif.muted,
-    min_level: state.notif.minLevel } })
+    min_level: state.notif.minLevel, layout: state.layout, filters: state.filters } })
   async function loadNotifState() {
     const out = await getJson('/api/ui/notif-state')
     if (!out.ok) {
@@ -82,21 +82,37 @@
       return out
     }
     notifSource = 'server'
-    notifStateNote = `存在服务端（按会话身份 ${out.identity || ''}）：换浏览器、换设备仍在`
+    notifStateNote = `存在服务端（按会话身份 ${out.identity || ''}）：通知偏好 / 已读 / **布局** / 筛选都在，`
+      + '换浏览器、换设备仍在'
     const localRead = [...state.notif.read]
     const localMuted = [...state.notif.muted]
     const localLevel = state.notif.minLevel
+    const localLayout = state.layout
+    const localFilters = state.filters
     state.notif.read = new Set(Array.isArray(out.state?.read) ? out.state.read : [])
     state.notif.muted = Array.isArray(out.state?.muted) ? out.state.muted : []
     if (['info', 'warn', 'bad'].includes(out.state?.min_level)) state.notif.minLevel = out.state.min_level
+    // 布局 / 筛选：服务端有记录 ⇒ 它就是真源（这正是"换设备仍在"）；服务端空 ⇒ 用本浏览器的镜像。
+    const serverLayout = out.state?.layout && typeof out.state.layout === 'object' ? out.state.layout : {}
+    const serverFilters = out.state?.filters && typeof out.state.filters === 'object' ? out.state.filters : {}
+    if (Object.keys(serverLayout).length) state.layout = serverLayout
+    if (Object.keys(serverFilters).length) state.filters = serverFilters
     saveNotif()
+    store.set(KEYS.layout, state.layout)
+    store.set(FILTER_KEY, state.filters)
     const serverEmpty = state.notif.read.size === 0 && state.notif.muted.length === 0
-      && state.notif.minLevel === 'info'
-    if (serverEmpty && (localRead.length || localMuted.length || localLevel !== 'info')) {
+      && state.notif.minLevel === 'info' && Object.keys(serverLayout).length === 0
+      && Object.keys(serverFilters).length === 0
+    if (serverEmpty && (localRead.length || localMuted.length || localLevel !== 'info'
+      || Object.keys(localLayout || {}).length || Object.keys(localFilters || {}).length)) {
       state.notif.read = new Set(localRead)
       state.notif.muted = localMuted
       state.notif.minLevel = localLevel
+      state.layout = localLayout
+      state.filters = localFilters
       saveNotif()
+      store.set(KEYS.layout, state.layout)
+      store.set(FILTER_KEY, state.filters)
       pushNotifState(true)
     }
     return out
@@ -133,6 +149,7 @@
   const setFilter = (key, value) => {
     state.filters = { ...state.filters, [key]: String(value ?? '') }
     store.set(FILTER_KEY, state.filters)
+    pushNotifState()            // 筛选也服务端化：换浏览器/换设备仍是这套筛选
   }
   /** 收集桶：先取面板声明的 `data.buckets`（有计数），再补条目自带但没声明过的 `bucket`。 */
   function bucketsOf(data, rows) {
@@ -161,7 +178,7 @@
       + `<span class="q-bucketbar-label">筛选</span>`
       + chip('', '全部', rows.length)
       + buckets.map((item) => chip(item.key, item.label, item.count)).join('')
-      + `<span class="q-hint">只看你关心的那一类（存本浏览器；不改任何事实）</span></div>`
+      + `<span class="q-hint">只看你关心的那一类（按你的身份存在服务端：换浏览器/换设备仍是这套筛选；不改任何事实）</span></div>`
   }
 
 
@@ -680,6 +697,7 @@
   const saveLayout = (next) => {
     state.layout[layoutKey()] = { order: next.order, collapsed: next.collapsed, hidden: next.hidden }
     store.set(KEYS.layout, state.layout)
+    pushNotifState()            // 布局**服务端化**：按身份落 0600 文件 ⇒ 换浏览器/换设备仍是这套布局
   }
   /** 按保存的顺序排面板（没记过的面板按插件声明的 order 排在后面 —— 不猜，只补位）。 */
   function orderedPanels() {
@@ -702,7 +720,9 @@
     const layout = layoutOf()
     saveLayout({ order: shown, collapsed: layout.collapsed, hidden: layout.hidden })
     renderPanels()
-    toast('ok', '面板顺序已保存', '刷新页面后仍是这个顺序（布局存在本浏览器里）')
+    toast('ok', '面板顺序已保存', notifSource === 'server'
+      ? `已按你的身份写到服务端（${notifStateNote}）`
+      : '刷新页面后仍是这个顺序（未登录：只在本浏览器里）')
   }
   function dropPanel(dragId, targetId, before) {
     const shown = orderedPanels().list.map((item) => item.panel.id).filter((id) => id !== dragId)
@@ -732,7 +752,9 @@
       + `<button data-layout="collapse-all">收起全部</button>`
       + `<button data-layout="expand-all">展开全部</button>`
       + `<button data-layout="reset">恢复默认布局</button>`
-      + `<span class="q-hint">拖动面板标题左边的 ⠿ 换顺序；键盘：焦点在 ⠿ 上按 Alt+↑/↓</span></div>`
+      + `<span class="q-hint">拖动面板标题左边的 ⠿ 换顺序；键盘：焦点在 ⠿ 上按 Alt+↑/↓`
+      + `${notifSource === 'server' ? '｜布局按你的身份存在服务端（换浏览器/换设备仍在）'
+        : '｜布局只在本浏览器（登录后落服务端）'}</span></div>`
   }
 
   /**
@@ -1350,9 +1372,14 @@
     }
     const inputmode = field.type === 'number' ? ' inputmode="decimal"' : ''
     const hint = field.type === 'number' ? `<span class="q-help">只填数字（金额一律<b>整数分</b>：8600 = 86.00）</span>` : ''
+    // 自动补全（机制）：声明了 `suggest_url` 的字段挂一个 `<datalist>`，候选由**本服务**的只读接口给
+    // （`openAction` 里异步灌进去）；声明了 `mention_suggest_url` 的文本域在打 `@` 时弹候选。
+    const suggest = field.suggest_url
+      ? `<datalist data-suggest="${attr(field.name)}" id="dl-${attr(field.name)}"></datalist>`
+        + `<span class="q-help">候选来自服务端（自动补全；也可以照旧手敲）</span>` : ''
     return `<div class="q-field"><label for="${attr(id)}">${esc(field.label)}${field.required ? ' *' : ''}</label>`
       + `<input id="${attr(id)}" name="${attr(field.name)}" type="text"${inputmode} value="${attr(v)}"`
-      + ` data-field-type="${attr(field.type)}">${help}${hint}`
+      + ` data-field-type="${attr(field.type)}">${help}${hint}${suggest}`
       + `<span class="q-fielderr" data-err="${attr(field.name)}" role="alert"></span></div>`
   }
 
@@ -1461,6 +1488,9 @@
     openModal(body, 'q-action-modal')
     const modal = el('q-modal')
     modal.querySelector('[data-close]').addEventListener('click', closeModal)
+    // 自动补全（机制）：`suggest_url` ⇒ datalist；`mention_suggest_url` ⇒ 正文里打 `@` 弹候选。
+    wireSuggest(modal, fields)
+    wireMention(modal, fields)
     // 上一次失败的结果（被拒原因 / errors / 下一步）跟着表单一起回来 —— 不能只在 toast 里一闪而过
     if (priorResult) {
       const holder = modal.querySelector('[data-result]')
@@ -1539,6 +1569,96 @@
       + `${out.next_action ? `<div class="q-hint">下一步：<code>${esc(out.next_action)}</code></div>` : ''}`
       + `${result ? `<details class="q-mech"><summary>原始回执（${Object.keys(result).length} 个键）</summary>`
         + `<pre>${esc(JSON.stringify(result, null, 1).slice(0, 4000))}</pre></details>` : ''}</div>`
+  }
+
+  // ---------------------------------------------------------------- 自动补全（机制：建议列表来自**本服务**的只读接口）
+  /**
+   * 字段可以声明 `suggest_url`（这个值从一份服务端建议列表里挑）与 `mention_suggest_url`
+   * （长文本里打 `@` 弹候选）。机制只做三件事：**取一次**（同一个地址一次会话内只取一次）、
+   * **渲染**（`<datalist>` 原生候选 / 文本域上的 `@` 下拉）、**填进去**（候选的 `value` 就是入参值）。
+   * 它不认识任何建议内容的语义：谁来提供由插件/机制自己声明（例如名册面给"本侧在册的人"）。
+   */
+  const suggestCache = new Map()
+  async function suggestItems(url) {
+    if (suggestCache.has(url)) return suggestCache.get(url)
+    const promise = getJson(url).then((out) => (out && out.ok && Array.isArray(out.items) ? out.items : []))
+      .catch(() => [])
+    suggestCache.set(url, promise)
+    return promise
+  }
+  /** 把建议列表灌进 `<datalist>`（原生候选：键盘上下选、可照旧手敲）。 */
+  function wireSuggest(modal, fields) {
+    for (const field of fields) {
+      if (!field.suggest_url) continue
+      const holder = modal.querySelector(`datalist[data-suggest="${field.name}"]`)
+      const input = modal.querySelector(`[name="${field.name}"]`)
+      if (!holder || !input) continue
+      suggestItems(field.suggest_url).then((items) => {
+        holder.innerHTML = items.map((item) => `<option value="${attr(item.value)}">${esc(item.label || '')}</option>`)
+          .join('')
+        input.setAttribute('list', holder.id)
+        input.setAttribute('autocomplete', 'off')
+      })
+    }
+  }
+  /**
+   * 文本域里的 `@` 候选：在光标前出现 `@<前缀>` 时弹出**名册**里的候选；点/回车/Tab 就替换掉那一段。
+   * 为什么在机制层做：@ 人这件事对任何"在对象上说话"的动作都成立（协作面就是这么用它）。
+   */
+  function wireMention(modal, fields) {
+    for (const field of fields) {
+      if (!field.mention_suggest_url) continue
+      const area = modal.querySelector(`textarea[name="${field.name}"]`)
+      if (!area) continue
+      const box = document.createElement('div')
+      box.className = 'q-mention'
+      box.setAttribute('role', 'listbox')
+      box.style.display = 'none'
+      area.parentNode.insertBefore(box, area.nextSibling)
+      const tokenAt = () => {
+        const upto = area.value.slice(0, area.selectionStart)
+        const hit = /(^|[\s(（[【,，。;；:：])@([a-z0-9._-]*)$/.exec(upto)
+        return hit ? { start: upto.length - hit[2].length - 1, prefix: hit[2] } : null
+      }
+      const close = () => { box.style.display = 'none'; box.innerHTML = '' }
+      const insert = (value) => {
+        const token = tokenAt()
+        if (!token) return close()
+        const before = area.value.slice(0, token.start)
+        const after = area.value.slice(area.selectionStart)
+        const text = `@${value} `
+        area.value = `${before}${text}${after}`
+        const caret = before.length + text.length
+        area.setSelectionRange(caret, caret)
+        area.focus()
+        close()
+      }
+      const refresh = async () => {
+        const token = tokenAt()
+        if (!token) return close()
+        const items = (await suggestItems(field.mention_suggest_url))
+          .filter((item) => String(item.value).startsWith(token.prefix) && String(item.value) !== token.prefix)
+          .slice(0, 8)
+        if (!items.length) return close()
+        box.innerHTML = `<span class="q-hint">名册里的候选（点一个填进去，也可以照旧手敲）：</span>`
+          + items.map((item) => `<button type="button" data-mention="${attr(item.value)}">`
+            + `${esc(item.label || `@${item.value}`)}</button>`).join('')
+        box.style.display = 'block'
+        box.querySelectorAll('[data-mention]').forEach((node) => node.addEventListener('click',
+          () => insert(node.dataset.mention)))
+      }
+      area.addEventListener('input', refresh)
+      area.addEventListener('keyup', () => { if (tokenAt()) refresh() })
+      area.addEventListener('blur', () => setTimeout(close, 150))
+      area.addEventListener('keydown', (ev) => {
+        if (box.style.display === 'none') return
+        const first = box.querySelector('[data-mention]')
+        if (!first) return
+        if (ev.key === 'Enter' || ev.key === 'Tab') { ev.preventDefault(); insert(first.dataset.mention) }
+        if (ev.key === 'Escape') { ev.preventDefault(); close() }
+      })
+      refresh()
+    }
   }
 
   function openModal(bodyHtml, id) {

@@ -242,8 +242,6 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "domain/sync", "src/domain/sync/tests/checks_sync.py"),
     "src/quotagent/qa/checks_terms.py": (
         "domain/terms", "src/domain/terms/tests/checks_terms.py"),
-    "src/quotagent/qa/checks_ui_snapshot.py": (
-        "system/webui", "src/system/webui/tests/checks_ui_snapshot.py"),
     # --- 本批（EV-177 / T-327）：`tools/**` 非薄入口 **12 个**（8 个路由门 + 4 个平台门）搬进各自插件的
     # `tests/`（旧位置留**薄转发**，`runpy` 按目标路径装载）；实现只改一处 —— `ROOT` 推导
     # `Path(__file__).resolve().parents[1]`（`tools/` 下）→ `parents[4]`（`src/<层>/<插件>/tests/` 下）。
@@ -337,7 +335,7 @@ RELOCATED: dict[str, tuple[str, str]] = {
     # `manual-check.py`）。旧位置留 `runpy` 薄转发；实现只改一处 —— `ROOT` 推导 `parents[1]`
     # （`tools/` 下）→ `parents[4]`（`src/<层>/<插件>/{tests,tools}/` 同为四层上溯），外加**先改读方**
     # （按路径装载被检查实体的各处：check-config-route / check-mail-transport ×2 / mail_transport /
-    # checks_ui_snapshot / checks_qprep / check-quote-draft-route / check-run-once）。
+    # checks_qprep / check-quote-draft-route / check-run-once）。
     "tools/check-run-once.py": (
         "system/runtime", "src/system/runtime/tests/check-run-once.py"),
     "tools/check-run-clone.py": (

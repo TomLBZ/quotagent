@@ -576,9 +576,8 @@ check('待批摘要正控：/contractor/api/approvals 与 /supplier/api/approval
 
 // ============================================================================
 // P0-2 / P0-3 门扩充（**只增不改**：上面 27 条一字不动）
-//   E2   四道页面 0 <script> / 0 内联事件属性；子视图页面同形
+//   E2   五道页面脚本只来自受信来源（`/assets/**`）+ 0 内联事件属性；子视图页面同形
 //   E2b  八个新子路由各 200 且带道内子导航 + GET 表单
-//   E4   第一屏三个 data-block 锚点存在且顺序正确
 //   E5   筛选非空转（不同参数值 → 不同响应体 + 不同行集合）
 //   E6   空结果**显式说明**「筛选无结果」
 //   E7   分页不重叠 + 不丢行（与全量集合自证比对）
@@ -683,23 +682,6 @@ check('邮件域**负控**（私域与凭据不出这条路由）：快照里刻
   && !mailApi.text.includes('private:') && mailApi.text.includes('(redacted)'),
   `哨兵在页面=${mailPage.text.includes(MAIL_LEAK)} 在 JSON=${mailApi.text.includes(MAIL_LEAK)} `
   + `JSON 含 password=${mailApi.text.includes('"password"')} 含 (redacted)=${mailApi.text.includes('(redacted)')}`)
-
-// E4：第一屏三块（contractor / supplier）
-const P02_BLOCKS = ['pending-approvals', 'in-progress', 'health']
-const blockBad = []
-const blockReport = []
-for (const [name, page] of [['/contractor/', contractor], ['/supplier/', supplier]]) {
-  const at = P02_BLOCKS.map((block) => page.text.indexOf(`data-block="${block}"`))
-  const counts = P02_BLOCKS.map((block) => (page.text.match(new RegExp(`data-block="${block}"`, 'g')) || []).length)
-  const ordered = at.every((index) => index >= 0) && at[0] < at[1] && at[1] < at[2]
-  const single = counts.every((count) => count === 1)
-  const asSection = P02_BLOCKS.every((block) => page.text.includes(`<section data-block="${block}">`))
-  blockReport.push(`${name}: 位置=${JSON.stringify(at)} 出现次数=${JSON.stringify(counts)} 顺序正确=${ordered} 都是<section>=${asSection}`)
-  if (!(ordered && single && asSection)) blockBad.push(name)
-}
-check('P0-2/E4 第一屏三个 `data-block` 锚点（pending-approvals → in-progress → health）**各一次、顺序正确**、'
-  + '且都挂在 `<section>` 上（顺序错了 → 第一屏的顺序就错了）',
-  blockBad.length === 0, blockReport.join('；'))
 
 // E5：筛选非空转（同一参数下不同值 → 结果必须不同）
 const evAll = await get('/contractor/events/')

@@ -724,7 +724,7 @@ try {
   const realDomains = real.views[0] ? ['negotiate', 'faq', 'mail'].filter((key) => key in real.views[0]) : []
   const realSentinel = 'ZZ-SENTINEL-PRIVATE-ZZ'
   check('13 真数据正控：`tools/refresh-ui-snapshots.py` 在**真账本**上的真实快照 → 三域计数/合计/通道/最近事件'
-    + '逐字段等于手算表（与 AC-UI-002 的手算同源：线程 1 / 轮 1 / 拒 1 / FAQ 1 / 邮件 1-1）、`transport.available=false`'
+    + '逐字段等于手算表（线程 1 / 轮 1 / 拒 1 / FAQ 1 / 邮件 1-1）、`transport.available=false`'
     + '（本轮没有发信能力，只能这么报）、写入器丢掉的哨兵与私域键一个都不出现（真数据不是"手抄的形状"）',
   JSON.stringify(real.views) === JSON.stringify(HAND_REAL.views)
   && JSON.stringify(real.totals) === JSON.stringify(HAND_REAL.totals) && real.totals_source === 'summed'

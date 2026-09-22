@@ -211,7 +211,7 @@ docs/work/evolution-log.json      # 产出日志；tmp/evolve/ledger.jsonl 是�
 
 - **真收发只在 Python 侧**：`src/quotagent/services/mail_transport.py`（纯标准库 `smtplib`/`imaplib`）。
   宿主（`host/**`）**不联网、不起子进程**，只读一份状态快照。
-- **路由**：`GET /quotagent/ops/mail/`（页面，**0 行 `<script>`**）与 `GET /quotagent/api/mail`（JSON）。
+- **路由**：`GET /quotagent/ops/mail/`（页面，**脚本只来自受信来源**）与 `GET /quotagent/api/mail`（JSON）。
   数据来源：`tools/refresh-ui-snapshots.py` 把「`mail/*` 账本计数」+「`mail_transport` 的真实状态」
   写成 `tmp/ui-shared/mail.json`，宿主插件 `mail-view` 只做有界只读投影（坏快照 → `degraded` + 有名 reason）。
 - **配置键**（`host/lib/config-keys.mjs` + `host/lib/schema.mjs` 已登记，配置 UI 可直接改）：

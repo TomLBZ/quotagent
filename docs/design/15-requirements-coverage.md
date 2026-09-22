@@ -8,10 +8,10 @@
 
 | FR | 承载体 | 证据 | 状态 |
 |---|---|---|---|
-| FR-GATE-001 | host/modules/gate-timeline.mjs、tools/gate-nudge.py | 「审批等多久 / 变更单谁卡着」围栏门 33/33 + 真路由门 11/11（`verify.sh gates`）：**age 不随两个不同 `now` 入口变化**（不取墙钟）/ 空投影两列表为 0 / 插件不能批准 / 每条有 basis / 催办 POST 只落 0600 待办件且账本零新增 / 真跑 `gate-nudge.py` 落 `gate/nudged` 且 ops 计数 +1 / 幂等 duplicates / 两条拒绝路径 / 四道页面子导航入口 + 页面 0 内联脚本 | 直引 |
+| FR-GATE-001 | host/modules/gate-timeline.mjs、tools/gate-nudge.py | 「审批等多久 / 变更单谁卡着」围栏门 33/33 + 真路由门 11/11（`verify.sh gates`）：**age 不随两个不同 `now` 入口变化**（不取墙钟）/ 空投影两列表为 0 / 插件不能批准 / 每条有 basis / 催办 POST 只落 0600 待办件且账本零新增 / 真跑 `gate-nudge.py` 落 `gate/nudged` 且 ops 计数 +1 / 幂等 duplicates / 两条拒绝路径 / 四道页面子导航入口 + 页面脚本只来自受信来源 | 直引 |
 | FR-GATE-002 | host/modules/gate-timeline.mjs、host/t283-change-detail-gate.mjs、tools/check-change-detail-route.py | 变更单**逐行明细**：围栏门 22/22 + 真路由门 9/9（`verify.sh change-detail`）：**逐行手算金额对账**（整数分；`delta = after − before`；`delta_pct` 整数分位 half-up）／缺依据的行**不入小计**（`basis_missing`）／无可用行 ⇒ degraded + 明细空 + 小计记 null／供应商侧哨兵逐字节一致 0 命中／未知 id 页面与 JSON 都 404 + next_action／只读（账本零新增）＋ 4 处单点变异全红 | 直引 |
 | FR-AUTH-001 | host/modules/authority-band.mjs、host/t284-authority-gate.mjs、tools/check-authority-route.py | 见 §2 的 `authority-band` 行（逐条计数与断言在 §2 的格子里） | 直引 |
-| FR-ADV-001 | host/modules/advice-panel.mjs | 决策建议层围栏门 30/30 + 真路由门 14/14（`verify.sh advice`）；四道页面子导航入口 + 页面 0 内联脚本 | 直引 |
+| FR-ADV-001 | host/modules/advice-panel.mjs | 决策建议层围栏门 30/30 + 真路由门 14/14（`verify.sh advice`）；四道页面子导航入口 + 页面脚本只来自受信来源 | 直引 |
 | FR-APPROVE-001 | src/quotagent/services/approval.py | ApprovalService.request() | 直引 |
 | FR-APPROVE-002 | src/quotagent/services/approval.py | ApprovalService.require(scope, ref, approval | 直引 |
 | FR-APPROVE-003 | src/quotagent/services/approval.py | ApprovalService.sweep() | 直引 |
@@ -75,7 +75,7 @@
 | FR-NORM-002 | src/quotagent/services/norm.py | Rejection | 映射 |
 | FR-NORM-003 | src/quotagent/services/norm.py | NormService._stage_align() | 映射 |
 | FR-NORM-004 | src/quotagent/services/quotes.py | QuoteBook.on_amended(from_rev,to_rev) | 直引 |
-| FR-PLUGIN-005 | host/lib/ui-slot.mjs、host/modules/webui.mjs | 注入式 UI 注册面：机制只做槽位/排序/装配（webui 零业务耦合、0 内联脚本）；两个样板各注册只读区块（`plugin-lifecycle` 43/43，含 4 处变异全红） | 直引 |
+| FR-PLUGIN-005 | host/lib/ui-slot.mjs、host/modules/webui.mjs | 注入式 UI 注册面：机制只做槽位/排序/装配（webui 零业务耦合、脚本只来自受信来源）；两个样板各注册只读区块（`plugin-lifecycle` 43/43，含 4 处变异全红） | 直引 |
 | FR-PLUGIN-001 | src/quotagent/kernel/plugin.py、src/system/runtime/tools/plugin-lifecycle.mjs | PluginHost._activate()；宿主侧六动词同一套接口（`tools/verify.sh plugin-lifecycle`） | 直引 |
 | FR-PLUGIN-002 | src/quotagent/kernel/plugin.py | PluginHost._reconcile() | 直引 |
 | FR-PLUGIN-003 | src/quotagent/kernel/plugin.py | PluginHost.unmount() | 直引 |
@@ -120,7 +120,7 @@
 | FR-EVAL-005 | host/modules/supplier-scorecard.mjs | AC-EVAL-003（见 §4 的机检命令） | 映射 |
 | FR-UX-004 | host/modules/ops-view.mjs | AC-RUNTIME-010（见 §4 的机检命令） | 映射 |
 
-| FR-UX-005 | src/system/webui/tools/refresh-ui-snapshots.py、host/modules/pipeline-view.mjs | AC-UI-002 + AC-PIPELINE-001 | 直引 |
+| FR-UX-005 | src/system/webui/tools/refresh-ui-snapshots.py、host/modules/pipeline-view.mjs | AC-PIPELINE-001 | 直引 |
 
 
 | FR-ADMIN-001 | host/modules/admin-view.mjs | 见对应 AC | 直引 |
