@@ -63,24 +63,7 @@
 
 目录布局与最小契约见 `docs/design/27-plugin-architecture.md` §2/§3；需求归属见 `docs/work/plugin-requirements-map.md`。
 **`T-321` 起 63/63 插件目录均已建出**（`plugin.json` + `requirements/README.md`；测试/围栅门按阶段 4.1/4.2 搬进 `tests/`）。
-**承载体现状（`EV-178` 末实测，逐条可复算）**：**53/63 已接承载**（`code/index.mjs` 或 `code/__init__.py` 真实存在
-⇒ `plugin.sh list` 报 `valid:true`；本批新接 **5 个 ESM + 19 个 Python** 入口）；**10 个仍无入口**（如实报
-`degraded: artifact-missing`）：**8 个**是「多实体插件，'哪个实体当入口'未定」（`system/admin`、`system/agent-runtime`、
-`system/canary`、`system/eval`、`system/kernel-bridge`、`system/mail`、`system/webui`、`domain/compare`），
-**2 个**的实现在插件根而非 `code/`（`system/repo-gate`、`system/qa-runner` —— 跨插件的**平台门/AC 运行器**，
-落 `code: 待实现`）。**不假装已实现**。
-
-| 插件（目录 / id） | 提供的能力 | 提供者服务名 | 被哪些装配 | 独立演进时改哪里 |
-|---|---|---|---|---|
-| `src/system/runtime/`（`system/runtime`） | 仓库内自包含运行时 + 六动词生命周期 + 一键运行 `./run` | `pluginLifecycle` | 运行时进程（`tools/plugin.sh`） | 只改本插件 `code/`（规则文本在 27） |
-| `src/domain/advice/`（`domain/advice`） | 决策建议层：没有可分的数据就不给建议 | `advicePanel` | wrapper → `host/modules/advice-panel.mjs`（阶段 4.1 实体搬迁） | 只改本插件 `code/` + 围栏门 |
-| `src/userspace/demo-ns/hello/`（`userspace/demo-ns/hello`） | 用户空间样板：命名空间服务 + 只读区块，零写面 | `bucket`、`status` | 宿主运行时（副本 `user-space/demo-ns/hello/`） | 只改本插件目录（隔离四件套在 `host/lib/user-space.mjs`） |
-| `src/system/webui/` | 双方视角 WebUI + 注入式 UI 注册面（0 业务语义） | `webui`、`uiSlots` | `webui` profile | 实体已落 `code/webui.mjs`（`EV-178`；旧路径薄重导） |
-| `src/system/storage/` | 按 ns 分区的文件管理 + 键值表 + 只读观察面 | `storageView` / `storage` | `storage` profile | 实体已落 `code/storage-view.mjs` + `tools/storage.py`（`EV-177`/`EV-178`；旧路径薄重导/薄转发） |
-| `src/system/market/` | 插件市场：三真源只读聚合（逐项 `source`/`wired`） | `pluginMarket` | `webui`（系统管理道） | 实体已落 `code/plugin-market.mjs`（`EV-177`；旧路径薄重导） |
-| `src/system/evolution/` | 自进化流水线 + 流水只读归纳 | `evolution` / `evolveJournal` | `webui`（运维道与管理道） | 实体已落 `code/evolution.mjs`（`EV-178`，裸 `cordis` 由模块内显式解析）+ `code/evolve-journal.mjs` |
-| `src/system/mail/` | 邮件真收发（SMTP/IMAP）+ 只读运维视图 | `mailView` / `mail`、`mail_transport` | `webui`（运维道邮件的运维视图） | 实体已落 `code/mail.py`·`mail_transport.py`·`mail-view.mjs`（旧路径薄重导） |
-| `src/system/kernel/` | 平台内核：唯一账本写者 + 事件总线 + QEP + 插件宿主 + 交付绑定 | `ledger`、`events`、`qep`、`plugin`、`delivery` | 内核进程（经 `kernel-bridge.mjs`） | 阶段 3.1；**内核不可自改**（ADR-0002） |
+**承载体现状（`EV-178` 末实测，逐条可复算）**：整段（已接承载计数、无入口插件的逐条清单、三层插件的逐行归属表）按归档机制**整段逐字**搬到 `docs/design/14-plugin-inventory-archive.md` §6 —— `tools/verify.sh plugins` 读的是主文件 + 归档的**并集**，搬过去的行受同一套断言约束（归档不是豁免区）。
 
 ## 3. 已归档的四节
 

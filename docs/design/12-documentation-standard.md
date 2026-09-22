@@ -63,6 +63,14 @@
 
 引用一律写 ID 或相对路径链接（可机检），不写"见上文"。
 
+**归档集合（口径，唯一真源是各门脚本里的常量）**：下表之外还有三处"文档集合 = 主文件 + 同目录 `*-archive*.md`"——
+`docs/design/14-plugin-inventory.md` + `14-plugin-inventory-archive*.md`（门 `tools/verify.sh plugins`）、
+`docs/design/15-requirements-coverage.md` + `15-requirements-coverage-archive*.md`（门 `tools/verify.sh coverage`）、
+`docs/work/handover.md` + `handover-archive*.md`（门 `tools/verify.sh docs`；这是一个**指针型**集合：判据是主文件里
+每个 `§N` 指针在归档里有**对应小节且小节非空**）。集合内的归档**不是豁免区**：搬进去的行受同一套断言约束，
+"归档 0 条定义行 / 0 节"是硬失败。**超预算时的减法顺序**：删重复 → 删叙述 → 拆到归档 → 才考虑提高预算
+（提高预算需在提交信息里说明，且既有文件的**具体路径**预算行只能收紧不能放宽）。
+
 **用户诉求的落点**（本仓不靠"记住"）：用户原话对应的需求 = `docs/work/functional-requirements.md` §6.1 的
 `FR-USREQ-<NNN>` 行（每行含**原话短引 + 可验收含义 + 验收方式**），其 需求→实现→证据 状态表在
 `docs/work/requirements-traceability.md`（状态只能 `done`/`partial`/`missing`，且必须有证据列支撑）。

@@ -444,10 +444,11 @@ def assert_config_init() -> None:
 # R14：**空 HOME + 断网**下的一键运行（本环境做不到内核级断网 ⇒ 如实标注）
 # ---------------------------------------------------------------------------------------------
 def build_netblock(work: Path) -> tuple[Path | None, str]:
-    """编译断网垫片（`tools/netblock.c`）；没有 gcc 就返回 None（门如实标注做不到的那一半）。"""
-    source = ROOT / "tools" / "netblock.c"
+    """编译断网垫片（实体 `src/system/runtime/tests/netblock.c`；本批搬迁后**读方跟到实体**，
+    `tools/netblock.c` 只剩 `#include` 薄转发）；没有 gcc 就返回 None（门如实标注做不到的那一半）。"""
+    source = ROOT / "src" / "system" / "runtime" / "tests" / "netblock.c"
     if not source.exists():
-        return None, "缺 tools/netblock.c"
+        return None, "缺 src/system/runtime/tests/netblock.c"
     compiler = shutil.which("gcc") or shutil.which("cc")
     if compiler is None:
         return None, "本机没有 gcc/cc（垫片编译不了）"

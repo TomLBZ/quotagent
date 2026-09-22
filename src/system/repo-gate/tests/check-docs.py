@@ -7,15 +7,21 @@
 预算不在此脚本硬编码，而是从 docs/design/12-documentation-standard.md §1 的表格解析，
 避免两处真源漂移。
 
-定义文件集合（口径，唯一真源就在本脚本的 AC_MAIN / AC_ARCHIVE_GLOB、FR_MAIN / FR_ARCHIVE_GLOB
-与 T_MAIN / T_ARCHIVE_GLOB）：
+定义文件集合（口径，唯一真源就在本脚本的 AC_MAIN / AC_ARCHIVE_GLOB、FR_MAIN / FR_ARCHIVE_GLOB、
+T_MAIN / T_ARCHIVE_GLOB 与 HANDOVER_MAIN / HANDOVER_ARCHIVE_GLOB）：
   AC：`docs/work/acceptance-criteria.md` **+ 同目录下所有 `acceptance-criteria-archive*.md`**；
   FR：`docs/work/functional-requirements.md` **+ 同目录下所有 `functional-requirements-archive*.md`**；
-  T ：`docs/work/progress-checklist.md` **+ 同目录下所有 `progress-checklist-archive*.md`**。
+  T ：`docs/work/progress-checklist.md` **+ 同目录下所有 `progress-checklist-archive*.md`**；
+  交接：`docs/work/handover.md` **+ 同目录下所有 `handover-archive*.md`**（本批新增的第一个**指针型**集合：
+       主文件受 1024 B 预算约束，细节搬进归档；断言落在"细节不许搬丢"—— 主文件里的每个 `§N` 指针
+       必须在归档里有**对应小节且小节非空**，见 check_handover_set）。
 归档只改变"定义可以放在哪个文件里"，不改变任何断言语义：ID 必须存在于集合内、
 预算照查、FR↔AC 覆盖照查两个集合里的行（见 check_coverage）。归档**必须真的被读到**：
 某个归档 0 条 FR 定义行（或 0 条 AC / T 定义行）即判失败，杜绝"两边都是空集合"式的静默通过。
 注意 V 不走集合：`V-` 行只认主文件 `docs/work/functional-requirements.md` §1（口径比 FR 更窄）。
+同一套集合口径也被 `tools/verify.sh coverage`（`docs/design/15-requirements-coverage.md` +
+`15-requirements-coverage-archive*.md`）与 `tools/verify.sh plugins`
+（`docs/design/14-plugin-inventory.md` + `14-plugin-inventory-archive*.md`）使用。
 
 扫描范围（D-072，承接 D-071 第 3 条"判据不得覆盖无关写入者"）：
   门只扫**契约文档** = 仓库内 `.md`，但排除 `.git/ .venv/ tmp/ node_modules/ __pycache__/` 下的
@@ -76,6 +82,13 @@ SET_LABELS = {
 }
 ADR_DIR = "docs/design/adr"
 EVIDENCE_DIR = "docs/work/evidence"
+
+# --- 交接文档集合（本批新增）：`docs/work/handover.md` 的预算是 **1024 B**（§1），逐批细节写在主文件里
+# 立刻超预算 ⇒ 细节按同一套归档机制搬进同目录 `handover-archive*.md`。判据落在"细节不许消失"上：
+# 主文件里的每个 `§N` 指针必须在归档里有**对应小节且小节非空**（抽掉小节的标题行 ⇒ 本节必红）。
+HANDOVER_MAIN = "docs/work/handover.md"
+HANDOVER_ARCHIVE_GLOB = "handover-archive*.md"
+HANDOVER_POINTER_RE = re.compile(r"§\s*(\d+)")
 
 # 定义行：表格首列就是 ID
 ROW_RE = re.compile(r"^\|\s*(?P<id>[A-Z]+-[A-Z0-9-]*\d)\s*\|", re.M)
@@ -351,14 +364,70 @@ def check_coverage(rep: Report) -> None:
                f"AC 定义文件 {len(ac_files)} 个：主文件 + {len(ac_archives)} 个归档）")
 
 
+def check_handover_set(rep: Report, budgets: dict[str, int]) -> None:
+    """交接文档集合（主文件 + 同目录 `handover-archive*.md`）：细节搬走，但**不许搬丢**。
+
+    判据：① 主文件在；② 归档集合非空（`glob` 0 个文件 ⇒ 红）；③ 主文件里的每个 `§N` 指针在归档里有
+    对应标题 `## N …`；④ 每个被指向的小节**非空**（标题下一行空到尾 ⇒ 红）。
+    这条与 FR/AC/T 的"归档 0 条定义行 = 空读 = 失败"是同一套思路：归档要有实质内容才算数。
+    """
+    main = ROOT / HANDOVER_MAIN
+    if not main.exists():
+        rep.fail(f"交接主文件不存在：{HANDOVER_MAIN}")
+        return
+    archives = sorted(p for p in main.parent.glob(HANDOVER_ARCHIVE_GLOB) if p.is_file())
+    main_text = read_md(rep, main) or ""
+    problems: list[str] = []
+    if not archives:
+        problems.append(f"交接归档集合为空（`{HANDOVER_ARCHIVE_GLOB}` 0 个文件）⇒ 细节没处放")
+    pointers = sorted({m.group(1) for m in HANDOVER_POINTER_RE.finditer(main_text)})
+    if not pointers:
+        problems.append(f"`{HANDOVER_MAIN}` 里没有任何 `§N` 指针（细节的归档指向必须显式写出来）")
+    arch_texts = {str(p.relative_to(ROOT)): (read_md(rep, p) or "") for p in archives}
+    sections = 0
+    for num in pointers:
+        heading = re.compile(rf"^##\s*{re.escape(num)}[.、\s]")
+        hit = None
+        for rel, text in arch_texts.items():
+            lines = text.splitlines()
+            for index, line in enumerate(lines):
+                if not heading.match(line.strip()):
+                    continue
+                body = []
+                for follow in lines[index + 1:]:
+                    if follow.strip().startswith("##"):
+                        break
+                    if follow.strip():
+                        body.append(follow.strip())
+                if body:
+                    hit = rel
+                    sections += 1
+                else:
+                    problems.append(f"归档 `{rel}` 的小节 `## {num}` 是**空小节**（只有标题）")
+                break
+            if hit:
+                break
+        if hit is None and not any(f"## {num}" in p for p in problems):
+            problems.append(f"指针 §{num} 在归档里找不到对应标题 `## {num} …`（细节搬丢了或编号漂了）")
+    if problems:
+        rep.fail("交接文档集合（主文件 + 归档）", problems)
+    else:
+        limit = budgets.get(HANDOVER_MAIN)
+        shown = f"{limit} B" if limit else "（预算表无此行）"
+        rep.ok(f"交接文档集合: 主文件 {HANDOVER_MAIN}（{main.stat().st_size} B / 预算 {shown}）/ 归档 "
+               f"{list(arch_texts)}；`§N` 指针 {len(pointers)} 个全部解析且小节非空（{sections} 节有正文）")
+
+
 def main() -> int:
     verbose = "-v" in sys.argv or "--verbose" in sys.argv
     rep = Report()
     files, skipped = md_files()
     defined = collect_definitions(rep)
+    budgets = parse_budgets(rep)
     check_ids(rep, files, defined)
     check_placeholders(rep, files)
-    check_budgets(rep, parse_budgets(rep))
+    check_budgets(rep, budgets)
+    check_handover_set(rep, budgets)
     check_coverage(rep)
     print("== quotagent 文档门 (AC-DESIGN-001/002/003) ==")
     print(f"扫描范围: 契约文档 {len(files)} 个 markdown 文件"

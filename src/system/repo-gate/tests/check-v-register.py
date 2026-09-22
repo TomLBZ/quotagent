@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -124,6 +125,22 @@ def main() -> int:
             missing_files.append(f"{vid}.md 缺小节 {absent}")
     report.ok("12 份执行包存在且含必需小节（需要谁/怎么做/产出与例子/放回哪里）") if not missing_files else \
         report.fail("执行包不完整", missing_files)
+
+    # 材料打包器在位（`EV-180` 把它搬进 `src/system/repo-gate/tools/`，旧路径只剩薄转发）：
+    # 12 份执行包的现场材料靠它打包；打包器不在 ⇒ 登记表里的证据也没法复现。
+    packer_old = ROOT / "tools" / "v-kit.sh"
+    packer_new = ROOT / "src" / "system" / "repo-gate" / "tools" / "v-kit.sh"
+    packer_problems = []
+    if not packer_old.is_file():
+        packer_problems.append("缺 tools/v-kit.sh（薄转发入口）")
+    elif "薄转发（迁移阶段 4.1）" not in packer_old.read_text(encoding="utf-8"):
+        packer_problems.append("tools/v-kit.sh 不是薄转发（旧位置不许留实体）")
+    if not packer_new.is_file():
+        packer_problems.append("缺实体 src/system/repo-gate/tools/v-kit.sh")
+    elif not os.access(packer_new, os.X_OK):
+        packer_problems.append("实体没有执行位（人手会直接跑它）")
+    report.ok("材料打包器在位：`tools/v-kit.sh`（薄转发）→ `src/system/repo-gate/tools/v-kit.sh`（可执行）") \
+        if not packer_problems else report.fail("材料打包器缺失或位置不符", packer_problems)
 
     printed = "== V 登记表校验（T-117 / S0.15） =="
     print(printed)

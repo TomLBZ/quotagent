@@ -324,9 +324,8 @@
    `插件·已搬`（实体已在新位置，旧位置**只剩薄转发**）· `插件·待搬`（实体仍在旧位置，**逐条登记**在此，不许无名散落）。
 3. **子目录**：`tests/` = 门/检查（`check-*.py`、`checks_*.py`、围栏门 `*-gate.mjs`）随被检查的插件走；
    `tools/` = 有写面的工具（写账本者只能是该账本唯一写者，27 §2.2）。
-4. **`tools/**` 的非薄入口数**（散落的度量）：**本批（`EV-179`）再搬走 10 个**（旧位置全部变薄转发）⇒ **3**（`netblock.c`/`v-kit.sh`/`manual-check.py`）。
-   逐批的加减史（搬前 69 → 63 → 64 → 54 → 42 → 30 → **13**）、每批搬了哪些、复算命令见
-   [`plugin-file-map-batches.md`](plugin-file-map-batches.md) §「非薄入口数的加减史」。门把 **3** 冻结为下界锁
+4. **`tools/**` 的非薄入口数**（散落的度量）：**本批（`EV-180`）再搬走 2 个**（`netblock.c`/`v-kit.sh`，旧位置变薄转发）⇒ **1**（`manual-check.py`：契约面 0 调用者 ⇒ 搬了成孤儿）。逐批的加减史（搬前 69 → 63 → 64 → 54 → 42 → 30 → 13 → 3）、每批搬了哪些、复算命令见
+   [`plugin-file-map-batches.md`](plugin-file-map-batches.md) §「非薄入口数的加减史」。门把 **1** 冻结为下界锁
    （`tools/check-plugin-assets.py` 的 `BASELINE_NONTHIN`，一路**收紧**、**从未放宽**）：只减不增，且集合必须与下表逐条相等。
 5. **薄转发**：旧位置那几行只做转发（Python 用 `runpy`/`importlib` 指到新位置；`.mjs` 围栅门用 `import './../src/…'`，
    实现只在 `src/<层>/<插件>/tests/` 那一份），**不含任何实现**；
@@ -401,7 +400,7 @@
 | `tools/gate-nudge.py` | `domain/gate-timeline` | 插件·已搬 | `tools/` |
 | `tools/manual-check.py` | `system/repo-gate` | 插件·待搬 | `tools/` |
 | `tools/mutate-ui-views.py` | `system/webui` | 插件·已搬 | `tools/` |
-| `tools/netblock.c` | `system/runtime` | 插件·待搬 | `tests/` |
+| `tools/netblock.c` | `system/runtime` | 插件·已搬 | `tests/` |
 | `tools/plugin.sh` | — | 平台薄入口 | — |
 | `tools/quote-draft.py` | `domain/quote-prepare` | 插件·已搬 | `tools/` |
 | `tools/quote-sign.py` | `domain/quote-prepare` | 插件·已搬 | `tools/` |
@@ -419,7 +418,7 @@
 | `tools/ui-seed-pipeline.py` | `system/webui` | 插件·已搬 | `tools/` |
 | `tools/userplugin-elevate.py` | `system/user-plugin-manager` | 插件·已搬 | `tools/` |
 | `tools/userplugin-record.py` | `system/user-plugin-manager` | 插件·已搬 | `tools/` |
-| `tools/v-kit.sh` | `system/repo-gate` | 插件·待搬 | `tools/` |
+| `tools/v-kit.sh` | `system/repo-gate` | 插件·已搬 | `tools/` |
 | `tools/verify.sh` | — | 平台薄入口 | — |
 | `tools/webui-serve.py` | `system/webui` | 插件·已搬 | `tools/` |
 | `tools/ws-integrate.py` | `system/runtime` | 插件·已搬 | `tools/` |

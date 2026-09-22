@@ -21,6 +21,7 @@
 **EV-171 批的扩展**：为给新行腾预算，截止时间放宽到 **≤ 2026-09-21T14:00:00Z**，据此追加
 `T-253`/`T-254`/`T-260`/`T-261`/`T-262`/`T-263`/`T-264`/`T-265c` 八行（整行逐字、按引入时间升序追加在文末；
 既有各批也是「逐批追加」，故文末不全局单调 —— 这一点如实记在这里，不假装整文有序）。
+**EV-180 批的追加**（为给新行腾预算）：主文件 §P1 的 **20 行**（`T-275`…`T-288`，第二格 `P1`、`status` 列**恰为 `done`**、evidence 列非 `—` —— 唯一例外是 `P3-UX2`（evidence `—`，但它也是 done 行，故与其余 19 行一并搬））按**原文件行序**整行逐字追加在文末（与既有各批一样是"逐批追加"，故文末不全局单调 —— 如实记录，不假装整文有序）。
 | T-001 | 设计期 | 分析层文档（cordis 架构 / 设计优势 / agent 仓库约定 / 领域痛点） | – | – | done | EV-002 |
 | T-002 | 设计期 | 设计层文档（00..12 + ADR-0001..0006） | – | – | done | EV-001 |
 | T-003 | 设计期 | 需求与路线图（FR / AC / roadmap / 本清单 / handover） | – | – | done | EV-001 |
@@ -122,3 +123,23 @@
 | T-114 | P0 | 端到端脚本（S1 合成场景） | FR-EVAL-001 | AC-EVAL-001 | done | EV-034 |
 | T-272 | 宿主侧 admin 门卫/视图插件 + 围栅门 18/18 + 端到端 12/12（subagent 产出，父方实跑） | B67 | done | EV-132 |
 | T-273 | admin 道接入 webui（路由/提权表单/CLI/e2e/profile/stubs/verify.sh）+ 本批 FR/AC 落表 | B67 | done | EV-132 |
+| T-275 | agent 运行期插件（上下文/记忆四层/harness）+ 围栏门 22/22 + 四类反例与 4 处变异自证 | B74 | done | EV-140 |
+| T-275b | 父方复核：自跑门、静态零写面断言、挂 `verify.sh agent-runtime`、清单标『未接线』 | B74 | done | EV-140 |
+| T-276 | 项目记忆=账本可重建投影（真账本 11 条/9 类；丢缓存不丢事实；只读重放；`citations` 齐） | B75 | done | EV-141 |
+| T-277 | 存储由插件提供：`tools/storage.py`（文件管理+键值表，租户分区）+ 围栏门 18/18 + 4 处变异自证 | B76 | done | EV-142 |
+| T-277b | 父方复核与接线：我自跑门、挂 `storage` profile、补登记行、落 AC-STORAGE-001/004 | B76 | done | EV-142 |
+| T-278 | 运行期插件独立装卸/卸载零残留/卸载后事实不丢（`AC-AGENTRT-007` 5/5） | B77 | done | EV-143 |
+| GUI-P0a | 上手页 `/start/` + `/api/routes` 路由表（每页可达 token/配置位置）`f3e76b8` | B78 | done | EV-144 |
+| GUI-P0b | 第一屏三块 + 8 个子视图（GET 筛选/排序/翻页）+ 门 27→44/44；顺手修掉 admin 面板恒 `NaN` 的既有 bug | B78 | done | EV-144 |
+| GUI-P0c | 配置/凭据 UI + YAML 持久化 + `--init`；新模块 `config-view`；门 `config-route` 22/22 | B79 | done | EV-145 |
+| GUI-P0d | 邮件由插件提供：未配置诚实报未连接、配置后真收发（回环 SMTP 真发）+ `mail-view` 只读视图 + `verify.sh mail-transport` 27/27 | B80 | done | EV-146 |
+| GUI-P0e | 比价 heuristics visualizer（可调权重 + 贡献分解 + 私域零泄漏；门 32/32 + 路由门 12/12） | B81 | done | EV-147 |
+| DOC-AC1 | AC 归档合法化：门把 `acceptance-criteria-archive*.md` 并入 AC 定义集合（docs/ac-registry/coverage 三处口径统一 + 归档空读守卫 + `archives=[...]` 可观察）；46 条非 P0 老行逐字搬入归档，主文件 32760→25066 B；反向验证 3 例（副本上做，字节还原一致） | B82 | done | EV-149 |
+| P3-UX2 | 三份 UX 规格持久化进 `docs/work/plans/`（22 痛点 / 9 human / 20 FR 草案）`4e0f2cb` | B78 | done | — |
+| P3-UXWF | 员工工作流驱动的 UI 重做规格（三部分：`docs/work/plans/ui-workflow-rework.md` + `-part2.md` + `-part3.md`；§0 结论 / §1 实测证据 / §2 缺口清单 / §3 目标交互规格 / §4 视觉规格 40 条 / §5–§7）。**以承包商采购员与供应商报价员两个角色逐步实测现有 UI**：58 次真请求里 36 次卡住或假成功（含 4 例「POST 200 且与 GET 逐字节相同」的假成功），能完整完成的步骤 = 0（承包商 0/6，供应商 0/5），全部探测跑完两侧账本 sha 逐字节不变；视觉量测 26 页 0 CSS 变量 / 0 焦点态 / 0 `@media` / 0 `<button>` / 0 卡片类。**只产出规格与证据：不改代码、不改门、不改 AC/FR 定义** | – | – | done | EV-158 |
+| T-283 | P2 | 「审批等多久 / 变更单谁卡着」GUI 闭环：`gate-timeline` 插件（等待时长口径=事实 ts 差、不取墙钟、**不能批准**）+ 三路由（页面/JSON/催办 POST 只落 0600 待办件、账本零新增）+ `tools/gate-nudge.py`（唯一落账本者，落 `gate/nudged`）+ 围栏门 33/33（4 处变异自证）与真路由门 11/11 | FR-GATE-001 | AC-GATE-001 | done | EV-153 |
+| T-284 | P2 | 「变更单到底改了什么、多花多少钱」**逐行明细**：`gate-timeline` 规则 ⑤ + 两路由（`/<view>/changes/<id>/` 与 `/<view>/api/changes/<id>`，只读）+ 金额整数分逐行手算对账 / 缺依据的行不入小计 / 无可用行必降级 + 围栏门 22/22（4 处变异自证）与真路由门 9/9 | FR-GATE-002 | AC-GATE-002 | done | EV-154 |
+| T-284 | P2 | 「授权区间」：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁（`authority-band` 插件 + 两条路由 + 配置键进白名单可由 UI 改与 YAML 初始化）+ 围栏门 22/22（4 处变异自证）与真路由门 12/12 | FR-AUTH-001 | AC-AUTH-001 | done | EV-156 |
+| T-285 | P2 | 「来不及回 RFQ」GUI 闭环：`rfq-deadline` 插件（回文时限口径=**事实 ts 差**、不取墙钟、**不能发信**、名册是业主私域）+ 三路由（页面/JSON/登记承诺 POST 只落 0600 待办件、账本零新增）+ `tools/rfq-promise.py`（唯一落账本者，落 `rfq/promised`）+ 围栏门 23/23（4 处变异自证）与真路由门 11/11（含 POST→0600→掉账本回读→**承诺改变页面口径**） | FR-RFQ-008 | AC-RFQ-006 | done | EV-157 |
+| T-287 | P2 | 「供应商看不到自己的 RFQ 包」的根因修复：投递信封 + 收件人作用域 + **字段级白名单**（契约 `docs/design/26-rfq-delivery-visibility.md`）+ 首页投递块（只读、0 内联脚本）+ `--rfq-delivery` 装配；围栏门 26/26（**4 处单点变异全红**，含把包发给所有供应商的越权变异）与真路由门 10/10（真两进程两身份） | FR-RFQ-009 | AC-RFQ-007 | done | EV-160 |
+| T-288 | P2 | **「不要假成功」+ 第一条真写闭环**：① 宿主围栏 —— **只应为 `GET` 的路由收到非 GET ⇒ 405 + `Allow: GET` + `{ok:false,code:"method-not-allowed",next_action}`**（改前实测 GET 与 POST `/contractor/quotes/` 返回**逐字节相同**的 200 页面，bytes=3935/sha256 相同；表单 action 只指向真写路径）② `quote-prepare` 插件（字段级 8 字段校验 + 行项目目录从本视角事实逐条按键读、读不出来**不编** + 草稿恒为**待签署** + **不能签名/提交/发信**）+ 两条路由 `GET｜POST /quotagent/supplier/quotes/prepare/`（宿主**只落 0600 待办件**、账本零新增、202 + `next_action`）③ `tools/quote-draft.py`（**唯一落账本者**：落 `quote/drafted`、body 恰 12 键、**两侧登记 ⇒ 双向可见**；幂等 + 6 类拒绝码）④ `tools/quote-sign.py`（**签名只能由人**：拒 `agent:*`，`human:*` 落 `approval/requested→granted→quote/submitted`）⑤ 围栏门 17/17（**4 处单点变异全红**）与真路由门 14/14 | FR-QUOTE-001 | AC-QUOTE-001 | done | EV-161 |

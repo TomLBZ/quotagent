@@ -352,6 +352,10 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "system/webui", "src/system/webui/tools/refresh-ui-snapshots.py"),
     "tools/ui-seed-pipeline.py": (
         "system/webui", "src/system/webui/tools/ui-seed-pipeline.py"),
+    "tools/v-kit.sh": (
+        "system/repo-gate", "src/system/repo-gate/tools/v-kit.sh"),
+    "tools/netblock.c": (
+        "system/runtime", "src/system/runtime/tests/netblock.c"),
     "tools/webui-serve.py": (
         "system/webui", "src/system/webui/tools/webui-serve.py"),
 }
@@ -364,13 +368,15 @@ MAX_FORWARDER_LINES = 20
 EXCLUDE_DIRS = frozenset({"__pycache__", ".git", "tmp", "node_modules", ".venv"})
 
 #: `tools/` 下非薄入口文件的**实测值**：一路由 69（搬前）→ 63 → 64（`EV-171` 加干净副本门）→ 54（`EV-175` 搬 10）
-#: → 42（`EV-176` 搬 12）→ 30（`EV-177` 搬 12）→ 13（`EV-178` 搬 17）→ **3（本批 `EV-179` 再搬 10）**；
-#: 旧位置全部变薄转发。余下三个**逐条留名**：`manual-check.py`（PA6 断言「已搬资产仍被**契约面**引用」，
-#: 它在 verify.sh / qa / tests / tools 里都没有调用者 ⇒ 搬了就等于制造一个孤儿）、`netblock.c`（被
-#: `run-clone` 按仓库路径编译的最小垫片）、`v-kit.sh`（shell 打包器；`.sh` 转发还要额外 `git add --chmod=+x`）。
+#: → 42（`EV-176` 搬 12）→ 30（`EV-177` 搬 12）→ 13（`EV-178` 搬 17）→ 3（`EV-179` 再搬 10）
+#: → **1（本批 `EV-180` 再搬 2）**；旧位置全部变薄转发（`.c` 用 `#include`、`.sh` 用 `exec sh`）。
+#: 余下**一个**逐条留名：`manual-check.py`（PA6 断言「已搬资产仍被**契约面**引用」，它在 verify.sh / qa /
+#: tests / tools 里都没有调用者 ⇒ 搬了就等于制造一个孤儿）。本批搬走的两个不再有这种理由：
+#: `netblock.c` 的读方 `src/system/runtime/tests/check-run-once.py` 已**跟到实体**、`v-kit.sh` 由
+#: `docs/work/validation/README.md` 的人手命令使用（旧路径的 `exec sh` 薄转发保持命令不变）。
 #: 逐批加减史与复算命令见 `docs/work/plans/plugin-file-map-batches.md` §「非薄入口数的加减史」。
 #: 锁的语义是"只减不增"：搬走本门或其它项时这个数应随之下调；**上调只允许"新增一个同级平台门"这一种理由**（改这一行是显式动作）。
-BASELINE_NONTHIN = 3
+BASELINE_NONTHIN = 1
 #: 门名数下界（阶段 4.1 搬前 69 + `plugin-assets` = 70；本批新增 `run-clone` ⇒ 71；门名是接口，只增不减）。
 MIN_GATE_NAMES = 71
 #: `--help` 一类的别名不算"实现分支"。

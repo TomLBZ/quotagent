@@ -1,6 +1,10 @@
 """check-fr-coverage —— 把「每个功能都由插件提供」变成机检（`tools/verify.sh coverage`）。
 
-读 `docs/design/15-requirements-coverage.md`（需求覆盖矩阵），断言：
+读**矩阵文档集合** = `docs/design/15-requirements-coverage.md`（主文件）+ 同目录
+`15-requirements-coverage-archive*.md`（归档）—— 归档不是豁免区：与 FR/AC/T 定义集合
+（`tools/check-docs.py` 的 `DEF_SETS`）和插件清单集合（`tools/check-plugin-inventory.py`）**同一套归档机制**，
+搬进归档的行仍受下面全部断言约束（搬行只改"行写在哪"，不改判据）。断言：
+  A0 矩阵文档集合被真读到：归档**存在**且各自贡献 ≥1 条定义行（归档 0 条定义行 = 空读 = 失败）；
   A1 双向全覆盖：FR **定义集合**（`docs/work/functional-requirements.md` + 同目录
      `functional-requirements-archive*.md`）里的每条 FR 在矩阵里都有一行，且矩阵里没有伪造的 FR ID；
      另加守卫：集合非空、归档文件被读到（归档 0 条 FR 行 = 空读 = 失败，不许静默变绿）；
@@ -8,7 +12,8 @@
   A3 **承载体必须真实存在**（防"矩阵里写一个不存在的文件"）；
   A4 状态只能是 直引/映射/缺口/存疑；【缺口】【存疑】必须逐条列在矩阵的登记小节里（不许悄悄留洞）；
   A5 每个插件至少归属 1 条 FR 或 AC（"功能由插件提供"的落点）；
-  A6 内建负控：拿"篡改过的矩阵"跑一遍**必须变红**（门不是橡皮图章）。
+  A6 内建负控：拿"篡改过的矩阵"跑一遍**必须变红**（门不是橡皮图章）：假承载体 / 删 FR 行 / 删插件行 /
+     **删归档里的一条 FR 行**（证明归档不是豁免区）。
 """
 from __future__ import annotations
 
@@ -19,6 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 MATRIX = ROOT / 'docs/design/15-requirements-coverage.md'
+MATRIX_ARCHIVE_GLOB = '15-requirements-coverage-archive*.md'
 FR_MAIN = ROOT / 'docs/work/functional-requirements.md'
 FR_ARCHIVE_GLOB = 'functional-requirements-archive*.md'
 CHECKS: list[dict] = []
@@ -30,6 +36,34 @@ def check(name: str, ok: bool, detail: str = "") -> None:
 
 def read(p: Path) -> str:
     return p.read_text(encoding='utf-8', errors='ignore') if p.exists() else ''
+
+
+def matrix_files() -> tuple[list[Path], list[Path]]:
+    """矩阵**文档集合** = (主文件 + 同目录归档, 其中的归档文件)。"""
+    archives = sorted(p for p in MATRIX.parent.glob(MATRIX_ARCHIVE_GLOB) if p.is_file())
+    return [MATRIX, *archives], archives
+
+
+def matrix_text() -> str:
+    """矩阵文档集合的正文（主文件 + 所有归档）。"""
+    files, _ = matrix_files()
+    return '\n'.join(read(p) for p in files)
+
+
+def definition_rows(text: str) -> int:
+    """某段文本里贡献的**定义行**数：FR 行（`| FR-… |`）+ 插件归属行（`| <插件 id> |`）+ 债务登记行。
+
+    用途只有一个：挡住"归档是空壳却让门静默变绿"（归档必须真的贡献行）。
+    """
+    count = 0
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith('|') or set(stripped) <= set('|- '):
+            continue
+        first = stripped.strip('|').split('|')[0].strip().strip('`')
+        if re.fullmatch(r'FR-[A-Z0-9]+-\d+', first) or re.fullmatch(r'[a-z][a-z0-9-]+', first):
+            count += 1
+    return count
 
 
 def fr_archive_files() -> list[Path]:
@@ -60,16 +94,22 @@ def rows(section: str) -> list[list[str]]:
 
 
 def section_of(text: str, title_kw: str) -> str:
+    """标题含 `title_kw` 的**所有**小节正文（并集：主文件与归档各有一段都算，不取第一个就返回）。"""
     parts = re.split(r'^##+ ', text, flags=re.M)
-    for p in parts[1:]:
-        if title_kw in p.split('\n', 1)[0]:
-            return p
-    return ''
+    return '\n'.join(p for p in parts[1:] if title_kw in p.split('\n', 1)[0])
 
 
 def evaluate(matrix_text: str, allow_debt: bool = True) -> list[dict]:
     """对给定矩阵文本求值，返回断言列表（供负控复用）。"""
     res: list[dict] = []
+    # A0：矩阵**文档集合**（主文件 + 同目录归档）被真读到。归档不是豁免区 —— 但它也不能是空壳：
+    # 归档必须存在、且各自贡献 ≥1 条定义行，否则"两边都空"会让下面的集合断言静默变绿。
+    files, archives = matrix_files()
+    per_file = {str(p.relative_to(ROOT)): definition_rows(read(p)) for p in files}
+    blank = [rel for rel, rows_n in per_file.items() if rows_n == 0]
+    res.append({"name": "矩阵文档集合被真读到（主文件 + 同目录归档；归档存在且各自贡献 ≥1 条定义行 = 非空读）",
+                "ok": bool(archives) and not blank,
+                "detail": f"定义文件 {list(per_file)}；逐文件定义行={per_file}；空读={blank}"})
     fr_doc = fr_definition_text()
     ac_doc = read(ROOT / 'docs/work/acceptance-criteria.md')
     frs = sorted(set(re.findall(r'FR-[A-Z]+-\d+', fr_doc)))
@@ -160,7 +200,7 @@ def evaluate(matrix_text: str, allow_debt: bool = True) -> list[dict]:
     return res
 
 
-text = read(MATRIX)
+text = matrix_text()
 check("矩阵文件存在", MATRIX.exists(), str(MATRIX.relative_to(ROOT)))
 if MATRIX.exists():
     CHECKS.extend(evaluate(text))
@@ -175,8 +215,14 @@ if MATRIX.exists():
     neg.append(('删掉一条 FR 行', evaluate(tampered2)))
     tampered3 = re.sub(r'^\| [a-z][a-z0-9-]+ \| (FR|AC)-.*$', '', text, count=1, flags=re.M)
     neg.append(('删掉一条插件行', evaluate(tampered3)))
+    # 归档不是豁免区：把**归档里**的一条 FR 行抽掉也必须红（这一条同时是"归档被真读到"的负控）
+    _files, _archives = matrix_files()
+    arch_rows = [line for p in _archives for line in read(p).splitlines()
+                 if re.match(r'^\|\s*FR-', line.strip())]
+    if arch_rows:
+        neg.append(('删掉归档里的一条 FR 行', evaluate(text.replace(arch_rows[0], '', 1))))
     ok_neg = all(any(not c['ok'] for c in r) for _, r in neg)
-    check("内建负控：三种篡改（假承载体/删 FR 行/删插件行）**都必须让门变红**", ok_neg,
+    check("内建负控：四种篡改（假承载体/删 FR 行/删插件行/删归档里的一条 FR 行）**都必须让门变红**", ok_neg,
           '; '.join(f"{n}→{'红' if any(not c['ok'] for c in r) else '竟然绿'}" for n, r in neg))
 
 failed = [c for c in CHECKS if not c['ok']]

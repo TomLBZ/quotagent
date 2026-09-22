@@ -286,6 +286,10 @@ rc/passed-total 对拍」原始行见 `docs/work/evidence/EV-175b-tools-relocati
 | `EV-175` | **54** | 阶段 4.2 续搬 10 个（旧位置变薄转发，全部落在 `tests/`） |
 | `EV-176` | **42** | 再搬 12 个（外圈、归属明确的 `check-*.py`，全部落 `tests/`） |
 | `EV-177` | **30** | 再搬 12 个（8 个路由门 + 4 个平台门） |
-| **`EV-178`（本批）** | **13** | 再搬 **17** 个：`audit-verify`·`export-events`·`refresh-admin-snapshot`·`admin-apply`·`refresh-agent-memory`·`refresh-retention-plan`·`gate-nudge`·`rfq-promise`·`userplugin-record`·`userplugin-elevate`·`ui-feedback-apply`·`ui-feedback-monitor`·`ui-feedback-tick`·`ws-integrate`·`evolve-record`·`evolve-module`·`storage`（旧位置全部变薄转发） |
+| **`EV-178`** | **13** | 再搬 **17** 个：`audit-verify`·`export-events`·`refresh-admin-snapshot`·`admin-apply`·`refresh-agent-memory`·`refresh-retention-plan`·`gate-nudge`·`rfq-promise`·`userplugin-record`·`userplugin-elevate`·`ui-feedback-apply`·`ui-feedback-monitor`·`ui-feedback-tick`·`ws-integrate`·`evolve-record`·`evolve-module`·`storage`（旧位置全部变薄转发） |
+| `EV-179` | **3** | 再搬 **10** 个（`check-*.py` 一族与外圈工具，全部落 `tests/`；旧位置全部变薄转发） |
+| **`EV-180`（本批）** | **1** | 再搬 **2** 个：`netblock.c`（→ `src/system/runtime/tests/`，旧位置用 `#include` 转发；读方 `check-run-once.py` 跟到实体）、`v-kit.sh`（→ `src/system/repo-gate/tools/`，旧位置用 `exec sh` 转发；人手命令不变） |
 
-剩下的 **13** 个非薄入口（**逐条登记在** `plugin-file-map.md` §A 的 `插件·待搬` 行）：`check-run-once.py`、`check-run-clone.py`（两个平台级真跑门，须在 commit 后跑 ⇒ 与 `verify.sh` 的分支强耦合）、`manual-check.py`（契约面上没有调用者：搬了就是孤儿 ⇒ 本批留着不搬）、`config-apply.py`、`refresh-ui-snapshots.py`、`ui-seed-pipeline.py`、`quote-draft.py`、`quote-sign.py`、`gate-nudge`… 中的**被以模块方式 import 的**几个（`config-apply.py` 被 `check-run-once.py` 按 `spec_from_file_location` 装载、`refresh-ui-snapshots.py` 被 `ui-seed-pipeline.py` 同法装载 ⇒ 用 `runpy` 薄转发会**丢掉模块命名空间**）与**被变异锚点钉住路径的**几个（`tools/mutate-ui-views.py` 的 M1..M3 锚在 `refresh-ui-snapshots.py` 源码里），属于下一批：要么先把读方改成「跟到实体」，要么换一种转发形态（保模块语义）。
+剩下**唯一**的非薄入口（**逐条登记在** `plugin-file-map.md` §A 的 `插件·待搬` 行）：`manual-check.py` ——
+PA6 断言「已搬资产仍被**契约面**引用」，它在 `verify.sh` / `qa` / 各插件 `tests/` / `tools/` 里都没有调用者
+⇒ 搬走就等于制造一个孤儿。**本批不搬**，如实登记（不假装它也能搬）。
