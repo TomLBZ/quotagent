@@ -1,0 +1,126 @@
+EV-164 — D-073 根因修复（哨兵扫描口径=契约源集合 + 反向断言）+ 两个受预算约束文档降到 ≤ 28 KB
+时间（UTC）: 2026-09-22T08:17Z 起（本批）    仓库: /workspace/projects/quotagent
+命令: tools/verify.sh ac AC-AGENTRT-002 | tools/verify.sh docs | ac-registry | coverage | p0-no-node | g1
+基线 HEAD: c1d56b308cd01c6863be84b406f67f8d2b4eb34b（本批提交 sha 见 §7 追加）
+
+== 0. 本批做了什么（一句话） ==
+① 修 D-073 根因：AC-AGENTRT-002 的「会话哨兵不落盘」判据口径改为**契约源集合**（全树 − .git/.venv/tmp/node_modules/__pycache__，
+   按相对扫描根的路径分量判定），哨兵改分片拼接，并新增/保留**反向断言**证明这不是放宽（⑤b/⑤c）。
+② 腾文档预算：acceptance-criteria.md 32645 → 26355 B、progress-checklist.md 31843 → 25339 B（均 ≤ 28 KB），
+   最老的行**整行逐字**搬入新建归档 acceptance-criteria-archive-b.md / progress-checklist-archive.md
+   （门的 **T 定义集合先扩到归档**再搬，`tools/check-docs.py` 新增 T_MAIN/T_ARCHIVE_GLOB/DEF_SETS["T"]/SET_LABELS["T"]）。
+③ 顺手把本批新增的决策 D-074 写进 decisions.md（主文件 31074 → 29063 B：新增 D-074 + 4 段无引用旧决策
+   D-063/D-064/D-066/D-067 逐字移入 decisions-archive-b.md，22085 → 26357 B，并在归档指针区登记）。
+
+== 1. D-073 的改法（改了哪个文件、改了哪两件事） ==
+文件: src/quotagent/qa/checks_agentrt_memory.py（8696 → 14030 B）
+  (a) 扫描范围（新增常量 + 两个函数）: SCAN_EXCLUDE_DIRS = {'.git','.venv','tmp','node_modules','__pycache__'}；
+      in_contract_source(root, path) 按 `path.resolve().relative_to(root).parts` 判定；
+      scan_sentinel(root, sentinel) 扫**全树**（不是旧口径的 tmp/host/user-space 三处）+ 相对路径命中列表。
+      ⇒ 真源码（src/ host/ docs/ tools/ .agents/ …）**全部照扫**，被排除的只有临时/派生目录里的整树副本。
+  (b) 哨兵: SENTINEL = 'agentrt-memory-session-' 'sentinel-9f3a'（**分片拼接**；本文件自身也是契约源，
+      整串写成连续字面量会让"扫真源码"自命中 —— 这是 D-073 的另一半根因）。⑤c 断言这条自洽性。
+  (c) 新增断言:
+      ⑤ 契约源集合内检索不到会话哨兵（范围 + 排除集写进 detail）
+      ⑤b 反向断言（非空转）: 同一扫描器扫**真源码路径**里的哨兵 ⇒ 命中；**仅 tmp/ 派生副本**里的哨兵 ⇒ 不命中；
+          副本字节**还原**后与真源逐字节一致（probe 建在 tmp/ac/ 一次性目录里，不写真源码）
+      ⑤c 扫描器自身不含哨兵字面量
+  (d) AC 行同步: docs/work/acceptance-criteria.md 的 AC-AGENTRT-002 行补上"契约源集合 + ⑤b 反向断言"的口径。
+
+== 2. D-073 反向验证（原始输出摘录） ==
+【N1 整仓副本里往**真源码**注入哨兵 ⇒ 必须红】副本 = tmp/d073-copy（tar 复制整仓，排除 .git/.venv/tmp）
+    注入前 src/quotagent/qa/registry.py sha256 前 16 位 e85ea6b2a0e180d6 → 注入后 f1deec2c1b9e42c8
+    "exit_code": 1
+    [FAIL] AC-AGENTRT-002 — 记忆四层边界：会话不落盘 / 项目=账本投影可重建 / 策略只人写 / 跨方只走协议
+【N2 只把哨兵放进 tmp/ 派生副本（D-073 原貌：tmp/usreq-clean/src/quotagent/qa/checks_agentrt_memory.py）⇒ 必须绿】
+    "exit_code": 0
+    [PASS] AC-AGENTRT-002 — 记忆四层边界：会话不落盘 / 项目=账本投影可重建 / 策略只人写 / 跨方只走协议
+    还原 registry.py 后 sha256 前 16 位 = e85ea6b2a0e180d6（与注入前逐字节一致）
+【M1 变异：把排除集撤空（= 回到"整树都扫"的旧行为）⇒ 红（复现 D-073）】
+    "exit_code": 1
+    [FAIL] AC-AGENTRT-002 — 记忆四层边界：会话不落盘 / 项目=账本投影可重建 / 策略只人写 / 跨方只走协议
+    FAIL ⑤ 磁盘上检索不到会话哨兵（契约源集合 = 全树 − 临时/派生目录；事件流只在内存；落账本由 Python 侧显式做） — 命中=['src/quotagent/qa/__pycache__/checks_agentrt_memory.cpython-313.pyc', 'tmp/usreq-clean/src/quotagent/qa/checks_agentrt_memory.py']（哨兵 agentrt-memo… 从未被写入磁盘；范围=/workspace/projects/quotagent/tmp/d073-copy 减去 ）
+    FAIL ⑤b 反向断言（非空转）：同一扫描器扫到**真源码路径**里的哨兵 ⇒ 命中；**仅 tmp/ 派生副本**里的哨兵 ⇒ 不命中；副本字节还原后与真源逐字节一致 — 真源码命中=['src/quotagent/qa/checks_agentrt_memory.py', 'tmp/usreq-clean/src/quotagent/qa/checks_agentrt_memory.py']（期望 ['src/quotagent/qa/checks_agentrt_memory.py']）；tmp/ 副本命中=['tmp/usreq-clean/src/quotagent/qa/checks_agentrt_memory.py']；还原逐字节一致=True
+【M2 变异：把哨兵写回连续字面量 ⇒ ⑤（自命中）/⑤c 红】
+    "exit_code": 1
+    FAIL ⑤ 磁盘上检索不到会话哨兵（契约源集合 = 全树 − 临时/派生目录；事件流只在内存；落账本由 Python 侧显式做） — 命中=['src/quotagent/qa/checks_agentrt_memory.py']（哨兵 agentrt-memo… 从未被写入磁盘；范围=/workspace/projects/quotagent/tmp/d073-copy 减去 .git/.venv/__pycache__/node_modules/tmp）
+    FAIL ⑤c 扫描器自身不含哨兵字面量（否则"扫真源码"必然自命中 —— D-073 的另一半根因） — 哨兵 agentrt-memo… 在本文件里只以分片拼接形式存在（检 7120917039a2）
+【副本内基线（未注入）⇒ 绿】
+    "exit_code": 0
+    [PASS] AC-AGENTRT-002 — 记忆四层边界：会话不落盘 / 项目=账本投影可重建 / 策略只人写 / 跨方只走协议
+
+== 3. 文档预算（字节前 → 后）与搬行规则 ==
+| 文件 | 前 | 后 | 说明 |
+|---|---|---|---|
+| docs/work/acceptance-criteria.md | 32645 | **26355** | 20 条最老非 P0 AC 行（6922 B）整行逐字搬入 |
+| docs/work/acceptance-criteria-archive-b.md（新） | – | 8800 | 批次 B；规则: phase ≠ P0 且 git 引入时间 ≤ 2026-09-21T15:04:59Z |
+| docs/work/progress-checklist.md | 31843 | **25339** | 54 行整行（7922 B；其中 52 条 `T-` 定义行）整行逐字搬入 |
+| docs/work/progress-checklist-archive.md（新） | – | 9557 | 规则: 第二个单元格 ≠ P0、status 恰为 done、引入时间 ≤ 2026-09-21T10:46:22Z |
+| docs/work/decisions.md | 31074 | 29063 | +D-074；D-063/D-064/D-066/D-067（4 段，无外部引用）移入 archive-b |
+| docs/work/decisions-archive-b.md | 22085 | 26357 | 4 段逐字（逐段 sha256 复核，见下） |
+| docs/work/handover.md | 1013 | 1019 | ≤ 1024 B 硬预算内 |
+| docs/design/12-documentation-standard.md | 4926 | 5049 | §2 的 `T-` 定义处补归档口径 |
+搬行走的是脚本 `tmp/move_rows.py`（按 git 引入时间排序，`git show <commit>:<path>` 求每个 ID 的首次出现），
+搬完自检 `roundtrip_identical=True`（归档正文 == 被搬走的行，逐字节同序）、`gone_from_main=True`。
+T 归档是**新机制**，所以先扩门（`tools/check-docs.py` 的 DEF_SETS/SET_LABELS+T_MAIN/T_ARCHIVE_GLOB，
+归档 0 条定义行 = 硬失败），再搬；门现在会打印 `T 定义集合: 主文件 … 定义 63 条；t_archives=[…:52]`。
+
+== 4. 文档门反向验证（在"本批提交树"的整仓副本 tmp/doc-copy2 上做，字节还原后复核） ==
+【基线】rc=0
+    [ok]   T 定义集合: 主文件 docs/work/progress-checklist.md 定义 63 条；t_archives=[docs/work/progress-checklist-archive.md:52]（归档文件共 52 条 T 定义行，受同一套门校验）
+    RESULT: PASS
+【N3 从 AC 归档 B 抽掉一行 AC-ADMIN-005 ⇒ 必红】
+    [FAIL] 未解析的 ID 引用 1 个（共 3081 处引用）
+    - AC-ADMIN-005  ← docs/design/15-requirements-coverage.md, docs/work/functional-requirements-archive-b.md, docs/work/progress-checklist.md
+    还原后 sha256 与前逐字节一致 ⇒ rc=0
+【N4 从清单归档抽掉一行 T-201 ⇒ 必红】
+    [FAIL] 未解析的 ID 引用 1 个（共 3080 处引用）
+    - T-201  ← .agents/sessions/README.md, docs/design/adr/0010-p0-approval-and-realm-filtering.md, docs/design/adr/0013-cordis-bridge-protocol.md, docs/design/adr/0015-host-profiles-and-config-veto.md, docs/work/evidence/INDEX-P1.md, docs/work/evidence/INDEX.md, docs/work/roadmap.md
+    还原后逐字节一致
+【N5 删掉整个清单归档文件 ⇒ 必红（证明归档是承重件，不是装饰）】
+    [FAIL] 未解析的 ID 引用 48 个（共 2907 处引用）
+    还原后 rc=0
+
+== 5. 门结果（本批提交树 tmp/commit-tree = HEAD:c1d56b3 + 本批改动，**且树里放着 D-073 形状的 tmp/ 源码副本**） ==
+副本: tmp/commit-tree/tmp/d073-repro/src/quotagent/qa/checks_agentrt_memory.py（有副本也能绿 = D-073 的验收）
+docs: rc=0
+    [ok]   T 定义集合: 主文件 docs/work/progress-checklist.md 定义 63 条；t_archives=[docs/work/progress-checklist-archive.md:52]（归档文件共 52 条 T 定义行，受同一套门校验）
+    [ok]   预算: 116 个文件受检，最高占用 100%（docs/design/14-plugin-inventory.md 28564/28672 B）
+    RESULT: PASS
+ac-registry: rc=0
+    [ok]   定义集合 133 条 AC（其中 P0 29 条），注册表 85 条
+    [ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查）
+coverage: rc=0（8/8）
+p0-no-node: rc=0
+    P0 阶段 63 条 AC 在无 Node 环境下全绿（P0 不因引入宿主而失去可复跑性）；无瞬时命中（日志: /workspace/projects/quotagent/tmp/commit-tree/tmp/p0-no-node.p2Vzpq）
+g1: rc=0
+    全量 AC：85/85 通过
+    [ok] 阶段门 G1：MVP 判据全部可机检项通过（逐条判定见上方走查报告）
+【如实记录：g1 第一次跑出现瞬时红（不可复现）】tree-g1.txt 第 198 行:
+    全量 AC：82/85 通过；失败 ['AC-AGENTRT-002', 'AC-AGENTRT-006', 'AC-AGENTRT-007']
+    同一棵树、同一条命令随后两次重跑均 `全量 AC：85/85 通过`（tree-g1-rerun.txt / rerun-all.txt），
+    三条 AC 单独跑也各自 PASS；未改任何代码来解释它 ⇒ 记为**未定位的间歇命中**（见 §6）。
+
+== 6. 没验证的东西（诚实边界） ==
+1. §5 的 g1 第一次的瞬时红**未定位**：它出现在本批之前也存在的高并发窗口里（同时期有另一批 agent 在同一个仓库里跑门），
+   两次重跑全绿、单跑全绿；没有抓到失败断言明细（qa all 只打印汇总行）⇒ 只作为"未定位间歇"记录，不声称已修。
+2. 共享工作树（/workspace/projects/quotagent）当前 `tools/verify.sh docs` **红**，原因**不是本批**：
+   另一个并发批次新加的未跟踪文件 `src/domain/advice/requirements/README.md`、`src/userspace/demo-ns/hello/README.md`
+   引用了**尚未定义**的 `AC-PLUGIN-005`/`AC-PLUGIN-006`（该批次计划中的 AC）。本批只提交自己的文件，
+   所以"本批提交树"（= HEAD + 本批文件）里的门全绿；合并两批后是否绿取决于那批自己补上 AC 定义。
+   同理，那批的 README 也引用了 `EV-163`，本批因此**避开 EV-163、改用 EV-164**（避免证据编号撞车）。
+3. 未跑 `clean-copy` / `invariants` / `webui` 等其余门（不在本批要求内）；`docs/design/14-plugin-inventory.md`
+   当前占用 28564/28672 B（99.6%，非本批引入）仍未腾预算。
+4. 本批未审计 `AC-AGENTRT-002` 之外的哨兵类断言是否也存在"扫到无关副本"的同类形态。
+
+== 7. 提交 sha 与远端回读 ==
+（本 § 由紧随其后的"只追加证据/状态"提交补齐）
+
+== 5b. 最终门复跑（把 EV-164 正文写进树之后重跑五道门，仍然树内有 tmp/ 源码副本） ==
+docs rc=0 / ac-registry rc=0 / coverage rc=0 / p0-no-node rc=0 / g1 rc=0（原始输出 tmp/final-*.txt）
+    [ok]   T 定义集合: 主文件 docs/work/progress-checklist.md 定义 63 条；t_archives=[docs/work/progress-checklist-archive.md:52]
+    [ok]   预算: 116 个文件受检，最高占用 100%（docs/design/14-plugin-inventory.md 28564/28672 B；非本批文件）
+    RESULT: PASS
+    P0 阶段 63 条 AC 在无 Node 环境下全绿（P0 不因引入宿主而失去可复跑性）；无瞬时命中
+    全量 AC：85/85 通过
+    [ok] 阶段门 G1：MVP 判据全部可机检项通过（逐条判定见上方走查报告）

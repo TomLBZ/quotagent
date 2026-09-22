@@ -7,12 +7,14 @@
 预算不在此脚本硬编码，而是从 docs/design/12-documentation-standard.md §1 的表格解析，
 避免两处真源漂移。
 
-定义文件集合（口径，唯一真源就在本脚本的 AC_MAIN / AC_ARCHIVE_GLOB 与 FR_MAIN / FR_ARCHIVE_GLOB）：
+定义文件集合（口径，唯一真源就在本脚本的 AC_MAIN / AC_ARCHIVE_GLOB、FR_MAIN / FR_ARCHIVE_GLOB
+与 T_MAIN / T_ARCHIVE_GLOB）：
   AC：`docs/work/acceptance-criteria.md` **+ 同目录下所有 `acceptance-criteria-archive*.md`**；
-  FR：`docs/work/functional-requirements.md` **+ 同目录下所有 `functional-requirements-archive*.md`**。
+  FR：`docs/work/functional-requirements.md` **+ 同目录下所有 `functional-requirements-archive*.md`**；
+  T ：`docs/work/progress-checklist.md` **+ 同目录下所有 `progress-checklist-archive*.md`**。
 归档只改变"定义可以放在哪个文件里"，不改变任何断言语义：ID 必须存在于集合内、
 预算照查、FR↔AC 覆盖照查两个集合里的行（见 check_coverage）。归档**必须真的被读到**：
-某个归档 0 条 FR 定义行（或 0 条 AC 定义行）即判失败，杜绝"两边都是空集合"式的静默通过。
+某个归档 0 条 FR 定义行（或 0 条 AC / T 定义行）即判失败，杜绝"两边都是空集合"式的静默通过。
 注意 V 不走集合：`V-` 行只认主文件 `docs/work/functional-requirements.md` §1（口径比 FR 更窄）。
 
 扫描范围（D-072，承接 D-071 第 3 条"判据不得覆盖无关写入者"）：
@@ -43,22 +45,26 @@ SCAN_SUFFIX = ".md"
 SCAN_EXCLUDE_DIRS = frozenset({".git", ".venv", "tmp", "node_modules", "__pycache__"})
 
 # --- ID 定义源（一处一事实：每个 ID 前缀只有一个定义文件） --------------------
-# 例外有二且仅此二处：AC 与 FR 的"定义文件"各是**一组** —— 主文件 + 同目录下的全部归档。
+# 例外有三且仅此三处：AC、FR 与 T 的"定义文件"各是**一组** —— 主文件 + 同目录下的全部归档。
 # 归档是**集合内的合法定义处**，不是豁免区：归档里的行受同一套断言（ID 完整性、预算、
 # FR↔AC 无孤儿），且"归档 0 条定义行"是硬失败（见 collect_definitions）。
+# T 的归档（D-073 批次新增）口径与 FR/AC 完全一致：搬进归档的 T 号仍是**定义**（引用照解析），
+# 只是行不在主文件里 —— 这样进度清单可以按"最老的行先搬"腾预算，而不会制造"消失的 ID"。
 AC_MAIN = "docs/work/acceptance-criteria.md"
 AC_ARCHIVE_GLOB = "acceptance-criteria-archive*.md"
 FR_MAIN = "docs/work/functional-requirements.md"
 FR_ARCHIVE_GLOB = "functional-requirements-archive*.md"
+T_MAIN = "docs/work/progress-checklist.md"
+T_ARCHIVE_GLOB = "progress-checklist-archive*.md"
 DEF_SETS: dict[str, tuple[str, str]] = {          # 前缀 -> (主文件, 同目录归档 glob)
     "FR": (FR_MAIN, FR_ARCHIVE_GLOB),
     "AC": (AC_MAIN, AC_ARCHIVE_GLOB),
+    "T": (T_MAIN, T_ARCHIVE_GLOB),
 }
 # 单文件定义源：其余每个前缀只有一个文件。V **不**随 FR 扩到归档集合（口径更窄，不放宽）：
 # `V-` 行只认主文件 §1 的验证清单。
 DEF_SOURCES = {
     "V": FR_MAIN,
-    "T": "docs/work/progress-checklist.md",
     "INV": "docs/design/04-services-catalog.md",
     "NFR": "docs/design/10-nonfunctional.md",
 }
@@ -66,6 +72,7 @@ DEF_SOURCES = {
 SET_LABELS = {
     "FR": ("FR 定义集合", "fr_archives", "FR 定义行"),
     "AC": ("AC 定义集合", "archives", "AC 定义行"),
+    "T": ("T 定义集合", "t_archives", "T 定义行"),
 }
 ADR_DIR = "docs/design/adr"
 EVIDENCE_DIR = "docs/work/evidence"
@@ -154,7 +161,7 @@ def md_files() -> tuple[list[Path], int]:
 def id_definition_files(prefix: str) -> tuple[list[Path], list[Path]]:
     """某前缀的定义文件集合 = (全部文件, 其中的归档文件)。
 
-    集合前缀（见 DEF_SETS：FR、AC）：主文件恒在首位，其后是与主文件**同目录**、名字匹配归档 glob
+    集合前缀（见 DEF_SETS：FR、AC、T）：主文件恒在首位，其后是与主文件**同目录**、名字匹配归档 glob
     的每个文件（glob 覆盖多份归档，如 `functional-requirements-archive.md` / `-archive-b.md`）。
     单文件前缀：只有主文件、无归档。
     调用方必须把归档真的读进来（read_md），并对"归档 0 条定义行"判失败 —— 见 collect_definitions。
@@ -203,7 +210,7 @@ def collect_definitions(rep: Report) -> set[str]:
             rep.fail(f"{main_rel} 中未找到任何 {prefix}- 定义行")
         if archives:
             # 可观察证据 + 硬断言：归档必须真被读到（0 条定义行 = 空读 = 失败），
-            # 不许只靠"主文件与归档两边都是空集合"静默通过。FR 与 AC 同一套口径。
+            # 不许只靠"主文件与归档两边都是空集合"静默通过。FR / AC / T 同一套口径。
             label, key, row_label = SET_LABELS[prefix]
             arch_rels = [rel(p) for p in archives]
             for relp in arch_rels:

@@ -5,15 +5,15 @@
 **当前阶段：P1 mvp demo（S1.1 已完成，S1.2 起按 `roadmap.md` §3 推进）**。设计期与 P0 mock（S0.1–S0.15 备料）任务全部 `done`；
 P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假设通过**，在 `validation/register.json.planning_assumptions` 标注（非结论）。
 任务定义（描述与顺序）在 `roadmap.md`；本文件只维护**状态与证据**。
+较早的行（54 行整行 = 归档里 52 条 `T-` 定义行；`T-215a/b` 不以数字结尾，门不按定义行计）在
+`progress-checklist-archive.md`（同目录；选入规则见归档头）。
+**归档仍受门校验**：主文件 + 归档 = 门的 **T 定义集合**（`tools/check-docs.py` 的 `DEF_SETS["T"]`）——
+搬进归档的 T 号仍是定义，引用照解析。
 
 ## 设计期
 
 | T | 阶段 | 内容 | FR | AC | status | evidence |
 |---|---|---|---|---|---|---|
-| T-001 | 设计期 | 分析层文档（cordis 架构 / 设计优势 / agent 仓库约定 / 领域痛点） | – | – | done | EV-002 |
-| T-002 | 设计期 | 设计层文档（00..12 + ADR-0001..0006） | – | – | done | EV-001 |
-| T-003 | 设计期 | 需求与路线图（FR / AC / roadmap / 本清单 / handover） | – | – | done | EV-001 |
-| T-004 | 设计期 | 文档门工具与运行、推送并回读远端 refs | – | AC-DESIGN-001/002/003 | done | EV-001, EV-003 |
 
 ## P0 mock（见 `roadmap.md` §2）
 
@@ -41,37 +41,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 
 | T | 阶段 | 内容 | FR | AC | status | evidence |
 |---|---|---|---|---|---|---|
-| T-201 | P1 | 双侧进程分离 + profiles | FR-PLUGIN-004 | AC-PLUGIN-003 | done | EV-039 |
-| T-202 | P1 | QEP 顺序/空洞/重发 + 版本协商 | FR-QEP-003, FR-QEP-005, FR-QEP-006, FR-QEP-008 | AC-QEP-003, AC-QEP-004 | done | EV-042 |
-| T-218 | P1 | relay 绑定：opaque 转发 + 不可达排队重试 + 篡改拒投（S1.17） | FR-INTEG-002 | AC-INTEG-002 | done | EV-043 |
-| T-203 | P1 | 三方协调 + 字段权威方 + 冲突上报（S1.3） | FR-QEP-007 | AC-SYNC-001 | done | EV-044 |
-| T-204 | P1 | 澄清工单 + 广播完整性 + 版本重开（S1.4） | FR-CLARIFY-001..003 | AC-CLARIFY-001..003 | done | EV-045 |
-| T-205 | P1 | 包版本变更与报价过期标记（S1.5） | FR-NORM-004, FR-RFQ-003, FR-RFQ-006 | AC-COMPARE-001, AC-RFQ-002, AC-RFQ-004 | done | EV-046 |
-| T-206 | P1 | 护栏扩展：条款冲突（付款/质保/罚则）与产能冲突双来源（S1.6） | FR-GUARD-001, FR-GUARD-004 | AC-GUARD-001, AC-GUARD-002 | done | EV-047 |
-| T-207 | P1 | 产能日历与交期校验 + `firm` 交期不可由模型变更（S1.6） | FR-CAP-001, FR-CAP-002, FR-GUARD-003 | AC-CAP-001, AC-GUARD-002 | done | EV-047 |
-| T-208 | P1 | 审计包导出/验证 + 签名 + 包含证明 + 模型输入重建（S1.10） | FR-EVIDENCE-001..003, FR-EVIDENCE-005 | AC-AUDIT-001, AC-AUDIT-002, AC-AUDIT-004 | done | EV-048 |
 | T-209 | P1 | 场景集 S1..S4 + 反例集 | FR-EVAL-001, FR-EVAL-002, FR-EVAL-004 | AC-EVAL-001, AC-EVAL-002 | todo | – |
-| T-210 | P1 | 人工门队列视图 + 超时策略三选一（S1.12） | FR-APPROVE-003, FR-UX-001 | AC-APPROVE-003 | done | EV-049 |
-| T-211 | P1 | 条款库与冲突标注（S1.11） | FR-TERMS-001, FR-TERMS-002, FR-GUARD-004 | AC-TERMS-001 | done | EV-050 |
-| T-212 | P1 | 变更闭环（S1.11 前置：变更与报价版本衔接） | FR-CHANGE-001, FR-CHANGE-002 | AC-CHANGE-001, AC-CHANGE-002 | done | EV-051 |
-| T-213 | P1 | 授标与 PO 闭环（含事件门机检） | FR-AWARD-001..003 | AC-AWARD-001, AC-AWARD-002 | done | EV-052 |
-| T-214 | P1 | 比较表导出（S1.13） | FR-COMPARE-004, FR-UX-003 | AC-COMPARE-004 | done | EV-053 |
-| T-215a | P1 | 分发记录 + 截止时间与超时提醒（S1.14 前置） | FR-RFQ-004, FR-RFQ-005 | AC-RFQ-003 | done | EV-054 |
-| T-215b | P1 | 部署与操作手册（一页能跑起来）+ `verify.sh g1` 聚合门（MVP 判据见 ADR-0014 §3） | FR-RUNTIME-001 | AC-RUNTIME-001、走查 14 条判据 | done | EV-055 |
-| T-219 | P1 | 宿主强制不变量 H1/H2/H3/H5/H6 各带负控（评审 C §7.1 第 6 条） | FR-PLUGIN-004 | `tools/verify.sh invariants` 22/22 | done | EV-056 |
-| T-220 | P1 | 演化门机检骨架：proposal 记录 + patch/journal 归属 + 影子挂载 + dispose 回滚 + promote 必带人工 `approval_ref`（§7.1 第 7 条） | FR-EVOLVE-001 | `verify.sh evolution` 15/15（含负控） | done | EV-057 |
-| T-223 | 模型 Jev 调研报告（强项/用法/适用性/插件建议） | B22 | done | EV-060 |
-| T-225 | 插件清单门 + 模块自动发现 + clean-copy 门（fresh clone 自足性）+ host 依赖自愈 | B23 | done | EV-061 |
-| T-226 | `timeline` 中间件插件（subagent 交付：按 realm 时间线环形缓冲、幂等去重、零残留） | B23 | done | EV-061 |
-| T-228 | A1 `builtin` 断言改双向（声明即事实）+ 各模块声明与用法对齐 | B23b | done | EV-062 |
-| T-227 | 自进化产出插件：提案交付 `host/modules/*.mjs`，影子目录真跑模块 fixture 当门信号，晋升仍需人工引用（ADR-0016） | B24 | done | EV-063 |
-| T-229 | canary 分流与自动回滚：进/升需人工引用、回滚自动；判定三条阈值 + 样本不足不下结论（`canary` 插件，ADR-0017） | B25 | done | EV-064 |
-| T-230 | canary 接线到真实入口：投影独立成 `projection` 插件 + `canary-dispatch` 失败隔离 + UI 路径端到端（ADR-0017 §4 收口） | B26 | done | EV-065 |
-| T-231 | canary 样本接到真实桥调用：`bridge-canary` 插件 + CLI `--canary-weight/--candidate-module`（默认零影响，同形契约） | B27 | done | EV-066 |
-| T-232 | 运行期中间件 `governor` 插件：可解释拒绝/背压、显式超时、有界重试（与 canary 互补） | B28 | done | EV-067 |
-| T-233 | 运行期审计钩子 `audit-hook` 插件：决策留痕（观测，不写账本）+ 去重/有界/零残留 | B29 | done | EV-068 |
-| T-234 | `governor` 接进 UI 真实 HTTP 路径：背压端到端（429+Retry-After）+ 三档映射单测（504/500） | B30 | done | EV-069 / D-027 |
-| T-247 | 由 subagents 生产两件插件（supplier-scorecard 已接线 / idempotency-guard 待接线）+ 修 process.exit 截断 | B43 | done | D-042 / EV-082 |
 | T-252 | FR-EVIDENCE-004 留存与销毁：设计决策 + ADR-0018 + 判定器 `services/retention.py` + 机检 21/21 | B48 | done | D-047 / EV-087 |
 | T-254b | 留存计划的**刷新钩子**：seed 之后 + 网关探活时刷新（清目录后最多一个探活周期恢复） | B51 | done | EV-090 §5 |
 | T-255 | 谈判轮次/让步：设计与契约落档（`16/17-negotiation-*.md`）+ ADR-0019 | B52 | done | EV-091 |
@@ -127,27 +97,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-256 | 谈判轮次**实现**：`services/negotiation.py` + `AC-NEGO-003`（机检 + 变异自证）+ 事件两侧登记 + 矩阵转正 | B53 | done | D-050 / EV-092 |
 | T-254 | 留存计划可被看见：桥侧 `retention.plan`（compute，只读）+ 宿主 `retention-view`（自进化产出）→ 运维视角 `/api/retention`；线上+公网 200 | B50 | done | EV-089 / EV-090 |
 | T-253 | 留存**执行侧**：真删派生副本 + 读侧封存 + 落 `evidence/retention-*`；`AC-AUDIT-005` 机检 22/22 | B49 | done | D-048 / EV-088 |
-| T-251 | 需求覆盖矩阵 + `verify.sh coverage`：FR↔插件↔门全链可核对；补登记 14 FR/14 AC | B47 | done | D-046 / EV-086 |
-| T-250 | subagents 产出两件（approval-digest→双方视角 / budget-guard→桥路径）并接线 | B46 | done | D-045 / EV-085 |
-| T-249 | 把 P2 现状写进运维手册（三条视角道/接口/中间件接线/门清单/排障） | B45 | done | D-044 / EV-084 |
-| T-248 | 幂等守卫接进桥调用路径（同请求只打一次下游，端到端门 5/5） | B44 | done | D-043 / EV-083 |
-| T-246 | 把"新增依赖同步四处"的人肉清单变成机检（verify.sh wiring 5/5，抓出 2 个孤儿 stub） | B42 | done | D-041 / EV-081 |
-| T-245 | 第五个自进化产出（evolve-journal）：自进化流水接进运维视角（webui 门 19/19） | B41 | done | D-040 / EV-080 |
-| T-244 | 运维视角挂到 /quotagent/ops/（第三条视角道齐备，webui 门 18/18） | B40 | done | D-039 / EV-079 |
-| T-243 | 第四次自进化产出：运维视角插件 ops-view（第三个视角，围栏门 9/9） | B39 | done | D-038 / EV-078 |
-| T-242 | 把自进化产出的 breaker 接进真实调用路径（端到端门 4/4） | B38 | done | D-037 / EV-077 |
-| T-241 | 第三次自进化产出：第一个中间件 circuit-breaker（围栏门人工维护，10/10） | B37 | done | D-036 / EV-076 |
-| T-240 | 第二个自进化产出（evidence-summary）接进 WebUI 双方视角 + 固化"新增依赖同步四处" | B36 | done | D-035 / EV-075 |
-| T-239 | 第二次自进化产出（evidence-summary）+ 同类失败护栏真的生效 + 追溯偷改负控 | B35 | done | D-034 / EV-074 |
-| T-238 | 自进化产出的 price-history 接进 WebUI 双方视角（/api/history + 页面价格序列表） | B34 | done | D-033 / EV-073 |
-| T-237 | 用自进化流程真实产出并晋升第一个进树插件（price-history）+ 可机检追溯链 | B33 | done | D-032 / EV-072 |
-| T-236 | 运行期观测（governor/audit/canary）独立插件 + WebUI `/api/obs` 双方可见 | B32 | done | D-031 / EV-071 |
-| T-235 | canary 探针 + 退化自动回滚接到真实命令路径（真人批准进、自动回滚出、落账） | B31 | done | D-030 / EV-070 |
 | T-224 | Jev 建议层插件（`advisor`）：建议不入判定、低置信转人工、外部失败降级 | B23+ | todo | — |
-| T-222 | WebUI 插件（双方视角路由）+ 工作区接入（从现有 dashboard 可访问） | B20/B21 | done | EV-059 |
-| T-221 | P1 | 每个进树模块的 manifest（name/inject/Config/apply）+ fixture A1..A6 + ≥1 契约测试（§7.1 第 5 条） | FR-PLUGIN-001 | `verify.sh modules` 36/36（3 模块 × 12 项） | done | EV-058 |
-| T-216 | P1 | 桥接协议最小闭环（握手/版本协商/方法面/身份注入/错误码） | FR-INTEG-004 | AC-INTEG-004, AC-INTEG-005 | done | EV-040 |
-| T-217 | P1 | 桥的故障语义（SIGKILL/断连 + 背压 + 在途请求记 unknown + 重启预算 + 锚点）（S1.16） | FR-INTEG-004 | AC-INTEG-006 | done | EV-041 |
 
 ## P2 product（见 `roadmap.md` §4）
 
@@ -166,6 +116,8 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-311 | P2 | 12 条用户诉求**持久化进合同**：`FR-USREQ-001..012`（§6.1，每行含原话短引 + 可验收含义 + 验收方式）+ 可追溯表 `docs/work/requirements-traceability.md`（2 done / 9 partial / 1 missing）+ FR 归档批次 B（46 行逐字；主文件 31695→28235 B）+ `AC-USREQ-006`（cron 没待处理反馈时不得发垃圾消息，10/10） | FR-USREQ-001..012 | AC-USREQ-006 | done | EV-159 |
 | T-312 | P2 | 「一切皆插件」架构**持久化成硬规范**（本批，只改文档）：① `docs/design/27-plugin-architecture.md`（三层分类 system 34 / domain 25 / userspace 2 + 单插件目录布局 + `plugin.json` 最小契约 + 六动词生命周期 + 依赖规则 + 注入式 UI 契约 + cordis 边界：直接用/可替换/必须自研/不迁移）② `docs/design/28-plugin-requirements-and-run.md`（"不存在产品整体功能性需求" + 40 个 FR 家族 / 45 个 AC 家族 → 归属插件逐条映射 + 一键运行契约原文）③ ADR-0020「一切皆插件与目录规范」、ADR-0021「需求必须归属到插件」④ `docs/work/plans/plugin-migration-plan.md`（6 阶段，每阶段可单独提交）+ `plugin-file-map.md`（**259 行**逐文件映射，256 路径全映射 0 未映射）+ `spec-persistence.md`（tmp/ 与 plans/ 的事实源落点 + 5 条缺口登记）⑤ 预算表新增 4 行（`docs/work/plans/*.md` 等）⑥ 可追溯表加"插件归属"列（12 条） | FR-PLUGIN-001..004, FR-USERPLUG-012 | AC-PLUGIN-004 | done | EV-162 |
 
+| T-313 | P2 | **两个阻塞消掉（本批）**：① **D-073 根因修复** —— `AC-AGENTRT-002` 的会话哨兵扫描改为**契约源集合**口径（全树 − `.git/.venv/tmp/node_modules/__pycache__`，按相对仓库根的路径分量判定；与 D-071/D-072 同源），哨兵改分片拼接（检查器自身不再是命中源），并新增 **⑤b 反向断言**（真源码路径含哨兵 ⇒ 必命中；仅 `tmp/` 派生副本 ⇒ 不命中；副本字节还原后与真源逐字节一致）与 ⑤c ② **文档预算**：AC 主文件 32645→25723 B、进度清单 31843→23921 B（均 ≤ 28 KB），各行**整行逐字**搬入新建 `acceptance-criteria-archive-b.md` / `progress-checklist-archive.md`（门的 **T 定义集合先扩到归档**再搬） | – | AC-AGENTRT-002 | done | EV-164 |
+
 ## 缺陷与阻塞
 
 | 编号 | 类型 | 内容 | 影响 | 状态 |
@@ -178,5 +130,5 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | GATE-FLAKE-3 | 门维护（本批，D-071 收口）：文档门扫描范围收窄为**契约文档集合**（决策 D-072：临时副本不进判据，`SCAN_EXCLUDE_DIRS` 与 AC-RUNTIME-001 的干净副本 IGNORE_DIRS 同口径；267 → 98）② 契约文档在**读窗口里消失仍判红**（`read_md` 不跳过；仪表化把窗口拉长后删真文档 → exit 1 且失败行指名该文件）③ `AC-RUNTIME-001` 那条断言语义改为「**契约文档集合**不变」+ 门自报数对账 + 定义文件仍在范围内 + 只断言本用例自己的 scratch（10 → 13 条） | 九道门全绿；并发 12/12 绿 | done | EV-152 / D-071 / D-072 |
 | DOC-FR1 | FR 归档合法化：门把 `functional-requirements-archive*.md` 并入 **FR 定义集合**（`tools/check-docs.py` 的 FR↔AC 覆盖同步扩到集合 + 归档 0 条 FR 行硬断言 + `fr_archives=[...]`；`tools/check-fr-coverage.py` 同集合判矩阵双向全覆盖 + 归档空读守卫）；47 条最老非 P0 行**逐字**搬入新建归档，主文件 32583→27645 B；handover 1015→796 B；反向验证 3 例（整仓副本：归档抽行→红、主文件抽行→红（ID 未解析 + AC 孤儿两处）、0 条 FR 行的归档→红；还原 sha256 一致）；12 次连续 docs 全绿 | B83 | done | EV-155 |
 | PERSIST-USREQ | **12 条用户诉求持久化进合同**（用户严厉指出「需求从未落进合同，因为你忘了」）：① `FR-USREQ-001..012` 写入主文件 §6.1（**原话短引 + 可验收含义 + 验收方式**；家族先查重，纯字母）② `docs/work/requirements-traceability.md`（需求→实现→证据；状态 **2 done / 9 partial / 1 missing**，无证据即 missing）③ FR 归档**批次 B**（46 行逐字，选入规则可复核；主文件 31695→28235 B ≤ 28 KB）④ 覆盖矩阵同步 12 行 + 3 条【缺口】登记（并清掉 §3 里 5 行重复登记与叙事，压回预算内）⑤ 新机检 `AC-USREQ-006`（cron 探测器 10/10；负控注入 `date` 即红）⑥ `tools/ui-feedback-monitor.sh` 纳入版本控制（需求 6 的载体，此前**未跟踪**） | B84 | done | EV-159 |
-| D-073 | 门缺陷（本批实测，非本批引入） | `AC-AGENTRT-002` 的"⑤ 会话哨兵不落盘"断言扫 `tmp/`、`host/`、`user-space/` 时，把**自己源码的副本**当成命中：实测命中 `tmp/usreq-clean/src/quotagent/qa/checks_agentrt_memory.py`（前一批用于"干净副本"核对的遗留目录，07:37 创建，早于本批）⇒ `tools/verify.sh g1` 因这条断言红，与文档改动无关（同一条 AC 在 `tmp/` 无源码副本时不红）。这是"判据覆盖了无关写入者"的又一例（与 D-071/D-072 同类） | 需要修 `src/quotagent/qa/checks_agentrt_memory.py` 的扫描排除（排除 `tmp/**/src/**` 这类源码副本，或改成"哨兵必须出现在数据文件里"）—— **属测试改动，本批不做** | **已定位**：本批把那份遗留副本**移出仓库**（`tmp/usreq-clean` → `/tmp/quotagent-scratch/usreq-clean`，未删除任何内容）后同一条 AC **全绿** ⇒ 成因确认；根因修复（改扫描排除）仍需动检查脚本，**属测试改动，本批不做**，见 `docs/work/evidence/EV-162-*.txt` §8 |
+| D-073 | 门缺陷（**已修**，历史：本批之前实测命中） | `AC-AGENTRT-002` 的“⑤ 会话哨兵不落盘”断言扫 `tmp/`、`host/`、`user-space/` 时，把**自己源码的副本**当成命中（实测 `tmp/usreq-clean/src/quotagent/qa/checks_agentrt_memory.py`）⇒ `g1` 因这条断言红，与文档改动无关（无副本时不红）；这是“判据覆盖了无关写入者”的又一例（与 D-071/D-072 同类）。**已修（EV-164 / 决策 D-074）**：① 扫描口径改为**契约源集合**（全树减去 `.git/.venv/tmp/node_modules/__pycache__`，按相对根的路径分量判定；`SCAN_EXCLUDE_DIRS` 与文档门同源）② 哨兵改**分片拼接**（检查器自身不再自命中，⑤c 断言这条自洽性）③ 新增 **⑤b 反向断言**（真源码含哨兵 ⇒ 必命中、仅 `tmp/` 副本 ⇒ 不命中、副本字节还原比对）。**实测**：仓库里有 `tmp/` 源码副本时 `AC-AGENTRT-002` 绿且 `p0-no-node` 全绿；整仓副本里往真源码注入哨兵 ⇒ 红。（编号说明：`decisions.md` 的 D-073 是另一件事“同一秒的 requested+granted”，两处**历史撞车**，本轮不擅自重编号。） | 仓库内存在整树副本也不再红；根因消除，`g1`/`p0-no-node` 与副本解耦 | **resolved（EV-164）** |
 | DOC-BUDGET-FLAKE | 未验证 | 父方在**别处**实测 `tools/verify.sh docs` 同批连续 5 次里 2 次 `exit=1`（当时 `docs/work/functional-requirements.md` = 32583/32768 B，即 99.4%）。本轮同机 12 次连续**全绿**（搬行后 27645/32768 B = 84.4%），且这 12 次的窗口内 `docs/work/*.md` 逐字节未变、`pgrep` 无并发写入者 ⇒ **本机未复现**（不排除父方当时确有并发写入者/半写读）。复现命令：`for i in $(seq 1 12); do tools/verify.sh docs; echo rc=$?; done`。**本批不擅自修门**（避免一次改两件事） | 门间歇红（未定位；预算 99.4% 时风险最高） | open（待复核） |
