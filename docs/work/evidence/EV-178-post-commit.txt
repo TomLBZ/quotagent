@@ -1,0 +1,242 @@
+# EV-178 提交之后：原始行（门 / status / clean-copy / run-clone）
+
+> 本文件是 `EV-178-plugin-relocation-batch8.md` §七 的「提交之后」附录（`.txt` 不受 8 KB 预算约束）。
+> 提交 1 = **6940627**（代码+文档+执行位）；本附录提交 = 见页末。
+
+## 一、`git status --porcelain` 原文（提交前 / 提交后）
+
+### 提交前（`git add` 之后、`git commit` 之前）—— 185 行，**全部在第一列（已暂存）**；
+### 非暂存/未跟踪项 **0 行**（判据：`git status --porcelain | grep -cE '^(\?\?|.[MADRCU])'` == 0）
+
+```
+M  .agents/state.json
+M  docs/design/14-plugin-inventory.md
+M  docs/design/27-plugin-architecture.md
+A  docs/work/evidence/EV-178-plugin-relocation-batch8.md
+M  docs/work/evidence/INDEX-P2-archive-b.md
+M  docs/work/evidence/INDEX-P2.md
+M  docs/work/handover.md
+M  docs/work/plans/plugin-file-map-batches.md
+M  docs/work/plans/plugin-file-map.md
+M  docs/work/progress-checklist-archive.md
+M  docs/work/progress-checklist.md
+M  host/check-modules.mjs
+A  host/lib/entity-advice-panel.mjs
+A  host/lib/entity-audit-hook.mjs
+A  host/lib/entity-authority-band.mjs
+A  host/lib/entity-bridge-canary.mjs
+A  host/lib/entity-compare.mjs
+A  host/lib/entity-gate-timeline.mjs
+A  host/lib/entity-index.mjs
+A  host/lib/entity-kernel-bridge.mjs
+A  host/lib/entity-mail-view.mjs
+A  host/lib/entity-observability.mjs
+A  host/lib/entity-projection.mjs
+A  host/lib/entity-quote-prepare.mjs
+A  host/lib/entity-rfq-deadline.mjs
+A  host/lib/entity-timeline.mjs
+A  host/lib/entity-ui-feedback.mjs
+A  host/lib/entity-webui.mjs
+M  host/lib/evolution.mjs
+M  host/lib/user-space.mjs
+M  host/modules/advice-panel.mjs
+M  host/modules/audit-hook.mjs
+M  host/modules/authority-band.mjs
+M  host/modules/bridge-canary.mjs
+M  host/modules/compare.mjs
+M  host/modules/gate-timeline.mjs
+M  host/modules/index.mjs
+M  host/modules/kernel-bridge.mjs
+M  host/modules/mail-view.mjs
+M  host/modules/observability.mjs
+M  host/modules/projection.mjs
+M  host/modules/quote-prepare.mjs
+M  host/modules/rfq-deadline.mjs
+M  host/modules/timeline.mjs
+M  host/modules/ui-feedback.mjs
+M  host/modules/webui.mjs
+A  src/domain/advice/code/advice-panel.mjs
+A  src/domain/advice/lib
+M  src/domain/advice/tests/checks_adv.py
+M  src/domain/advice/tests/t281-advice-gate.mjs
+A  src/domain/authority-band/code/authority-band.mjs
+A  src/domain/authority-band/lib
+M  src/domain/authority-band/tests/t284-authority-gate.mjs
+M  src/domain/bid-heuristics/tests/checks_viz.py
+A  src/domain/capacity/code/__init__.py
+M  src/domain/capacity/plugin.json
+A  src/domain/change/code/__init__.py
+M  src/domain/change/plugin.json
+A  src/domain/clarify/code/__init__.py
+M  src/domain/clarify/plugin.json
+A  src/domain/commitments/code/__init__.py
+M  src/domain/commitments/plugin.json
+A  src/domain/compare/code/compare.mjs
+A  src/domain/compare/lib
+A  src/domain/costmodel/code/__init__.py
+M  src/domain/costmodel/plugin.json
+A  src/domain/deviation/code/__init__.py
+M  src/domain/deviation/plugin.json
+A  src/domain/export/code/__init__.py
+M  src/domain/export/plugin.json
+A  src/domain/faq/code/__init__.py
+M  src/domain/faq/plugin.json
+A  src/domain/gate-timeline/code/gate-timeline.mjs
+A  src/domain/gate-timeline/lib
+M  src/domain/gate-timeline/tests/checks_gate.py
+M  src/domain/gate-timeline/tests/t282-gate-timeline-gate.mjs
+M  src/domain/gate-timeline/tests/t283-change-detail-gate.mjs
+A  src/domain/gate-timeline/tools/gate-nudge.py
+A  src/domain/guard/code/__init__.py
+M  src/domain/guard/plugin.json
+A  src/domain/intake/code/__init__.py
+M  src/domain/intake/plugin.json
+A  src/domain/negotiation/code/__init__.py
+M  src/domain/negotiation/plugin.json
+A  src/domain/pricing/code/__init__.py
+M  src/domain/pricing/plugin.json
+A  src/domain/quote-prepare/code/quote-prepare.mjs
+A  src/domain/quote-prepare/lib
+M  src/domain/quote-prepare/tests/checks_qprep.py
+M  src/domain/quote-prepare/tests/t286-quote-draft-gate.mjs
+A  src/domain/quotes/code/__init__.py
+M  src/domain/quotes/plugin.json
+A  src/domain/rfq-deadline/code/index.mjs
+A  src/domain/rfq-deadline/code/rfq-deadline.mjs
+A  src/domain/rfq-deadline/lib
+M  src/domain/rfq-deadline/plugin.json
+M  src/domain/rfq-deadline/tests/t285-rfq-deadline-gate.mjs
+A  src/domain/rfq-deadline/tools/rfq-promise.py
+A  src/domain/rfq/code/__init__.py
+M  src/domain/rfq/plugin.json
+A  src/domain/sync/code/__init__.py
+M  src/domain/sync/plugin.json
+A  src/domain/terms/code/__init__.py
+M  src/domain/terms/plugin.json
+M  src/system/admin/tests/checks_admin.py
+A  src/system/admin/tools/admin-apply.py
+A  src/system/admin/tools/refresh-admin-snapshot.py
+A  src/system/agent-runtime/tools/refresh-agent-memory.py
+A  src/system/audit-hook/code/audit-hook.mjs
+A  src/system/audit-hook/code/index.mjs
+A  src/system/audit-hook/lib
+M  src/system/audit-hook/plugin.json
+A  src/system/canary/code/bridge-canary.mjs
+A  src/system/evidence/tools/audit-verify.py
+A  src/system/evidence/tools/export-events.py
+A  src/system/evolution/code/evolution.mjs
+M  src/system/evolution/plugin.json
+A  src/system/evolution/tools/evolve-module.mjs
+A  src/system/evolution/tools/evolve-record.py
+A  src/system/kernel-bridge/code/kernel-bridge.mjs
+A  src/system/kernel-bridge/lib
+A  src/system/mail/code/mail-view.mjs
+A  src/system/mail/lib
+M  src/system/mail/tests/check-mail-transport.py
+M  src/system/mail/tests/checks_mail_transport.py
+A  src/system/measures/code/__init__.py
+M  src/system/measures/plugin.json
+A  src/system/observability/code/index.mjs
+A  src/system/observability/code/observability.mjs
+A  src/system/observability/lib
+M  src/system/observability/plugin.json
+A  src/system/projection/code/projection.mjs
+A  src/system/projection/lib
+M  src/system/projection/tests/t287-rfq-visibility-gate.mjs
+A  src/system/realm/code/__init__.py
+M  src/system/realm/plugin.json
+A  src/system/relay/code/__init__.py
+M  src/system/relay/plugin.json
+M  src/system/repo-gate/tests/check-plugin-assets.py
+M  src/system/repo-gate/tests/checks_usreq.py
+A  src/system/retention/tools/refresh-retention-plan.py
+A  src/system/runtime/code/plugin-index.mjs
+A  src/system/runtime/lib
+M  src/system/runtime/tests/check-plugin-lifecycle.py
+A  src/system/runtime/tools/ws-integrate.py
+M  src/system/storage/tests/t277-storage-gate.mjs
+A  src/system/storage/tools/storage.py
+A  src/system/timeline/code/index.mjs
+A  src/system/timeline/code/timeline.mjs
+A  src/system/timeline/lib
+M  src/system/timeline/plugin.json
+A  src/system/ui-feedback/code/index.mjs
+A  src/system/ui-feedback/code/ui-feedback.mjs
+A  src/system/ui-feedback/lib
+M  src/system/ui-feedback/plugin.json
+M  src/system/ui-feedback/tests/checks_uifb.py
+M  src/system/ui-feedback/tests/t280-ui-feedback-gate.mjs
+A  src/system/ui-feedback/tools/ui-feedback-apply.py
+A  src/system/ui-feedback/tools/ui-feedback-monitor.sh
+A  src/system/ui-feedback/tools/ui-feedback-tick.sh
+A  src/system/user-plugin-manager/code/user-space.mjs
+M  src/system/user-plugin-manager/plugin.json
+A  src/system/user-plugin-manager/tools/userplugin-elevate.py
+A  src/system/user-plugin-manager/tools/userplugin-record.py
+A  src/system/webui/code/webui.mjs
+A  src/system/webui/lib
+M  src/system/webui/tests/checks_uxweb.py
+M  tools/admin-apply.py
+M  tools/audit-verify.py
+M  tools/evolve-module.mjs
+M  tools/evolve-record.py
+M  tools/export-events.py
+M  tools/gate-nudge.py
+M  tools/mutate-ui-views.py
+M  tools/refresh-admin-snapshot.py
+M  tools/refresh-agent-memory.py
+M  tools/refresh-retention-plan.py
+M  tools/rfq-promise.py
+M  tools/storage.py
+M  tools/ui-feedback-apply.py
+M  tools/ui-feedback-monitor.sh
+M  tools/ui-feedback-tick.sh
+M  tools/userplugin-elevate.py
+M  tools/userplugin-record.py
+M  tools/ws-integrate.py
+```
+
+### 提交后 —— **0 行**（原文为空）
+
+> 口径：本行取自**提交 1（6940627）之后、生成 `EV-178-batch8-raw.json` 之前**的同一命令；
+> 本附录（提交 2）与补记（提交 3）之后再次执行为 **0 行**（原文同样为空，见文件末「五、收尾复核」）。
+
+```
+
+```
+
+## 二、19 道门（提交后跑的 clean-copy / run-clone 校验 HEAD）
+
+| 门 | rc | 结论行 |
+|---|---|---|
+| `docs` | 0 | RESULT: PASS |
+| `coverage` | 0 | 8/8 |
+| `ac-registry` | 0 | rc=0（见 .err 为空） |
+| `plugins` | 0 | 5/5 |
+| `webui` | 0 | 51/51 |
+| `modules` | 0 | 521/521 通过 |
+| `wiring` | 0 | 5/5 |
+| `invariants` | 0 | 22/22 通过 |
+| `events` | 0 | rc=0 |
+| `storage` | 0 | 19/19 |
+| `plugin-assets` | 0 | 16/16 |
+| `plugin-requirements` | 0 | 18/18 |
+| `plugin-lifecycle` | 0 | 66/66 |
+| `evolution` | 0 | [PASS] evolution skeleton |
+| `evolve-module` | 0 | 61/61 |
+| `p0-no-node` | 0 | P0 阶段 63 条 AC 在无 Node 环境下全绿；无瞬时命中 |
+| `run-once` | 0 | 34/34 |
+| `clean-copy` | 0 | RESULT: PASS（15 道门在干净副本里全绿） |
+| `run-clone` | 0 | RESULT: PASS（run-clone 门 20/20） |
+
+> 与 HEAD（搬前）逐项对拍的原始行见 `EV-178-batch8-raw.json` §⑥gates：17 道 rc 全部 **0→0**；
+> 两处**按设计**变化：`plugin-assets` 14/14→**16/16**（+PA8 +变异 F7）、`modules` 断言数仍 521/521（两条按源码文本判的读点改走 `moduleSource`，判据变强）。
+> 6 个 `t2xx` 围栏门（approval-digest / budget-guard / supplier-scorecard / plugin-market / pipeline-view / retention-view）
+> **在 HEAD 上就是红的**（EV-176/177 搬迁时未把它们的 import 白名单跟到 `../lib/entity-*.mjs`）—— 本批复跑 ok:false 计数与失败详情**逐条不变**，不是本批引入。
+## 三、干净副本 / 克隆（提交后）
+
+```
+RESULT: PASS（15 道门在干净副本里全绿；已提交内容自足可复现）
+[ok]   K2 副本里的入口**真的可执行**：`run` 与每个 `tools/*.sh` 都有执行位（实测缺陷：索引 100644 ⇒ 干净克隆 `./run up` 报 `host-deps-install-failed`）
+RESULT: PASS（run-clone 门 20/20）
+```

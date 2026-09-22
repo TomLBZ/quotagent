@@ -1,0 +1,652 @@
+{
+ "batch": "EV-178 / T-328（收尾搬迁五件）",
+ "①host_lib": {
+  "moved": [
+   {
+    "from": "host/lib/evolution.mjs",
+    "to": "src/system/evolution/code/evolution.mjs"
+   },
+   {
+    "from": "host/lib/user-space.mjs",
+    "to": "src/system/user-plugin-manager/code/user-space.mjs"
+   }
+  ],
+  "cordis_resolution": "$QUOTAGENT_CORDIS → host/node_modules/cordis/lib/index.js → 裸 'cordis'（与 plugin-registry.mjs 的 loadCordis 同一套）；plugin.json 增 dependencies.cordis",
+  "import_probe_raw": "OK  src/system/evolution/code/evolution.mjs -> ARTIFACT_SURFACE,DIRECTIONS,EvolutionError,METRIC_SOURCES,PatchJournal,SAME_KIND_FAILURE_LIMIT,gate,gateModule,makeModuleProposal,makeProposal,promote,promoteModule,recordEvent,rollback,rollbackModule,shadowArtifact,shadowMount\nOK  host/lib/evolution.mjs -> ARTIFACT_SURFACE,DIRECTIONS,EvolutionError,METRIC_SOURCES,PatchJournal,SAME_KIND_FAILURE_LIMIT,gate,gateModule,makeModuleProposal,makeProposal,promote,promoteModule,recordEvent,rollback,rollbackModule,shadowArtifact,shadowMount\nOK  src/system/user-plugin-manager/code/user-space.mjs -> APPROVAL_RE,DEGRADED_REASONS,ELEVATION_CODE,ENTRY,ENTRY_REASONS,HOST_SERVICES,MANIFEST,MAX_MANIFEST_BYTES,MAX_PLUGINS,NAME_RE,REFUSAL_CODES,REQUIRED_FIELDS,RESERVED_PREFIXES,RESERVED_SERVICES,SERVICE_RE,assertWriteSurface,credentialScope,isReserved,loadPlugin,namespaceKey,reload,resolveCredential,scan,userSpaceRootOf\nOK  host/lib/user-space.mjs -> APPROVAL_RE,DEGRADED_REASONS,ELEVATION_CODE,ENTRY,ENTRY_REASONS,HOST_SERVICES,MANIFEST,MAX_MANIFEST_BYTES,MAX_PLUGINS,NAME_RE,REFUSAL_CODES,REQUIRED_FIELDS,RESERVED_PREFIXES,RESERVED_SERVICES,SERVICE_RE,assertWriteSurface,credentialScope,isReserved,loadPlugin,namespaceKey,reload,resolveCredential,scan,userSpaceRootOf\n"
+ },
+ "②host_modules": {
+  "moved": [
+   {
+    "stem": "advice-panel",
+    "to": "src/domain/advice/code/advice-panel.mjs"
+   },
+   {
+    "stem": "authority-band",
+    "to": "src/domain/authority-band/code/authority-band.mjs"
+   },
+   {
+    "stem": "compare",
+    "to": "src/domain/compare/code/compare.mjs"
+   },
+   {
+    "stem": "gate-timeline",
+    "to": "src/domain/gate-timeline/code/gate-timeline.mjs"
+   },
+   {
+    "stem": "quote-prepare",
+    "to": "src/domain/quote-prepare/code/quote-prepare.mjs"
+   },
+   {
+    "stem": "rfq-deadline",
+    "to": "src/domain/rfq-deadline/code/rfq-deadline.mjs"
+   },
+   {
+    "stem": "audit-hook",
+    "to": "src/system/audit-hook/code/audit-hook.mjs"
+   },
+   {
+    "stem": "bridge-canary",
+    "to": "src/system/canary/code/bridge-canary.mjs"
+   },
+   {
+    "stem": "index",
+    "to": "src/system/runtime/code/plugin-index.mjs"
+   },
+   {
+    "stem": "kernel-bridge",
+    "to": "src/system/kernel-bridge/code/kernel-bridge.mjs"
+   },
+   {
+    "stem": "mail-view",
+    "to": "src/system/mail/code/mail-view.mjs"
+   },
+   {
+    "stem": "observability",
+    "to": "src/system/observability/code/observability.mjs"
+   },
+   {
+    "stem": "projection",
+    "to": "src/system/projection/code/projection.mjs"
+   },
+   {
+    "stem": "timeline",
+    "to": "src/system/timeline/code/timeline.mjs"
+   },
+   {
+    "stem": "ui-feedback",
+    "to": "src/system/ui-feedback/code/ui-feedback.mjs"
+   },
+   {
+    "stem": "webui",
+    "to": "src/system/webui/code/webui.mjs"
+   }
+  ],
+  "export_face_probe_raw": "SAME advice-panel    n=20  COMMIT_SCOPES,Config,DEGRADED_REASONS,ENGINE,ENGINE_NOTE,GATE_COMMANDS,GATE_COMMAND_FALLBACK,RULES,SECTIONS,SEVERITIES,adviseOf,apply,builtin,disposer,fixture,inject,isoMs,name,provides,usedServices\nSAME audit-hook      n=8  Config,apply,builtin,fixture,inject,name,provides,usedServices\nSAME authority-band  n=35  AMOUNT_MAX,APPROVAL_NOTE,BAND_PREFIX,BLOCKED_BY_VALUES,CONFIG_PREFIX,CONFIG_WHERE,CURRENCY_KEY,Config,ENGINE,ENGINE_NOTE,ESCALATE_COMMAND,ESCALATE_HUMAN_COMMAND,ESCALATION_NOTE_KEY,FALLBACK_ROLE_KEY,IGNORED_NOW_INPUTS,MONEY_NOTE,MONEY_UNIT,REASONS,REFUSAL_CODES,REGISTERED_ROLES,ROLE_MAX,SECTIONS,STATUSES,SUPPORTED_UNITS,UNCONFIGURED_NOTE,UNIT_KEY,apply,builtin,checkOf,disposer,fixture,inject,name,provides,usedServices\nSAME bridge-canary   n=8  Config,apply,builtin,fixture,inject,name,provides,usedServices\nSAME compare         n=8  Config,apply,builtin,disposer,inject,name,provides,usedServices\nSAME gate-timeline   n=42  AGE_BASIS_NOTE,AGE_CLOCK,CHANGE_COMMANDS,CHANGE_STATES,CHANGE_STATE_RANK,COMMIT_SCOPES,Config,DEGRADED_REASONS,DETAIL_KEYS,DETAIL_REASONS,ENGINE,ENGINE_NOTE,GATE_COMMANDS,GATE_COMMAND_FALLBACK,IGNORED_NOW_INPUTS,MONEY_NOTE,MONEY_UNIT,NUDGE_ACTION,NUDGE_CODES,NUDGE_KIND,NUDGE_SCHEMA,POLICY_EFFECTS,POLICY_UNKNOWN,PRIVATE_COLUMNS_NOTE,PRIVATE_COLUMN_VIEWS,PRIVATE_KEY_MARKS,RESOLVED_APPROVAL_EVENTS,ROUNDING,SECTIONS,TIMEOUT_POLICIES,apply,builtin,changeDetailOf,disposer,fixture,inject,isoMs,name,nudgeOf,provides,timelineOf,usedServices\nSAME index           n=2  loadModules,moduleFiles\nSAME kernel-bridge   n=8  Config,apply,builtin,disposer,inject,name,provides,usedServices\nSAME mail-view       n=10  COUNT_KEYS,Config,DEGRADED_REASONS,apply,builtin,fixture,inject,name,provides,usedServices\nSAME observability   n=8  Config,apply,builtin,fixture,inject,name,provides,usedServices\nSAME projection      n=24  Config,DELIVERY_BASIS,DELIVERY_NEVER_READ,DELIVERY_REASONS,DELIVERY_ROW_TYPE,DELIVERY_SUPPRESSED,DELIVERY_VIEWS,DERIVED_FIELDS,ENVELOPE_KEYS_READ,ITEM_KEYS_READ,RFQ_ITEM_KEYS,RFQ_KEYS,SPEC_KEYS_READ,VIEW_RULES,apply,builtin,fixture,inject,name,project,projectDeliveries,projectWithAudit,provides,usedServices\nSAME quote-prepare   n=30  ACTION,Config,DEFAULT_CURRENCY,DEGRADED_REASONS,ENGINE,ENGINE_NOTE,ERROR_CODES,EVENT,FIELDS,KIND,LIMITS,MONEY_UNIT,PENDING_PREFIX,REF_RE,SCHEMA,SECTIONS,SIGNATURE_NOTE,apply,buildCatalogue,buildDrafts,builtin,fixture,handoff,hasPrivateKey,inject,name,prepare,provides,usedServices,validate\nSAME rfq-deadline    n=34  CALL_TO_ACTION,Config,DEGRADED_REASONS,DUE_BASIS_NOTE,DUE_CLOCK,ENGINE,ENGINE_NOTE,IGNORED_NOW_INPUTS,NO_SEND_NOTE,PRIVATE_LISTS_NOTE,PRIVATE_LIST_VIEWS,PROMISE_ACTION,PROMISE_CODES,PROMISE_CONSUMER,PROMISE_EVENT,PROMISE_KIND,PROMISE_ROUTE,PROMISE_SCHEMA,RFQ_KEYS,ROSTER_NOTE,SECTIONS,SEVERITIES,SEVERITY_RANK,apply,builtin,disposer,fixture,inject,isoMs,name,promiseOf,provides,statusOf,usedServices\nSAME timeline        n=9  Config,apply,builtin,disposer,fixture,inject,name,provides,usedServices\nSAME ui-feedback     n=11  Config,DEGRADED_REASONS,REVISION_ZERO,SUBMISSION_CODES,apply,builtin,fixture,inject,name,provides,usedServices\nSAME webui           n=9  Config,SUBVIEWS,apply,builtin,inject,name,provides,sendGovernorError,usedServices\n",
+  "evolution_log_intersection": "空（12 条 artifact_path 与本批 16 个 stem 无交集 ⇒ 无追链项）"
+ },
+ "③tools": {
+  "threshold": ">=12",
+  "moved_count": 17,
+  "moved": [
+   "tools/audit-verify.py",
+   "tools/export-events.py",
+   "tools/refresh-admin-snapshot.py",
+   "tools/admin-apply.py",
+   "tools/refresh-agent-memory.py",
+   "tools/refresh-retention-plan.py",
+   "tools/gate-nudge.py",
+   "tools/rfq-promise.py",
+   "tools/userplugin-record.py",
+   "tools/userplugin-elevate.py",
+   "tools/ui-feedback-apply.py",
+   "tools/ui-feedback-monitor.sh",
+   "tools/ui-feedback-tick.sh",
+   "tools/ws-integrate.py",
+   "tools/evolve-record.py",
+   "tools/evolve-module.mjs",
+   "tools/storage.py"
+  ],
+  "not_moved_reason": {
+   "tools/manual-check.py": "契约面（verify.sh/qa/tests/tools）里没有调用者 ⇒ 搬了就是孤儿（PA6 会红）"
+  },
+  "baseline_nonthin": {
+   "before": 30,
+   "after": 13
+  }
+ },
+ "④carriers": {
+  "python": [
+   "src/domain/faq/code/__init__.py",
+   "src/domain/pricing/code/__init__.py",
+   "src/domain/quotes/code/__init__.py",
+   "src/domain/rfq/code/__init__.py",
+   "src/domain/intake/code/__init__.py",
+   "src/domain/negotiation/code/__init__.py",
+   "src/domain/capacity/code/__init__.py",
+   "src/domain/change/code/__init__.py",
+   "src/domain/clarify/code/__init__.py",
+   "src/domain/commitments/code/__init__.py",
+   "src/domain/costmodel/code/__init__.py",
+   "src/domain/deviation/code/__init__.py",
+   "src/domain/export/code/__init__.py",
+   "src/domain/guard/code/__init__.py",
+   "src/domain/sync/code/__init__.py",
+   "src/domain/terms/code/__init__.py",
+   "src/system/measures/code/__init__.py",
+   "src/system/relay/code/__init__.py",
+   "src/system/realm/code/__init__.py"
+  ],
+  "esm": [
+   "src/system/audit-hook/code/index.mjs",
+   "src/system/observability/code/index.mjs",
+   "src/system/timeline/code/index.mjs",
+   "src/system/ui-feedback/code/index.mjs",
+   "src/domain/rfq-deadline/code/index.mjs"
+  ],
+  "counts": {
+   "plugin_json_total": 63,
+   "carried_after": 53,
+   "still_no_entry": 10,
+   "new_in_batch": 24,
+   "python_carriers": 19,
+   "esm_carriers": 5
+  },
+  "probe_raw": "OK  src/system/audit-hook/code/index.mjs name=audit-hook keys=Config,apply,builtin,fixture,inject,name,provides,usedServices\nOK  src/system/observability/code/index.mjs name=observability keys=Config,apply,builtin,fixture,inject,name,provides,usedServices\nOK  src/system/timeline/code/index.mjs name=timeline keys=Config,apply,builtin,disposer,fixture,inject,name,provides,usedServices\nOK  src/system/ui-feedback/code/index.mjs name=ui-feedback keys=Config,DEGRADED_REASONS,REVISION_ZERO,SUBMISSION_CODES,apply,builtin,fixture,inject,name,provides,usedServices\nOK  src/domain/rfq-deadline/code/index.mjs name=rfq-deadline keys=CALL_TO_ACTION,Config,DEGRADED_REASONS,DUE_BASIS_NOTE,DUE_CLOCK,ENGINE,ENGINE_NOTE,IGNORED_NOW_INPUTS,NO_SEND_NOTE,PRIVATE_LISTS_NOTE,PRIVATE_LIST_VIEWS,PROMISE_ACTION,PROMISE_CODES,PROMISE_CONSUMER,PROMISE_EVENT,PROMISE_KIND,PROMISE_ROUTE,PROMISE_SCHEMA,RFQ_KEYS,ROSTER_NOTE,SECTIONS,SEVERITIES,SEVERITY_RANK,apply,builtin,disposer,fixture,inject,isoMs,name,promiseOf,provides,statusOf,usedServices\nOK  src/domain/faq/code/__init__.py __all__(12)=['AgentCannotPublish', 'ENTRY_PUBLISHED_EVENT', 'EVENT_MODES', 'FaqError', 'FaqService', 'FaqVersionMismatch']...\nOK  src/domain/pricing/code/__init__.py __all__(9)=['HUMAN_APPROVED_EVENT', 'OUT_OF_BAND_SCOPE', 'PIPELINE_REASON', 'PRICE_PIPELINE', 'PRICE_PROPOSED_EVENT', 'PriceError']...\nOK  src/domain/quotes/code/__init__.py __all__(5)=['ACTIVE', 'QuoteBook', 'QuoteBookError', 'SUPERSEDED', 'SUPERSEDED_EVENT']\nOK  src/domain/rfq/code/__init__.py __all__(12)=['AMENDED_EVENT', 'DEADLINE_KEYS', 'DEFAULT_SOON_HOURS', 'DISTRIBUTED_EVENT', 'DUE_SOON_EVENT', 'OVERDUE_EVENT']...\nOK  src/domain/intake/code/__init__.py __all__(9)=['ASKED_EVENT', 'ASSUMPTION_EVENT', 'ASSUMPTION_MARKER', 'DependencyNotReady', 'INTAKE_EVENT', 'IntakeError']...\nOK  src/domain/negotiation/code/__init__.py __all__(33)=['BOUNDS_BODY_KEYS', 'BOUNDS_DECLARED_EVENT', 'CLOSED_EVENT', 'CONCESSION_SCOPE', 'ConcessionBelowFloor', 'ConcessionLimitExceeded']...\nOK  src/domain/capacity/code/__init__.py __all__(11)=['BINDING', 'COMMITTED_EVENT', 'CONFLICT_EVENT', 'Calendar', 'CapacityError', 'CapacityService']...\nOK  src/domain/change/code/__init__.py __all__(8)=['APPROVAL_SCOPE', 'APPROVED_EVENT', 'ChangeError', 'ChangeService', 'PRICED_EVENT', 'PROPOSED_EVENT']...\nOK  src/domain/clarify/code/__init__.py __all__(9)=['ANSWERED_EVENT', 'ASKED_EVENT', 'ClarificationService', 'ClarifyError', 'DRAFT_EVENT', 'DRAFT_REASON']...\nOK  src/domain/commitments/code/__init__.py __all__(10)=['AWARD_COMMITTED_EVENT', 'AWARD_INTENT_EVENT', 'AWARD_WITHDRAWN_EVENT', 'CommitmentError', 'CommitmentGate', 'PO_ISSUED_EVENT']...\nOK  src/domain/costmodel/code/__init__.py __all__(10)=['COST_BUILT_EVENT', 'CostError', 'CostLibrary', 'CostModelService', 'DIRECT_ELEMENTS', 'ELEMENTS']...\nOK  src/domain/deviation/code/__init__.py __all__(6)=['CAPTURED_EVENT', 'DeviationError', 'DeviationService', 'IMPACT_KEYS', 'KINDS', 'QUANTIFIED_EVENT']\nOK  src/domain/export/code/__init__.py __all__(6)=['BOM', 'COMPONENTS', 'EXPORT_EVENT', 'ExportError', 'ExportService', 'ROW_HEADER']\nOK  src/domain/guard/code/__init__.py __all__(6)=['FLAG_EVENT', 'FLAG_KINDS', 'GuardService', 'INJECTION_PATTERNS', 'PRIVATE_MARKERS', 'SEVERITIES']\nOK  src/domain/sync/code/__init__.py __all__(10)=['ASKER', 'CONTRACTOR', 'FIELD_AUTHORITY', 'SELF', 'SUGGESTION_TYPE', 'SUPPLIER']...\nOK  src/domain/terms/code/__init__.py __all__(9)=['ALLOWED_SOURCES', 'APPLIED_EVENT', 'CONFLICT_EVENT', 'Conflict', 'DEFINED_EVENT', 'FAMILIES']...\nOK  src/system/measures/code/__init__.py __all__(14)=['DEFAULT_TAXES', 'DEFAULT_UNITS', 'FxBook', 'FxRate', 'IncompatibleMeasure', 'MeasureBook']...\nOK  src/system/relay/code/__init__.py __all__(4)=['RELAY_EVENTS', 'RelayError', 'RelayService', 'sha256_of']\nOK  src/system/realm/code/__init__.py __all__(13)=['CLASSES', 'DEFAULT_FIELD_CLASSES', 'EXCHANGE', 'OWNER_KIND', 'PRIVATE_CLASSES', 'PRIVATE_CONTRACTOR']...\n"
+ },
+ "⑤pa8": {
+  "anchor": "<!-- exceptions: host-layer-nonthin -->（docs/design/27-plugin-architecture.md §10，空表）",
+  "reverse_verification_raw": "[FAIL] PA8 宿主层非薄入口 == 27 §10 登记的例外集合（默认空；双向）\n        `host/modules/zz-reverse-probe.mjs` 是**非薄入口实体**，但 27 §10 例外表里没有登记（搬漏，或放回 host/modules 没登记）\n",
+  "gate_result": "RESULT: PASS（plugin-assets 门 16/16）；变异 F7 命中指定断言=True；红项=['PA6','PA8']"
+ },
+ "⑥gates": [
+  {
+   "gate": "docs",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "coverage",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "8",
+   "frac_after": "8",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "ac-registry",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "plugins",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "5/5",
+   "frac_after": "5/5",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "webui",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "51/51",
+   "frac_after": "51/51",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "modules",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "wiring",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "5",
+   "frac_after": "5",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "invariants",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "22",
+   "frac_after": "22",
+   "reds_before": 1,
+   "reds_after": 1
+  },
+  {
+   "gate": "events",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "storage",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "19",
+   "frac_after": "19",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "plugin-assets",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "14/14",
+   "frac_after": "16/16",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "plugin-requirements",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "18/18",
+   "frac_after": "18/18",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "plugin-lifecycle",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "66/66",
+   "frac_after": "66/66",
+   "reds_before": 3,
+   "reds_after": 3
+  },
+  {
+   "gate": "evolution",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "evolve-module",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "61",
+   "frac_after": "61",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "p0-no-node",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": 0,
+   "reds_after": 0
+  },
+  {
+   "gate": "run-once",
+   "rc_before": 0,
+   "rc_after": 0,
+   "frac_before": "34/34",
+   "frac_after": "34/34",
+   "reds_before": 3,
+   "reds_after": 3
+  },
+  {
+   "gate": "advice",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "14",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "authority",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "12",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "gates",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "4/4",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "change-detail",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "9",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "rfq-deadline",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "11",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "quote-draft",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "14",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "rfq-visibility",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "10/10",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "ui-feedback",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "11",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "bid-heuristics",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "12",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "canary-route",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "8/8",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "canary",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "11/11",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "audit-hook",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "7/7",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "observability",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "bridge-canary",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "11/11",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "governor",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "9/9",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "breaker",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "10",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "breaker-route",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "4",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "approval-digest",
+   "rc_before": null,
+   "rc_after": null,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": null,
+   "reds_after": null
+  },
+  {
+   "gate": "budget-guard",
+   "rc_before": null,
+   "rc_after": null,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": null,
+   "reds_after": null
+  },
+  {
+   "gate": "budget-route",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "5",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "idem-route",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "5",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "idempotency-guard",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "10",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "ops-view",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "9",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "evolve-journal",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "7",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "supplier-scorecard",
+   "rc_before": null,
+   "rc_after": null,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": null,
+   "reds_after": null
+  },
+  {
+   "gate": "plugin-market",
+   "rc_before": null,
+   "rc_after": null,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": null,
+   "reds_after": null
+  },
+  {
+   "gate": "user-space",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "21",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "agent-runtime",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "22",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "mail",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "20",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "mail-transport",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "27/27",
+   "reds_before": null,
+   "reds_after": 1
+  },
+  {
+   "gate": "config-route",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "22",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "admin-route",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "13",
+   "reds_before": null,
+   "reds_after": 1
+  },
+  {
+   "gate": "pipeline-route",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "18",
+   "reds_before": null,
+   "reds_after": 0
+  },
+  {
+   "gate": "pipeline-view",
+   "rc_before": null,
+   "rc_after": null,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": null,
+   "reds_after": null
+  },
+  {
+   "gate": "retention",
+   "rc_before": null,
+   "rc_after": null,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": null,
+   "reds_after": null
+  },
+  {
+   "gate": "retention-view",
+   "rc_before": null,
+   "rc_after": null,
+   "frac_before": "",
+   "frac_after": "",
+   "reds_before": null,
+   "reds_after": null
+  },
+  {
+   "gate": "ui-seed",
+   "rc_before": null,
+   "rc_after": 0,
+   "frac_before": "",
+   "frac_after": "17",
+   "reds_before": null,
+   "reds_after": 0
+  }
+ ],
+ "git_status_precommit": "M  .agents/state.json\nM  docs/design/14-plugin-inventory.md\nM  docs/design/27-plugin-architecture.md\nA  docs/work/evidence/EV-178-plugin-relocation-batch8.md\nM  docs/work/evidence/INDEX-P2-archive-b.md\nM  docs/work/evidence/INDEX-P2.md\nM  docs/work/handover.md\nM  docs/work/plans/plugin-file-map-batches.md\nM  docs/work/plans/plugin-file-map.md\nM  docs/work/progress-checklist-archive.md\nM  docs/work/progress-checklist.md\nM  host/check-modules.mjs\nA  host/lib/entity-advice-panel.mjs\nA  host/lib/entity-audit-hook.mjs\nA  host/lib/entity-authority-band.mjs\nA  host/lib/entity-bridge-canary.mjs\nA  host/lib/entity-compare.mjs\nA  host/lib/entity-gate-timeline.mjs\nA  host/lib/entity-index.mjs\nA  host/lib/entity-kernel-bridge.mjs\nA  host/lib/entity-mail-view.mjs\nA  host/lib/entity-observability.mjs\nA  host/lib/entity-projection.mjs\nA  host/lib/entity-quote-prepare.mjs\nA  host/lib/entity-rfq-deadline.mjs\nA  host/lib/entity-timeline.mjs\nA  host/lib/entity-ui-feedback.mjs\nA  host/lib/entity-webui.mjs\nM  host/lib/evolution.mjs\nM  host/lib/user-space.mjs\nM  host/modules/advice-panel.mjs\nM  host/modules/audit-hook.mjs\nM  host/modules/authority-band.mjs\nM  host/modules/bridge-canary.mjs\nM  host/modules/compare.mjs\nM  host/modules/gate-timeline.mjs\nM  host/modules/index.mjs\nM  host/modules/kernel-bridge.mjs\nM  host/modules/mail-view.mjs\nM  host/modules/observability.mjs\nM  host/modules/projection.mjs\nM  host/modules/quote-prepare.mjs\nM  host/modules/rfq-deadline.mjs\nM  host/modules/timeline.mjs\nM  host/modules/ui-feedback.mjs\nM  host/modules/webui.mjs\nA  src/domain/advice/code/advice-panel.mjs\nA  src/domain/advice/lib\nM  src/domain/advice/tests/checks_adv.py\nM  src/domain/advice/tests/t281-advice-gate.mjs\nA  src/domain/authority-band/code/authority-band.mjs\nA  src/domain/authority-band/lib\nM  src/domain/authority-band/tests/t284-authority-gate.mjs\nM  src/domain/bid-heuristics/tests/checks_viz.py\nA  src/domain/capacity/code/__init__.py\nM  src/domain/capacity/plugin.json\nA  src/domain/change/code/__init__.py\nM  src/domain/change/plugin.json\nA  src/domain/clarify/code/__init__.py\nM  src/domain/clarify/plugin.json\nA  src/domain/commitments/code/__init__.py\nM  src/domain/commitments/plugin.json\nA  src/domain/compare/code/compare.mjs\nA  src/domain/compare/lib\nA  src/domain/costmodel/code/__init__.py\nM  src/domain/costmodel/plugin.json\nA  src/domain/deviation/code/__init__.py\nM  src/domain/deviation/plugin.json\nA  src/domain/export/code/__init__.py\nM  src/domain/export/plugin.json\nA  src/domain/faq/code/__init__.py\nM  src/domain/faq/plugin.json\nA  src/domain/gate-timeline/code/gate-timeline.mjs\nA  src/domain/gate-timeline/lib\nM  src/domain/gate-timeline/tests/checks_gate.py\nM  src/domain/gate-timeline/tests/t282-gate-timeline-gate.mjs\nM  src/domain/gate-timeline/tests/t283-change-detail-gate.mjs\nA  src/domain/gate-timeline/tools/gate-nudge.py\nA  src/domain/guard/code/__init__.py\nM  src/domain/guard/plugin.json\nA  src/domain/intake/code/__init__.py\nM  src/domain/intake/plugin.json\nA  src/domain/negotiation/code/__init__.py\nM  src/domain/negotiation/plugin.json\nA  src/domain/pricing/code/__init__.py\nM  src/domain/pricing/plugin.json\nA  src/domain/quote-prepare/code/quote-prepare.mjs\nA  src/domain/quote-prepare/lib\nM  src/domain/quote-prepare/tests/checks_qprep.py\nM  src/domain/quote-prepare/tests/t286-quote-draft-gate.mjs\nA  src/domain/quotes/code/__init__.py\nM  src/domain/quotes/plugin.json\nA  src/domain/rfq-deadline/code/index.mjs\nA  src/domain/rfq-deadline/code/rfq-deadline.mjs\nA  src/domain/rfq-deadline/lib\nM  src/domain/rfq-deadline/plugin.json\nM  src/domain/rfq-deadline/tests/t285-rfq-deadline-gate.mjs\nA  src/domain/rfq-deadline/tools/rfq-promise.py\nA  src/domain/rfq/code/__init__.py\nM  src/domain/rfq/plugin.json\nA  src/domain/sync/code/__init__.py\nM  src/domain/sync/plugin.json\nA  src/domain/terms/code/__init__.py\nM  src/domain/terms/plugin.json\nM  src/system/admin/tests/checks_admin.py\nA  src/system/admin/tools/admin-apply.py\nA  src/system/admin/tools/refresh-admin-snapshot.py\nA  src/system/agent-runtime/tools/refresh-agent-memory.py\nA  src/system/audit-hook/code/audit-hook.mjs\nA  src/system/audit-hook/code/index.mjs\nA  src/system/audit-hook/lib\nM  src/system/audit-hook/plugin.json\nA  src/system/canary/code/bridge-canary.mjs\nA  src/system/evidence/tools/audit-verify.py\nA  src/system/evidence/tools/export-events.py\nA  src/system/evolution/code/evolution.mjs\nM  src/system/evolution/plugin.json\nA  src/system/evolution/tools/evolve-module.mjs\nA  src/system/evolution/tools/evolve-record.py\nA  src/system/kernel-bridge/code/kernel-bridge.mjs\nA  src/system/kernel-bridge/lib\nA  src/system/mail/code/mail-view.mjs\nA  src/system/mail/lib\nM  src/system/mail/tests/check-mail-transport.py\nM  src/system/mail/tests/checks_mail_transport.py\nA  src/system/measures/code/__init__.py\nM  src/system/measures/plugin.json\nA  src/system/observability/code/index.mjs\nA  src/system/observability/code/observability.mjs\nA  src/system/observability/lib\nM  src/system/observability/plugin.json\nA  src/system/projection/code/projection.mjs\nA  src/system/projection/lib\nM  src/system/projection/tests/t287-rfq-visibility-gate.mjs\nA  src/system/realm/code/__init__.py\nM  src/system/realm/plugin.json\nA  src/system/relay/code/__init__.py\nM  src/system/relay/plugin.json\nM  src/system/repo-gate/tests/check-plugin-assets.py\nM  src/system/repo-gate/tests/checks_usreq.py\nA  src/system/retention/tools/refresh-retention-plan.py\nA  src/system/runtime/code/plugin-index.mjs\nA  src/system/runtime/lib\nM  src/system/runtime/tests/check-plugin-lifecycle.py\nA  src/system/runtime/tools/ws-integrate.py\nM  src/system/storage/tests/t277-storage-gate.mjs\nA  src/system/storage/tools/storage.py\nA  src/system/timeline/code/index.mjs\nA  src/system/timeline/code/timeline.mjs\nA  src/system/timeline/lib\nM  src/system/timeline/plugin.json\nA  src/system/ui-feedback/code/index.mjs\nA  src/system/ui-feedback/code/ui-feedback.mjs\nA  src/system/ui-feedback/lib\nM  src/system/ui-feedback/plugin.json\nM  src/system/ui-feedback/tests/checks_uifb.py\nM  src/system/ui-feedback/tests/t280-ui-feedback-gate.mjs\nA  src/system/ui-feedback/tools/ui-feedback-apply.py\nA  src/system/ui-feedback/tools/ui-feedback-monitor.sh\nA  src/system/ui-feedback/tools/ui-feedback-tick.sh\nA  src/system/user-plugin-manager/code/user-space.mjs\nM  src/system/user-plugin-manager/plugin.json\nA  src/system/user-plugin-manager/tools/userplugin-elevate.py\nA  src/system/user-plugin-manager/tools/userplugin-record.py\nA  src/system/webui/code/webui.mjs\nA  src/system/webui/lib\nM  src/system/webui/tests/checks_uxweb.py\nM  tools/admin-apply.py\nM  tools/audit-verify.py\nM  tools/evolve-module.mjs\nM  tools/evolve-record.py\nM  tools/export-events.py\nM  tools/gate-nudge.py\nM  tools/mutate-ui-views.py\nM  tools/refresh-admin-snapshot.py\nM  tools/refresh-agent-memory.py\nM  tools/refresh-retention-plan.py\nM  tools/rfq-promise.py\nM  tools/storage.py\nM  tools/ui-feedback-apply.py\nM  tools/ui-feedback-monitor.sh\nM  tools/ui-feedback-tick.sh\nM  tools/userplugin-elevate.py\nM  tools/userplugin-record.py\nM  tools/ws-integrate.py\n",
+ "git_status_postcommit": "",
+ "commit": "98ad0f707f8c3ae8986273db62dc26b98b6cce53"
+}
