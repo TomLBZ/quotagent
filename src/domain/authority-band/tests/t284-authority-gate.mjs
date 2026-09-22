@@ -298,7 +298,9 @@ try {
   // ---------- 1. 契约正控 ----------
   const imports = [...originalSource.matchAll(/from\s+'([^']+)'/g)].map((match) => match[1])
   const importLeaks = imports.filter((spec) => !(spec === '../lib/std-schema.mjs' || spec.startsWith('node:')))
-  const keysText = sourceOf(join(HERE, 'lib', 'config-keys.mjs'))
+  // 先改读方（EV-177）：`host/lib/config-keys.mjs` 已搬进 `src/system/config/code/`，旧路径只剩薄重导
+  // ⇒ 按源码文本判据必须指实体（读旧路径会在 8 行转发上读不到任何登记）。
+  const keysText = sourceOf(join(HERE, '..', 'src', 'system', 'config', 'code', 'config-keys.mjs'))
   const registeredInKeys = [...keysText.matchAll(/'(authority\.bands\.[a-z0-9_-]+)':/g)]
     .map((match) => match[1].slice('authority.bands.'.length)).sort()
   const manifest = {

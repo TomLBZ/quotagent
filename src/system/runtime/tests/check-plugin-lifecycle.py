@@ -45,7 +45,7 @@ ROOT = Path(__file__).resolve().parents[4]
 PLUGIN_SH = ROOT / "tools" / "plugin.sh"
 CLI = ROOT / "src" / "system" / "runtime" / "tools" / "plugin-lifecycle.mjs"
 REGISTRY = ROOT / "src" / "system" / "runtime" / "code" / "plugin-registry.mjs"
-UI_SLOT = ROOT / "host" / "lib" / "ui-slot.mjs"
+UI_SLOT = ROOT / "src" / "system" / "webui" / "code" / "ui-slot.mjs"   # 实体（EV-177 搬进 system/webui/code/；旧路径 host/lib/ui-slot.mjs 只剩薄重导）
 WEBUI = ROOT / "host" / "modules" / "webui.mjs"
 RUN = ROOT / "run"
 ADVICE = ROOT / "src" / "domain" / "advice" / "code" / "index.mjs"
@@ -826,7 +826,8 @@ def assert_webui_knows_nothing() -> None:
     check("D3 机制实现 `host/lib/ui-slot.mjs` 自身也 0 命中插件 id/标题/业务名词",
           not slot_hits, f"命中={slot_hits}")
     # D4/D5：阶段 5.2+ 的两条机制纪律（运行期装卸让它们从"应该"变成"必须"）
-    route_path = ROOT / "host" / "lib" / "ui-route.mjs"
+    # 实体（EV-177 搬进 system/webui/code/）；读旧路径会在薄重导上**静默判绿**（0 命中是因为文件里 0 语义）。
+    route_path = ROOT / "src" / "system" / "webui" / "code" / "ui-route.mjs"
     route = route_path.read_text(encoding="utf-8") if route_path.exists() else ""
     route_hits = [needle for needle in needles if needle in route] + \
         [noun for noun in BUSINESS_NOUNS if noun in route]

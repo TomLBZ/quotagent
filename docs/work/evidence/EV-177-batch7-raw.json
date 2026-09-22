@@ -1,0 +1,1742 @@
+{
+ "batch": "EV-177 / T-327",
+ "host_lib_surface": {
+  "before": [
+   {
+    "stem": "bridge",
+    "path": "host/lib/bridge.mjs",
+    "keys": [
+     "BRIDGE_VERSION",
+     "BridgeClient",
+     "MAX_FRAME_BYTES",
+     "ledgerExists"
+    ],
+    "keys_count": 4,
+    "ok": true
+   },
+   {
+    "stem": "canary-dispatch",
+    "path": "host/lib/canary-dispatch.mjs",
+    "keys": [
+     "makeDispatcher"
+    ],
+    "keys_count": 1,
+    "ok": true
+   },
+   {
+    "stem": "canary-run",
+    "path": "host/lib/canary-run.mjs",
+    "keys": [
+     "CanaryApprovalRequired",
+     "probeKey",
+     "runCanary"
+    ],
+    "keys_count": 3,
+    "ok": true
+   },
+   {
+    "stem": "config",
+    "path": "host/lib/config.mjs",
+    "keys": [
+     "UPDATE_EVENT",
+     "canonical",
+     "deletePath",
+     "digestOf",
+     "flatten",
+     "makeConfigHostPlugin",
+     "mergePatch",
+     "requestUpdate",
+     "setPath"
+    ],
+    "keys_count": 9,
+    "ok": true
+   },
+   {
+    "stem": "config-keys",
+    "path": "host/lib/config-keys.mjs",
+    "keys": [
+     "CREDENTIALS",
+     "LAYERS",
+     "PROJECT_KEYS",
+     "envNameFor",
+     "matchSchemaPattern"
+    ],
+    "keys_count": 5,
+    "ok": true
+   },
+   {
+    "stem": "config-ui",
+    "path": "host/lib/config-ui.mjs",
+    "keys": [
+     "CREDENTIALS",
+     "LAYERS",
+     "MANAGED_SECTIONS",
+     "NEXT_ACTION",
+     "PROJECT_KEYS",
+     "REFUSAL_CODES",
+     "canonical",
+     "credentialsView",
+     "digestOf",
+     "envNameFor",
+     "flattenDoc",
+     "matchSchemaPattern",
+     "parseScalar",
+     "parseYaml",
+     "pendingSummary",
+     "pluginView",
+     "previewPatch",
+     "projectView",
+     "readConfigFile",
+     "readManagedSections",
+     "readStatusFile",
+     "sectionRanges",
+     "sha256",
+     "spliceSection",
+     "submitReceipt",
+     "writePendingItem"
+    ],
+    "keys_count": 26,
+    "ok": true
+   },
+   {
+    "stem": "frozen",
+    "path": "host/lib/frozen.mjs",
+    "keys": [
+     "FROZEN_BY",
+     "flattenPaths",
+     "lookup",
+     "validate"
+    ],
+    "keys_count": 4,
+    "ok": true
+   },
+   {
+    "stem": "ledger-view",
+    "path": "host/lib/ledger-view.mjs",
+    "keys": [
+     "openLedger"
+    ],
+    "keys_count": 1,
+    "ok": true
+   },
+   {
+    "stem": "schema",
+    "path": "host/lib/schema.mjs",
+    "keys": [
+     "SCHEMA"
+    ],
+    "keys_count": 1,
+    "ok": true
+   },
+   {
+    "stem": "std-schema",
+    "path": "host/lib/std-schema.mjs",
+    "keys": [
+     "array",
+     "boolean",
+     "constant",
+     "enumOf",
+     "number",
+     "object",
+     "string",
+     "union"
+    ],
+    "keys_count": 8,
+    "ok": true
+   },
+   {
+    "stem": "supervisor",
+    "path": "host/lib/supervisor.mjs",
+    "keys": [
+     "KernelSupervisor",
+     "RESTART_BUDGET",
+     "RESTART_WINDOW_MS",
+     "SHUTDOWN_GRACE_MS"
+    ],
+    "keys_count": 4,
+    "ok": true
+   },
+   {
+    "stem": "ui-route",
+    "path": "host/lib/ui-route.mjs",
+    "keys": [
+     "METHODS",
+     "PATH_RE",
+     "REFUSAL_CODES",
+     "WHAT_MAX",
+     "createRouteRegistry"
+    ],
+    "keys_count": 5,
+    "ok": true
+   },
+   {
+    "stem": "ui-slot",
+    "path": "host/lib/ui-slot.mjs",
+    "keys": [
+     "LAYERS",
+     "ORDER_MAX",
+     "ORDER_MIN",
+     "PLUGIN_ID_RE",
+     "REFUSAL_CODES",
+     "SLOTS",
+     "TITLE_MAX",
+     "createSlotRegistry",
+     "esc"
+    ],
+    "keys_count": 9,
+    "ok": true
+   },
+   {
+    "stem": "evolution",
+    "path": "host/lib/evolution.mjs",
+    "keys": [
+     "ARTIFACT_SURFACE",
+     "DIRECTIONS",
+     "EvolutionError",
+     "METRIC_SOURCES",
+     "PatchJournal",
+     "SAME_KIND_FAILURE_LIMIT",
+     "gate",
+     "gateModule",
+     "makeModuleProposal",
+     "makeProposal",
+     "promote",
+     "promoteModule",
+     "recordEvent",
+     "rollback",
+     "rollbackModule",
+     "shadowArtifact",
+     "shadowMount"
+    ],
+    "keys_count": 17,
+    "ok": true
+   },
+   {
+    "stem": "user-space",
+    "path": "host/lib/user-space.mjs",
+    "keys": [
+     "APPROVAL_RE",
+     "DEGRADED_REASONS",
+     "ELEVATION_CODE",
+     "ENTRY",
+     "ENTRY_REASONS",
+     "HOST_SERVICES",
+     "MANIFEST",
+     "MAX_MANIFEST_BYTES",
+     "MAX_PLUGINS",
+     "NAME_RE",
+     "REFUSAL_CODES",
+     "REQUIRED_FIELDS",
+     "RESERVED_PREFIXES",
+     "RESERVED_SERVICES",
+     "SERVICE_RE",
+     "assertWriteSurface",
+     "credentialScope",
+     "isReserved",
+     "loadPlugin",
+     "namespaceKey",
+     "reload",
+     "resolveCredential",
+     "scan",
+     "userSpaceRootOf"
+    ],
+    "keys_count": 24,
+    "ok": true
+   }
+  ],
+  "after": [
+   {
+    "stem": "bridge",
+    "path": "host/lib/bridge.mjs",
+    "keys": [
+     "BRIDGE_VERSION",
+     "BridgeClient",
+     "MAX_FRAME_BYTES",
+     "ledgerExists"
+    ],
+    "keys_count": 4,
+    "ok": true
+   },
+   {
+    "stem": "canary-dispatch",
+    "path": "host/lib/canary-dispatch.mjs",
+    "keys": [
+     "makeDispatcher"
+    ],
+    "keys_count": 1,
+    "ok": true
+   },
+   {
+    "stem": "canary-run",
+    "path": "host/lib/canary-run.mjs",
+    "keys": [
+     "CanaryApprovalRequired",
+     "probeKey",
+     "runCanary"
+    ],
+    "keys_count": 3,
+    "ok": true
+   },
+   {
+    "stem": "config",
+    "path": "host/lib/config.mjs",
+    "keys": [
+     "UPDATE_EVENT",
+     "canonical",
+     "deletePath",
+     "digestOf",
+     "flatten",
+     "makeConfigHostPlugin",
+     "mergePatch",
+     "requestUpdate",
+     "setPath"
+    ],
+    "keys_count": 9,
+    "ok": true
+   },
+   {
+    "stem": "config-keys",
+    "path": "host/lib/config-keys.mjs",
+    "keys": [
+     "CREDENTIALS",
+     "LAYERS",
+     "PROJECT_KEYS",
+     "envNameFor",
+     "matchSchemaPattern"
+    ],
+    "keys_count": 5,
+    "ok": true
+   },
+   {
+    "stem": "config-ui",
+    "path": "host/lib/config-ui.mjs",
+    "keys": [
+     "CREDENTIALS",
+     "LAYERS",
+     "MANAGED_SECTIONS",
+     "NEXT_ACTION",
+     "PROJECT_KEYS",
+     "REFUSAL_CODES",
+     "canonical",
+     "credentialsView",
+     "digestOf",
+     "envNameFor",
+     "flattenDoc",
+     "matchSchemaPattern",
+     "parseScalar",
+     "parseYaml",
+     "pendingSummary",
+     "pluginView",
+     "previewPatch",
+     "projectView",
+     "readConfigFile",
+     "readManagedSections",
+     "readStatusFile",
+     "sectionRanges",
+     "sha256",
+     "spliceSection",
+     "submitReceipt",
+     "writePendingItem"
+    ],
+    "keys_count": 26,
+    "ok": true
+   },
+   {
+    "stem": "frozen",
+    "path": "host/lib/frozen.mjs",
+    "keys": [
+     "FROZEN_BY",
+     "flattenPaths",
+     "lookup",
+     "validate"
+    ],
+    "keys_count": 4,
+    "ok": true
+   },
+   {
+    "stem": "ledger-view",
+    "path": "host/lib/ledger-view.mjs",
+    "keys": [
+     "openLedger"
+    ],
+    "keys_count": 1,
+    "ok": true
+   },
+   {
+    "stem": "schema",
+    "path": "host/lib/schema.mjs",
+    "keys": [
+     "SCHEMA"
+    ],
+    "keys_count": 1,
+    "ok": true
+   },
+   {
+    "stem": "std-schema",
+    "path": "host/lib/std-schema.mjs",
+    "keys": [
+     "array",
+     "boolean",
+     "constant",
+     "enumOf",
+     "number",
+     "object",
+     "string",
+     "union"
+    ],
+    "keys_count": 8,
+    "ok": true
+   },
+   {
+    "stem": "supervisor",
+    "path": "host/lib/supervisor.mjs",
+    "keys": [
+     "KernelSupervisor",
+     "RESTART_BUDGET",
+     "RESTART_WINDOW_MS",
+     "SHUTDOWN_GRACE_MS"
+    ],
+    "keys_count": 4,
+    "ok": true
+   },
+   {
+    "stem": "ui-route",
+    "path": "host/lib/ui-route.mjs",
+    "keys": [
+     "METHODS",
+     "PATH_RE",
+     "REFUSAL_CODES",
+     "WHAT_MAX",
+     "createRouteRegistry"
+    ],
+    "keys_count": 5,
+    "ok": true
+   },
+   {
+    "stem": "ui-slot",
+    "path": "host/lib/ui-slot.mjs",
+    "keys": [
+     "LAYERS",
+     "ORDER_MAX",
+     "ORDER_MIN",
+     "PLUGIN_ID_RE",
+     "REFUSAL_CODES",
+     "SLOTS",
+     "TITLE_MAX",
+     "createSlotRegistry",
+     "esc"
+    ],
+    "keys_count": 9,
+    "ok": true
+   },
+   {
+    "stem": "evolution",
+    "path": "host/lib/evolution.mjs",
+    "keys": [
+     "ARTIFACT_SURFACE",
+     "DIRECTIONS",
+     "EvolutionError",
+     "METRIC_SOURCES",
+     "PatchJournal",
+     "SAME_KIND_FAILURE_LIMIT",
+     "gate",
+     "gateModule",
+     "makeModuleProposal",
+     "makeProposal",
+     "promote",
+     "promoteModule",
+     "recordEvent",
+     "rollback",
+     "rollbackModule",
+     "shadowArtifact",
+     "shadowMount"
+    ],
+    "keys_count": 17,
+    "ok": true
+   },
+   {
+    "stem": "user-space",
+    "path": "host/lib/user-space.mjs",
+    "keys": [
+     "APPROVAL_RE",
+     "DEGRADED_REASONS",
+     "ELEVATION_CODE",
+     "ENTRY",
+     "ENTRY_REASONS",
+     "HOST_SERVICES",
+     "MANIFEST",
+     "MAX_MANIFEST_BYTES",
+     "MAX_PLUGINS",
+     "NAME_RE",
+     "REFUSAL_CODES",
+     "REQUIRED_FIELDS",
+     "RESERVED_PREFIXES",
+     "RESERVED_SERVICES",
+     "SERVICE_RE",
+     "assertWriteSurface",
+     "credentialScope",
+     "isReserved",
+     "loadPlugin",
+     "namespaceKey",
+     "reload",
+     "resolveCredential",
+     "scan",
+     "userSpaceRootOf"
+    ],
+    "keys_count": 24,
+    "ok": true
+   }
+  ],
+  "note": "逐文件 import host/lib/<x>.mjs，比导出名集合与关键 manifest 字段（含 2 个未搬对照）"
+ },
+ "evolution_chain_verify": [
+  {
+   "name": "price-history",
+   "new_path": "src/domain/price-history/code/price-history.mjs",
+   "bytes_conserved": true,
+   "head_sha": "edf4fc3cb4f124c4",
+   "new_sha": "edf4fc3cb4f124c4",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 10,
+   "thin_two_halves": "host/modules/price-history.mjs -> host/lib/entity-price-history.mjs -> src/domain/price-history/code/price-history.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "describe",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "seriesFor",
+      "usedServices"
+     ],
+     "name": "price-history",
+     "provides": [
+      "priceHistory"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "describe",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "seriesFor",
+      "usedServices"
+     ],
+     "name": "price-history",
+     "provides": [
+      "priceHistory"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "describe",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "seriesFor",
+      "usedServices"
+     ],
+     "name": "price-history",
+     "provides": [
+      "priceHistory"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  },
+  {
+   "name": "evidence-summary",
+   "new_path": "src/system/evidence/code/evidence-summary.mjs",
+   "bytes_conserved": true,
+   "head_sha": "be399b59ac3f2f99",
+   "new_sha": "be399b59ac3f2f99",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 10,
+   "thin_two_halves": "host/modules/evidence-summary.mjs -> host/lib/entity-evidence-summary.mjs -> src/system/evidence/code/evidence-summary.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "byType",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "span",
+      "usedServices"
+     ],
+     "name": "evidence-summary",
+     "provides": [
+      "evidenceSummary"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "byType",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "span",
+      "usedServices"
+     ],
+     "name": "evidence-summary",
+     "provides": [
+      "evidenceSummary"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "byType",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "span",
+      "usedServices"
+     ],
+     "name": "evidence-summary",
+     "provides": [
+      "evidenceSummary"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  },
+  {
+   "name": "circuit-breaker",
+   "new_path": "src/system/circuit-breaker/code/circuit-breaker.mjs",
+   "bytes_conserved": true,
+   "head_sha": "4bddc04fbd83aafb",
+   "new_sha": "4bddc04fbd83aafb",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 8,
+   "thin_two_halves": "host/modules/circuit-breaker.mjs -> host/lib/entity-circuit-breaker.mjs -> src/system/circuit-breaker/code/circuit-breaker.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "circuit-breaker",
+     "provides": [
+      "breaker"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "circuit-breaker",
+     "provides": [
+      "breaker"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "circuit-breaker",
+     "provides": [
+      "breaker"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  },
+  {
+   "name": "ops-view",
+   "new_path": "src/system/ops-view/code/ops-view.mjs",
+   "bytes_conserved": true,
+   "head_sha": "14948a40890d7dcf",
+   "new_sha": "14948a40890d7dcf",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 8,
+   "thin_two_halves": "host/modules/ops-view.mjs -> host/lib/entity-ops-view.mjs -> src/system/ops-view/code/ops-view.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "ops-view",
+     "provides": [
+      "opsView"
+     ],
+     "inject": [
+      "observability",
+      "breaker",
+      "evidenceSummary"
+     ],
+     "usedServices": [
+      "observability",
+      "breaker",
+      "evidenceSummary"
+     ],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "ops-view",
+     "provides": [
+      "opsView"
+     ],
+     "inject": [
+      "observability",
+      "breaker",
+      "evidenceSummary"
+     ],
+     "usedServices": [
+      "observability",
+      "breaker",
+      "evidenceSummary"
+     ],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "ops-view",
+     "provides": [
+      "opsView"
+     ],
+     "inject": [
+      "observability",
+      "breaker",
+      "evidenceSummary"
+     ],
+     "usedServices": [
+      "observability",
+      "breaker",
+      "evidenceSummary"
+     ],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  },
+  {
+   "name": "evolve-journal",
+   "new_path": "src/system/evolution/code/evolve-journal.mjs",
+   "bytes_conserved": true,
+   "head_sha": "a242c8ea8d79e5ff",
+   "new_sha": "a242c8ea8d79e5ff",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 9,
+   "thin_two_halves": "host/modules/evolve-journal.mjs -> host/lib/entity-evolve-journal.mjs -> src/system/evolution/code/evolve-journal.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "Config",
+      "KNOWN",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "evolve-journal",
+     "provides": [
+      "evolveJournal"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "Config",
+      "KNOWN",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "evolve-journal",
+     "provides": [
+      "evolveJournal"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "Config",
+      "KNOWN",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "evolve-journal",
+     "provides": [
+      "evolveJournal"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  },
+  {
+   "name": "supplier-scorecard",
+   "new_path": "src/domain/supplier-scorecard/code/supplier-scorecard.mjs",
+   "bytes_conserved": true,
+   "head_sha": "fb7acd47a2baa280",
+   "new_sha": "fb7acd47a2baa280",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 10,
+   "thin_two_halves": "host/modules/supplier-scorecard.mjs -> host/lib/entity-supplier-scorecard.mjs -> src/domain/supplier-scorecard/code/supplier-scorecard.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "groupBySupplier",
+      "inject",
+      "name",
+      "provides",
+      "scorecardOf",
+      "usedServices"
+     ],
+     "name": "supplier-scorecard",
+     "provides": [
+      "supplierScorecard"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "groupBySupplier",
+      "inject",
+      "name",
+      "provides",
+      "scorecardOf",
+      "usedServices"
+     ],
+     "name": "supplier-scorecard",
+     "provides": [
+      "supplierScorecard"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "groupBySupplier",
+      "inject",
+      "name",
+      "provides",
+      "scorecardOf",
+      "usedServices"
+     ],
+     "name": "supplier-scorecard",
+     "provides": [
+      "supplierScorecard"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  },
+  {
+   "name": "idempotency-guard",
+   "new_path": "src/system/idempotency-guard/code/idempotency-guard.mjs",
+   "bytes_conserved": true,
+   "head_sha": "6d9b9e450aa7a9fe",
+   "new_sha": "6d9b9e450aa7a9fe",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 8,
+   "thin_two_halves": "host/modules/idempotency-guard.mjs -> host/lib/entity-idempotency-guard.mjs -> src/system/idempotency-guard/code/idempotency-guard.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "idempotency-guard",
+     "provides": [
+      "idempotency"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "idempotency-guard",
+     "provides": [
+      "idempotency"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "idempotency-guard",
+     "provides": [
+      "idempotency"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  },
+  {
+   "name": "approval-digest",
+   "new_path": "src/system/approval/code/approval-digest.mjs",
+   "bytes_conserved": true,
+   "head_sha": "d421207e8822901e",
+   "new_sha": "d421207e8822901e",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 11,
+   "thin_two_halves": "host/modules/approval-digest.mjs -> host/lib/entity-approval-digest.mjs -> src/system/approval/code/approval-digest.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "byPolicyOf",
+      "digestOf",
+      "fixture",
+      "inject",
+      "name",
+      "oldestOf",
+      "provides",
+      "usedServices"
+     ],
+     "name": "approval-digest",
+     "provides": [
+      "approvalDigest"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "byPolicyOf",
+      "digestOf",
+      "fixture",
+      "inject",
+      "name",
+      "oldestOf",
+      "provides",
+      "usedServices"
+     ],
+     "name": "approval-digest",
+     "provides": [
+      "approvalDigest"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "Config",
+      "apply",
+      "builtin",
+      "byPolicyOf",
+      "digestOf",
+      "fixture",
+      "inject",
+      "name",
+      "oldestOf",
+      "provides",
+      "usedServices"
+     ],
+     "name": "approval-digest",
+     "provides": [
+      "approvalDigest"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  },
+  {
+   "name": "budget-guard",
+   "new_path": "src/system/budget-guard/code/budget-guard.mjs",
+   "bytes_conserved": true,
+   "head_sha": "b8196aa0d5b437ef",
+   "new_sha": "b8196aa0d5b437ef",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 9,
+   "thin_two_halves": "host/modules/budget-guard.mjs -> host/lib/entity-budget-guard.mjs -> src/system/budget-guard/code/budget-guard.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "BudgetGuardError",
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "budget-guard",
+     "provides": [
+      "budgetGuard"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "BudgetGuardError",
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "budget-guard",
+     "provides": [
+      "budgetGuard"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "BudgetGuardError",
+      "Config",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "budget-guard",
+     "provides": [
+      "budgetGuard"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  },
+  {
+   "name": "retention-view",
+   "new_path": "src/system/retention/code/retention-view.mjs",
+   "bytes_conserved": true,
+   "head_sha": "96a1dda2c6f2f1ea",
+   "new_sha": "96a1dda2c6f2f1ea",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 10,
+   "thin_two_halves": "host/modules/retention-view.mjs -> host/lib/entity-retention-view.mjs -> src/system/retention/code/retention-view.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "COUNT_KEYS",
+      "Config",
+      "ITEM_KEYS",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "retention-view",
+     "provides": [
+      "retentionView"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "COUNT_KEYS",
+      "Config",
+      "ITEM_KEYS",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "retention-view",
+     "provides": [
+      "retentionView"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "COUNT_KEYS",
+      "Config",
+      "ITEM_KEYS",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "usedServices"
+     ],
+     "name": "retention-view",
+     "provides": [
+      "retentionView"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  },
+  {
+   "name": "pipeline-view",
+   "new_path": "src/system/pipeline-view/code/pipeline-view.mjs",
+   "bytes_conserved": true,
+   "head_sha": "25d56c92e97d4011",
+   "new_sha": "25d56c92e97d4011",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 14,
+   "thin_two_halves": "host/modules/pipeline-view.mjs -> host/lib/entity-pipeline-view.mjs -> src/system/pipeline-view/code/pipeline-view.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "Config",
+      "DEGRADED_REASONS",
+      "NEGOTIATE_KEYS",
+      "TOTAL_KEYS",
+      "TRANSPORT_TIERS",
+      "VIEW_DOMAINS",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "reconcileTransport",
+      "usedServices"
+     ],
+     "name": "pipeline-view",
+     "provides": [
+      "pipelineView"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "Config",
+      "DEGRADED_REASONS",
+      "NEGOTIATE_KEYS",
+      "TOTAL_KEYS",
+      "TRANSPORT_TIERS",
+      "VIEW_DOMAINS",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "reconcileTransport",
+      "usedServices"
+     ],
+     "name": "pipeline-view",
+     "provides": [
+      "pipelineView"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "Config",
+      "DEGRADED_REASONS",
+      "NEGOTIATE_KEYS",
+      "TOTAL_KEYS",
+      "TRANSPORT_TIERS",
+      "VIEW_DOMAINS",
+      "apply",
+      "builtin",
+      "fixture",
+      "inject",
+      "name",
+      "provides",
+      "reconcileTransport",
+      "usedServices"
+     ],
+     "name": "pipeline-view",
+     "provides": [
+      "pipelineView"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  },
+  {
+   "name": "plugin-market",
+   "new_path": "src/system/market/code/plugin-market.mjs",
+   "bytes_conserved": true,
+   "head_sha": "867a7c792ac1f97f",
+   "new_sha": "867a7c792ac1f97f",
+   "keys_head_vs_entity": true,
+   "keys_head_vs_thin": true,
+   "keys_count": 26,
+   "thin_two_halves": "host/modules/plugin-market.mjs -> host/lib/entity-plugin-market.mjs -> src/system/market/code/plugin-market.mjs",
+   "probe": {
+    "head": {
+     "keys": [
+      "COUNT_KEYS",
+      "Config",
+      "DEGRADED_REASONS",
+      "DIFFERENCE_KINDS",
+      "EMPTY_REASON",
+      "EVOLVE_MARKERS",
+      "ITEM_KEYS",
+      "NON_PLUGIN_FILES",
+      "OUTPUT_KEYS",
+      "SERVICE_RE",
+      "SOURCE_KINDS",
+      "UNWIRED_EXACT",
+      "UNWIRED_MARKERS",
+      "USER_MANIFEST",
+      "apply",
+      "builtin",
+      "fixture",
+      "hasEvolveMarker",
+      "inject",
+      "isWiredCell",
+      "name",
+      "provides",
+      "readInventory",
+      "readInventoryRow",
+      "readProfileRefs",
+      "usedServices"
+     ],
+     "name": "plugin-market",
+     "provides": [
+      "pluginMarket"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "entity": {
+     "keys": [
+      "COUNT_KEYS",
+      "Config",
+      "DEGRADED_REASONS",
+      "DIFFERENCE_KINDS",
+      "EMPTY_REASON",
+      "EVOLVE_MARKERS",
+      "ITEM_KEYS",
+      "NON_PLUGIN_FILES",
+      "OUTPUT_KEYS",
+      "SERVICE_RE",
+      "SOURCE_KINDS",
+      "UNWIRED_EXACT",
+      "UNWIRED_MARKERS",
+      "USER_MANIFEST",
+      "apply",
+      "builtin",
+      "fixture",
+      "hasEvolveMarker",
+      "inject",
+      "isWiredCell",
+      "name",
+      "provides",
+      "readInventory",
+      "readInventoryRow",
+      "readProfileRefs",
+      "usedServices"
+     ],
+     "name": "plugin-market",
+     "provides": [
+      "pluginMarket"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    },
+    "thin": {
+     "keys": [
+      "COUNT_KEYS",
+      "Config",
+      "DEGRADED_REASONS",
+      "DIFFERENCE_KINDS",
+      "EMPTY_REASON",
+      "EVOLVE_MARKERS",
+      "ITEM_KEYS",
+      "NON_PLUGIN_FILES",
+      "OUTPUT_KEYS",
+      "SERVICE_RE",
+      "SOURCE_KINDS",
+      "UNWIRED_EXACT",
+      "UNWIRED_MARKERS",
+      "USER_MANIFEST",
+      "apply",
+      "builtin",
+      "fixture",
+      "hasEvolveMarker",
+      "inject",
+      "isWiredCell",
+      "name",
+      "provides",
+      "readInventory",
+      "readInventoryRow",
+      "readProfileRefs",
+      "usedServices"
+     ],
+     "name": "plugin-market",
+     "provides": [
+      "pluginMarket"
+     ],
+     "inject": [],
+     "usedServices": [],
+     "builtin": [],
+     "has_config": true,
+     "has_apply": true,
+     "has_fixture": true
+    }
+   },
+   "ok": true
+  }
+ ],
+ "evolution_chain_positive": {
+  "command": "python3 src/system/evolution/tests/check-evolution-log-path.py",
+  "tail": {
+   "TOTAL": 12,
+   "FAIL": 0
+  },
+  "note": "12 条记录的 sha256 与当前实体逐字节相等（逐行 ok:true 见 tmp/ 原始输出）"
+ },
+ "evolution_chain_negative": {
+  "harness": "tmp/ev177_chain_negative.py（改动只写在 tmp/ 的最小副本里）",
+  "N1_追链前形态_日志指旧路径": {
+   "check-evolved-module.py": "rc=1 passed=25/61",
+   "check-evolution-log-path.py": "rc=1 TOTAL=12 FAIL=12"
+  },
+  "N2_实体翻转一个字节": {
+   "check-evolved-module.py": "rc=1 passed=60/61",
+   "check-evolution-log-path.py": "rc=1 TOTAL=12 FAIL=1"
+  },
+  "TOTAL": 4,
+  "FAIL": 0
+ },
+ "tools_moves_pairwise": {
+  "note": "搬前 = 纯 HEAD 干净副本 / 同工作树 ③ 之前实测；搬后 = 现工作树逐门实测",
+  "rows": [
+   {
+    "gate": "admin-route",
+    "before": "13/13",
+    "after": "13/13"
+   },
+   {
+    "gate": "budget-route",
+    "before": "5/5",
+    "after": "5/5"
+   },
+   {
+    "gate": "pipeline-route",
+    "before": "18/18",
+    "after": "18/18"
+   },
+   {
+    "gate": "rfq-deadline",
+    "before": "23/23 + 11/11",
+    "after": "23/23 + 11/11"
+   },
+   {
+    "gate": "ui-seed",
+    "before": "17/17",
+    "after": "17/17"
+   },
+   {
+    "gate": "mail-transport",
+    "before": "27/27",
+    "after": "27/27"
+   },
+   {
+    "gate": "config-route",
+    "before": "22/22",
+    "after": "22/22"
+   },
+   {
+    "gate": "ui-feedback",
+    "before": "11/11",
+    "after": "11/11"
+   },
+   {
+    "gate": "modules",
+    "before": "521/521",
+    "after": "521/521"
+   },
+   {
+    "gate": "evolve-module",
+    "before": "61/61",
+    "after": "61/61"
+   },
+   {
+    "gate": "plugin-requirements",
+    "before": "18/18",
+    "after": "18/18"
+   },
+   {
+    "gate": "plugin-assets",
+    "before": "14/14",
+    "after": "14/14"
+   }
+  ]
+ },
+ "carriers": [
+  {
+   "id": "domain/price-history",
+   "entity": "code/price-history.mjs",
+   "provides": "priceHistory"
+  },
+  {
+   "id": "system/evidence",
+   "entity": "code/evidence-summary.mjs",
+   "provides": "evidenceSummary"
+  },
+  {
+   "id": "system/circuit-breaker",
+   "entity": "code/circuit-breaker.mjs",
+   "provides": "breaker"
+  },
+  {
+   "id": "system/ops-view",
+   "entity": "code/ops-view.mjs",
+   "provides": "opsView"
+  },
+  {
+   "id": "system/evolution",
+   "entity": "code/evolve-journal.mjs",
+   "provides": "evolveJournal"
+  },
+  {
+   "id": "domain/supplier-scorecard",
+   "entity": "code/supplier-scorecard.mjs",
+   "provides": "supplierScorecard"
+  },
+  {
+   "id": "system/idempotency-guard",
+   "entity": "code/idempotency-guard.mjs",
+   "provides": "idempotency"
+  },
+  {
+   "id": "system/approval",
+   "entity": "code/approval-digest.mjs",
+   "provides": "approvalDigest"
+  },
+  {
+   "id": "system/budget-guard",
+   "entity": "code/budget-guard.mjs",
+   "provides": "budgetGuard"
+  },
+  {
+   "id": "system/retention",
+   "entity": "code/retention-view.mjs",
+   "provides": "retentionView"
+  },
+  {
+   "id": "system/pipeline-view",
+   "entity": "code/pipeline-view.mjs",
+   "provides": "pipelineView"
+  },
+  {
+   "id": "system/market",
+   "entity": "code/plugin-market.mjs",
+   "provides": "pluginMarket"
+  }
+ ],
+ "carrier_runtime": {
+  "status": "12/12 valid=true reason=null kind=esm deps_ready=true",
+  "load": "system/market ⇒ rc=0 fiber_state=ACTIVE effects={\"count\":1,\"labels\":[\"ctx.provide(\\\"pluginMarket\\\")\"]}",
+  "unload": "system/market ⇒ effects_before=1 effects_after=0 zero_effects=true"
+ }
+}

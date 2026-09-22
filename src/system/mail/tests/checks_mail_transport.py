@@ -20,8 +20,9 @@ ROOT = Path(__file__).resolve().parents[4]
 FILES = {'transport': ROOT / 'src' / 'system' / 'mail' / 'code' / 'mail_transport.py',
          'mail': ROOT / 'src' / 'system' / 'mail' / 'code' / 'mail.py',
          'view': ROOT / 'host' / 'modules' / 'mail-view.mjs',
-         'keys': ROOT / 'host' / 'lib' / 'config-keys.mjs',
-         'gate': ROOT / 'tools' / 'check-mail-transport.py'}
+         'keys': ROOT / 'src' / 'system' / 'config' / 'code' / 'config-keys.mjs',
+         # 实体（EV-177 搬进本插件 tests/；旧路径只剩薄转发 ⇒ 按大小/文本判的读点必须指实体）
+         'gate': ROOT / 'src' / 'system' / 'mail' / 'tests' / 'check-mail-transport.py'}
 
 
 def _node() -> bool:

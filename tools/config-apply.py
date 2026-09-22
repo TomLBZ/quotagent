@@ -17,7 +17,7 @@
   **整次拒绝**（退出码 2、零落盘、零账本、stdout 一行 JSON 说清理由）。
 - **权限即门**：待处理项**权限必须恰为 0600**（0644 等一律拒），不猜、不自动改权限。凭据文件落盘后**必须** 0600。
 - **重算校验**：`payload_sha256` 与 `bytes` 一律用 `fields` 重算比对（不采信文件自述），不一致即拒。
-- **白名单 + 类型**：`project` 层的键必须**同时**在 `host/lib/schema.mjs` 白名单与 `host/lib/config-keys.mjs`
+- **白名单 + 类型**：`project` 层的键必须**同时**在 `src/system/config/code/schema.mjs` 白名单与 `src/system/config/code/config-keys.mjs`
   登记表里（两处都是**同一份文件**被解析，不存在第二份白名单）；`frozen` 永拒、`humanOnly` 必须带人工引用；
   未登记键 → `unknown-key`；类型不符 → `type-mismatch`。
 - **YAML 子集**：只支持"顶层映射 + 嵌套映射 + 标量 + 简单列表 + 内联 {}/[]"；锚点/别名、多文档、块标量、
@@ -103,8 +103,8 @@ TEMPLATE_NOTE = (
 # 单一真源：解析 host/lib 下的登记表与白名单（**不写第二份白名单**）
 # ---------------------------------------------------------------------------
 def _registry() -> tuple[dict, dict]:
-    """读 `host/lib/config-keys.mjs`（键 → 类型；凭据名 → env/file/required_mode）。解析不出来就拒（fail-closed）。"""
-    text = (ROOT / "host" / "lib" / "config-keys.mjs").read_text(encoding="utf-8")
+    """读 `src/system/config/code/config-keys.mjs`（键 → 类型；凭据名 → env/file/required_mode）。解析不出来就拒（fail-closed）。"""
+    text = (ROOT / "src" / "system" / "config" / "code" / "config-keys.mjs").read_text(encoding="utf-8")
     keys: dict[str, dict] = {}
     for match in re.finditer(r"'([^']+)':\s*\{\s*type:\s*'([a-z]+)',\s*default:\s*([^,}]+)", text):
         keys[match.group(1)] = {"type": match.group(2), "default": _literal(match.group(3).strip())}
@@ -129,8 +129,8 @@ def _literal(text: str) -> Any:
 
 
 def _schema() -> dict:
-    """读 `host/lib/schema.mjs`（键模式 → frozen/humanOnly）。**唯一白名单真源**。"""
-    text = (ROOT / "host" / "lib" / "schema.mjs").read_text(encoding="utf-8")
+    """读 `src/system/config/code/schema.mjs`（键模式 → frozen/humanOnly）。**唯一白名单真源**。"""
+    text = (ROOT / "src" / "system" / "config" / "code" / "schema.mjs").read_text(encoding="utf-8")
     rules: dict[str, dict] = {}
     for match in re.finditer(r"^\s*'([^']+)':\s*\{([^}]*)\}", text, re.M):
         body = match.group(2)
@@ -141,7 +141,7 @@ def _schema() -> dict:
 
 
 def match_schema(key: str, rules: dict) -> dict | None:
-    """最长前缀优先、`*` 匹配一个段（与 `host/lib/config-keys.mjs` 的同名函数同一口径）。"""
+    """最长前缀优先、`*` 匹配一个段（与 `src/system/config/code/config-keys.mjs` 的同名函数同一口径）。"""
     segments = str(key).split(".")
     best = None
     for pattern, rule in rules.items():

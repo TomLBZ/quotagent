@@ -44,6 +44,9 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 
 ## 落地状态（`code/`）
 
-<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+<!-- 本行由批 `EV-177` 登记：入口 + 实体都在本插件 `code/` 下，`plugin.json` 的 `entry` = `code/index.mjs`。 -->
 
-- `code:` **待实现** —— 实现对**已存在**于 `host/modules/`（`pipeline-view.mjs`），本批未给它做入口；`entry` 仍如实报 `degraded: artifact-missing`；**不新造功能**。
+- `code:` **已落地** —— 实体 `code/pipeline-view.mjs`（本批随宿主模块搬迁进 `code/`，**字节守恒**，`evolve-module` 逐字节校验）+
+  入口 `code/index.mjs`（只把实体公开面**重导出**：`export *` 的绑定是活的，无业务语义、无写面）。
+- `provides:` `pipelineView`（实体自述的真实服务键；占位键已改写）。
+- 实测：`tools/plugin.sh status system/pipeline-view` ⇒ `valid:true`、`reason:null`；`load` 真进口（`effects` 非 0）、`unload` 后 `effects_after:0`。

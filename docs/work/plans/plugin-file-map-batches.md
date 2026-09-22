@@ -252,3 +252,23 @@ rc/passed-total 对拍」原始行见 `docs/work/evidence/EV-175b-tools-relocati
 其余 **47 个**未接入口的插件，逐个在自己的 `requirements/README.md` 「落地状态（`code/`）」一节**如实标注**
 （`部分落地` / `待实现`；不造功能）。
 
+## 阶段 4.2 终批（二）+ 阶段 5 第五小片（`EV-177` / `T-327`）
+
+1. **`host/lib/**` 13 个** ⇒ 归属插件 `code/`：`bridge`/`supervisor` → `system/kernel-bridge`；
+   `canary-dispatch`/`canary-run` → `system/canary`；`config`/`config-keys`/`config-ui`/`schema`/`std-schema` → `system/config`；
+   `frozen`/`ledger-view` → `system/kernel`；`ui-route`/`ui-slot` → `system/webui`。旧位置一律**薄重导**（`export * from`），
+   旧导入路径实测仍可用（逐文件导出名集合与搬前逐名一致；含 2 个未搬对照 `evolution.mjs`/`user-space.mjs`，共 15/15）。
+   **先改读方 6 处**（按源码文本读库层的点）：`tools/config-apply.py`、`tools/check-run-once.py`、`tools/check-config-route.py`、
+   `tools/check-mail-transport.py`、`src/system/mail/tests/checks_mail_transport.py`、
+   `src/system/config/tests/checks_config.py`、`src/domain/authority-band/tests/t284-authority-gate.mjs`。
+   **搬迁补丁 2 处**：`src/system/config/code/config.mjs` 的 `./frozen.mjs` → `../lib/frozen.mjs`；
+   `src/system/kernel/code/ledger-view.mjs` 的自相对 `ROOT` 上溯 2 级 → 4 级。
+2. **自进化产物追链搬迁 12 个**：`host/modules/<name>.mjs` ⇒ `src/<层>/<插件>/code/<name>.mjs`（blob 守恒 12/12），
+   `docs/work/evolution-log.json` 逐条同步 `artifact_path`/`artifact_hash`/`bytes`；门 `evolve-module` 改**按日志的路径读**
+   （并把"旧路径只是薄重导"折进原断言，条数不变）；可复跑校验 `src/system/evolution/tests/check-evolution-log-path.py`。
+3. **`tools/**` 非薄入口 12 项** ⇒ 各自插件 `tests/`（旧处**薄转发**）；`plugin-assets`：`RELOCATED 96 → 108`、
+   `BASELINE_NONTHIN 42 → 30`（**收紧**）。
+4. **12 个插件补真实承载**（`code/index.mjs` = 对**已在 `code/` 的实体**的薄包装 + 真 `provides`）；**不新造功能**。
+5. **两处门读方加"跟重导链"**（否则按源码文本判的断言在 8 行转发上**静默判绿**）：
+   `src/system/repo-gate/tests/check-module-wiring.py` 的 `module_source()`（实测：`ops-view` 的 inject 看不见 ⇒ `breaker` 变孤儿）、
+   `host/check-modules.mjs` 的 `moduleSource()`（A1/A4/A6 一起跟到实体）。

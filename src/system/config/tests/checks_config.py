@@ -16,8 +16,11 @@ ROOT = Path(__file__).resolve().parents[4]
 FILES = {'apply': ROOT / 'tools' / 'config-apply.py',
          # 实体已随批 EV-176 搬进插件 `code/`（旧路径只剩薄重导）：静态断言读实体那一份，否则静默判绿。
          'view': ROOT / 'src' / 'system' / 'config' / 'code' / 'config-view.mjs',
-         'ui': ROOT / 'host' / 'lib' / 'config-ui.mjs',
-         'keys': ROOT / 'host' / 'lib' / 'config-keys.mjs'}
+         # 库层实体已随批 EV-177 搬进本插件 `code/`（旧路径 `host/lib/config-*.mjs` 只剩薄重导 ⇒
+         # 按**源码文本**判的断言必须指实体，否则读到的是一份 8 行转发：实测 `p0-no-node` 的
+         # AC-CONFIG-001 就是在这里读红过 —— `keys_bytes=489`（= 转发文件的大小））。
+         'ui': ROOT / 'src' / 'system' / 'config' / 'code' / 'config-ui.mjs',
+         'keys': ROOT / 'src' / 'system' / 'config' / 'code' / 'config-keys.mjs'}
 
 
 def _node() -> bool:
@@ -61,7 +64,7 @@ def check() -> list[Assertion]:
                          'config-route)' in v and 'check-config-route.py' in v, "gate=" + str('config-route)' in v)))
     if _node():
         r = subprocess.run(['node', '--input-type=module', '-e',
-                            "import * as K from './host/lib/config-keys.mjs';console.log(JSON.stringify(Object.keys(K)))"],
+                            "import * as K from './src/system/config/code/config-keys.mjs';console.log(JSON.stringify(Object.keys(K)))"],
                            cwd=str(ROOT), capture_output=True, text=True, timeout=120)
         try:
             exported = json.loads(r.stdout.strip().splitlines()[-1])

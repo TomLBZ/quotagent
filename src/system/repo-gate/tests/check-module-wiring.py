@@ -49,6 +49,28 @@ PROVIDERS = {
 }
 
 
+def module_source(path: Path) -> str:
+    """模块源码；本批（`EV-177`）起 `host/modules/<f>.mjs` 可能是**薄重导**（实体在 `src/<层>/<插件>/code/`）。
+
+    按**源码文本**判的断言必须跟到实体 —— 否则会在重导文件上**静默判绿**（本批实测：`ops-view` 的
+    `inject=['observability','breaker','evidenceSummary']` 会被整条看不见 ⇒ 断言 D 的 `breaker` 变孤儿）。
+    """
+    text = path.read_text(encoding="utf-8")
+    current = path
+    seen: set[Path] = set()
+    for _ in range(8):
+        match = re.search(r"^\s*export \* from '([^']+)'", text, re.M)
+        if not match:
+            break
+        target = (current.parent / match.group(1)).resolve()
+        if target in seen or not target.is_file():
+            break
+        seen.add(target)
+        current = target
+        text = current.read_text(encoding="utf-8")
+    return text
+
+
 def inject_of(src: str) -> list[str]:
     m = re.search(r"export const inject\s*=\s*\[([^\]]*)\]", src, re.S)
     return re.findall(r"'([^']+)'", m.group(1)) if m else []
@@ -66,7 +88,7 @@ def main() -> int:
     def check(name: str, ok: bool, detail: str = "") -> None:
         checks.append({"name": name, "ok": bool(ok), "detail": detail})
 
-    modules = {p.stem: p.read_text(encoding="utf-8") for p in sorted(MODULES.glob("*.mjs"))}
+    modules = {p.stem: module_source(p) for p in sorted(MODULES.glob("*.mjs"))}
     all_injected: set[str] = set()
     for name, src in modules.items():
         all_injected.update(inject_of(src))

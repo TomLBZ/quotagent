@@ -341,7 +341,7 @@ def assert_logs() -> None:
 
 def config_whitelist() -> dict:
     """白名单真源 = `host/lib/config-keys.mjs` 的 PROJECT_KEYS（与 `./run config init` 同一份文件同一个正则）。"""
-    text = (ROOT / "host" / "lib" / "config-keys.mjs").read_text(encoding="utf-8")
+    text = (ROOT / "src" / "system" / "config" / "code" / "config-keys.mjs").read_text(encoding="utf-8")
     text = text.split("export const CREDENTIALS", 1)[0]
     out = {}
     for match in re.finditer(r"^\s{2}'([a-z0-9._-]+)': \{ type: '([a-z]+)', default: (.*?), note: ", text, re.M):

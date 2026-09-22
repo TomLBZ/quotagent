@@ -38,6 +38,28 @@ const declaredEvents = eventsPath && existsSync(eventsPath)
   ? JSON.parse(readFileSync(eventsPath, 'utf-8')).events || []
   : []
 
+/**
+ * 模块源码（**按源码文本判的断言必须跟到实体**）：本批（`EV-177`）起 `host/modules/<f>.mjs`
+ * 可能是**薄重导**（实体在 `src/<层>/<插件>/code/`）。返回**整条链的拼接** —— 既保留重导文件
+ * 自己的 import 检查（A6），也把实体的 `builtin`/emit/import 面一起纳入；否则会在 8 行重导上
+ * **静默判绿**（实证：`ops-view` 的 inject 在重导文件里整条看不见 ⇒ `wiring` 的 `breaker` 变孤儿）。
+ */
+function moduleSource(file) {
+  const parts = []
+  let current = join(MODULE_DIR, file)
+  const seen = new Set()
+  for (let hop = 0; hop < 8; hop += 1) {
+    if (!existsSync(current) || seen.has(current)) break
+    seen.add(current)
+    const text = readFileSync(current, 'utf-8')
+    parts.push(text)
+    const match = text.match(/^\s*export \* from '([^']+)'/m)
+    if (!match) break
+    current = resolve(dirname(current), match[1])
+  }
+  return parts.join('\n')
+}
+
 const checks = []
 let failures = 0
 const constKeysFound = []

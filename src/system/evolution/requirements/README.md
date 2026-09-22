@@ -48,6 +48,22 @@
 
 ## 落地状态（`code/`）
 
-<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+<!-- 本行由批 `EV-177` 登记：入口 + 实体都在本插件 `code/` 下，`plugin.json` 的 `entry` = `code/index.mjs`。 -->
 
-- `code:` **待实现** —— 实现对**已存在**于 `host/modules/`（`evolve-journal.mjs`），本批未给它做入口；`entry` 仍如实报 `degraded: artifact-missing`；**不新造功能**。
+- `code:` **已落地** —— 实体 `code/evolve-journal.mjs`（本批随宿主模块搬迁进 `code/`，**字节守恒**，`evolve-module` 逐字节校验）+
+  入口 `code/index.mjs`（只把实体公开面**重导出**：`export *` 的绑定是活的，无业务语义、无写面）。
+- `provides:` `evolveJournal`（实体自述的真实服务键；占位键已改写）。
+- 实测：`tools/plugin.sh status system/evolution` ⇒ `valid:true`、`reason:null`；`load` 真进口（`effects` 非 0）、`unload` 后 `effects_after:0`。
+
+## 自进化产物的追链（`EV-177`）
+
+本插件的实体 `code/evolve-journal.mjs` 是**自进化产出**（`docs/work/evolution-log.json` 里 `name=evolve-journal` 那条），
+`artifact_hash` 钉住它的字节。本批搬迁把 12 个产物搬进各自插件的 `code/`，**同批同步了日志的 `artifact_path` 与
+`artifact_hash`**，并提供两件可复跑校验：
+
+- 门形态：`tools/verify.sh evolve-module` ⇒ `check-evolved-module.py` **按日志的 `artifact_path` 读**（缺该字段才回落到
+  `host/modules/<name>.mjs`），并把「旧路径只是薄重导」折进原断言（断言条数不变）。
+- 独立脚本：`python3 src/system/evolution/tests/check-evolution-log-path.py` —— 日志里**每条记录**的 sha256 与当前实体
+  逐字节相等；末行打印 `{"TOTAL": n, "FAIL": 0}`。**反向自证**（改动只写在 `tmp/` 副本里）：把日志指回旧路径 ⇒ 12 条全红；
+  把实体翻转一个字节 ⇒ 1 条红。
+

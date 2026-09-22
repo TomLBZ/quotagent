@@ -124,7 +124,20 @@ check('确定性正控：注入假时钟跑同一序列两次 → 判定与统�
   det1 === det2 && det1.length > 100, `len=${det1.length} equal=${det1 === det2}`)
 
 // --- 10. 零残留：静态扫描 + 不订阅事件 ---
-const src = readFileSync(new URL('./modules/circuit-breaker.mjs', import.meta.url), 'utf8')
+// 静态扫描必须跟到**实体**（本批 `EV-177` 起 `host/modules/<stem>.mjs` 可能是**薄重导**：实体在
+// `src/<层>/<插件>/code/`；读转发文件会让"零写面 / 零定时器 / 不订阅事件"这类断言在 8 行重导上**静默判绿**）。
+const moduleSource = (relative) => {
+  let current = new URL(relative, import.meta.url)
+  let text = readFileSync(current, 'utf8')
+  for (let hop = 0; hop < 8; hop += 1) {
+    const match = text.match(/^\s*export \* from '([^']+)'/m)
+    if (!match) break
+    current = new URL(match[1], current)
+    text = readFileSync(current, 'utf8')
+  }
+  return text
+}
+const src = moduleSource('./modules/circuit-breaker.mjs')
 const forbidden = ['ctx.on(', 'ctx.events.on(', 'setInterval(', 'setTimeout(', 'writeFile', 'appendFile']
   .filter((needle) => src.includes(needle))
 check('零残留负控：模块不订阅事件/不注册定时器/不写文件（冷却用注入时钟判断）',

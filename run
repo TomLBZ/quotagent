@@ -405,11 +405,13 @@ do_logs() {
 # ---------------------------------------------------------------------------------------------
 # config init：生成**只含白名单键**的 config.yaml（存在即拒；不写账本）
 # ---------------------------------------------------------------------------------------------
-# 白名单真源 = host/lib/config-keys.mjs 的 PROJECT_KEYS（**跨语言单一真源**：Python 侧按同一份文件的
-# 规整字面量逐行解析；本脚本只读不写它）。抽取形状：`  '<点分键>': { type: '<类型>', default: <默认值>, note: …`。
+# 白名单真源 = `src/system/config/code/config-keys.mjs` 的 PROJECT_KEYS（**跨语言单一真源**：Python 侧按同一份
+# 文件的规整字面量逐行解析；本脚本只读不写它）。抽取形状：`  '<点分键>': { type: '<类型>', default: <默认值>, note: …`。
+# 注意（本批 `EV-177`）：库层实体已搬进 `src/system/config/code/`，旧路径 `host/lib/config-keys.mjs` 只剩**薄重导** ——
+# 读旧路径会得到 **0 个键**（实测 `run-once` 的 R13a 报「键 0/36」），按源码文本读的读点必须指实体。
 config_whitelist() {
   sed -n "s/^  '\([a-z0-9._-]*\)': { type: '\([a-z]*\)', default: \(.*\), note: .*/\1|\2|\3/p" \
-    "$ROOT/host/lib/config-keys.mjs" | LC_ALL=C sort
+    "$ROOT/src/system/config/code/config-keys.mjs" | LC_ALL=C sort
 }
 
 # 白名单 → 嵌套 YAML（与 `tools/config-apply.py` 的渲染约定一致：缩进 2 空格、字符串加双引号、

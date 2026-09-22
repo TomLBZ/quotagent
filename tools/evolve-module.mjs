@@ -152,6 +152,11 @@ if (gateVerdict.verdict === 'passed' && !dryRun) {
 
 if (promoted) {
   appendLog({ name: moduleName, proposal_id: proposal.id, artifact_hash: promoted.artifact_hash,
+    // `artifact_path`（本批 `EV-177` 起必带）：日志里**唯一真源**的实体位置 —— 新晋升的产物落在
+    // `host/modules/<name>.mjs`；已搬进 `src/<层>/<插件>/code/` 的那些由本批搬迁改成新路径。
+    // 校验器（`src/system/evolution/tests/check-evolved-module.py` / `check-evolution-log-path.py`）按它读字节，
+    // 缺字段才回落到旧路径 ⇒ 这条字段是"日志与实体不走散"的那把钥匙。
+    artifact_path: `host/modules/${moduleName}.mjs`,
     bytes: proposal.artifact.bytes, approval_ref: approvalRef, gate: gateVerdict.verdict,
     fixture: { passed: fixture.passed, total: fixture.total },
     produced_by: 'tools/evolve-module.mjs', ledger, evidence: (source.match(/EV-\d+/) ?? [])[0] ?? null })

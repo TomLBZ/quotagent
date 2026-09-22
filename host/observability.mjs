@@ -106,7 +106,20 @@ check('降级正控：来源"有问题"（去重/丢弃/额度耗尽）时快照
   `deduped=${snapB.audit.stats.deduped} dropped=${snapB.audit.stats.dropped} refused=${snapB.governor.stats.refused}`)
 
 // --- 6. 零残留：不订阅事件、不注册定时器；卸载后重挂载是干净的 ---
-const src = readFileSync(new URL('./modules/observability.mjs', import.meta.url), 'utf8')
+// 静态扫描必须跟到**实体**（本批 `EV-177` 起 `host/modules/<stem>.mjs` 可能是**薄重导**：实体在
+// `src/<层>/<插件>/code/`；读转发文件会让"零写面 / 零定时器 / 不订阅事件"这类断言在 8 行重导上**静默判绿**）。
+const moduleSource = (relative) => {
+  let current = new URL(relative, import.meta.url)
+  let text = readFileSync(current, 'utf8')
+  for (let hop = 0; hop < 8; hop += 1) {
+    const match = text.match(/^\s*export \* from '([^']+)'/m)
+    if (!match) break
+    current = new URL(match[1], current)
+    text = readFileSync(current, 'utf8')
+  }
+  return text
+}
+const src = moduleSource('./modules/observability.mjs')
 const forbidden = ['ctx.on(', 'ctx.events.on(', 'setInterval(', 'setTimeout(', 'writeFile', 'appendFile']
   .filter((needle) => src.includes(needle))
 await b.obsFiber.dispose()

@@ -25,18 +25,20 @@
 | `host/evolve-journal.mjs` | `src/system/evolution/tests/evolve-journal.mjs` |  |
 | `host/governor.mjs` | `src/system/governor/tests/governor.mjs` |  |
 | `host/invariants.mjs` | `src/system/repo-gate/invariants.mjs` |  |
-| `host/lib/bridge.mjs` | `src/system/kernel-bridge/bridge.mjs` |  |
-| `host/lib/canary-dispatch.mjs` | `src/system/canary/canary-dispatch.mjs` |  |
-| `host/lib/canary-run.mjs` | `src/system/canary/canary-run.mjs` |  |
-| `host/lib/config-keys.mjs` | `src/system/config/config-keys.mjs` |  |
-| `host/lib/config-ui.mjs` | `src/system/config/config-ui.mjs` |  |
-| `host/lib/config.mjs` | `src/system/config/config.mjs` |  |
+| `host/lib/bridge.mjs` | `src/system/kernel-bridge/code/bridge.mjs` |  | **已落 `code/`**（`EV-177`；旧路径薄重导）
+| `host/lib/canary-dispatch.mjs` | `src/system/canary/code/canary-dispatch.mjs` |  | **已落 `code/`**（`EV-177`；旧路径薄重导）
+| `host/lib/canary-run.mjs` | `src/system/canary/code/canary-run.mjs` |  | **已落 `code/`**（`EV-177`；旧路径薄重导）
+| `host/lib/config-keys.mjs` | `src/system/config/code/config-keys.mjs` |  | **已落 `code/`**（`EV-177`；旧路径薄重导）
+| `host/lib/config-ui.mjs` | `src/system/config/code/config-ui.mjs` |  | **已落 `code/`**（`EV-177`；旧路径薄重导）
+| `host/lib/config.mjs` | `src/system/config/code/config.mjs` |  | **已落 `code/`**（`EV-177`；旧路径薄重导）
 | `host/lib/evolution.mjs` | `src/system/evolution/evolution.mjs` |  |
-| `host/lib/frozen.mjs` | `src/system/kernel/frozen.mjs` |  |
-| `host/lib/ledger-view.mjs` | `src/system/kernel/ledger-view.mjs` |  |
-| `host/lib/schema.mjs` | `src/system/config/schema.mjs` |  |
-| `host/lib/std-schema.mjs` | `src/system/config/std-schema.mjs` |  |
-| `host/lib/supervisor.mjs` | `src/system/kernel-bridge/supervisor.mjs` |  |
+| `host/lib/frozen.mjs` | `src/system/kernel/code/frozen.mjs` |  | **已落 `code/`**（`EV-177`；旧路径薄重导）
+| `host/lib/ledger-view.mjs` | `src/system/kernel/code/ledger-view.mjs` |  | **已落 `code/`**（`EV-177`；旧路径薄重导）
+| `host/lib/schema.mjs` | `src/system/config/code/schema.mjs` |  | **已落 `code/`**（`EV-177`；旧路径薄重导）
+| `host/lib/std-schema.mjs` | `src/system/config/code/std-schema.mjs` |  | **已落 `code/`**（`EV-177`；旧路径薄重导）
+| `host/lib/supervisor.mjs` | `src/system/kernel-bridge/code/supervisor.mjs` |  | **已落 `code/`**（`EV-177`；旧路径薄重导）
+| `host/lib/ui-route.mjs` | `src/system/webui/code/ui-route.mjs` | 本批 `EV-177` 首次登记（映射表生成后进树） | **已落 `code/`**（`EV-177`；旧路径薄重导）
+| `host/lib/ui-slot.mjs` | `src/system/webui/code/ui-slot.mjs` | 本批 `EV-177` 首次登记（映射表生成后进树） | **已落 `code/`**（`EV-177`；旧路径薄重导）
 | `host/lib/user-space.mjs` | `src/system/user-plugin-manager/user-space.mjs` |  |
 | `host/modules/admin-guard.mjs` | `src/system/admin/code/admin-guard.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/admin-guard.mjs` 留**薄重导**） |
 | `host/modules/admin-view.mjs` | `src/system/admin/code/admin-view.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/admin-view.mjs` 留**薄重导**） |
@@ -44,36 +46,36 @@
 | `host/modules/agent-context.mjs` | `src/system/agent-runtime/code/agent-context.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/agent-context.mjs` 留**薄重导**） |
 | `host/modules/agent-harness.mjs` | `src/system/agent-runtime/code/agent-harness.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/agent-harness.mjs` 留**薄重导**） |
 | `host/modules/agent-memory.mjs` | `src/system/agent-runtime/code/agent-memory.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/agent-memory.mjs` 留**薄重导**） |
-| `host/modules/approval-digest.mjs` | `src/system/approval/code/approval-digest.mjs` |  |
+| `host/modules/approval-digest.mjs` | `src/system/approval/code/approval-digest.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
 | `host/modules/audit-hook.mjs` | `src/system/audit-hook/code/audit-hook.mjs` |  |
 | `host/modules/authority-band.mjs` | `src/domain/authority-band/code/authority-band.mjs` |  |
 | `host/modules/bid-heuristics.mjs` | `src/domain/bid-heuristics/code/bid-heuristics.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/bid-heuristics.mjs` 留**薄重导**） |
 | `host/modules/bridge-canary.mjs` | `src/system/canary/code/bridge-canary.mjs` |  |
-| `host/modules/budget-guard.mjs` | `src/system/budget-guard/code/budget-guard.mjs` |  |
+| `host/modules/budget-guard.mjs` | `src/system/budget-guard/code/budget-guard.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
 | `host/modules/canary.mjs` | `src/system/canary/code/canary.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/canary.mjs` 留**薄重导**） |
-| `host/modules/circuit-breaker.mjs` | `src/system/circuit-breaker/code/circuit-breaker.mjs` |  |
+| `host/modules/circuit-breaker.mjs` | `src/system/circuit-breaker/code/circuit-breaker.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
 | `host/modules/compare.mjs` | `src/domain/compare/code/compare.mjs` |  |
 | `host/modules/config-view.mjs` | `src/system/config/code/config-view.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/config-view.mjs` 留**薄重导**） |
-| `host/modules/evidence-summary.mjs` | `src/system/evidence/code/evidence-summary.mjs` |  |
-| `host/modules/evolve-journal.mjs` | `src/system/evolution/code/evolve-journal.mjs` |  |
+| `host/modules/evidence-summary.mjs` | `src/system/evidence/code/evidence-summary.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
+| `host/modules/evolve-journal.mjs` | `src/system/evolution/code/evolve-journal.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
 | `host/modules/gate-timeline.mjs` | `src/domain/gate-timeline/code/gate-timeline.mjs` |  |
 | `host/modules/governor.mjs` | `src/system/governor/code/governor.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/governor.mjs` 留**薄重导**） |
-| `host/modules/idempotency-guard.mjs` | `src/system/idempotency-guard/code/idempotency-guard.mjs` |  |
+| `host/modules/idempotency-guard.mjs` | `src/system/idempotency-guard/code/idempotency-guard.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
 | `host/modules/index.mjs` | `src/system/runtime/plugin-index.mjs` | 目录即清单（自动发现） |
 | `host/modules/kernel-bridge.mjs` | `src/system/kernel-bridge/code/kernel-bridge.mjs` |  |
 | `host/modules/mail-view.mjs` | `src/system/mail/code/mail-view.mjs` |  |
 | `host/modules/norm.mjs` | `src/system/norm/code/norm.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/norm.mjs` 留**薄重导**） |
 | `host/modules/observability.mjs` | `src/system/observability/code/observability.mjs` |  |
-| `host/modules/ops-view.mjs` | `src/system/ops-view/code/ops-view.mjs` |  |
-| `host/modules/pipeline-view.mjs` | `src/system/pipeline-view/code/pipeline-view.mjs` |  |
-| `host/modules/plugin-market.mjs` | `src/system/market/code/plugin-market.mjs` |  |
-| `host/modules/price-history.mjs` | `src/domain/price-history/code/price-history.mjs` |  |
+| `host/modules/ops-view.mjs` | `src/system/ops-view/code/ops-view.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
+| `host/modules/pipeline-view.mjs` | `src/system/pipeline-view/code/pipeline-view.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
+| `host/modules/plugin-market.mjs` | `src/system/market/code/plugin-market.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
+| `host/modules/price-history.mjs` | `src/domain/price-history/code/price-history.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
 | `host/modules/projection.mjs` | `src/system/projection/code/projection.mjs` |  |
-| `host/modules/retention-view.mjs` | `src/system/retention/code/retention-view.mjs` |  |
+| `host/modules/retention-view.mjs` | `src/system/retention/code/retention-view.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
 | `host/modules/rfq-deadline.mjs` | `src/domain/rfq-deadline/code/rfq-deadline.mjs` |  |
 | `host/modules/sourcing.mjs` | `src/domain/sourcing/code/sourcing.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/sourcing.mjs` 留**薄重导**） |
 | `host/modules/storage-view.mjs` | `src/system/storage/code/storage-view.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/storage-view.mjs` 留**薄重导**） |
-| `host/modules/supplier-scorecard.mjs` | `src/domain/supplier-scorecard/code/supplier-scorecard.mjs` |  |
+| `host/modules/supplier-scorecard.mjs` | `src/domain/supplier-scorecard/code/supplier-scorecard.mjs` |  | **已落 `code/`**（`EV-177`：blob 守恒；旧路径薄重导；哈希见 `evolution-log.json`）
 | `host/modules/timeline.mjs` | `src/system/timeline/code/timeline.mjs` |  |
 | `host/modules/ui-feedback.mjs` | `src/system/ui-feedback/code/ui-feedback.mjs` |  |
 | `host/modules/user-plugin-manager.mjs` | `src/system/user-plugin-manager/code/user-plugin-manager.mjs` |  | **已落 `code/`**（本批 `EV-176`；字节与 HEAD 逐字节相同，旧路径 `host/modules/user-plugin-manager.mjs` 留**薄重导**） |
@@ -295,7 +297,7 @@
 | `src/quotagent/bridge.py` | `src/system/kernel-bridge/bridge.py` | 与宿主桥同插件 |
 | `src/quotagent/g1side.py` | `src/system/repo-gate/g1side.py` | G1 走查的 Python 侧 |
 | `host/modules/<stem>.mjs` | `src/{system|domain}/<plugin>/code/<stem>.mjs` | 归属规则见 27 §1.2（`norm/compare` 与 Python 侧同插件）；**实体落 `code/`**（本批 `EV-176` 起明确）——旧路径 `host/modules/<stem>.mjs` 留**薄重导**，`host/modules/index.mjs` 的目录即清单自动发现与全部 import 面一行未改。宿主模块源码只许 `./` 与 `../lib/` 这一条（`verify.sh modules` 的 A6）⇒ 重导经 `host/lib/entity-<stem>.mjs` 一跳；另一侧，实体里的 `../lib/…` 由各插件目录的**过渡软链** `src/<层>/<插件>/lib -> host/lib` 解析（模块 import 契约逐字未改） |
-| `host/lib/<f>.mjs` | 按功能拆到 `system/{kernel,kernel-bridge,canary,config,evolution,user-plugin-manager}/` | 库层不单独成立插件：它属于使用它的插件 |
+| `host/lib/<f>.mjs` | 按功能拆到 `system/{kernel,kernel-bridge,canary,config,evolution,user-plugin-manager}/` | 库层不单独成立插件：它属于使用它的插件；**本批 `EV-177` 落 13 个到插件 `code/`**，`evolution.mjs`/`user-space.mjs` 因裸 `cordis` 解析（`src/` 下上溯不到 `host/node_modules/`）留待下批 |
 | `host/<plugin>.mjs`（围栏门） | `src/<层>/<plugin>/tests/<plugin>.mjs` | 门的对象即插件 |
 | `host/t2NN-*-gate.mjs` | `src/<层>/<plugin>/tests/` | 同上 |
 | `host/{package.json,package-lock.json,README.md,smoke.mjs,cli.mjs,profiles.mjs}` | `src/system/runtime/` | 宿主运行时清单与入口 |
@@ -343,7 +345,7 @@
 
 ### 全量分类表（144 行 = 77 + 20 + 47）
 
-### A. `tools/**`（77 个，其中平台薄入口 6 + 阶段 4.1 已搬 7 + `EV-175` 已搬 10 + `EV-176` 已搬 12 + 待搬 42）
+### A. `tools/**`（77 个，其中平台薄入口 6 + 阶段 4.1 已搬 7 + `EV-175` 已搬 10 + `EV-176` 已搬 12 + `EV-177` 已搬 12 + 待搬 30）
 
 | 资产 | 归属插件 | 分类 | 子目录 |
 |---|---|---|---|
@@ -351,21 +353,21 @@
 | `tools/audit-verify.py` | `system/evidence` | 插件·待搬 | `tools/` |
 | `tools/bootstrap.sh` | — | 平台薄入口 | — |
 | `tools/check-ac-registry.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
-| `tools/check-admin-route.py` | `system/admin` | 插件·待搬 | `tests/` |
+| `tools/check-admin-route.py` | `system/admin` | 插件·已搬 | `tests/` |
 | `tools/check-advice-route.py` | `domain/advice` | 插件·已搬 | `tests/` |
 | `tools/check-audit-hook.py` | `system/audit-hook` | 插件·已搬 | `tests/` |
 | `tools/check-authority-route.py` | `domain/authority-band` | 插件·已搬 | `tests/` |
 | `tools/check-breaker-route.py` | `system/circuit-breaker` | 插件·已搬 | `tests/` |
 | `tools/check-bridge-canary.py` | `system/canary` | 插件·已搬 | `tests/` |
-| `tools/check-budget-route.py` | `system/budget-guard` | 插件·待搬 | `tests/` |
+| `tools/check-budget-route.py` | `system/budget-guard` | 插件·已搬 | `tests/` |
 | `tools/check-canary-dispatch.py` | `system/canary` | 插件·已搬 | `tests/` |
 | `tools/check-canary.py` | `system/canary` | 插件·已搬 | `tests/` |
 | `tools/check-change-detail-route.py` | `domain/gate-timeline` | 插件·已搬 | `tests/` |
 | `tools/check-clean-copy.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
-| `tools/check-config-route.py` | `system/config` | 插件·待搬 | `tests/` |
+| `tools/check-config-route.py` | `system/config` | 插件·已搬 | `tests/` |
 | `tools/check-docs.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-events.py` | `system/kernel` | 插件·已搬 | `tests/` |
-| `tools/check-evolved-module.py` | `system/evolution` | 插件·待搬 | `tests/` |
+| `tools/check-evolved-module.py` | `system/evolution` | 插件·已搬 | `tests/` |
 | `tools/check-faq.py` | `domain/faq` | 插件·已搬 | `tests/` |
 | `tools/check-fr-coverage.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-gate-timeline-route.py` | `domain/gate-timeline` | 插件·已搬 | `tests/` |
@@ -373,24 +375,24 @@
 | `tools/check-heuristics-route.py` | `domain/bid-heuristics` | 插件·已搬 | `tests/` |
 | `tools/check-idem-route.py` | `system/idempotency-guard` | 插件·已搬 | `tests/` |
 | `tools/check-invariants.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
-| `tools/check-mail-transport.py` | `system/mail` | 插件·待搬 | `tests/` |
+| `tools/check-mail-transport.py` | `system/mail` | 插件·已搬 | `tests/` |
 | `tools/check-mail.py` | `system/mail` | 插件·已搬 | `tests/` |
 | `tools/check-module-wiring.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
-| `tools/check-modules.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
+| `tools/check-modules.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-negotiation.py` | `domain/negotiation` | 插件·已搬 | `tests/` |
-| `tools/check-pipeline-route.py` | `system/pipeline-view` | 插件·待搬 | `tests/` |
-| `tools/check-plugin-assets.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
+| `tools/check-pipeline-route.py` | `system/pipeline-view` | 插件·已搬 | `tests/` |
+| `tools/check-plugin-assets.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-plugin-inventory.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-plugin-lifecycle.py` | `system/runtime` | 插件·已搬 | `tests/` |
-| `tools/check-plugin-requirements.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
+| `tools/check-plugin-requirements.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-quote-draft-route.py` | `domain/quote-prepare` | 插件·已搬 | `tests/` |
 | `tools/check-retention.py` | `system/retention` | 插件·已搬 | `tests/` |
-| `tools/check-rfq-deadline-route.py` | `domain/rfq-deadline` | 插件·待搬 | `tests/` |
+| `tools/check-rfq-deadline-route.py` | `domain/rfq-deadline` | 插件·已搬 | `tests/` |
 | `tools/check-rfq-visibility-route.py` | `system/projection` | 插件·已搬 | `tests/` |
 | `tools/check-run-once.py` | `system/runtime` | 插件·待搬 | `tests/` |
 | `tools/check-run-clone.py` | `system/runtime` | 插件·待搬 | `tests/` |
-| `tools/check-ui-feedback.py` | `system/ui-feedback` | 插件·待搬 | `tests/` |
-| `tools/check-ui-seed.py` | `system/webui` | 插件·待搬 | `tests/` |
+| `tools/check-ui-feedback.py` | `system/ui-feedback` | 插件·已搬 | `tests/` |
+| `tools/check-ui-seed.py` | `system/webui` | 插件·已搬 | `tests/` |
 | `tools/check-v-register.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-webui.py` | `system/webui` | 插件·已搬 | `tests/` |
 | `tools/config-apply.py` | `system/config` | 插件·待搬 | `tools/` |
