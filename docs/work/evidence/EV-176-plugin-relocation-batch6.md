@@ -85,3 +85,17 @@ $ tools/plugin.sh unload domain/bid-heuristics ⇒ effects_after=0 zero_effects=
 
 ## 五、提交前后的 `git status --porcelain`、commit、push 回读
 
+一个功能提交：`2664765`（①②③ + 门/文档/证据；同时带上 `tools/*.sh` 7 个文件的**执行位**——mode-only
+100644→100755，**上一批遗留的索引半边**，`run-clone` 的 K2 需要它）。
+
+**提交后在 HEAD 上复跑**：`clean-copy` `rc=0`（`RESULT: PASS（15 道门在干净副本里全绿；已提交内容自足可复现）`）、
+`run-clone` **20/20**（`RESULT: PASS（run-clone 门 20/20）`，K2「入口可执行位」在本次提交的 HEAD 上成立）。
+
+```text
+$ git status --porcelain            # git add -A 之后（提交前）
+行数 = 166（**全部是第一列的已暂存项**：`A ` 56 + `M ` 110；**第二列为空的行 = 全部**，未跟踪 `??` = 0
+⇒ 没有未处理的改名/伪删半边）。逐行原文见本批回答与 `tmp/status-preecommit.txt`（tmp/ 不入库）。
+
+$ git status --porcelain            # 提交之后
+（原文为空：0 行）
+```
