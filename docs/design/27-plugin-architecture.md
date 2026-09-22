@@ -76,6 +76,25 @@ src/<层>/<plugin>/
 3. `requirements/README.md` 有归属行且能在覆盖矩阵里对上；4. `tests/` 全绿且至少一条负控见过红；
 5. `docs/` 有对外契约（若对外）；6. 在 `docs/design/14-plugin-inventory.md` 有一行（模块清单真源）。
 
+### 2.4 需求文档的位置（迁移未完成时的口径，`T-318` 定案）
+
+插件目录建出（`plugin.json` + `code/`）之前，逐插件需求文档一律落在
+`docs/work/plugin-requirements-<层>-<插件>.md`（**带层前缀**，与插件 id `层次/插件` 同形；
+内容与 §2.1 的标准形态**同形**：用途一句话 / 归属行（FR 号 + 承载体 + 关联 AC + 可跑命令）/ provides 与依赖 / 门 / 现状与缺口），
+建目录时 `git mv` 进 `src/<层>/<插件>/requirements/README.md`。归属与状态的唯一指针仍是
+`docs/work/plugin-requirements-map.md`（其 §4 写口径、§4.2 逐条登记这批位置偏差）。
+
+**为什么不选「先建裸目录 + 文档直接放标准位置」**（实测，不是推测）：`plugin-registry` 的 `depsClosure`
+把「目录存在」当「插件存在」（`scan()` 对没有 `plugin.json` 的目录仍给出 id），所以先建出 `src/system/webui/`
+这类裸目录会让 `plugin-lifecycle` 的 A13/A14 变红（该门断言 `domain/advice` 的依赖 `system/webui` 未就绪 ⇒
+`deps_ready=false`、`deps_missing=["system/webui"]`）。本仓铁律是**不得把门改松**，本批也不动产品代码
+（`src/system/runtime/code/plugin-registry.mjs`）与迁移批次的判据 ⇒ 等阶段 2–4 建目录时再 `git mv`，
+并把 `depsClosure` 收紧为「没有 `plugin.json` 的目录不算已知插件」（与 §3.3 对齐）。
+
+**机检**：`tools/verify.sh plugin-requirements` 的 A6a/A6c/A7（`req=` 指向的文档真实存在 / 非标准位置逐条登记 / 缺口清单双向）。
+**反向验证**：造一个「目录存在但没有 `plugin.json`」的假插件 ⇒ `tools/plugin.sh list` 报 `manifest-missing` 降级，
+且 `plugin-requirements` 的 A6b 判红（无主的 `requirements/` 目录不被接受）；原始行见 `docs/work/evidence/EV-169-*`。
+
 ## 3. 插件自述清单（manifest）与最小契约
 
 清单文件名固定 `plugin.json`，**复用** userspace 既有约定（`host/lib/user-space.mjs` 的 `MANIFEST`/`NAME_RE`/`MAX_MANIFEST_BYTES=65536`），三层共用一张清单。

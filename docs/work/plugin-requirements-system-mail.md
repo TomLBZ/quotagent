@@ -8,7 +8,8 @@
 > （迁移计划阶段 2–4 才建），而**先建裸目录**会让 `plugin-lifecycle` 门的两条断言变红 —— 该门的 A13/A14 断言
 > "`domain/advice` 的依赖 `system/webui` 未就绪 ⇒ 非激活"，而 `plugin-registry` 的 `depsClosure` 把"目录存在"当作"插件存在"
 > （与 27 §3.3"没有 `plugin.json` 的目录不是插件"存在口径差）。本仓铁律是**不得把门改松**，所以本批把这份文档落在
-> `docs/work/plugin-requirements-<插件>.md`（内容与标准形态**同形**），待迁移阶段建目录（`plugin.json` + `code/`）时 `git mv` 进 `requirements/README.md`。
+> `docs/work/plugin-requirements-<层>-<插件>.md`
+> （本批 `T-318` 起命名统一带层前缀，与插件 id `层次/插件` 同形；内容与标准形态**同形**），待迁移阶段建目录（`plugin.json` + `code/`）时 `git mv` 进 `requirements/README.md`。
 
 ## 用途（一句话）
 

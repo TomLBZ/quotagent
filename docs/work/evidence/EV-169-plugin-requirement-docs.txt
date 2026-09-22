@@ -1,0 +1,211 @@
+EV-169 —— 52 个插件逐个补齐独立需求文档 + 位置口径定案（T-318，只动文档 + 一处门的变异锚点）
+================================================================================
+
+批次：T-318（P2）。提交面 = ① 52 份新增逐插件需求文档；② 6 份核心文档改名（统一带层前缀）；
+③ 映射表 §4 位置口径 + §4.2 逐条登记 + §5 复算；④ 27 §2.4 位置口径定案；⑤ 映射表 §3 偏差表拆文件（守 32 KB 预算）；
+⑥ 门 tools/check-plugin-requirements.py 的 F4 变异锚点随改名更新（一处字符串，判据不放宽）。
+编号说明：EV-169 经查重后占用（`ls docs/work/evidence | grep -E "EV-169|EV-170"` 当时为空）。
+
+--------------------------------------------------------------------------------
+一、本轮补齐的插件清单与文档字节（52 份新增 + 6 份改名后的核心文档）
+--------------------------------------------------------------------------------
+
+命令：wc -c docs/work/plugin-requirements-domain-*.md docs/work/plugin-requirements-system-*.md
+
+  3239 docs/work/plugin-requirements-domain-authority-band.md
+  2925 docs/work/plugin-requirements-domain-bid-heuristics.md
+  2920 docs/work/plugin-requirements-domain-capacity.md
+  2982 docs/work/plugin-requirements-domain-change.md
+  3167 docs/work/plugin-requirements-domain-clarify.md
+  3152 docs/work/plugin-requirements-domain-commitments.md
+  3362 docs/work/plugin-requirements-domain-compare.md
+  3186 docs/work/plugin-requirements-domain-costmodel.md
+  2958 docs/work/plugin-requirements-domain-deviation.md
+  2957 docs/work/plugin-requirements-domain-export.md
+  2969 docs/work/plugin-requirements-domain-faq.md
+  3293 docs/work/plugin-requirements-domain-gate-timeline.md
+  3437 docs/work/plugin-requirements-domain-guard.md
+  3141 docs/work/plugin-requirements-domain-intake.md
+  3255 docs/work/plugin-requirements-domain-negotiation.md
+  3238 docs/work/plugin-requirements-domain-price-history.md
+  2953 docs/work/plugin-requirements-domain-pricing.md
+  3206 docs/work/plugin-requirements-domain-quote-prepare.md
+  3072 docs/work/plugin-requirements-domain-quotes.md
+  3247 docs/work/plugin-requirements-domain-rfq-deadline.md
+  3287 docs/work/plugin-requirements-domain-rfq.md
+  3099 docs/work/plugin-requirements-domain-sourcing.md
+  3283 docs/work/plugin-requirements-domain-supplier-scorecard.md
+  2834 docs/work/plugin-requirements-domain-sync.md
+  2858 docs/work/plugin-requirements-domain-terms.md
+  5611 docs/work/plugin-requirements-system-admin.md
+  3792 docs/work/plugin-requirements-system-agent-runtime.md
+  3563 docs/work/plugin-requirements-system-approval.md
+  3094 docs/work/plugin-requirements-system-audit-hook.md
+  3256 docs/work/plugin-requirements-system-budget-guard.md
+  3391 docs/work/plugin-requirements-system-canary.md
+  3224 docs/work/plugin-requirements-system-circuit-breaker.md
+  3704 docs/work/plugin-requirements-system-config.md
+  3636 docs/work/plugin-requirements-system-eval.md
+  4020 docs/work/plugin-requirements-system-evidence.md
+  3813 docs/work/plugin-requirements-system-evolution.md
+  3077 docs/work/plugin-requirements-system-governor.md
+  3259 docs/work/plugin-requirements-system-idempotency-guard.md
+  3201 docs/work/plugin-requirements-system-kernel-bridge.md
+  5180 docs/work/plugin-requirements-system-kernel.md
+  3703 docs/work/plugin-requirements-system-mail.md
+  3891 docs/work/plugin-requirements-system-market.md
+  3051 docs/work/plugin-requirements-system-measures.md
+  3331 docs/work/plugin-requirements-system-norm.md
+  3134 docs/work/plugin-requirements-system-observability.md
+  3063 docs/work/plugin-requirements-system-ops-view.md
+  3403 docs/work/plugin-requirements-system-pipeline-view.md
+  3651 docs/work/plugin-requirements-system-projection.md
+  3320 docs/work/plugin-requirements-system-qa-runner.md
+  2998 docs/work/plugin-requirements-system-realm.md
+  2821 docs/work/plugin-requirements-system-relay.md
+  3209 docs/work/plugin-requirements-system-repo-gate.md
+  3410 docs/work/plugin-requirements-system-retention.md
+  3275 docs/work/plugin-requirements-system-storage.md
+  3030 docs/work/plugin-requirements-system-timeline.md
+  3348 docs/work/plugin-requirements-system-ui-feedback.md
+  6470 docs/work/plugin-requirements-system-user-plugin-manager.md
+  4209 docs/work/plugin-requirements-system-webui.md
+197158 total
+
+本轮 52 份新文档合计（生成器口径）：
+--- 52 份，合计 173087 B
+
+--------------------------------------------------------------------------------
+二、互证：58 份文档的 FR 行集合 == 映射表该插件认领的 FR 集合
+--------------------------------------------------------------------------------
+
+校验器：python3 /opt/data/scratch/validate.py /opt/data/scratch/out
+  ① 逐插件的 FR 行集合与映射表比对（双向）② 引用的 AC 都在 AC 定义集合内
+  ③ 引用的每个 `ac` 命令都在 qa 注册表内（可跑，未注册的不冒充命令）④ 引用的门名都在 tools/verify.sh 里
+  ⑤ 引用的 T/FR/AC/EV ID 都在定义集合内 ⑥ 文档自称路径与位置口径一致
+
+插件 52；FR 行并集 114（期望 114，缺 []，重复 {}）
+文档合计 173087 B；超 32 KB 的文件 []
+错误 0 条
+
+--------------------------------------------------------------------------------
+三、映射表复算（缺口数 52 → 0；全部机算，不手写）
+--------------------------------------------------------------------------------
+
+req= 出现次数 66 唯一 66
+重复: []
+非 docs/work/plugin-requirements- 前缀: ["'", '<path>', "[a-zA-Z0-9_./-]+'", 'src/domain/advice/requirements/README.md', 'src/system/runtime/requirements/README.md', 'src/userspace/con-a/quote-trend/requirements/README.md', 'src/userspace/demo-ns/badge/requirements/README.md', 'src/userspace/demo-ns/hello/requirements/README.md']
+总字节 29714
+## 0. 2341
+## 1. 16665
+## 2. 183
+## 3. 432
+## 4. 6628
+## 5. 2888
+
+§1 里指向不存在文件的 req=： []
+§1 行数 63
+
+映射表 §5 的两条复算命令（原文，可直接跑）：
+  grep -oE 'req=[a-zA-Z0-9_./-]+' docs/work/plugin-requirements-map.md | sort -u | wc -l
+63
+
+--------------------------------------------------------------------------------
+四、反向验证：造一个「目录存在但没有 plugin.json」的假插件 ⇒ 必须仍判为不存在 / 拒绝
+--------------------------------------------------------------------------------
+
+取证方式：整树副本 tmp/negctl-root/（tar 排除 ./tmp ./git ./node_modules），在副本里造两个裸目录
+（都有 requirements/、都没有 plugin.json）：src/system/webui/、src/system/fake-plugin/。
+
+$ tools/plugin.sh deps domain/advice          # 基线：webui 目录还不存在
+{"ok":true,"verb":"deps","id":"domain/advice","code":null,"direct":["system/webui"],"closure":[],"order":["domain/advice"],"cycle":null,"unresolved_services":[],"missing_targets":["system/webui"],"next_action":"依赖闭包已给出（顺序即拓扑序）"}
+$ tools/plugin.sh deps domain/advice          # 造出裸目录 src/system/webui/ 之后
+{"ok":true,"verb":"deps","id":"domain/advice","code":null,"direct":["system/webui"],"closure":["system/webui"],"order":["domain/advice","system/webui"],"cycle":null,"unresolved_services":[],"missing_targets":[],"next_action":"依赖闭包已给出（顺序即拓扑序）"}
+   ⇒ missing_targets 从 ["system/webui"] 变成 []：裸目录被 depsClosure 当「已存在的插件」
+     ⇒ plugin-lifecycle 的 A13/A14（要的是 deps_ready=false / deps_missing=["system/webui"]）会变红。
+
+$ tools/plugin.sh list --json | (count/degraded)
+count 11
+degraded [('system/fake-plugin', 'manifest-missing'), ('system/webui', 'manifest-missing')]
+   ⇒ 假目录**被枚举成插件**（manifest-missing 降级），所以门必须自己把它们拒掉。
+
+$ python3 tools/check-plugin-requirements.py   # 副本里跑门（原始行）
+[FAIL] A2 `plugin.sh list` 枚举到的每个插件在映射表里有行（真跑 CLI；枚举为空 = 失败）
+        CLI ids=11（rc=0 count=11 ids=11 degraded=['system/fake-plugin', 'system/webui']）；缺行=['system/fake-plugin']
+[ok]   A3 映射表引用的 FR 都在定义集合内（166 条：主文件 + 2 个归档）
+--
+[FAIL] A6b 有 `src/<层>/<插件>/requirements/` 目录的插件**都在映射表里有行**（目录不无主）
+        目录侧 ['domain/advice', 'system/fake-plugin', 'system/runtime', 'system/webui', 'userspace/con-a/quote-trend', 'userspace/demo-ns/badge', 'userspace/demo-ns/hello']；无行的=['system/fake-plugin']
+[ok]   A6c 需求文档**不在标准布局位置**（非 `src/<层>/<插件>/requirements/`）的插件逐条登记（双向）
+--
+[FAIL] F0 基线（未变异）在同一套断言上**不红**（否则 4 处变异变红都是空转）
+        基线红项=['A2 `plugin.sh list` 枚举到的每个插件在映射表里有行（真跑 CLI；枚举为空 = 失败）', 'A6b 有 `src/<层>/<插件>/requirements/` 目录的插件**都在映射表里有行**（目录不无主）']
+[ok]   F5 防假变异：不存在的锚点必须返回 None（否则『变异变红』说明不了任何事）
+--
+RESULT: FAIL（plugin-requirements 门 14/17）
+
+结论：假插件（目录存在、无 plugin.json）**没有被判为存在** —— 门在 A2（枚举到的插件必须有行）与
+A6b（有 requirements/ 目录的插件必须无主）两处直接拒绝，基线因此不绿（F0 红）。本批按这条实测选定
+「文档落 docs/work/、不先建裸目录」的位置口径（27 §2.4）。
+
+--------------------------------------------------------------------------------
+五、六道门回归（本批提交树上的原始 RESULT 行）
+--------------------------------------------------------------------------------
+
+环境条件（实测）：本会话的 shell 里注入了 `QUOTAGENT_PLUGIN_CONTROL_TOKEN`（工作区激活脚本带来的），
+它会让 `plugin-lifecycle` 的 L6（「没有令牌时客户端就地拒 `plugin-control-disabled`」）变成
+`plugin-control-unauthorized` —— 该门的服务端子进程继承了同一个环境变量。
+这不是本批造成的：**干净 HEAD 副本**（`git archive HEAD | tar -x -C tmp/head-clean`，不含本批任何改动）
+在同一个环境里跑同一条门，失败行**逐字相同**：
+
+$ (tmp/head-clean, 干净 HEAD) tools/verify.sh plugin-lifecycle
+[FAIL] L6 客户端围栅：没有令牌时 `tools/plugin.sh <动词> --live` 就地拒（`plugin-control-disabled` + next_action；退出码非 0）
+        rc=1 code=plugin-control-unauthorized next_action=确认用的是这台机器的控制令牌（只比 sha256 摘要；令牌不落盘、不回显）
+RESULT: FAIL（plugin-lifecycle 门 58/59）
+
+把注入的变量去掉后（`env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN`），同一棵树 59/59 全绿：
+
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/verify.sh plugin-requirements
+RESULT: PASS（plugin-requirements 门 17/17）
+
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/verify.sh docs
+RESULT: PASS
+
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/verify.sh plugin-lifecycle
+RESULT: PASS（plugin-lifecycle 门 59/59）
+
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/verify.sh coverage
+  "passed": 8,
+  "failures": 0
+
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/verify.sh ac-registry
+
+$ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/verify.sh plugins
+RESULT: PASS（插件清单门 5/5）
+
+
+--------------------------------------------------------------------------------
+六、没验证的东西（诚实清单）
+--------------------------------------------------------------------------------
+
+1. 52 份文档里逐条列的 `tools/verify.sh ac <AC>` 命令**没有逐条真跑一遍**（166 条 FR 对应的 AC 有 85 条已注册、
+   50 条 P2 未到期）。本批验的是：引用的 AC 都在 AC 定义集合内、每个被写成命令的 AC 都在 `qa` 注册表内
+   （未注册的如实标注「命令此刻不可跑」，不冒充命令）、门名都在 `tools/verify.sh` 里（见第二节校验器）。
+2. 文档里的 `provides` 一句是我按承载文件与 modules/15/14 的既有描述写的**概括**，没有为每个插件跑一遍
+   `plugin.sh status` 去回读 provides（这些插件多数还没有 `plugin.json`，没有可回读的面）。
+3. 「依赖（实测 import）」只覆盖承载文件的**静态 import 目标**，不含运行期通过桥/服务键获得的依赖。
+4. 逐插件文档的 FR 行集合与映射表一致，是**用脚本比对**出来的（EV-169 第二节），但这套比对**没有进 `plugin-requirements` 门**
+   （本批不改门脚本的判据面，只更新了 F4 的一处变异锚点字符串）——所以它是「本批取证」，不是「常驻机检」。
+5. `docs/work/plugin-requirements-deviations.md` 只是把映射表 §3 的整表搬走（逐字），没有重新核对每条偏差的证据。
+6. 改名（6 份核心文档）只改了文件名与映射表里的 `req=` 指针；**没有**检查仓库外（例如别的 worktree、
+   工作区面板缓存、`user-space/**` 兼容链接目标）里是否还有指向旧文件名的引用。
+7. `plugin-lifecycle` 的 L6 只在「去掉注入变量」这一个环境上验过是绿的；注入变量那种环境下的红是
+   **既有的环境敏感点**（干净 HEAD 同样红），本批没有修它。
+
+六道门的退出码（直接看 rc，`ac-registry` 与 `coverage` 不打 RESULT 行）：
+  tools/verify.sh plugin-requirements → rc=0
+  tools/verify.sh docs → rc=0
+  tools/verify.sh plugin-lifecycle → rc=0
+  tools/verify.sh coverage → rc=0
+  tools/verify.sh ac-registry → rc=0
+  tools/verify.sh plugins → rc=0

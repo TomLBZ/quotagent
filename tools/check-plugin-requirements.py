@@ -295,7 +295,7 @@ def main() -> int:
          "must_red": "A5 每条 FR **只被一个插件**认领",
          "why": "唯一指针被打破：同一条 FR 出现在两处"},
         {"name": "F4 抽掉一条 `req=` 标记（system/mail）必须让 A6c 变红",
-         "mutate": lambda text: apply_mutation(text, " · `req=docs/work/plugin-requirements-mail.md`", ""),
+         "mutate": lambda text: apply_mutation(text, " · `req=docs/work/plugin-requirements-system-mail.md`", ""),
          "must_red": "A6c 需求文档**不在标准布局位置**",
          "why": "§4.2 登记了 system/mail 却不再声明文档 ⇒ 两侧不一致"},
     ]
