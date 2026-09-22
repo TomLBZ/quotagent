@@ -22,7 +22,7 @@ $ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/verify.sh audit        # 修前
 | 文件 | 索引执行位（修前 → 修后） | 判定 |
 |---|---|---|
 | `tools/audit-verify.py` | **`100644` → `100755`** | 唯一缺陷：被 `checks_audit.py` 直接 exec |
-| `tools/verify.sh`、`run`、`tools/run.sh`、`tools/{cordis,plugin,runtime,bootstrap,v-kit}.sh`、`src/system/ui-feedback/tools/*.sh` | `100755` → 未动 | 都是直接 exec 的入口，本来就有执行位 |
+| `tools/verify.sh`、`run`、`tools/{run,cordis,plugin,runtime,bootstrap,v-kit}.sh`、`src/system/ui-feedback/tools/*.sh` | `100755` → 未动 | 本来就有执行位 |
 | 其余 `tools/*.py`（薄转发） | `100644` → 未动 | 经解释器调用 ⇒ 不需要执行位 |
 
 ```
@@ -88,10 +88,11 @@ $ git ls-tree af496d7 tools/audit-verify.py   # 修后（本批提交）
 
 - 提交：功能提交 **`af496d7`**；提交后实测见 `EV-180-post-commit.txt`。
 - `git status --porcelain`：提交前 **25 行（全部已暂存、0 未暂存/未跟踪）** → 提交后 **0 行**。
-- **23 道门（提交前，最终树）全绿**：`docs` PASS、`coverage` 9/9、`ac-registry` rc=0、`plugins` 5/5、`webui` 51/51、
-  `modules` 521/521、`wiring` 5/5、`invariants` 22/22、`events` rc=0、`storage` 19/19、`plugin-assets` 16/16、
-  `plugin-requirements` 18/18、`plugin-lifecycle` 66/66、`evolution` [PASS]、`evolve-module` 61/61、
-  `p0-no-node`（63 条 AC 无 Node 全绿）、`run-once` 34/34、**`g1` 绿**（走查 14/14）、`approval-digest` 10/10、
-  `budget-guard` 10/10、`supplier-scorecard` 10/10、`plugin-market` 13/13、`pipeline-view` 13/13、`retention-view` 12/12。
+- **23 道门（提交前，最终树）全绿**（逐门原始行见 `EV-180-post-commit.txt` §五）：`coverage` 9/9、`plugins` 5/5、
+  `webui` 51/51、`modules` 521/521、`wiring` 5/5、`invariants` 22/22、`storage` 19/19、`plugin-assets` 16/16、
+  `plugin-requirements` 18/18、`plugin-lifecycle` 66/66、`evolve-module` 61/61、`run-once` 34/34、
+  **`g1` 绿**（走查 14/14）、`approval-digest`/`budget-guard`/`supplier-scorecard` 各 10/10、
+  `plugin-market`/`pipeline-view` 各 13/13、`retention-view` 12/12、`p0-no-node`（63 条 AC 无 Node 全绿）；
+  `docs`、`ac-registry`、`events`、`evolution` 四门 rc=0 / PASS。
 - **提交后**：`run-clone` **20/20**、`clean-copy` **PASS**（15 道门在干净副本里全绿）、`git status` **0 行**、
   push 后 `git ls-remote` 回读与本地一致（逐字见 `EV-180-post-commit.txt`）。
