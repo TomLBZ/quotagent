@@ -98,3 +98,25 @@ pipeline-view          rc=0
 retention-view         rc=0   
 ALL DONE
 ```
+
+## 六、push 与 `git ls-remote` 回读（最终行）
+
+```
+$ git push origin main
+   968de24..41a5e47  main -> main
+$ git ls-remote origin refs/heads/main
+41a5e4750b5a5d59d2cc74ef37b0cad44092a1ee	refs/heads/main
+$ git rev-parse HEAD
+41a5e4750b5a5d59d2cc74ef37b0cad44092a1ee
+```
+
+## 七、最终 HEAD 上再跑一遍两个「校验 HEAD」的门
+
+```
+run-clone:   RESULT: PASS（run-clone 门 20/20）
+clean-copy:  RESULT: PASS（15 道门在干净副本里全绿；已提交内容自足可复现）
+```
+
+## 八、最终 `git status --porcelain`（补记提交前）
+
+本补记提交前：`M  docs/work/evidence/EV-180-post-commit.txt` 一行（全部已暂存）；提交后 0 行。
