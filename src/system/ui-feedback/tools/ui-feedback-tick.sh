@@ -8,7 +8,11 @@
 #
 # 输出约定（供 cron 以 no_agent 模式直接投递）：**有变化才打印**，无变化输出空。
 set -u
-ROOT=/workspace/projects/quotagent
+# 仓库根由**脚本自身位置**推出（`src/system/ui-feedback/tools/` 上溯 3 层），并可被 `QUOTAGENT_ROOT`
+# 覆盖（与 `tools/verify.sh` / `ui-feedback-monitor.sh` 同一约定）—— 硬编码绝对路径会让「克隆到别的
+# 路径」就废（可移植性，服务「克隆即跑」；机检 `tools/verify.sh plugin-assets` 的 PA9）。
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT="${QUOTAGENT_ROOT:-$(CDPATH= cd -- "$HERE/../../.." && pwd)}"
 PEND="$ROOT/tmp/ui-shared/ui-feedback"
 cd "$ROOT" || exit 1
 [ -d "$PEND" ] || exit 0

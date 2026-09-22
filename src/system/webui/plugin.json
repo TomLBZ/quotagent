@@ -3,8 +3,16 @@
   "version": "1.0.0",
   "layer": "system",
   "provides": [
-    "webui"
+    "webui",
+    "uiSlots"
   ],
   "entry": "code/index.mjs",
-  "description": "system 插件「webui」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/system/webui/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "description": "system 插件「webui」：双方视角 WebUI —— 把账本投影装配成人能用的页面与只读路由，并提供注入式 UI 注册面（0 业务语义）。本批（接上 `entry`）：`entry` = `code/index.mjs`，只重导出既有实体 `code/webui.mjs`（`provides=['webui','uiSlots']`）⇒ 合法清单（`valid:true`），`provides` 改写为实体自述的真实服务键。",
+  "migration": {
+    "stage": 4.2,
+    "mode": "entity-moved-and-wrapper",
+    "impl": "src/system/webui/code/webui.mjs",
+    "from": "host/modules/webui.mjs",
+    "moves_in_stage": 4.2
+  }
 }

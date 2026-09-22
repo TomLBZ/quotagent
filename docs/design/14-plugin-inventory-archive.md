@@ -55,12 +55,14 @@
 
 ## 6. 三层插件（`src/<层>/<插件>/`，自 `T-321`/`T-329` 起）
 
-**承载体现状（`EV-178` 末实测，逐条可复算）**：**53/63 已接承载**（`code/index.mjs` 或 `code/__init__.py` 真实存在
-⇒ `plugin.sh list` 报 `valid:true`；本批新接 **5 个 ESM + 19 个 Python** 入口）；**10 个仍无入口**（如实报
-`degraded: artifact-missing`）：**8 个**是「多实体插件，'哪个实体当入口'未定」（`system/admin`、`system/agent-runtime`、
-`system/canary`、`system/eval`、`system/kernel-bridge`、`system/mail`、`system/webui`、`domain/compare`），
-**2 个**的实现在插件根而非 `code/`（`system/repo-gate`、`system/qa-runner` —— 跨插件的**平台门/AC 运行器**，
-落 `code: 待实现`）。**不假装已实现**。
+**承载体现状（本批实测，逐条可复算）**：**63/63 全部接上 `entry`**（`plugin.sh list --json` ⇒ `valid:true` 63/63、
+`degraded: artifact-missing` 0 条）。历史：`EV-178` 末 53/63（`code/index.mjs` 或 `code/__init__.py` 真实存在；
+本批新接 5 个 ESM + 19 个 Python），`EV-179` 补 4 ⇒ 57/63（该数当时偏高：实测 `system/repo-gate` 的入口
+不在 `code/`），本批（`EV-181`）收掉最后 **7 个「多实体插件」**：`system/{webui,admin,agent-runtime,canary,mail}`
+= ESM 入口（`webui`/`mail` 重导出唯一自述服务的实体；`admin`/`agent-runtime`/`canary` 是**机制组合**入口，
+按序把平级成员插件交给宿主），`system/{eval,kernel}` = Python 承载入口（宿主侧 0 个 ESM 服务实体，
+造 `index.mjs` 只能是空壳 ⇒ 用 `code/__init__.py`）。逐条理由与被否决的选项见 `docs/work/decisions.md`
+的 `D-078`..`D-084`。**不假装已实现**：`entry` 只是「实现落在 `code/`」这件事的登记，内核仍不可自改（ADR-0002）。
 
 | 插件（目录 / id） | 提供的能力 | 提供者服务名 | 被哪些装配 | 独立演进时改哪里 |
 |---|---|---|---|---|

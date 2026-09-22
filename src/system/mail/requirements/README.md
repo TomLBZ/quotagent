@@ -45,9 +45,11 @@
 
 ## 落地状态（`code/`）
 
-<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+<!-- 本批 `EV-181` 接上 `entry`；决策与被否决的选项见 `docs/work/decisions.md` D-082。 -->
 
-- `code:` 部分落地 —— Python 实体 2 个已在 `code/`（`mail.py`、`mail_transport.py`）；宿主 **ESM 入口未接** ⇒ `entry` 仍如实报 `degraded: artifact-missing`。
-- **待定（需设计决定，本批不代做 ✗）**：`code/` 里 `mail-view.mjs` 自述 `provides=['mailView']`，
-  而 Python 侧 `mail.py`/`mail_transport.py` 是**邮件收发服务本体**（`provides` 占位键现在写的是 `mail`）⇒ **两个面**，
-  入口取哪一个（视图 vs 服务本体）属**插件设计**。
+- `code:` **已接入口** —— 宿主侧实体 `mail-view.mjs`（`provides=['mailView']`）在 `code/`；Python 侧真收发 `mail.py`/`mail_transport.py` 也在 `code/`。
+  `entry` = `code/index.mjs`（只重导出 `mail-view.mjs`）⇒ `valid:true`；`provides` 由占位键 `['mail']` 改为实体自述的 `['mailView']`。
+- 口径（与 `system/approval` 同形）：**有 ESM 实体时，入口 = 那个宿主可装载的实体**；SMTP/IMAP 真收发由 Python 侧负责，
+  宿主不经 cordis 装载它们（`entryKind` 只把本入口记为 `esm`）。
+- 真装载：`tools/plugin.sh load system/mail` ⇒ `ok:true`、`fiber_state=ACTIVE`、`effects.count=2`（`ctx.provide("mailView")`）；`unload` 后 `zero_effects=true`。
+- 被否决的选项（逐条理由）见 D-082：入口只重导 Python 面 / 不接。

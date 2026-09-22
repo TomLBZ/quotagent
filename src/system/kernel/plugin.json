@@ -5,6 +5,12 @@
   "provides": [
     "kernel"
   ],
-  "entry": "code/index.mjs",
-  "description": "system 插件「kernel」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/system/kernel/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "entry": "code/__init__.py",
+  "description": "system 插件「kernel」：平台内核（L0）—— 唯一账本写者 + 事件总线 + QEP + 插件宿主 + 交付绑定；**内核不可自改**（ADR-0002）。本批（接上 `entry`）：本插件在宿主侧**没有 ESM 服务实体**（`code/frozen.mjs`·`code/ledger-view.mjs` 是机制件，无 `provides`），所以 `entry` = `code/__init__.py`（Python 承载入口，**就是内核包自己的包初始化文件**，不是新造的空壳）⇒ 合法清单（`valid:true`）。决策与被否决的选项见 `docs/work/decisions.md` D-084；内核只经 `kernel-bridge` 的 stdio 通道被使用，宿主不经 cordis 装载它（`entryKind` = `python`，见 27 §7.1）。",
+  "migration": {
+    "stage": 3,
+    "mode": "python-entry-package-init",
+    "impl": "src/system/kernel/code/__init__.py",
+    "batch": "EV-181"
+  }
 }

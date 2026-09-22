@@ -1,0 +1,9 @@
+# 证据索引（P2 product 分册 C：EV-181 起）
+
+> 为什么要开分册：`docs/work/evidence/INDEX-P2.md` 已到 8046/8192 B（8 KB 硬预算），无法再追加行；
+> 分册与 `INDEX.md` → `INDEX-P1.md` → `INDEX-P2.md` → `INDEX-P2-archive*.md` 同形，每份各自受 8 KB 预算约束。
+> 每份证据的原始命令输出在 `EV-<编号>-*.txt`。
+
+| 证据 | 内容 | 关联 | 阶段 |
+|---|---|---|---|
+| EV-181 | **干净副本红 AC 的根因 + 7 个 `entry` 决定 + 硬编码路径门**（`T-331`）：① `AC-AGENTRT-002/006/007` 在 `git archive HEAD` 副本里红的**根因** = 围栏门顶层 `import` 宿主内核 `cordis`（`host/node_modules/` **gitignored** ⇒ 副本里不存在），三条 AC 原先裸 `node <实体>` ⇒ `ERR_MODULE_NOT_FOUND`；「单独跑也全绿」是因为全量按 ID 升序跑、后面的 `AC-INTEG-004` 走 `tools/cordis.sh run`（幂等 `install_deps`）把依赖装上了（实测：跑前 `host/node_modules` 不存在、跑完存在）。修法 = 三条 AC 改走既有的 `tools/cordis.sh run` 约定，**判据一格未改**；正向（同副本 3/3 PASS + 全量 **85/85**）/反向（回退成裸 `node` ⇒ 3/3 必红） ② **7 个多实体插件定 `entry` 并接上**（D-078..D-084）：单实体 = 薄重导出（`webui`/`mail`）、多实体 = **机制组合**（`admin` 2 个 / `agent-runtime` 3 个 / `canary` 2 个）、宿主侧 0 个 ESM 服务实体 = **Python 承载入口**（`eval` 新建 `code/__init__.py`、`kernel` 用它自己的包初始化）⇒ `plugin.sh list` **63/63 valid、degraded 0**（此前 7 条 `artifact-missing`）；连带把 `plugin-lifecycle` 的 A13/A14 从「真根上 webui 未迁移」改指**对照根负控**（真 id + 真清单字节 + 入口缺失）+ 真根正控，**断言 66/66 → 68/68**（只增不减），同一运行的变异 1..6 仍全红 ③ 硬编码仓库根扫描（`src/**`/`host/**`/`tools/**`/`*.sh`）：命中 4 处（`mutate-ui-views.py:16`、`ui-feedback-tick.sh:11`、`ui-feedback-monitor.sh:10`、`manual-check.py:15`）全改成由 `__file__`/`$0` 推导；新增门断言 **PA9**（以 `quotagent` 为末段目录的绝对路径字面量 0 处 + 探针自证非空转）+ 门内变异 **F8**（写死 checkout 路径 ⇒ PA9 必红）；`plugin-assets` **16/16 → 18/18** | `T-331`, `AC-PLUGIN-004`, `AC-AGENTRT-002/006/007` | P2 |

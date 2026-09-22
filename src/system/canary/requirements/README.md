@@ -44,8 +44,11 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 
 ## 落地状态（`code/`）
 
-<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+<!-- 本批 `EV-181` 接上 `entry`；决策与被否决的选项见 `docs/work/decisions.md` D-081。 -->
 
-- `code:` 部分落地 —— 拥有的宿主模块实体 `canary.mjs` 已随本批进 `code/`；宿主 **ESM 入口未接**（不拼装、不造功能）⇒ `plugin.json` 的 `entry` 仍如实报 `degraded: artifact-missing`。
-- **待定（需设计决定，本批不代做 ✗）**：`code/` 里 `canary.mjs` 自述 `provides=['canary']`、`bridge-canary.mjs` 自述 `provides=['canary-dispatch']`
-  （另两个 `canary-dispatch.mjs`/`canary-run.mjs` 是库件）⇒ **两个真服务键**，入口取哪一个属**插件设计**。
+- `code:` **已接入口** —— 两个真插件实体 `canary.mjs`（`canary`）与 `bridge-canary.mjs`（`canary-dispatch`，`inject: ['canary']`）
+  都在 `code/`；`canary-dispatch.mjs`/`canary-run.mjs` 是**库件**（无 `apply`/`provides`，不是入口候选）。
+  `entry` = `code/index.mjs` = **机制组合**（先 `canary`，再 `bridge-canary`，满足后者的 `inject`）。
+- `provides` 由占位键 `['canary']` 改写为两者并集 `['canary','canary-dispatch']`。
+- 真装载：`tools/plugin.sh load system/canary` ⇒ `ok:true`、`fiber_state=ACTIVE`、`effects={count:2, ...}`；`unload` 后 `zero_effects=true`。
+- 被否决的选项（逐条理由）见 D-081：只装 `canary.mjs` / 把库件当入口 / 不接。

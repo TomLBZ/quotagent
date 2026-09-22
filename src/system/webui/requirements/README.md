@@ -50,16 +50,12 @@
 
 ## 落地状态（`code/`）
 
-<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+<!-- 本批 `EV-181` 接上 `entry`；决策与被否决的选项见 `docs/work/decisions.md` D-078。 -->
 
-- `code:` 部分落地 —— 宿主模块实体 `webui.mjs`（`provides=['webui','uiSlots']`）与机制件 `ui-route.mjs`/`ui-slot.mjs` 已在 `code/`；
-  **入口接法本批未做 ⇒ `entry` 仍如实报 `degraded: artifact-missing`**。
-- **待定（需设计决定，本批不代做 ✗）**：本插件的实体看起来「只有一个真服务入口」（`webui.mjs`），但接入口会**改变一个既有负控判据的事实**：
-  `plugins/plugin-lifecycle` 的 **A13/A14** 断言「`domain/advice` 的依赖目标 `system/webui` **未迁移 ⇒ 如实记 missing**」
-  （`deps.missing_targets == ["system/webui"]`、`status.deps_missing == ["system/webui"]`、`deps_ready=false`），
-  且 **变异 6**（「依赖闭包把『目录存在』当『插件存在』」）的对照正是「`system/webui` 不合法时闭包缺它」。
-  让 `system/webui` 变 `valid:true` 会让这三条**同时失去对照**（= 放宽），因此需要**人工决定**：
-  ①入口是否就是 `webui.mjs`（`uiSlots` 是机制注册面，算不算插件对外服务键？`plugin.json` 现在只写 `['webui']`）；
-  ②A13/A14 与变异 6 该改指哪一个仍未迁移的插件目标（或改造成夹具根上的对照）。
-  **证据**：`tools/plugin.sh status system/webui` ⇒ `degraded: artifact-missing`；A13/A14 原文见
-  `src/system/runtime/tests/check-plugin-lifecycle.py`（`missing_targets`/`deps_missing` 两处 + 变异 6 的 `invalid_dirs`）。
+- `code:` **已接入口** —— 实体 `webui.mjs`（`provides=['webui','uiSlots']`）与机制件 `ui-route.mjs`/`ui-slot.mjs` 都在 `code/`；
+  `entry` = `code/index.mjs`（只重导出实体，零业务语义零写面）⇒ `tools/plugin.sh list` 报 `valid:true`，**不再是** `degraded: artifact-missing`。
+- `provides` 由占位键 `['webui']` 改写为**实体自述的真实服务键** `['webui','uiSlots']`（`uiSlots` = 注入式 UI 的注册面，机制、0 语义）。
+- 真装载：`tools/plugin.sh load system/webui` ⇒ `ok:true`、`kind=esm`、`provides=['webui','uiSlots']`、卸载后 effects 归零；
+  该实体 `inject` 列出 25 个同位插件服务键，运行期在缺少这些服务时 fiber 停在 `PENDING`（**「未就绪 ⇒ 非激活，不是崩」**，不是失败）。
+- 连带改动（必须）：`plugin-lifecycle` 的 A13/A14 原以「真根上 `system/webui` 未迁移」为锚点 ⇒ 本批改指**对照根**
+  （真 id + 真清单字节 + 入口文件缺失）并在真根补正控；断言只增不减（见 D-078 与 `docs/work/evidence/EV-181-*`）。

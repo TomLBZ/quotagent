@@ -61,8 +61,11 @@
 
 ## 落地状态（`code/`）
 
-<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+<!-- 本批 `EV-181` 接上 `entry`；决策与被否决的选项见 `docs/work/decisions.md` D-084。 -->
 
-- `code:` 部分落地 —— Python 实体 9 个已在 `code/`（`__init__.py`、`canon.py`、`delivery.py`、`events.py`、`evidence.py`、`ledger.py`…）；宿主 **ESM 入口未接** ⇒ `entry` 仍如实报 `degraded: artifact-missing`。
-- **待定（需设计决定，本批不代做 ✗）**：内核 9 个模块**各自独立**（且 ADR-0002 冻结：内核不随自进化改），
-  另有两个宿主件 `frozen.mjs`/`ledger-view.mjs` —— 入口取哪一个（或内核算不算「插件」）属**插件设计**。
+- `code:` **已接入口** —— 内核 9 个 Python 模块（`canon.py`/`ledger.py`/`events.py`/`qep.py`/`plugin.py`/`delivery.py`/`evidence.py`/`modelgate.py` + `__init__.py`）
+  与两个宿主机制件 `frozen.mjs`/`ledger-view.mjs` 都在 `code/`；`entry` = `code/__init__.py`（**内核包自己的**包初始化文件，不是新造）⇒ `valid:true`、`kind=python`。
+- `provides` 沿用 `['kernel']`（内核只经 `kernel-bridge` 的 stdio 通道被使用，宿主**不**经 cordis 装载它；见 27 §7.1）。
+- 边界：**内核不可自改**（ADR-0002）—— 接上 `entry` 只表示"实现落在 `code/`"，不表示内核成为可热插拔的宿主插件；
+  任何门都没有放宽（装载/卸载内核仍不在判据内）。
+- 被否决的选项（逐条理由）见 D-084：造一层 ESM 假面 / 不接（`degraded` 反而掩盖"Python 实现在树里"）。

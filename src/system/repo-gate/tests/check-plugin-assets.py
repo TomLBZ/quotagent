@@ -26,10 +26,18 @@
       里不该再有实现文件（搬迁完成后应只剩薄入口/薄重导/薄转发）；任何仍有实体声明的文件必须在
       `docs/design/27-plugin-architecture.md` §10 的例外表里逐条登记（登记锚点 `<!-- exceptions: host-layer-nonthin -->`）。
       以前「搬漏一个」只有人眼能发现；这条把它变成**必红**。
+  PA9 可移植性（服务「克隆即跑」）：`src/**`、`host/**`、`tools/**`、任意 `*.sh`、**根入口 `run`
+      （没有扩展名，在 `**/*.sh` 之外）**里**没有硬编码的仓库根**——判据是「以 `quotagent` 为**末段目录**
+      的绝对路径字面量」0 处（与"当前仓库在哪"无关 ⇒ 克隆到任何路径都能抓到别处硬编码过的那一串）；
+      同时探针自证正则非空转。与 `clean-copy`/`run-clone` 互补：那两道门真跑行为，这条抓字面量。
+  PA9b 扫描面**自证**：光有「0 处命中」分不清「干净」与「没扫到」⇒ 逐条点名「必须被扫到」的文件
+      （含没有扩展名的根入口 `run`），漏一个即红。
   F0 基线（未变异）在同一套判据上**不红**（否则"变异变红"说明不了任何事）。
   F1..F4 **4 处单点变异全红**（整树副本 + 单点改动；每处必须让**指定的**断言变红）；
       ① 抽走目标目录里的资产 ② 把一条转发改成实体 ③ 把资产副本放进另一个插件目录
-      ④ 往 `tools/` 加一个未登记的非薄入口 ⑤ 把一个**实体**放回 `host/modules/` 而不登记（PA8）。
+      ④ 往 `tools/` 加一个未登记的非薄入口 ⑤ 把一个**实体**放回 `host/modules/` 而不登记（PA8）
+      ⑥ 在 `tools/` 的源码里写死仓库根（PA9）⑦ 在没有扩展名的**根入口 `run`** 里写死仓库根（PA9 的
+      扫描面自证：那一层不在 `**/*.sh` 里）。
   F5 防假变异：不存在的锚点必须被判为假变异（不许"没改到任何字节"也算红）。
   F6 全过程**产品树字节不变**（变异只写在 `tmp/` 的整树副本里）。
 
@@ -424,6 +432,45 @@ def qa_check_files(root: Path) -> list[str]:
     return sorted(str(p.relative_to(root)) for p in (root / "src" / "quotagent" / "qa").glob("checks_*.py") if p.is_file())
 
 
+#: 硬编码「仓库根（checkout 路径）」的判据：绝对路径里以 `quotagent` 为**末段目录**的那些。
+#: 判据形状 = `<任意前缀目录>` 之后直接接上末段目录 `quotagent`（例：`<工作区>/projects` 再拼 `quotagent`）
+#: ✅ 命中；`/workspace/config/quotagent-admin-token` ❌（末段是文件名，不是 checkout 根）；
+#: `/…/config` 段下把 `quotagent` 当**文件名词干**（如 admin token 文件）❌ 不命中；
+#: HTTP 路由前缀那种（前导段后直接接 `quotagent/`）❌ 也不命中——本条注释自己也受 PA9 扫，故只按形状描述。
+#: 与「当前仓库实际在哪」无关 ⇒ 克隆到任何路径都能抓到**别处硬编码过的**那一串（才是可移植性缺陷）。
+HARDCODED_CHECKOUT_RE = re.compile(r"(?:/[A-Za-z0-9._-]+)+/quotagent(?![A-Za-z0-9._-])")
+#: 扫描面（PA9）= 会被「克隆即跑」直接执行的那几层：`src/**`、`host/**`、`tools/**`、任意 `*.sh`、
+#: **以及仓库根那个没有扩展名的入口 `run`**（`**/*.sh` 匹配不到它 —— 盲区；而 `./run up` 恰恰是
+#: 「克隆即跑」的第一层）。
+PORTABLE_SCAN_GLOBS = ("src/**/*", "host/**/*", "tools/**/*", "**/*.sh", "run")
+MAX_PORTABLE_SCAN_BYTES = 512_000
+
+
+def hardcoded_root_hits(root: Path) -> tuple[list[str], int, list[str]]:
+    """PA9 的扫描器：返回（`相对路径:行号: 原始行` 升序, 扫描文件数, 扫描到的相对路径升序）。只读、有界。
+
+    第三个返回值是给 PA9b 用的**扫描面自证**：光看命中数为 0 分不清「干净」与「没扫到」
+    （扩展名外的入口漏扫过一次，正是这条要防的）。
+    """
+    files: set[Path] = set()
+    for pattern in PORTABLE_SCAN_GLOBS:
+        for path in root.glob(pattern):
+            if path.is_file() and not is_excluded(path, root):
+                files.add(path)
+    hits: list[str] = []
+    for path in sorted(files):
+        try:
+            if path.stat().st_size > MAX_PORTABLE_SCAN_BYTES:
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:                      # 读不到/竞态消失：不把它当命中（范围外的事不该让断言变红）
+            continue
+        for number, line in enumerate(text.splitlines(), start=1):
+            if HARDCODED_CHECKOUT_RE.search(line):
+                hits.append(f"{path.relative_to(root)}:{number}: {line.strip()[:120]}")
+    return hits, len(files), sorted(str(p.relative_to(root)) for p in files)
+
+
 def classification_rows(root: Path) -> list[dict]:
     """解析 `plugin-file-map.md` §分类 的三节表（机器登记的人可读镜像）。"""
     text = (root / MAP_REL).read_text(encoding="utf-8")
@@ -750,6 +797,30 @@ def evaluate(root: Path, run_gates: bool = True) -> tuple[list[tuple[str, bool, 
                                      f"例外表 {len(registered) if registered is not None else '（缺）'} 条，双向一致")
     facts["host_nonthin"] = len(host_nonthin)
     facts["host_exceptions"] = sorted(registered) if registered is not None else None
+
+    # --- PA9：可移植性（硬编码仓库根 ⇒ 红）--------------------------------------------
+    # 与 `clean-copy`/`run-clone` 互补：那两道门**真跑**（行为），这条抓**字面量**（且克隆位置无关）。
+    # 判据 = `src/**`、`host/**`、`tools/**`、任意 `*.sh` 里「以 `quotagent` 为末段目录的绝对路径」0 处；
+    # 探针自证判据非空转（运行期拼出违例串 ⇒ 同一正则必须命中，否则说明正则退化成空转）。
+    hits9, scanned, scanned_names = hardcoded_root_hits(root)
+    probe_literal = "/" + "srv/" + "zz-probe/" + "quotagent"      # 运行期拼：本文件自己不许含违例字面量
+    probe9 = bool(HARDCODED_CHECKOUT_RE.search("ROOT = Path('" + probe_literal + "')"))
+    add(f"PA9 仓库内**没有硬编码的仓库根**（`src/**`/`host/**`/`tools/**`/`*.sh`/根入口 `run` 扫 {scanned} 个文件："
+        f"以 `quotagent` 为末段目录的绝对路径字面量 0 处；探针自证非空转）",
+        not hits9 and probe9,
+        "; ".join(hits9[:6]) or f"{scanned} 个文件 0 处硬编码仓库根（探针命中={probe9}）")
+    facts["portable_scanned"] = scanned
+    facts["hardcoded_root"] = len(hits9)
+    #: PA9b：**扫描面自证**。「0 处命中」分不清「真的干净」与「根本没扫到」—— 根入口 `run` 没有扩展名，
+    #: `**/*.sh` 匹配不到它（实测盲区），而它正是「克隆即跑」的第一层。所以扫描面本身要有断言：
+    #: 逐个点名要求「必须被扫到」的文件，缺一个就红（F9 从行为侧再证一次：往 `run` 里写死仓库根 ⇒ PA9 必红）。
+    required_scanned = ("run", "tools/verify.sh", "host/modules/webui.mjs", "src/system/runtime/tools/plugin-lifecycle.mjs")
+    missing_scan = [rel for rel in required_scanned if rel not in scanned_names]
+    add(f"PA9b 扫描面**覆盖「克隆即跑」的第一层**（逐条点名：{len(required_scanned)} 个必扫文件 —— 含"
+        f"**没有扩展名的根入口 `run`**，它在 `**/*.sh` 之外）",
+        not missing_scan,
+        f"漏扫={missing_scan}；扫描面共 {len(scanned_names)} 个文件")
+    facts["portable_scan_required_missing"] = missing_scan
     return res, facts
 
 
@@ -818,6 +889,21 @@ def main() -> int:
             "/** 未登记的实体（变异）：含实现声明，不是薄重导。 */\nexport function zz() { return 1 }\n",
             encoding="utf-8"),
         "must_red": "PA8 ", "why": "宿主层出现未登记的实现文件 ⇒ 例外表与事实不符"})
+    #: 违例字面量**运行期拼**（本文件自己也在 PA9 的扫描面里，写死会自命中）。
+    _hard = "'" + "/" + "workspace/projects/" + "quotagent'"
+    mutant_specs.append({
+        "name": "F8 在 `tools/` 的源码里写死仓库根（往 `tools/manual-check.py` 追加一行绝对 checkout 路径）"
+                "必须让 PA9 变红",
+        "apply": lambda base: (base / "tools/manual-check.py").write_text(
+            (base / "tools/manual-check.py").read_text(encoding="utf-8") + "ANCHOR = " + f"{_hard}\n",
+            encoding="utf-8"),
+        "must_red": "PA9 ", "why": "可移植性被破坏：硬编码 checkout 路径 ⇒ 克隆到别的路径就废"})
+    mutant_specs.append({
+        "name": "F9 在**根入口 `run`**（没有扩展名，`**/*.sh` 匹配不到它）里写死仓库根必须让 PA9 变 red"
+                "（证明扫描面真盖到了那一层，而不是只靠扩展名）",
+        "apply": lambda base: (base / "run").write_text(
+            (base / "run").read_text(encoding="utf-8") + "# ANCHOR = " + f"{_hard}\n", encoding="utf-8"),
+        "must_red": "PA9 ", "why": "盲区回归：没有扩展名的入口层被漏扫"})
     mutated_roots: list[Path] = []
     for index, spec in enumerate(mutant_specs, start=1):
         base = tree_copy(ROOT, work / f"mutant-{index}")

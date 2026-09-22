@@ -3,8 +3,20 @@
   "version": "1.0.0",
   "layer": "system",
   "provides": [
-    "admin"
+    "adminGuard",
+    "adminView"
   ],
   "entry": "code/index.mjs",
-  "description": "system 插件「admin」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/system/admin/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "description": "system 插件「admin」：系统管理道 —— 门卫（token 校验/不透明会话/统一拒绝体/有界冷却）与只读面板（阻塞与进度聚合）。本批（接上 `entry`）：`entry` = `code/index.mjs`，把两个**平级**成员实体 `code/admin-guard.mjs`（`adminGuard`）与 `code/admin-view.mjs`（`adminView`）按机制组合装载 ⇒ 合法清单（`valid:true`），`provides` 改写为两者的真实服务键。",
+  "migration": {
+    "stage": 4.2,
+    "mode": "entity-moved-and-composite-entry",
+    "impl": "src/system/admin/code/admin-guard.mjs",
+    "impl_members": [
+      "src/system/admin/code/admin-guard.mjs",
+      "src/system/admin/code/admin-view.mjs"
+    ],
+    "from": "host/modules/admin-guard.mjs + host/modules/admin-view.mjs",
+    "moves_in_stage": 4.2
+  }
 }

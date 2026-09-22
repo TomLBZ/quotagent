@@ -7,7 +7,11 @@
 set -u
 # 根目录可被 `QUOTAGENT_ROOT` 覆盖（与 tools/verify.sh 同一约定）：机检要在**隔离根**上真跑
 # 「空待办 ⇒ 恰一行 pending=0」「有 2 条待办 ⇒ pending=2」两态，不能靠读源码猜（见 AC-USREQ-006）。
-ROOT="${QUOTAGENT_ROOT:-/workspace/projects/quotagent}"
+# 默认根由**脚本自身位置**推出（`src/system/ui-feedback/tools/` 上溯 3 层）；`QUOTAGENT_ROOT` 仍可
+# 覆盖（与 `tools/verify.sh` 同一约定）—— 硬编码绝对路径会让「克隆到别的路径」就废
+# （可移植性，服务「克隆即跑」；机检 `tools/verify.sh plugin-assets` 的 PA9）。
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT="${QUOTAGENT_ROOT:-$(CDPATH= cd -- "$HERE/../../.." && pwd)}"
 PEND="$ROOT/tmp/ui-shared/ui-feedback"
 shopt -s nullglob 2>/dev/null || true
 files=()

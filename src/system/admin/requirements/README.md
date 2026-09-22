@@ -53,9 +53,12 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 
 ## 落地状态（`code/`）
 
-<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+<!-- 本批 `EV-181` 接上 `entry`；决策与被否决的选项见 `docs/work/decisions.md` D-079。 -->
 
-- `code:` 部分落地 —— 拥有的宿主模块实体 `admin-guard.mjs`、`admin-view.mjs` 已随本批进 `code/`；宿主 **ESM 入口未接**（不拼装、不造功能）⇒ `plugin.json` 的 `entry` 仍如实报 `degraded: artifact-missing`。
-- **待定（需设计决定，本批不代做 ✗）**：`code/` 里**有两个各自自述服务键**的实体（`admin-guard.mjs` → `adminGuard`、`admin-view.mjs` → `adminView`），
-  外加 Python 侧 `admin_blocks.py` —— **哪个是插件入口**（还是本插件该拆成两个插件？）属**插件设计**，不是搬迁口径能定的。
-  证据：`grep -n "^export const provides" src/system/admin/code/*.mjs` ⇒ `['adminGuard']` 与 `['adminView']` 两条。
+- `code:` **已接入口** —— 两个**各自独立的 cordis 插件实体** `admin-guard.mjs`（`adminGuard`）与 `admin-view.mjs`（`adminView`）
+  都在 `code/`（外加 Python 侧 `admin_blocks.py`）；`entry` = `code/index.mjs` = **机制组合**（按序把两个成员交给宿主）。
+- `provides` 由占位键 `['admin']` 改写为**两个实体自述服务键的并集** `['adminGuard','adminView']` ⇒ 服务索引不再漏这两个键。
+- 真装载：`tools/plugin.sh load system/admin` ⇒ `ok:true`、`fiber_state=ACTIVE`、`effects={count:2, labels:['ctx.plugin()','ctx.plugin()']}`
+  （两个成员各自注册一个 effect）、`provides=['adminGuard','adminView']`；`unload` 后 `zero_effects=true`。
+- 机制组合**不新造语义**：入口文件不判断、不算数、不读文件、不写任何东西，也不替成员解析配置（成员按自己的 `Config` 取默认值）。
+- 被否决的选项（逐条理由）见 D-079：只挑一个当入口 / 拆成两个插件目录 / 不接。

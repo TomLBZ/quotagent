@@ -12,7 +12,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path('/workspace/projects/quotagent')
+#: 仓库根由**本文件位置**推出（`tools/` 上溯 1 层）—— 硬编码绝对路径会让「克隆到别的路径」就废
+#: （可移植性，服务「克隆即跑」；机检 `tools/verify.sh plugin-assets` 的 PA9）。
+ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / 'tmp' / 'manual-check'
 LOG = ROOT / 'docs' / 'work' / 'evidence' / 'EV-055-deployment-manual-walkthrough.txt'
 

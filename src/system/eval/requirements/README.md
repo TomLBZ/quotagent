@@ -47,8 +47,11 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 
 ## 落地状态（`code/`）
 
-<!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
+<!-- 本批 `EV-181` 接上 `entry`；决策与被否决的选项见 `docs/work/decisions.md` D-083。 -->
 
-- `code:` 部分落地 —— Python 实体 3 个已在 `code/`（`evaldata.py`、`evalmetrics.py`、`scenarios.py`）；宿主 **ESM 入口未接** ⇒ `entry` 仍如实报 `degraded: artifact-missing`。
-- **待定（需设计决定，本批不代做 ✗）**：三个 Python 实体**各自独立**（数据集快照 / 指标 / 场景集），没有单一模块面；
-  入口写哪一个（或是否拆成三个插件）属**插件设计**。
+- `code:` **已接入口** —— 三个 Python 实体 `evaldata.py`（反例集）/ `evalmetrics.py`（指标与基线）/ `scenarios.py`（S1..S4）都在 `code/`；
+  本批新增 `code/__init__.py` = **Python 承载入口**（只重导出上面三份既有实现，与 19 个 Python 承载插件同形）。
+- `entry` 由不存在的 `code/index.mjs` 改为 `code/__init__.py` ⇒ `tools/plugin.sh list` 报 `valid:true`、`kind=python`（`degraded` 清空）；
+  `provides` 沿用插件名键 `['eval']`（Python 承载插件的既有口径：宿主侧不经 cordis 解析本插件的细粒度面）。
+- **为什么不是 `code/index.mjs`**：本插件在宿主侧 0 个 `provides`/`apply` 的 `.mjs` ⇒ 写 ESM 入口只能是空壳或新造宿主面 = 造功能 ✗（D-083 第 1 条否决项）。
+- 被否决的选项（逐条理由）见 D-083：造空 `index.mjs` / 把 `provides` 写成三个模块名 / 不接。

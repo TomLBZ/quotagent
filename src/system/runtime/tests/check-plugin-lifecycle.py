@@ -272,6 +272,36 @@ def run_mutant_cli(script: Path, root: Path, args: list[str], timeout: int = 180
     return proc.returncode, json_line(proc.stdout), proc.stderr
 
 
+def make_anchor_root(tag: str) -> Path:
+    """A13b/A14b 的**对照根**：真 `domain/advice`（整块拷贝）+ 真 `system/webui` 的**合法形状清单**，
+    但**不放入口文件**（`entry` 指的文件不存在 ⇒ `artifact-missing`）。
+
+    为什么要新增这一条（而不是复用 A15/A16）：那两条的假目标分别是「只有裸目录、没有 `plugin.json`」
+    与「有清单但缺必填字段」；这里补的是**第三种**形态 —— 清单字段齐备、`name`/`layer` 都对，只有
+    `entry` 指的文件不在（= `system/webui` 在接上入口之前的真实形态）。三者都不许被当成「依赖已就绪」。
+    用**真实 id 与真实清单字节**（`shutil.copyfile`），不是合成的 `domain/xxx` 夹具名。
+    """
+    root = make_mutant_root(tag)
+    target = root / "src" / "system" / "webui"
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / "src" / "system" / "webui" / "plugin.json", target / "plugin.json")
+    if (target / "code" / "index.mjs").exists():          # 对照必须真的是「入口缺失」，否则本断言空转
+        raise AssertionError("对照根里 webui 的入口不该存在：" + str(target))
+    return root
+
+
+def anchor_facts(tag: str, verbs: tuple) -> dict:
+    """在对照根上真跑一遍动词序列，返回 `{verb: (rc, payload)}`（自足：自己 stage CLI、自己收尾）。"""
+    staged = stage_mutant_plugin_dir(tag)
+    root = make_anchor_root(tag)
+    cli = staged / "runtime" / "tools" / "plugin-lifecycle.mjs"
+    out = {}
+    for verb in verbs:
+        rc, payload, _err = run_mutant_cli(cli, root, list(verb))
+        out[verb[0]] = (rc, payload)
+    return out
+
+
 # ---------------------------------------------------------------------------------------------
 # A/B：六动词真跑 + 拒绝路径
 # ---------------------------------------------------------------------------------------------
@@ -415,16 +445,56 @@ def assert_lifecycle(facts: dict) -> None:
           f"uid={facts.get('runtime_load', {}).get('uid')}")
 
     deps = facts.get("deps", {})
-    check("A13 `deps` 给依赖闭包：`depends_on` + `inject`（服务键 → 提供者）；未迁移的目标如实记 missing",
+    check("A13 `deps` 给依赖闭包：`depends_on` + `inject`（服务键 → 提供者）；依赖目标已接入口 ⇒ 闭包含它、"
+          "`missing_targets` 为空（真根的正控；「未就绪仍如实记 missing」的负控见 A13b）",
           deps.get("ok") is True and deps.get("direct") == ["system/webui"]
-          and deps.get("missing_targets") == ["system/webui"]
+          and deps.get("closure") == ["system/webui"]
+          and deps.get("order") == ["domain/advice", "system/webui"]
+          and deps.get("missing_targets") == []
           and deps.get("cycle") is None,
-          f"direct={deps.get('direct')} missing={deps.get('missing_targets')} unresolved={deps.get('unresolved_services')}")
-    check("A14 依赖未就绪 ⇒ **非激活**（不是崩）：`deps_ready=false` 且语义有名字（`depends_on` 指向未迁移的 webui）",
-          facts.get("status_before", {}).get("deps_ready") is False
-          and facts.get("status_before", {}).get("deps_missing") == ["system/webui"],
+          f"direct={deps.get('direct')} closure={deps.get('closure')} order={deps.get('order')} "
+          f"missing={deps.get('missing_targets')} unresolved={deps.get('unresolved_services')}")
+
+    # A13b/A14b：**「依赖未就绪」的负控搬到对照根上**（`system/webui` 的合法形状清单在、入口文件不在）。
+    # 为什么必须搬：`system/webui` 接上入口之后，"真根上存在一个未迁移的依赖目标"这个**事实**就没了；
+    # 但"目标清单不合法/入口不存在 ⇒ 不算依赖已就绪、且不许崩"这条**判据**必须继续被真跑证明 ——
+    # 所以在对照根上用**真实 id 与真实清单字节**重造该形态（比依赖真根当时的偶然状态更强：它是构造出来的，
+    # 不会因为仓库演进再变绿）。A15/A16 覆盖另外两种目标形态（裸目录 / 清单缺字段）。
+    anchor = anchor_facts("a13b", (["deps", "domain/advice", "--json"], ["status", "domain/advice", "--json"],
+                                   ["list", "--json"]))
+    rc_deps, payload = anchor["deps"]
+    check("A13b **负控（对照根）**：依赖目标目录与**合法形状清单**都在、只有入口文件不存在（`artifact-missing`）"
+          "⇒ 仍不算依赖已就绪：`missing_targets` 如实给出 `system/webui`、闭包与拓扑序里不含它，且 `ok:true`（不是崩）",
+          rc_deps == 0 and payload.get("ok") is True
+          and payload.get("missing_targets") == ["system/webui"]
+          and payload.get("closure") == [] and payload.get("order") == ["domain/advice"]
+          and payload.get("direct") == ["system/webui"],
+          f"原始行: rc={rc_deps} direct={payload.get('direct')} closure={payload.get('closure')} "
+          f"order={payload.get('order')} missing_targets={payload.get('missing_targets')}")
+
+    check("A14 依赖已就绪 ⇒ **可激活**：真根上 `deps_ready=true` 且 `deps_missing` 为空（状态语义仍有名字）",
+          facts.get("status_before", {}).get("deps_ready") is True
+          and facts.get("status_before", {}).get("deps_missing") == []
+          and facts.get("status_before", {}).get("deps_direct") == ["system/webui"],
           f"deps_ready={facts.get('status_before', {}).get('deps_ready')} "
-          f"deps_missing={facts.get('status_before', {}).get('deps_missing')}")
+          f"deps_missing={facts.get('status_before', {}).get('deps_missing')} "
+          f"deps_direct={facts.get('status_before', {}).get('deps_direct')}")
+
+    rc_status, status = anchor["status"]
+    _rc_list, listing_anchor = anchor["list"]
+    anchor_webui = {item.get("id"): item for item in listing_anchor.get("plugins", [])}.get("system/webui", {})
+    check("A14b **负控（对照根）**：同一个未就绪目标下 `status` **非激活但不崩**：`deps_ready=false` + "
+          "`deps_missing=[\"system/webui\"]` + `ok:true`，且未就绪的**原因是有名的**（`valid:false` + "
+          "`reason='artifact-missing'`，不是静默）",
+          rc_status == 0 and status.get("ok") is True
+          and status.get("deps_ready") is False
+          and status.get("deps_missing") == ["system/webui"]
+          and status.get("deps_direct") == ["system/webui"]
+          and status.get("status") == "not-loaded" and status.get("cycle") is None
+          and anchor_webui.get("valid") is False and anchor_webui.get("reason") == "artifact-missing",
+          f"原始行: rc={rc_status} deps_ready={status.get('deps_ready')} "
+          f"deps_missing={status.get('deps_missing')} status={status.get('status')} "
+          f"webui valid={anchor_webui.get('valid')} reason={anchor_webui.get('reason')}")
 
     check("B1 未知插件 ⇒ `unknown-plugin` + 候选列表（rc=1）",
           facts.get("unknown_rc") == 1 and facts.get("unknown", {}).get("code") == "unknown-plugin"

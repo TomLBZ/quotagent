@@ -13,7 +13,9 @@ import hashlib
 import subprocess
 from pathlib import Path
 
-ROOT = Path('/workspace/projects/quotagent')
+#: 仓库根由**本文件位置**推出（`src/system/webui/tools/` 上溯 4 层）—— 硬编码绝对路径会让「克隆到
+#: 别的路径」就废（可移植性，服务「克隆即跑」）；机检 `tools/verify.sh plugin-assets` 的 PA9。
+ROOT = Path(__file__).resolve().parents[4]
 OUT = Path(ROOT / 'tmp' / 'ui-mutate.log')
 lines: list[str] = []
 

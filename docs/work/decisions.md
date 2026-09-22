@@ -32,83 +32,7 @@
 | D-013 | 新增 `tools/check-ac-registry.py`（入口 `tools/verify.sh ac-registry`）：**phase 恰为 P0 的文档 AC 必须已有注册断言**，未到期（P1/P2/P0-P1）只报告不失败；反向捕获"注册了但文档没有"的孤儿 AC | 实测发现 `AC-CLARIFY-001` 在 `acceptance-criteria.md` 里标着 P0 却从未有断言（文档门只查文档，查不出这种漂移） | agent:arch | 若某 P0 AC 需要延后，须改文档 phase 或在 checklist 里写明理由 |
 | D-014 | 事件派发统一走 `EventBus.dispatch()`（按事件的 `@mode` 选分发器）；服务不得自行 `emit(bail 事件)` | 实测暴露：`compare` 用 emit 派发 bail 模式的 `rfq/version-mismatch`，一旦挂上事件总线就抛 `EventModeError` —— 而 AC-COMPARE-001 当时没挂总线，所以漏了；修法把「按模式派发」下沉到总线并**同时给 AC-COMPARE-001/AC-EVT-001 补断言**（覆盖漏洞与 bug 一起修） | agent:arch | 新增服务写事件前先查 `05-events.md` 的 @mode；AC 里凡涉及事件派发的路径都要挂总线 |
 
-## D-042 T-247：让 subagents 生产插件（2 件）+ 抓到 process.exit() 截断 stdout 的真 bug（2026-09-21T10:19:10Z）
-
-**用户指令**："批准使用subsgents讨论、执行代替人工执行"、"可以用subagents制作…插件或者中间件"。
-此前 5 个自进化产物都是主 agent 手写；本轮派 **2 个 subagent 并行**各产出一件（领域 + 中间件），
-授权范围写死为"只写 `tmp/<产物>.mjs` 与 `host/<门>.mjs`"，**不得动仓库其它文件**。
-
-**复核纪律（D-019）**：subagent 自述**不算事实**。父侧自己跑了三件：语法检查、纪律静态扫描、
-**两个门与官方 fixture（影子目录）**——全绿后才进入晋升。晋升仍走同一条流程（ap-0105 / ap-0106）。
-两个 subagent 自己写的围栏门也一并纳入 `verify.sh`（**门的所有权**：谁写不重要，"必须存在且会红"才重要，
-本轮两个门都做了变异测试自证非橡皮图章）。
-
-**抓到的真 bug（基础设施级，值得记）**：`host/check-modules.mjs` 末尾用 `process.exit()`；
-报告涨到 54 KB 后 **stdout 未刷完即被截断** → 包装器拿到坏 JSON（`Unterminated string`）→ `modules` 门红。
-**修法**：`process.exitCode = …`（让 Node 自己刷完再退出）。教训：**大输出 + `process.exit()` = 输出截断**；
-凡是"门红但看着数据没问题"的情况，先怀疑**输出/管道**这一层。
-
-**接线状态如实区分**：`supplier-scorecard` **已接线**（WebUI 双方视角 + 门内真数据断言）；
-`idempotency-guard` **未接线**，在插件清单里**显式标注**并从 webui 角色装配列表移除 ——
-宁可明说未接线，也不假装它已经在用（这正是本项目 `plugins` 门存在的意义）。
-
-### D-042 附：同一轮修掉的第二个真缺陷 —— AC 的"只在某个钟点前才成立"（时间耦合）
-
-`AC-APPROVE-003` 把超时扫描时刻**硬编码**在 `2026-09-21T10:02:00Z`，而被批项的 `requested_at` 取真实时钟。
-于是它**只在真实时间早于该时刻时才可能通过**：本会话早些时候 `g1 = 57/57`，过了 10:02Z 就必然 56/57。
-修法是把扫描时刻改为**相对该项 requested_at 推算**，**断言数量/内容/强度一字未改**。
-
-**纪律**（与本项目既有教训同源）：**AC 断言里不得出现"相对当下的绝对时刻"**——
-要么注入假时钟，要么以数据自身的时刻为基准推算。否则门会随墙上时间自己变红/变绿，
-而"门自己会漂"比"门红"更危险（会让人怀疑门、进而绕过门）。
-
-## D-052 T-258：邮件集成先做"不假装发送"的一半（2026-09-21T11:46:33Z）
-
-**决定**：`FR-INTEG-003` 拆两半。**本轮做**报文构造/解析 + 幂等投递记录 + 可解释失败（纯标准库，`email`）；
-**不做**真正收发（需 SMTP/IMAP 凭据，且"发给谁"是人的决定）。为此引入**传输边界**：内置实现永远返回
-`unavailable` + `reason` + `next_action`，**并且不声明 `mail/sent` 事件** —— 声明了就会有人以为能发。
-**纪律**：*做不到的事要在接口上显式拒绝，不能在返回值里含糊过去。*
-
-## D-054 T-261：面板要用"真流程种出来的真事件"，且演示数据必须自报家门（2026-09-21T12:15:10Z）
-
-**问题**：T-260 接上三域面板后，真账本里没有这三域的事件 → 面板恒为 0。空面板与"坏了的面板"看不出区别。
-
-**决定**：写 `tools/ui-seed-pipeline.py`，用**真服务**（真人工门、真账本、真事件）在 `tmp/ui-shared/` 上跑一遍
-谈判/FAQ/邮件流程，让面板显示真数字。三条纪律：
-1. **演员可识别**：种子的所有写入用 `human:ui-seed` / `agent:ui-seed`，**不得**冒充真实业务主体；
-2. **幂等**：重复运行不得把账本无限撑大（同批 id 去重），并在输出里报告"本次新增几行"；
-3. **不读墙钟**：时间由 `--now` 传入，同一输入可复现。
-并把"面板数字来自演示种子"写进运维手册 —— *演示数据不自报家门，就等着被当成事实。*
-
-**被否决**：直接往账本里**手写**事件行（绕过服务，等于伪造事实）→ 否决；把演示事件种进生产账本 → 否决。
-
-## D-055 T-262：业务双方视角看"自己的"谈判与 FAQ（渲染只读快照，不动判定）
-
-**背景**：三域（谈判/FAQ/邮件）此前只在**运维道**可见；但"承包商关心自己的谈判轮次、供应商关心 FAQ 复用"
-属于**各自视角**该看的东西 —— 你要求"不同 routes 提供双方视角可见的不同 UI"。
-
-**决定**：新增两条**业务视角**路由（各视角一份）：`/<view>/api/negotiation`、`/<view>/api/faq`，
-数据仍来自 Python 侧写的快照（`tmp/ui-shared/pipeline.json` 的该视角切片），宿主只做**渲染与截断**：
-· 只给计数 + **最近列表**（谈判：`thread_id`/`attempt_no`/`status`；FAQ：`entry_id`/`rfq_viz`），
-  **不出正文、不出私域键**；列表有界（写入器侧至多 5 条）。
-· 域键对照显式写死（URL 用 `negotiation`，快照用 `negotiate`）—— **别靠名字凑巧相同**
-  （本轮我就踩了：FAQ 因为名字一致而过、谈判因为不一致而 `counts=undefined`）。
-**被否决**：让宿主页面自己去账本里数（重复实现判定、且会把私域带出来）→ 否决；
-把谈判/FAQ 细节只留在运维道（业务方看不到与自己相关的事）→ 否决。
-**补记（T-262）**：`git add -A` 会把**别的 agent 在途**的编辑一起提交（本轮就发生了：写入器的改动被并进 T-262a 的提交，提交信息与范围不符）。多 agent 并行时按文件显式 `git add`。
-
-## D-056 T-263：快照里同域两个口径（计数=服务回放，列表=账本行）**不得相互冒充**
-
-**发现方式**：给"有界与顺序"补真数据门时，夹具里放 7 条 `negotiate/round` 行 → `recent` 正确地出 5 条，
-但 `rounds` 仍是 **1**。查因：`counts` 来自**服务回放**（只统计被服务跟踪的线程/轮次），
-`recent` 来自**账本原始行**。两个口径都对，但**混着读就会得出错误结论**（"有 7 条轮次"或"轮次只有 1 条"）。
-
-**决定**：保留两个口径（计数要权威、列表要"最近发生了什么"），但
-① 在契约 §2 写明差异与读法；② 把差异本身写成门的断言（`ui-seed` ④ 用夹具行放大）；
-③ **禁止**用列表长度推计数、用计数否定列表 —— 要新口径就新增键，不许改现有键的语义。
-
-**被否决**：让 `recent` 也走服务回放（列表将丢失"账本上真实发生但服务没跟踪的行"，而这正是运维要看的东西）→ 否决；
-把 `counts` 改成账本行计数（同一域出现两个真假难辨的计数）→ 否决。
+> 较早的小节（D-042…D-054）已按预算机制整段逐字搬进 `docs/work/decisions-archive-c.md`（本批 `EV-181`）。
 
 ## D-059 P3 落表规则：FR 与 AC 一起落，AC 只在门与证据真实存在时落
 
@@ -292,3 +216,80 @@ open-append …` 返回 `ok:true`，**真在 `src/userspace/` 下落了文件** 
 
 **判据**：`storage` **18/19 → 19/19**；`--mutate 5` 与修前/修后三条构造的原始行见
 `docs/work/evidence/EV-174-batch4-raw.json`；契约同步 `docs/design/25-storage-plugins.md` §3。
+
+## D-078 `system/webui` 接上入口：入口 = 唯一自述服务的 ESM 实体（2026-09-22）
+
+- 决定：`entry` = `code/index.mjs`（只重导出既有实体 `code/webui.mjs`，透传 `inject`/`provides`/`Config`）；
+  `provides` 由占位键 `['webui']` 改为实体自述的 `['webui','uiSlots']`。
+- 理由：`uiSlots`（注入式 UI 注册面）是**实体自己声明的服务键**，不写进清单会让服务索引与实体自述不符。
+- 被否决：①入口取 `ui-slot.mjs`/`ui-route.mjs`（机制件，无 `provides`/`apply`，不是插件）②`provides` 只留 `['webui']`（与实体自述不符）③不接，让占位键长期留在树里（`degraded: artifact-missing` 从"事实"退化成"没做完"）。
+- 连带（必做，否则等于放宽门）：`plugin-lifecycle` 的 A13/A14 原本以「真根上 `system/webui` **未迁移**」为锚点 ⇒
+  本批改指**对照根**（真 id + 真清单字节 + `entry` 文件缺失 ⇒ `artifact-missing`），并在真根上补**正控**
+  （`missing_targets == []`、`closure == ['system/webui']`、`deps_ready == true`）；断言只增不减。
+
+## D-079 `system/admin` 接上入口：**机制组合**（两个平级成员插件）（2026-09-22）
+
+- 决定：`entry` = `code/index.mjs`，`apply` 按序把 `code/admin-guard.mjs`（`adminGuard`）与
+  `code/admin-view.mjs`（`adminView`）交给宿主；`provides` = 两者并集。
+- 理由：本目录里是**两个各自独立的 cordis 插件**（各有 `apply`/`provides`/`Config`），不是「一个服务 + 支持库」；
+  宿主里它们本来就是两个平级模块（`host/modules/admin-guard.mjs`、`admin-view.mjs`）。
+- 被否决：①只挑一个当入口（另一个的服务键在服务索引里永远 `unresolved`，`load` 也只装半个插件）
+  ②把目录拆成两个插件（63 个插件数量与需求归属是冻结事实，拆目录会连带改归属真源）
+  ③不接（`provides` 长期是占位键 `['admin']`，与实体自述不符）。
+- 机制组合**不新造语义**：本文件不做判断、不算数、不读文件、不写任何东西；也不替成员解析配置（成员按自己的 `Config` 取默认值装载）。
+
+## D-080 `system/agent-runtime` 接上入口：**机制组合**（三个平级成员插件）（2026-09-22）
+
+- 决定：`entry` = `code/index.mjs`，`apply` 按 name 字典序装载 `agent-context`/`agent-harness`/`agent-memory`；
+  `provides` = 三者并集（`agentContext`/`agentHarness`/`agentMemory`）。
+- 理由：三者 `inject` 全空、互不依赖，宿主里本来就是三个平级模块；**「各自独立装卸」这条性质不变**
+  （由 `AC-AGENTRT-007` 单独围栏：卸载零残留、卸载后事实不丢）。
+- 被否决：①只挑一个当入口（另两个的服务键永远 `unresolved`）②拆成三个插件（同 D-079 的理由）③不接。
+
+## D-081 `system/canary` 接上入口：**机制组合**（`canary` + `bridge-canary`）（2026-09-22）
+
+- 决定：`entry` = `code/index.mjs`，先装 `canary.mjs`（`canary`）、再装 `bridge-canary.mjs`
+  （`canary-dispatch`，声明 `inject: ['canary']`）；`provides` = 两者并集。
+- 理由：`canary-dispatch.mjs`/`canary-run.mjs` 是**库**（导出 `makeDispatcher`/`runCanary`，无 `apply`、无 `provides`）
+  ⇒ 不是入口候选；两个真插件都必须被装到，否则"接线文件不接线"这个已知限制会长期留着。
+- 被否决：①只装 `canary.mjs` ②把库文件当入口（不是插件）③不接（占位键 `['canary']` 与实体自述不符）。
+
+## D-082 `system/mail` 接上入口：ESM 视图实体当入口，Python 真收发不经入口（2026-09-22）
+
+- 决定：`entry` = `code/index.mjs`（重导出 `code/mail-view.mjs`，`provides=['mailView']`）。
+- 理由：与 `system/approval`（ESM + Python 并存）**同一口径** —— 有 ESM 实体时，入口 = 那个宿主可装载的实体；
+  SMTP/IMAP 真收发在 Python 侧 `code/mail.py`·`mail_transport.py`（宿主**不**经 cordis 装载它们，见 27 §7.1）。
+- 被否决：①入口 = `code/__init__.py` 只重导 Python 面（宿主侧就丢掉了 `mailView` 这个真服务键，运维视图装不上）
+  ②不接（占位键 `['mail']` 既不是 Python 模块名也不是服务键）。
+
+## D-083 `system/eval` 接上入口：**Python 承载入口**（宿主侧 0 个 ESM 实体）（2026-09-22）
+
+- 决定：`entry` = `code/__init__.py`（新建，只重导出既有实体 `code/evaldata.py`·`evalmetrics.py`·`scenarios.py`，
+  与 19 个 Python 承载插件同形）；`provides` 沿用插件名键 `['eval']`（Python 承载插件的既有口径）。
+- 理由：本插件在宿主侧**没有任何** `provides`/`apply` 的 `.mjs` ⇒ 写 `code/index.mjs` 只能是空壳或新造的宿主面 = **造功能** ✗；
+  而 Python 承载入口是仓库既有的合法形态（`entryKind` = `python`）。
+- 被否决：①造一个空的 `code/index.mjs`（假入口）②把 `provides` 改成三个 Python 模块名（宿主侧不经 cordis 解析它们，属于把"模块名"冒充"服务键"）③不接。
+
+## D-084 `system/kernel` 接上入口：入口 = **内核包自己的** `code/__init__.py`（2026-09-22）
+
+- 决定：`entry` = `code/__init__.py`（**已存在**的包初始化文件，不是新造）；`provides` 沿用 `['kernel']`。
+- 理由：本插件在宿主侧没有 ESM 服务实体（`code/frozen.mjs`·`code/ledger-view.mjs` 是机制件，无 `provides`）；
+  内核只经 `kernel-bridge` 的 stdio 通道被使用，宿主不经 cordis 装载它 ⇒ 用包初始化文件当 `entry` 是**如实**的。
+- 边界（不因本决定放宽）：**内核不可自改**（ADR-0002）—— 接上 `entry` 只表示"这个插件的实现在 `code/`"，不表示
+  内核成为可热插拔的宿主插件；卸载/装载内核仍不在任何门的判据内。
+- 被否决：①造 `code/index.mjs` 包一层 ESM 面（内核没有宿主侧服务键可导，属造功能）②不接（`degraded: artifact-missing`
+  反而掩盖"Python 实现在树里"这个事实）。
+
+## D-085 干净副本的宿主依赖口径 + 扫描面自证（2026-09-22）
+
+- ① **干净副本三条红**（`AC-AGENTRT-002/006/007`）的根因是**宿主依赖**：三条 AC 的围栏门 `import`
+  gitignored 的 `host/node_modules/cordis` ⇒ `ERR_MODULE_NOT_FOUND`（rc=1）；工作树里装过依赖所以看着绿。
+  裁决：AC 真跑围栏门一律走 `tools/cordis.sh run`（幂等 `install_deps`；与 `checks_bridge`/`check-webui.py`/
+  `check-canary.py` 同一既有约定），**判据一格未改**（仍是 `failures:0` 且断言数 ≥22）；`_node()` 的
+  「无 Node ⇒ 明说降级」不变。一般规则：**判据不许依赖真根上的偶然状态** —— 同一副本里「单独跑绿 /
+  全量跑红」只是**顺序**造成的（靠后的 `AC-INTEG-*` 走 `cordis.sh run` 顺手把依赖装上）。
+- ② **扫描面必须自证**：PA9 的扫描面原本是 `src/**`/`host/**`/`tools/**`/`**/*.sh` —— 匹配不到**没有扩展名**
+  的仓库根入口 `run`，而它正是「克隆即跑」的第一层。裁决：扫描面加 `run`；新增 **PA9b**（逐条点名必扫文件，
+  漏一个即红）；**F9** 往 `run` 里写死仓库根 ⇒ PA9 必红。
+- 判据：干净副本（无 `node_modules`）三条 AC 绿、把修复还原成裸 `node <实体>` ⇒ 三条必红；
+  `plugin-assets` PA9/PA9b 正向 0 处命中 + F8/F9 反向必红；`plugin-lifecycle` 68/68。

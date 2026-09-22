@@ -5,6 +5,12 @@
   "provides": [
     "eval"
   ],
-  "entry": "code/index.mjs",
-  "description": "system 插件「eval」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/system/eval/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "entry": "code/__init__.py",
+  "description": "system 插件「eval」：评估域（反例集 / 指标与基线 / 场景集 S1..S4），全部合成数据、只增不减的反例注册表。本批（接上 `entry`）：本插件在宿主侧**没有 ESM 实体**，所以 `entry` = `code/__init__.py`（Python 承载入口，只重导出既有实体 `code/{evaldata,evalmetrics,scenarios}.py`，与 `system/measures` 同形）⇒ 合法清单（`valid:true`）。`provides` 沿用插件名键（与 19 个 Python 承载插件同一口径；本插件的细粒度服务 = 那三个 Python 模块，宿主侧不经 cordis 装载）。",
+  "migration": {
+    "stage": 5,
+    "mode": "python-entry-wrapper",
+    "impl": "src/system/eval/code/{evaldata,evalmetrics,scenarios}.py",
+    "batch": "EV-181"
+  }
 }

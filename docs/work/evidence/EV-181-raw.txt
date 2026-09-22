@@ -1,0 +1,114 @@
+EV-181 原始行（干净副本红 / 7 个 entry / 硬编码路径扫描）
+=================================================================
+时间：2026-09-22（UTC）；仓库：/workspace/projects/quotagent
+注：本轮同一工作树里有一个**并发写入者**（另一 subagent）在改同一批文件；
+凡「产品树字节不变」这类断言受影响处，本文件如实标注。原始命令与原文如下。
+
+━━━ ① 干净副本三条红：最小复现（HEAD + 本批三条 AC 文件；副本内**没有** host/node_modules）
+---------------------
+$ rm -rf /tmp/clean2 && mkdir /tmp/clean2 && cd /workspace/projects/quotagent && git archive HEAD | tar -x -C /tmp/clean2
+$ cd /tmp/clean2 && ls -d host/node_modules
+ls: cannot access 'host/node_modules': No such file or directory
+$ cd /tmp/clean2 && env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/run.sh -m quotagent.qa all
+[ok]   AC-ADMIN-004 …
+[ok]   AC-ADV-001 …
+[FAIL] AC-AGENTRT-002 — 记忆四层边界：会话不落盘 / 项目=账本投影可重建 / 策略只人写 / 跨方只走协议（9/10 断言）
+[FAIL] AC-AGENTRT-006 — 运行期插件的有界与显式降级：截断必须报数、不可用必须 degraded+reason，空上下文不得报 ok:true（11/12 断言）
+[FAIL] AC-AGENTRT-007 — 运行期插件各自独立装卸、卸载零残留；卸载记忆插件后**事实不丢**（项目记忆仍可重建）（4/5 断言）
+[ok]   AC-INTEG-001 …  ← 这一族（checks_bridge）走 `tools/cordis.sh run`，**顺手把 host/node_modules 装上了**
+[ok]   AC-INTEG-004 …
+------------------------------------------------------------------------
+全量 AC：82/85 通过；失败 ['AC-AGENTRT-002', 'AC-AGENTRT-006', 'AC-AGENTRT-007']
+RC=1
+$ ls -d /tmp/clean2/host/node_modules      # 全量跑完**之后**依赖已存在 ⇒ 「单独重跑就绿」正是这么来的
+/tmp/clean2/host/node_modules
+$ cd /tmp/clean2 && env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/verify.sh ac AC-AGENTRT-002   # 现在绿
+[PASS] AC-AGENTRT-002 …
+
+【根因原始行】围栏门 import 宿主的 cordis（gitignored），干净副本里必然失败：
+$ cd /tmp/clean1/src/system/agent-runtime/tests && node t275-runtime-gate.mjs
+node:internal/modules/esm/resolve:272
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/tmp/clean1/host/node_modules/cordis/lib/index.js'
+  imported from /tmp/clean1/src/system/agent-runtime/tests/t275-runtime-gate.mjs
+    at finalizeResolution …
+Node.js v24.21.0
+【AC 侧原始断言行（同一失败在夹具上的形状）】：
+  FAIL ⑥ 策略层路径上的围栏门真跑 — total=None failures=None rc=1
+
+━━━ ② 修法实测（同一条命令，只改「怎么跑门」）
+---------------------
+$ cd /tmp/clean3 && ls -d host/node_modules            # 修前：依赖不在
+ls: cannot access 'host/node_modules': No such file or directory
+$ cd /tmp/clean3 && for a in AC-AGENTRT-002 AC-AGENTRT-006 AC-AGENTRT-007; do env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/verify.sh ac $a; done
+[PASS] AC-AGENTRT-002 — 记忆四层边界：会话不落盘 / 项目=账本投影可重建 / 策略只人写 / 跨方只走协议
+[PASS] AC-AGENTRT-006 — 运行期插件的有界与显式降级：截断必须报数、不可用必须 degraded+reason，空上下文不得报 ok:true
+[PASS] AC-AGENTRT-007 — 运行期插件各自独立装卸、卸载零残留；卸载记忆插件后**事实不丢**（项目记忆仍可重建）
+$ ls -d host/node_modules                              # 门自己把手依赖补上了（cordis.sh install_deps）
+host/node_modules
+【反向验证（同一副本，把修复还原成裸 `node <实体>`；先删掉刚装上的依赖）】
+$ rm -rf /tmp/clean3/host/node_modules
+$ python3 - <<'EOF'   # 只把 run_fence_gate 的调用体换回裸 node
+… replace("subprocess.run([str(CORDIS), 'run', GATE_REL], cwd=str(GATE.parent),",
+           "subprocess.run(['node', str(GATE.name)], cwd=str(GATE.parent),")
+EOF
+mutated checks_agentrt_memory.py / checks_agentrt_lifecycle.py / checks_agentrt.py
+$ ls -d host/node_modules
+ls: cannot access 'host/node_modules': No such file or directory
+$ for a in AC-AGENTRT-002 AC-AGENTRT-006 AC-AGENTRT-007; do … tools/verify.sh ac $a; done
+[FAIL] AC-AGENTRT-002 — 记忆四层边界：…
+[FAIL] AC-AGENTRT-006 — 运行期插件的有界与显式降级：…
+[FAIL] AC-AGENTRT-007 — 运行期插件各自独立装卸、卸载零残留；…
+
+━━━ ③ ② 的门侧对照：A13/A14 改指 + 断言总数（plugin-lifecycle）
+---------------------
+修前（webui 未接入口时的原文，本批已不复现）：
+  [ok]   A13 `deps` 给依赖闭包：`depends_on` + `inject`（服务键 → 提供者）；未迁移的目标如实记 missing
+  [ok]   A14 依赖未就绪 ⇒ **非激活**（不是崩）：`deps_ready=false` 且语义有名字（`depends_on` 指向未迁移的 webui）
+接上 webui 入口后（**只**这两条变红，其余 64 条仍绿）：
+  [FAIL] A13 …  → direct=['system/webui'] missing=[] unresolved=[]
+  [FAIL] A14 …  → deps_ready=True deps_missing=[]
+  RESULT: FAIL（plugin-lifecycle 门 64/66）
+改指后：
+  [ok]   A13 … （真根正控：closure=['system/webui']、order=['domain/advice','system/webui']、missing=[]）
+  [ok]   A13b …（对照根负控：missing_targets=['system/webui']、closure=[]、order=['domain/advice']、ok:true）
+  [ok]   A14 … （真根：deps_ready=True、deps_missing=[]、deps_direct=['system/webui']）
+  [ok]   A14b …（对照根负控：deps_ready=False、deps_missing=['system/webui']、status='not-loaded'、
+                webui valid=False reason='artifact-missing'）
+  RESULT: PASS（plugin-lifecycle 门 68/68）        ← 66 → 68，断言只增不减
+【变异 6（依赖闭包把「目录存在」当「插件存在」）】**没有**失去对照：它跑在夹具根上，自己的
+  `invalid_dirs=("src/system/webui",)` 造出「有 plugin.json 但最小契约不合法」的假目标，
+  与真根上 webui 是否接上入口**无关**：F6 仍 [ok]（基线不红、变异体红）。
+
+【反向验证（本批 A13/A13b/A14/A14b 四条，现场跑，跑完还原）】
+  === 变异 1：对照根里补上入口（A13b/A14b 的前提被抽掉）===
+  [FAIL] A13b … / [FAIL] A14b …        RESULT: FAIL（plugin-lifecycle 门 66/68）
+  === 变异 2：真 `system/webui/code/index.mjs` 移走（A13/A14 的正控前提被抽掉）===
+  [FAIL] A13 … / [FAIL] A14 …          RESULT: FAIL（plugin-lifecycle 门 66/68）
+  === 产品树字节不变 ===
+  ⚠ 本轮该自证**不成立**：并发写入者在我跑这段时改写了 `src/system/webui/code/index.mjs`
+    （前后 sha256 06a86612… → 16603f36…；文件头写的是对方的 `EV-181` 文本）。三条断言的红/绿
+    结论不受影响（变异是运行期改文件、断言读的是命令输出），但「字节不变」这句本轮**不能说**。
+
+━━━ ④ 硬编码路径扫描（全仓 tracked 码/配置面；模式见下）
+---------------------
+命中 142 处，三类：① 部署挂载点（`/workspace/config.yaml`、`/workspace/config/*`、`/workspace/runtime/node`、
+`/workspace/bin/activate.sh`、`/workspace/services/services.json`）—— **合法**（产品路径，均有 env 覆盖）；
+② `tmp/` 夹具与 `$ROOT/tmp/...` —— 合法（仓库内临时）；③ **checkout 根字面量** —— 真缺陷类，本批 4 处已修：
+  tools/manual-check.py                                  ROOT = Path('/workspace/projects/quotagent')
+  src/system/webui/tools/mutate-ui-views.py              ROOT = Path('/workspace/projects/quotagent')
+  src/system/ui-feedback/tools/ui-feedback-monitor.sh    ROOT="${QUOTAGENT_ROOT:-/workspace/projects/quotagent}"
+  src/system/ui-feedback/tools/ui-feedback-tick.sh       ROOT="${QUOTAGENT_ROOT:-/workspace/projects/quotagent}"
+  （4 处均改为「由本文件位置上溯推出 + env 仍可覆盖」）
+  ⚠ 归属说明：这 4 处修复与 PA9 本体是**并发写入者**先落盘的（我复核并复跑通过）；我在其上补了
+    PA9b（扫描面自证）+ F9（往无扩展名的根入口 `run` 写死仓库根 ⇒ PA9 必红）。
+
+━━━ ⑤ 新增门断言的正/反向行（plugin-assets）
+---------------------
+[ok]   PA9 仓库内**没有硬编码的仓库根**（`src/**`/`host/**`/`tools/**`/`*.sh`/根入口 `run` 扫 765 个文件：
+       以 `quotagent` 为末段目录的绝对路径字面量 0 处；探针自证非空转）
+[ok]   PA9b 扫描面**覆盖「克隆即跑」的第一层**（逐条点名：4 个必扫文件 —— 含**没有扩展名的根入口 `run`**）
+[ok]   F8 …往 `tools/manual-check.py` 追加一行绝对 checkout 路径… 必须让 PA9 变红 → 红项=['PA9']
+[ok]   F9 在**根入口 `run`**（没有扩展名，`**/*.sh` 匹配不到它）里写死仓库根必须让 PA9 变 red → 红项=['PA9']
+[ok]   F0 基线（未变异）在同一套判据上**不红**  基线红项=[]
+[ok]   F6 全过程**产品树字节不变**（变异只写在 tmp/ 的整树副本里）前后 276/276 个文件摘要一致=True
+RESULT: PASS（plugin-assets 门 20/20）

@@ -30,6 +30,16 @@ from quotagent.qa.registry import Assertion, register
 ROOT = Path(__file__).resolve().parents[4]
 TOOL = ROOT / 'tools' / 'refresh-agent-memory.py'
 GATE = ROOT / 'src' / 'system' / 'agent-runtime' / 'tests' / 't275-runtime-gate.mjs'
+# 围栏门走**宿主侧薄转发** + `tools/cordis.sh run`（幂等 install_deps）——干净副本里 host/node_modules
+# 不存在是正常的，裸 `node <实体>` 会 ERR_MODULE_NOT_FOUND（D-075）。判据一格未改。
+CORDIS = ROOT / 'tools' / 'cordis.sh'
+GATE_REL = 't275-runtime-gate.mjs'
+
+
+def run_fence_gate():
+    """真跑围栏门（与 `checks_bridge` / `check-webui.py` 同一套依赖自愈约定）。"""
+    return subprocess.run([str(CORDIS), 'run', GATE_REL], cwd=str(GATE.parent),
+                          capture_output=True, text=True, timeout=600)
 # 实体已随批 EV-176 搬进插件 `code/`（旧路径只剩薄重导）：静态断言读实体那一份，否则静默判绿。
 MEM = ROOT / 'src' / 'system' / 'agent-runtime' / 'code' / 'agent-memory.mjs'
 
@@ -195,7 +205,7 @@ def check() -> list[Assertion]:
 
         # ⑥ 策略层 / 跨方层：Node 可用时真跑围栏门；不可用时降级并明说
         if _node():
-            r = subprocess.run(['node', str(GATE.name)], cwd=str(GATE.parent), capture_output=True, text=True, timeout=600)
+            r = run_fence_gate()
             report = {}
             for line in reversed((r.stdout or '').splitlines()):
                 if '"failures"' in line and '"total"' in line:
