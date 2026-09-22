@@ -386,7 +386,7 @@
    "id": "AC-ADMIN-011",
    "stage": "P2",
    "assert": "变异自证（D-057 纪律）：对 admin 道逐处偷改实现——①统一拒绝体改成分类错误 ②投影白名单改成透传 ③状态机转移放宽为任意 ④token 比较改前缀匹配——四处每一处都必须让对应门**真变红**并还原；变异脚本自带「锚点未命中或改了但字节没变 = 假变异即失败」的防伪检测",
-   "command": "tools/verify.sh ui-mutate`（需父方扩展）",
+   "command": "【待重规划】D-057 的独立变异门已按 `docs/design/29-webui-gui-app.md` §2 删除；本 AC 尚未定义、不得落地",
    "evidence_draft": "见 `evidence/EV-102`",
    "source_draft": "t264-fr-admin.md.txt",
    "landed": false

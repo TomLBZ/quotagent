@@ -7,7 +7,7 @@
     "uiSlots"
   ],
   "entry": "code/index.mjs",
-  "description": "system 插件「webui」：双方视角 WebUI —— 把账本投影装配成人能用的页面与只读路由，并提供注入式 UI 注册面（0 业务语义）。本批（接上 `entry`）：`entry` = `code/index.mjs`，只重导出既有实体 `code/webui.mjs`（`provides=['webui','uiSlots']`）⇒ 合法清单（`valid:true`），`provides` 改写为实体自述的真实服务键。",
+  "description": "system 插件「webui」：双方的**完整 GUI 应用**外壳（多视图/导航/命令面板/通知/快捷键/深链）+ 注册面（视图·区块 / 交互方式 / 动作与命令 / 业务逻辑钩子 / 通知与状态）—— 插件注册即可把任意功能搬上界面，外壳自身 0 业务语义、0 插件 id。口径真源 `docs/design/29-webui-gui-app.md`（旧口径「账本投影装配 + 只读路由」已废止）。`entry` = `code/index.mjs`，重导出实体 `code/webui.mjs`（`provides=['webui','uiSlots']`）⇒ 合法清单（`valid:true`）。",
   "migration": {
     "stage": 4.2,
     "mode": "entity-moved-and-wrapper",

@@ -572,14 +572,18 @@ check('P0-2/E13b 真 webui 的第四道（`/admin/`，门内提权后）**真的
   + `含市场=${adminText.includes('插件市场')} 体就是 NaN=${adminText === 'NaN'}`)
 const fourPages = [['/', homePage], ['/contractor/', contractor], ['/supplier/', supplier],
   ['/ops/', opsPage], ['/admin/', { status: adminPage.status, text: adminText }]]
-const scripty = fourPages.filter(([, page]) => page.text.includes('<script'))
-const handlery = fourPages.filter(([, page]) => INLINE_EVENT.test(page.text))
-check('P0-2/E2 四道页面（含 admin 道真提权）仍 **0 行 `<script>` 且 0 个内联事件属性**'
-  + '（零 JS 是机检事实：交互只允许 `<form method=get>` 与 `<a>`）',
-  fourPages.every(([, page]) => page.status === 200) && scripty.length === 0 && handlery.length === 0
+// 29 §2.3（用户 2026-09-22）：旧判据「页面 0 <script>」**冻结的是只读说明书页，已废止**。
+// 新判据（29 §1/§3）：脚本只允许来自**受信来源**——本服务自己的 `/assets/**`（外壳 app.js）；
+// 内联 <script> 体、外网 CDN、on* 内联事件属性一律禁止（插件区块仍由 ui-slot 结构性拒收脚本）。
+const BAD_SCRIPT = /<script(?![^>]*\bsrc\s*=\s*["'][^"']*\/assets\/)(?![^>]*\btype\s*=\s*["']application\/json["'])[^>]*>/i
+const scriptClean = (text) => !BAD_SCRIPT.test(text) && !INLINE_EVENT.test(text)
+const scripty = fourPages.filter(([, page]) => !scriptClean(page.text))
+check('P0-2/E2 五道页面（含 admin 道真提权）**只从受信来源加载脚本**：允许 `<script src="/assets/...">`（外壳），'
+  + '**禁止**内联 `<script>` 体 / 外网 CDN / `on*` 内联事件属性',
+  fourPages.every(([, page]) => page.status === 200) && scripty.length === 0
   && adminElevate.status === 200,
   `status=${fourPages.map(([name, page]) => `${name}=${page.status}`).join(' ')}；提权 status=${adminElevate.status}；`
-  + `含 <script>=${scripty.map(([name]) => name).join(',') || '无'}；含内联事件=${handlery.map(([name]) => name).join(',') || '无'}`)
+  + `不合规脚本=${scripty.map(([name]) => name).join(',') || '无'}；含内联事件=${fourPages.filter(([, page]) => INLINE_EVENT.test(page.text)).map(([name]) => name).join(',') || '无'}`)
 
 // E2b / E2c：八个新子路由
 const subPages = {}
@@ -594,8 +598,8 @@ check('P0-3/E2b 八个新子路由**各返回 200**，页面里有**道内子导
   subBad.length === 0 && subNoNav.length === 0 && subNoForm.length === 0 && Object.keys(subPages).length === 8,
   `status=${Object.entries(subPages).map(([path, res]) => `${path}=${res.status}`).join(' ')}；`
   + `缺子导航=${subNoNav.map(([path]) => path).join(',') || '无'}；缺 GET 表单=${subNoForm.map(([path]) => path).join(',') || '无'}`)
-const subScripty = Object.entries(subPages).filter(([, res]) => res.text.includes('<script') || INLINE_EVENT.test(res.text))
-check('P0-3/E2c 子视图页面同样 **0 `<script>` / 0 内联事件属性**（新页面不得偷偷引入脚本）',
+const subScripty = Object.entries(subPages).filter(([, res]) => !scriptClean(res.text))
+check('P0-3/E2c 子视图页面同样**只许受信来源脚本**（内联 `<script>` 体 / `on*` 事件属性一律红；旧「0 `<script>`」判据已废止）',
   subScripty.length === 0, `命中=${subScripty.map(([path]) => path).join(',') || '无'}`)
 
 // 4m（本批）：邮件域（SMTP/IMAP）的只读视图 —— 页面 + JSON 都真读 Python 侧快照
@@ -610,14 +614,14 @@ check('邮件域正控：`/ops/mail/` 200 且是**真页面**（道内导航 + �
   mailPage.status === 200 && mailApi.status === 200
   && mailPage.text.includes('data-subnav="ops"') && mailPage.text.includes('data-mail="counts"')
   && mailPage.text.includes('data-mail="transport"') && mailPage.text.includes('data-mail="attempts"')
-  && !mailPage.text.includes('<script') && !INLINE_EVENT.test(mailPage.text)
+  && scriptClean(mailPage.text)
   && mailSnap.degraded === false && mailSnap.counts?.sent === 1 && mailSnap.counts?.queued === 3
   && mailSnap.smtp?.available === false && typeof mailSnap.smtp?.reason === 'string'
   && mailSnap.smtp.reason.length > 0
   && typeof mailSnap.smtp?.next_action === 'string' && mailSnap.smtp.next_action.length > 8
   && mailSnap.last_attempt?.reason === 'smtp-unreachable'
   && Array.isArray(mailSnap.attempts) && mailSnap.attempts.length >= 1
-  && !mailPage.text.includes('<script'),
+  && scriptClean(mailPage.text),
   `status=${mailPage.status}/${mailApi.status} counts=${JSON.stringify(mailSnap.counts)} `
   + `smtp=${JSON.stringify(mailSnap.smtp)} last=${JSON.stringify(mailSnap.last_attempt)}`)
 
@@ -834,10 +838,10 @@ const cfgApiRes = await fetch(`${base}/admin/api/config`, { headers: { cookie: a
 const cfgApi = JSON.parse(await cfgApiRes.text())
 const cfgProjectRow = (cfgApi.project || []).find((row) => row.key === 'pricing.markup_pct') || {}
 const cfgCredRow = (cfgApi.credentials || []).find((row) => row.name === 'mail_smtp') || {}
-check('P0-config/E16 配置与凭据页（提权后）**200 且 0 行 `<script>` / 0 内联事件**；一屏含三层'
+check('P0-config/E16 配置与凭据页（提权后）**200 且只许受信来源脚本**（内联 `<script>` 体 / `on*` 事件属性一律红）；一屏含三层'
   + '（`data-layer="project"` / `"plugin"` / `"credential"`）+ `source` / `shadowed_by` / `editable`；'
   + 'JSON 总览里每键给 source/shadowed_by/editable，凭据行给 required_mode 与 next_action 且**没有值字段**',
-  cfgPageRes.status === 200 && !cfgPageText.includes('<script') && !INLINE_EVENT.test(cfgPageText)
+  cfgPageRes.status === 200 && scriptClean(cfgPageText)
   && cfgPageText.includes('data-layer="project"') && cfgPageText.includes('data-layer="credential"')
   && cfgApiRes.status === 200 && cfgApi.layers?.join(',') === 'project,plugin,credential'
   && typeof cfgProjectRow.source === 'string' && ['default', 'file', 'env', 'runtime'].includes(cfgProjectRow.source)

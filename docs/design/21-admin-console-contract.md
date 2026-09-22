@@ -28,7 +28,6 @@
 | `verify.sh admin-route`（新建） | AC 条目/002/003/005/007/008/009/010 |
 | `verify.sh ac AC 条目`（新建 `qa/checks_admin.py`） | 面板真数据（阻塞≥2 条：`plugin-request`/`credential`） |
 | `verify.sh ac AC 条目`（同上） | 状态机只 Python 侧写、非法转移零新增 |
-| `verify.sh ui-mutate`（扩展） | AC 条目：四处偷改必须变红 |
 
 ## 4. 被否决的选项（来自设计草案，逐条保留）
 

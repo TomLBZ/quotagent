@@ -16,7 +16,7 @@
 
 | 服务键 | 方法面 | 谁在用 |
 |---|---|---|
-| `projection` | `project(view, rows, options)` / `projectWithAudit(...)` | 宿主 WebUI 的只读装配（`host/modules/webui.mjs`）与真路由门 |
+| `projection` | `project(view, rows, options)` / `projectWithAudit(...)` | 宿主 WebUI 的**视角投影装配**（`src/system/webui/code/webui.mjs`；WebUI 本身是完整 GUI，见 `docs/design/29-webui-gui-app.md`）与真路由门 |
 
 ## 用法（一行命令）
 

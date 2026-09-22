@@ -22,6 +22,9 @@ import { createSlotRegistry, SLOTS as UI_SLOTS } from '../lib/ui-slot.mjs'
 // 注入式 UI 的**路由注册面**（机制，见 host/lib/ui-route.mjs）：与槽位面姊妹 —— 插件自己注册 HTTP 路由
 // （27 §6.1 把"路由注册"列为 webui 必须提供的注册面之一）。本文件不知道任何路由的业务含义。
 import { createRouteRegistry } from '../lib/ui-route.mjs'
+// GUI **应用外壳**（机制；见 `docs/design/29-webui-gui-app.md`）：多视图/导航/命令面板/通知中心/状态栏/深链/
+// 快捷键 + 动作总线。本文件只把它挂上路由；功能全部由插件通过注册面贡献（`code/ui.mjs` 发现式装载）。
+import { createAppShell } from './app-shell.mjs'
 
 export const name = 'webui'
 
@@ -106,8 +109,12 @@ const LIMIT_CHOICES = [10, 20, 50, 200]
  */
 const GET_ONLY_PATTERNS = [
   /^\/?$/,                                                     // 总览
+  /^\/overview\/?$/,                                           // 旧总览页（GUI 首屏换成工作台后，它降为一张明细页）
   /^\/start\/?$/,
   /^\/api\/(health|status|obs|ops|mail|pipeline|retention|routes|ui-feedback|ui\/blocks)\/?$/,
+  /^\/api\/ui\/(surface|panels|notifications|status)\/?$/,      // GUI 外壳：注册面自述 / 面板数据 / 通知 / 状态
+  /^\/assets\/[A-Za-z0-9._-]+$/,                                // GUI 外壳自己的客户端资源（只来自本服务）
+  /^\/app(\/[A-Za-z0-9._-]+)*\/?$/,                             // GUI 深链（工作台/各视图/面板）
   /^\/ops\/?$/,
   /^\/ops\/mail\/?$/,
   /^\/ops\/ui-feedback\/?$/,
@@ -124,6 +131,8 @@ const GET_ONLY_PATTERNS = [
 
 /** **真的会处理写**的路径（POST 白名单）：只有这几条能把请求变成一条待办件或一次状态变化。 */
 const WRITE_PATTERNS = [
+  /^\/api\/action\/[A-Za-z0-9._-]+\/?$/,                       // GUI 动作总线（插件自己的服务端一半）
+  /^\/api\/ui\/plugins\/[^/]+\/unload\/?$/,                    // 撤销一个插件的全部 UI 贡献（可卸载）
   /^\/admin\/api\/elevate\/?$/,
   /^\/admin\/api\/blocks\/[^/]+\/resolve\/?$/,
   /^\/admin\/api\/user-plugins\/(load|unload|reload|request|elevate)\/?$/,
@@ -287,6 +296,32 @@ export function apply(ctx, config) {
   // ② 把动态路由与静态路由登记在同一张 `/api/routes` 表里。**不解读**任何路由的语义。
   const uiRoutes = createRouteRegistry()
   ctx.effect(() => () => uiRoutes.dispose())     // 卸载即释放（注册者随之失去服务，零残留）
+  // ---- GUI 应用外壳（机制） --------------------------------------------------------------
+  // 外壳自己**零业务语义**：它只把注册面（`ui-surface.mjs`）上的贡献装配成可点的界面，并把动作请求交给
+  // 插件自己的**服务端一半**。写动作仍只能由 Python 侧唯一写者落账本（外壳只落 0600 待办件 + spawn）。
+  const repoRoot = new URL('../../../..', import.meta.url).pathname
+  const shell = createAppShell({
+    root: repoRoot,
+    prefix,
+    views: ['home', ...config.views],
+    config,
+    // 本视角**账本行**（结构性隔离：每个视角只读自己的账本；与 webui.mjs 既有各特性同一口径）+
+    // **公开投影行**（白名单在 projection 插件）—— 两者都交给插件，由插件按自己领域知识挑字段。
+    rowsOf: (view) => (rules[view] ? ledgerOf(view).rows() : []),
+    publicRowsOf: (view) => (rules[view] ? projectionOf(view).publicRows : []),
+    slots: uiSlots,
+    // 宿主自己注入的服务句柄（机制：按名字取；外壳不知道它们的业务含义）
+    services: { quotePrepare: ctx.quotePrepare, bidHeuristics: ctx.bidHeuristics, gateTimeline: ctx.gateTimeline,
+      rfqDeadline: ctx.rfqDeadline, approvalDigest: ctx.approvalDigest, projection: ctx.projection },
+    log: (msg) => console.error(msg),
+  })
+  ctx.effect(() => () => shell.surface.dispose())
+  // 插件贡献的**发现式装载**（任何插件放 `code/ui.mjs` 就会被装载；装载失败如实记日志，不静默吞）
+  Promise.resolve(shell.loadContributions()).then((summary) => {
+    const bad = summary.filter((row) => row.ok === false)
+    console.error(`[webui] GUI 贡献装载：${summary.length} 个插件`
+      + `${bad.length ? `，其中失败 ${bad.map((row) => row.plugin_id).join(',')}` : '，全部成功'}`)
+  }).catch((err) => console.error(`[webui] GUI 贡献装载异常：${String(err).slice(0, 160)}`))
   // 视角 → 账本：配了自有账本就用它（结构性隔离），否则退回注入的只读视图（fixture/单账本模式）
   const ledgerOf = (view) => {
     const own = view === 'contractor' ? config.ledger_contractor : config.ledger_supplier
@@ -2438,6 +2473,97 @@ ${sortForm('events', '筛查事件')}
       }
     }
 
+    // ---- GUI 应用外壳（**机制**；`docs/design/29-webui-gui-app.md`）--------------------------------
+    // 外壳自有的路径族：`/`（工作台首屏）、`/app/<view>/[<panel>/]`（深链）、`/assets/**`（本服务自己的
+    // 客户端资源）、`/api/ui/**`（注册面自述 + 面板数据 + 通知 + 状态 + 区块 HTML）、
+    // `POST /api/action/<id>`（动作总线：交给插件自己的服务端一半）、`POST /api/ui/plugins/<id>/unload`
+    // （撤销一个插件的全部贡献）。放在动态路由**之前**：这些路径族归外壳，插件不得抢占（其余路径照旧）。
+    const appMatch = /^\/app(\/[A-Za-z0-9._-]+)*\/?$/.exec(path)
+    if ((path === '/' || path === '' || appMatch) && (method === 'GET' || method === 'HEAD')) {
+      // 首屏 = **「我今天要做什么」的工作台**（不是报告列表）：面板 + 待办动作 + 通知都由注册面给。
+      const bits = path.split('/').filter(Boolean)          // ['app', view?, panel?]
+      const view = bits[1] ?? 'home'
+      if (!['home', ...config.views].includes(view)) {
+        return json(404, { ok: false, code: 'unknown-view', view,
+          next_action: `可用视图：home / ${config.views.join(' / ')}` })
+      }
+      return send(200, 'text/html; charset=utf-8', shell.shellHtml({ view, panel: bits[2] ?? '' }))
+    }
+    if (path.startsWith('/assets/')) {
+      const name = path.slice('/assets/'.length)
+      if (!/^[A-Za-z0-9._-]+$/.test(name)) {
+        return json(404, { ok: false, code: 'asset-not-allowed', name, next_action: '资源名只允许 [A-Za-z0-9._-]' })
+      }
+      const found = shell.asset(name)
+      if (!found.ok) return json(404, { ok: false, code: found.code, name, reason: found.reason })
+      const type = name.endsWith('.css') ? 'text/css; charset=utf-8'
+        : (name.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/plain; charset=utf-8')
+      return send(200, type, found.body)
+    }
+    if (path === '/api/ui/surface') return json(200, shell.surfaceJson())
+    if (path === '/api/ui/panels') {
+      const view = String(url.searchParams.get('view') ?? 'home')
+      if (!['home', ...config.views].includes(view)) {
+        return json(400, { ok: false, code: 'unknown-view', view,
+          next_action: `可用视图：home / ${config.views.join(' / ')}` })
+      }
+      return json(200, { ok: true, view, panels: shell.panelsOf(view),
+        mechanism: '面板数据由插件自己的 data() 产出（通用形状：table/form/list/kv/metrics/html）；'
+          + '外壳只按形状渲染，不解读语义' })
+    }
+    if (path === '/api/ui/notifications') return json(200, { ok: true, items: shell.notifications() })
+    if (path === '/api/ui/status') return json(200, { ok: true, items: shell.statusItems() })
+    if (path === '/api/ui/plugins/unload-all') {
+      return json(400, { ok: false, code: 'explicit-plugin-required',
+        next_action: `POST ${prefix}/api/ui/plugins/<plugin_id>/unload（plugin_id 形如 domain%2Fcompare）` })
+    }
+    const unloadMatch = /^\/api\/ui\/plugins\/([^/]+)\/unload\/?$/.exec(path)
+    if (unloadMatch && method === 'POST') {
+      const pluginId = decodeURIComponent(unloadMatch[1])
+      return json(200, shell.unload(pluginId))
+    }
+    const actionMatch = /^\/api\/action\/([A-Za-z0-9._-]+)\/?$/.exec(path)
+    if (actionMatch && method === 'POST') {
+      // 动作总线收 JSON 请求体：有界 256 KB（超上限**如实拒** 413 + code，不截断成另一份正文）
+      const MAX_ACTION_BYTES = 262144
+      let data = ''
+      let over = false
+      req.on('data', (chunk) => {
+        if (data.length + chunk.length > MAX_ACTION_BYTES) over = true
+        else if (!over) data += chunk
+      })
+      req.on('end', () => {
+        if (over) {
+          return json(413, { ok: false, code: 'action-body-too-large',
+            next_action: `动作请求体超过 ${MAX_ACTION_BYTES} 字节：宿主不截断（截断会合成另一份正文），请拆小后重提` })
+        }
+        let parsed = {}
+        if (String(data ?? '').trim() !== '') {
+          try { parsed = JSON.parse(data) } catch (err) {
+            return json(400, { ok: false, code: 'invalid-json', detail: String(err).slice(0, 120),
+              next_action: '动作总线收 JSON 请求体：{"view":"<视图>","input":{…}}' })
+          }
+        }
+        const promise = shell.runAction(actionMatch[1], parsed)
+        promise.then((out) => json(out.ok ? 200 : 400, out))
+          .catch((err) => {
+            console.error(`[webui] 动作执行异常 ${actionMatch[1]}：${String(err).slice(0, 160)}`)
+            json(500, { ok: false, code: 'action-failed', detail: String(err).slice(0, 160),
+              next_action: '看宿主日志定位（动作的服务端一半抛错时如实报，不假装成功）' })
+          })
+        return undefined
+      })
+      req.on('error', () => json(400, { ok: false, code: 'action-body-unreadable',
+        next_action: '重发一次（读体失败：本路由没有收到完整请求体）' }))
+      return undefined
+    }
+    if (path === '/api/ui/blocks' && url.searchParams.get('slot')) {
+      const slot = String(url.searchParams.get('slot'))
+      const rendered = uiSlots.render(slot)
+      return json(200, { ok: rendered.ok, slot, html: rendered.html, blocks: rendered.blocks,
+        errors: rendered.errors, mechanism: '旧槽位注册面（ui-slot.mjs）：按 order 装配插件自己的区块 HTML' })
+    }
+
     if (path === '/api/ui/blocks') {
       // 注册面自述（**只回执元数据**）：谁注册了什么槽位 —— 本文件只把注册表读出来，不解读内容。
       const described = uiSlots.describe()
@@ -2519,7 +2645,31 @@ ${sortForm('events', '筛查事件')}
           { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
           // 注入式 UI 注册面（机制；`host/lib/ui-slot.mjs`）：只回执"谁注册了哪个槽位"，不解读区块内容
           { path: `${prefix}/api/ui/blocks`, method: 'GET', auth: 'none',
-            what: '注入式 UI 注册面自述（槽位闭合集合 + 已注册区块的 plugin_id/slot/order/title；webui 不懂业务语义）' },
+            what: '注入式 UI 注册面自述（槽位闭合集合 + 已注册区块的 plugin_id/slot/order/title；webui 不懂业务语义）'
+              + '；带 `?slot=<槽位>` 时返回该槽位的**已装配 HTML**（外壳按槽位嵌进视图）' },
+          // ---- GUI 应用外壳（机制；`docs/design/29-webui-gui-app.md`）：功能由插件注册面贡献 ----------
+          { path: `${prefix}/`, method: 'GET', auth: 'none',
+            what: 'GUI 应用外壳首屏 =「我今天要做什么」工作台（多视图导航/命令面板/通知中心/状态栏/深链/快捷键）' },
+          { path: `${prefix}/app/<view>/`, method: 'GET', auth: 'none',
+            what: 'GUI 深链（home / 各视图）；客户端按注册面渲染面板与动作，资源只来自本服务 `/assets/**`' },
+          { path: `${prefix}/assets/app.js`, method: 'GET', auth: 'none',
+            what: 'GUI 客户端脚本（**只来自本服务**：src/system/webui/code/assets/，无外网 CDN、无构建步骤）' },
+          { path: `${prefix}/assets/app.css`, method: 'GET', auth: 'none', what: 'GUI 客户端样式（同上）' },
+          { path: `${prefix}/api/ui/surface`, method: 'GET', auth: 'none',
+            what: '注册面自述：视图 / 面板 / 动作与命令（含入参 schema、权限、确认策略）/ 快捷键 / 通知源 / 状态项'
+              + ' + 逐插件的贡献清单（卸载演示与审计据此对照）' },
+          { path: `${prefix}/api/ui/panels`, method: 'GET', auth: 'none',
+            what: '面板数据（参数 view=home|<视图>）：通用形状 table/form/list/kv/metrics/html，由插件自己的 data() 产出' },
+          { path: `${prefix}/api/ui/notifications`, method: 'GET', auth: 'none',
+            what: '通知中心（插件通知源 + 动作结果队列：进度 / 失败原因 / next_action / 待人工门）' },
+          { path: `${prefix}/api/ui/status`, method: 'GET', auth: 'none', what: '状态栏项（插件注册的状态读数）' },
+          { path: `${prefix}/api/action/<id>`, method: 'POST', auth: 'none',
+            what: '动作总线（JSON 入参）：校验 → 调用插件自己的**服务端一半**；写动作只落 0600 待办件，'
+              + '落账本仍由 Python 侧唯一写者（GUI 不是第二条事实写路径）' },
+          { path: `${prefix}/api/ui/plugins/<plugin_id>/unload`, method: 'POST', auth: 'none',
+            what: '撤销一个插件的**全部** UI 贡献（视图/面板/动作/快捷键/通知源/状态项/校验器 + 它注册的区块）；'
+              + '页面其余部分不变（`AGENTS.md` 规则 1）' },
+          { path: `${prefix}/overview/`, method: 'GET', auth: 'none', what: '旧总览页（各视图账本条数与链自洽）' },
           // 动态路由（**路由注册面**，`host/lib/ui-route.mjs`）：注册者是插件，本表只登记元数据
           ...uiRoutes.list().map((row) => ({ path: `${prefix}${row.path}`, method: row.method,
             auth: row.auth, what: row.what, source: row.source })),
@@ -2917,7 +3067,7 @@ ${sortForm('events', '筛查事件')}
       const rows = rowsFor(viewApi[1])   // 一次请求只投影一次（原先算两遍：canary 采样会翻倍，实测发现）
       return json(200, { view: viewApi[1], count: rows.length, events: rows })
     }
-    if (path === '/' || path === '') {
+    if (path === '/overview/' || path === '/overview') {
       const rows = config.views.filter((view) => rules[view]).map((view) => {
         const ledger = ledgerOf(view)
         let report = { count: 0, ok: false }

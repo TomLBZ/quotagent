@@ -163,8 +163,6 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "domain/bid-heuristics", "src/domain/bid-heuristics/tests/checks_viz.py"),
     "src/quotagent/qa/checks_config.py": (
         "system/config", "src/system/config/tests/checks_config.py"),
-    "src/quotagent/qa/checks_uxweb.py": (
-        "system/webui", "src/system/webui/tests/checks_uxweb.py"),
     "src/quotagent/qa/checks_storage.py": (
         "system/storage", "src/system/storage/tests/checks_storage.py"),
     "src/quotagent/qa/checks_userplugin.py": (
@@ -258,8 +256,6 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "system/pipeline-view", "src/system/pipeline-view/tests/check-pipeline-route.py"),
     "tools/check-rfq-deadline-route.py": (
         "domain/rfq-deadline", "src/domain/rfq-deadline/tests/check-rfq-deadline-route.py"),
-    "tools/check-ui-seed.py": (
-        "system/webui", "src/system/webui/tests/check-ui-seed.py"),
     "tools/check-mail-transport.py": (
         "system/mail", "src/system/mail/tests/check-mail-transport.py"),
     "tools/check-config-route.py": (
@@ -340,8 +336,8 @@ RELOCATED: dict[str, tuple[str, str]] = {
     # --- 本批（`EV-179`）：`tools/**` 非薄入口**再搬 10 个**（余 3：`netblock.c` / `v-kit.sh` /
     # `manual-check.py`）。旧位置留 `runpy` 薄转发；实现只改一处 —— `ROOT` 推导 `parents[1]`
     # （`tools/` 下）→ `parents[4]`（`src/<层>/<插件>/{tests,tools}/` 同为四层上溯），外加**先改读方**
-    # （按路径装载被检查实体的 7 处：check-config-route / check-mail-transport ×2 / mail_transport /
-    # check-ui-seed / checks_ui_snapshot / checks_qprep / check-quote-draft-route / check-run-once）。
+    # （按路径装载被检查实体的各处：check-config-route / check-mail-transport ×2 / mail_transport /
+    # checks_ui_snapshot / checks_qprep / check-quote-draft-route / check-run-once）。
     "tools/check-run-once.py": (
         "system/runtime", "src/system/runtime/tests/check-run-once.py"),
     "tools/check-run-clone.py": (
@@ -350,8 +346,6 @@ RELOCATED: dict[str, tuple[str, str]] = {
         "system/config", "src/system/config/tools/config-apply.py"),
     "tools/g1-walkthrough.py": (
         "system/repo-gate", "src/system/repo-gate/tests/g1-walkthrough.py"),
-    "tools/mutate-ui-views.py": (
-        "system/webui", "src/system/webui/tools/mutate-ui-views.py"),
     "tools/quote-draft.py": (
         "domain/quote-prepare", "src/domain/quote-prepare/tools/quote-draft.py"),
     "tools/quote-sign.py": (
@@ -385,8 +379,11 @@ EXCLUDE_DIRS = frozenset({"__pycache__", ".git", "tmp", "node_modules", ".venv"}
 #: 逐批加减史与复算命令见 `docs/work/plans/plugin-file-map-batches.md` §「非薄入口数的加减史」。
 #: 锁的语义是"只减不增"：搬走本门或其它项时这个数应随之下调；**上调只允许"新增一个同级平台门"这一种理由**（改这一行是显式动作）。
 BASELINE_NONTHIN = 1
-#: 门名数下界（阶段 4.1 搬前 69 + `plugin-assets` = 70；本批新增 `run-clone` ⇒ 71；门名是接口，只增不减）。
-MIN_GATE_NAMES = 71
+#: 门名数下界（阶段 4.1 搬前 69 + `plugin-assets` = 70；新增 `run-clone` ⇒ 71）。
+#: 口径纠正（2026-09-22，`docs/design/29-webui-gui-app.md` §2 + AGENTS.md §12：门禁只删不加）后
+#: **下调 71 → 69**：随「旧口径」删除两个只冻旧形态的门（`ui-seed` / `ui-mutate`）。这是唯一的放宽方向，
+#: 且**只允许"删门"这一种理由**（新门仍只增不减）。
+MIN_GATE_NAMES = 69
 #: `--help` 一类的别名不算"实现分支"。
 HELP_ALIASES = frozenset({"help", "--help", "-h"})
 

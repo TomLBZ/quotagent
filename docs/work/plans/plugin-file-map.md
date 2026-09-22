@@ -6,7 +6,8 @@
 到目标路径（`src/{system,domain,userspace}/<plugin>/…`）的一行一条映射。
 
 - 口径：路径清单 = `git ls-files src host tools user-space`（HEAD 时点，**250** 个路径）+ `user-space/` 磁盘上的 **6** 个文件 = **256** 个路径，另有 **8** 个在飞（未跟踪）源文件。
-- 行数：**251 行迁移 + 5 个保留入口（不迁移，见下行与迁移计划 §2 阶段 0）= 256**；表内另有 **8** 行在飞 ⇒ 表体 **259** 行。未映射 **0** 个（判据：映射脚本对未知路径 `raise`，不静默跳过）。
+- 行数：**248 行迁移 + 5 个保留入口（不迁移，见下行与迁移计划 §2 阶段 0）= 253**；表内另有 **8** 行在飞 ⇒ 表体 **256** 行
+  （比生成时点少 3 行：三个已迁资产已按 29 §2 删除，见 §分类 的注记）。未映射 **0** 个（判据：映射脚本对未知路径 `raise`，不静默跳过）。
 - 保留不动的是 `tools/` 的 5 个薄入口：`verify.sh`/`run.sh`/`runtime.sh`/`bootstrap.sh`/`cordis.sh`（门与一键运行的稳定入口，见 `27-plugin-architecture.md` §9 未决 3）。
 - 每行都由**规则**产生（不是逐条手写），规则表与复算命令在 `plugin-migration-plan.md` §3（`tmp/arch-batch/gen_map.py` 为一次性脚手架，不入库）。
 
@@ -164,7 +165,6 @@
 | `src/quotagent/qa/checks_userplugin_elevate.py` | `src/system/user-plugin-manager/tests/checks_userplugin_elevate.py` |  |
 | `src/quotagent/qa/checks_userplugin_versions.py` | `src/system/user-plugin-manager/tests/checks_userplugin_versions.py` |  |
 | `src/quotagent/qa/checks_usreq.py` | `src/system/repo-gate/tests/checks_usreq.py` |  |
-| `src/quotagent/qa/checks_uxweb.py` | `src/system/webui/tests/checks_uxweb.py` |  |
 | `src/quotagent/qa/checks_viz.py` | `src/domain/bid-heuristics/tests/checks_viz.py` |  |
 | `src/quotagent/qa/registry.py` | `src/system/qa-runner/registry.py` |  |
 | `src/quotagent/services/__init__.py` | `src/system/runtime/services-__init__.py` |  |
@@ -233,7 +233,6 @@
 | `tools/check-retention.py` | `src/system/retention/tests/check-retention.py` |  |
 | `tools/check-rfq-deadline-route.py` | `src/domain/rfq-deadline/tests/check-rfq-deadline-route.py` |  |
 | `tools/check-ui-feedback.py` | `src/system/ui-feedback/tests/check-ui-feedback.py` |  |
-| `tools/check-ui-seed.py` | `src/system/webui/tests/check-ui-seed.py` |  |
 | `tools/check-v-register.py` | `src/system/repo-gate/tests/check-v-register.py` |  |
 | `tools/check-webui.py` | `src/system/webui/tests/check-webui.py` |  |
 | `tools/config-apply.py` | `src/system/config/tools/config-apply.py` |  |
@@ -243,7 +242,6 @@
 | `tools/g1-walkthrough.py` | `src/system/repo-gate/tests/g1-walkthrough.py` |  |
 | `tools/gate-nudge.py` | `src/domain/gate-timeline/tools/gate-nudge.py` |  |
 | `tools/manual-check.py` | `src/system/repo-gate/tools/manual-check.py` |  |
-| `tools/mutate-ui-views.py` | `src/system/webui/tools/mutate-ui-views.py` |  |
 | `tools/refresh-admin-snapshot.py` | `src/system/admin/tools/refresh-admin-snapshot.py` |  |
 | `tools/refresh-agent-memory.py` | `src/system/agent-runtime/tools/refresh-agent-memory.py` |  |
 | `tools/refresh-retention-plan.py` | `src/system/retention/tools/refresh-retention-plan.py` |  |
@@ -339,9 +337,12 @@
 ⇒ 主文件只留**机器登记的 §分类三节表**（`tools/verify.sh plugin-assets` 的 PA3/PA4 读它）与规则。
 本批（`EV-174` / `T-323`）的清单同样登记在那份台账里。
 
-### 全量分类表（144 行 = 77 + 20 + 47）
+### 全量分类表（141 行 = 75 + 20 + 46）
 
-### A. `tools/**`（77 个，其中平台薄入口 6 + 阶段 4.1 已搬 7 + `EV-175` 已搬 10 + `EV-176` 已搬 12 + `EV-177` 已搬 12 + `EV-178` 已搬 17 + `EV-179` 已搬 10 + 待搬 3）
+<!-- 本批删除（29 §2：只冻旧形态的门与 AC 连同实体一起删除）：A 节 77→75、C 节 47→46
+     ⇒ 全量分类表 144→141 行；下表行集合仍 == 磁盘（PA4）。逐项清单见本批证据与 `git log`。 -->
+
+### A. `tools/**`（75 个，其中平台薄入口 6 + 阶段 4.1 已搬 7 + `EV-175` 已搬 10 + `EV-176` 已搬 12 + `EV-177` 已搬 10 + `EV-178` 已搬 17 + `EV-179` 已搬 9 + 待搬 3）
 
 | 资产 | 归属插件 | 分类 | 子目录 |
 |---|---|---|---|
@@ -388,7 +389,6 @@
 | `tools/check-run-once.py` | `system/runtime` | 插件·已搬 | `tests/` |
 | `tools/check-run-clone.py` | `system/runtime` | 插件·已搬 | `tests/` |
 | `tools/check-ui-feedback.py` | `system/ui-feedback` | 插件·已搬 | `tests/` |
-| `tools/check-ui-seed.py` | `system/webui` | 插件·已搬 | `tests/` |
 | `tools/check-v-register.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-webui.py` | `system/webui` | 插件·已搬 | `tests/` |
 | `tools/config-apply.py` | `system/config` | 插件·已搬 | `tools/` |
@@ -399,7 +399,6 @@
 | `tools/g1-walkthrough.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/gate-nudge.py` | `domain/gate-timeline` | 插件·已搬 | `tools/` |
 | `tools/manual-check.py` | `system/repo-gate` | 插件·待搬 | `tools/` |
-| `tools/mutate-ui-views.py` | `system/webui` | 插件·已搬 | `tools/` |
 | `tools/netblock.c` | `system/runtime` | 插件·已搬 | `tests/` |
 | `tools/plugin.sh` | — | 平台薄入口 | — |
 | `tools/quote-draft.py` | `domain/quote-prepare` | 插件·已搬 | `tools/` |
@@ -448,7 +447,7 @@
 | `host/t286-quote-draft-gate.mjs` | `domain/quote-prepare` | 插件·已搬 | `tests/` |
 | `host/t287-rfq-visibility-gate.mjs` | `system/projection` | 插件·已搬 | `tests/` |
 
-### C. `src/quotagent/qa/checks_*.py`（47 个：平台薄入口 0 + 已搬 **47**（阶段 4.1 的 1 + `EV-173` 的 21 + `EV-174` 的 25）+ 待搬 0）
+### C. `src/quotagent/qa/checks_*.py`（46 个：平台薄入口 0 + 已搬 **46**（阶段 4.1 的 1 + `EV-173` 的 20 + `EV-174` 的 25）+ 待搬 0）
 
 | 资产 | 归属插件 | 分类 | 子目录 |
 |---|---|---|---|
@@ -497,7 +496,6 @@
 | `src/quotagent/qa/checks_userplugin_elevate.py` | `system/user-plugin-manager` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_userplugin_versions.py` | `system/user-plugin-manager` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_usreq.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
-| `src/quotagent/qa/checks_uxweb.py` | `system/webui` | 插件·已搬 | `tests/` |
 | `src/quotagent/qa/checks_viz.py` | `domain/bid-heuristics` | 插件·已搬 | `tests/` |
 
 > 说明 1：`tools/check-plugin-assets.py`（本节的机检门）、`tools/check-plugin-requirements.py`、`tools/check-run-once.py`

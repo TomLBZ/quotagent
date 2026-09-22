@@ -38,7 +38,7 @@ case "${1:-}" in
     names=$(gate_names "$0")
     printf '可用门（%s 个名字）：\n' "$(printf '%s\n' "$names" | tr -d ' )' | tr '|' '\n' | sort -u | wc -l | tr -d ' ')"
     printf '  %s\n\n' "$(printf '%s\n' "$names" | tr -d ' )' | tr '|' '\n' | sort -u | tr '\n' '|' | sed 's/|$//')"
-    printf '说明：`all` 不含 ui-mutate（约 4 分钟）；`clean-copy` 校验 HEAD，须在 commit 之后跑。\n'
+    printf '说明：`clean-copy` 校验 HEAD，须在 commit 之后跑。\n'
     exit 0
     ;;
   docs)
@@ -303,14 +303,6 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     # 配置与凭据（P0）：UI 化 + YAML 持久化 + 配置文件初始化的端到端门
     shift
     exec python3 tools/check-config-route.py "$@"
-    ;;
-  ui-mutate)
-    shift
-    exec python3 tools/mutate-ui-views.py "$@"
-    ;;
-  ui-seed)
-    shift
-    exec python3 tools/check-ui-seed.py "$@"
     ;;
   pipeline-route)
     shift

@@ -84,5 +84,5 @@ export const apply = (ctx, config) => { /* ctx.provide('pipelineView', api) */ }
 - `counts`（如 `negotiate.threads/rounds/rejected`）：走**服务回放** —— 只统计被服务跟踪的对象（权威口径）。
 - `recent`：走**账本原始行**（`negotiate/round`、`faq/entry-published`）—— 回答"最近发生了什么"。
 
-因此 `rounds = 1` 与 `recent` 有 5 条**可以同时成立**（夹具行放大了这个差异，见 `verify.sh ui-seed` 的 ④）。
+因此 `rounds = 1` 与 `recent` 有 5 条**可以同时成立**（两个口径来自两个来源，见上）。
 **读法**：计数看趋势与规模，列表看最近动态；**不要**用列表长度去推计数，也不要用计数去否定列表。

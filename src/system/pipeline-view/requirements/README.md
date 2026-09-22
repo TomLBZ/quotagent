@@ -21,7 +21,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 
 | FR 号 | 承载体（`15` §1 实测） | 关联 AC | 验收方式（门或命令） |
 |---|---|---|---|
-| `FR-UX-005` | tools/refresh-ui-snapshots.py、host/modules/pipeline-view.mjs | `AC-UI-002`、`AC-UI-003` | `tools/verify.sh ac AC-UI-002` |
+| `FR-UX-005` | tools/refresh-ui-snapshots.py、host/modules/pipeline-view.mjs | `AC-UI-002` | `tools/verify.sh ac AC-UI-002` |
 
 ## 对外契约（provides / 依赖）
 
@@ -29,7 +29,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 |---|---|
 | provides | `pipelineView`（`host/modules/pipeline-view.mjs`）+ 快照写入器 `tools/refresh-ui-snapshots.py`。 |
 | 依赖（实测 import 目标） | `host/modules/pipeline-view.mjs` → `../lib/std-schema.mjs`；`tools/refresh-ui-snapshots.py` → `quotagent.kernel.ledger`、`quotagent.services.faq`、`quotagent.services.mail`、`quotagent.services.mail_transport`、`quotagent.services.negotiation`（27 §5.1/§5.2：只 import 内核面或其它插件的公开服务面，不 import 别的插件实现文件） |
-| 门（映射表 §1 证据列里的 `ac` 简写已展开成可跑命令） | `tools/verify.sh pipeline-view` · `tools/verify.sh pipeline-route` · `tools/verify.sh ac AC-UI-002`；另：`AC-UI-003`（尚未在 `qa` 注册 ⇒ 该 AC 的命令此刻不可跑） |
+| 门（映射表 §1 证据列里的 `ac` 简写已展开成可跑命令） | `tools/verify.sh pipeline-view` · `tools/verify.sh pipeline-route` · `tools/verify.sh ac AC-UI-002`（旧的「UI 演示种子」AC 已随旧口径删除，见 `docs/design/29-webui-gui-app.md` §2） |
 | 写面 | 账本唯一写者仍是内核（H1）；本插件的账本写入只在映射表 §1 证据列点名的工具里（若有） |
 
 ## 现状与缺口
@@ -38,7 +38,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 |---|---|
 | 状态（映射表 §1） | `done` |
 | 承载体（映射表 §1） | `host/modules/pipeline-view.mjs`、`tools/refresh-ui-snapshots.py` |
-| 证据（映射表 §1） | `pipeline-view`(7/7) · `pipeline-route` · `ac AC-UI-002/003` |
+| 证据（映射表 §1） | `pipeline-view`(7/7) · `pipeline-route` · `ac AC-UI-002` |
 | 缺口 | 无登记缺口（映射表 §1 与该插件名下 FR 的 AC 均已注册）。 |
 | 需求文档位置 | **非标准位置**：本文件 `docs/work/plugin-requirements-system-pipeline-view.md` ⇒ 已登记在映射表 §4.2 |
 

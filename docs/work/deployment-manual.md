@@ -243,17 +243,18 @@ docs/work/evolution-log.json      # 产出日志；tmp/evolve/ledger.jsonl 是�
 
 两者**可以不一致**（例如计数 1、列表 5 条）。**读法**：计数看规模，列表看动态；不要用列表长度推计数。
 
-## 门清单（44 道，全部可用 `tools/verify.sh <名>` 单独跑）
+## 门清单（42 道，全部可用 `tools/verify.sh <名>` 单独跑）
 
 ```text
-ac-registry  approval-digest  audit-hook  breaker  breaker-route  bridge  bridge-canary  budget-guard  budget-route  canary  canary-route  clean-copy  cordis  coverage  docs  events  evolution  evolve-journal  evolve-module  faq  g1  governor  idem-route  idempotency-guard  invariants  mail  mail-transport  modules  negotiation  observability  ops-view  p0-no-node  pipeline-route  pipeline-view  plugins  retention  retention-view  smoke  supplier-scorecard  ui-mutate  ui-seed  v  webui  wiring
+ac-registry  approval-digest  audit-hook  breaker  breaker-route  bridge  bridge-canary  budget-guard  budget-route  canary  canary-route  clean-copy  cordis  coverage  docs  events  evolution  evolve-journal  evolve-module  faq  g1  governor  idem-route  idempotency-guard  invariants  mail  mail-transport  modules  negotiation  observability  ops-view  p0-no-node  pipeline-route  pipeline-view  plugins  retention  retention-view  smoke  supplier-scorecard  v  webui  wiring
 ```
 
-- 一键全套：`tools/verify.sh all`（不含 `ui-mutate` —— 它要跑 4 次真门，约 4 分钟，变更视图/快照实现时手动跑）。
+- 一键全套：`tools/verify.sh all`（长门如 `g1`/`clean-copy`/`run-clone` 按需单独跑；`clean-copy` 与 `run-clone` 校验 **HEAD**，须在 commit 之后跑）。
 - `clean-copy` 校验的是 **HEAD**（不是工作树）：所以正确次序是
   `verify.sh docs && <本批相关门>` → `git commit` → `git push` → **对新 HEAD 跑 `clean-copy`**。
-- `ui-mutate`：逐处偷改实现，验证对应门**真的会红**（自带防假变异）。性质类断言（有界/定序/投影/幂等/只读）
-  写完必须跑一次它。
+- **变异自证在门自己里面**（`plugin-assets` F1–F4、`plugin-requirements` F1–F5、`run-once` 4 处、各插件围栅门
+  的 4 处单点变异）：性质类断言（有界/定序/投影/幂等/只读）写完必须当场变异自证。旧的独立变异门
+  `ui-mutate` 已按 `docs/design/29-webui-gui-app.md` §2 删除（门禁只删不加）。
 
 ### 系统管理道（admin，给 deployer / installer / admin）
 

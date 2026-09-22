@@ -23,11 +23,11 @@
 
 | ID | 一句话（本插件承担的部分） | 可执行验收命令 |
 |---|---|---|
-| FR-UXWEB-001 | 四道（contractor/supplier/ops/admin）第一屏固定三块，动作是可点的表单或链接，页面 0 内联脚本 | `tools/verify.sh webui` |
-| FR-UXWEB-002 | 子视图与真交互（筛选/排序/翻页；越界夹取并回显 `applied`；空结果显式说明） | `tools/verify.sh webui` |
+| FR-UXWEB-001 | 完整 GUI 应用外壳（多视图/导航/命令面板/通知/快捷键/深链）+ 注册面（视图·区块 / 交互方式 / 动作与命令 / 业务逻辑钩子 / 通知与状态） | **待实现**（P0：`docs/design/29-webui-gui-app.md` §5） |
+| FR-UXWEB-002 | 双方流程逐条可在 GUI 内闭环（29 §4；动作真落账本或 0600 待办件） | **待实现**（P0：同上） |
 | FR-PLUGIN-005 | 插件向 WebUI 的**注入式注册面**提交区块/路由声明；WebUI 只做机制 | `tools/verify.sh plugin-lifecycle` |
 | FR-USREQ-001 | 「每一步都能在 APP 内闭环（含写操作）」的**写入口** | `tools/verify.sh webui` · `config-route` · `gates` · `rfq-deadline` · `ui-feedback` |
-| FR-USREQ-002 | 视觉基线（「像现代 app」） | **暂无机检**（矩阵 §3 登记为缺口；只有结构切片：0 内联脚本 / 三块顺序） |
+| FR-USREQ-002 | 视觉基线（「像现代 app」） | **暂无机检**（矩阵 §3 登记为缺口；旧结构锚点判据已按 29 §2 删除） |
 | FR-USREQ-004 | 服务自述面 `GET /quotagent/api/routes`（projects & routes 的仓内一半） | `tools/verify.sh webui` |
 | FR-USREQ-005 | 面向用户的 app 定位（三块 + 子视图 + 「上手」入口），不是一堆报告 | `tools/verify.sh webui` |
 | FR-USREQ-011 | 双方各自视角是**不同路由**，不是一条 route | `tools/verify.sh webui` |
@@ -36,7 +36,7 @@
 
 | 面 | 内容 |
 |---|---|
-| provides | `webui`（页面与只读路由装配）、`uiSlots`（注入式 UI 槽位服务：`nav.*`/`page.*`/`api.*`/`admin.*`） |
+| provides | `webui`（**完整 GUI 应用**外壳 + 注册面；口径真源 `docs/design/29-webui-gui-app.md`）、`uiSlots`（注入式 UI 槽位服务：`nav.*`/`page.*`/`api.*`/`admin.*`） |
 | 依赖 | `host/lib/ledger-view.mjs`（只读账本视图）、`host/lib/ui-slot.mjs`（机制，0 插件 id / 0 业务名词） |
 | 写面 | 零写面：不写账本、不写文件（提交类动作只落 0600 待办件，落账本由 Python 侧唯一写者做） |
 | 门 | `tools/verify.sh webui`（51/51）· `plugin-lifecycle`（注册面 C/D 组）· `run-once`（一键起服务 + `/healthz`） |
