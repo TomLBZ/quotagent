@@ -3,18 +3,12 @@
 <!-- budget: 1024 bytes, hard -->
 ## 现在在哪
 
-P2 收尾（EV-178 / T-328）：① `host/lib` **剩 2 个**实体入 `code/`（裸 `cordis` 改模块内显式解析，**不拷**）
-② `host/modules` **剩 16 个**实体入各自 `code/` ⇒ 该目录 **41 个全是薄重导** ③ `tools/**` 再搬 **17** 项
-（基线→**13**）④ 补承载 **24**（19 Python `code/__init__.py` + 5 ESM）⇒ **53/63**。
-门新增 **PA8**：宿主层非薄入口 == `27 §10` 例外集合（**空表**）。
+P2 收尾（`EV-179`/T-329）：① 6 道围栅门**跟重导链读到真实体**（断言数不变；反向 6/6 必红）② `tools/**` 再搬 **10** ⇒ 非薄入口 **13→3** ③ 补承载 **4** ⇒ **57/63** ④ 历史引用清账（14/15/映射表/偏差表/文件地图）。
 
 ## 下一步唯一动作
 
-续搬余 **13** 项 `tools/**`（含两个 HEAD 门）；给 8 个多实体插件
-（admin/agent-runtime/canary/eval/kernel-bridge/mail/webui/compare）定入口 —— **不许代做决定**。
-规则见映射表 §规则。
+给仍需**设计决定**的 7 个多实体插件定入口 —— `webui` 最急：接入口会让 `plugin-lifecycle` 的 **A13/A14** 与**变异 6** 失去对照 ⇒ 需人工定；理由逐条在各插件 `requirements/README.md`。**不许代做**。余 3 个 `tools/**` 非薄入口（`netblock.c`/`v-kit.sh`/`manual-check.py`）按需再定。
 
 ## 不变量
 
-内核不可自改·账本唯一写者·账本行永不销毁·commit 面不进桥·私域不出 realm·V 只能人签·**门名是接口**。
-`run-clone`/`clean-copy` 校验 HEAD ⇒ 提交后跑。待人手：T-224 Jev key；G0/G1 签署。
+内核不可自改·账本唯一写者·账本行永不销毁·commit 面不进桥·私域不出 realm·V 只能人签·**门名是接口**。`run-clone`/`clean-copy` 校验 HEAD ⇒ 提交后跑。已知红（非本批）：`verify.sh g1`。待人手：T-224、G0/G1 签署。

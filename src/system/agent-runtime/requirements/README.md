@@ -49,3 +49,5 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 <!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
 
 - `code:` 部分落地 —— 拥有的宿主模块实体 `agent-context.mjs`、`agent-harness.mjs`、`agent-memory.mjs` 已随本批进 `code/`；宿主 **ESM 入口未接**（不拼装、不造功能）⇒ `plugin.json` 的 `entry` 仍如实报 `degraded: artifact-missing`。
+- **待定（需设计决定，本批不代做 ✗）**：`code/` 里**三个实体各自自述一个服务键**（`agentContext`/`agentHarness`/`agentMemory`），
+  没有单一入口 —— 入口取哪一个（或是否拆成三个插件）属**插件设计**。

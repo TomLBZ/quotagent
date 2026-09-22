@@ -46,4 +46,9 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 
 <!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
 
-- `code:` **待实现** —— 本插件此刻确无实现产物：不造功能，只如实标注。
+- `code:` **已承载（本批 `EV-179`，平台运行器口径）** —— 新增 `code/__init__.py` 作为 **python 装载面**
+  （按 27 §7.1「python 为 `__init__.py`」，对已有实现 `quotagent.qa.registry` 的公开面**原样重导出**，`__all__` 11 个名字，实测可独立执行）
+  ⇒ `entry` 真实存在，`status` 由 `degraded: artifact-missing` 变为 `valid:true`（`kind: python`）。**不新造功能**：
+  运行器本体仍是 `python -m quotagent.qa`（`src/quotagent/qa/{__init__,__main__,registry}.py`，**本批不搬**）。
+- **如实说明**：本插件是**平台运行器**，不是 cordis 插件 —— `plugin.json` 的 `provides` 那一格只是最小契约的必填**名字**
+  （`validate()` 要求非空数组），本插件**不 provide 任何 cordis 服务**；ESM 侧的 `mount()` 只装载 ESM 入口（27 §7.1）。

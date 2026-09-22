@@ -50,3 +50,5 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 <!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
 
 - `code:` 部分落地 —— Python 实体 3 个已在 `code/`（`evaldata.py`、`evalmetrics.py`、`scenarios.py`）；宿主 **ESM 入口未接** ⇒ `entry` 仍如实报 `degraded: artifact-missing`。
+- **待定（需设计决定，本批不代做 ✗）**：三个 Python 实体**各自独立**（数据集快照 / 指标 / 场景集），没有单一模块面；
+  入口写哪一个（或是否拆成三个插件）属**插件设计**。

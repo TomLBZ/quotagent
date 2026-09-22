@@ -17,7 +17,7 @@
 | FR-UX-002 | system/webui | `system/projection` | 15 §2 显式把 `FR-UX-002` 与 `AC-TRUST-001` 记在 `projection` 行；私域字段过滤的机制面是投影 |
 | FR-UX-003 | system/webui | `domain/export` | 承载体实测 `services/export.py`（比价表 CSV 导出） |
 | FR-UX-004 | system/webui | `system/ops-view` | 承载体实测 `host/modules/ops-view.mjs`（运维视角只读快照，"不属于任何一方"） |
-| FR-UX-005 | system/webui | `system/pipeline-view` | 15 §2 显式把 `FR-UX-005` 记在 `pipeline-view` 行；承载体 `tools/refresh-ui-snapshots.py` + `host/modules/pipeline-view.mjs` |
+| FR-UX-005 | system/webui | `system/pipeline-view` | 15 §2 显式把 `FR-UX-005` 记在 `pipeline-view` 行；承载体 `src/system/webui/tools/refresh-ui-snapshots.py` + `host/modules/pipeline-view.mjs` |
 | FR-PLUGIN-005 | 28 §2.2 只数了 PLUGIN 4 条（本 FR 晚于 28 成立） | `system/webui` | 27 §6 的"注入式 UI 契约"由 webui 提供注册面；承载体实测 `host/lib/ui-slot.mjs` + `host/modules/webui.mjs`，门 `tools/verify.sh plugin-lifecycle` 的 C/D 组 |
 | FR-USREQ-001..011 | 28 §2.4.3 是**多插件**列表（无唯一归属） | 取该表**首个**插件为主归属（001/002/004/005/011 → `system/webui`；003 → `system/runtime`；006 → `system/ui-feedback`；007 → `system/repo-gate`；008 → `system/market`；009 → `system/config`；010 → `system/evolution`） | 唯一指针要求"每条 FR 只出现一次"；共同参与方**不删**，写在证据列 |
 | 插件自己的 `requirements/`（含 `plugin.json.requirements`）| — | 主归属仍以本表为准 | 插件文件里对某条 FR 的声明是"本插件承担的**部分**"（27 §2.1 允许），**不是**主归属：例 `src/system/runtime/requirements/README.md` 声明 `FR-PLUGIN-001/002/003`；`src/userspace/demo-ns/hello`、`demo-ns/badge`、`con-a/quote-trend` 的 `plugin.json` 各声明 `FR-USERPLUG-*` 等。唯一指针只看本表与矩阵 |

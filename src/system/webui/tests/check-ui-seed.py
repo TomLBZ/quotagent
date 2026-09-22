@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "src"))  # 门里造夹具用真 Ledger（追加�
 RECENT_LIMIT = 5
 REC_NEG = {"thread_id", "attempt_no", "status"}
 REC_FAQ = {"entry_id", "rfq_rev"}
-SEED = ROOT / "tools" / "ui-seed-pipeline.py"
+SEED = ROOT / "src" / "system" / "webui" / "tools" / "ui-seed-pipeline.py"
 CHECKS: list[dict] = []
 
 
@@ -75,7 +75,7 @@ check("② 幂等：第二遍后账本**逐字节不变**（反例：追加了�
       bool(before) and before == after, f"文件数={len(before)}/{len(after)}")
 
 snap = scratch / "pipeline.json"
-rc3, _p3, log3 = run(str(ROOT / "tools" / "refresh-ui-snapshots.py"), "--shared-dir", str(scratch))
+rc3, _p3, log3 = run(str(ROOT / "src" / "system" / "webui" / "tools" / "refresh-ui-snapshots.py"), "--shared-dir", str(scratch))
 payload = {}
 try:
     payload = json.loads(snap.read_text(encoding="utf-8"))
@@ -109,7 +109,7 @@ led_faq = Ledger(scratch / "supplier" / "ledger.jsonl", realm="supplier:ui")
 for i in range(FAQ_TOTAL):
     led_faq.append("faq/entry-published", {"entry_id": f"fq-fixture-{i + 1}", "rfq_rev": i + 1,
                                             "subject": "SECRET-不应外泄"}, correlation_id=f"fx-faq-{i}")
-rc4, _p4, _log4 = run(str(ROOT / "tools" / "refresh-ui-snapshots.py"), "--shared-dir", str(scratch))
+rc4, _p4, _log4 = run(str(ROOT / "src" / "system" / "webui" / "tools" / "refresh-ui-snapshots.py"), "--shared-dir", str(scratch))
 snap4 = {}
 try:
     snap4 = json.loads(snap.read_text(encoding="utf-8"))

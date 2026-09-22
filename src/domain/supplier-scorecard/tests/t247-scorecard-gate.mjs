@@ -25,7 +25,7 @@
  */
 import { registerHooks } from 'node:module'
 import { existsSync, readFileSync, writeSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 // 实现已搬进 `src/<层>/<插件>/tests/`（迁移阶段 4.2 / EV-172）：宿主目录由仓库根推出（`src/<层>/<插件>/tests/` 4 层上溯），
@@ -86,6 +86,55 @@ for (const candidate of CANDIDATES) {
   }
 }
 
+/**
+ * 被检查产物的**源码链**（跟到**真实体**）：`host/modules/<x>.mjs` 自搬迁（阶段 4.2/5）起可能是**薄重导**
+ * ——实体在 `src/<层>/<插件>/code/<x>.mjs`，中间经 `host/lib/entity-<x>.mjs` 一跳。
+ *
+ * 为什么必须跟：① 按**源码文本**判的断言在 8 行的重导文件上会**静默判绿**（manifest / inject / 静态
+ * 副作用扫描全都在实体里）；② 只读第一跳会把正常的**链目标** `../lib/entity-<x>.mjs` 误判成「越界 import」。
+ *
+ * 口径**收紧而非放宽**：只有**纯重导**（除注释外恰好一行 `export * from '<spec>'`）才算一跳；某一跳的
+ * `<spec>` 是**链的结构**，只在该跳文件里豁免（实体自己写的任何 spec 照原白名单逐字判）。整条链的文本
+ * 一起纳入扫描 ⇒ 实体藏在一跳之后也逃不掉；某一跳若**不纯**，跟链立刻停在那一跳（它自己的 spec 就按普通 import 判）。
+ */
+const RE_EXPORT_LINE = /^\s*export \* from '([^']+)'\s*$/
+const reExportTarget = (text) => {
+  const lines = text.split('\n').map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('//') && !line.startsWith('*') && !line.startsWith('/*'))
+  if (lines.length !== 1) return null          // 除注释外还有别的语句 ⇒ **不是**一跳（不跟）
+  const match = lines[0].match(RE_EXPORT_LINE)
+  return match ? match[1] : null
+}
+const moduleChain = (entry) => {
+  const files = [entry]
+  const links = []
+  const seen = new Set([entry])
+  let current = entry
+  let text = readFileSync(current, 'utf8')
+  for (let hop = 0; hop < 8; hop += 1) {
+    const spec = reExportTarget(text)          // `null` ⇒ 到底了（这一跳不是纯重导）
+    if (spec === null) break
+    const next = resolve(dirname(current), spec)
+    if (seen.has(next) || !existsSync(next)) break
+    links.push(spec)          // 只有**纯重导**的一跳才把目标记为链结构（实体自己写的同一个 spec 不算）
+    seen.add(next)
+    current = next
+    text = readFileSync(current, 'utf8')
+    files.push(current)
+  }
+  return {
+    files, links, entity: current,
+    text: files.map((file) => readFileSync(file, 'utf8')).join('\n'),
+    per_file: files.map((file, index) => ({
+      file,
+      specs: [...readFileSync(file, 'utf8').matchAll(/from\s+'([^']+)'/g)].map((match) => match[1]),
+      link: links[index] ?? null,
+    })),
+  }
+}
+/** 链的人可读写法（仓库根相对），只用于 detail / stderr 打印。 */
+const chainLabel = (files) => files.map((file) => file.replace(`${join(HERE, '..')}/`, '')).join(' → ')
+
 /** 挂载：照抄产物声明的 `inject`（写成 [] 会让它取不到依赖），并包装 `provide` 抓句柄。 */
 const mountWith = async (raw = {}) => {
   const ctx = new Context()
@@ -128,9 +177,15 @@ const deepFreeze = (value) => {
 
 try {
   // ---------- 0. 加载 + 契约（正控） ----------
-  const source = mod ? readFileSync(fileURLToPath(new URL(loadedFrom, HOST_URL)), 'utf8') : ''
-  const imports = [...source.matchAll(/from\s+'([^']+)'/g)].map((match) => match[1])
-  const importLeaks = imports.filter((spec) => !(spec === '../lib/std-schema.mjs' || spec.startsWith('node:')))
+  // 跟重导链读到**真实体**（`source` = 整条链的文本）：搬迁后候选是薄重导，只读第一跳会
+  // ①在 8 行重导上静默判绿 ②把正常的链目标 `../lib/entity-<x>.mjs` 误判成越界。
+  const chain = mod ? moduleChain(fileURLToPath(new URL(loadedFrom, HOST_URL)))
+    : { files: [], links: [], per_file: [] }
+  const source = mod ? chain.text : ''
+  const imports = chain.per_file.flatMap((entry) => entry.specs)
+  // 逐文件判：链目标**只在该跳文件里**豁免；实体自己写的任何 spec 都要过白名单（白名单一格没松）。
+  const importLeaks = chain.per_file.flatMap((entry) =>
+    entry.specs.filter((spec) => !(spec === '../lib/std-schema.mjs' || spec.startsWith('node:')) && spec !== entry.link))
   const manifest = {
     name: mod?.name === 'supplier-scorecard',
     inject: Array.isArray(mod?.inject) && mod.inject.length === 0,
@@ -144,7 +199,8 @@ try {
   const manifestBad = Object.entries(manifest).filter(([, ok]) => !ok).map(([key]) => key)
   check('1 契约正控：manifest 齐备（name/inject/builtin/usedServices/provides=[supplierScorecard]/Config/apply/fixture）且只 import ../lib 白名单',
     mod !== null && manifestBad.length === 0 && importLeaks.length === 0,
-    `载入=${loadedFrom ?? '未加载'}；候选=${loadTried.join('；')}；解析钩子=${hookReady ? '已装' : '不可用'}；问题键=${manifestBad.join(',') || '无'}；越界 import=${importLeaks.join(',') || '无'}`)
+    `载入=${loadedFrom ?? '未加载'}；候选=${loadTried.join('；')}；解析钩子=${hookReady ? '已装' : '不可用'}；`
+    + `链=[${chainLabel(chain.files)}]（${chain.files.length} 跳）；问题键=${manifestBad.join(',') || '无'}；越界 import=${importLeaks.join(',') || '无'}`)
   if (!mod) finish()
 
   // ---------- 2. 挂载 + 零残留（正控） ----------

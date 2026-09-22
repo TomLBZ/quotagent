@@ -165,7 +165,7 @@ def applied_files() -> list[Path]:
 
 
 def run_tool(tool: str, *extra: str) -> tuple[int, dict, str]:
-    proc = subprocess.run([sys.executable, str(ROOT / "tools" / tool), *extra,
+    proc = subprocess.run([sys.executable, str(ROOT / "src" / "domain" / "quote-prepare" / "tools" / tool), *extra,
                            "--ui-shared", str(UI_SHARED),
                            "--ledger-supplier", str(SUPPLIER_LEDGER),
                            "--ledger-contractor", str(CONTRACTOR_LEDGER)],

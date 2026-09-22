@@ -26,8 +26,8 @@ from quotagent.qa.registry import Assertion, register
 
 ROOT = Path(__file__).resolve().parents[4]
 MOD = ROOT / 'src' / 'domain' / 'quote-prepare' / 'code' / 'quote-prepare.mjs'   # 实体（本批 EV-178 搬进本插件 `code/`；旧路径 `host/modules/quote-prepare.mjs` 只剩薄重导）
-TOOL = ROOT / 'tools' / 'quote-draft.py'
-SIGNER = ROOT / 'tools' / 'quote-sign.py'
+TOOL = ROOT / 'src' / 'domain' / 'quote-prepare' / 'tools' / 'quote-draft.py'
+SIGNER = ROOT / 'src' / 'domain' / 'quote-prepare' / 'tools' / 'quote-sign.py'
 GATE = ROOT / 'src' / 'domain' / 'quote-prepare' / 'tests' / 't286-quote-draft-gate.mjs'
 ROUTE_CHECK = ROOT / 'src' / 'domain' / 'quote-prepare' / 'tests' / 'check-quote-draft-route.py'
 WEBUI = ROOT / 'src' / 'system' / 'webui' / 'code' / 'webui.mjs'   # 实体（本批 EV-178 搬进本插件 `code/`；旧路径 `host/modules/webui.mjs` 只剩薄重导）

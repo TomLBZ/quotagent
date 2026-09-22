@@ -6,5 +6,13 @@
     "compare"
   ],
   "entry": "code/index.mjs",
-  "description": "domain 插件「compare」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/domain/compare/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "description": "domain/compare：本批 EV-179 补**真实承载** —— 实体（宿主模块）`code/compare.mjs` + 入口 `code/index.mjs`（薄包装：`export *` 活绑定 + 透传自述面），`entry` 指向的入口**真实存在**（不再 `degraded: artifact-missing`）。**不新造功能**：语义仍只在 `code/compare.mjs`（宿主侧同口径排序）与 `code/compare.py`（Python 侧 `CompareService`）里。",
+  "migration": {
+    "stage": 4.2,
+    "mode": "entity-moved-and-wrapper",
+    "impl": "src/domain/compare/code/compare.mjs",
+    "also": "src/domain/compare/code/compare.py（Python 侧，阶段 5 第二小片已落）",
+    "from": "host/modules/compare.mjs",
+    "moves_in_stage": 4.2
+  }
 }

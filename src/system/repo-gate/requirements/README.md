@@ -46,4 +46,9 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 
 <!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
 
-- `code:` **待实现** —— 本插件此刻确无实现产物：不造功能，只如实标注。
+- `code:` **已承载（本批 `EV-179`，平台运行器口径：实现在插件根）** —— 本插件的实现是 `tests/**` 里 **11 个独立可执行的门**
+  （`check-docs.py`…），**没有一个模块面可包装**，故**不造 `code/` 包装**；`entry` 按本批口径直接指到**插件根下的实现**
+  `tests/check-plugin-assets.py` ⇒ `entry` 真实存在，`status` 由 `degraded: artifact-missing` 变为 `valid:true`（`kind: python`）。
+- **如实说明**：本插件是**平台门集合**，不是 cordis 插件 —— `provides` 那一格只是最小契约的必填**名字**，本插件不 provide cordis 服务。
+  `entry` 选 `check-plugin-assets.py` 的理由：它是本插件里**唯一以「插件资产归属/布局」为判据**的门（= repo-gate 自身契约的机检形态）；
+  **这是指向，不是新语义**（11 个门一个都没变）。若后续要改指某一门，那属**插件设计决定**，改的只是 `plugin.json` 这一行。

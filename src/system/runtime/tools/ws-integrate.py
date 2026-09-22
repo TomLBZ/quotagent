@@ -4,7 +4,7 @@
 做三件事：
 
 1. 在 `/workspace/services/services.json` 里登记服务 `quotagent`
-   （脚本 `projects/quotagent/tools/webui-serve.py`、端口 8093、健康路径 `/api/health`）；
+   （脚本 `projects/quotagent/src/system/webui/tools/webui-serve.py`、端口 8093、健康路径 `/api/health`）；
 2. 在 `gateway.routes` 里加一条**代理路由** `/quotagent` → 该服务
    （不剥前缀：UI 自己按 `/quotagent/...` 暴露承包商/供应商两个子路由）；
 3. 调 `bin/ws-gateway` 启停服务并**回读**健康路径与 dashboard 的路由表 —— 不是"写完就说成功"。
@@ -64,7 +64,7 @@ def main(argv: list[str]) -> int:
     # 路由表在 gateway.routes 里；`_` 开头的键是注释。
     entry = manifest.get(SERVICE_NAME) or {}
     desired = {
-        "script": "projects/quotagent/tools/webui-serve.py",
+        "script": "projects/quotagent/src/system/webui/tools/webui-serve.py",
         "port": port,
         "health": HEALTH_PATH,
         "log": "logs/quotagent.log",

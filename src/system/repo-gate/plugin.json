@@ -5,6 +5,12 @@
   "provides": [
     "repo-gate"
   ],
-  "entry": "code/index.mjs",
-  "description": "system 插件「repo-gate」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/system/repo-gate/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "entry": "tests/check-plugin-assets.py",
+  "description": "system/repo-gate（**平台门集合**，不是 cordis 插件）：本批 EV-179 按「**实现在插件根**」的口径接 `entry` —— 本插件的实现是 `tests/**` 里 11 个**独立可执行的门**（没有一个模块面可包装，故不造 `code/` 包装），`entry` 指到其中的 `check-plugin-assets.py`（本插件里唯一以「插件资产归属/布局」为判据的门 = repo-gate 自身契约的机检形态；**这是指向，不是新语义**）。`provides` 那一格是最小契约的必填**名字**，本插件不 provide cordis 服务。",
+  "migration": {
+    "stage": 5.2,
+    "mode": "root-implementation-entry",
+    "impl": "src/system/repo-gate/tests/**（门集合，阶段 4.1/4.2 已落）",
+    "entry": "src/system/repo-gate/tests/check-plugin-assets.py"
+  }
 }

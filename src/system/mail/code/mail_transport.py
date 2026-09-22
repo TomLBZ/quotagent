@@ -184,7 +184,7 @@ def _parser_module() -> tuple:
         return _PARSER_CACHE["module"], _PARSER_CACHE["reason"]
     module, reason = None, ""
     try:
-        path = Path(repo_root()) / "tools" / "config-apply.py"
+        path = Path(repo_root()) / "src" / "system" / "config" / "tools" / "config-apply.py"
         spec = importlib.util.spec_from_file_location("quotagent_tools_config_apply", path)
         candidate = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(candidate)

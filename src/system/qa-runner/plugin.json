@@ -5,6 +5,12 @@
   "provides": [
     "qa-runner"
   ],
-  "entry": "code/index.mjs",
-  "description": "system 插件「qa-runner」：迁移阶段 4.2 的**清单先行**形态 —— 需求文档已归位 src/system/qa-runner/requirements/README.md；`provides` 是占位服务键（真实服务面随 `code/` 落地时改写），`entry` 指向的标准入口此刻**还不存在** ⇒ `tools/plugin.sh list` 如实报 `artifact-missing` 降级，绝不假装已实现。"
+  "entry": "code/__init__.py",
+  "description": "system/qa-runner（**平台运行器**，不是 cordis 插件）：本批 EV-179 按 27 §7.1 的 python 口径接**装载面** `code/__init__.py`（`entry` 真实存在 ⇒ 不再 `degraded: artifact-missing`）。运行器本体是 `python -m quotagent.qa`（`src/quotagent/qa/{__init__,__main__,registry}.py`，本批**不搬**）；`provides` 那一格是最小契约的必填**名字**，本插件不 provide cordis 服务。**不新造功能**。",
+  "migration": {
+    "stage": 5.2,
+    "mode": "python-entry-only",
+    "impl": "src/quotagent/qa/registry.py（运行器本体，未搬）",
+    "entry": "src/system/qa-runner/code/__init__.py（装载面，本批新增）"
+  }
 }

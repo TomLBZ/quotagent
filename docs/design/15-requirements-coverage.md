@@ -10,7 +10,7 @@
 |---|---|---|---|
 | FR-GATE-001 | host/modules/gate-timeline.mjs、tools/gate-nudge.py | 「审批等多久 / 变更单谁卡着」围栏门 33/33 + 真路由门 11/11（`verify.sh gates`）：**age 不随两个不同 `now` 入口变化**（不取墙钟）/ 空投影两列表为 0 / 插件不能批准 / 每条有 basis / 催办 POST 只落 0600 待办件且账本零新增 / 真跑 `gate-nudge.py` 落 `gate/nudged` 且 ops 计数 +1 / 幂等 duplicates / 两条拒绝路径 / 四道页面子导航入口 + 页面 0 内联脚本 | 直引 |
 | FR-GATE-002 | host/modules/gate-timeline.mjs、host/t283-change-detail-gate.mjs、tools/check-change-detail-route.py | 变更单**逐行明细**：围栏门 22/22 + 真路由门 9/9（`verify.sh change-detail`）：**逐行手算金额对账**（整数分；`delta = after − before`；`delta_pct` 整数分位 half-up）／缺依据的行**不入小计**（`basis_missing`）／无可用行 ⇒ degraded + 明细空 + 小计记 null／供应商侧哨兵逐字节一致 0 命中／未知 id 页面与 JSON 都 404 + next_action／只读（账本零新增）＋ 4 处单点变异全红 | 直引 |
-| FR-AUTH-001 | host/modules/authority-band.mjs、host/t284-authority-gate.mjs、tools/check-authority-route.py | 见 §2 的 `authority-band` 行（围栏门 22/22 + 真路由门 12/12 的逐条计数与断言在那个格子里，避免两处重复） | 直引 |
+| FR-AUTH-001 | host/modules/authority-band.mjs、host/t284-authority-gate.mjs、tools/check-authority-route.py | 见 §2 的 `authority-band` 行（逐条计数与断言在 §2 的格子里） | 直引 |
 | FR-ADV-001 | host/modules/advice-panel.mjs | 决策建议层围栏门 30/30 + 真路由门 14/14（`verify.sh advice`）；四道页面子导航入口 + 页面 0 内联脚本 | 直引 |
 | FR-APPROVE-001 | src/quotagent/services/approval.py | ApprovalService.request() | 直引 |
 | FR-APPROVE-002 | src/quotagent/services/approval.py | ApprovalService.require(scope, ref, approval | 直引 |
@@ -115,12 +115,12 @@
 | FR-EVOLVE-007 | host/modules/evolve-journal.mjs | AC-EVOLVE-005（见 §4 的机检命令） | 映射 |
 | FR-PRICE-003 | host/modules/price-history.mjs | AC-PRICE-002（见 §4 的机检命令） | 映射 |
 | FR-RFQ-007 | host/modules/sourcing.mjs | AC-RFQ-005（见 §4 的机检命令） | 映射 |
-| FR-RFQ-008 | host/modules/rfq-deadline.mjs、tools/rfq-promise.py | 见 §2 的 `rfq-deadline` 行（围栏门 23/23 + 真路由门 11/11 的逐条计数与断言在那个格子里，避免两处重复） | 直引 |
+| FR-RFQ-008 | host/modules/rfq-deadline.mjs、tools/rfq-promise.py | 见 §2 的 `rfq-deadline` 行（逐条计数与断言在 §2 的格子里） | 直引 |
 | FR-RFQ-009 | host/modules/projection.mjs、host/lib/ledger-view.mjs、host/modules/webui.mjs、host/t287-rfq-visibility-gate.mjs、tools/check-rfq-visibility-route.py | 投递信封 + 收件人作用域 + 字段级白名单（契约 `docs/design/26-rfq-delivery-visibility.md`）：围栏门 26/26 + 真路由门 10/10（`verify.sh rfq-visibility`） | 直引 |
 | FR-EVAL-005 | host/modules/supplier-scorecard.mjs | AC-EVAL-003（见 §4 的机检命令） | 映射 |
 | FR-UX-004 | host/modules/ops-view.mjs | AC-RUNTIME-010（见 §4 的机检命令） | 映射 |
 
-| FR-UX-005 | tools/refresh-ui-snapshots.py、host/modules/pipeline-view.mjs | AC-UI-002 + AC-PIPELINE-001 | 直引 |
+| FR-UX-005 | src/system/webui/tools/refresh-ui-snapshots.py、host/modules/pipeline-view.mjs | AC-UI-002 + AC-PIPELINE-001 | 直引 |
 
 
 | FR-ADMIN-001 | host/modules/admin-view.mjs | 见对应 AC | 直引 |
@@ -162,15 +162,15 @@
 | FR-STORAGE-006 | tools/storage.py + host/modules/storage-view.mjs | 见 AC-STORAGE-006 | 直引 |
 | FR-UXWEB-001 | host/modules/webui.mjs | 见 AC-UXWEB-001 | 直引 |
 | FR-UXWEB-002 | host/modules/webui.mjs | 见 AC-UXWEB-001 | 直引 |
-| FR-CONFIG-001 | host/modules/config-view.mjs + host/lib/config-ui.mjs + tools/config-apply.py | 见 AC-CONFIG-001 | 直引 |
-| FR-CONFIG-002 | tools/config-apply.py + host/lib/config-keys.mjs | 见 AC-CONFIG-001 | 直引 |
+| FR-CONFIG-001 | host/modules/config-view.mjs + host/lib/config-ui.mjs + src/system/config/tools/config-apply.py | 见 AC-CONFIG-001 | 直引 |
+| FR-CONFIG-002 | src/system/config/tools/config-apply.py + host/lib/config-keys.mjs | 见 AC-CONFIG-001 | 直引 |
 | FR-MAIL-001 | src/quotagent/services/mail_transport.py + src/quotagent/services/mail.py | 见 AC-MAIL-001 | 直引 |
 | FR-MAIL-002 | host/modules/mail-view.mjs + host/lib/config-keys.mjs | 见 AC-MAIL-002 | 直引 |
 | FR-VIZ-001 | host/modules/bid-heuristics.mjs | 见 AC-VIZ-001 | 直引 |
 | FR-UIFB-001 | host/modules/ui-feedback.mjs + tools/ui-feedback-apply.py | 见 AC-UIFB-001 | 直引 |
 | FR-USREQ-006 | host/modules/ui-feedback.mjs + tools/ui-feedback-apply.py | AC-USREQ-006 10/10（探测器确定性 / 空待办恰一行 / 非空转；负控注入 `date` 即红） | 直引 |
 | FR-USREQ-007 | docs/work/requirements-traceability.md | `verify.sh docs` + `verify.sh coverage`（本表与 §6.1 是同一批的落点） | 直引 |
-| FR-USREQ-009 | host/modules/config-view.mjs + tools/config-apply.py | 见 AC-CONFIG-001（含 `--init` / 原子写 / 401 同形）；邮件侧 AC-MAIL-002 | 直引 |
+| FR-USREQ-009 | host/modules/config-view.mjs + src/system/config/tools/config-apply.py | 见 AC-CONFIG-001（含 `--init` / 原子写 / 401 同形）；邮件侧 AC-MAIL-002 | 直引 |
 | FR-USREQ-012 | host/modules/advice-panel.mjs + tools/userplugin-elevate.py | 见 AC-ADV-001；提权路径见 AC-USERPLUG-010 | 直引 |
 | FR-USREQ-004 | host/modules/webui.mjs | 自述 `/api/routes`（`verify.sh webui`）；dashboard 侧为跨仓（见可追溯表） | 映射 |
 | FR-USREQ-005 | host/modules/webui.mjs | 第一屏三块 + 子视图 + 上手入口（`verify.sh webui`） | 映射 |
@@ -180,7 +180,7 @@
 | FR-USREQ-001 | host/modules/webui.mjs + host/modules/config-view.mjs | 四类写操作各有门（config-route / gates / rfq-deadline / ui-feedback），但「每一步」完整性无机检 | 缺口 |
 | FR-USREQ-002 | host/modules/webui.mjs | 只有结构切片（0 内联脚本 / 三块顺序 / `data-empty`），视觉本身**零判据** | 缺口 |
 | FR-USREQ-003 | host/profiles.mjs + src/quotagent/g1side.py | `verify.sh g1` 只覆盖「两侧各自跑完工作流」；「像员工」无机检 | 缺口 |
-| FR-QUOTE-001 | host/modules/quote-prepare.mjs、tools/quote-draft.py、tools/quote-sign.py | **报价草稿写闭环**（`verify.sh quote-draft`）：围栏门（服务面恰 8 键且无 `approve/decide/submit/send`、`can_sign=false`、字段级拒绝码闭合、确定性、墙钟入口读都不读、私域哨兵逐字节一致、行项目读不出来不编、**4 处单点变异全红且还原字节一致**）+ 真路由门（真进程真回读）：假成功杀死（`/api/routes` 里每个 GET 只读路由 POST ⇒ 405 + `Allow: GET` + `method-not-allowed`；**反向对照**真写路由 POST ⇒ 不是该 code）/ 字段级 errors / 待办件恰 0600 / 宿主账本零新增 / 真跑工具后两侧账本各 +1 且 body 恰 12 键不含备注正文 / 幂等 / 拒绝码 / 双向可见 / 0 内联脚本 / 假成功对照（改前 GET 与 POST 逐字节相同） | 直引 |
+| FR-QUOTE-001 | host/modules/quote-prepare.mjs、src/domain/quote-prepare/tools/quote-draft.py、src/domain/quote-prepare/tools/quote-sign.py | **报价草稿写闭环**（`verify.sh quote-draft`）：围栏门（服务面恰 8 键且无 `approve/decide/submit/send`、`can_sign=false`、字段级拒绝码闭合、确定性、墙钟入口读都不读、私域哨兵逐字节一致、行项目读不出来不编、**4 处单点变异全红且还原字节一致**）+ 真路由门（真进程真回读）：假成功杀死（`/api/routes` 里每个 GET 只读路由 POST ⇒ 405 + `Allow: GET` + `method-not-allowed`；**反向对照**真写路由 POST ⇒ 不是该 code）/ 字段级 errors / 待办件恰 0600 / 宿主账本零新增 / 真跑工具后两侧账本各 +1 且 body 恰 12 键不含备注正文 / 幂等 / 拒绝码 / 双向可见 / 0 内联脚本 / 假成功对照（改前 GET 与 POST 逐字节相同） | 直引 |
 
 > 末段 12 行 = **用户诉求批次**（`FR-USREQ-001..012`，契约见 `../../work/functional-requirements.md` §6.1；状态真源 `../../work/requirements-traceability.md`）。
 

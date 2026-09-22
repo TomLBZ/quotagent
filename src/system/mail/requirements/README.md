@@ -48,3 +48,6 @@
 <!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
 
 - `code:` 部分落地 —— Python 实体 2 个已在 `code/`（`mail.py`、`mail_transport.py`）；宿主 **ESM 入口未接** ⇒ `entry` 仍如实报 `degraded: artifact-missing`。
+- **待定（需设计决定，本批不代做 ✗）**：`code/` 里 `mail-view.mjs` 自述 `provides=['mailView']`，
+  而 Python 侧 `mail.py`/`mail_transport.py` 是**邮件收发服务本体**（`provides` 占位键现在写的是 `mail`）⇒ **两个面**，
+  入口取哪一个（视图 vs 服务本体）属**插件设计**。

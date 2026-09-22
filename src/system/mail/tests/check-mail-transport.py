@@ -257,7 +257,7 @@ NO_CONFIG = str(Path(tempfile.gettempdir()) / "quotagent-mail-transport-absent" 
 REAL_CONFIG = Path("/workspace/config.yaml")
 REAL_CONFIG_HASH = sha256_file(REAL_CONFIG) if REAL_CONFIG.exists() else ""
 #: 内置的"缺省即真源"快照写入器（Python 侧唯一判定者；宿主只读它的输出）
-SNAPSHOT_WRITER = ROOT / "tools" / "refresh-ui-snapshots.py"
+SNAPSHOT_WRITER = ROOT / "src" / "system" / "webui" / "tools" / "refresh-ui-snapshots.py"
 
 
 # ===========================================================================
@@ -563,7 +563,7 @@ try:
     inbox.mkdir(parents=True, exist_ok=True)
     yaml_path = apply_dir / "config.yaml"
     apply_ledger = apply_dir / "config-ledger.jsonl"
-    init_proc = subprocess.run([sys.executable, str(ROOT / "tools" / "config-apply.py"), "--init",
+    init_proc = subprocess.run([sys.executable, str(ROOT / "src" / "system" / "config" / "tools" / "config-apply.py"), "--init",
                                 "--file", str(yaml_path), "--ledger", str(apply_ledger),
                                 "--actor", "human:gate", "--now", NOW],
                                cwd=str(ROOT), capture_output=True, text=True, timeout=120)
@@ -578,7 +578,7 @@ try:
     item_path = inbox / f"cfg-{item['payload_sha256'][:16]}.json"
     item_path.write_text(json.dumps(item, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     os.chmod(item_path, 0o600)
-    apply_proc = subprocess.run([sys.executable, str(ROOT / "tools" / "config-apply.py"),
+    apply_proc = subprocess.run([sys.executable, str(ROOT / "src" / "system" / "config" / "tools" / "config-apply.py"),
                                  "--inbox", str(inbox), "--file", str(yaml_path),
                                  "--ledger", str(apply_ledger), "--approval-ref", "ap-0001",
                                  "--actor", "human:gate", "--now", NOW],

@@ -56,3 +56,6 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 <!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
 
 - `code:` 部分落地 —— 拥有的宿主模块实体 `admin-guard.mjs`、`admin-view.mjs` 已随本批进 `code/`；宿主 **ESM 入口未接**（不拼装、不造功能）⇒ `plugin.json` 的 `entry` 仍如实报 `degraded: artifact-missing`。
+- **待定（需设计决定，本批不代做 ✗）**：`code/` 里**有两个各自自述服务键**的实体（`admin-guard.mjs` → `adminGuard`、`admin-view.mjs` → `adminView`），
+  外加 Python 侧 `admin_blocks.py` —— **哪个是插件入口**（还是本插件该拆成两个插件？）属**插件设计**，不是搬迁口径能定的。
+  证据：`grep -n "^export const provides" src/system/admin/code/*.mjs` ⇒ `['adminGuard']` 与 `['adminView']` 两条。

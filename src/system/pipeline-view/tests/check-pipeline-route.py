@@ -44,7 +44,7 @@ def curl(url: str, timeout: float = 10.0) -> tuple[int, str]:
 
 # ① 真刷新快照（写不了也不致命：路由会走降级路径，下面的断言会如实反映）
 snap = ROOT / "tmp" / "ui-shared" / "pipeline.json"
-refresh = subprocess.run([sys.executable, str(ROOT / "tools" / "refresh-ui-snapshots.py"),
+refresh = subprocess.run([sys.executable, str(ROOT / "src" / "system" / "webui" / "tools" / "refresh-ui-snapshots.py"),
                           "--shared-dir", str(ROOT / "tmp" / "ui-shared")],
                          cwd=str(ROOT), capture_output=True, text=True, timeout=300)
 check("① 快照刷新可运行（Python 侧写入器）", refresh.returncode == 0,

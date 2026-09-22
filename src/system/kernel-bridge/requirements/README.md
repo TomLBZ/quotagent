@@ -46,4 +46,8 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 
 <!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
 
-- `code:` **待实现** —— 实现对**已存在**于 `host/modules/`（`kernel-bridge.mjs`），本批未给它做入口；`entry` 仍如实报 `degraded: artifact-missing`；**不新造功能**。
+- `code:` **已承载（本批 `EV-179`）** —— 宿主模块实体 `kernel-bridge.mjs` 已在 `code/`（`bridge.mjs`/`supervisor.mjs` 是库件，
+  **不自述 `provides`**）；本批新增入口 `code/index.mjs`（薄包装）⇒ `entry` 真实存在，`status` 由 `degraded: artifact-missing`
+  变为 `valid:true`（`kind: esm`）。`provides` 由占位键 `kernel-bridge` 改写为**实体的真实服务键** `bridge`。**不新造功能**。
+- **为什么这个插件可以直接里接入口**：`code/` 里**只有一个**文件自述 `provides`（`kernel-bridge.mjs` → `['bridge']`），
+  另两个是它用的库件 —— 不存在「哪个实体是入口」的设计歧义。

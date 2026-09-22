@@ -289,7 +289,7 @@ do_up() {
   QUOTAGENT_UI_ADMIN=$DATA_DIR/admin.json \
   QUOTAGENT_UI_ADMIN_INBOX=$DATA_DIR/admin-submissions \
   QUOTAGENT_UI_RFQ_DELIVERY=$DATA_DIR/contractor/01-package.json \
-    nohup "$PY_BIN" "$ROOT/tools/webui-serve.py" >>"$LOG_FILE" 2>&1 &
+    nohup "$PY_BIN" "$ROOT/src/system/webui/tools/webui-serve.py" >>"$LOG_FILE" 2>&1 &
   SERVICE_PID=$!
   { printf '%s\n' "$SERVICE_PID"; printf '%s\n' "$START_MS"; printf '%s\n' "pending"; printf 'data=%s\n' "$DATA_DIR"; } \
     >"$PID_FILE" 2>/dev/null || true

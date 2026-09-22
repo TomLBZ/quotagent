@@ -64,3 +64,5 @@
 <!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
 
 - `code:` 部分落地 —— Python 实体 9 个已在 `code/`（`__init__.py`、`canon.py`、`delivery.py`、`events.py`、`evidence.py`、`ledger.py`…）；宿主 **ESM 入口未接** ⇒ `entry` 仍如实报 `degraded: artifact-missing`。
+- **待定（需设计决定，本批不代做 ✗）**：内核 9 个模块**各自独立**（且 ADR-0002 冻结：内核不随自进化改），
+  另有两个宿主件 `frozen.mjs`/`ledger-view.mjs` —— 入口取哪一个（或内核算不算「插件」）属**插件设计**。

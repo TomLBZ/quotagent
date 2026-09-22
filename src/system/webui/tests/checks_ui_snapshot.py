@@ -17,7 +17,7 @@ from pathlib import Path
 from quotagent.qa.registry import Assertion, register
 
 ROOT = Path(__file__).resolve().parents[4]
-WRITER = ROOT / "tools" / "refresh-ui-snapshots.py"
+WRITER = ROOT / "src" / "system" / "webui" / "tools" / "refresh-ui-snapshots.py"
 SENTINEL = "ZZ-SENTINEL-PRIVATE-ZZ"
 TIME_KEYS = re.compile(r"(^|_)(date|ts|time|at|created|updated)($|_)", re.I)
 

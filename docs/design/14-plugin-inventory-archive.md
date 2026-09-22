@@ -36,7 +36,7 @@
 
 | 服务 | 提供者 | 备注 |
 |---|---|---|
-| `quotagent`（工作区网关路由 `/quotagent`） | `tools/webui-serve.py` → cordis 插件 `webui` | 幂等接入脚本 `tools/ws-integrate.py` |
+| `quotagent`（工作区网关路由 `/quotagent`） | `src/system/webui/tools/webui-serve.py` → cordis 插件 `webui`（**已归位**：`tools/webui-serve.py` 现只剩薄转发，实体在 `src/system/webui/tools/`，本批 `EV-179`） | 幂等接入脚本 `tools/ws-integrate.py` |
 
 ## 5. 自进化产出的插件（`ADR-0016` / `T-227`）
 

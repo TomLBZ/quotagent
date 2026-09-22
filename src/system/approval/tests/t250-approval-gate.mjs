@@ -31,7 +31,7 @@
  */
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeSync } from 'node:fs'
-import { dirname, join, relative } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 // 实现已搬进 `src/<层>/<插件>/tests/`（迁移阶段 4.2 / EV-172）：宿主目录由仓库根推出（`src/<层>/<插件>/tests/` 4 层上溯），
@@ -62,10 +62,60 @@ const finish = () => {
   process.exit(failures === 0 ? 0 : 1)
 }
 
+/**
+ * 被检查产物的**源码链**（跟到**真实体**）：`host/modules/<x>.mjs` 自搬迁（阶段 4.2/5）起可能是**薄重导**
+ * ——实体在 `src/<层>/<插件>/code/<x>.mjs`，中间经 `host/lib/entity-<x>.mjs` 一跳。
+ *
+ * 为什么必须跟：① 按**源码文本**判的断言在 8 行的重导文件上会**静默判绿**（manifest / inject / 静态
+ * 副作用扫描全都在实体里）；② 只读第一跳会把正常的**链目标** `../lib/entity-<x>.mjs` 误判成「越界 import」。
+ *
+ * 口径**收紧而非放宽**：只有**纯重导**（除注释外恰好一行 `export * from '<spec>'`）才算一跳；某一跳的
+ * `<spec>` 是**链的结构**，只在该跳文件里豁免（实体自己写的任何 spec 照原白名单逐字判）。整条链的文本
+ * 一起纳入扫描 ⇒ 实体藏在一跳之后也逃不掉；某一跳若**不纯**，跟链立刻停在那一跳（它自己的 spec 就按普通 import 判）。
+ */
+const RE_EXPORT_LINE = /^\s*export \* from '([^']+)'\s*$/
+const reExportTarget = (text) => {
+  const lines = text.split('\n').map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('//') && !line.startsWith('*') && !line.startsWith('/*'))
+  if (lines.length !== 1) return null          // 除注释外还有别的语句 ⇒ **不是**一跳（不跟）
+  const match = lines[0].match(RE_EXPORT_LINE)
+  return match ? match[1] : null
+}
+const moduleChain = (entry) => {
+  const files = [entry]
+  const links = []
+  const seen = new Set([entry])
+  let current = entry
+  let text = readFileSync(current, 'utf8')
+  for (let hop = 0; hop < 8; hop += 1) {
+    const spec = reExportTarget(text)          // `null` ⇒ 到底了（这一跳不是纯重导）
+    if (spec === null) break
+    const next = resolve(dirname(current), spec)
+    if (seen.has(next) || !existsSync(next)) break
+    links.push(spec)          // 只有**纯重导**的一跳才把目标记为链结构（实体自己写的同一个 spec 不算）
+    seen.add(next)
+    current = next
+    text = readFileSync(current, 'utf8')
+    files.push(current)
+  }
+  return {
+    files, links, entity: current,
+    text: files.map((file) => readFileSync(file, 'utf8')).join('\n'),
+    per_file: files.map((file, index) => ({
+      file,
+      specs: [...readFileSync(file, 'utf8').matchAll(/from\s+'([^']+)'/g)].map((match) => match[1]),
+      link: links[index] ?? null,
+    })),
+  }
+}
+/** 链的人可读写法（仓库根相对），只用于 detail 打印。 */
+const chainLabel = (files) => files.map((file) => file.replace(`${join(HERE, '..')}/`, '')).join(' → ')
+
 /** 定位并加载产物：晋升前从 tmp/（经影子目录），晋升后直接是同目录的 modules/。 */
 const loadArtifact = async () => {
   if (existsSync(IN_TREE)) {
-    return { mod: await import(pathToFileURL(IN_TREE).href), source: readFileSync(IN_TREE, 'utf8'),
+    const chain = moduleChain(IN_TREE)          // 跟重导链读到**真实体**（`source` = 整条链的文本）
+    return { mod: await import(pathToFileURL(IN_TREE).href), source: chain.text, chain,
       path: IN_TREE, copied: null }
   }
   if (!existsSync(FROM_TMP)) return null
@@ -76,7 +126,8 @@ const loadArtifact = async () => {
   copyFileSync(FROM_TMP, copyPath)
   const source = readFileSync(FROM_TMP, 'utf8')
   const copied = readFileSync(copyPath, 'utf8') === source
-  return { mod: await import(pathToFileURL(copyPath).href), source, path: FROM_TMP, copied,
+  const chain = moduleChain(copyPath)           // 同一条口径：影子副本也跟链
+  return { mod: await import(pathToFileURL(copyPath).href), source: chain.text, chain, path: FROM_TMP, copied,
     copyPath }
 }
 
@@ -174,8 +225,12 @@ let mod = null
 try {
   // ---------- 1. 契约正控（含实际加载路径 / 字节数 / sha256） ----------
   const source = artifact ? artifact.source : ''
-  const imports = [...source.matchAll(/from\s+'([^']+)'/g)].map((match) => match[1])
-  const importLeaks = imports.filter((spec) => !(spec === '../lib/std-schema.mjs' || spec.startsWith('node:')))
+  const chain = artifact ? artifact.chain : { files: [], links: [], per_file: [] }
+  const imports = chain.per_file.flatMap((entry) => entry.specs)
+  // 逐文件判：链目标（`../lib/entity-<x>.mjs` 那一跳）**只在该跳文件里**豁免；实体自己写的任何 spec
+  // 都要过白名单 —— `spec !== entry.link` 一格没松，只是把重导链**读穿了**。
+  const importLeaks = chain.per_file.flatMap((entry) =>
+    entry.specs.filter((spec) => !(spec === '../lib/std-schema.mjs' || spec.startsWith('node:')) && spec !== entry.link))
   mod = artifact ? artifact.mod : null
   const manifest = {
     name: mod?.name === 'approval-digest',
@@ -193,7 +248,8 @@ try {
   mod !== null && manifestBad.length === 0 && importLeaks.length === 0,
   `载入路径=${artifact ? artifact.path : '（未找到产物）'}；字节=${Buffer.byteLength(source, 'utf8')}；`
   + `sha256=${sha256(source)}；影子副本=${artifact?.copyPath ?? '（进树，无需影子）'}；`
-  + `影子字节一致=${artifact?.copied ?? 'n/a'}；import=${JSON.stringify(imports)}；越界=${importLeaks.join(',') || '无'}；`
+  + `影子字节一致=${artifact?.copied ?? 'n/a'}；链=[${chainLabel(chain.files)}]（${chain.files.length} 跳）；`
+  + `import=${JSON.stringify(imports)}；越界=${importLeaks.join(',') || '无'}；`
   + `问题键=${manifestBad.join(',') || '无'}`)
   if (!mod) finish()
 

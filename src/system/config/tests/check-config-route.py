@@ -195,7 +195,7 @@ PARSER_FIXTURES = [
 
 
 def load_config_apply():
-    spec = importlib.util.spec_from_file_location("config_apply_probe", ROOT / "tools" / "config-apply.py")
+    spec = importlib.util.spec_from_file_location("config_apply_probe", ROOT / "src" / "system" / "config" / "tools" / "config-apply.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -203,7 +203,7 @@ def load_config_apply():
 
 def apply_run(*extra: str, expect: int | None = None, inbox: Path | None = None, file: Path | None = None):
     """真跑 Python 写入者（**临时目录、临时账本**；绝不碰真文件）。"""
-    cmd = [sys.executable, str(ROOT / "tools" / "config-apply.py"), "--file", str(file or CONFIG_PATH),
+    cmd = [sys.executable, str(ROOT / "src" / "system" / "config" / "tools" / "config-apply.py"), "--file", str(file or CONFIG_PATH),
            "--ledger", str(LEDGER), "--approval-ref", "ap-0007", "--actor", "human:gate",
            "--now", "2026-09-21T00:00:00Z"]
     if inbox is not None:
@@ -538,7 +538,7 @@ try:
     # -----------------------------------------------------------------------
     init_path = FIXTURE_DIR / "init-config.yaml"
     proc_init, init_receipt = (None, None)
-    init_cmd = [sys.executable, str(ROOT / "tools" / "config-apply.py"), "--init", "--file", str(init_path),
+    init_cmd = [sys.executable, str(ROOT / "src" / "system" / "config" / "tools" / "config-apply.py"), "--init", "--file", str(init_path),
                 "--ledger", str(FIXTURE_DIR / "init-ledger.jsonl"), "--actor", "human:gate",
                 "--now", "2026-09-21T00:00:00Z"]
     proc_init = subprocess.run(init_cmd, capture_output=True, text=True)
@@ -644,7 +644,7 @@ try:
     # -----------------------------------------------------------------------
     # ⑪ py_compile（写入者必须能被标准库解释器加载）
     # -----------------------------------------------------------------------
-    compile_proc = subprocess.run([sys.executable, "-m", "py_compile", str(ROOT / "tools" / "config-apply.py")],
+    compile_proc = subprocess.run([sys.executable, "-m", "py_compile", str(ROOT / "src" / "system" / "config" / "tools" / "config-apply.py")],
                                   capture_output=True, text=True)
     check("⑪ `python3 -m py_compile tools/config-apply.py` 通过（标准库、无第三方依赖）",
           compile_proc.returncode == 0, f"exit={compile_proc.returncode} stderr={compile_proc.stderr[-200:]}")

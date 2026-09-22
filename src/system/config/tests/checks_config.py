@@ -13,7 +13,7 @@ from pathlib import Path
 from quotagent.qa.registry import Assertion, register
 
 ROOT = Path(__file__).resolve().parents[4]
-FILES = {'apply': ROOT / 'tools' / 'config-apply.py',
+FILES = {'apply': ROOT / 'src' / 'system' / 'config' / 'tools' / 'config-apply.py',   # 实体（本批 EV-179 从 `tools/config-apply.py` 搬进本插件 `tools/`；旧位置只剩薄转发）
          # 实体已随批 EV-176 搬进插件 `code/`（旧路径只剩薄重导）：静态断言读实体那一份，否则静默判绿。
          'view': ROOT / 'src' / 'system' / 'config' / 'code' / 'config-view.mjs',
          # 库层实体已随批 EV-177 搬进本插件 `code/`（旧路径 `host/lib/config-*.mjs` 只剩薄重导 ⇒

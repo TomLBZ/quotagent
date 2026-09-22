@@ -48,4 +48,9 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 
 <!-- 本行由批 `EV-176` 逐插件如实登记（机检口径见 `docs/work/plans/plugin-file-map.md` §分类）。 -->
 
-- `code:` 部分落地 —— Python 实体 1 个已在 `code/`（`compare.py`）；宿主 **ESM 入口未接** ⇒ `entry` 仍如实报 `degraded: artifact-missing`。
+- `code:` **已承载（本批 `EV-179`）** —— 宿主模块实体 `compare.mjs` + Python 实体 `compare.py` 都在 `code/`；
+  本批新增入口 `code/index.mjs`（对 `./compare.mjs` 的薄包装：`export *` 活绑定 + 透传自述面）⇒ `entry` 指向的入口**真实存在**，
+  `tools/plugin.sh status domain/compare` 由 `degraded: artifact-missing` 变为 `valid:true`（`kind: esm`）。**不新造功能**：
+  `provides=[compare]` 与实体一致，语义仍只在 `compare.mjs`/`compare.py` 里。
+- **为什么这个插件可以直接里接入口**：它的 `code/` 里**只有一个**自述服务键的宿主模块（`compare.mjs`，`provides=['compare']`，
+  且 `host/profiles.mjs` 的 `contractor-ops` 已装配它、清单 `14` 行 18 已登记）—— 不存在「哪个实体是入口」的设计歧义。

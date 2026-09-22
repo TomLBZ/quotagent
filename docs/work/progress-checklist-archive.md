@@ -92,6 +92,8 @@
 | T-271 | Python 侧 admin 阻塞/进度判定器 + 快照写入器 + 2 条 AC 机检（subagent 产出，父方实跑） | B67 | done | EV-132 |
 | T-260 | 实现：`tools/refresh-ui-snapshots.py` + `pipeline-view`（第九个自进化产出）+ `/api/pipeline` + 门与端到端；线上与公网 200 | B60 | done | D-053 / EV-095 |
 | T-254 | 留存计划可被看见：桥侧 `retention.plan`（compute，只读）+ 宿主 `retention-view`（自进化产出）→ 运维视角 `/api/retention`；线上+公网 200 | B50 | done | EV-089 / EV-090 |
+**`EV-179` 批的补搬**：`T-272`/`T-273`（引入时间 **2026-09-21T13:44:06Z** ≤ 上面 14:00:00Z 的截止、第二个单元格非 `P0`、`status` 恰为 `done`）在 `EV-171` 的扩展批里**漏搬**，本批为给新行腾预算按同一规则**整行逐字**追加在这里（行序＝引入时间 13:44:06Z）。
+
 | T-253 | 留存**执行侧**：真删派生副本 + 读侧封存 + 落 `evidence/retention-*`；`AC-AUDIT-005` 机检 22/22 | B49 | done | D-048 / EV-088 |
 | T-264 | 系统管理 UI：`/quotagent/admin/` 道 + token 提权 + 视角切换 + agent 进度/阻塞面板 | B67 | todo | D-059 |
 | T-265c | 线上闭环：UI 提交 → 消费 → 面板 blocked 9→8 / resolved 0→1（真回读） | B68 | done | EV-133 |
@@ -118,3 +120,5 @@
 | T-112 | P0 | 比价：TCO + 排序 + 引用链 | FR-COMPARE-001..003 | AC-COMPARE-001..003 | done | EV-029, EV-030, EV-031 |
 | T-113 | P0 | 护栏：漏项 + 注入/私域检测 | FR-GUARD-002, FR-GUARD-005 | AC-GUARD-001, AC-GUARD-003 | done | EV-032, EV-033 |
 | T-114 | P0 | 端到端脚本（S1 合成场景） | FR-EVAL-001 | AC-EVAL-001 | done | EV-034 |
+| T-272 | 宿主侧 admin 门卫/视图插件 + 围栅门 18/18 + 端到端 12/12（subagent 产出，父方实跑） | B67 | done | EV-132 |
+| T-273 | admin 道接入 webui（路由/提权表单/CLI/e2e/profile/stubs/verify.sh）+ 本批 FR/AC 落表 | B67 | done | EV-132 |

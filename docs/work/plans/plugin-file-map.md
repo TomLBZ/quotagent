@@ -324,9 +324,9 @@
    `插件·已搬`（实体已在新位置，旧位置**只剩薄转发**）· `插件·待搬`（实体仍在旧位置，**逐条登记**在此，不许无名散落）。
 3. **子目录**：`tests/` = 门/检查（`check-*.py`、`checks_*.py`、围栏门 `*-gate.mjs`）随被检查的插件走；
    `tools/` = 有写面的工具（写账本者只能是该账本唯一写者，27 §2.2）。
-4. **`tools/**` 的非薄入口数**（散落的度量）：**本批（`EV-178`）再搬走 17 个**（旧位置全部变薄转发）⇒ **13**。
+4. **`tools/**` 的非薄入口数**（散落的度量）：**本批（`EV-179`）再搬走 10 个**（旧位置全部变薄转发）⇒ **3**（`netblock.c`/`v-kit.sh`/`manual-check.py`）。
    逐批的加减史（搬前 69 → 63 → 64 → 54 → 42 → 30 → **13**）、每批搬了哪些、复算命令见
-   [`plugin-file-map-batches.md`](plugin-file-map-batches.md) §「非薄入口数的加减史」。门把 **13** 冻结为下界锁
+   [`plugin-file-map-batches.md`](plugin-file-map-batches.md) §「非薄入口数的加减史」。门把 **3** 冻结为下界锁
    （`tools/check-plugin-assets.py` 的 `BASELINE_NONTHIN`，一路**收紧**、**从未放宽**）：只减不增，且集合必须与下表逐条相等。
 5. **薄转发**：旧位置那几行只做转发（Python 用 `runpy`/`importlib` 指到新位置；`.mjs` 围栅门用 `import './../src/…'`，
    实现只在 `src/<层>/<插件>/tests/` 那一份），**不含任何实现**；
@@ -342,7 +342,7 @@
 
 ### 全量分类表（144 行 = 77 + 20 + 47）
 
-### A. `tools/**`（77 个，其中平台薄入口 6 + 阶段 4.1 已搬 7 + `EV-175` 已搬 10 + `EV-176` 已搬 12 + `EV-177` 已搬 12 + `EV-178` 已搬 17 + 待搬 13）
+### A. `tools/**`（77 个，其中平台薄入口 6 + 阶段 4.1 已搬 7 + `EV-175` 已搬 10 + `EV-176` 已搬 12 + `EV-177` 已搬 12 + `EV-178` 已搬 17 + `EV-179` 已搬 10 + 待搬 3）
 
 | 资产 | 归属插件 | 分类 | 子目录 |
 |---|---|---|---|
@@ -386,29 +386,29 @@
 | `tools/check-retention.py` | `system/retention` | 插件·已搬 | `tests/` |
 | `tools/check-rfq-deadline-route.py` | `domain/rfq-deadline` | 插件·已搬 | `tests/` |
 | `tools/check-rfq-visibility-route.py` | `system/projection` | 插件·已搬 | `tests/` |
-| `tools/check-run-once.py` | `system/runtime` | 插件·待搬 | `tests/` |
-| `tools/check-run-clone.py` | `system/runtime` | 插件·待搬 | `tests/` |
+| `tools/check-run-once.py` | `system/runtime` | 插件·已搬 | `tests/` |
+| `tools/check-run-clone.py` | `system/runtime` | 插件·已搬 | `tests/` |
 | `tools/check-ui-feedback.py` | `system/ui-feedback` | 插件·已搬 | `tests/` |
 | `tools/check-ui-seed.py` | `system/webui` | 插件·已搬 | `tests/` |
 | `tools/check-v-register.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/check-webui.py` | `system/webui` | 插件·已搬 | `tests/` |
-| `tools/config-apply.py` | `system/config` | 插件·待搬 | `tools/` |
+| `tools/config-apply.py` | `system/config` | 插件·已搬 | `tools/` |
 | `tools/cordis.sh` | — | 平台薄入口 | — |
 | `tools/evolve-module.mjs` | `system/evolution` | 插件·已搬 | `tools/` |
 | `tools/evolve-record.py` | `system/evolution` | 插件·已搬 | `tools/` |
 | `tools/export-events.py` | `system/evidence` | 插件·已搬 | `tools/` |
-| `tools/g1-walkthrough.py` | `system/repo-gate` | 插件·待搬 | `tests/` |
+| `tools/g1-walkthrough.py` | `system/repo-gate` | 插件·已搬 | `tests/` |
 | `tools/gate-nudge.py` | `domain/gate-timeline` | 插件·已搬 | `tools/` |
 | `tools/manual-check.py` | `system/repo-gate` | 插件·待搬 | `tools/` |
-| `tools/mutate-ui-views.py` | `system/webui` | 插件·待搬 | `tools/` |
+| `tools/mutate-ui-views.py` | `system/webui` | 插件·已搬 | `tools/` |
 | `tools/netblock.c` | `system/runtime` | 插件·待搬 | `tests/` |
 | `tools/plugin.sh` | — | 平台薄入口 | — |
-| `tools/quote-draft.py` | `domain/quote-prepare` | 插件·待搬 | `tools/` |
-| `tools/quote-sign.py` | `domain/quote-prepare` | 插件·待搬 | `tools/` |
+| `tools/quote-draft.py` | `domain/quote-prepare` | 插件·已搬 | `tools/` |
+| `tools/quote-sign.py` | `domain/quote-prepare` | 插件·已搬 | `tools/` |
 | `tools/refresh-admin-snapshot.py` | `system/admin` | 插件·已搬 | `tools/` |
 | `tools/refresh-agent-memory.py` | `system/agent-runtime` | 插件·已搬 | `tools/` |
 | `tools/refresh-retention-plan.py` | `system/retention` | 插件·已搬 | `tools/` |
-| `tools/refresh-ui-snapshots.py` | `system/webui` | 插件·待搬 | `tools/` |
+| `tools/refresh-ui-snapshots.py` | `system/webui` | 插件·已搬 | `tools/` |
 | `tools/rfq-promise.py` | `domain/rfq-deadline` | 插件·已搬 | `tools/` |
 | `tools/run.sh` | — | 平台薄入口 | — |
 | `tools/runtime.sh` | — | 平台薄入口 | — |
@@ -416,12 +416,12 @@
 | `tools/ui-feedback-apply.py` | `system/ui-feedback` | 插件·已搬 | `tools/` |
 | `tools/ui-feedback-monitor.sh` | `system/ui-feedback` | 插件·已搬 | `tools/` |
 | `tools/ui-feedback-tick.sh` | `system/ui-feedback` | 插件·已搬 | `tools/` |
-| `tools/ui-seed-pipeline.py` | `system/webui` | 插件·待搬 | `tools/` |
+| `tools/ui-seed-pipeline.py` | `system/webui` | 插件·已搬 | `tools/` |
 | `tools/userplugin-elevate.py` | `system/user-plugin-manager` | 插件·已搬 | `tools/` |
 | `tools/userplugin-record.py` | `system/user-plugin-manager` | 插件·已搬 | `tools/` |
 | `tools/v-kit.sh` | `system/repo-gate` | 插件·待搬 | `tools/` |
 | `tools/verify.sh` | — | 平台薄入口 | — |
-| `tools/webui-serve.py` | `system/webui` | 插件·待搬 | `tools/` |
+| `tools/webui-serve.py` | `system/webui` | 插件·已搬 | `tools/` |
 | `tools/ws-integrate.py` | `system/runtime` | 插件·已搬 | `tools/` |
 
 ### B. `host/*-gate.mjs`（20 个：**已全部搬** —— 阶段 4.2 前 10 个（EV-172）+ 续批 10 个（EV-173））
