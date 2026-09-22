@@ -1,0 +1,214 @@
+EV-167  「需求归属到插件」落成完整映射 + 逐插件需求文档 + 归档 + 新门 plugin-requirements（T-316）
+================================================================================
+时间（UTC）：2026-09-22T08:5x（见每节命令回显）
+仓库：/workspace/projects/quotagent   cwd 一律 = 仓库根
+基线提交（本批之前的 HEAD）：202515321c50a83a2e37084af07819c66de06978
+解释器/环境：`source /workspace/bin/activate.sh` 之后 `tools/verify.sh <门>`（门自带 QUOTAGENT_PY / QUOTAGENT_NODE 解析）
+
+本批**只动文档 + 新增一条门脚本**（未改任何产品代码；`src/**` 与 `host/**` 的产品文件均未改）：
+
+  改 docs/design/14-plugin-inventory.md            28564 → 27390 B（先归档再加行）
+  新 docs/design/14-plugin-inventory-archive.md     5311 B（§2–§5 四节 4348 B **整节逐字**搬入）
+  新 docs/work/plugin-requirements-map.md          23674 B（63 行插件索引 = 每条 FR 的唯一归属指针）
+  新 docs/work/plugin-requirements-{webui,storage,market,evolution,mail,kernel}.md（6 份逐插件需求文档）
+  改 tools/check-plugin-inventory.py               清单文档集合 = 主文件 + 归档（新增 P0「归档 0 条登记名 = 空读」守卫）
+  新 tools/check-plugin-requirements.py            新门（17 条断言 + 4 处单点变异）
+  改 tools/verify.sh                               +`plugin-requirements)` 分支（门名是接口，只加不改）
+  改 docs/work/progress-checklist.md               T-316 行
+  改 docs/work/handover.md / .agents/state.json     同步「下一步唯一动作」
+  改 docs/work/evidence/INDEX-P2.md                本节索引行
+
+结论（先说结果）：
+  · 未认领 FR：**0**（166/166 各出现且仅出现一次）
+  · 写完整需求文档的插件：**9**（3 样板在标准位置 `src/<层>/<插件>/requirements/README.md`；6 核心在
+    `docs/work/plugin-requirements-<插件>.md`——**位置偏差**逐条登记在映射表 §4.2，原因见该节：先建裸插件目录会让
+    `plugin-lifecycle` 的 A13/A14 变红，本批不得把门改松）
+  · 缺口：**52** 个插件尚无需求文档（映射表 §4.1 逐条列）
+  · 新门 plugin-requirements：**17/17**（4 处单点变异全红 + 还原字节一致）
+  · 归档前后 14：**28564 → 24865 B**（搬走四节，实测）→ 加 9 行后 **27390 B ≤ 28 KB**
+
+--------------------------------------------------------------------------------
+§1 未认领 FR 与「唯一指针」（复算，不是声称）
+--------------------------------------------------------------------------------
+命令（口径：**定义行**数 FR / 映射表**第 3 个 pipe 字段**里的 FR 总数与去重数）：
+  $ grep -chE '^\| FR-' docs/work/functional-requirements*.md | awk '{s+=$1} END {print s}'
+  166
+  $ python3 -c "import re
+  rows=[l for l in open('docs/work/plugin-requirements-map.md') if l.startswith('| \`')]
+  frs=[f for l in rows for f in re.findall(r'FR-[A-Z]+-[0-9]{3}', l.split('|')[2])]
+  print(len(frs), len(set(frs)))"
+  166 166
+结论：**未认领 FR = 0**（定义集合 166 条 = 映射表认领 166 条 = 去重后 166 条 ⇒ 无人重复认领）。
+（易误读点：§1 的**证据列**还有 8 处提到别的插件的 FR（"部分承载"注释），所以"全文 grep FR"会给 174 个命中 —— 唯一指针只看第 3 个 pipe 字段。）
+门侧同一口径的断言（见 §3）：A3（引用的 FR 都在定义集合内）/ A4（每条 FR 至少被认领）/ A5（只被一个插件认领）。
+
+--------------------------------------------------------------------------------
+§2 映射表规模与状态计数
+--------------------------------------------------------------------------------
+命令与输出（真实回显；区间切片 = 只数 §1 的数据行）：
+  $ wc -c docs/work/plugin-requirements-map.md
+  25891 docs/work/plugin-requirements-map.md
+  $ sed -n '/^## 1\./,/^## 2\./p' docs/work/plugin-requirements-map.md | grep -c '^| `'
+  63
+  $ sed -n '/^## 1\./,/^## 2\./p' docs/work/plugin-requirements-map.md | grep -c ' done '      # 55
+  $ sed -n '/^## 1\./,/^## 2\./p' docs/work/plugin-requirements-map.md | grep -c ' partial '   # 1
+  $ sed -n '/^## 1\./,/^## 2\./p' docs/work/plugin-requirements-map.md | grep -c ' missing '   # 7
+  55 · 1 · 7      （partial=1：system/runtime 名下 FR-USREQ-003 是矩阵 §3 已登记缺口；
+                     missing=7：system/webui（FR-USREQ-002 视觉零判据）+ 6 个「无 FR 归属」的插件/实例）
+  $ grep -oE 'req=[a-zA-Z0-9_./-]+' docs/work/plugin-requirements-map.md | sort -u | wc -l
+  11       （本批 9 + 并发批次 2；A6a 断言这 11 个路径都真实存在）
+
+从 FR 家族表（28 §2.2/§2.3/§2.4）与承载矩阵（15 §1/§2）到本表的**13 处偏差**逐条登记在映射表 §3，
+其中 5 处是「承载体实测与 28 家族表不一致」（`FR-QEP-007`→domain/sync、`FR-NORM-004`→domain/quotes、
+`FR-RFQ-006`→domain/quotes、`FR-RFQ-008`→domain/rfq-deadline（判为 28 笔误）、`FR-EVIDENCE-004`→system/retention），
+5 处是 UX 族逐条拆分（`FR-UX-001`→approval、`002`→projection、`003`→export、`004`→ops-view、`005`→pipeline-view），
+1 处是晚于 28 的新 FR（`FR-PLUGIN-005`→system/webui），1 处是 USREQ 族的多插件列表取主归属，1 处是样板插件的部分承载声明。
+
+--------------------------------------------------------------------------------
+§3 新门：tools/verify.sh plugin-requirements（17/17）
+--------------------------------------------------------------------------------
+$ tools/verify.sh plugin-requirements
+--------------------------------------------------------------------------------
+§3 新门：tools/verify.sh plugin-requirements（17/17，含 4 处单点变异）
+--------------------------------------------------------------------------------
+$ cd /workspace/projects/quotagent && source /workspace/bin/activate.sh && tools/verify.sh plugin-requirements
+[ok]   A1 映射表存在且非空（每行 id 形态合法）
+        行 63；重复 id []；文件 docs/work/plugin-requirements-map.md
+[ok]   A2 `plugin.sh list` 枚举到的每个插件在映射表里有行（真跑 CLI；枚举为空 = 失败）
+        CLI ids=5（rc=0 count=5 ids=5 degraded=[]）；缺行=[]
+[ok]   A3 映射表引用的 FR 都在定义集合内（166 条：主文件 + 2 个归档）
+        定义文件={'docs/work/functional-requirements.md': 73, 'docs/work/functional-requirements-archive-b.md': 46, 'docs/work/functional-requirements-archive.md': 47}；伪造 0 条 []
+[ok]   A4 每条 FR 至少被一个插件认领
+        未认领 0 条 []
+[ok]   A5 每条 FR **只被一个插件**认领（唯一指针：无人重复认领）
+        重复 0 条 []
+[ok]   A6a 每个 `req=` 指向的需求文档**真实存在**（不得指向不存在的文件）
+        标的文档 11 份；缺文件 []
+[ok]   A6b 有 `src/<层>/<插件>/requirements/` 目录的插件**都在映射表里有行**（目录不无主）
+        目录侧 ['domain/advice', 'system/runtime', 'userspace/con-a/quote-trend', 'userspace/demo-ns/badge', 'userspace/demo-ns/hello']；无行的=[]
+[ok]   A6c 需求文档**不在标准布局位置**（非 `src/<层>/<插件>/requirements/`）的插件逐条登记（双向）
+        实际 ['system/evolution', 'system/kernel', 'system/mail', 'system/market', 'system/storage', 'system/webui']；登记 ['system/evolution', 'system/kernel', 'system/mail', 'system/market', 'system/storage', 'system/webui']；未登记=[]；多登记=[]
+[ok]   A7 没有需求文档的插件逐条列在 §4.1 缺口清单（双向：清单里不许多出插件）
+        缺文档 52 个；清单 52 个；未列=[]；多列=[]
+[ok]   A8 状态合法（done/partial/missing）且 `done` 行有真证据（门名 / `ac <AC-ID>` / `EV-`）
+        非法状态 []；done 但无证据 []
+[ok]   F1 抽掉一行插件（`system/kernel`）必须让 A4（每条 FR 被认领）变红
+        变异体红 2 项（命中指定断言=True）；kernel 名下有 19 条 FR，抽掉这一行 ⇒ 19 条 FR 无人认领；红项=['A4 每条 FR 至少被一个插件认领', 'A6c 需求文档**不在标准布局位置**（非 `src/<层>/<插']
+[ok]   F2 把一条 FR 改成不存在的号（FR-LEDGER-004 → FR-LEDGER-009）必须让 A3 变红
+        变异体红 2 项（命中指定断言=True）；定义集合里没有 FR-LEDGER-009 ⇒ 伪造引用；红项=['A3 映射表引用的 FR 都在定义集合内（166 条：主文件 + 2', 'A4 每条 FR 至少被一个插件认领']
+[ok]   F3 把一条 FR 重复认领（FR-MARKET-006 → FR-MARKET-005）必须让 A5 变红
+        变异体红 2 项（命中指定断言=True）；唯一指针被打破：同一条 FR 出现在两处；红项=['A4 每条 FR 至少被一个插件认领', 'A5 每条 FR **只被一个插件**认领（唯一指针：无人重复认领）']
+[ok]   F4 抽掉一条 `req=` 标记（system/mail）必须让 A6c 变红
+        变异体红 2 项（命中指定断言=True）；§4.2 登记了 system/mail 却不再声明文档 ⇒ 两侧不一致；红项=['A6c 需求文档**不在标准布局位置**（非 `src/<层>/<插', 'A7 没有需求文档的插件逐条列在 §4.1 缺口清单（双向：清单里不']
+[ok]   F0 基线（未变异）在同一套断言上**不红**（否则 4 处变异变红都是空转）
+        基线红项=[]
+[ok]   F5 防假变异：不存在的锚点必须返回 None（否则『变异变红』说明不了任何事）
+        apply_mutation / drop_line 都对不存在的锚点返回 None
+[ok]   F6 全过程**产品树字节不变**（变异只写在 tmp/ 的临时副本里）
+        before=a6ffc7beb493 after=a6ffc7beb493；变异副本 4 份在 tmp/
+RESULT: PASS（plugin-requirements 门 17/17）
+
+--------------------------------------------------------------------------------
+§4 门：tools/verify.sh plugins（清单文档集合 = 主文件 + 归档；5/5）
+--------------------------------------------------------------------------------
+$ tools/verify.sh plugins
+[ok]   P0 清单文档集合（主文件 + 归档）都被真读到（归档 0 条登记行 = 空读 = 失败）
+        定义文件 ['docs/design/14-plugin-inventory.md', 'docs/design/14-plugin-inventory-archive.md']；逐文件登记行={'docs/design/14-plugin-inventory.md': 50, 'docs/design/14-plugin-inventory-archive.md': 30}；空读=[]
+[ok]   P1 目录→清单：每个进树模块在清单里有一行（新增功能必须登记归属）
+        模块 ['admin-guard', 'admin-view', 'advice-panel', 'agent-context', 'agent-harness', 'agent-memory', 'approval-digest', 'audit-hook', 'authority-band', 'bid-heuristics', 'bridge-canary', 'budget-guard', 'canary', 'circuit-breaker', 'compare', 'config-view', 'evidence-summary', 'evolve-journal', 'gate-timeline', 'governor', 'idempotency-guard', 'kernel-bridge', 'mail-view', 'norm', 'observability', 'ops-view', 'pipeline-view', 'plugin-market', 'price-history', 'projection', 'quote-prepare', 'retention-view', 'rfq-deadline', 'sourcing', 'storage-view', 'supplier-scorecard', 'timeline', 'ui-feedback', 'user-plugin-manager', 'webui']；未登记=[]
+[ok]   P1 清单→目录：清单里的模块行都有对应文件（不得引用不存在的插件）
+        清单里多出=[]
+[ok]   P2 模块→装配：每个模块至少被一个 profile 引用，或在清单里显式标「未接线」
+        profile 引用=['admin-guard', 'admin-view', 'advice-panel', 'agent-context', 'agent-harness', 'agent-memory', 'approval', 'approval-digest', 'audit-hook', 'authority-band', 'bid-heuristics', 'bridge-canary', 'budget-guard', 'canary', 'circuit-breaker', 'compare', 'config', 'config-view', 'cost', 'evidence-summary', 'evolve-journal', 'frozen', 'gate-timeline', 'governor', 'guard', 'idempotency-guard', 'kernel-bridge', 'mail-view', 'norm', 'observability', 'ops-view', 'pipeline-view', 'plugin-market', 'price-history', 'pricing', 'projection', 'queue', 'quote-prepare', 'retention-view', 'rfq-deadline', 'sourcing', 'storage-view', 'supplier-scorecard', 'timeline', 'transport', 'ui-feedback', 'user-plugin-manager', 'webui']；未接线=[]（已显式标注=[]）
+[ok]   P3 Python 功能归属：每个 `services/*.py` 在清单里出现（功能有归属）
+        服务 30 个；未归属=[]
+RESULT: PASS（插件清单门 5/5）
+
+--------------------------------------------------------------------------------
+§5 门：docs / coverage / ac-registry（三门的尾部回显；退出码见文件末尾 rc=）
+--------------------------------------------------------------------------------
+$ tools/verify.sh docs
+[ok]   T 定义集合: 主文件 docs/work/progress-checklist.md 定义 66 条；t_archives=[docs/work/progress-checklist-archive.md:52]（归档文件共 52 条 T 定义行，受同一套门校验）
+[ok]   ID 完整性: 626 个定义，3608 处引用，0 未解析
+[ok]   占位符: 无
+[ok]   预算: 131 个文件受检，最高占用 100%（docs/design/15-requirements-coverage.md 28665/28672 B）
+[ok]   FR↔AC 覆盖: 166 条 FR 均关联 AC，136 条 AC 无孤儿（FR 定义文件 3 个：主文件 + 2 个归档；AC 定义文件 3 个：主文件 + 2 个归档）
+RESULT: PASS
+
+$ tools/verify.sh coverage
+    }
+  ],
+  "passed": 8,
+  "total": 8,
+  "failures": 0
+}
+
+$ tools/verify.sh ac-registry
+[ok]   定义文件 3 个（主文件 1 + archives=[docs/work/acceptance-criteria-archive-b.md:20, docs/work/acceptance-criteria-archive.md:62]，归档共 82 条 AC 行）
+[ok]   定义集合 135 条 AC（其中 P0 29 条），注册表 85 条
+[info] 尚未到期（P1/P2 等）未注册 50 条：AC-ADMIN-001(P2)、AC-ADMIN-002(P2)、AC-ADMIN-003(P2)、AC-ADMIN-007(P2)、AC-ADMIN-008(P2)、AC-ADMIN-009(P2)、AC-ADMIN-010(P2)、AC-AUTH-001(P2)…
+[ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查）
+
+--------------------------------------------------------------------------------
+§6 门：tools/verify.sh plugin-lifecycle（本批实测 43/44，**1 项红**，原因与归属见下）
+--------------------------------------------------------------------------------
+$ tools/verify.sh plugin-lifecycle
+[FAIL] C1 `GET /api/ui/blocks` 真返回两个样板插件的注册元数据（只回执元数据，不含正文）
+RESULT: FAIL（plugin-lifecycle 门 43/44）
+rc=1
+
+归因（实测，非推测）：
+  · 本批最初把 6 份核心插件需求文档放进 `src/system/{webui,storage,market,evolution,mail,kernel}/requirements/`，
+    结果 plugin-lifecycle 是 **41/44**：C1 红 + A13/A14 红。A13/A14 断言「`domain/advice` 的依赖 `system/webui`
+    **未就绪 ⇒ 非激活**」（`deps_missing=["system/webui"]`、`deps_ready=false`）；实测（本目录 §7 的命令）把
+    `src/system/webui/` 移走后 A13/A14 立刻回绿 ⇒ **裸插件目录**会被 `plugin-registry` 的 `depsClosure` 当成
+    "已知插件"（与 27 §3.3"没有 `plugin.json` 的目录不是插件"存在口径差）。
+  · 因此本批改为把 6 份文档落 `docs/work/plugin-requirements-<插件>.md`（映射表 §4.2 逐条登记位置偏差），
+    重跑 plugin-lifecycle = **43/44**：A13/A14 绿（本批对它们是中性的），只剩 **C1** 红。
+  · C1 = `GET /api/ui/blocks` 的 JSON 注册面（`count=None blocks=[]`），而同一门的 C2/C3（页面上的区块）**绿**：
+    页面装配与注册面 JSON 出现分歧。该文件的改动**不在本批**（本批未改任何产品代码）：同工作树有**并发批次**
+    在飞（`git status` 显示 `host/modules/webui.mjs`、`host/lib/ui-route.mjs`、`tools/check-plugin-lifecycle.py`、
+    `tools/check-run-once.py`、`run`、`tools/plugin.sh`、`src/userspace/**` 正在被改，时间戳与本批重叠）。
+    本批不越权改他人文件，也不把门改松 ⇒ 如实记为「1 项红、归因为并发批次的在飞状态」。
+
+--------------------------------------------------------------------------------
+§7 归档前后字节与「裸目录会让 A13/A14 变红」的决定性实验
+--------------------------------------------------------------------------------
+
+$ base=202515321c50a83a2e37084af07819c66de06978        # 本批之前的 HEAD
+$ git show $base:docs/design/14-plugin-inventory.md | wc -c
+28564
+$ wc -c docs/design/14-plugin-inventory.md
+27390 docs/design/14-plugin-inventory.md          # 加 9 行（3 样板 + 6 骨架）之后；预算 28 KB（`docs/design/*.md`）
+$ wc -c docs/design/14-plugin-inventory-archive.md
+5311 docs/design/14-plugin-inventory-archive.md    # §2–§5 四节 4348 B 整节逐字 + 归档头
+$ python3 -c "<head + §1 + §3 + §4 的字节数>"
+24865                                            # 搬走四节、**尚未加行**时的主文件字节（28564 → 24865）
+
+$ ls -d src/system/*/ && tools/plugin.sh list --json | tail -1 | python3 -c "..."
+5 ['system/runtime', 'domain/advice', 'userspace/con-a/quote-trend', 'userspace/demo-ns/badge', 'userspace/demo-ns/hello']
+# ⇒ 本批提交树上**没有**裸插件目录（6 份核心文档落在 docs/work/plugin-requirements-*.md）
+
+# 决定性实验（说明 A13/A14 对"裸插件目录"敏感，与文档内容无关）：
+#   $ mkdir -p src/system/webui/requirements && printf '# probe\n' > src/system/webui/requirements/README.md
+#   $ tools/plugin.sh deps domain/advice | tail -1     → {"ok":true,...,"missing_targets":[],...}       ← A13 红
+#   $ tools/plugin.sh status domain/advice | tail -1   → deps_ready=True（deps_missing=[]）             ← A14 红
+#   $ mv src/system/webui /tmp/webui-probe-off
+#   $ tools/plugin.sh deps domain/advice | tail -1     → {"ok":true,...,"missing_targets":["system/webui"]}  ← A13 绿
+#   $ tools/plugin.sh status domain/advice | tail -1   → deps_ready=False（deps_missing=['system/webui']）   ← A14 绿
+#   （门侧同一现象：有裸目录时 plugin-lifecycle 41/44，移除后 43/44 —— 见 §6。）
+
+--------------------------------------------------------------------------------
+§8 本批**没有**验证的东西（诚实清单）
+--------------------------------------------------------------------------------
+
+1. **没有验证** `plugin-lifecycle` 的 C1 红在"并发批次提交后"是否转绿 —— 那是另一个批次的文件（本批未改），
+   本批只证明它对 A13/A14 是中性的（43/44 vs 41/44）。
+2. **没有跑** `tools/verify.sh ac <AC-ID>` 的全量 AC 回归（本批不改产品代码、不改 AC；只跑了 docs/coverage/
+   ac-registry/plugins/plugin-requirements/plugin-lifecycle 六道）。
+3. **没有跑** `user-space` / `storage` / `plugin-market` / `webui` / `modules` 等宿主围栏门（本批未改 `src/**`、`host/**` 的产品文件）；
+   映射表 §1 里这些行的证据是**引用既有门的既有证据**（EV 号与门名），本批**没有重跑**它们。
+4. **没有**为 52 个缺口插件写需求文档（映射表 §4.1 逐条列出，属下一批）。
+5. **没有**改 `plugin-registry` / `plugin-lifecycle` 的门判据（"裸目录算不算已知插件"的口径差 → 记为映射表 §4.2 的已知交互，留待迁移批次）。
+6. **没有**验证 `docs/work/plugin-requirements-*.md` 的 6 份文档在 `git mv` 到 `src/<层>/<插件>/requirements/README.md`
+   之后的门行为（那要等插件目录建出来）。

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """插件清单门（`tools/verify.sh plugins`）："每个功能都由插件提供"的机检形态。
 
-三条断言（双向、可负控）：
-  P1 目录 ↔ 清单：`host/modules/*.mjs` 每个文件在 `docs/design/14-plugin-inventory.md` 里有一行（反之亦然）；
+四条断言（双向、可负控）：
+  P0 **清单文档集合被真读到**：`docs/design/14-plugin-inventory.md`（主文件）+ 同目录
+     `14-plugin-inventory-archive*.md`（归档）—— 归档不是豁免区，与 FR/AC/T 同一套归档机制
+     （`tools/check-docs.py` 的 DEF_SETS 口径）；**归档 0 条登记行 = 空读 = 失败**（不许"两边都空"静默通过）。
+  P1 目录 ↔ 清单：`host/modules/*.mjs` 每个文件在清单文档集合里有一行（反之亦然）；
   P2 模块 ↔ 装配：每个模块至少被 `host/profiles.mjs` 的某个 `modules` 引用，或在清单里显式标「未接线」；
-  P3 Python 侧归属：`src/quotagent/services/*.py` 每个文件在清单里出现（功能有归属）。
+  P3 Python 侧归属：`src/quotagent/services/*.py` 每个文件在清单文档集合里出现（功能有归属）。
 
 用法：`python3 tools/check-plugin-inventory.py`
 退出码：0 全通过 / 1 有断言失败 / 2 环境错误。
@@ -18,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_DIR = ROOT / 'host' / 'modules'
 INVENTORY = ROOT / 'docs' / 'design' / '14-plugin-inventory.md'
+INVENTORY_ARCHIVE_GLOB = '14-plugin-inventory-archive*.md'
 PROFILES = ROOT / 'host' / 'profiles.mjs'
 SERVICES = ROOT / 'src' / 'quotagent' / 'services'
 
@@ -28,13 +32,49 @@ def check(name: str, ok: bool, detail: str = '') -> None:
     results.append((name, bool(ok), detail))
 
 
+def inventory_files() -> tuple[list[Path], list[Path]]:
+    """清单文档集合 = (主文件 + 同目录归档, 其中的归档文件)。"""
+    archives = sorted(p for p in INVENTORY.parent.glob(INVENTORY_ARCHIVE_GLOB) if p.is_file())
+    return [INVENTORY, *archives], archives
+
+
+def inventory_text() -> tuple[str, dict[str, int]]:
+    """把清单文档集合**全文读进来**（读不到 = 空串，由 P0 判红），并逐文件数**登记名**。
+
+    登记名 = 该文件里出现的 `host/modules/<x>.mjs` 模块名 + 它贡献的 `services/<x>.py` 服务名
+    （后者与 P3 的"功能有归属"同一口径：服务名以子串出现即算）。归档必须**真的贡献登记名**，
+    否则"两边都空"会让 P1/P3 静默通过。
+    """
+    services = sorted(p.stem for p in SERVICES.glob('*.py') if p.stem != '__init__')
+    modules = sorted(p.stem for p in MODULE_DIR.glob('*.mjs') if p.stem != 'index')
+    per: dict[str, int] = {}
+    chunks: list[str] = []
+    for path in inventory_files()[0]:
+        try:
+            text = path.read_text(encoding='utf-8')
+        except OSError:
+            per[str(path.relative_to(ROOT))] = 0
+            continue
+        chunks.append(text)
+        contributed = {name for name in modules if f'`host/modules/{name}.mjs`' in text}
+        contributed |= {name for name in services if name in text}
+        per[str(path.relative_to(ROOT))] = len(contributed)
+    return '\n'.join(chunks), per
+
+
 def main() -> int:
     for path in (MODULE_DIR, INVENTORY, PROFILES, SERVICES):
         if not path.exists():
             print(f'插件清单门：缺少 {path}', file=sys.stderr)
             return 2
 
-    text = INVENTORY.read_text(encoding='utf-8')
+    files, archives = inventory_files()
+    text, per_file = inventory_text()
+    empty = [rel for rel, count in per_file.items() if count == 0]
+    check('P0 清单文档集合（主文件 + 归档）都被真读到（归档 0 条登记行 = 空读 = 失败）',
+          bool(text) and not empty,
+          f'定义文件 {[str(p.relative_to(ROOT)) for p in files]}；逐文件登记行={per_file}；空读={empty}')
+
     modules = sorted(p.stem for p in MODULE_DIR.glob('*.mjs') if p.stem != 'index')
     # `index.mjs` 是模块发现入口（不是插件），不进"清单→目录"比对
     documented = sorted({m.group(1) for m in re.finditer(r'`host/modules/([a-z0-9-]+)\.mjs`', text)}

@@ -312,6 +312,18 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     shift
     exec python3 tools/check-fr-coverage.py "$@"
     ;;
+  plugin-requirements)
+    # 「需求归属到插件」的机检（T-316 批次；规则真源 docs/design/28 §1，归属真源 = 15-requirements-coverage.md）：
+    #   把"每条 FR 由哪个插件提供"变成断言 ——
+    #     ① `tools/plugin.sh list` 枚举到的每个插件在映射表 `docs/work/plugin-requirements-map.md` 里有行；
+    #     ② 映射表引用的每个 FR 号都在 FR 定义集合内（主文件 + `functional-requirements-archive*.md`）；
+    #     ③ 每条 FR 恰好被一个插件认领（唯一指针：未认领与重复认领都判红）；
+    #     ④ `src/<层>/<插件>/requirements/` 存在的插件都在映射表里有行（目录不无主）、每个 `req=` 指向的文档真实存在、
+    #        文档不在标准布局位置的逐条登记、没有需求文档的插件逐条列在 §4.1 缺口清单（状态取值合法、`done` 必须有真证据）。
+    #   反向验证：**4 处单点变异全红**（抽一行插件 / FR 改成不存在的号 / FR 重复认领 / 抽掉 req= 标记）
+    #   且产品树字节不变（变异只写在 tmp/ 的临时副本里）。
+    exec "$QUOTAGENT_PY" "$ROOT/tools/check-plugin-requirements.py" "$@"
+    ;;
   budget-route)
     shift
     exec python3 tools/check-budget-route.py "$@"
