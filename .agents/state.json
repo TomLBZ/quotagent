@@ -8,7 +8,7 @@
   "last_verified_command": "tools/verify.sh docs | coverage | ac-registry | plugins | webui | modules | wiring | invariants | events | storage | plugin-assets | plugin-requirements | plugin-lifecycle | evolution | evolve-module | p0-no-node | run-once | g1 | approval-digest | budget-guard | supplier-scorecard | plugin-market | pipeline-view | retention-view（23 道，全部 `env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN`）；提交后另跑 run-clone / clean-copy 与干净副本 g1",
   "last_verified_result": "PASS（本批实测，rc 全 0）：docs、coverage 9/9、ac-registry rc=0、plugins 5/5、webui 51/51、modules 521/521、wiring 5/5、invariants 22/22、events rc=0、storage 19/19、plugin-assets **16/16**（`tools/**` 非薄入口 3→**1**，PA7 双向一致）、plugin-requirements 18/18、plugin-lifecycle 66/66、evolution [PASS]、evolve-module 61/61、p0-no-node（63 条 AC 无 Node 全绿）、run-once 34/34、**g1 绿**（走查 14/14；本批修掉的正是它的红）、approval-digest 10/10、budget-guard 10/10、supplier-scorecard 10/10、plugin-market 13/13、pipeline-view 13/13、retention-view 12/12。已知红：**无**（上一批遗留的 `g1`/`tools/audit-verify.py` 执行位缺陷本批已修）。提交后：见 `docs/work/evidence/EV-180-post-commit.txt`。",
   "last_verified_evidence": "docs/work/evidence/EV-180-closeout-and-final-leftovers.md（+ 原始行 docs/work/evidence/EV-180-post-commit.txt）",
-  "last_verified_commit": "968de24230944a8ff4247fbabbee81753d9fde41",
+  "last_verified_commit": "af496d77febb26641ccdc1ca167294acae1e6390",
   "blockers": [],
   "human_required": [
     "T-117 现场验证 V-001..V-012：备料已完成；**P1 按用户指令以\"V 全部通过\"为前提推进**（planning_assumptions，非结论），V 的正式 conclusion 与 G0/G1 签署仍需人工",
@@ -76,7 +76,7 @@
     "gate_fences_follow_reexport_chain": "**EV-179**：6 道围栅门（approval-digest/budget-guard/supplier-scorecard/plugin-market/pipeline-view/retention-view）的「被检查产物」改为 `moduleChain()` 跟到真实体（`host/modules/<x>.mjs` → `host/lib/entity-<x>.mjs` → `src/<层>/<插件>/code/<x>.mjs`）；只有纯重导才算一跳，链文本一并纳入静态扫描，链目标只在该跳文件里豁免 ⇒ 口径收紧而非放宽。",
     "plugin_entry_pending": "7 个多实体插件仍需**人工**定 `entry`：`system/{webui,admin,agent-runtime,canary,eval,kernel,mail}`（理由逐条在各自 `requirements/README.md`）。本批补承载 4 个后为 **57/63**。"
   },
-  "last_verified_commit_semantics": "本批**功能提交**：① `tools/audit-verify.py` 补 shebang + 索引 `100755`（`git add --chmod=+x`）② `check-fr-coverage.py` 扩成矩阵文档集合 + A0 + 删归档行负控；`check-docs.py` 新增交接文档集合③ 四份文档搬行进归档（15/14/进度清单/handover）+ `12-documentation-standard.md` §2 口径④ `netblock.c`/`v-kit.sh` 搬进归属插件（旧处分 `#include`/`exec sh` 薄转发；读方与 `v` 门同步）⑤ `BASELINE_NONTHIN` 3 → 1、file-map/加减史登记 ⑥ T-330 行 + EV-180 + 清单/交接/state 同步。提交前 `git status --porcelain` = 25 行（全部已暂存）。",
+  "last_verified_commit_semantics": "本批**功能提交** `af496d7`：① `tools/audit-verify.py` 补 shebang + 索引 `100755`（`git add --chmod=+x`）② `check-fr-coverage.py` 扩成矩阵文档集合（小节并集 + A0 + 删归档行负控）；`check-docs.py` 新增交接文档集合③ 四份文档搬行进归档（15/14/进度清单/handover）+ `12-documentation-standard.md` §2 口径④ `netblock.c`/`v-kit.sh` 搬进归属插件（旧处分 `#include`/`exec sh` 薄转发；读方与 `v` 门同步）⑤ `BASELINE_NONTHIN` 3 → 1、file-map/加减史登记、G1-EXECBIT 缺陷行 ⑥ T-330 行 + EV-180 + 清单/交接/state 同步。**提交后实测**（原始行见 `docs/work/evidence/EV-180-post-commit.txt`）：`git status --porcelain` 提交前 25 行（全部已暂存）→ 提交后 **0 行**；`run-clone` **20/20**、`clean-copy` **PASS**（15 道门在干净副本里全绿）；`git archive HEAD` 干净副本里 `tools/verify.sh g1`：修前红（`Exec format error`）→ 修后门全绿 + 走查 14/14，但 `全量 AC` 82/85（红 3 条 `AC-AGENTRT-002/006/007`）—— **同一组 3 条在上一提交（`968de24`）的干净副本里也红**（那边 81/85，多的那条正是本批修掉的 `AC-AUDIT-004`），且本批没碰它们任何文件 ⇒ **既有现象、与本批无关**，如实记录未修（不在本批范围）。",
   "done_p2": [
     "T-222",
     "T-223",

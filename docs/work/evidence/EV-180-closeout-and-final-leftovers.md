@@ -1,7 +1,7 @@
 # EV-180 最后两个真遗留 + 收尾（`T-330`）
 
 四件：① 修 `g1` 全链的**索引执行位**真缺陷 ② 四份文档的预算压力按归档机制解除 ③ `tools/**` 非薄入口 3 → 1
-④ 全门全绿 + 提交后 `run-clone`/`clean-copy` + push 回读。门链原始输出：`tmp/gates-180/`。
+④ 全门全绿 + 提交后 `run-clone`/`clean-copy` + push 回读。提交后原始输出：`EV-180-post-commit.txt`。
 
 ## 一、`g1` 全链：索引执行位真缺陷（修前红 → 修后绿）
 
@@ -22,30 +22,25 @@ $ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/verify.sh audit        # 修前
 | 文件 | 索引执行位（修前 → 修后） | 判定 |
 |---|---|---|
 | `tools/audit-verify.py` | **`100644` → `100755`** | 唯一缺陷：被 `checks_audit.py` 直接 exec |
-| `tools/verify.sh`、`run`、`tools/run.sh`、`tools/cordis.sh`、`tools/plugin.sh`、`tools/runtime.sh`、`tools/bootstrap.sh`、`tools/v-kit.sh`、`src/system/ui-feedback/tools/*.sh` | `100755` → 未动 | 都是直接 exec 的入口，本来就有执行位 |
-| 其余 `tools/*.py`（薄转发） | `100644` → 未动 | 一律经解释器调用（`"$QUOTAGENT_PY" …` / `python3 …`）⇒ 不需要执行位 |
+| `tools/verify.sh`、`run`、`tools/run.sh`、`tools/{cordis,plugin,runtime,bootstrap,v-kit}.sh`、`src/system/ui-feedback/tools/*.sh` | `100755` → 未动 | 都是直接 exec 的入口，本来就有执行位 |
+| 其余 `tools/*.py`（薄转发） | `100644` → 未动 | 经解释器调用 ⇒ 不需要执行位 |
 
 ```
 $ git ls-tree HEAD tools/audit-verify.py      # 修前（968de24）
 100644 blob 25775d7f1d2c6e5a23740b70323aed47b98eca66	tools/audit-verify.py
-$ git ls-files -s tools/audit-verify.py       # 暂存后（进本批提交）
-100755 5eba8619d314b8cafb5b6f480e7c6f8b9c08b470 0	tools/audit-verify.py
+$ git ls-tree af496d7 tools/audit-verify.py   # 修后（本批提交）
+100755 blob 5eba8619d314b8cafb5b6f480e7c6f8b9c08b470	tools/audit-verify.py
 ```
 
 **为什么"只 chmod 工作树"没用**：本机工作树在 SMB 上、所有文件都显示 `-rwxrwxrwx`，`ls -l` 看不出差别；
-仓库记的是**索引/tree 的 mode 位** ⇒ 判据是 `git ls-files -s` / `git ls-tree HEAD`，落库要靠 `git add --chmod=+x`。
+仓库记的是**索引/tree 的 mode 位** ⇒ 判据是 `git ls-files -s` / `git ls-tree HEAD`，落库靠 `git add --chmod=+x`。
 
-### 1.3 干净副本实测（`git archive HEAD` 解到仓库外，`tmp/` 不参与）
+### 1.3 干净副本实测（`git archive` 解到仓库外）
 
-修前（`tmp/g1base`，HEAD=968de24）`tools/verify.sh g1` **红**，日志尾部逐字：
-
-```
-  "detail": "OSError: [Errno 8] Exec format error: '/workspace/projects/quotagent/tmp/g1base/tools/audit-verify.py'"
-  FAIL 执行异常 — OSError: [Errno 8] Exec format error: …/tmp/g1base/tools/audit-verify.py
-rc=1
-```
-
-修后的同一条命令（提交后重做）见「四」。
+修前（`968de24` 副本）：`g1` **红**在更早的位置 —— `FAIL 执行异常 — OSError: [Errno 8] Exec format error`，`rc=1`。
+修后（本批提交副本）：同一条命令走完 —— 门全绿、走查 14/14；`全量 AC` 的 3 条红 `AC-AGENTRT-002/006/007`
+**上一提交的副本同样红**（那边还多红一条 `AC-AUDIT-004` = 本批修掉的缺陷），故与本批无关，逐条归因见
+`EV-180-post-commit.txt` §二（不掩盖、不顺手改）。
 
 ## 二、四份文档的预算压力：归档 + 反向验证
 
@@ -58,10 +53,10 @@ rc=1
 | `docs/design/15-requirements-coverage.md` | 28668/28672 | §1 末段 28 行 4375 B | **24621** | 新建 `15-requirements-coverage-archive.md` | 本批**新增**：主文件 + `15-…-archive*.md`，小节取**并集**；A0「归档存在且贡献定义行」 |
 | `docs/design/14-plugin-inventory.md` | 28631/28672 | 18 行 3048 B（承载现状 + 三层插件逐行表） | **25976** | `14-plugin-inventory-archive.md` §6 | 既有（清单文档集合） |
 | `docs/work/progress-checklist.md` | 32745/32768 | 20 行 6055 B（最老 `done` 行） | 27127（+`T-330` = 28858） | `progress-checklist-archive.md` 文末追加 | 既有（T 定义集合） |
-| `docs/work/handover.md` | 1013/1024 | 逐批细节段 | **967** | 新建 `handover-archive.md` | 本批**新增**：**指针型**集合 —— 每个 `§N` 指针必须有**非空小节** |
+| `docs/work/handover.md` | 1013/1024 | 逐批细节段 | **967** | 新建 `handover-archive.md` | 本批**新增**：**指针型** —— 每个 `§N` 指针必须有**非空小节** |
 
-搬走那一段的 sha256（可与 `git show` 对拍）：15 `6052687150ef3a9721…`（28 行 4375 B）、14 `8a17d8970a07a0ec96…`（18 行
-3048 B）、清单 `e7019c9d6fd12aed4e…`（20 行 6055 B）。口径同步写进 `12-documentation-standard.md` §2 与三个门脚本头。
+搬走那一段的 sha256（可与 `git show` 对拍）：15 `6052687150ef3a9721…`、14 `8a17d8970a07a0ec96…`、
+清单 `e7019c9d6fd12aed4e…`。口径同步写进 `12-documentation-standard.md` §2 与三个门脚本头。
 
 ### 2.1 反向验证：四个归档各抽一行/一节 ⇒ 门必红（在 `tmp/` 的整树副本里做，产品树不受影响）
 
@@ -91,5 +86,12 @@ rc=1
 
 ## 四、门与提交后
 
-（提交后补：23 道门的 passed/total、`git status --porcelain` 提交前后原文与行数、干净副本 `g1` 绿行、
-`run-clone` 20/20 与 `clean-copy`、commit SHA、push 后 `ls-remote` 回读。）
+- 提交：功能提交 **`af496d7`**；提交后实测见 `EV-180-post-commit.txt`。
+- `git status --porcelain`：提交前 **25 行（全部已暂存、0 未暂存/未跟踪）** → 提交后 **0 行**。
+- **23 道门（提交前，最终树）全绿**：`docs` PASS、`coverage` 9/9、`ac-registry` rc=0、`plugins` 5/5、`webui` 51/51、
+  `modules` 521/521、`wiring` 5/5、`invariants` 22/22、`events` rc=0、`storage` 19/19、`plugin-assets` 16/16、
+  `plugin-requirements` 18/18、`plugin-lifecycle` 66/66、`evolution` [PASS]、`evolve-module` 61/61、
+  `p0-no-node`（63 条 AC 无 Node 全绿）、`run-once` 34/34、**`g1` 绿**（走查 14/14）、`approval-digest` 10/10、
+  `budget-guard` 10/10、`supplier-scorecard` 10/10、`plugin-market` 13/13、`pipeline-view` 13/13、`retention-view` 12/12。
+- **提交后**：`run-clone` **20/20**、`clean-copy` **PASS**（15 道门在干净副本里全绿）、`git status` **0 行**、
+  push 后 `git ls-remote` 回读与本地一致（逐字见 `EV-180-post-commit.txt`）。

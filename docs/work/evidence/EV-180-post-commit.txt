@@ -1,0 +1,100 @@
+# EV-180 提交后实测（`T-330`）
+
+被测提交：`af496d77febb26641ccdc1ca167294acae1e6390`（功能提交 `af496d7`；本文件是它的**提交后**实测，原始输出在 `tmp/gates-180*/`）。
+主文件：`EV-180-closeout-and-final-leftovers.md`。
+
+## 一、提交后 `git status --porcelain`
+
+```
+（空）
+```
+行数：0（全空 = 0 行；提交前 25 行、全部已暂存）
+
+## 二、干净副本里真跑 `tools/verify.sh g1`（「新克隆能跑」的那一半）
+
+`git archive HEAD` → 仓库外 `tmp-qa/af496d7/`，在其中跑 `tools/verify.sh g1`：
+
+```
+[ok] AC-USREQ-006 — cron 没待处理反馈时不得发垃圾消息：探测器确定性（两次/跨 TZ 一致）+ 空待办恰一行 `pending=0` +（10/10 断言）
+[ok] AC-UXWEB-001 — GUI 控制台化第一批：第一屏三块锚点 + 子视图（GET 筛选/排序/翻页）+ 子导航 + 仍 0 JS（6/6 断言）
+[ok] AC-VIZ-001 — 比价 heuristics：权重可调且回显、贡献可分解、私域零泄漏、零写面、页面仍无内联脚本（7/7 断言）
+------------------------------------------------------------------------
+全量 AC：82/85 通过；失败 ['AC-AGENTRT-002', 'AC-AGENTRT-006', 'AC-AGENTRT-007']
+rc=1
+```
+
+**归因（不掩盖）**：`全量 AC` 有 3 条红 —— `AC-AGENTRT-002/006/007`。它们是**本批之前就有**的：
+
+| 跑法 | 结果 |
+|---|---|
+| 主线树（本批提交）`tools/verify.sh g1` | **绿**（走查 14/14） |
+| 干净副本 `af496d7`（本批提交）`tools/verify.sh g1` | `全量 AC：82/85 通过；失败 ['AC-AGENTRT-002', 'AC-AGENTRT-006', 'AC-AGENTRT-007']` |
+| 干净副本 `968de24`（**上一提交**，本批没动过它）跑同一条 AC 套件 | `全量 AC：81/85 通过；失败 ['AC-AGENTRT-002', 'AC-AGENTRT-006', 'AC-AGENTRT-007', 'AC-AUDIT-004']` |
+| 干净副本 `af496d7` 里**单独**跑这三条 | 三条全 `status: pass`（逐条见本批记录） |
+
+⇒ 3 条红是**干净副本里的既有现象**（上一提交的副本同样红，且多红一条 `AC-AUDIT-004` —— 正是本批修掉的执行位缺陷）；
+本批的净效果是**消掉 `AC-AUDIT-004`**（81/85 → 82/85）。本批没有碰它们的任何文件
+（`git show --name-only af496d7` 里与 agentrt 相关的只有 `src/system/runtime/tests/*`）。**不修、不掩盖**：
+它们不在本批范围内，如实列在这里；要动它们需要另开一批（先定位副本里的串行/环境敏感点）。
+
+修前的同一命令（`968de24` 副本）红在更早的位置：
+
+```
+}
+[ERROR] AC-AUDIT-004 — 审计包带签名与包含证明；可用独立入口（不接触原账本）验证，篡改/错误密钥/缺签名均失败
+  FAIL 执行异常 — OSError: [Errno 8] Exec format error: '/workspace/projects/quotagent/tmp/g1base/tools/audit-verify.py'
+  首个失败: 执行异常: OSError: [Errno 8] Exec format error: '/workspace/projects/quotagent/tmp/g1base/tools/audit-verify.py'
+rc=1
+```
+
+## 三、`run-clone`（提交后跑，校验 HEAD 本身）
+
+```
+        红=True 单点=True | 缺依赖报到 ok ⇒ 「如实报」被破；这条红 = K8 的 doctor 口径真的能抓住假装成功 | up rc=0 {"ok": true, "action": "up", "state": "started", "service": "quotagent; doctor rc=0 {"ok": true, "action": "doctor", "port": 49069, "blocking": 0, "items"
+[ok]   K10-0 基线（未变异）在同一序列上**不红**（否则四处变异变红都是空转）
+        #1 基线红=False；#2 基线红=False；#3 基线红=False；#4 基线红=False
+[ok]   K10-5 全过程**产品树字节不变**（变异只写在仓库外的副本里；`./run` 与原件逐字节一致）
+        before=2b6f860c04ec after=2b6f860c04ec
+RESULT: PASS（run-clone 门 20/20）
+```
+
+## 四、`clean-copy`
+
+```
+[ok] audit-hook 门: exit=0 | RESULT: PASS（audit-hook 门 7/7）
+[ok] 不变量门: exit=0 | 宿主强制不变量：22/22 通过
+[ok] 演化门: exit=0 | }
+[ok] AC 注册表: exit=0 | [ok]   P0 阶段的 AC 全部已注册（无「有编号无断言」；P0 行落在主文件或归档都照查）
+[ok] 无 Node 下的 P0: exit=0 | P0 阶段 63 条 AC 在无 Node 环境下全绿（P0 不因引入宿主而失去可复跑性）；无瞬时命中（日志: /workspace/projects/quotagent/tmp/clean-
+RESULT: PASS（15 道门在干净副本里全绿；已提交内容自足可复现）
+```
+
+## 五、23 道门（提交前，最终树上一遍）
+
+```
+docs                   rc=0   RESULT: PASS
+coverage               rc=0   
+ac-registry            rc=0   
+plugins                rc=0   RESULT: PASS（插件清单门 5/5）
+webui                  rc=0   RESULT: PASS（webui 门 51/51）
+modules                rc=0   
+wiring                 rc=0   
+invariants             rc=0   
+events                 rc=0   
+storage                rc=0   
+plugin-assets          rc=0   RESULT: PASS（plugin-assets 门 16/16）
+plugin-requirements    rc=0   RESULT: PASS（plugin-requirements 门 18/18）
+plugin-lifecycle       rc=0   RESULT: PASS（plugin-lifecycle 门 66/66）
+evolution              rc=0   
+evolve-module          rc=0   
+p0-no-node             rc=0   
+run-once               rc=0   RESULT: PASS（run-once 门 34/34）
+g1                     rc=0   [ok] 阶段门 G1：MVP 判据全部可机检项通过（逐条判定见上方走查报告）
+approval-digest        rc=0   
+budget-guard           rc=0   
+supplier-scorecard     rc=0   
+plugin-market          rc=0   
+pipeline-view          rc=0   
+retention-view         rc=0   
+ALL DONE
+```
