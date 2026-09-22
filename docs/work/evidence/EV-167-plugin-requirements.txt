@@ -229,3 +229,15 @@ b691b977a80581ab6f078c5f6390f84509f6f90e
 本批提交：**b691b977a80581ab6f078c5f6390f84509f6f90e**（17 个文件：13 新增/4 修改的文档与门；**未**包含同工作树的并发批次文件
 `host/cli.mjs`、`host/modules/webui.mjs`、`run`、`tools/plugin.sh`、`tools/check-plugin-lifecycle.py`、`tools/check-run-once.py`、
 `src/userspace/**`、`host/lib/ui-route.mjs`、`src/system/runtime/{code/live-control.mjs,tools/plugin-live.mjs}`）。
+
+--------------------------------------------------------------------------------
+§10 并发批次收尾后的复跑（只追加；本批提交 b691b97 之后）
+--------------------------------------------------------------------------------
+$ tools/verify.sh coverage           → passed 8 / total 8 / failures 0
+$ tools/verify.sh plugin-lifecycle   → RESULT: PASS（plugin-lifecycle 门 **59/59**）
+$ git status --short | grep <本批文件> → (no uncommitted changes)   # 本批文件已全部入库
+
+说明：本批提交时（§6）`plugin-lifecycle` 是 43/44，唯一 1 项红是**并发批次在飞**的 webui 注入式注册面
+（C1 `GET /api/ui/blocks` 空、C2/C3 绿）。并发批次收尾后该门扩到 **59** 条断言并**全绿** ⇒ §6 的那 1 项红
+已被对方修掉，**不是**本批遗留。到此六道门全绿：`docs` / `coverage` 8/8 / `ac-registry` / `plugins` 5/5 /
+`plugin-requirements` 17/17 / `plugin-lifecycle` 59/59。
