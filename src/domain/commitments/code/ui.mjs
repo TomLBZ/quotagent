@@ -857,5 +857,71 @@ export async function register(surface, host) {
       return items
     } }))
 
+  // ------------------------------------------------------------------ 导出 / 打印（`report` 声明 + 动作）
+  /**
+   * **PO 导出**（对象页 `/app/contractor/po/<id>/` 上的「导出 / 打印」）：行与价**全部来自账本事实**
+   * （`po/issued` 的 `lines` 与追溯链），一列都不由界面拼；每行带 `basis`（单价基准）与 `trace`，
+   * 表头带四段链与账本行号 ⇒ 打印出来能逐行对回账本。
+   */
+  out.push(surface.action({ plugin_id: me, id: 'po.export', title: '导出 / 打印采购单（人读格式）',
+    views: ['contractor'], group: '授标', order: 32, icon: 'print', object_kind: 'po',
+    hint: '内容 = 本侧账本 `po/issued` 的行 + 追溯链（逐行带单价基准）；外壳只做序列化',
+    input: { fields: [
+      { name: 'po_id', label: 'PO id', type: 'text', required: true, from_route: true,
+        help: '在 PO 对象页上会自动填当前这一条' },
+      { name: 'format', label: '格式（csv = 表格；html = 可直接打印）', type: 'select', required: true,
+        options: ['csv', 'html'], default: 'csv' },
+    ] },
+    server: (ctx, input) => {
+      const view = 'contractor'
+      const rows = host.rows(view)
+      const poId = asText(input.po_id)
+      const po = posOf(rows).find((item) => asText(item.po_id) === poId) ?? null
+      if (!po) {
+        return { ok: false, code: 'po-not-in-my-view', reason: `本侧账本里没有这条 PO：${poId || '(空)'}`,
+          next_action: '回「采购单（PO）」面板，点行内「打开 →」用真实存在的深链再导出' }
+      }
+      const award = awardsOf(rows).find((item) => asText(item.award_id) === asText(po.award_id)) ?? {}
+      const intent = intentsOf(rows).find((item) => asText(item.intent_id) === asText(po.intent_id)) ?? {}
+      const poRow = rows.filter((row) => String(row?.type ?? '') === 'po/issued')
+        .find((row) => asText(bodyOf(row).po_id) === poId) ?? {}
+      const lines = (po.lines ?? []).map((line, index) => ({ no: index + 1, ref_line: asText(line.ref_line),
+        qty: line.qty, unit_price: line.unit_price,
+        amount: Number(line.qty ?? 0) * Number(line.unit_price ?? 0), basis: asText(line.basis),
+        trace: asText(line.trace), quote_id: asText(po.quote_id) }))
+      return host.report({ format: asText(input.format) || 'csv', filename: `po-${poId}`,
+        title: `采购单（PO）${poId}`,
+        subtitle: `承包商侧导出 · ${lines.length} 行 · 追溯模式 ${asText(po.trace_mode) || '—'}`,
+        facts: [
+          { key: 'PO', value: poId },
+          { key: '承诺（award）', value: asText(po.award_id) },
+          { key: '意向（intent）', value: asText(po.intent_id) },
+          { key: '报价（quote）', value: asText(po.quote_id) },
+          { key: '人工门（approval）', value: asText(po.approval_id) },
+          { key: '批准人（署名）', value: asText(po.approved_by) },
+          { key: '签发时刻', value: asText(po.issued_at) },
+          { key: '追溯链', value: asText(po.chain) },
+          { key: '金额合计', value: String(po.total_amount ?? '') },
+          { key: '中标条目（承诺里）', value: String((award.lines ?? intent.lines ?? []).length) },
+          { key: '账本行', value: poRow.seq === undefined ? '—'
+            : `seq ${poRow.seq} · ${asText(poRow.entry_hash)}` },
+        ],
+        columns: [{ key: 'no', label: '#' }, { key: 'ref_line', label: '行项目' }, { key: 'qty', label: '数量' },
+          { key: 'unit_price', label: '单价' }, { key: 'amount', label: '行金额' },
+          { key: 'basis', label: '单价基准（可追溯）' }, { key: 'trace', label: '追溯模式' },
+          { key: 'quote_id', label: '来源报价' }],
+        rows: lines,
+        notes: ['行与价都由中标承诺派生（不得在界面上改价）；`basis` 指向中标报价的那一条单价。',
+          `导出时刻：${host.now()}；本文件逐行可与账本 po/issued（seq ${poRow.seq ?? '—'}）核对，`
+            + '合计 = 各行 数量×单价 之和。'],
+        source: '承包商侧账本 po/issued（po.export，domain/commitments）',
+        ledger_refs: poRow.seq === undefined ? [] : [{ type: 'po/issued', seq: poRow.seq,
+          entry_hash: asText(poRow.entry_hash), chain: asText(po.chain) }] })
+    } }))
+
+  out.push(surface.report({ plugin_id: me, id: 'report.po', title: '采购单 PO（CSV / 可打印 HTML）',
+    views: ['contractor'], object_kind: 'po', formats: ['csv', 'html'], action: 'po.export', order: 32,
+    hint: '逐行带单价基准与来源报价；表头给四段追溯链与账本行号' }))
+
   return out
 }

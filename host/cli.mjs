@@ -292,6 +292,21 @@ const main = async () => {
     const { apply: liveApply } = await import('../src/system/runtime/code/live-control.mjs')
     await fiber.ctx.plugin({ name: 'runtime/live-control', inject: [], provides: ['livePluginControl'],
       apply: (inner, liveCfg) => liveApply(inner, liveCfg) }, { root: REPO_ROOT })
+    // **对象级附件**（本批 P6）：与 live-control 同一处装配点、同一套父子关系（必须挂在 webui 的 ctx 下，
+    // 才 inject 得到它提供的**路由注册面** `uiRoutes`）。它用注册面注册自己的 HTTP 路由（上传/列表/取件/
+    // 删除）—— `webui.mjs` 的静态路由表**一行未改**；GUI 贡献（附件面板/删除动作/状态/通知）在它的
+    // `code/ui.mjs` 里，由外壳的发现式装载面自动挂上。正文落 0600 存储，**账本零新增**。
+    const { apply: attApply, Config: attConfig } = await import('../src/system/attachments/code/index.mjs')
+    await fiber.ctx.plugin({ name: 'system/attachments', inject: [], provides: ['attachments'],
+      apply: (inner, cfg) => attApply(inner, cfg) }, attConfig.parse({
+        root: REPO_ROOT,
+        prefix: String(args.prefix ?? '/quotagent'),
+        ui_shared: String(args['ui-shared'] ?? process.env.QUOTAGENT_UI_SHARED ?? 'tmp/ui-shared'),
+        ledger_contractor: contractorLedger,
+        ledger_supplier: String(args['ledger-supplier'] ?? ''),
+        rfq_delivery: String(args['rfq-delivery'] ?? process.env.QUOTAGENT_UI_RFQ_DELIVERY ?? ''),
+      }))
+    const attachmentsStore = ctx.get('attachments')
     process.stdout.write(JSON.stringify({ ok: true, action: 'webui', profile: profileName, pid: process.pid,
            url: webuiHandle?.url, port: webuiHandle?.port, prefix: webuiHandle?.prefix,
            views: Object.keys(VIEW_RULES), routes: (webuiHandle ? Object.keys(VIEW_RULES) : [])
@@ -307,6 +322,9 @@ const main = async () => {
            subview_routes: Object.entries(SUBVIEWS).flatMap(([view, subs]) =>
              subs.map((sub) => `${String(args.prefix ?? '/quotagent')}/${view}/${sub}/`)),
            retention_route: `${String(args.prefix ?? '/quotagent')}/api/retention`,
+           attachments_routes: ['upload', 'list', 'file', 'delete', 'store']
+             .map((name) => `${String(args.prefix ?? '/quotagent')}/api/attachments/${name}`),
+           attachments_store: attachmentsStore ? attachmentsStore.dir : null,
            pipeline_route: `${String(args.prefix ?? '/quotagent')}/api/pipeline`,
            feedback_routes: ['contractor', 'supplier'].flatMap((v) => [`${String(args.prefix ?? '/quotagent')}/${v}/feedback`])
              .concat([`${String(args.prefix ?? '/quotagent')}/ops/ui-feedback/`, `${String(args.prefix ?? '/quotagent')}/api/ui-feedback`]),

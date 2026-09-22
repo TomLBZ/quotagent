@@ -55,6 +55,196 @@ const canonical = (record) => {
 const digestOf = (text) => `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`
 const flat = (value, limit = 240) => String(value ?? '').replace(/\s+/g, ' ').slice(0, limit)
 
+/**
+ * **写者回执的单一判据**（机制，0 业务语义）：一个 Python 唯一写者跑完，算数的只有两样东西 ——
+ * **退出码**（`rc`）与 **stdout 最后一行 JSON**。响应体的 `ok` / `code` / `ledger_added` / `next_action`
+ * 必须**从这一处派生**（插件用 `host.writerReceipt(run)` 拿它），不许再叠加"看起来没写就报失败"这类
+ * 自造判据 —— 那会造出**假失败**：写者真落了行、界面却说失败，用户于是**重复提交**（比真失败更坏）。
+ *
+ * 它同时把"这条回执里哪一条是**本动作**那一项"变成显式查询（`receipt.item({file, draft_id})`）：
+ * 修前的假失败正是拿 `applied[0]` 当自己的那一条（写者一次处理多条待办件时，第一条不是你的）。
+ */
+const RECEIPT_ITEM_KEYS = ['file', 'pending_file', 'request', 'name', 'draft_id', 'quote_draft_id',
+  'quote_id', 'intent_id', 'gate_id', 'id']
+
+/** 回执条目里指代"哪个待办件/请求文件"的名字（basename；没有就返回空串 —— 不猜）。 */
+export function receiptFileName(entry) {
+  if (entry === null || entry === undefined) return ''
+  if (typeof entry === 'string') return entry.split('/').pop()
+  if (typeof entry !== 'object') return ''
+  for (const key of ['file', 'pending_file', 'request', 'name']) {
+    const value = entry[key]
+    if (typeof value === 'string' && value.trim() !== '') return value.trim().split('/').pop()
+  }
+  return ''
+}
+
+/** 写者回执：**退出码 + stdout JSON** ⇒ `{ok, code, ledger_added, applied, duplicates, refused, item()}`。 */
+export function writerReceipt(run) {
+  const json = run && typeof run.json === 'object' && run.json !== null ? run.json : null
+  const rc = run && Number.isInteger(run.rc) ? run.rc : null
+  const said = json && typeof json.ok === 'boolean' ? json.ok : null
+  const applied = json && Array.isArray(json.applied) ? json.applied : []
+  const duplicates = json && Array.isArray(json.duplicates) ? json.duplicates : []
+  let refused = json && Array.isArray(json.refused) ? json.refused : []
+  if (!refused.length && json && json.refusal) refused = [{ ...json.refusal, file: null }]
+  const skipped = json && Array.isArray(json.skipped) ? json.skipped : []
+  const refusal = refused[0] ?? (json ? json.refusal ?? null : null)
+  const ledgerAdded = json && Number.isFinite(Number(json.ledger_added)) ? Number(json.ledger_added) : null
+  const ok = rc === 0 && said === true
+  return {
+    tool: String(run?.tool ?? ''), rc, said, ok,
+    spawn: run?.code === 'tool-missing' ? 'tool-missing' : '',
+    code: ok ? null : (refusal?.code ?? run?.code ?? 'writer-failed'),
+    reason: String(refusal?.reason ?? run?.reason ?? ''),
+    next_action: String(refusal?.next_action ?? json?.next_action ?? ''),
+    ledger_added: ledgerAdded, applied, duplicates, refused, skipped, json,
+    stdout_tail: run?.stdout ? flat(run.stdout, 400) : '',
+    stderr_tail: run?.stderr ? flat(run.stderr, 400) : '',
+    /**
+     * 在**这份回执**里找出「本动作那一条」：按待办件名 / 草稿 id / 报价 id 逐键比，返回
+     * `{where, entry}`（`where` ∈ applied/duplicates/refused/skipped，顺序 = 判定优先级）。
+     * 找不到 ⇒ `null`（**找不到就说找不到**，绝不退回去猜"大概是第一条"）。
+     */
+    item(keys = {}) {
+      const wanted = new Set()
+      for (const value of Object.values(keys)) {
+        const text = typeof value === 'string' ? value.trim() : ''
+        if (text !== '') { wanted.add(text); wanted.add(text.split('/').pop()) }
+      }
+      if (!wanted.size) return null
+      const hit = (entry) => {
+        if (entry === null || entry === undefined) return false
+        if (typeof entry === 'string') return wanted.has(entry) || wanted.has(entry.split('/').pop())
+        if (typeof entry !== 'object') return false
+        const name = receiptFileName(entry)
+        if (name !== '' && wanted.has(name)) return true
+        for (const key of RECEIPT_ITEM_KEYS) {
+          const value = entry[key]
+          if (typeof value === 'string' && value !== '' && wanted.has(value)) return true
+        }
+        return false
+      }
+      const lists = { applied, duplicates, refused, skipped }
+      for (const where of ['applied', 'duplicates', 'refused', 'skipped']) {
+        for (const entry of lists[where]) if (hit(entry)) return { where, entry }
+      }
+      return null
+    },
+  }
+}
+
+/** 回执的**可序列化摘要**（响应体里带的那一份：原始判据都在，函数不进响应）。 */
+export function receiptSummary(receipt, tool = '') {
+  return {
+    tool: String(tool || receipt.tool || ''), rc: receipt.rc, stdout_ok: receipt.said, ok: receipt.ok,
+    code: receipt.code, ledger_added: receipt.ledger_added,
+    counts: { applied: receipt.applied.length, duplicates: receipt.duplicates.length,
+      refused: receipt.refused.length, skipped: receipt.skipped.length },
+    files: [...receipt.applied, ...receipt.duplicates, ...receipt.refused, ...receipt.skipped]
+      .map(receiptFileName).filter((name) => name !== ''),
+    refused_codes: receipt.refused.map((entry) => String(entry?.code ?? '')).filter((code) => code !== ''),
+    stdout_tail: receipt.stdout_tail, stderr_tail: receipt.stderr_tail,
+  }
+}
+
+/**
+ * **导出 / 打印的序列化机制**（外壳提供，0 业务语义）：插件把"这一侧账本里的事实 + 一张表"交进来，
+ * 外壳只把它变成**一份可读的文件**（CSV / 可打印 HTML）并给内容指纹 —— 它不认识表里是什么业务，
+ * 也不生成任何行（行必须由插件从它自己的事实里给出；`docs/design/29-webui-gui-app.md` §3 的
+ * 「谁的事实谁导出」）。上限与拒绝都是有名的（超限如实拒，不截断成半份文件）。
+ */
+export const REPORT_LIMITS = { max_bytes: 4 * 1024 * 1024, max_rows: 5000, max_columns: 40, max_facts: 40 }
+
+/** CSV 单元格：逗号/引号/换行按 RFC4180 处理；`null`/`undefined` 一律空串（不写 "null" 这种假值）。 */
+export function csvCell(value) {
+  if (value === null || value === undefined) return ''
+  const text = typeof value === 'string' ? value : String(value)
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+/** 一张表的 CSV 文本（列声明 `[{key, label}]`；**行序即账本行序**，不重排 —— 便于逐行对账）。 */
+export function csvText(columns, rows) {
+  const head = columns.map((column) => csvCell(column.label ?? column.key)).join(',')
+  const body = rows.map((row) => columns.map((column) => csvCell(row[column.key])).join(',')).join('\n')
+  return `${head}\n${body}\n`
+}
+const escHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+/**
+ * 一份**自带样式、可直接打印**的 HTML 文档（事实表 + 明细表 + 备注）。
+ * 打印样式放在文档内部 ⇒ 在哪台机器上打开都是同一份样子（不依赖界面样式）。
+ */
+export function htmlReport({ title = '', subtitle = '', facts = [], columns = [], rows = [], notes = [],
+  generated_at = '', source = '' } = {}) {
+  const factRows = facts.map((fact) => `<dt>${escHtml(fact.key)}</dt><dd>${escHtml(fact.value)}</dd>`).join('')
+  const head = columns.map((column) => `<th>${escHtml(column.label ?? column.key)}</th>`).join('')
+  const body = rows.map((row) => `<tr>${columns.map((column) =>
+    `<td>${escHtml(row[column.key])}</td>`).join('')}</tr>`).join('')
+  return `<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<title>${escHtml(title)}</title><style>
+  @page { margin: 14mm; }
+  body { font: 13px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; color: #111; margin: 0; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: #555; margin: 0 0 10px; }
+  .facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0 0 12px; }
+  .facts dt { color: #555; } .facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+  th, td { border: 1px solid #bbb; padding: 3px 6px; text-align: left; font-size: 12px; }
+  th { background: #f0f0f0; }
+  td { font-variant-numeric: tabular-nums; }
+  .notes { margin-top: 12px; color: #444; font-size: 12px; }
+  .foot { margin-top: 14px; padding-top: 6px; border-top: 1px solid #ccc; color: #666; font-size: 11px; }
+  @media print { thead { display: table-header-group; } tr { break-inside: avoid; } }
+</style></head><body>
+<h1>${escHtml(title)}</h1>${subtitle ? `<p class="sub">${escHtml(subtitle)}</p>` : ''}
+${factRows ? `<dl class="facts">${factRows}</dl>` : ''}
+<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+${notes.length ? `<div class="notes">${notes.map((note) => `<p>${escHtml(note)}</p>`).join('')}</div>` : ''}
+<p class="foot">${generated_at ? `生成时刻 ${escHtml(generated_at)} · ` : ''}${escHtml(source)}</p>
+</body></html>`
+}
+
+/** 导出结果的标准形状（客户端认得 `result.export` ⇒ 落文件 + 打开预览/打印）。 */
+export function buildReport(spec = {}, { now = '' } = {}) {
+  const format = String(spec.format ?? '').toLowerCase()
+  if (!['csv', 'html'].includes(format)) {
+    return { ok: false, code: 'unsupported-format', reason: `这个导出只支持 csv / html：${JSON.stringify(spec.format ?? null)}`,
+      next_action: '用声明过的格式（界面上每个格式一个按钮）' }
+  }
+  const columns = Array.isArray(spec.columns) ? spec.columns : []
+  const rows = Array.isArray(spec.rows) ? spec.rows : []
+  if (columns.length === 0 || columns.length > REPORT_LIMITS.max_columns) {
+    return { ok: false, code: 'report-columns-invalid',
+      reason: `列数必须在 1..${REPORT_LIMITS.max_columns} 之间（现在 ${columns.length}）`,
+      next_action: '把表的列收敛到关键字段（导出是给人看的台账，不是全字段转储）' }
+  }
+  if (rows.length > REPORT_LIMITS.max_rows) {
+    return { ok: false, code: 'report-too-many-rows',
+      reason: `${rows.length} 行超过 ${REPORT_LIMITS.max_rows} 行上限`,
+      next_action: '按对象/时间窗缩小范围后再导出（导出不截断：截断会给出半份台账）' }
+  }
+  const facts = Array.isArray(spec.facts) ? spec.facts.slice(0, REPORT_LIMITS.max_facts) : []
+  const base = String(spec.filename || 'export').replace(/[^\w.\u4e00-\u9fa5-]+/g, '_').slice(0, 80) || 'export'
+  const filename = `${base}.${format}`
+  const content = format === 'csv' ? csvText(columns, rows)
+    : htmlReport({ title: spec.title ?? '', subtitle: spec.subtitle ?? '', facts, columns, rows,
+      notes: Array.isArray(spec.notes) ? spec.notes : [], generated_at: spec.generated_at ?? now,
+      source: spec.source ?? '' })
+  if (Buffer.byteLength(content, 'utf8') > REPORT_LIMITS.max_bytes) {
+    return { ok: false, code: 'report-too-large',
+      reason: `导出内容 ${Buffer.byteLength(content, 'utf8')} 字节超过 ${REPORT_LIMITS.max_bytes} 字节上限`,
+      next_action: '缩小范围（导出不截断：截断会给出半份台账）' }
+  }
+  return { ok: true, code: 'export-ready',
+    result: { export: { filename, format, content_type: format === 'csv'
+      ? 'text/csv; charset=utf-8' : 'text/html; charset=utf-8', content, rows: rows.length,
+      columns: columns.map((column) => column.label ?? column.key), digest: `sha256:${createHash('sha256')
+        .update(content, 'utf8').digest('hex')}`, source: spec.source ?? '',
+      ledger_refs: Array.isArray(spec.ledger_refs) ? spec.ledger_refs.slice(0, 200) : [] } },
+    note: `导出已生成（${rows.length} 行，格式 ${format}）：内容只由本插件自己那一侧的事实拼出，`
+      + '外壳只做序列化 —— 逐行可与账面核对' }
+}
+
 /** 读体（有界）：超上限**如实拒**，不截断成另一份正文。 */
 function readBody(req, done) {
   let data = ''
@@ -158,6 +348,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     const result = { ok: proc.status === 0 && parsed !== null, rc: proc.status, tool: toolPath, args,
       json: parsed, stdout: flat(stdout, 4000), stderr: flat(proc.stderr, 1200), ms: Date.now() - started,
       reason: proc.error ? String(proc.error).slice(0, 200) : (parsed === null ? '工具没有输出 JSON' : '') }
+    // 动作期间跑的**写者**（非只读调用）：把它的回执挂到本次动作的作用域上（退出码 + stdout JSON 是判据）
+    const scope = currentActionScope()
+    if (scope && !read) scope.runs.push({ tool: toolPath, receipt: writerReceipt(result) })
     if (read && result.ok && readCacheOn) {
       readCache.set(cacheKey, { at: Date.now(), result })
       const memo = renderScopes[renderScopes.length - 1]
@@ -171,6 +364,61 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     if (readCache.size === 0) return
     readCache.clear()
     ioStats.cache_clears += 1
+  }
+
+  /**
+   * **动作作用域**（机制）：一次动作执行期间落下的待办件 + 跑过的唯一写者回执 —— 也就是"这次动作
+   * 到底写了什么"的**归属**。有了它，动作返回**之后**机制能把「写者回执」与「响应体自述」两端对账，
+   * 把**可证明的**矛盾标出来（响应体里的 `writer_consistency`）：这不是第二条判据，而是同一条判据
+   * （退出码 + stdout JSON）的两端核对。不重写插件的结果，只如实附证据 + 显式报矛盾。
+   */
+  const actionScopes = []
+  const currentActionScope = () => (actionScopes.length ? actionScopes[actionScopes.length - 1] : null)
+
+  /** 两端对账：把本动作的待办件与写者回执摆在一起，给出可核对的判词。 */
+  const writerCheck = (scope, verdictOk) => {
+    const staged = scope.staged.map((item) => item.name)
+    const ours = { applied: [], duplicates: [], refused: [], unaccounted: [...staged] }
+    for (const run of scope.runs) {
+      for (const where of ['applied', 'duplicates', 'refused']) {
+        for (const entry of run.receipt[where]) {
+          const name = receiptFileName(entry)
+          if (name === '' || !staged.includes(name)) continue
+          if (!ours[where].includes(name)) ours[where].push(name)
+          const index = ours.unaccounted.indexOf(name)
+          if (index >= 0) ours.unaccounted.splice(index, 1)
+        }
+      }
+    }
+    const receipts = scope.runs.map((run) => receiptSummary(run.receipt, run.tool))
+    const rows = receipts.reduce((sum, item) => sum + (Number(item.ledger_added) || 0), 0)
+    const declaredOk = verdictOk === true
+    const allReceiptsOk = scope.runs.length > 0 && scope.runs.every((run) => run.receipt.ok)
+    const noReceiptOk = scope.runs.length > 0 && scope.runs.every((run) => !run.receipt.ok)
+    let verdict = 'consistent'
+    let note = ''
+    if (!scope.runs.length) {
+      verdict = 'no-writer-run'
+      note = '这次动作没有跑任何唯一写者（只登记待办件或只改配置）：账本该零新增'
+        + (staged.length ? `；落下待办件 ${staged.join(' / ')}（等写者消费）` : '')
+    } else if (!declaredOk && ours.applied.length > 0) {
+      verdict = 'fake-failure'
+      note = `写者回执说本动作的待办件 ${ours.applied.join(' / ')} **真的落行了**，响应体却报失败`
+        + '（用户会据此重复提交）—— 响应体的 ok/code 必须与写者回执同源'
+    } else if (!declaredOk && ours.duplicates.length > 0) {
+      verdict = 'fake-failure'
+      note = `写者回执说本动作的待办件 ${ours.duplicates.join(' / ')} **已经在账本/归档里**（幂等：这次零新增），`
+        + '响应体却报失败 —— 用户会换句话/换个对象重提，等于亲手造重复'
+    } else if (!declaredOk && allReceiptsOk && rows > 0 && ours.refused.length === 0
+      && ours.duplicates.length === 0) {
+      verdict = 'fake-failure-suspected'
+      note = `写者回执全部为成功且账本真新增了 ${rows} 行，响应体却报失败`
+        + '（判据：先看写者回执里本动作那一条，再由它定 ok/code）'
+    } else if (declaredOk && noReceiptOk && rows === 0 && !ours.applied.length && !ours.duplicates.length) {
+      verdict = 'fake-success-suspected'
+      note = '写者回执说没写成功、也没报告本动作的任何一条，响应体却报成功'
+    }
+    return { staged, receipts, rows_written: rows, ours, verdict, note, declared_ok: declaredOk }
   }
 
   /** 一次渲染的作用域（面板/状态/通知在同一批里读同一个只读工具 ⇒ 只起一个进程）。 */
@@ -199,6 +447,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       mkdirSync(dir, { recursive: true, mode: 0o700 })
       try { chmodSync(dir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
       const target = join(dir, name)
+      const scope = currentActionScope()
+      if (scope) scope.staged.push({ kind, name, file: relative(root, target) })
       if (existsSync(target)) {
         return { ok: true, duplicate: true, kind, file: relative(root, target), path: target, name,
           record: payload }
@@ -236,6 +486,14 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     rows: (view) => (typeof rowsOf === 'function' ? rowsOf(view) : []),
     publicRows: (view) => (typeof publicRowsOf === 'function' ? publicRowsOf(view) : []),
     runPython, stage, readJson, sharedFile,
+    /**
+     * **写者回执的单一判据**（插件用它派生 `ok`/`code`/`ledger_added`/`next_action`；见 `writerReceipt`）：
+     * `host.writerReceipt(run).item({file: staged.name, draft_id})` 回答"本动作那一条在回执里是 applied、
+     * duplicates 还是 refused" —— 写者一次处理多条待办件时（邮箱式写者），**绝不能**拿 `applied[0]` 当自己那条。
+     */
+    writerReceipt: (run) => writerReceipt(run),
+    /** 回执条目指代的待办件/请求文件名（basename；没有 ⇒ 空串）。判"哪几条**不**属于本动作"时用它。 */
+    receiptFileName: (entry) => receiptFileName(entry),
     /** **同侧协作**句柄（指派/转交、关注、评论与 `@同事`、活动流、已读）：机制，不认识对象类。
      *  插件可以拿它把协作挂到自己的对象上；`side`/`actor` 必须来自 `ctx.identity`（会话），不由表单给。 */
     collab,
@@ -246,6 +504,12 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     service: (name) => (services && typeof services === 'object' ? services[name] : undefined) ?? null,
     services: () => Object.keys(services ?? {}),
     note: noteStore,
+    /**
+     * **导出/打印**（机制）：插件把"这一侧账本里的事实 + 一张表"交进来 ⇒ 拿到标准导出形状
+     * （CSV 或可打印 HTML + 内容指纹），直接作为动作回执的 `result` 返回即可。
+     * 外壳**不认识表里的业务**、也**不生成任何行**（谁的事实谁导出）。
+     */
+    report: (spec) => buildReport(spec, { now: host.now() }),
     log: say,
   }
 
@@ -573,6 +837,23 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         if (!PANEL_KINDS.includes(kind)) {
           return { ...base, visible: true, error: { code: 'unknown-panel-kind', reason: `kind=${kind}` } }
         }
+        // `files` 面板的**地址纪律**（机制，与 `suggest_url` 同一口径）：下载地址与上传地址只允许**本服务
+        // 前缀相对路径**（`/` 开头）—— 外站地址一律丢掉并如实计数（界面不会被引去第三方取/传文件）。
+        if (kind === 'files') {
+          const bad = []
+          const files = (Array.isArray(data.files) ? data.files : []).filter((row) => {
+            const keep = Boolean(row) && typeof row === 'object' && String(row.url ?? '').startsWith('/')
+            if (!keep) bad.push(String(row?.url ?? row?.name ?? '(无地址)'))
+            return keep
+          })
+          const upload = data.upload && typeof data.upload === 'object' && String(data.upload.url ?? '').startsWith('/')
+            ? data.upload : null
+          if (!upload && data.upload) bad.push(String(data.upload.url ?? '(无上传地址)'))
+          return { ...base, visible: true, degraded: data.degraded === true || bad.length > 0,
+            reason: bad.length ? `absolute-url-refused:${bad.length}` : (data.reason ?? null),
+            data: { ...data, kind, files, upload, refused_urls: bad.length,
+              plugin_id: panel.plugin_id, panel_id: panel.id } }
+        }
         return { ...base, visible: true, degraded: data.degraded === true, reason: data.reason ?? null,
           data: { ...data, kind, plugin_id: panel.plugin_id, panel_id: panel.id } }
       } catch (err) {
@@ -594,6 +875,11 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     const header = panels.map((panel) => (panel.data ?? {}).object).find((item) => item && typeof item === 'object')
       ?? null
     const found = claimed && panels.length > 0 && (header ? header.found !== false : true)
+    // **导出 / 打印**（机制）：只摆出该对象类上被声明过的导出（`report` 贡献），并给出每个格式的入口 ——
+    // 外壳不知道这些格式里是什么内容：点按钮就是打开那个动作并把 `format` 预填好。
+    const reports = (found ? surface.reportsFor(view, kind) : []).filter((item) => surface.findAction(item.action))
+      .map((item) => ({ id: item.id, title: item.title, plugin_id: item.plugin_id, action: item.action,
+        formats: item.formats, hint: item.hint, order: item.order }))
     return {
       ok: true, view, kind, id, found,
       title: header?.title ?? (claimed ? `${kind} ${id}` : `${kind}（本视图没有这种对象）`),
@@ -604,7 +890,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         ? '这个 id 不在本视图的投影里：换成列表里真实存在的 id（列表里每一行的 id 就是它的深链）'
         : `本视图可打开的对象类：${kinds.join(' / ') || '（一个都没有：还没有插件声明 object_kind）'}`
           + `；也可以回到 ${prefix}/app/${view}/ 看列表`)),
-      kinds, panels,
+      kinds, panels, reports,
+      reports_note: '导出/打印是**声明**（`report` 贡献）：每个格式一个按钮 = 打开声明的动作并把 format 预填好；'
+        + '内容由那个插件自己的服务端一半生成（外壳不生成、不解读内容）',
       actions: surface.actionsFor(view, kind).map((action) => action.id),
       deep_link: `${prefix}/app/${view}/${kind}/${id}/`,
       mechanism: '对象页是**机制**：外壳按插件声明的 `object_kind` 找面板、把面板给的 `data.object` 摊成页头；'
@@ -784,26 +1072,43 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         guard: 'role-limit', ledger: 'zero-management' }
     }
     let out = null
+    // 本次动作的**作用域**：它落下的待办件 + 它跑过的写者回执（见 `writerCheck`）——动作返回后两端对账
+    const scope = { action_id: action.id, staged: [], runs: [] }
+    actionScopes.push(scope)
     try {
       out = await action.server(ctx, input)
     } catch (err) {
       out = { ok: false, code: 'action-failed', reason: flat(err), next_action: '修该动作的服务端一半（不静默吞）' }
+    } finally {
+      const index = actionScopes.lastIndexOf(scope)
+      if (index >= 0) actionScopes.splice(index, 1)
     }
     const result = out && typeof out === 'object' ? out : { ok: false, code: 'invalid-result',
       reason: '服务端一半没有返回对象', next_action: '返回 {ok, code, reason, next_action, result}' }
+    // ---- **写者回执 ⟷ 响应体** 两端对账（机制）：判据只有一条（退出码 + stdout JSON） ------------------
+    const writer = writerCheck(scope, result.ok)
+    if (writer.verdict !== 'consistent' && writer.verdict !== 'no-writer-run') {
+      say(`写者回执与响应不一致：${action.id} → ${writer.verdict}（${writer.note}）`)
+    }
     const actor = normIdentity(who)
     const entry = { id: `act-${Date.now()}-${action.id}`, level: result.ok ? 'ok' : 'bad',
-      title: `${action.title} → ${result.ok ? 'ok' : (result.code ?? 'refused')}`,
-      body: flat(result.reason ?? result.note ?? ''), next_action: flat(result.next_action ?? ''),
-      ref: result.result ?? null, at: host.now(), plugin_id: action.plugin_id, action: action.id,
+      title: `${action.title} → ${result.ok ? 'ok' : (result.code ?? 'refused')}`
+        + (writer.verdict === 'consistent' || writer.verdict === 'no-writer-run'
+          ? '' : `（写者回执与响应不一致：${writer.verdict}）`),
+      body: flat(result.reason ?? result.note ?? '')
+        + (writer.verdict === 'consistent' || writer.verdict === 'no-writer-run' ? '' : ` · ${writer.note}`),
+      next_action: flat(result.next_action ?? ''), ref: result.result ?? null, at: host.now(),
+      plugin_id: action.plugin_id, action: action.id,
       // 动作流水**按会话身份隔离**：同侧别人做的事不该出现在你的通知中心里（多人在同一侧时的隐私与噪声）
-      actor: actor ? actor.human : '' }
+      actor: actor ? actor.human : '', writer: { verdict: writer.verdict, rows_written: writer.rows_written } }
     actionLog.unshift(entry)
     if (actionLog.length > 100) actionLog.length = 100
     clearReadCache()   // 动作可能改了事实（写者刚跑过）⇒ 只读缓存作废：下一屏读到的一定是新状态
     return { ok: result.ok === true, action: action.id, code: result.code ?? null, reason: result.reason ?? null,
       next_action: result.next_action ?? null, result: result.result ?? null, note: result.note ?? null,
-      errors: result.errors ?? null, refresh: result.refresh ?? ['panels', 'notifications', 'status'] }
+      errors: result.errors ?? null, refresh: result.refresh ?? ['panels', 'notifications', 'status'],
+      // 写者回执的**原始判据 + 与本动作的归属**：界面/审计据此核对"响应说的"与"账本真发生的"
+      writer_consistency: writer.verdict, writer }
   }
 
   // ------------------------------------------------------------------ 撤销（卸载一个插件的全部贡献）
@@ -896,6 +1201,12 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     panels: surface.byKind('panel').map((panel) => ({ id: panel.id, title: panel.title, view: panel.view,
       panel_kind: panel.panel_kind, placement: panel.placement, actions: panel.actions, order: panel.order,
       object_kind: panel.object_kind, plugin_id: panel.plugin_id })),
+    // **导出 / 打印**（`report` 贡献）：只给元数据（谁声明的、什么对象类、哪几种格式、真干活的动作是哪个）。
+    reports: surface.reports().map((item) => ({ id: item.id, title: item.title, views: item.views,
+      view: item.view, object_kind: item.object_kind, formats: item.formats, action: item.action,
+      hint: item.hint, order: item.order, plugin_id: item.plugin_id })),
+    reports_note: '导出/打印是**声明**：内容由声明的那个动作（插件自己的服务端一半）生成 —— 外壳不生成内容、'
+      + '也不解读它导出的是什么；插件的两个一半都在这里（谁的事实谁导出）',
     shortcuts: surface.shortcuts().map((item) => ({ keys: item.keys, action: item.action, title: item.title,
       plugin_id: item.plugin_id })),
     shell_shortcuts: SHELL_SHORTCUTS,

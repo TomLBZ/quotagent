@@ -238,7 +238,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     # 幂等：已签过就零新增
     if already_signed(rows, quote_id):
         return emit({**base, "ok": True, "event": EVENT_SUBMITTED, "applied": [],
-                     "duplicates": [{"quote_id": quote_id, "reason": "already-signed",
+                     "duplicates": [{"quote_id": quote_id, "draft_id": str(args.draft_id),
+                                     "line_count": len(lines_of(draft)) or 1,
+                                     "ledger_added": 0, "reason": "already-signed",
                                      "matched": "ledger-submitted"}],
                      "ledger_added": 0, "refusal": None,
                      "note": "同一份草稿已经签过：账本零新增（签名是幂等动作，不产生第二条报价事实）"}, 0)
@@ -326,11 +328,16 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             return _usage_error("ledger-frozen", str(exc)[0:200],
                                 "先修账本（本脚本不往校验不过的账本追加任何行）")
         ledger_added = 4
+    # 回执**可按 id 指认**（调用方要能核"这一份"是不是我签的，而不是猜 `applied[0]`）：
+    # 每条 applied 都带 `draft_id` / `quote_id` / `approval_id` / `line_count`。
     applied.append({"view": "supplier", "events": [EVENT_REQUESTED, EVENT_GRANTED, EVENT_SUBMITTED],
-                    "quote_id": quote_id, "approval_id": approval_id,
+                    "quote_id": quote_id, "draft_id": str(args.draft_id), "approval_id": approval_id,
                     "line_count": len(line_bodies) or 1,
+                    "ledger_added": 0 if args.dry_run else 3,
                     "body_keys": sorted(SUBMITTED_BODY_KEYS_MULTI if line_bodies else SUBMITTED_BODY_KEYS)})
     applied.append({"view": "contractor", "events": [EVENT_SUBMITTED], "quote_id": quote_id,
+                    "draft_id": str(args.draft_id), "approval_id": approval_id,
+                    "ledger_added": 0 if args.dry_run else 1,
                     "body_keys": sorted(NOTIFICATION_BODY_KEYS + (("lines", "line_count") if line_bodies else ()))})
 
     return emit({**base, "ok": True, "event": EVENT_SUBMITTED, "applied": applied, "duplicates": [],

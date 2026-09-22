@@ -25,6 +25,9 @@
  *   ⑤ `notification-source` 通知源：`{plugin_id, id, title, order, poll(ctx)}`
  *   ⑥ `status-item` 状态栏项：`{plugin_id, id, title, order, read(ctx)}`
  *   ⑦ `validator` 交互校验：`{plugin_id, id, actions?, validate(input) -> [{field, code, message}]}`
+ *   ⑧ `report`   导出/打印声明：`{plugin_id, id, title, views, object_kind?, formats:['csv'|'html'|…], action,
+ *              order?, hint?}` —— 只声明"这个对象/这个视图能以哪几种可读格式导出"；**内容由 `action`
+ *              （插件自己的服务端一半）生成**，外壳既不懂语义也不生成内容（谁的事实谁导出）。
  *
  * 交互类（表单字段与校验、可编辑表格与批量操作、右键菜单、内联动作）都由上面的**声明**拼出来：
  * 字段形状 = `action.input.fields`；表格可编辑/批量 = `panel.data()` 返回的 `editable` / `bulk`；右键菜单 =
@@ -57,8 +60,19 @@
  *   这三条都是**声明**，外壳不认识任何具体 kind；插件卸载后它的对象页与深链一起消失（规则 1）。
  */
 
-/** 面板的通用渲染形状（外壳按 `kind` 选渲染器；不认识的一律 `unknown-panel-kind` 拒收）。 */
-export const PANEL_KINDS = ['table', 'form', 'list', 'kv', 'metrics', 'html']
+/** 面板的通用渲染形状（外壳按 `kind` 选渲染器；不认识的一律 `unknown-panel-kind` 拒收）。
+ *
+ *  `files` = **一份文件集合**（附件面）：插件声明"这个对象挂着一批文件"，外壳只知道"文件列表 + 拖拽上传区
+ *  + 每个文件的下载/删除入口"。文件是什么、给谁看、谁能删，全由插件声明（本文件不懂任何业务）。
+ *  形状（`data()` 返回）：
+ *    `{kind:'files', files:[{id, name, bytes, sha256, uploader, at, content_type, visibility, deleted,
+ *      url(下载地址，本服务相对路径), deletable?:bool, note?}], upload:{url, label?, multiple?:true,
+ *      max_bytes, accept?, help?}, empty_text?, reason?(降级用), next_action?, counts?:{}, object?:{kind,id}}`
+ *  —— `url` 与 `upload.url` 必须是**本服务前缀相对路径**（`/` 开头；外站一律拒，与 `suggest_url` 同一纪律）。 */
+export const PANEL_KINDS = ['table', 'form', 'list', 'kv', 'metrics', 'html', 'files']
+
+/** 可导出的可读格式（`report.formats` 的闭合集合；外壳按它渲染「导出 / 打印」按钮）。 */
+export const REPORT_FORMATS = ['csv', 'html', 'txt', 'json']
 
 /** 字段类型（客户端渲染器与校验器都只认这些）。 */
 export const FIELD_TYPES = ['text', 'textarea', 'number', 'select', 'checkbox', 'signature', 'hidden']
@@ -349,6 +363,60 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       title: entry.title, order: orderOf(entry.order), actions, validate: entry.validate } }
   })
 
+  /**
+   * **导出 / 打印声明**（`kind: 'report'`）：插件声明"这个对象（或这个视图）能以哪几种**可读格式**导出"。
+   *
+   * 形状：`{plugin_id, id, title, views:[…], object_kind?, formats:['csv'|'html'|…], action, order?, hint?}`
+   *   · `formats` = 声明的格式（闭合集合 `REPORT_FORMATS`）；每个格式在界面上是一个按钮；
+   *   · `action`   = **真干活的那个动作 id**（导出内容由插件自己的服务端一半生成：谁的事实谁导出，
+   *     外壳不解读语义、也不生成任何内容）；打开时外壳把 `format` 预填进该动作的入参；
+   *   · `object_kind` 非空 ⇒ 它出现在 `/app/<view>/<kind>/<id>/` **对象页**的「导出 / 打印」区；
+   *     留空 ⇒ 视图级导出（例如整张比价表）。
+   *
+   * 机制只做四件事：校验形状、登记、列举（`snapshot()`/`reportsFor()`）、可撤销（disposer）。
+   * 它**不生成任何内容**、不留文件、不读账本 —— 导出内容的唯一来源是插件自己的动作。
+   */
+  const report = (raw) => add('report', raw, (entry) => {
+    if (!plainObject(entry)) {
+      return { error: code('invalid-input', 'report 贡献不是对象', 'report({plugin_id, id, title, formats, action})') }
+    }
+    const viewsOf = Array.isArray(entry.views) && entry.views.length > 0 ? entry.views.map(text)
+      : (text(entry.view) !== '' ? [text(entry.view)] : [])
+    if (viewsOf.length === 0) {
+      return { error: code('unknown-view', 'report 必须声明 views（在哪些视图里出现）',
+        '给 `views: ["contractor"]`') }
+    }
+    for (const item of viewsOf) {
+      if (!allowedViews.has(item)) {
+        return { error: code('unknown-view', `report.views 里有不在允许集合里的视图：${item}`,
+          `用 ${views.join(' / ')} 之一`) }
+      }
+    }
+    const formats = Array.isArray(entry.formats) ? entry.formats.map(text).filter((item) => item !== '') : []
+    if (formats.length === 0) {
+      return { error: code('invalid-input', 'report.formats 必须给至少一种格式',
+        `用 ${REPORT_FORMATS.join(' / ')} 之一（例如 formats: ["csv","html"]）`) }
+    }
+    for (const format of formats) {
+      if (!REPORT_FORMATS.includes(format)) {
+        return { error: code('invalid-input', `report.formats 里有不认识的格式：${format}`,
+          `用 ${REPORT_FORMATS.join(' / ')} 之一`) }
+      }
+    }
+    if (!ID_RE.test(text(entry.action))) {
+      return { error: code('unknown-action', `report.action 必须是动作 id：${JSON.stringify(entry.action)}`,
+        '给已注册动作的 id（导出内容由那个动作的服务端一半生成：谁的事实谁导出）') }
+    }
+    const objectKind = text(entry.object_kind)
+    if (objectKind !== '' && !OBJECT_KIND_RE.test(objectKind)) {
+      return { error: code('invalid-object-kind', `report.object_kind 形状不合法：${JSON.stringify(entry.object_kind)}`,
+        '对象类写小写字母/数字/连字符；留空 = 视图级导出') }
+    }
+    return { entry: { kind: 'report', plugin_id: text(entry.plugin_id), id: text(entry.id), title: entry.title,
+      order: orderOf(entry.order), views: viewsOf, view: viewsOf[0] ?? '', formats, action: text(entry.action),
+      object_kind: objectKind, hint: text(entry.hint) } }
+  })
+
   const byKind = (kind) => [...entries.values()].filter((item) => item.kind === kind).sort((left, right) =>
     (sortKey(left) < sortKey(right) ? -1 : (sortKey(left) > sortKey(right) ? 1 : 0)))
 
@@ -357,6 +425,14 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
   const shortcuts = () => byKind('shortcut')
   const validatorsFor = (actionId) => byKind('validator')
     .filter((item) => item.actions.length === 0 || item.actions.includes(actionId))
+  /**
+   * 某个视图里可用的**导出 / 打印**声明：`objectKind` 为空 ⇒ 视图级导出（整张比价表这类）；
+   * 非空 ⇒ 该对象类对象页上的导出按钮。调用方（外壳/客户端）只拿到元数据，内容由 `action` 生成。
+   */
+  const reportsFor = (viewId, objectKind = '') => byKind('report').filter((item) => item.views.includes(viewId)
+    && item.object_kind === String(objectKind ?? ''))
+  /** 全部导出声明（`/api/ui/surface` 用它把「谁能导出什么」摆出来，含注册者与格式）。 */
+  const reports = () => byKind('report')
 
   // ---- 对象深链（**机制**）：哪些对象类被声明过 / 某个对象类是谁在负责 / 某个视图的对象页动作 ----
   /** 本视图里被声明过的对象类（去重、字典序）：`/app/<view>/<kind>/<id>` 能打开哪些 kind 由它决定。 */
@@ -385,6 +461,8 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
     if (entry.kind === 'notification-source') return { ...base, hint: entry.hint }
     if (entry.kind === 'status-item') return { ...base }
     if (entry.kind === 'validator') return { ...base, actions: entry.actions }
+    if (entry.kind === 'report') return { ...base, views: entry.views, formats: entry.formats,
+      action: entry.action, object_kind: entry.object_kind, hint: entry.hint }
     return base
   }
 
@@ -400,7 +478,7 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       slots: [...allowedSlots],
       views: [...allowedViews],
       counts: { total: entries.size, by_kind: Object.fromEntries(
-        ['view', 'panel', 'action', 'shortcut', 'notification-source', 'status-item', 'validator']
+        ['view', 'panel', 'action', 'shortcut', 'notification-source', 'status-item', 'validator', 'report']
           .map((kind) => [kind, byKind(kind).length])) },
       plugins: Object.entries(plugins).sort(([left], [right]) => (left < right ? -1 : 1))
         .map(([plugin_id, contributions]) => ({ plugin_id, contributions })),
@@ -422,8 +500,8 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
 
   const dispose = () => { disposed = true; entries.clear() }
 
-  return { view, panel, action, shortcut, notificationSource, statusItem, validator,
-    findAction, panelsOf, panelsFor, actionsFor, objectKindsFor, shortcuts, validatorsFor, byKind, snapshot,
-    disposePlugin, dispose, get entries() { return [...entries.values()] }, get size() { return entries.size },
-    get disposed() { return disposed } }
+  return { view, panel, action, shortcut, notificationSource, statusItem, validator, report,
+    findAction, panelsOf, panelsFor, actionsFor, objectKindsFor, shortcuts, validatorsFor, reportsFor, reports,
+    byKind, snapshot, disposePlugin, dispose, get entries() { return [...entries.values()] },
+    get size() { return entries.size }, get disposed() { return disposed } }
 }

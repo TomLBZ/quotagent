@@ -145,3 +145,70 @@
 
 用法、配置与边界见 `src/system/webui/docs/people-and-roles.md`；复跑 `python3 tmp/p5-people-verify.py`。
 
+## 10. 文件交换与可打印文档（对象级附件 / 导出 / 打印）—— 机制与判据
+
+用户口径：「现实采购里**不能传文件、不能打印/导出**是用不下去的：技术规格、质检报告、回签的 PO 必须能随对象走」。
+本节是这一条的口径真源（机制/判据都在这里；复跑 `python3 tmp/p6-verify.py`）。
+
+### 10.1 对象级附件（谁都能挂，按对象类声明）
+
+1. **对象类由插件声明**：`system/attachments` 在 `code/ui.mjs` 里按 `(视图, 对象类)` 注册形状为 **`files`** 的面板
+   （承包商：`package` / `quote` / `po` / `change`；供应商：`package` / `quote` / `po`）。外壳只按形状渲染
+   （拖拽多文件上传区 + 文件表 + 每行下载/删除），**不认识"附件"这个业务概念**（`ui-surface.mjs` 的 `PANEL_KINDS` 加一个值，
+   没有一处业务名词）。
+2. **形状**（`data()` 返回）：`{kind:'files', files:[{id,name,bytes,sha256,uploader,at,visibility,url,deletable,
+   deleted,deleted_by,deleted_at}], upload:{url,kind,id,name_param,visibility_param,visibility:{default,options},
+   multiple,max_bytes,accept}, row_actions:['attach.delete'], counts, visibility_rule, reason?, next_action?}`。
+   `url` / `upload.url` **只允许本服务前缀相对路径**（`/` 开头）——外站地址一律丢掉并计数（`absolute-url-refused`），
+   与 `suggest_url` 同一条纪律：界面不会被引去第三方取/传文件。
+3. **上传**：客户端把**原始字节** POST 到声明过的上传地址（原始字节而非 multipart：没有边界串/编码这一层可以搞错，
+   大文件也是流式的；文件名与可见性走查询串）。**侧与署名只认会话**（查询串改不动"我是谁"）。
+
+### 10.2 附件**不进账本**（只进 0600 存储）
+
+`<ui_shared>/attachments/`：目录 0700 / 文件 **0600**（原子写、显式 chmod，不受 umask 影响）。
+`index.json`（文件名/大小/sha256/上传人/时刻/对象关联/可见性/墓碑）+ `blobs/<sha256>.bin`（**内容寻址**：
+用户给的文件名只进索引、不进路径 ⇒ 路径穿越在结构上不可能）+ `journal.jsonl`（**上传与删除的留痕**，append-only）
++ `trash/`（删除时未被别的条目引用才搬过去的原件）。理由与名册/协作面同源（§7/§8）：附件是**交付物**不是合同事实，
+写进账本会改事件类型目录、证据包哈希与审计取证语义。上传/删除回执里 `ledger_added` 恒为 `0`。
+
+### 10.3 下载按**侧 + 身份**校验（一刀切的两条件）
+
+| 情形 | 判据 | 拒绝码 |
+|---|---|---|
+| 未登录（读/传/删/列表） | 侧只认会话 | `401 identity-required` |
+| 本侧上传的件 | 本侧随便下 | —— |
+| 交付件（`visibility=both`） | **且**请求方的侧是该对象的**当事方**（该对象在本侧事实/交换件里可见） | 否则 `403 cross-side-attachment` |
+| 本侧内部件（`visibility=side`） | 只在**上传方本侧**可下 | 另一方 `403 cross-side-attachment` |
+| 附件 id 形状不对（含路径穿越） | `^att-[0-9a-f]{12}$` | `400 attachment-id-invalid` |
+| 超上限（默认 8 MiB）/类型不在白名单/空件/文件名含路径 | 见 `attachments.mjs` 的 `LIMITS` / `ALLOWED_TYPES` | `413` / `415` / `400` |
+
+**拒绝一律零落盘**：所有判据跑在写任何文件**之前**；拒绝路径上不建目录、不写索引、不写日志
+（验证脚本用「存储逐文件 sha256 + journal 行数前后一致」断言这一条）。
+**删除留痕**：索引留墓碑（`deleted_by`/`deleted_at`）+ journal 记一行（含理由）+ 原件进 `trash/`；
+对方在列表里看到的也是墓碑（"谁删的、什么时候"），不是静默消失。**只能删自己上传的**（`403 not-your-attachment`）。
+
+### 10.4 路由**经注册面**（不改 `webui.mjs` 的静态路由表）
+
+`system/attachments` 用 `ctx.inject(['uiRoutes'])` 注册五条路径：`POST /api/attachments/upload`、
+`GET /api/attachments/list`、`GET /api/attachments/file`、`POST /api/attachments/delete`、`GET /api/attachments/store`；
+**只读路径各带一条 POST 孪生路由返回 `405 + Allow: GET`**（与 §9.3 的方法围栏同口径）。注册表里的 `auth` 是真实值
+（`identity-session` / `none`），`/api/routes` 自动登记（`tools/verify.sh quote-draft` 第 ③ 条拿它逐条反查）。
+正文由插件**自己**有界读取（不用 `webui.mjs` 那个 16 KiB 的读体夹取：那里会**静默截断**，截断等于把半份文件当完整件存下来）。
+
+### 10.5 导出 / 打印：**声明**由插件给、**内容**由插件生成
+
+1. **`report` 贡献**（`ui-surface.mjs` 的第 ⑧ 类）：`{plugin_id,id,title,views,object_kind?,formats:['csv'|'html'|…],
+   action,order?,hint?}` —— 只声明"这个对象/这个视图能以哪几种可读格式导出"，**不生成任何内容**。
+   本批三条：`report.po`（承包商 PO）、`report.rfq-package`（双方 RFQ 包）、`report.compare`（承包商比价表）。
+2. **入口**：对象页工具栏下的「导出 / 打印」区（每个格式一个按钮 = 打开声明的动作并把 `format` 预填好）；
+   视图级导出（比价表）在视图页上。机制只做摆位，不懂内容。
+3. **内容**：`host.report(spec)`（`app-shell.mjs` 的**序列化机制**：CSV / 自带样式的可打印 HTML + 内容指纹 sha256），
+   `spec` 的 `columns/rows/facts` 全部由**插件自己**从它那一侧的账本行拼出（谁的事实谁导出）；上限有名
+   （5000 行 / 4 MiB，超限**如实拒**，不截断成半份台账）。行内带 `source` / `ledger_seq` / `payload_sha256` 这类锚
+   ⇒ 打印出来也能逐行对回账本（验证脚本就是这么比的）。
+4. **打印**：导出结果在**预览弹层**里给出「打印」（走浏览器打印对话框：导出文档放进隐藏 iframe 打印，
+   打印的是那份文档而不是界面；界面另有一份 `@media print` 兜底）+「下载这份文件」。
+   `result.export` 是客户端认得的标准形状（`{filename,format,content_type,content,rows,digest}`）。
+
+

@@ -176,6 +176,15 @@ def item_ids_of(body: dict) -> list[str]:
                     candidate = ""
                 if candidate and candidate not in out:
                     out.append(candidate)
+    # **逐行真值**：`lines[].item_id` 同样是"这个行项目在本视角事实里出现过"的证据
+    # （与 `host/modules/quote-prepare.mjs` 的目录口径一致；漏掉它会把明明读到的行项目当成读不到，
+    #  于是一份合法的多行报价会被误判成 `line-item-not-found`）。
+    lines = body.get("lines")
+    if isinstance(lines, list):
+        for entry in lines:
+            candidate = str(entry.get("item_id") or "").strip() if isinstance(entry, dict) else ""
+            if candidate and candidate not in out:
+                out.append(candidate)
     for key in ITEM_SCALAR_KEYS:
         candidate = str(body.get(key) or "").strip()
         if candidate and candidate not in out:
@@ -396,7 +405,8 @@ def load_item(path: Path, views: list[str]) -> tuple[dict | None, dict | None]:
             "prepared_by": prepared_by, "rfq_id": rfq_id, "item_id": item_id,
             "currency": currency, "unit_price_cents": price, "lead_time_days": lead,
             "note": note, "note_sha256": digest_of(note), "quote_draft_id": draft_id,
-            "lines": lines, "line_count": len(lines),
+            # `line_count` = **这份报价几行**（单行草稿也是 1 行 —— 不是"`lines` 数组里有几条"）
+            "lines": lines, "line_count": (len(lines) if lines else 1),
             "lines_sha256": digest_of(canonical_lines(record))}, None
 
 
@@ -487,6 +497,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
     pending = [item for item in sorted(inbox.glob("qd-*.json")) if PENDING_RE.match(item.name)]
     refused: list[dict] = []
+    skipped: list[dict] = []
     items: list[dict] = []
     for path in pending:
         item, refusal = load_item(path, views)
@@ -494,21 +505,27 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             refusal.update({"file": path.name, "view": ""})
             refused.append(refusal)
             continue
+        # 视角过滤**不静默丢件**：不在本次视角里的待办件如实列进 `skipped`（回执里说清楚"我看见了、但没处理"）
         if args.view and item["view"] != args.view:
+            skipped.append({"file": item["file"], "pending_file": item["file"], "view": item["view"],
+                            "code": "view-skipped",
+                            "reason": f"这条待办件的 view={item['view']} 不在本次 --view {args.view} 之内",
+                            "next_action": "用该视角再跑一次（本脚本按视角分片消费待办件）"})
             continue
         items.append(item)
 
     if refused and not items:
         # 全是坏件：**不碰账本**（拒绝时零写）
         return emit({"ok": False, "applied": [], "duplicates": [], "ledger_added": 0,
-                     "refused": refused, "pending_seen": len(pending), "inbox": str(inbox)}, 1)
+                     "refused": refused, "skipped": skipped, "pending_seen": len(pending),
+                     "inbox": str(inbox)}, 1)
 
     # 环境门：要写的账本先必须可读（坏账本宁可不写）
     supplier_rows, supplier_error = load_rows(supplier_ledger)
     contractor_rows, contractor_error = load_rows(contractor_ledger)
     if supplier_error is not None or contractor_error is not None:
         return emit({"ok": False, "applied": [], "duplicates": [], "ledger_added": 0, "refused": refused,
-                     "refused_ledger": [
+                     "skipped": skipped, "refused_ledger": [
                          {"view": "supplier", "code": "ledger-unreadable", "reason": supplier_error,
                           "next_action": "先修账本（本脚本不往坏账本追加）"},
                          {"view": "contractor", "code": "ledger-unreadable", "reason": contractor_error,
@@ -555,8 +572,10 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                             "next_action": "先把一条事实行落进供应商账本（realm 由账本给出），再重提"})
             continue
         if key in archived or key in supplier_live or key in contractor_live:
-            duplicates.append({"file": item["file"], "view": view, "quote_draft_id": item["quote_draft_id"],
+            duplicates.append({"file": item["file"], "pending_file": item["file"], "view": view,
+                               "quote_draft_id": item["quote_draft_id"], "draft_id": item["quote_draft_id"],
                                "lines_sha256": item["lines_sha256"], "reason": "already-drafted",
+                               "ledger_added": 0,
                                "matched": "applied-archive" if key in archived else "ledger"})
             if not args.dry_run:
                 archive(inbox, item["path"])
@@ -572,6 +591,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             base["lines"] = [dict(line) for line in item["lines"]]
             base["line_count"] = len(item["lines"])
         body_keys = BODY_KEYS_MULTI if item["lines"] else BODY_KEYS
+        item_rows = 0                      # 这条待办件**真落了几行**（供应商 + 承包商各一条；回执里逐条给）
         if not args.dry_run:
             ledger = supplier_handles.get(view) or Ledger(supplier_ledger, realm=supplier_realm or f"{view}:quote-draft")
             supplier_handles[view] = ledger
@@ -586,17 +606,25 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 # 账本自检不过（哈希链断/冻结）→ **宁可不写**：如实报，并把这件事本身当成环境错误
                 return emit({"ok": False, "applied": applied, "duplicates": duplicates,
                              "ledger_added": ledger_added, "refused": refused + [
-                                 {"file": item["file"], "view": view, "code": "ledger-frozen",
+                                 {"file": item["file"], "pending_file": item["file"], "view": view,
+                                  "code": "ledger-frozen",
                                   "reason": str(exc)[0:200],
-                                  "next_action": "先修账本（本脚本不往校验不过的账本追加任何行）"}]}, 2)
+                                  "next_action": "先修账本（本脚本不往校验不过的账本追加任何行）"}],
+                             "skipped": skipped}, 2)
             ledger_added += 2
+            item_rows = 2
         supplier_live.add(key)
         contractor_live.add(key)
         added_supplier[key] = True
-        applied.append({"file": item["file"], "view": view, "quote_draft_id": item["quote_draft_id"],
+        applied.append({"file": item["file"], "pending_file": item["file"], "view": view,
+                        "quote_draft_id": item["quote_draft_id"], "draft_id": item["quote_draft_id"],
                         "rfq_id": item["rfq_id"], "item_id": item["item_id"],
                         "line_count": item["line_count"],
                         "unit_price_cents": item["unit_price_cents"],
+                        # **这一条**真落了几行（不是本次运行的全局数）：调用方据此报自己的 `ledger_added`
+                        "ledger_added": item_rows,
+                        "ledger_rows": [] if item_rows == 0 else [
+                            f"{supplier_ledger}:{EVENT}", f"{contractor_ledger}:{EVENT}"],
                         "body_keys": sorted(body_keys), "ledger": str(supplier_ledger),
                         "notified": "contractor"})
         if not args.dry_run:
@@ -604,7 +632,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
     out = {"ok": not refused, "event": EVENT, "actor": str(args.actor), "now": args.now,
            "applied": applied, "duplicates": duplicates, "ledger_added": ledger_added,
-           "refused": refused, "pending_seen": len(pending), "inbox": str(inbox),
+           "refused": refused, "skipped": skipped, "pending_seen": len(pending), "inbox": str(inbox),
            "ledger_supplier": str(supplier_ledger), "ledger_contractor": str(contractor_ledger),
            "supplier": supplier_realm, "contractor": contractor_realm,
            "catalogue": {"items": item_catalogue, "rfqs": rfq_catalogue},

@@ -667,8 +667,84 @@
     const body = renderBody(kind, panel, data)
     return degraded + body
   }
+
+  /**
+   * **文件集合面板**（形状 `files`，机制）：插件声明"这个对象挂着一批文件"，外壳只按形状渲染 ——
+   * 拖拽上传区（多文件）+ 文件表（文件名/大小/上传人/时间/sha256/可见性）+ 每行下载与删除入口。
+   * 机制不认识"附件"这个业务概念：上传地址、删除动作、可见性选项都由插件在 `data` 里声明。
+   */
+  function renderFiles(panel, data) {
+    const rows = data.files || []
+    const upload = data.upload || null
+    const rowAction = (Array.isArray(data.row_actions) ? data.row_actions : []).find((id) => actionOf(id))
+    const visSelect = (upload && upload.visibility && (upload.visibility.options || []).length)
+      ? `<div class="q-drop-vis"><label>这个文件给谁看： <select data-file-visibility="1">${
+        upload.visibility.options.map((option) => `<option value="${attr(option.value)}"${
+          option.value === upload.visibility.default ? ' selected' : ''} title="${attr(option.help || '')}">${
+          esc(option.label)}</option>`).join('')}</select></label></div>`
+      : ''
+    const zone = upload ? html([
+      `<div class="q-drop" data-dropzone="1" tabindex="0" role="group" aria-label="拖拽上传或选择文件"`,
+      ` data-upload-url="${attr(upload.url)}" data-upload-kind="${attr(upload.kind)}"`,
+      ` data-upload-id="${attr(upload.id)}" data-name-param="${attr(upload.name_param || 'name')}"`,
+      ` data-visibility-param="${attr(upload.visibility_param || 'visibility')}">`,
+      `<div class="q-drop-big">把文件拖到这里</div>`,
+      `<div>或 <button class="primary" data-file-pick="1">选择文件</button>`,
+      `${upload.multiple ? '（可多选）' : ''}`,
+      `<input type="file" hidden data-file-input="1"${upload.multiple ? ' multiple' : ''}`,
+      `${upload.accept ? ` accept="${attr(upload.accept)}"` : ''}></div>`,
+      visSelect,
+      `${upload.help ? `<div class="q-hint">${esc(upload.help)}</div>` : ''}`,
+      `<div class="q-hint">上传人 = 你的会话身份；文件名/大小/时间/sha256 会记下来，**正文不进账本**`,
+      `（落 0600 存储）。对方能不能看由「给谁看」这一档决定。</div>`,
+      `<div class="q-drop-status" data-drop-status="1"></div></div>`]) : ''
+    const head = `<thead><tr><th>文件名</th><th>大小</th><th>上传人</th><th>时间</th><th>sha256</th>` +
+      `<th>给谁看</th><th>操作</th></tr></thead>`
+    const body = rows.length ? rows.map((row) => {
+      const deleted = row.deleted === true
+      return `<tr data-file-row="${attr(row.id)}"${deleted ? ' class="q-file-deleted"' : ''}>` +
+        `<td>${deleted ? `<s>${esc(row.name)}</s>` : `<a class="q-deeplink" href="${attr(row.url)}"` +
+          ` data-file-download="1" download="${attr(row.name)}" title="下载（按侧与身份校验；带 sha256 校验头）">` +
+          `${esc(row.name)}</a>`}</td>` +
+        `<td>${esc(row.bytes_label || row.bytes)}</td>` +
+        `<td><code>${esc(row.uploader)}</code></td>` +
+        `<td>${esc(row.at)}</td>` +
+        `<td><code title="${attr(row.sha256)}">${esc(row.sha256_short || row.sha256)}</code>` +
+          `<button class="q-link" data-copy="${attr(row.sha256)}" title="复制完整 sha256（用来对账）">复制</button></td>` +
+        `<td>${esc(row.visibility_label || row.visibility)}</td>` +
+        `<td>${deleted
+          ? `已删除（${esc(row.deleted_by || '')} @ ${esc(row.deleted_at || '')}）—— 留痕：墓碑 + trash/`
+          : `<a class="q-deeplink" href="${attr(row.url)}" download="${attr(row.name)}">下载</a>` +
+            `${rowRowDelete(row, rowAction)}`}</td></tr>`
+    }).join('') : ''
+    const table = rows.length
+      ? `<div class="q-scroll"><table class="q-table q-files-table" data-panel-table="${attr(panel.id)}">` +
+        `<caption class="q-caption">${esc(panel.title)}（${rows.filter((row) => !row.deleted).length} 个活的` +
+        `${rows.some((row) => row.deleted) ? `，${rows.filter((row) => row.deleted).length} 个已删（留痕）` : ''}）` +
+        `</caption>${head}<tbody>${body}</tbody></table></div>`
+      : stateBlock({ kind: 'empty', title: '这个对象上还没有附件（不是坏了）', reason: 'no-attachments',
+        hint: '现实采购里这一步是硬需求：技术规格、质检报告、回签的 PO 都挂在这里。',
+        next_action: data.next_action || '把文件拖到上面的方块里，或点「选择文件」' })
+    const countsBar = data.counts
+      ? `<p class="q-hint" data-file-counts="1">活的 ${esc(data.counts.live ?? 0)} · 本侧上传 ${esc(data.counts.mine ?? 0)}` +
+        ` · 已删（留痕）${esc(data.counts.deleted ?? 0)}` +
+        `${data.counts.visible_ids !== undefined ? ` · 本侧可见的同类对象 ${esc(data.counts.visible_ids)} 个` : ''}` +
+        `${data.visibility_rule ? ` · ${esc(data.visibility_rule)}` : ''}</p>`
+      : ''
+    return html([zone, table, countsBar])
+  }
+
+  /** 一行的删除入口（做成"打开那个动作"的按钮：行内动作与表格同一套机制，不懂业务）。
+   *  **只有 `deletable:true` 的行才给按钮**（插件已经判过"是不是我上传的"）：界面不摆一个按下去必被拒的按钮。 */
+  function rowRowDelete(row, actionId) {
+    if (!actionId || row.deleted === true || row.deletable !== true) return ''
+    const action = actionOf(actionId)
+    return `<button data-action="${attr(actionId)}" data-preset='${attr(JSON.stringify({ id: row.id }))}'` +
+      ` title="${attr(action.title)}">删除（留痕）</button>`
+  }
   function renderBody(kind, panel, data) {
     if (kind === 'table') return renderTable(panel, data)
+    if (kind === 'files') return renderFiles(panel, data)
     if (kind === 'metrics') {
       return `<div class="q-metrics">${(data.metrics || []).map((item) =>
         `<div class="q-metric"><b>${esc(item.value)}</b><span>${esc(item.label)}</span></div>`).join('')}</div>`
@@ -798,6 +874,7 @@
     if (bar) bar.outerHTML = layoutBar(list.length)
     bindPanels()
     bindInteractions()
+    bindFiles(el('q-view'))          // ⑥ 文件集合面板（附件）：拖拽上传 / 选择文件 / 键盘
   }
 
 
@@ -948,6 +1025,7 @@
       + `<button class="q-link" data-tab-pin="1" title="把这条对象地址固定成一个标签页，方便来回切">钉成标签页</button></div>`,
       head,
       toolbarHtml([...objectActions(), ...objectRouteActions()], `${route.view}/${route.kind}`),
+      reportBar(state.object?.reports || [], `${route.view}/${route.kind}`),
       layoutBar(laid.list.length),
       `<div class="q-panels">${laid.list.map((item) => panelSection(item.panel, item.collapsed)).join('')}</div>`,
       toolbarHtml(viewActions({ excludeRoutePrefilled: true }), `${route.view}（视图级动作）`)
@@ -957,6 +1035,7 @@
       `<div data-ui-blocks="${attr(`page.${route.view}`)}"></div>`])
     bindPanels()
     bindInteractions()
+    bindFiles(el('q-view'))          // ⑥ 文件集合面板（附件）：拖拽上传 / 选择文件 / 键盘
     loadBlocks()
   }
 
@@ -972,12 +1051,15 @@
       + `<button class="q-link" data-tab-pin="1">钉成标签页</button></p></div>`,
       isHome ? workbenchHtml() : '',
       toolbarHtml(actions, state.route.view),
+      reportBar((state.surface.reports || []).filter((item) => !item.object_kind
+        && (item.views || []).includes(state.route.view)), state.route.view),
       layoutBar(laid.list.length),
       `<div class="q-panels${isHome ? ' q-panels-home' : ''}">${laid.list.map((item) =>
         panelSection(item.panel, item.collapsed)).join('')}</div>`,
       `<div data-ui-blocks="${attr(`page.${state.route.view}`)}"></div>`])
     bindPanels()
     bindInteractions()
+    bindFiles(el('q-view'))          // ⑥ 文件集合面板（附件）：拖拽上传 / 选择文件 / 键盘
     loadBlocks()
   }
 
@@ -1050,6 +1132,169 @@
     const layout = layoutOf()
     saveLayout({ order: layout.order, collapsed: ids, hidden: layout.hidden })
     renderPanels()
+  }
+
+  // ---------------------------------------------------------------- ⑥ 文件集合面板（附件）
+  /**
+   * 一个文件的上传：**原始字节** POST（查询串带对象关联与文件名）。为什么不是 multipart/表单：
+   * 原始字节最直白 —— 没有"边界串/编码"这一层可以被搞错，大文件也是流式的；文件名与可见性走查询串，
+   * 服务端按**会话身份**判侧（查询串改不动"我是谁"）。
+   */
+  async function uploadOne(zone, file) {
+    const url = zone.dataset.uploadUrl
+    const params = new URLSearchParams()
+    params.set('kind', zone.dataset.uploadKind || '')
+    params.set('id', zone.dataset.uploadId || '')
+    params.set(zone.dataset.nameParam || 'name', file.name)
+    const vis = zone.querySelector('[data-file-visibility]')
+    if (vis) params.set(zone.dataset.visibilityParam || 'visibility', vis.value)
+    const status = (text) => {
+      const box = zone.querySelector('[data-drop-status]')
+      if (box) box.textContent = text
+    }
+    status(`上传 ${file.name}…（${Math.max(1, Math.round(file.size / 1024))} KiB）`)
+    try {
+      const res = await fetch(`${url}?${params.toString()}`, { method: 'POST', credentials: 'same-origin',
+        headers: { 'content-type': file.type || 'application/octet-stream' }, body: file })
+      let out = null
+      try { out = await res.json() } catch (err) {
+        out = { ok: false, code: 'bad-json', reason: `HTTP ${res.status}（响应不是 JSON）` }
+      }
+      if (!out.ok) {
+        status(`${file.name} 被拒：${out.code || res.status} —— ${out.reason || ''}`)
+        toast('bad', `上传被拒（${out.code || res.status}）`,
+          [out.reason, out.next_action].filter(Boolean).join(' · '))
+        return { ok: false, code: out.code || String(res.status), status: res.status }
+      }
+      status(`${file.name} 已上传（sha256 ${String(out.attachment?.sha256 || '').slice(0, 19)}…）`)
+      return { ok: true, status: res.status }
+    } catch (err) {
+      status(`${file.name} 上传失败：${String(err)}`)
+      return { ok: false, code: 'offline', status: 0 }
+    }
+  }
+  async function uploadFiles(zone, files) {
+    if (!zone || !files || !files.length) return
+    const done = []
+    for (const file of files) done.push(await uploadOne(zone, file))
+    const ok = done.filter((item) => item.ok).length
+    const bad = done.filter((item) => !item.ok)
+    toast(ok ? 'ok' : 'bad', `${ok}/${done.length} 个文件已上传`,
+      bad.length ? `被拒：${[...new Set(bad.map((item) => item.code))].join(' / ')}（原因见面板上的字与提示条）`
+        : '列表已刷新：文件名/大小/上传人/时间/sha256 都在表里，可核对')
+    await loadAll()
+  }
+  /** 拖拽 + 选择文件（多文件）+ 键盘（焦点在方块上按 Enter/Space = 选择文件）。 */
+  function bindFiles(root) {
+    root.querySelectorAll('[data-dropzone]').forEach((zone) => {
+      const input = zone.querySelector('[data-file-input]')
+      const pick = zone.querySelector('[data-file-pick]')
+      if (pick && input) pick.addEventListener('click', () => input.click())
+      if (input) input.addEventListener('change', () => { uploadFiles(zone, [...input.files]); input.value = '' })
+      zone.addEventListener('dragover', (ev) => { ev.preventDefault(); zone.classList.add('q-drop-on') })
+      zone.addEventListener('dragleave', () => zone.classList.remove('q-drop-on'))
+      zone.addEventListener('drop', (ev) => {
+        ev.preventDefault()
+        zone.classList.remove('q-drop-on')
+        uploadFiles(zone, [...(ev.dataTransfer ? ev.dataTransfer.files : [])])
+      })
+      zone.addEventListener('keydown', (ev) => {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return
+        ev.preventDefault()
+        if (input) input.click()
+      })
+    })
+  }
+
+  // ---------------------------------------------------------------- ⑦ 导出 / 打印（`report` 声明）
+  /**
+   * 导出/打印按钮组：每个**声明过的格式**一个按钮 = 打开那个插件自己的动作并把 `format` 预填好。
+   * 外壳既不知道导出的是什么内容、也不生成内容（谁的事实谁导出）；`html` 那一档就是"可打印的文档"。
+   */
+  function reportBar(reports, label) {
+    const list = (reports || []).filter((item) => actionOf(item.action) && (item.formats || []).length)
+    if (!list.length) return ''
+    return `<div class="q-actions q-reportbar" data-reportbar="${attr(label)}">` + list.map((item) =>
+      `<span class="q-report"><span class="q-report-title">${esc(item.title)}</span>` +
+      (item.formats || []).map((format) => `<button data-action="${attr(item.action)}"` +
+        ` data-preset='${attr(JSON.stringify({ format }))}' title="${attr(item.hint || '')}">` +
+        `${format === 'html' ? '打印 / HTML' : `导出 ${format.toUpperCase()}`}</button>`).join('') +
+      `</span>`).join('') +
+      `<span class="q-hint">导出内容由注册它的插件生成（与账面同源、逐行可对）；HTML 可直接打印</span></div>`
+  }
+  /** 打印：把导出的 HTML 放进一个隐藏 iframe 里打印（不打印界面本身；弹窗被拦也能用下载的那份）。 */
+  function printExport(htmlText) {
+    const frame = document.createElement('iframe')
+    frame.setAttribute('data-print-frame', '1')
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
+    document.body.appendChild(frame)
+    frame.srcdoc = htmlText
+    frame.addEventListener('load', () => {
+      try { frame.contentWindow.focus(); frame.contentWindow.print() } catch (err) { /* 浏览器拦住时用下载件打印 */ }
+      setTimeout(() => frame.remove(), 4000)
+    })
+  }
+  /** 导出预览 + 打印（一屏内完成：看得见内容、点得到打印、也能再下载一次）。 */
+  function exportPreview(exp, action) {
+    const rows = exp.rows === undefined || exp.rows === null ? '' : `${exp.rows} 行`
+    openModal(html([
+      `<h2 id="q-action-title">导出：${esc(exp.filename || '')}</h2>`,
+      `<p class="q-src">由 <code>${esc(action ? action.plugin_id : '')}</code> 的 <code>${
+        esc(action ? action.id : '')}</code> 生成 · 格式 <code>${esc(exp.format || '')}</code>`,
+      `${rows ? ` · ${esc(rows)}` : ''}${exp.digest ? ` · 内容指纹 <code>${esc(String(exp.digest).slice(0, 19))}…</code>` : ''}`,
+      ` · 与账面同源（导出用的就是这一侧账本里的行）</p>`,
+      `<div class="q-export-holder" data-export-holder="1"></div>`,
+      `<div class="q-actions"><button class="primary" data-print="1">打印</button>`,
+      `<button data-download="1">下载这份文件</button><button data-close="1">关闭</button></div>`,
+      `<p class="q-hint">打印走浏览器自己的打印对话框（可以"另存为 PDF"）；下载得到的是同内容的一份文件。</p>`]),
+    'q-export-modal')
+    const modal = el('q-modal')
+    if (!modal) return
+    const holder = modal.querySelector('[data-export-holder]')
+    if (holder) {
+      if ((exp.format || '') === 'html') {
+        const frame = document.createElement('iframe')
+        frame.className = 'q-export-frame'
+        frame.setAttribute('data-export-frame', '1')
+        frame.setAttribute('title', exp.filename || '导出预览')
+        frame.srcdoc = exp.content
+        holder.appendChild(frame)
+      } else {
+        const pre = document.createElement('pre')
+        pre.className = 'q-export-text'
+        pre.textContent = String(exp.content).slice(0, 20000)
+        holder.appendChild(pre)
+      }
+    }
+    modal.querySelector('[data-close]')?.addEventListener('click', closeModal)
+    modal.querySelector('[data-print]')?.addEventListener('click', () => printExport(exp.content))
+    modal.querySelector('[data-download]')?.addEventListener('click', () => downloadExport(exp))
+  }
+  /** 导出结果落成一份文件（浏览器下载；文件名由插件给）。 */
+  function downloadExport(exp) {
+    try {
+      const blob = new Blob([exp.content], { type: exp.content_type || 'text/plain; charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = exp.filename || `export.${exp.format || 'txt'}`
+      document.body.appendChild(link); link.click(); link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 4000)
+      return true
+    } catch (err) {
+      toast('warn', '下载没起来（浏览器限制）', String(err))
+      return false
+    }
+  }
+  /** 动作回执里带了 `result.export` ⇒ 落文件 + 打开预览（打印在预览里一键完成）。 */
+  function deliverExport(out, action) {
+    const exp = out && out.result && out.result.export
+    if (!exp || typeof exp.content !== 'string') return false
+    const saved = downloadExport(exp)
+    exportPreview(exp, action)
+    toast('ok', `导出已生成：${exp.filename || ''}`,
+      [exp.rows !== undefined ? `${exp.rows} 行（与账面同源）` : '', saved ? '已下载' : ''].filter(Boolean).join(' · '))
+    return true
   }
 
   function bindInteractions() {
@@ -1503,8 +1748,11 @@
         { view: state.route.view, route: state.route, input })
       notifyAction(out, action)
       if (out.ok) {
+        // **导出/打印**（`result.export`）：落一份文件 + 打开预览（打印在预览里一键完成）
+        const exported = out.result && out.result.export ? { ...out.result.export } : null
         closeModal()
         await loadAll()
+        if (exported) deliverExport({ result: { export: exported } }, action)
         return
       }
       // 失败：**回到表单**（确认弹层已经不在 DOM 里了，把结果写进它等于丢掉）并逐字段标红

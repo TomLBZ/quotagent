@@ -65,6 +65,16 @@
 **`T-321` 起 63/63 插件目录均已建出**（`plugin.json` + `requirements/README.md`；测试/围栅门按阶段 4.1/4.2 搬进 `tests/`）。
 **承载体现状（`EV-178` 末实测，逐条可复算）**：整段（已接承载计数、无入口插件的逐条清单、三层插件的逐行归属表）按归档机制**整段逐字**搬到 `docs/design/14-plugin-inventory-archive.md` §6 —— `tools/verify.sh plugins` 读的是主文件 + 归档的**并集**，搬过去的行受同一套断言约束（归档不是豁免区）。
 
+### 2.1 本批新增：`system/attachments`（对象级附件与文件交换）
+
+| 插件（文件） | 提供的能力 | 提供者服务名 | 被哪些 profile 装配 | 独立演进时改哪里 |
+|---|---|---|---|---|
+| `src/system/attachments/code/index.mjs` | **对象级附件（文件交换）的路由面**：RFQ 包 / 报价 / 变更 / PO 上都能传与看文件；上传/列表/下载/删除五条 HTTP 路由**注册进路由注册面** `uiRoutes`（不改 `webui.mjs` 的静态路由表）；下载按**会话侧 + 身份**校验（未登录 401 / 跨侧 403 / 超限 413 / 类型 415 / 路径穿越 400）；正文落 `<ui_shared>/attachments/` 的 **0600** 存储（内容寻址 + journal 留痕），**账本零新增** | `attachments` | `webui` profile（`host/cli.mjs` 与 `runtime/live-control` 同一处装配点，挂在 webui 的 ctx 下才 inject 得到 `uiRoutes`） | 只改本目录；上限/类型白名单/对象类策略在 `code/attachments.mjs`，路由表在 `code/index.mjs`；正文存储格式变更须新增 ADR |
+| `src/system/attachments/code/ui.mjs` | **同一插件在界面上的那一半**：附件面板（形状 `files`：拖拽多文件上传 + 文件表：名字/大小/上传人/时间/sha256/可见性 + 每行下载与删除）、删除动作（留痕）、状态栏读数、删除留痕通知 | ——（GUI 贡献，经 `ui-surface.mjs` 装载） | 同左 | 只改本文件；交付物/内部件的可见性档位与 `attachments.mjs` 同源 |
+| `src/domain/{rfq,commitments,compare}/code/ui.mjs` | **导出 / 打印的插件侧一半**：`report` 贡献（声明"能以哪几种格式导出"）+ 各自的动作（RFQ 包 / 采购单 PO / 比价表），内容只由该插件自己那一侧的账本行拼出 | —— | 同左 | 只改各自文件；新增导出格式先扩 `ui-surface.mjs` 的 `REPORT_FORMATS` |
+| `src/system/webui/code/{ui-surface,app-shell,assets}/**` | 机制侧：`report` 贡献种类 + `files` 面板形状（`ui-surface.mjs`）；`host.report()` 的**序列化与上限**（CSV / 可打印 HTML，`app-shell.mjs`）；客户端渲染与拖拽/打印（`assets/app.{js,css}`） | —— | 同左 | 只改这些文件；机制不认识任何业务（谁的事实谁导出） |
+
+
 ## 3. 已归档的四节
 
 `docs/design/14-plugin-inventory-archive.md`：宿主库层（`host/lib/*.mjs`）、Python 侧功能（含 `src/quotagent/services/*.py` 的逐文件归属）、

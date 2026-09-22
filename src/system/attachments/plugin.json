@@ -1,0 +1,17 @@
+{
+  "name": "attachments",
+  "version": "1.0.0",
+  "layer": "system",
+  "provides": [
+    "attachments"
+  ],
+  "entry": "code/index.mjs",
+  "description": "system 插件「attachments」：**对象级附件**（RFQ 包 / 报价 / 变更 / 采购单 PO 都能挂文件）+ 文件交换的存储与权限 —— 上传/列表/下载/删除都**经路由注册面**（`uiRoutes`）注册；正文落 `<ui_shared>/attachments/` 的 0600 存储（内容寻址 + journal 留痕），**账本零新增**；下载按**会话侧与身份**校验（未登录 401 / 跨侧 403 / 超限 413 / 类型 415 / 路径穿越 400，拒绝零落盘）。GUI 贡献（附件面板 / 删除动作 / 状态读数 / 删除留痕通知）在 `code/ui.mjs`，经 `ui-surface.mjs` 的注册面装载。",
+  "permissions": {
+    "ledger": "none",
+    "writes": [
+      "own-dir"
+    ],
+    "network": "loopback-only"
+  }
+}

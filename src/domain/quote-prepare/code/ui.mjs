@@ -49,14 +49,22 @@ const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== nul
 const typeRows = (rows, prefix) => rows.filter((row) => String(row?.type ?? '').startsWith(prefix))
 
 /** 本视角投影事实行 → 插件要的白名单载荷（只有 `rfq/*`、`quote/*` 的类型，逐键白名单）。 */
-const FACT_KEYS = ['item_id', 'item_ids', 'items', 'currency', 'package_id', 'rfq_id', 'quote_id', 'quote_by',
-  'quote_draft_id', 'unit_price_cents', 'lead_time_days', 'supplier', 'ok', 'status', 'submitted_at']
+const FACT_KEYS = ['item_id', 'item_ids', 'items', 'lines', 'currency', 'package_id', 'rfq_id', 'quote_id',
+  'quote_by', 'quote_draft_id', 'unit_price_cents', 'lead_time_days', 'supplier', 'ok', 'status',
+  'submitted_at', 'line_count']
 const payloadOf = (host, view) => {
   const facts = []
   for (const row of typeRows(host.rows(view), 'rfq/').concat(typeRows(host.rows(view), 'quote/'))) {
     const body = bodyOf(row)
     const fact = { type: String(row?.type ?? ''), ts: row?.ts }
     for (const key of FACT_KEYS) if (body[key] !== undefined && body[key] !== null) fact[key] = body[key]
+    // **逐行真值**也要进来：行项目目录是**并集**（`items[]` / `item_ids[]` / `item_id` / `lines[].item_id`）——
+    // 漏掉 `lines[].item_id` 会把"明明在账本里读到的行项目"当成不存在，于是一份多行报价的合法行被
+    // 误判成 `item-not-found`（`quote-prepare.mjs` 的老实现就是这么读的，本处是把它补回来）。
+    if (Array.isArray(body.lines)) {
+      fact.lines = body.lines.slice(0, 64).map((line) => ({
+        item_id: asText(line?.item_id), unit_price: line?.unit_price, lead_time_days: line?.lead_time_days }))
+    }
     if (String(row?.type ?? '').startsWith('quote/drafted') && fact.quote_draft_id === undefined
       && typeof row?.correlation_id === 'string') fact.quote_draft_id = row.correlation_id
     facts.push(fact)
@@ -435,21 +443,58 @@ export async function register(surface, host) {
         ['--inbox', `${host.sharedDir}/quote-drafts`, '--ui-shared', host.sharedDir, '--view', 'supplier',
           '--ledger-supplier', supplierLedger(), '--ledger-contractor', contractorLedger(),
           '--now', host.now()])
-      const json = run.json ?? {}
-      const appliedRow = (json.applied ?? [])[0] ?? {}
-      const ok = run.ok && json.ok === true && Number(appliedRow.line_count ?? 0) === lines.length
-      const refused = (json.refused ?? [])[0] ?? null
-      return { ok, code: ok ? 'drafted' : (refused?.code ?? 'writer-refused'),
-        reason: refused?.reason ?? (ok ? '' : (run.reason ?? '')),
+      // ---- **判据只有一条**：写者回执（退出码 + stdout JSON），且只认**本动作落的那一条待办件** --------
+      // 修前的**假失败**（两个子 agent 实测、原样复现）：`ok` 里叠了一条自造断言
+      // `Number(applied[0].line_count) === lines.length` ——
+      //   · `applied[0]` 是"写者这一次消费的**第一条**"，写者一次消费多条待办件时那不是我的；
+      //   · 单行草稿在写者侧 `line_count` 是"`lines` 数组有几条"（恒 0）⇒ 断言恒不成立。
+      // 结果：账本真落了行、响应报 `writer-refused`；用户看到失败→**重复提交**（比真失败更坏）。
+      // 现在：ok/code/ledger_added/next_action **全部**从 `receipt` 派生，归属用 `staged.name` 显式指认。
+      const receipt = host.writerReceipt(run)
+      const mine = receipt.item({ file: staged.name, draft_id: draftId })
+      const written = mine && mine.where === 'applied' ? mine.entry : null
+      const duplicated = mine && mine.where === 'duplicates' ? mine.entry : null
+      const refusedRow = mine && mine.where === 'refused' ? mine.entry : null
+      const ok = Boolean(written || duplicated)
+      // 本动作**自己**真落了几行（写者逐条给 `ledger_added`；不是本次运行的全局数）
+      const ledgerAdded = written ? Number(written.ledger_added ?? 0) : 0
+      // 同一次运行里写者还处理了**别人**的待办件（不属于本动作）：如实列出来 ——
+      // 否则用户会看到"本动作零新增"而账本行数却变了，又是一处对不上。
+      const mineName = staged.name
+      const othersApplied = (receipt.applied ?? []).filter((row) => host.receiptFileName(row) !== mineName)
+      const otherRefused = (receipt.refused ?? []).filter((row) => host.receiptFileName(row) !== mineName)
+      const othersNote = (written || duplicated) ? '' : (othersApplied.length || otherRefused.length
+        ? `（同一次运行里写者还处理了 ${othersApplied.length + otherRefused.length} 条**别的**待办件：`
+          + `${othersApplied.length} 条已落行、${otherRefused.length} 条被拒 —— 那些不属于本动作）`
+        : '')
+      const code = ok ? 'drafted'
+        : (refusedRow?.code ?? receipt.code ?? (mine ? 'writer-refused' : 'writer-receipt-missing'))
+      const reason = refusedRow?.reason ?? (ok ? '' : (receipt.reason || ''))
+      return { ok, code, reason,
         next_action: ok
-          ? `草稿已落账（quote/drafted，**${lines.length} 行**，两侧各一条）：在「我的草稿」里点「人签提交」`
+          ? `草稿已落账（quote/drafted，**${written ? (written.line_count ?? lines.length) : lines.length} 行**`
+            + `，供应商 + 承包商各一条 ⇒ 本动作账本 +${ledgerAdded} 行）：在「我的草稿」里点「人签提交」`
             + '一次签完整份（不必一行签一次）'
-          : (refused?.next_action ?? '看 files/failures 里每条的 next_action；被拒时账本零新增'),
-        result: { applied: [{ item_id: first.item_id, quote_draft_id: draftId, line_count: lines.length,
-          lines, pending: staged.file, ledger_added: json.ledger_added ?? 0,
-          event: appliedRow.event ?? (run.ok ? 'quote/drafted' : null), ok,
-          refusal: refused, writer_stdout: run.stdout ? run.stdout.slice(-240) : '' }],
-        failures, drafts: ok ? 1 : 0, lines: lines.length } }
+            + (duplicated ? '；这一份**本来就在账本里**（幂等：本次零新增）' : '')
+            + (otherRefused.length ? `；同一次运行里另有 ${otherRefused.length} 条待办件被拒`
+              + `（${otherRefused.map((row) => row?.file ?? '?').join(' / ')}）—— 它们不属于本动作` : '')
+          : (refusedRow?.next_action ?? receipt.next_action
+            ?? `这条待办件（${mineName}）没在写者回执里出现（applied/duplicates/refused 都没有）`
+              + '⇒ 本动作账本零新增：看 result.writer_stdout 定位，再重提交')
+            + othersNote,
+        result: { applied: [{ item_id: first.item_id, quote_draft_id: draftId,
+          line_count: written ? (written.line_count ?? lines.length) : lines.length,
+          lines, pending: staged.file, pending_file: staged.name,
+          // 这一条真落的行数（写者回执逐条给）+ 它落在哪两本账上
+          ledger_added: ledgerAdded, ledger_rows: written?.ledger_rows ?? [],
+          event: written ? (written.event ?? 'quote/drafted') : null, ok,
+          refusal: refusedRow, duplicate: duplicated,
+          writer_stdout: receipt.stdout_tail }],
+        failures, drafts: ok ? 1 : 0, lines: lines.length,
+        writer: { rc: receipt.rc, stdout_ok: receipt.said, code: receipt.code,
+          ledger_added: receipt.ledger_added, refused: receipt.refused, skipped: receipt.skipped,
+          others: { applied: othersApplied.map((row) => ({ file: row?.file ?? '', code: null })),
+            refused: otherRefused.map((row) => ({ file: row?.file ?? '', code: row?.code ?? '' })) } } } }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'quote.submit', title: '人签提交报价', views: ['supplier'],
@@ -481,20 +526,41 @@ export async function register(surface, host) {
           '--actor', typed, '--now', host.now(),
           '--comment', String(input.comment ?? ''), '--timeout-policy', asText(input.timeout_policy) || 'remind',
           '--ledger-supplier', supplierLedger(), '--ledger-contractor', contractorLedger()])
-      const json = run.json ?? {}
-      const applied = json.applied ?? []
-      const lines = Number((applied[0] ?? {}).line_count ?? 0)
-      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (run.ok ? 'submitted' : 'writer-failed'),
-        reason: json.refusal?.reason ?? run.reason ?? '',
-        next_action: json.refusal?.next_action ?? (run.ok
-          ? `已提交：本侧账本多了 approval/requested、approval/granted、quote/submitted 三条`
-            + `${lines > 1 ? `（这一份报价 **${lines} 行**，一次签完）` : ''}；`
-            + '承包商账本多了「供应商已提交报价」一条（下面两个面板都能回读）'
-          : '看 stdout/stderr 定位唯一写者的拒绝原因（拒绝时账本零新增）'),
-        result: { quote_id: json.quote_id ?? null, approval_id: json.approval_id ?? null,
-          applied, ledger_added: json.ledger_added ?? 0,
-          duplicates: json.duplicates ?? [], supplier: json.supplier ?? null,
-          contractor: json.contractor ?? null, writer: json } }
+      // ---- **判据只有一条**：写者回执（退出码 + stdout JSON）------------------------------------------------
+      // 归属**按草稿 id 指认**（写者回执的每条 applied/duplicates 都带 `draft_id`），不猜 `applied[0]`；
+      // 幂等（同一份草稿再签）⇒ 账本零新增，响应必须**如实说"零新增"**（不能照抄"多了三条"那句话）。
+      const receipt = host.writerReceipt(run)
+      const draftId = asText(input.draft_id)
+      const mine = receipt.item({ draft_id: draftId })
+      const written = mine && mine.where === 'applied' ? mine.entry : null
+      const already = mine && mine.where === 'duplicates' ? mine.entry : null
+      const refusedRow = mine && mine.where === 'refused' ? mine.entry : null
+      // 兜底：写者没有逐条给 id（旧版回执）但整次运行成功且确有 applied ⇒ 按成功算（同源，不猜内容）
+      const fallbackWritten = !mine && receipt.ok === true && receipt.applied.length > 0
+      const ok = Boolean(written || already || fallbackWritten)
+      const ledgerAdded = already ? 0 : Number(receipt.ledger_added ?? 0)
+      const lines = Number((written ?? receipt.applied.find((row) => row?.view === 'supplier')
+        ?? receipt.applied[0] ?? {}).line_count ?? 0)
+      const code = ok ? (already && !written ? 'already-signed' : 'submitted')
+        : (refusedRow?.code ?? receipt.code ?? 'writer-failed')
+      return { ok, code, reason: refusedRow?.reason ?? (ok ? '' : receipt.reason),
+        next_action: ok
+          ? (already && !written
+            ? `这一份（${draftId}）**已经签过了**：账本零新增（签名是幂等动作，不会产生第二条报价事实）——`
+              + '去「已提交的报价」面板回读那一条'
+            : `已提交：本侧账本多了 approval/requested、approval/granted、quote/submitted 三条`
+              + `${lines > 1 ? `（这一份报价 **${lines} 行**，一次签完）` : ''}；`
+              + `承包商账本多了「供应商已提交报价」一条 ⇒ 本次账本共 +${ledgerAdded} 行`
+              + '（下面两个面板都能回读）')
+          : (refusedRow?.next_action ?? receipt.next_action
+            ?? '看 stdout/stderr 定位唯一写者的拒绝原因（拒绝时账本零新增）'),
+        result: { quote_id: receipt.json?.quote_id ?? null, approval_id: receipt.json?.approval_id ?? null,
+          applied: receipt.applied, duplicates: receipt.duplicates, ledger_added: ledgerAdded,
+          line_count: lines, supplier: receipt.json?.supplier ?? null,
+          contractor: receipt.json?.contractor ?? null,
+          // 原始判据（rc + stdout JSON）与本次运行的全局读数都留在回执里，供界面/审计核对
+          writer: { rc: receipt.rc, stdout_ok: receipt.said, code: receipt.code,
+            ledger_added: receipt.ledger_added, json: receipt.json } } }
     } }))
 
   out.push(surface.shortcut({ plugin_id: me, id: 'shortcut.quote-draft', keys: 'd', action: 'quote.draft',

@@ -880,5 +880,103 @@ export async function register(surface, host) {
   out.push(surface.shortcut({ plugin_id: me, id: 'shortcut.find', keys: 'f', action: 'find.object',
     title: '按 id / 关键字找对象', order: 5 }))
 
+  // ------------------------------------------------------------------ 导出 / 打印（`report` 声明 + 动作的服务端一半）
+  /**
+   * 包的行项目（导出用）：**只从本侧事实与投递快照收集**，每行带 `source`（这条行是哪来的）与
+   * `payload_sha256`（该版本账本事实的载荷哈希）⇒ 打印出来也能逐条对回账本。
+   * 顺序 = 先账本事实（新写者把 `items` 数组写进 `rfq/published`），再投递信封，最后快照文件。
+   */
+  const exportItemsOf = (packageId, view) => {
+    const rows = host.rows(view)
+    const published = rowsOfType(rows, 'rfq/published').map((row) => ({ ...bodyOf(row), seq: row.seq,
+      entry_hash: row.entry_hash, ts: row.ts })).filter((row) => asText(row.package_id) === packageId)
+    const latest = published[published.length - 1] ?? {}
+    const amended = rowsOfType(rows, 'rfq/amended').map((row) => bodyOf(row))
+      .filter((row) => asText(row.package_id) === packageId)
+    const qtyDelta = new Map()
+    for (const delta of amended.flatMap((row) => (Array.isArray(row.deltas) ? row.deltas : []))) {
+      if (asText(delta.field) === 'qty') qtyDelta.set(asText(delta.item_id), delta)
+    }
+    const items = []
+    const push = (item, source, rev) => {
+      const itemId = asText(item?.item_id)
+      if (itemId === '' || items.some((row) => row.item_id === itemId)) return
+      const delta = qtyDelta.get(itemId)
+      items.push({ no: items.length + 1, item_id: itemId, description: asText(item?.description),
+        unit: asText(item?.unit), qty: Number(item?.qty), spec_refs: (Array.isArray(item?.spec_refs)
+          ? item.spec_refs : []).map(String).join(' '), source, rev: rev === undefined || rev === '' ? '' : rev,
+        payload_sha256: asText(latest.hash),
+        qty_amended: delta ? `${delta.before}→${delta.after}（rfq/amended）` : '' })
+    }
+    for (const item of (Array.isArray(latest.items) ? latest.items : [])) push(item, 'ledger:rfq/published', latest.rev)
+    const delivery = asText(host.config?.rfq_delivery)
+    if (delivery !== '') {
+      const raw = host.readJson(delivery)
+      for (const envelope of (Array.isArray(raw) ? raw : (raw ? [raw] : []))) {
+        const spec = envelope && typeof envelope.spec === 'object' && envelope.spec !== null ? envelope.spec : {}
+        if (asText(spec.package_id) !== packageId) continue
+        for (const item of (Array.isArray(spec.items) ? spec.items : [])) {
+          push(item, 'exchange-envelope', envelope.rev ?? '')
+        }
+      }
+    }
+    for (const item of (Array.isArray(snapshotOfPackage(packageId)?.spec?.items)
+      ? snapshotOfPackage(packageId).spec.items : [])) push(item, 'snapshot-file', '')
+    return { items, latest, published_count: published.length }
+  }
+
+  out.push(surface.action({ plugin_id: me, id: 'rfq.export', title: '导出 / 打印 RFQ 包（人读格式）',
+    views: ['contractor', 'supplier'], group: '发包', order: 14, icon: 'print', object_kind: 'package',
+    hint: '导出内容 = 本侧账本里的包版本事实 + 这次投递/快照里的行项目（逐行带来源与版本锚）；'
+      + '外壳只做序列化，内容由本插件给（谁的事实谁导出）',
+    input: { fields: [
+      { name: 'package_id', label: '包 id', type: 'text', required: true, from_route: true,
+        help: '在包的对象页上会自动填当前这一条' },
+      { name: 'format', label: '格式（csv = 表格；html = 可直接打印）', type: 'select', required: true,
+        options: ['csv', 'html'], default: 'csv' },
+    ] },
+    server: (ctx, input) => {
+      const view = ['contractor', 'supplier'].includes(asText(ctx?.view)) ? asText(ctx.view) : 'contractor'
+      const packageId = asText(input.package_id)
+      if (packageId === '') {
+        return { ok: false, code: 'package-id-required', reason: '要导出哪一个包？',
+          next_action: '在包的对象页上点「导出 / 打印」（按钮会把当前这一条填好）' }
+      }
+      const { items, latest, published_count } = exportItemsOf(packageId, view)
+      if (!items.length) {
+        return { ok: false, code: 'no-exportable-lines',
+          reason: `本侧（${view}）读不到包 ${packageId} 的行项目（账本事实里没有 items 数组，也没有投递信封/快照）`,
+          next_action: '先让对方把包投给你（供应商）或确认发布时落了快照文件（承包商）；'
+            + '行项目读不到就如实拒，不编一张空表出来' }
+      }
+      return host.report({ format: asText(input.format) || 'csv', filename: `rfq-${packageId}-rev${latest.rev ?? 'x'}`,
+        title: `RFQ 包 ${packageId}（rev${latest.rev ?? '?'}）`,
+        subtitle: `${view} 侧导出 · 行项目 ${items.length} 条 · 本侧版本事实 ${published_count} 条`,
+        facts: [
+          { key: '包 id', value: packageId },
+          { key: '版本（账本事实）', value: `rev${latest.rev ?? '?'}` },
+          { key: '报价截止', value: asText(latest.quote_by) || '—' },
+          { key: '载荷哈希（账本 body.hash）', value: asText(latest.hash) || '—' },
+          { key: '账本行', value: latest.seq === undefined ? '—' : `seq ${latest.seq} · ${asText(latest.entry_hash)}` },
+          { key: '条目数', value: String(items.length) },
+        ],
+        columns: [{ key: 'no', label: '#' }, { key: 'item_id', label: '行项目' },
+          { key: 'description', label: '描述' }, { key: 'unit', label: '单位' }, { key: 'qty', label: '数量' },
+          { key: 'spec_refs', label: '规格引用' }, { key: 'qty_amended', label: '量变更（如有）' },
+          { key: 'rev', label: '版本' }, { key: 'payload_sha256', label: '载荷哈希' },
+          { key: 'source', label: '行来源' }],
+        rows: items,
+        notes: ['行序与来源：账本事实 → 投递信封 → 快照文件（同一 item_id 只出一次）。',
+          `导出时刻：${host.now()}；本文件的行可与账本 rfq/published（seq ${latest.seq ?? '—'}）逐行核对。`],
+        source: `${view} 侧账本 rfq/published + 交换信封/快照文件（rfq.export，domain/rfq）`,
+        ledger_refs: latest.seq === undefined ? [] : [{ type: 'rfq/published', seq: latest.seq,
+          entry_hash: asText(latest.entry_hash), payload_sha256: asText(latest.hash) }] })
+    } }))
+
+  out.push(surface.report({ plugin_id: me, id: 'report.rfq-package',
+    title: 'RFQ 包（CSV / 可打印 HTML）', views: ['contractor', 'supplier'], object_kind: 'package',
+    formats: ['csv', 'html'], action: 'rfq.export', order: 14,
+    hint: '逐行带来源与版本锚；HTML 那一档可以直接打印或另存 PDF' }))
+
   return out
 }

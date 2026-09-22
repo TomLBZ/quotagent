@@ -361,5 +361,83 @@ export async function register(surface, host) {
           evaluation_id: json.evaluation_id ?? null, applied: json.applied ?? [] } }
     } }))
 
+  // ------------------------------------------------------------------ 导出 / 打印（`report` 声明 + 动作）
+  /**
+   * **比价表导出**（承包商道工具栏上的「导出 / 打印」）：内容 = 本侧账本里**已记录的那一次评估**
+   * （`compare/rank-computed` 的 `ranking` / `scores` / `flag_count` / `excluded` / `evaluation_id`），
+   * 名次与得分逐行来自账本事实；没有记录过评估时**如实说明**并给只读复算的那一份（绝不编一条名次）。
+   */
+  out.push(surface.action({ plugin_id: me, id: 'compare.print', title: '导出 / 打印比价表（人读格式）',
+    views: ['contractor'], group: '比价', order: 32, icon: 'print',
+    hint: '内容 = 本侧账本里已记录的那一次评估（名次/得分/偏差计数）；外壳只做序列化'
+      + '（与既有的 `compare.export` 分工：那条把两份 CSV 落盘并留一条 `compare/table-exported` 事实，'
+      + '这条给界面内的**下载 + 打印**）',
+    input: { fields: [
+      { name: 'format', label: '格式（csv = 表格；html = 可直接打印）', type: 'select', required: true,
+        options: ['csv', 'html'], default: 'csv' },
+      { name: 'package_id', label: '只看这个包（可空）', type: 'text',
+        help: '包 id（如 pkg-g1）；留空 = 本侧全部已记录的评估' },
+    ] },
+    server: (ctx, input) => {
+      const rows = host.rows('contractor')
+      const wanted = asText(input.package_id)
+      const recorded = rows.filter((row) => String(row?.type ?? '') === 'compare/rank-computed')
+        .map((row) => ({ body: (row && typeof row.body === 'object' && row.body !== null ? row.body : {}),
+          seq: row.seq, entry_hash: row.entry_hash, ts: row.ts }))
+        .filter((item) => wanted === '' || asText(item.body.package_id) === wanted)
+      const lines = []
+      for (const item of recorded) {
+        const body = item.body
+        const ranking = Array.isArray(body.ranking) ? body.ranking.map(String) : []
+        const scores = body.scores && typeof body.scores === 'object' ? body.scores : {}
+        ranking.forEach((quoteId, index) => lines.push({ no: lines.length + 1, rank: index + 1,
+          quote_id: quoteId, score: scores[quoteId] ?? '', package_id: asText(body.package_id),
+          package_rev: body.package_rev ?? '', flags: body.flag_count ?? 0,
+          excluded: (Array.isArray(body.excluded) ? body.excluded : []).map(String).join(' '),
+          evaluation_id: asText(body.evaluation_id), ledger_seq: item.seq ?? '',
+          source: 'ledger:compare/rank-computed' }))
+        for (const quoteId of (Array.isArray(body.excluded) ? body.excluded : []).map(String)) {
+          lines.push({ no: lines.length + 1, rank: '（排除）', quote_id: quoteId,
+            score: scores[quoteId] ?? '', package_id: asText(body.package_id), package_rev: body.package_rev ?? '',
+            flags: body.flag_count ?? 0, excluded: 'yes', evaluation_id: asText(body.evaluation_id),
+            ledger_seq: item.seq ?? '', source: 'ledger:compare/rank-computed' })
+        }
+      }
+      if (!lines.length) {
+        return { ok: false, code: 'no-recorded-evaluation',
+          reason: '本侧账本里还没有已记录的比价评估（`compare/rank-computed`）',
+          next_action: '先在「比价」工作区用当前权重排一次（那条只读复算不会落账本），'
+            + '或让承包商侧把评估结果落成事实；没有账面记录就不导出一张"看起来像官方表格"的东西' }
+      }
+      const weights = weightsNow()
+      const evaluations = [...new Set(lines.map((line) => line.evaluation_id).filter(Boolean))]
+      return host.report({ format: asText(input.format) || 'csv',
+        filename: `compare${wanted ? `-${wanted}` : ''}`,
+        title: `比价表${wanted ? `（包 ${wanted}）` : ''}`,
+        subtitle: `承包商侧导出 · ${lines.length} 行 · 已记录评估 ${evaluations.length} 次`,
+        facts: [
+          { key: '视图', value: 'contractor（承包商侧账本）' },
+          { key: '已记录的评估', value: evaluations.join(' ') || '—' },
+          { key: '当前权重（只读复算口径，不落账本）', value: weightsText(weights) },
+          { key: '行来源', value: 'ledger:compare/rank-computed（名次/得分/偏差计数逐行来自账本事实）' },
+        ],
+        columns: [{ key: 'no', label: '#' }, { key: 'rank', label: '名次' }, { key: 'quote_id', label: '报价' },
+          { key: 'score', label: '得分（越小越前，minmax 口径）' }, { key: 'package_id', label: '包' },
+          { key: 'package_rev', label: '包版本' }, { key: 'flags', label: '偏差计数' },
+          { key: 'excluded', label: '被排除' }, { key: 'evaluation_id', label: '评估 id' },
+          { key: 'ledger_seq', label: '账本行号' }, { key: 'source', label: '行来源' }],
+        rows: lines,
+        notes: ['名次与得分来自账本里已记录的那次评估（不是我现场算的）：这就是"与账面一致"的意思。',
+          `权重读数 ${weightsText(weights)} 只说明当前界面上的口径，导出内容不受它影响。`,
+          `导出时刻：${host.now()}。`],
+        source: '承包商侧账本 compare/rank-computed（compare.export，domain/compare）',
+        ledger_refs: recorded.map((item) => ({ type: 'compare/rank-computed', seq: item.seq,
+          entry_hash: asText(item.entry_hash), evaluation_id: asText(item.body.evaluation_id) })) })
+    } }))
+
+  out.push(surface.report({ plugin_id: me, id: 'report.compare', title: '比价表（CSV / 可打印 HTML）',
+    views: ['contractor'], formats: ['csv', 'html'], action: 'compare.print', order: 32,
+    hint: '名次/得分/偏差计数逐行来自账本里已记录的那次评估' }))
+
   return out
 }
