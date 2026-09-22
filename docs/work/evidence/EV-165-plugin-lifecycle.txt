@@ -297,3 +297,10 @@ rc=0
 - 未验证 `tools/plugin.sh load` 对 **Python 入口**（`entry: code/__init__.py`）的路径：本批 3 个样板插件入口都是 `.mjs`；
   装载器里 `.py` 分支（importlib）**写了但没被任何真实插件走过**。
 - 未在并发压力下重复跑两道门（只做了单次全绿 + 各自的变异自证）。
+
+## 提交与回读
+
+- 提交：`3a05b03d86b89e28b8a46c28de8724d997454b0d`（ARCH-PLUGIN2 迁移阶段 1：三层骨架 + tools/plugin.sh 六动词 + 注入式 UI 注册面 + ./run 一键运行）
+- 远端回读：`git ls-remote origin refs/heads/main` → `3a05b03d86b89e28b8a46c28de8724d997454b0d	refs/heads/main`（与本地 HEAD 逐字相同）
+- 本批只 `git add` 自己改的文件（47 个路径；同一工作树上有**并发批次** sa-1/sa-0 的在飞文档改动，未纳入本提交）
+- 收尾时间：2026-09-22T08:38:04Z

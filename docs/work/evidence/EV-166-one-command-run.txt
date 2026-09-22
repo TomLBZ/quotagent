@@ -80,3 +80,10 @@ rc=0
   断网需容器级隔离，本批没做（登记为阶段 5.4 的验收项）。
 - 未验证 `logs` 与 `config init`（**未实现**，见 `docs/design/28` §3.3）。
 - 未在**干净克隆**上跑 `./run up`（依赖 `host/node_modules`；`up` 会在缺失时调 `tools/cordis.sh install`，那条路径没被走过）。
+
+## 提交与回读
+
+- 提交：`3a05b03d86b89e28b8a46c28de8724d997454b0d`（ARCH-PLUGIN2 迁移阶段 1：三层骨架 + tools/plugin.sh 六动词 + 注入式 UI 注册面 + ./run 一键运行）
+- 远端回读：`git ls-remote origin refs/heads/main` → `3a05b03d86b89e28b8a46c28de8724d997454b0d	refs/heads/main`（与本地 HEAD 逐字相同）
+- 本批只 `git add` 自己改的文件（47 个路径；同一工作树上有**并发批次** sa-1/sa-0 的在飞文档改动，未纳入本提交）
+- 收尾时间：2026-09-22T08:38:04Z

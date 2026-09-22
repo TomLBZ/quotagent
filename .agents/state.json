@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-22T08:34:27Z",
+  "updated_at": "2026-09-22T08:38:04Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
   "next_task": "阶段 2（插件迁移）：把 `src/quotagent/services/**` 逐个搬进各自 `src/{domain,system}/<plugin>/code/`，每搬一个立刻跑它自己的 AC；阶段 1 的 wrapper 随实体搬迁撤销（见 `docs/work/plans/plugin-migration-plan.md` §2 阶段 2）",
@@ -8,7 +8,7 @@
   "last_verified_command": "tools/verify.sh docs | ac-registry | plugin-lifecycle | run-once | webui | modules | wiring | plugins | coverage（跑在本批提交树上）",
   "last_verified_result": "PASS：九道门全绿。docs（FR 166 条 / AC 136 条 / 0 未解析 / 预算最高 100%）；ac-registry；plugin-lifecycle 43/43（六动词真跑 + 注入式 UI 注册面真 HTTP + 机制负控 + 4 处单点变异全红 + 产品树字节不变）；run-once 18/18（doctor 7 项逐条 next_action / up 幂等且两次 status 逐字节一致 / down 真释放端口 / 凭据缺失不阻塞 up / 4 处变异全红）；webui；modules；wiring；plugins；coverage 8/8。阶段 1 的 wrapper：`src/domain/advice/code/index.mjs` → `host/modules/advice-panel.mjs`（阶段 4.1 实体搬迁）。",
   "last_verified_evidence": "docs/work/evidence/EV-165-plugin-lifecycle.txt",
-  "last_verified_commit": "477b2bf9c31c9aadca737c59e51926e870dd88a0",
+  "last_verified_commit": "3a05b03d86b89e28b8a46c28de8724d997454b0d",
   "blockers": [],
   "human_required": [
     "T-117 现场验证 V-001..V-012：备料已完成；**P1 按用户指令以\"V 全部通过\"为前提推进**（planning_assumptions，非结论），V 的正式 conclusion 与 G0/G1 签署仍需人工",
