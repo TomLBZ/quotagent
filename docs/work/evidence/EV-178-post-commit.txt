@@ -262,3 +262,12 @@ $ git rev-parse HEAD
 
 （本文件随「补记提交 3」一起入库；提交 3 的 SHA 与 push 后的回读见本次答复与页首说明。）
 
+### 收尾复核（本补记提交之后）
+
+```
+$ git status --porcelain        # 本补记提交之后
+(空)                            # ⇒ 0 行
+```
+
+> 注：`state.last_verified_commit` 按本仓惯例指**功能提交**（`6940627`），后续提交只追加原始行 / state 同步；`run-clone`/`clean-copy` 也是在该功能提交的 HEAD 上跑绿的，且其后两个提交只动文档与 state。
+

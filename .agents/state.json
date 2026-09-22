@@ -8,7 +8,7 @@
   "last_verified_command": "tools/verify.sh docs | coverage | ac-registry | plugins | webui | modules | wiring | invariants | events | storage | plugin-assets | plugin-requirements | plugin-lifecycle | evolution | evolve-module | p0-no-node | run-once（+ 提交后 run-clone / clean-copy）",
   "last_verified_result": "PASS（19 道门全绿）：docs PASS、coverage 8/8、ac-registry rc=0、plugins 5/5、webui 51/51、modules 521/521、wiring 5/5、invariants 22/22、events rc=0、storage 19/19、plugin-assets **16/16**（搬前 14/14，+PA8 +变异 F7）、plugin-requirements 18/18、plugin-lifecycle 66/66、evolution rc=0、evolve-module 61/61、p0-no-node 63 条 AC 全绿（无瞬时命中）、run-once 34/34；提交后 run-clone **20/20**、clean-copy PASS（15 道门在干净副本里全绿）。本批改到的门：plugin-assets（新增 PA8 + F7 + 参考面跟到搬家）、modules（读方改走 moduleSource）、plugin-lifecycle / storage / mail-transport / gate-timeline / advice / bid-heuristics（先改读方）",
   "last_verified_evidence": "docs/work/evidence/EV-178-plugin-relocation-batch8.md（+ plugin-file-map-batches.md §「非薄入口数的加减史」）",
-  "last_verified_commit": "818269c417a0da1c7e48b820842c37fa78f81ebe",
+  "last_verified_commit": "6940627f3782bb10bb8e22b019cb4626f8761808",
   "blockers": [],
   "human_required": [
     "T-117 现场验证 V-001..V-012：备料已完成；**P1 按用户指令以\"V 全部通过\"为前提推进**（planning_assumptions，非结论），V 的正式 conclusion 与 G0/G1 签署仍需人工",
@@ -73,7 +73,7 @@
     "userspace_single_source": "**src/userspace/ 是唯一事实源**（阶段 5.1，EV-168）：旧的 `user-space` 改成一个**指向 src/userspace 的 tracked 兼容符号链接**（.gitignore 的 `user-space/` 只匹配目录 ⇒ 链接本身入库），所以 tools/webui-serve.py 的 --user-space-root/--market-user-space、host/lib/user-space.mjs 的默认根与若干宿主门都不必改一行；两份用户插件（con-a/quote-trend、demo-ns/hello）的产物字节与声明哈希未变（11742 B/dffeff77…、297 B/33f46dbe…），旧 12 行实现逐字留档在 hello 的 docs/migration-note.md",
     "plugin_assets": "**资产归属一致性门**（阶段 4.1，EV-170）：`tools/verify.sh plugin-assets` → `tools/check-plugin-assets.py`。登记真源 = `docs/work/plans/plugin-file-map.md` §分类（143 行）；已搬 8 项的旧位置是**薄转发**（`runpy`/`importlib`），门名与 `tools/verify.sh` 的分支一行未改；`tools/**` 非薄入口数由门冻结（`BASELINE_NONTHIN = 63`，只减不增）；**阶段 4.2（EV-172 / T-321）**：`host/*-gate.mjs` 20 个里前 10 个搬进各自插件的 `tests/`（旧位置 5 行薄转发，门名/分支/输出形状逐项对拍一致），`RELOCATED` 8 → 18 项，§分类 B 节拆成「已搬 10 + 待搬 10」；`BASELINE_NONTHIN` 仍 64（**未放宽**）。**EV-174**：RELOCATED 49 → **74**（qa 检查 25 项全搬），非薄入口仍 64 ≤ 基线。 **EV-175**：`tools/**` 非薄入口 **64 → 54**（10 项外圈门进各自 `tests/`；`BASELINE_NONTHIN` 同步收紧为 54），`RELOCATED` 74 → **84**；门仍 14/14。 **本批（EV-176 / T-326）**：`tools/**` 非薄入口 **54 → 42**（12 项外圈 `check-*.py` 进各自 `tests/`；`BASELINE_NONTHIN` 同步**收紧**为 42），`RELOCATED` 74→84→**96**；§分类 A 节 12 行 `插件·待搬 → 插件·已搬`；门仍 **14/14**（PA7 明细：`非薄入口 == §分类 的待搬集合 42 项，且 ≤ 基线 42`）。"
   },
-  "last_verified_commit_semantics": "本批一个功能提交 `3a40f56`（① 13 个 host/lib + ② 12 个自进化产物追链 + ③ 12 项 tools/** + ④ 12 个插件补真实承载 + 门/文档/证据；同时带上上批遗留的 `tools/*.sh` 7 个执行位 —— `run-clone` 的 K2 需要它），其后的提交只追加「提交之后」的原始行/state 同步。提交后 `git status --porcelain` 原文为空（0 行）；`git ls-remote` 回读 `3a40f56 = refs/heads/main`；提交后复跑 `run-clone` 20/20、`clean-copy` PASS。",
+  "last_verified_commit_semantics": "本批**功能提交** `6940627`（① `host/lib` 剩 2 个实体 ② `host/modules` 剩 16 个实体 ③ `tools/**` 17 项 ④ 24 个插件补承载 ⑤ `27 §10` 例外登记 + 门新增 PA8 + 变异 F7；同时带上 `tools/*.sh` 与 `src/system/ui-feedback/tools/*.sh` 的**执行位** 100644→100755 —— `run-clone` 的 K2 需要它，而 `84d86b9` 把上批的执行位回退成 644 ⇒ 本批复绿）。其后的提交只追加「提交之后」的原始行 / 原始清单 JSON / state 同步。提交后 `git status --porcelain` 原文为空（**0 行**）；`git ls-remote origin refs/heads/main` 回读 == 本地 HEAD；提交后复跑 `run-clone` **20/20**、`clean-copy` **PASS**（15 道门在干净副本里全绿）。",
   "done_p2": [
     "T-222",
     "T-223",
