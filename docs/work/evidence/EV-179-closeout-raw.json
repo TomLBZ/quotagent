@@ -137,5 +137,15 @@
     "result": "RESULT: PASS（15 道门在干净副本里全绿；已提交内容自足可复现）"
   },
   "gate_regression_found_and_fixed": "AC-RUNTIME-001「P0 内核与服务不依赖宿主运行时」扫 src/{system,domain}/*/code/*.py；新 Python 载体的注释里出现字面量 cordis ⇒ p0-no-node rc=1（隔离重试两次都红）；改写该注释后 AC-RUNTIME-001 rc=0、p0-no-node rc=0",
-  "push": null
+  "push": {
+    "remote": "git@github.com:TomLBZ/quotagent.git",
+    "branch": "main",
+    "push_raw": "To github.com:TomLBZ/quotagent.git\\n   59d1180..a2f0714  main -> main",
+    "ls_remote_after_push": [
+      "a2f0714df321d0ee0a9e127671fe89f67b185ad1\\tHEAD",
+      "a2f0714df321d0ee0a9e127671fe89f67b185ad1\\trefs/heads/main"
+    ],
+    "local_head_at_readback": "a2f0714df321d0ee0a9e127671fe89f67b185ad1",
+    "gates_23_note": "run-clone/clean-copy 在功能提交 21d60af 之后跑（两者都校验 HEAD）"
+  }
 }
