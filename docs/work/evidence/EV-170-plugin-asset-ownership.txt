@@ -194,6 +194,46 @@ EV-170 —— 迁移阶段 4.1 先行 8 项：检查/测试资产收进各自插
 七、提交与远端回读
 --------------------------------------------------------------------------------
 
-（提交后追加：commit SHA / push 结果 / `git ls-remote` 回读。）
+提交（本批两笔，合起来才是可运行状态；只提交本批改的文件，pathspec 限定）：
+
+    d55a94e  refactor(plugin): 迁移阶段 4.1 先行 8 项实体搬迁（tools/qa → 各插件 tests/，纯 rename 保 --follow）
+    d43319b  feat(plugin): 迁移阶段 4.1 先行 8 项收口——薄转发 + 4 个插件骨架 + 新门 plugin-assets（EV-170 / T-319）
+
+提交 A 的 rename 检测（`git show --stat --find-renames d55a94e`，原始行）：
+
+    {tools => src/domain/advice/tests}/check-advice-route.py                 |  2 +-
+    .../domain/authority-band/tests}/check-authority-route.py                 |  2 +-
+    .../domain/gate-timeline/tests}/check-change-detail-route.py              |  2 +-
+    .../domain/gate-timeline/tests}/check-gate-timeline-route.py              |  2 +-
+    .../domain/quote-prepare/tests}/check-quote-draft-route.py                |  2 +-
+    {tools/src/quotagent/qa => domain/quote-prepare/tests}/checks_qprep.py    | 10 +++++-----
+    .../system/projection/tests}/check-rfq-visibility-route.py                |  2 +-
+    {tools => src/system/runtime/tests}/check-plugin-lifecycle.py            |  2 +-
+    8 files changed, 12 insertions(+), 12 deletions(-)
+
+`git log --follow` 可追溯（原始行）：
+
+    d55a94e refactor(plugin): 迁移阶段 4.1 先行 8 项实体搬迁（tools/qa → 各插件 tests/，纯 rename 保 --follow）
+    acea3e9 GUI-P0i gate-timeline：审批等多久 / 变更单卡在谁手里（两条 human problem 的闭环）
+
+push 与远端回读（原始行）：
+
+    To github.com:TomLBZ/quotagent.git
+       df829e5..d43319b  HEAD -> main
+    d43319b68f856f70f1302538f3070eb5807bb5f9	refs/heads/main      # git ls-remote origin main（本地 HEAD 逐字相同）
+
+干净副本自足性门（提交之后跑，验证「已提交内容克隆即可复现」；原始尾行）：
+
+    RESULT: PASS（15 道门在干净副本里全绿；已提交内容自足可复现）
+    clean-copy rc=0
+
+**共享工作树上的并发写入（如实记录）**：本批写 `docs/work/handover.md` / `.agents/state.json` /
+`docs/work/evidence/INDEX-P2.md` 时，与另一个在飞批次（`EV-169`/`T-318`）发生**同文件丢失更新**：
+它的证据提交从旧副本写回了这三个文件，我的 EV-170 索引行与 handover 段落在工作树里消失过一次
+（实测：`grep -c EV-170 INDEX-P2.md` = 0、handover 变回它的版本、state.json 的 `notes.t319` 丢失）。
+处置：提交前**重放并逐项核对**这三个文件（最终提交树里 state.json 同时含 `t318` 与 `t319`、
+handover 995 B 同时写了两个批次、INDEX-P2 含 EV-170 行），并在提交信息里点明「并发批次的
+T-318/EV-169 行仍在同两个文件里（未删，如实共存）」。这是**工作树纪律缺陷**（同一工作树并行写同一文件），
+不是本批的文档内容问题。
 
 （完）
