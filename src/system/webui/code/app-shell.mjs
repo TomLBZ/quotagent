@@ -36,6 +36,96 @@ const MAX_BODY_BYTES = 262144
 const PYTHON_TIMEOUT_MS = 30000
 const DEFAULT_PYTHON = process.env.QUOTAGENT_PYTHON || 'python3'
 
+// ============================================================================================
+// **乐观并发**（对象版本/指纹）—— 机制的一半：形状、指纹、差异、上限。
+//
+// 为什么这是机制而不是业务：它只回答两件事 ——"这个可编辑对象上次被谁改成了什么"与"你要写进去的
+// 跟它差在哪"。外壳不知道字段的业务含义（`state()` 由插件给），因此它既能保护报价草稿，也能保护
+// 变更单回应、比价权重、名册这类"配置对象"（AGENTS.md 规则 10：内核/账本语义一个字都不碰）。
+//
+// 判据（**不后写覆盖前写**）：
+//   · 版本对得上（或这个对象还没有版本）⇒ 放行，成功后把新版本记下来（rev+1）；
+//   · 对不上 ⇒ **明确拒绝**（`object-changed`），给出"自你那一版以来谁改了什么"与"你这次要写什么"；
+//   · 没带上版本 ⇒ 安全默认：内容与现在**一样**放行（本来就没改），**不一样就拒**（没看过就改不算读过）。
+// 存储：`<ui_shared>/webui/object-versions/<侧>.json`（目录 0700 / 文件 **0600**、原子写、有界）。
+// **它不是账本**：版本/指纹是"谁看到过哪一版"的运营状态，写进账本会改事件类型目录与证据包哈希
+// （理由与协作面/名册/附件同源，见 `collab.mjs`/`people.mjs` 文件头）。
+// ============================================================================================
+export const VERSION_SCHEMA = 'quotagent/object-versions/v1'
+/** 有界（超出的**丢掉并如实计数**，不静默增长）：对象数 / 每个对象的改动历史 / 字段数 / 值长度。 */
+export const VERSION_LIMITS = { objects: 400, history: 12, fields: 40, value_chars: 160 }
+export const CONFLICT_CODE = 'object-changed'
+
+const VKEY_SEP = '\u0000'
+export const versionObjectKey = (objectClass, objectId) => `${objectClass}${VKEY_SEP}${objectId}`
+/** 一次保存的"对象新状态"规范化：**扁平 字段→标量**（排序 + 有界 + 字符串化；不认识的形状丢掉）。 */
+export function normalizeState(value) {
+  const out = {}
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return out
+  for (const key of Object.keys(value).sort()) {
+    if (Object.keys(out).length >= VERSION_LIMITS.fields) break
+    const raw = value[key]
+    if (raw === undefined || raw === null) { out[String(key)] = ''; continue }
+    if (Array.isArray(raw) || typeof raw === 'object') {
+      // 复杂值：只留它的规范化 JSON 指纹的一部分（外壳不解读结构，只保证"变了就能看出来"）
+      out[String(key)] = JSON.stringify(raw).slice(0, VERSION_LIMITS.value_chars)
+      continue
+    }
+    out[String(key)] = String(raw).slice(0, VERSION_LIMITS.value_chars)
+  }
+  return out
+}
+/** 对象状态的**指纹**（`sha256:<hex>`；键序固定 ⇒ 同一内容恒同一指纹）。 */
+export function fingerprintOf(fields) {
+  const normalized = normalizeState(fields)
+  const body = Object.keys(normalized).sort().map((key) => `${key}=${normalized[key]}`).join('\n')
+  return `sha256:${createHash('sha256').update(body, 'utf8').digest('hex')}`
+}
+/** 逐字段差异（`before` → `after`）：只给**变了**的字段。 */
+export function stateDiff(before, after) {
+  const left = normalizeState(before)
+  const right = normalizeState(after)
+  const changed = []
+  for (const key of [...new Set([...Object.keys(left), ...Object.keys(right)])].sort()) {
+    if ((left[key] ?? '') === (right[key] ?? '')) continue
+    changed.push({ field: key, from: left[key] ?? '', to: right[key] ?? '' })
+  }
+  return changed
+}
+/** 客户端带来的"我看到的版本"与记录比对：指纹（可少 `sha256:` 前缀）或 `rev:<N>` 都认。 */
+export function versionMatches(expected, current) {
+  const wanted = String(expected ?? '').trim()
+  if (wanted === '' || !current) return false
+  const wantedHash = wanted.startsWith('sha256:') ? wanted : `sha256:${wanted}`
+  if (wantedHash === current.fingerprint) return true
+  const rev = /^rev:(\d+)$/.exec(wanted)
+  return rev ? Number(rev[1]) === Number(current.rev) : false
+}
+/**
+ * **自"你看到的那一版"以来的改动**（"谁在何时改了什么"）。
+ * `history` 每条记的是"进入那一版时改了什么"（相对上一版）；把 rev 大于你的那些累加成
+ * "字段 → 第一次的 from / 最后一次的 to / 谁在何时改的"（同一字段被多人改过就列多行）。
+ */
+export function changesSince(expected, current) {
+  if (!current) return { known: false, since: [] }
+  const history = Array.isArray(current.history) ? current.history : []
+  const wanted = String(expected ?? '').trim()
+  const wantedHash = wanted.startsWith('sha256:') ? wanted : `sha256:${wanted}`
+  const revMatch = /^rev:(\d+)$/.exec(wanted)
+  const mine = history.find((entry) => entry.fingerprint === wantedHash
+    || (revMatch ? Number(entry.rev) === Number(revMatch[1]) : false))
+  if (!mine) return { known: false, since: [] }
+  const since = []
+  for (const entry of history) {
+    if (Number(entry.rev) <= Number(mine.rev)) continue
+    for (const change of (Array.isArray(entry.changed) ? entry.changed : [])) {
+      since.push({ ...change, by: String(entry.by ?? ''), at: String(entry.at ?? ''), rev: entry.rev })
+    }
+  }
+  return { known: true, since, seen_rev: mine.rev, seen_by: String(mine.by ?? ''),
+    seen_at: String(mine.at ?? '') }
+}
+
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 /** 深排序（**所有层级**）：与 Python 侧 `json.dumps(sort_keys=True, separators=(',',':'), ensure_ascii=False)`
@@ -410,6 +500,287 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const pythonBin = DEFAULT_PYTHON
   const contributions = new Map()        // plugin_id → {module, file, entries: [{kind,id}], error}
   const actionLog = []                   // 机制层动作流水（通知中心用；有界）
+
+  // ------------------------------------------------------------------ 机制：乐观并发的**版本库**
+  /**
+   * 版本库（**按侧隔离**、0600、原子写、有界、不是账本）：见文件头「乐观并发」段。
+   * 单文件很小（≤ 400 个对象 × ≤ 12 条历史），读的时候按 (路径, mtime, size) 缓存 —— 面板逐行问
+   * `host.versions.current(...)` 时不会把同一个文件读几十遍，但**任何一次写都立刻让缓存失效**，
+   * 所以"刚保存完再看就是新版本"这件事不依赖时间窗。
+   */
+  const versionDirOf = () => join(effective().dir, 'webui', 'object-versions')
+  const versionFileOf = (side) => join(versionDirOf(), `${safeName(String(side ?? '') || 'anon')}.json`)
+  const docCache = new Map()             // path → {key, doc}
+  const readDoc = (path) => {
+    let key = 'missing'
+    try {
+      const stat = statSync(path)
+      key = `${Math.round(stat.mtimeMs)}:${stat.size}`
+    } catch (err) { key = 'missing' }
+    const hit = docCache.get(path)
+    if (hit && hit.key === key) return hit.doc
+    let doc = null
+    if (key !== 'missing') {
+      try {
+        const parsed = JSON.parse(readFileSync(path, 'utf8'))
+        // 只要求"是个对象"：形状（`objects` / `people`）由各自的调用方判 —— 早先这里写死了 `objects`，
+        // 结果导出偏好（`people`）永远读不回来（写进去了、读出来是空）。
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) doc = parsed
+      } catch (err) { doc = null }
+    }
+    docCache.set(path, { key, doc })
+    return doc
+  }
+  /** 原子写 + 显式 chmod（不受 umask 影响）；目录 0700。 */
+  const writeDocAtomic = (path, doc) => {
+    try {
+      const dir = join(path, '..')
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+      try { chmodSync(dir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
+      const tmp = `${path}.${process.pid}.tmp`
+      writeFileSync(tmp, JSON.stringify(doc, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
+      chmodSync(tmp, 0o600)
+      renameSync(tmp, path)
+      docCache.set(path, { key: 'stale', doc })
+      return { ok: true, file: path }
+    } catch (err) {
+      return { ok: false, code: 'version-write-failed', reason: flat(err),
+        next_action: '先修 <ui_shared>/webui/ 的权限（机制只落 0600）' }
+    }
+  }
+  const versionEntries = (side) => {
+    const doc = readDoc(versionFileOf(side))
+    return doc && doc.objects && typeof doc.objects === 'object' ? doc.objects : {}
+  }
+  /** 某个对象**现在**的版本（插件把它交给界面 ⇒ 界面保存时带回来）。没有记录 ⇒ `null`。 */
+  const versionCurrent = (side, objectClass, objectId) => {
+    const cls = String(objectClass ?? '').trim()
+    const id = String(objectId ?? '').trim()
+    if (cls === '' || id === '') return null
+    const entry = versionEntries(side)[versionObjectKey(cls, id)]
+    if (!entry || typeof entry !== 'object') return null
+    return { object_class: cls, object_id: id, rev: Number(entry.rev ?? 0),
+      fingerprint: String(entry.fingerprint ?? ''), at: String(entry.at ?? ''),
+      by: String(entry.by ?? ''), label: String(entry.label ?? ''), fields: entry.fields ?? {},
+      // 改动历史也带上：冲突时机制要靠它算"自你那一版以来谁改了什么"（界面不需要它，内部判据需要）
+      history: Array.isArray(entry.history) ? entry.history : [] }
+  }
+  /** 记一版（rev+1）；**内容没变就不写**（不制造版本噪声）。 */
+  const versionRecord = ({ side, object_class: objectClass, object_id: objectId, fields, by, label }) => {
+    const path = versionFileOf(side)
+    const doc = readDoc(path) ?? { schema: VERSION_SCHEMA, side: String(side ?? ''), objects: {} }
+    doc.schema = VERSION_SCHEMA
+    doc.side = String(side ?? '')
+    doc.objects = doc.objects && typeof doc.objects === 'object' ? doc.objects : {}
+    const key = versionObjectKey(objectClass, objectId)
+    const prev = doc.objects[key] ?? null
+    const fingerprint = fingerprintOf(fields)
+    if (prev && String(prev.fingerprint ?? '') === fingerprint) {
+      return { ok: true, unchanged: true, rev: Number(prev.rev ?? 0), fingerprint }
+    }
+    const changed = stateDiff(prev?.fields ?? {}, fields)
+    const rev = Number(prev?.rev ?? 0) + 1
+    const at = new Date().toISOString()
+    const history = [...(Array.isArray(prev?.history) ? prev.history : []),
+      { rev, at, by: String(by ?? ''), fingerprint, changed }].slice(-VERSION_LIMITS.history)
+    doc.objects[key] = { object_class: objectClass, object_id: objectId, rev, fingerprint, at,
+      by: String(by ?? ''), label: String(label ?? ''), fields: normalizeState(fields), history }
+    const keys = Object.keys(doc.objects)
+    if (keys.length > VERSION_LIMITS.objects) {
+      // 有界：按最后改动时刻丢掉最旧的那些（**如实计数**，不静默无限增长）
+      const ordered = keys.sort((left, right) =>
+        String(doc.objects[left]?.at ?? '').localeCompare(String(doc.objects[right]?.at ?? '')))
+      doc.dropped = (Number(doc.dropped ?? 0) + ordered.length - VERSION_LIMITS.objects)
+      for (const stale of ordered.slice(0, ordered.length - VERSION_LIMITS.objects)) delete doc.objects[stale]
+    }
+    doc.updated_at = at
+    const written = writeDocAtomic(path, doc)
+    return written.ok ? { ok: true, unchanged: false, rev, fingerprint, at, changed, file: written.file }
+      : written
+  }
+  const versionsApi = {
+    current: (side, objectClass, objectId) => versionCurrent(side, objectClass, objectId),
+    /** 只读自述（`/api/ui/surface` 用它把"版本落在哪、有多大、不是账本"摆出来）。 */
+    describe: (side) => {
+      const path = versionFileOf(side)
+      const doc = readDoc(path)
+      const objects = doc?.objects && typeof doc.objects === 'object' ? doc.objects : {}
+      const list = Object.values(objects)
+      return { mechanism: '乐观并发（对象版本/指纹）：保存前比对版本，对不上就**明确拒绝**并给差异',
+        file: path, mode: '0600', schema: VERSION_SCHEMA, limits: VERSION_LIMITS,
+        side: String(side ?? ''), objects: list.length,
+        updated_at: String(doc?.updated_at ?? ''), dropped: Number(doc?.dropped ?? 0),
+        history: list.slice(0, 20).map((entry) => ({ object_class: entry.object_class,
+          object_id: entry.object_id, rev: entry.rev, at: entry.at, by: entry.by, label: entry.label,
+          changed: (entry.history ?? []).slice(-1).map((item) => item.changed ?? [])[0] ?? [] })),
+        why_not_ledger: '版本/指纹是"谁看到过哪一版"的运营状态，不是合同事实：写进账本会改事件类型目录、'
+          + '证据包哈希与审计取证语义（与协作面/名册/附件同源的理由）' }
+    },
+    _readDoc: readDoc, _entries: versionEntries,
+  }
+
+  // ------------------------------------------------------------------ 机制：**导出列选择**（个人偏好，0600）
+  /**
+   * 「导出模板可配」= 每一份导出声明有哪些列（`report.columns`），用户勾掉不要的 ⇒ **按身份**落
+   * `<ui_shared>/webui/export-prefs.json`（目录 0700 / 文件 **0600**、原子写、有界：身份 ≤ 64、
+   * 每身份 ≤ 24 份导出、每份 ≤ 40 列）。**不是账本**：列选择是个人看法，不是业务事实。
+   * 之后**任何浏览器**导出同一份报表都按这套列走（读回同一份 0600 文件）⇒ "换浏览器仍在"。
+   */
+  const EXPORT_PREFS_SCHEMA = 'quotagent/export-prefs/v1'
+  const EXPORT_PREFS_LIMITS = { identities: 64, reports: 24, columns: 40 }
+  const exportPrefsFile = () => join(effective().dir, 'webui', 'export-prefs.json')
+  const exportOwnerKey = (side, human) => `${String(side ?? '') || 'anon'}${VKEY_SEP}${String(human ?? '') || 'anonymous'}`
+  const exportDoc = () => {
+    const doc = readDoc(exportPrefsFile())
+    return doc && doc.people && typeof doc.people === 'object'
+      ? doc : { schema: EXPORT_PREFS_SCHEMA, people: {}, updated_at: '' }
+  }
+  const exportPrefsOf = (side, human) => {
+    const doc = exportDoc()
+    return doc.people[exportOwnerKey(side, human)]?.reports ?? {}
+  }
+  const exportPrefsGet = (side, human, reportId) => {
+    const entry = exportPrefsOf(side, human)[String(reportId ?? '')] ?? null
+    if (!entry || !Array.isArray(entry.columns) || entry.columns.length === 0) return null
+    return { report_id: String(reportId ?? ''), columns: entry.columns.map(String),
+      saved_at: String(entry.saved_at ?? ''), by: String(entry.by ?? '') }
+  }
+  const exportPrefsSet = ({ side, human, at, reportId, columns, clear = false }) => {
+    const path = exportPrefsFile()
+    const doc = exportDoc()
+    doc.schema = EXPORT_PREFS_SCHEMA
+    doc.people = doc.people && typeof doc.people === 'object' ? doc.people : {}
+    const key = exportOwnerKey(side, human)
+    const owner = doc.people[key] ?? { side: String(side ?? ''), human: String(human ?? ''), reports: {} }
+    owner.reports = owner.reports && typeof owner.reports === 'object' ? owner.reports : {}
+    if (clear) delete owner.reports[String(reportId ?? '')]
+    else {
+      owner.reports[String(reportId ?? '')] = { columns: columns.slice(0, EXPORT_PREFS_LIMITS.columns).map(String),
+        saved_at: at, by: String(human ?? '') }
+      const ids = Object.keys(owner.reports)
+      if (ids.length > EXPORT_PREFS_LIMITS.reports) {
+        const ordered = ids.sort((left, right) => String(owner.reports[left]?.saved_at ?? '')
+          .localeCompare(String(owner.reports[right]?.saved_at ?? '')))
+        for (const stale of ordered.slice(0, ordered.length - EXPORT_PREFS_LIMITS.reports)) delete owner.reports[stale]
+      }
+    }
+    doc.people[key] = owner
+    const owners = Object.keys(doc.people)
+    if (owners.length > EXPORT_PREFS_LIMITS.identities) {
+      const ordered = owners.sort((left, right) => String(doc.people[left]?.reports?.[0]?.saved_at ?? '')
+        .localeCompare(String(doc.people[right]?.reports?.[0]?.saved_at ?? '')))
+      doc.dropped = Number(doc.dropped ?? 0) + ordered.length - EXPORT_PREFS_LIMITS.identities
+      for (const stale of ordered.slice(0, ordered.length - EXPORT_PREFS_LIMITS.identities)) delete doc.people[stale]
+    }
+    doc.updated_at = at
+    return writeDocAtomic(path, doc)
+  }
+  /** 导出声明里**哪一份报表**由这个动作生成（`report.action`）。找不到 ⇒ `''`（不做列过滤）。 */
+  const reportIdOfAction = (actionId) => (surface.reports()
+    .find((item) => item.action === String(actionId ?? '')) ?? {}).id ?? ''
+  /**
+   * 把用户保存的**列选择**套到这次导出的 spec 上（外壳只按 key 过滤，不解读列的含义）：
+   * 返回 `{spec, pref, available, used, dropped}`；选出来的列一个都不在 ⇒ **如实拒**（不偷偷导全表）。
+   */
+  const applyColumnsPref = (spec, { side, human }) => {
+    const reportId = String(spec.report_id ?? '') || reportIdOfAction(spec.action_id)
+    const pref = reportId === '' || !human ? null : exportPrefsGet(side, human, reportId)
+    const all = Array.isArray(spec.columns) ? spec.columns : []
+    const available = all.map((column) => ({ key: String(column.key), label: String(column.label ?? column.key) }))
+    if (!pref) return { spec, report_id: reportId, pref: null, available,
+      used: available, dropped: [], note: reportId === ''
+        ? '这份导出没有声明 `report.columns`（也没有列选择偏好）⇒ 按插件给的全部列导出'
+        : `没有你的列选择偏好 ⇒ 按插件给的全部列导出（在「列…」里勾掉不要的列会按你的身份存下来）` }
+    const wanted = new Set(pref.columns)
+    const kept = all.filter((column) => wanted.has(String(column.key)))
+    const used = kept.map((column) => ({ key: String(column.key), label: String(column.label ?? column.key) }))
+    const dropped = available.filter((column) => !wanted.has(column.key))
+    if (!kept.length) {
+      return { refused: { ok: false, code: 'report-columns-empty',
+        reason: `你保存的列选择（${pref.columns.join(' / ')}）跟这份导出的列（${available.map((c) => c.key).join(' / ')}）一个都对不上`,
+        next_action: '在「列…」里重选一次（或点「用全部列」清掉这套选择）：这一次什么都没有导出' },
+        report_id: reportId, pref, available, used: [], dropped }
+    }
+    return { spec: { ...spec, columns: kept }, report_id: reportId, pref, available, used, dropped,
+      note: `列选择来自**你的个人偏好**（按身份落 0600：换浏览器、换设备仍是这套列）：`
+        + `导出 ${kept.length}/${all.length} 列${dropped.length ? `，跳过了 ${dropped.map((c) => c.label).join('、')}` : ''}` }
+  }
+  const exportPrefsApi = {
+    get: (side, human, reportId) => exportPrefsGet(side, human, reportId),
+    set: (payload) => exportPrefsSet(payload),
+    /** 某个身份的全部偏好（机制面板与 `/api/ui/surface` 用它摆出"我选了哪些列"）。 */
+    all: (side, human) => {
+      const reports = exportPrefsOf(side, human)
+      const out = []
+      for (const [reportId, entry] of Object.entries(reports)) {
+        out.push({ report_id: reportId, columns: (entry.columns ?? []).map(String),
+          saved_at: String(entry.saved_at ?? ''), by: String(entry.by ?? '') })
+      }
+      return out.sort((left, right) => (left.report_id < right.report_id ? -1 : 1))
+    },
+    describe: (side, human) => ({ mechanism: '导出模板可配（列选择是**个人偏好**，按会话身份落 0600）',
+      file: exportPrefsFile(), mode: '0600', schema: EXPORT_PREFS_SCHEMA, limits: EXPORT_PREFS_LIMITS,
+      side: String(side ?? ''), human: String(human ?? ''), mine: exportPrefsApi.all(side, human),
+      why_not_ledger: '列选择是你自己的看法，不是业务事实（写进账本会改事件类型目录与证据包哈希）' }),
+  }
+
+  /**
+   * **保存前的版本比对**（机制；口径见文件头「乐观并发」段）。
+   * 返回 `{pending}`（放行；`pending` 里带着"成功后要记的那一版"）或 `{refusal}`（明确拒绝 + 差异）。
+   * 它**不认识任何字段的业务含义**：`state()` 由插件给，外壳只做指纹、逐字段差异与版本比较。
+   */
+  const versionGuard = ({ action, ctx, input }) => {
+    const spec = action.concurrency
+    const identity = ctx?.identity && ctx.identity.side ? ctx.identity : null
+    const side = identity ? identity.side : ''
+    const human = identity ? identity.human : ''
+    let objectId = ''
+    try {
+      objectId = spec.object_id ? String(spec.object_id(ctx, input) ?? '').trim()
+        : String(input?.[spec.id_field] ?? '').trim()
+    } catch (err) {
+      return { refusal: { ok: false, code: 'version-target-failed', action: action.id, ledger: 'zero-management',
+        reason: `${spec.label}：算不出这个对象的 id（插件声明的 object_id 抛错：${flat(err)}）`,
+        next_action: '修该动作的 concurrency.object_id（机制不替插件猜对象）' } }
+    }
+    if (objectId === '') {
+      return { refusal: { ok: false, code: 'version-target-missing', action: action.id, ledger: 'zero-management',
+        reason: `这个动作要保存「${spec.label}」，但入参里没有它的 id（${spec.id_field || 'object_id'}）`,
+        next_action: `从列表行/对象页打开这个动作（表单会带上 id），或先填 ${spec.id_field}` } }
+    }
+    let fields = null
+    try {
+      fields = normalizeState(spec.state(ctx, input))
+    } catch (err) {
+      return { refusal: { ok: false, code: 'version-state-failed', action: action.id, ledger: 'zero-management',
+        reason: `${spec.label}：算不出"这次保存后的状态"（插件声明的 state 抛错：${flat(err)}）`,
+        next_action: '修该动作的 concurrency.state（机制不猜这次要写什么）' } }
+    }
+    const pending = { object_class: spec.object_class, object_id: objectId, label: spec.label,
+      fields, side, by: human }
+    const current = versionCurrent(side, spec.object_class, objectId)
+    const expected = String(input?.[spec.expected_field] ?? '').trim()
+    const fingerprint = fingerprintOf(fields)
+    if (!current) return { pending, first: true }
+    if (versionMatches(expected, current)) return { pending, matched: true }
+    // 内容与现在**一样** ⇒ 放行（本来就没改任何东西，谈不上覆盖）
+    if (fingerprint === current.fingerprint) return { pending, unchanged: true }
+    const since = changesSince(expected, current)
+    const mine = stateDiff(current.fields, fields)
+    const who = current.by || '（未记名）'
+    return { refusal: { ok: false, code: CONFLICT_CODE, action: action.id, ledger: 'zero-management',
+      reason: `「${spec.label}」已经被别人改过：现在是 rev ${current.rev}，最后改动 ${who} @ ${current.at}`
+        + (expected !== '' ? `；你手上那一版是 ${expected.slice(0, 23)}…`
+          : '；这一次**没有带上**你看到的版本（界面没能把版本交给服务端）'),
+      next_action: '刷新这一页看最新的值（差异就在下面：谁在何时把哪个字段从什么改成了什么），'
+        + '确认后再保存一次 —— 界面会带上刚读到的那一版；**这一次什么都没写**',
+      result: { conflict: { code: CONFLICT_CODE, object_class: spec.object_class, object_id: objectId,
+        label: spec.label, expected: expected || null,
+        current: { rev: current.rev, fingerprint: current.fingerprint, at: current.at, by: current.by },
+        seen: since.known ? { rev: since.seen_rev, by: since.seen_by, at: since.seen_at } : null,
+        since: since.since, since_known: since.known, mine, mine_count: mine.length,
+        refreshed_fields: current.fields } } } }
+  }
   /**
    * **只读调用缓存**（机制：同一组参数的只读工具调用在一次渲染内只 spawn 一次）+ 计数（前后可对账）。
    * 来源优先级：环境变量 `QUOTAGENT_UI_PYTHON_CACHE_MS`（用来做"开/关缓存"的对照实测）> 配置
@@ -643,8 +1014,43 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
      * **导出/打印**（机制）：插件把"这一侧账本里的事实 + 一张表"交进来 ⇒ 拿到标准导出形状
      * （CSV 或可打印 HTML + 内容指纹），直接作为动作回执的 `result` 返回即可。
      * 外壳**不认识表里的业务**、也**不生成任何行**（谁的事实谁导出）。
+     *
+     * 本批多了一件事：**导出模板可配** —— 若这次动作对应的 `report` 声明了 `columns`，就按**当前会话
+     * 身份**保存的**列选择偏好**（0600，跨浏览器仍在）过滤列；选出来的列一个都不在 ⇒ **如实拒**
+     * （不偷偷导全表）。偏好是"你自己的看法"，**不进账本**（口径见上面导出偏好段）。
      */
-    report: (spec) => buildReport(spec, { now: host.now() }),
+    report: (spec) => {
+      const scope = currentActionScope()
+      const who = scope?.identity ?? null
+      const applied = applyColumnsPref({ ...spec, action_id: scope?.action_id ?? '' },
+        { side: who ? who.side : '', human: who ? who.human : '' })
+      if (applied.refused) return applied.refused
+      const built = buildReport(applied.spec, { now: host.now() })
+      if (!built.ok || !built.result?.export) return built
+      return { ...built, result: { ...built.result, export: { ...built.result.export,
+        columns_pref: applied.pref
+          ? { report_id: applied.report_id, columns: applied.pref.columns, saved_at: applied.pref.saved_at,
+            by: applied.pref.by, source: 'personal-preference(0600, per identity)' }
+          : null,
+        columns_available: applied.available, columns_used: applied.used, columns_dropped: applied.dropped,
+        columns_note: applied.note,
+        columns_pref_http: `${prefix}/api/action/export.columns` } } }
+    },
+    /** **乐观并发**句柄（机制）：插件把"你看到的那一版"交给界面，界面保存时再带回来。
+     *  `current(side, object_class, id)` ⇒ `{rev, fingerprint, at, by, label, fields}` | null。 */
+    versions: {
+      current: (side, objectClass, objectId) => versionCurrent(side, objectClass, objectId),
+      fingerprint: (fields) => fingerprintOf(fields),
+      /** 当前会话身份那一侧（插件通常直接用它，免得自己从 ctx.identity 里抄侧）。 */
+      side: (ctx) => String(ctx?.identity?.side ?? ''),
+      describe: () => versionsApi.describe(''),
+    },
+    /** **导出列选择偏好**句柄（机制）：`get(side, human, report_id)` / `all(side, human)`。 */
+    exportPrefs: {
+      get: (side, human, reportId) => exportPrefsGet(side, human, reportId),
+      all: (side, human) => exportPrefsApi.all(side, human),
+      describe: (side, human) => exportPrefsApi.describe(side, human),
+    },
     log: say,
   }
 
@@ -738,6 +1144,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     }
     syncCollab()          // 对象类都声明完了：把协作面挂到它们上面（并撤掉已经不存在的）
     syncPeople()          // 名册面不依赖对象类，但视图列表同样以装配方给的为准
+    syncExport()          // 新装载的插件可能声明了新的导出 ⇒ 把「导出模板（列选择）」面板补到那些视图上
     return summary
   }
 
@@ -810,6 +1217,18 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
           ? '协作面本来就在（外壳自带）：要撤掉用 POST .../unload，要重建用 POST .../reload'
           : '协作面已挂到所有插件声明的对象类上（刷新页面即可看到指派/关注/评论）' }
     }
+    // 分享 / 导出列选择：同样是**外壳自带的机制贡献**（规则 1：可卸载、可重建）
+    if (pluginId === SHARE_PLUGIN_ID || pluginId === EXPORT_PLUGIN_ID) {
+      const isShare = pluginId === SHARE_PLUGIN_ID
+      const before = surface.byKind('action').filter((item) => item.plugin_id === pluginId).length
+      const synced = isShare ? syncShare() : syncExport()
+      return { ok: true, code: before ? 'already-loaded' : 'loaded', plugin_id: pluginId, built_in: true,
+        file: 'src/system/webui/code/app-shell.mjs',
+        registered: synced.length || before,
+        next_action: before
+          ? `${isShare ? '分享' : '导出列选择'}面本来就在（外壳自带）：要撤掉用 POST .../unload，要重建用 POST .../reload`
+          : `${isShare ? '分享（深链 + 邮件正文）' : '导出列选择（个人偏好）'}已挂上（刷新页面即可看到入口）` }
+    }
     const item = scanContributions().find((row) => row.plugin_id === pluginId)
     if (!item) {
       return { ok: false, code: 'plugin-not-found', plugin_id: pluginId,
@@ -824,6 +1243,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     const verdict = await loadOne(item)
     clearReadCache()               // 新贡献可能带来新的只读读取：缓存一律作废
     syncCollab()                   // 它可能声明了新的对象类 ⇒ 协作面跟着长出来
+    syncExport()                   // 也可能声明了新的导出 ⇒ 「导出模板（列选择）」面板跟着长出来
     return { ok: verdict.ok === true, code: verdict.ok ? 'loaded' : (verdict.code ?? 'register-failed'),
       plugin_id: pluginId, file: relative(root, item.file), ms: Date.now() - started,
       registered: verdict.registered ?? 0, refused: verdict.refused ?? [], reason: verdict.reason ?? null,
@@ -856,6 +1276,18 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         next_action: '协作面已重建（指派/关注/评论/@同事 与「我的 / 我指派的 / 全部」筛选都在）；'
           + '协作**数据**不受影响（它落在 <ui_shared>/collab/ 下的 0600 文件里，不是贡献）' }
     }
+    // 分享 / 导出列选择：reload = 撤掉贡献后按当前代码重建（导出面板要一并清账，否则重建不出来）
+    if (pluginId === SHARE_PLUGIN_ID || pluginId === EXPORT_PLUGIN_ID) {
+      const isShare = pluginId === SHARE_PLUGIN_ID
+      if (!isShare) exportPanelViews.clear()
+      const removed = unload(pluginId)
+      const synced = isShare ? syncShare() : syncExport()
+      return { ok: true, code: 'reloaded', plugin_id: pluginId, built_in: true,
+        file: 'src/system/webui/code/app-shell.mjs', module_version: `mechanism.${Date.now()}`,
+        removed: removed.count, registered: synced.length,
+        next_action: `${isShare ? '分享面' : '导出列选择面'}已重建；`
+          + `${isShare ? '分享不落任何东西（它只拼文字）' : '列选择**数据**不受影响（它落在 <ui_shared>/webui/export-prefs.json 里）'}` }
+    }
     const item = scanContributions().find((row) => row.plugin_id === pluginId)
     if (!item) {
       return { ok: false, code: 'plugin-not-found', plugin_id: pluginId,
@@ -867,6 +1299,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     const verdict = await loadOne(item)
     clearReadCache()
     syncCollab()                   // 重载可能改了它声明的对象类
+    syncExport()                   // 也可能改了它声明的导出 ⇒ 面板跟着对账
     let mtime = null
     try { mtime = new Date(statSync(item.file).mtimeMs).toISOString() } catch (err) { mtime = null }
     return { ok: verdict.ok === true, code: verdict.ok ? 'reloaded' : (verdict.code ?? 'register-failed'),
@@ -908,6 +1341,28 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
           .map((item) => ({ kind: 'panel', id: item.id, title: item.title }))),
       refused: [], error: null,
       note: '人员名册与角色（同侧成员 / 角色 / 直属关系 / 按角色限动作）：外壳自带的机制贡献',
+    }, {
+      // 外壳自带的**分享面**（同样不是磁盘上的插件文件）：一样可卸载/重建（规则 1）
+      plugin_id: SHARE_PLUGIN_ID, file: 'src/system/webui/code/app-shell.mjs#share', built_in: true,
+      mtime: null, loaded: surface.byKind('action').some((item) => item.plugin_id === SHARE_PLUGIN_ID
+        && item.id === 'share.object'),
+      contributions: surface.byKind('action').filter((item) => item.plugin_id === SHARE_PLUGIN_ID)
+        .map((item) => ({ kind: 'action', id: item.id, title: item.title })),
+      refused: [], error: null,
+      note: '分享（可复制深链 + 对方需要什么身份/侧 + 可粘贴的邮件正文）：外壳自带的机制贡献；'
+        + '它不写账本、不落文件、不发邮件',
+    }, {
+      // 外壳自带的**导出列选择面**（个人偏好，0600）：一样可卸载/重建（规则 1）
+      plugin_id: EXPORT_PLUGIN_ID, file: 'src/system/webui/code/app-shell.mjs#export', built_in: true,
+      mtime: null, loaded: surface.byKind('action').some((item) => item.plugin_id === EXPORT_PLUGIN_ID
+        && item.id === 'export.columns'),
+      contributions: surface.byKind('action').filter((item) => item.plugin_id === EXPORT_PLUGIN_ID)
+        .map((item) => ({ kind: 'action', id: item.id, title: item.title }))
+        .concat(surface.byKind('panel').filter((item) => item.plugin_id === EXPORT_PLUGIN_ID)
+          .map((item) => ({ kind: 'panel', id: item.id, title: item.title }))),
+      refused: [], error: null,
+      note: '导出模板可配（列选择是**个人偏好**，按会话身份落 0600 ⇒ 换浏览器/换设备仍在）：外壳自带的机制贡献；'
+        + '导出**内容**仍由声明它的插件自己生成',
     }],
     mechanism: '装载面是**机制**：按磁盘上的 `code/ui.mjs` 发现式装载；`reload` = 撤掉这个插件的全部贡献后按'
       + '当前文件内容重新 import（带 ?v=<mtime> 击穿模块缓存）⇒ 改插件 UI 不必重启进程。'
@@ -952,8 +1407,12 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     const picked = normalized.kind === '' ? surface.panelsFor(view, '')
       : surface.panelsFor(view, normalized.kind)
     const ctx = panelCtx(view, normalized, who)
+    // **这一次渲染付出了多少代价**（机制读数，供"前后可对账"）：Python 进程数只看**这一次请求**的增量。
+    // 为什么放在这里：`/api/ui/panels` 是一次渲染的唯一起点（webui.mjs 里那一行只调这一个函数），
+    // 所以在这里量到的增量就是"打开这一页起了几个进程"，不必改任何路由代码。
+    const before = { spawns: ioStats.spawns, read: ioStats.read_spawns, hits: ioStats.read_hits, at: Date.now() }
     // 一次渲染的作用域：这一页上的多块面板读同一个只读工具时**只起一个进程**（缓存见 `runPython`）。
-    return withRenderScope(() => picked.map((panel) => {
+    const rows = withRenderScope(() => picked.map((panel) => {
       const base = { id: panel.id, title: panel.title, plugin_id: panel.plugin_id, order: panel.order,
         panel_kind: panel.panel_kind, placement: panel.placement, actions: panel.actions, hint: panel.hint,
         object_kind: panel.object_kind, wide: panel.placement === 'wide' }
@@ -996,6 +1455,11 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
           next_action: '修面板的 data()（抛错不静默吞：这块不渲染，页面其余部分照常）' }
       }
     }).sort((left, right) => (left.order - right.order) || (left.id < right.id ? -1 : 1)))
+    // 收口这次渲染的代价读数（`/api/ui/surface` 的 `io.last_render` 与状态栏都读它；只为可对账，不影响结果）
+    ioStats.last_render = { at: host.now(), view, kind: normalized.kind, panels: rows.length,
+      spawns: ioStats.spawns - before.spawns, read_spawns: ioStats.read_spawns - before.read,
+      read_cache_hits: ioStats.read_hits - before.hits, ms: Date.now() - before.at }
+    return rows
   })
 
   /**
@@ -1014,12 +1478,18 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     // 外壳不知道这些格式里是什么内容：点按钮就是打开那个动作并把 `format` 预填好。
     const reports = (found ? surface.reportsFor(view, kind) : []).filter((item) => surface.findAction(item.action))
       .map((item) => ({ id: item.id, title: item.title, plugin_id: item.plugin_id, action: item.action,
-        formats: item.formats, hint: item.hint, order: item.order }))
+        formats: item.formats, columns: item.columns, hint: item.hint, order: item.order }))
     return {
       ok: true, view, kind, id, found,
       title: header?.title ?? (claimed ? `${kind} ${id}` : `${kind}（本视图没有这种对象）`),
       subtitle: header?.subtitle ?? '', facts: Array.isArray(header?.facts) ? header.facts : [],
       links: Array.isArray(header?.links) ? header.links : [],
+      // **乐观并发**：插件在 `data.object.version` 里给出"你打开这一页时看到的版本" ⇒ 界面保存时带回
+      // 去（`expected_version`）。机制只搬运，不解读；没给 ⇒ 界面按"没看过"处理（服务端安全默认）。
+      version: header?.version && typeof header.version === 'object' ? header.version : null,
+      // **分享**：插件在 `data.object.share` 里声明"对方能不能看 / 从哪个视图看得到 / 要什么前提"
+      //（机制据此拼分享弹层；不声明就如实说"插件没声明，无法断言对方能不能看"）。
+      share: header?.share && typeof header.share === 'object' ? header.share : null,
       reason: found ? '' : (header?.reason ?? (claimed ? 'object-not-found' : 'object-kind-not-registered')),
       next_action: found ? '' : (header?.next_action ?? (claimed
         ? '这个 id 不在本视图的投影里：换成列表里真实存在的 id（列表里每一行的 id 就是它的深链）'
@@ -1056,13 +1526,27 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const normTags = (value) => (Array.isArray(value) ? value.map((item) => String(item ?? '').trim())
     .filter((item) => item !== '').slice(0, 6).map((item) => item.slice(0, 24)) : [])
 
+  /**
+   * 通知**在所有来源之间公平分配名额**（机制，0 业务语义；口径见 `docs/design/29-webui-gui-app.md`
+   * 的可用性节与 `src/system/webui/docs/scale-and-performance.md`）。
+   *
+   * 修前的口径是 `items.slice(0, 200)`：来源按注册顺序往后接，**一个来源给出几百条时，后面的来源
+   * 整体看不到**（本批实测：规模数据下 400 个待批人工门把 200 个名额吃光，报价/包/变更的通知一条
+   * 都进不来）。现在的口径是：
+   *   · 每个来源**轮转取一条**（round-robin），谁也不会被别的来源挤掉；
+   *   · 总数仍有上限（`NOTIF_CAP`，防止一次轮询把页面拖住），但**上限与产出数都如实记账**，
+   *     连"被截掉多少"一起放进 `io.notify` 与状态栏 —— 不静默截断。
+   */
+  const NOTIF_CAP = 600
   const notifications = (who = null) => withSandbox(who, () => withRenderScope(() => {
-    const items = []
-    for (const source of surface.byKind('notification-source')) {
+    const lists = []
+    const sources = surface.byKind('notification-source')
+    for (const source of sources) {
+      const rows = []
       try {
         const out = source.poll(panelCtx(source.view || 'home', undefined, who)) || []
         for (const item of Array.isArray(out) ? out : []) {
-          items.push({ id: String(item.id ?? `${source.plugin_id}:${items.length}`), level: String(item.level ?? 'info'),
+          rows.push({ id: String(item.id ?? `${source.plugin_id}:${rows.length}`), level: String(item.level ?? 'info'),
             title: String(item.title ?? ''), body: String(item.body ?? ''),
             next_action: String(item.next_action ?? ''), action: item.action ? String(item.action) : '',
             ref: normRef(item.ref), at: String(item.at ?? ''), plugin_id: source.plugin_id,
@@ -1072,19 +1556,28 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
               ? item.preset : null })
         }
       } catch (err) {
-        items.push({ id: `${source.plugin_id}:poll-failed`, level: 'bad', title: '通知源读取失败',
+        rows.push({ id: `${source.plugin_id}:poll-failed`, level: 'bad', title: '通知源读取失败',
           body: flat(err), next_action: '修该通知源的 poll()', plugin_id: source.plugin_id,
           at: host.now(), ref: null, action: '', tags: [] })
       }
+      lists.push(rows)
     }
     // 动作流水：只保留 `{kind,id}` 形状的对象引用（动作回执是任意 JSON，不能当深链用）；
-    // 并且**只给自己看**（`actor` 全会话身份；未登录时看不到任何人的动作流水）。
+    // 并且**只给自己看**（`actor` 全会话身份；未登录时看不到任何人的动作流水）。自己的动作结果排最前。
     const me = normIdentity(who)
+    const mine = []
     for (const entry of actionLog.slice(0, 20)) {
       if (entry.actor !== (me ? me.human : '')) continue
-      items.push({ ...entry, ref: normRef(entry.ref) })
+      mine.push({ ...entry, ref: normRef(entry.ref) })
     }
-    return items.slice(0, 200)
+    const merged = []
+    const depth = lists.reduce((max, rows) => Math.max(max, rows.length), 0)
+    for (let i = 0; i < depth; i += 1) for (const rows of lists) if (rows[i]) merged.push(rows[i])
+    const items = [...mine, ...merged]
+    ioStats.notify = { at: host.now(), sources: sources.length,
+      per_source: sources.map((source, index) => ({ plugin_id: source.plugin_id, produced: lists[index].length })),
+      produced: merged.length, returned: Math.min(items.length, NOTIF_CAP), cap: NOTIF_CAP }
+    return items.slice(0, NOTIF_CAP)
   }))
 
   const statusItems = (who = null) => withSandbox(who, () => withRenderScope(() => {
@@ -1106,6 +1599,27 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     out.push({ id: 'shell.io', title: 'Python', level: ioStats.spawns ? 'ok' : 'ok', plugin_id: 'system/webui',
       text: `进程 ${ioStats.spawns} 次（只读 ${ioStats.read_spawns}）· 只读命中缓存 ${ioStats.read_hits} 次`
         + ` · 缓存窗口 ${readCacheTtlMs}ms` })
+    // **上一次页面渲染**的代价（本批新增，只为"可对账"）：起几个进程 / 花多久 / 几块面板
+    const last = ioStats.last_render
+    if (last) {
+      out.push({ id: 'shell.io.last_render', title: '上次渲染', level: 'ok', plugin_id: 'system/webui',
+        text: `${last.view}${last.kind ? `/${last.kind}` : ''}：面板 ${last.panels} 块 · `
+          + `Python 进程 ${last.spawns} 次（只读 ${last.read_spawns}，命中缓存 ${last.read_cache_hits}）· `
+          + `服务端耗时 ${last.ms}ms` })
+    }
+    // **通知的名额分配**（本批新增）：产出多少、返回多少、上限多少 —— 截断如实记账，不静默
+    const notify = ioStats.notify
+    if (notify) {
+      const dropped = Math.max(0, notify.produced - notify.returned)
+      const busiest = [...(notify.per_source || [])].sort((left, right) => right.produced - left.produced)[0]
+      out.push({ id: 'shell.notify', title: '通知', level: dropped ? 'warn' : 'ok', plugin_id: 'system/webui',
+        text: `来源 ${notify.sources} 个 · 产出 ${notify.produced} 条 · 返回 ${notify.returned} 条`
+          + `（上限 ${notify.cap}${dropped ? `，截掉 ${dropped} 条` : ''}）`
+          + `${busiest ? ` · 产出最多：${busiest.plugin_id} ${busiest.produced} 条` : ''}`,
+        next_action: dropped
+          ? '同一件事在多条时是"一次轮询的上限"：用关键字/筛选在通知中心里缩小范围，或按插件静音'
+          : '' })
+    }
     return out
   }))
 
@@ -1210,7 +1724,26 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     }
     let out = null
     // 本次动作的**作用域**：它落下的待办件 + 它跑过的写者回执（见 `writerCheck`）——动作返回后两端对账
-    const scope = { action_id: action.id, staged: [], runs: [] }
+    // （`identity`/`view` 也在这里：`host.report()` 要按"谁在导出"套**个人列选择偏好**）
+    const scope = { action_id: action.id, staged: [], runs: [], identity: ctx.identity, view: ctx.view }
+    // ---- **乐观并发**（机制）：保存前比对对象版本；对不上 ⇒ **明确拒绝**并给差异（不后写覆盖前写）----
+    let pendingVersion = null
+    if (action.concurrency) {
+      const verdict = versionGuard({ action, ctx, input })
+      if (verdict.refusal) {
+        const refusal = verdict.refusal
+        actionLog.unshift({ id: `act-${Date.now()}-${action.id}`, level: 'bad',
+          title: `${action.title} → ${refusal.code}`, body: flat(refusal.reason),
+          next_action: flat(refusal.next_action), ref: null, at: host.now(), plugin_id: action.plugin_id,
+          action: action.id, actor: ctx.identity ? ctx.identity.human : '',
+          conflict: refusal.result?.conflict ?? null })
+        if (actionLog.length > 100) actionLog.length = 100
+        return { ...refusal, writer_consistency: 'no-writer-run',
+          writer: { verdict: 'no-writer-run', rows_written: 0 },
+          reason: refusal.reason, next_action: refusal.next_action, result: refusal.result ?? null }
+      }
+      pendingVersion = verdict.pending
+    }
     actionScopes.push(scope)
     try {
       out = await action.server(ctx, input)
@@ -1228,6 +1761,16 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       say(`写者回执与响应不一致：${action.id} → ${writer.verdict}（${writer.note}）`)
     }
     const actor = normIdentity(who)
+    // ---- **乐观并发**：这次保存**真的成了** ⇒ 把新版本记下来（rev+1），供下一个人比对 ------------
+    // 只在 `result.ok === true` 时记（被写者/业务门拒的动作没有"保存成功"这回事）。
+    let versionAfter = null
+    if (pendingVersion && result.ok === true) {
+      const recorded = versionRecord({ ...pendingVersion, fields: pendingVersion.fields })
+      versionAfter = { object_class: pendingVersion.object_class, object_id: pendingVersion.object_id,
+        label: pendingVersion.label, rev: recorded.rev ?? null, fingerprint: recorded.fingerprint ?? '',
+        unchanged: recorded.unchanged === true, changed: recorded.changed ?? [],
+        file: recorded.file ?? versionFileOf(pendingVersion.side) }
+    }
     const entry = { id: `act-${Date.now()}-${action.id}`, level: result.ok ? 'ok' : 'bad',
       title: `${action.title} → ${result.ok ? 'ok' : (result.code ?? 'refused')}`
         + (writer.verdict === 'consistent' || writer.verdict === 'no-writer-run'
@@ -1244,6 +1787,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     return { ok: result.ok === true, action: action.id, code: result.code ?? null, reason: result.reason ?? null,
       next_action: result.next_action ?? null, result: result.result ?? null, note: result.note ?? null,
       errors: result.errors ?? null, refresh: result.refresh ?? ['panels', 'notifications', 'status'],
+      // 乐观并发：这次保存之后的**版本**（rev/指纹；`unchanged:true` = 内容没变，没有制造新版本）
+      version: versionAfter,
+      conflict: result.result?.conflict ?? null,
       // 写者回执的**原始判据 + 与本动作的归属**：界面/审计据此核对"响应说的"与"账本真发生的"
       writer_consistency: writer.verdict, writer }
   }
@@ -1253,8 +1799,11 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     // 协作面（外壳自带）：撤掉它的贡献时把机制侧的账也清干净（否则再 load 会说"已经装着"）
     if (pluginId === COLLAB_PLUGIN_ID) collabSurface.dispose()
     if (pluginId === PEOPLE_PLUGIN_ID) peopleSurface.dispose()
+    // 导出列选择的**面板**是按视图记账的：撤掉贡献时要把这本账清掉，否则重建时补不回来
+    if (pluginId === EXPORT_PLUGIN_ID) exportPanelViews.clear()
     // 沙盘是**外壳机制**（不是业务插件）：它的面板/动作可以被撤，但机制本身不能卸载 —— 撤完立刻重建，
     // 免得"演示数据"入口被一次误卸载永久干掉（清空沙盘的动作也在这里面）。
+    // 分享 / 导出列选择则**真的可卸载**（规则 1）：撤掉后入口消失，`POST .../load|reload` 重建。
     const sandboxWas = pluginId === SANDBOX_PLUGIN_ID
     const removed = surface.disposePlugin(pluginId)
     const slotRows = []
@@ -1514,6 +2063,257 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   }
   const sandboxContributions = syncSandbox()
 
+  // ------------------------------------------------------------------ 机制贡献：**分享**（深链 + 对方需要什么 + 邮件正文）
+  /**
+   * 「能把事分享出去」= 一条**可复制的深链** + 明确写出**对方需要什么身份/侧才能看** + **一键拼成
+   * 可粘贴的邮件正文**。机制只做三件事：验对象类、取对象页头（插件声明的东西照搬）、把事实拼成
+   * 一段人能直接用的文字 —— 它不认识任何业务对象（口径见 `docs/design/29-webui-gui-app.md` §14）。
+   *
+   * 它**不写账本、不落文件、不发邮件**：分享是"你自己把地址与前提抄出去"，不是对外承诺。
+   * `object.share`（插件在 `data.object.share` 里声明）给的是"对方能不能看"这一档：
+   *   `{visibility:'both'|'side', other_side_view?, requirements?:[...], note?, next_action?}`
+   */
+  const SHARE_PLUGIN_ID = 'system/webui-share'
+  const shareBusinessViews = () => views.filter((view) => view !== 'home')
+  const isBusinessSide = (view) => sides.includes(view)
+  const viewTitleOf = (view) => String(config.view_titles?.[view] ?? ({ home: '工作台', contractor: '承包商',
+    supplier: '供应商', ops: '运维', admin: '系统管理' }[view] ?? view))
+  /** 哪个视图能打开这个对象类（对象类由插件声明；跨视图链接只在**确实声明过**的视图上给）。 */
+  const viewsForKind = (kind) => views.filter((view) => surface.objectKindsFor(view).includes(kind))
+  const composeShare = ({ ctx, input, who }) => {
+    const view = String(ctx.view ?? '')
+    const kind = String(input.kind ?? '').trim()
+    const id = String(input.id ?? '').trim()
+    const kinds = surface.objectKindsFor(view)
+    if (!kinds.includes(kind)) {
+      return { ok: false, code: 'object-kind-not-in-this-view', ledger: 'zero-management',
+        reason: `本视图（${viewTitleOf(view)}）里没有对象类 ${JSON.stringify(kind)}`,
+        next_action: `本视图可分享的对象类：${kinds.join(' / ') || '（一个都没有：还没有插件声明 object_kind）'}；`
+          + '先在列表里点某一行的「打开 →」进对象页，再点「分享」' }
+    }
+    const info = objectOf(view, kind, id, who)
+    const share = info.share ?? null
+    const path = `${prefix}/app/${view}/${kind}/${id}/`
+    const others = viewsForKind(kind).filter((other) => other !== view)
+      .map((other) => ({ view: other, title: viewTitleOf(other), path: `${prefix}/app/${other}/${kind}/${id}/` }))
+    const identityLine = isBusinessSide(view)
+      ? `需要**登录**并且身份属于 \`${view}\`（${viewTitleOf(view)}）侧 —— 业务视图按会话身份判权限，`
+        + '人签类动作还要求"署名 == 会话身份"'
+      : `本视图（${viewTitleOf(view)}）不按身份鉴权：登录即可打开（人签类动作仍按会话身份判）`
+    const requirements = [
+      { key: '需要的身份', value: identityLine, ok: Boolean(who) },
+      { key: '必须登录', value: who ? `已登录：${who.human}（${who.side}）` : '当前**未登录**：分享内容照给，'
+        + '但对方打开后要先登录才能看到自己那一侧的投影', ok: Boolean(who) },
+      { key: '这个对象在对方那侧能不能看', value: share
+        ? `${share.visibility === 'side' ? '**本侧内部**对象（插件声明 visibility=side）：对方看不到'
+          : share.visibility === 'both' ? '**交付件**（visibility=both）：对方是当事方时能看'
+            : '插件声明了 share，但没有给 visibility 档：照它下面这句为准'}`
+          + `${share.note ? ` · ${share.note}` : ''}`
+        : '**插件没有声明这个对象的可见性**（`data.object.share` 留空）⇒ 界面不替它断言"对方一定能看"：'
+          + '请让对方在他那一侧打开试试，或先用同侧同事的链接核对',
+        ok: share ? share.visibility !== 'side' : null },
+      { key: '对方从哪个视角能打开', value: share?.other_side_view
+        ? `${share.other_side_view}（${viewTitleOf(share.other_side_view)}）：${prefix}/app/${share.other_side_view}/${kind}/${id}/`
+        : (others.length ? `本视图的对象类也在这些视角里被声明过：${others.map((item) => `${item.view}（${item.title}）`).join('、')}`
+          : '（没有别的视角声明过这种对象类：对方只能在你这一侧看）') },
+      { key: '这个对象现在在不在本视图的投影里', value: info.found
+        ? '在：页头能读出来（下面就是它的标题与关键事实）'
+        : `**不在**（${info.reason || 'object-not-found'}）—— 分享前先确认它在自己这一侧真的存在，`
+          + '否则对方打开只是一条"如实未命中"的地址', ok: info.found === true },
+    ]
+    const lines = [
+      `${who ? `${who.human}（${who.side}）` : '我'}在 quotagent 上把这条发给你，麻烦看一下：`,
+      '',
+      `· 链接（复制到浏览器打开）：{{LINK}}`,
+      `· 打开后是：${viewTitleOf(view)} 视角下的 ${kind} ${id}${info.found ? `（${info.title}）` : ''}`,
+      `· 你需要的身份：${identityLine}`,
+      share?.requirements?.length
+        ? `· 这个对象的前提（对方插件声明的）：${share.requirements.map((item) => String(item)).join('；')}`
+        : `· 这个对象的前提：${share?.note || '（插件没声明额外的前提）'}`,
+      `· 如果打不开：那是**如实未命中**（地址里写的是别家/别的视角看不到的东西时不会回落成"能看"）。`
+        + `在你那一侧找同名的对象入口，或回我一句"看不到 ${kind} ${id}"`,
+      others.length ? '· 同一个 id 在其它视角下的地址（对方那一侧更可能直接命中）：{{ALT_LINKS}}' : '',
+    ].filter((line) => line !== '')
+    const out = { view, kind, id, path, view_title: viewTitleOf(view), found: info.found === true,
+      title: info.title ?? '', subtitle: info.subtitle ?? '',
+      facts: (info.facts ?? []).slice(0, 12), reason: info.reason ?? '', next_action: info.next_action ?? '',
+      requirements, share, other_views: others,
+      email: { subject: `【quotagent】${info.title || `${kind} ${id}`}：请你处理`,
+        lines, link_token: '{{LINK}}', alt_links_token: '{{ALT_LINKS}}',
+        recipient: String(input.recipient ?? '').trim(), note: String(input.note ?? '').trim() },
+      identity: who ? { human: who.human, side: who.side } : null,
+      ledger: 'zero-management' }
+    return { ok: true, code: 'share-ready', ledger_added: 0,
+      note: '分享只给"可复制的深链 + 对方需要什么身份/侧 + 一封可直接粘出去的邮件正文"：'
+        + '它不写账本、不落文件、不发邮件（发不发由你把这段文字放到你的邮件客户端里决定）',
+      next_action: info.found
+        ? '复制深链或邮件正文发给对方；对方打开时按上面写的身份/侧登录'
+        : `先修这条地址：${info.next_action || '换一个本视图里真实存在的 id'}`,
+      result: { share: out, deep_link: path } }
+  }
+
+  /** 分享/导出这两个机制贡献（外壳自带、同样可卸载/重建）：注册返回可撤销的贡献数组。 */
+  const syncShare = () => {
+    const out = []
+    if (!surface.findAction('share.object')) {
+      out.push(surface.action({ plugin_id: SHARE_PLUGIN_ID, id: 'share.object', title: '分享（深链 + 邮件正文）',
+        views: shareBusinessViews(), group: '分享', order: -6, icon: '↗', placement: ['toolbar', 'command'],
+        hint: '给你一条**可复制的深链**、明确写出**对方需要什么身份/侧才能看**，并一键拼成**可直接粘贴的邮件正文**；'
+          + '分享不写账本、不落文件、不发邮件',
+        input: { fields: [
+          { name: 'kind', label: '对象类', type: 'text', required: true, from_route_kind: true,
+            help: '当前对象地址里的对象类（对象页上会自动带上）' },
+          { name: 'id', label: '对象 id', type: 'text', required: true, from_route: true,
+            help: '当前对象地址里的 id（对象页上会自动带上）' },
+          { name: 'recipient', label: '收件人（对方的登录名，可空）', type: 'text',
+            help: '只写进邮件正文的抬头，方便对方对上是给他的' },
+          { name: 'note', label: '附一句话（可空）', type: 'textarea' },
+        ] },
+        server: async (ctx, input) => composeShare({ ctx, input, who: ctx.identity }) }))
+    }
+    return out
+  }
+  const shareContributions = syncShare()
+
+  // ------------------------------------------------------------------ 机制贡献：**导出模板可配**（列选择）
+  const EXPORT_PLUGIN_ID = 'system/webui-export'
+  const reportsOfView = (view) => surface.reports().filter((item) => item.views.includes(view))
+  const exportPaneRows = (view, who) => {
+    const list = view === 'home' ? surface.reports() : reportsOfView(view)
+    const mine = who ? exportPrefsApi.all(who.side, who.human) : []
+    return list.map((item) => {
+      const saved = mine.find((entry) => entry.report_id === item.id) ?? null
+      const declared = (item.columns ?? []).map((column) => column.key)
+      return { id: item.id, report_id: item.id, title: item.title,
+        views: item.views.join(' / '), formats: item.formats.join(' / '),
+        columns_declared: declared.length ? declared.join(' ') : '（未声明列：这份导出不支持列选择）',
+        columns: saved ? saved.columns.join(' ') : '', save_action: 'export.columns',
+        selection: saved ? `${saved.columns.length}/${declared.length} 列（你选的）` : `全部 ${declared.length} 列（默认）`,
+        saved_at: saved ? saved.saved_at : '' }
+    })
+  }
+  const syncExport = () => {
+    const out = []
+    if (!surface.findAction('export.columns')) {
+      out.push(surface.action({ plugin_id: EXPORT_PLUGIN_ID, id: 'export.columns',
+        title: '导出：这里有哪几列（个人偏好）', views: views.length ? views : ['home'],
+        group: '导出', order: 34, icon: '▦', placement: ['toolbar', 'inline', 'command', 'context'],
+        hint: '列选择是**你的个人偏好**：按会话身份落 0600（换浏览器、换设备仍是这套列）；'
+          + '它不写账本、不改导出内容（内容永远由插件自己从它那一侧的事实生成）',
+        input: { fields: [
+          { name: 'report_id', label: '哪一份导出（report id；留空 = 只看）', type: 'text', required: false,
+            help: '从「导出模板（列选择）」面板的行里取；**留空只读**：列出你现在这套列选择（不改任何东西）' },
+          { name: 'columns', label: '要哪几列（列 key，空格/逗号分隔；留空 + 勾上「用全部列」= 还原）',
+            type: 'textarea', help: '例：no rank quote_id score package_id —— 顺序按声明的顺序，勾掉的列就不再导出' },
+          { name: 'reset', label: '用全部列（清掉我这套选择）', type: 'checkbox', default: false },
+        ] },
+        server: async (ctx, input) => {
+          const who = ctx.identity
+          const reportId = String(input.report_id ?? '').trim()
+          if (!who || !who.human) {
+            return { ok: false, code: 'identity-required', ledger_added: 0,
+              reason: '列选择要按**你的身份**存（0600 文件）：当前请求没有会话身份',
+              next_action: `先去 ${prefix}/identity/?next=${prefix}/ 登录，再挑列 —— 这一次什么都没写` }
+          }
+          // **只读模式**（`report_id` 留空）：列出"我现在这套列选择" + 每份导出的列 —— 不改任何东西。
+          // 界面用它把「列…」按钮上的 N/M 与勾选状态填对（对象页上没有那块面板时也读得到真源）。
+          if (reportId === '') {
+            const reports = surface.reports().map((item) => ({ id: item.id, title: item.title,
+              columns: (item.columns ?? []).map((column) => column.key), views: item.views, formats: item.formats }))
+            return { ok: true, code: 'export-columns-read', ledger_added: 0,
+              note: '只读：没有写任何东西（这一条不落账本、也不改你的偏好）',
+              result: { export_prefs_all: exportPrefsApi.all(who.side, who.human), reports,
+                file: exportPrefsFile(), mode: '0600' } }
+          }
+          const decl = surface.reports().find((item) => item.id === reportId) ?? null
+          if (!decl) {
+            return { ok: false, code: 'unknown-report', ledger_added: 0,
+              reason: `注册面里没有这份导出：${JSON.stringify(reportId)}`,
+              next_action: `现成的导出：${surface.reports().map((item) => item.id).join(' / ') || '（一个都没有）'}` }
+          }
+          const declared = (decl.columns ?? []).map((column) => column.key)
+          if (!declared.length) {
+            return { ok: false, code: 'report-has-no-columns', ledger_added: 0,
+              reason: `这份导出（${reportId}）没有声明 columns：没有可选的列`,
+              next_action: '这份导出按插件给的全部列走（要在界面上配列，得先让声明它的插件给出 report.columns）' }
+          }
+          const at = host.now()
+          const clearing = input.reset === true || input.reset === 'true'
+          if (clearing) {
+            const wrote = exportPrefsApi.set({ side: who.side, human: who.human, at, reportId, columns: [], clear: true })
+            if (!wrote.ok) return { ...wrote, ledger_added: 0 }
+            clearReadCache()
+            return { ok: true, code: 'export-columns-reset', ledger_added: 0,
+              note: '你这套列选择已经清掉：这份导出回到**全部列**（偏好落 0600，账本零新增）',
+              next_action: '下次导出就是全部列了；想再挑一次就重开这个动作',
+              result: { export_prefs: { report_id: reportId, columns: declared, reset: true, file: wrote.file,
+                mode: '0600', ledger: 'zero-management' } } }
+          }
+          const wanted = String(input.columns ?? '').split(/[\s,，、]+/).map((item) => item.trim()).filter(Boolean)
+          const unknown = wanted.filter((key) => !declared.includes(key))
+          if (unknown.length) {
+            return { ok: false, code: 'unknown-column', ledger_added: 0,
+              reason: `这些列不在这份导出里：${unknown.join(' / ')}`,
+              next_action: `这份导出的列：${declared.join(' / ')}（写成空格隔开的列 key）` }
+          }
+          if (!wanted.length) {
+            return { ok: false, code: 'columns-required', ledger_added: 0,
+              reason: '没有给列（要挑列就写列 key；要还原成全部列请勾上「用全部列」）',
+              next_action: `从这些列里挑：${declared.join(' / ')}` }
+          }
+          // 按**声明的顺序**存，免得界面上的列序跟着人的手抖跑
+          const ordered = declared.filter((key) => wanted.includes(key))
+          const wrote = exportPrefsApi.set({ side: who.side, human: who.human, at, reportId, columns: ordered })
+          if (!wrote.ok) return { ...wrote, ledger_added: 0 }
+          clearReadCache()
+          const dropped = declared.filter((key) => !ordered.includes(key))
+          return { ok: true, code: 'export-columns-saved', ledger_added: 0,
+            note: `你这套列选择已按身份存下（${ordered.length}/${declared.length} 列；0600 文件，账本零新增）`
+              + `${dropped.length ? `：不再导出 ${dropped.join(' / ')}` : ''}`,
+            next_action: '换浏览器/换设备照样是这套列（读回同一份 0600 文件）；下次导出时会在预览里写明用了哪几列',
+            result: { export_prefs: { report_id: reportId, columns: ordered, dropped, saved_at: at,
+              file: wrote.file, mode: '0600', ledger: 'zero-management' } } }
+        } }))
+    }
+    // 面板：**哪些视图有导出**是随插件装载变的 ⇒ 每次同步只补新出现的那些视图（卸载插件后它的
+    // 导出消失，面板会变成"没有任何导出声明"的空表 —— 如实，不假装）。
+    for (const view of views) {
+      const wanted = reportsOfView(view).length > 0 || view === 'home' ? view : ''
+      if (wanted === '' || exportPanelViews.has(wanted)) continue
+      exportPanelViews.add(wanted)
+      out.push(surface.panel({ plugin_id: EXPORT_PLUGIN_ID, id: `export.prefs-${wanted}`,
+        title: '导出模板（列选择是**你的**个人偏好）', view: wanted, order: 92, kind: 'table',
+        actions: ['export.columns'], row_actions: ['export.columns'],
+        hint: '勾掉不要的列 ⇒ 这份导出以后只出你选的列；偏好按会话身份落 0600（换浏览器/换设备仍在）',
+        data: (ctx) => {
+          const who = ctx?.identity ?? null
+          const rows = exportPaneRows(wanted, who)
+          const prefs = {}
+          for (const item of (who ? exportPrefsApi.all(who.side, who.human) : [])) prefs[item.report_id] = item
+          return { ok: true, kind: 'table',
+            columns: [{ key: 'title', label: '这份导出' }, { key: 'report_id', label: 'report id', type: 'code' },
+              { key: 'views', label: '出现在' }, { key: 'formats', label: '格式', type: 'code' },
+              { key: 'selection', label: '你的列选择' }, { key: 'columns', label: '列 key（改这里再提交）' },
+              { key: 'saved_at', label: '保存时刻' }],
+            rows, degraded: !who || rows.length === 0,
+            reason: !who ? 'identity-required' : (rows.length ? null : 'no-report-declared'),
+            export_prefs: prefs, counts: { reports: rows.length },
+            next_action: !who
+              ? '登录后这里的列选择才是「你的」（服务端按会话身份存 0600；换浏览器/换设备仍在）'
+              : (rows.length ? '行内「导出：这里有哪几列」改你的列选择（「用全部列」还原）'
+                : '还没有插件声明导出（`surface.report`）⇒ 没有可配列的模板'),
+            note: `偏好落 ${exportPrefsApi.describe(who ? who.side : '', who ? who.human : '').file}（0600，按身份；`
+              + '**不是账本**：列选择是你自己的看法）。导出内容仍然**只由插件自己那一侧的事实生成**，'
+              + '外壳只按你选的列做序列化。' } } }))
+    }
+    return out
+  }
+  const exportPanelViews = new Set()
+  const exportContributions = syncExport()
+
+  /** 机制贡献的**重建**（卸载后不让"分享 / 导出列选择"入口被一次误卸载永久干掉）。 */
+  const syncMechanismContributions = () => syncShare().concat(syncExport())
+
   // ------------------------------------------------------------------ 外壳 HTML（单页应用；脚本只来自本服务）
   const shellHtml = (route) => {
     const safe = normRoute(route)
@@ -1569,22 +2369,37 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         + '刷新不丢、可复制分享；对方视角打开同一 id 只会在它自己的投影里找不到 ⇒ 如实未命中）' },
     io: { python_spawns: ioStats.spawns, python_read_spawns: ioStats.read_spawns,
       read_cache_hits: ioStats.read_hits, read_cache_ttl_ms: readCacheTtlMs, cache_clears: ioStats.cache_clears,
-      note: '只读工具调用（插件声明 read:true）按「工具+参数」缓存 TTL；任何一次动作/落待办件都会清空缓存' },
+      // **上一次页面渲染**的代价（本批新增）：`spawns` = 这一次 `/api/ui/panels` 起了几个 Python 进程。
+      // 用途：长列表改造前后的"渲染耗时 / DOM 节点数 / Python spawn 次数"三件套里最后一件的前后对照。
+      last_render: ioStats.last_render ?? null,
+      // **通知名额分配**（本批新增）：产出 / 返回 / 上限 —— 截断不静默。
+      notify: ioStats.notify ?? null,
+      note: '只读工具调用（插件声明 read:true）按「工具+参数」缓存 TTL；任何一次动作/落待办件都会清空缓存；'
+        + '`last_render`/`notify` 是"上一次渲染"的读数（只为可对账，不影响结果）' },
     registries: surface.snapshot(),
     actions: surface.byKind('action').map((action) => ({ id: action.id, title: action.title,
       views: action.views, group: action.group, icon: action.icon, placement: action.placement,
       inline: action.inline, context_menu: action.context_menu, shortcut: action.shortcut,
       input: action.input, permission: action.permission, confirm: action.confirm, hint: action.hint,
-      object_kind: action.object_kind, plugin_id: action.plugin_id })),
+      object_kind: action.object_kind, plugin_id: action.plugin_id,
+      // **乐观并发声明**（元数据；`state`/`object_id` 是插件自己的实现，不进接口）：
+      // 有它 ⇒ 这个动作保存的是"哪个可编辑对象"，界面把"你看到的那一版"填进 `expected_version`。
+      concurrency: action.concurrency
+        ? { object_class: action.concurrency.object_class, label: action.concurrency.label,
+          id_field: action.concurrency.id_field, expected_field: action.concurrency.expected_field,
+          object_id: action.concurrency.object_id ? '<插件自己算>' : null,
+          expected_version: true }
+        : null })),
     panels: surface.byKind('panel').map((panel) => ({ id: panel.id, title: panel.title, view: panel.view,
       panel_kind: panel.panel_kind, placement: panel.placement, actions: panel.actions, order: panel.order,
       object_kind: panel.object_kind, plugin_id: panel.plugin_id })),
     // **导出 / 打印**（`report` 贡献）：只给元数据（谁声明的、什么对象类、哪几种格式、真干活的动作是哪个）。
     reports: surface.reports().map((item) => ({ id: item.id, title: item.title, views: item.views,
       view: item.view, object_kind: item.object_kind, formats: item.formats, action: item.action,
-      hint: item.hint, order: item.order, plugin_id: item.plugin_id })),
+      columns: item.columns, hint: item.hint, order: item.order, plugin_id: item.plugin_id })),
     reports_note: '导出/打印是**声明**：内容由声明的那个动作（插件自己的服务端一半）生成 —— 外壳不生成内容、'
-      + '也不解读它导出的是什么；插件的两个一半都在这里（谁的事实谁导出）',
+      + '也不解读它导出的是什么；插件的两个一半都在这里（谁的事实谁导出）。`columns` 是**列元数据**：'
+      + '界面拿它做「列选择」（个人偏好，按身份落 0600 ⇒ 换浏览器/换设备仍在，见本 JSON 的 `export_prefs`）。',
     shortcuts: surface.shortcuts().map((item) => ({ keys: item.keys, action: item.action, title: item.title,
       plugin_id: item.plugin_id })),
     shell_shortcuts: SHELL_SHORTCUTS,
@@ -1600,6 +2415,23 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       panels: peopleSurface.panelCount, plugin_id: PEOPLE_PLUGIN_ID,
       http: { roster: `${prefix}/api/people/roster`, suggest: `${prefix}/api/people/suggest`,
         store: `${prefix}/api/people/store` } },
+    // **乐观并发**（对象版本/指纹）：哪些动作受保护、版本落在哪、冲突时给出什么（机制，不是账本事实）。
+    versions: { ...versionsApi.describe(''), guarded_actions: surface.byKind('action')
+      .filter((action) => action.concurrency)
+      .map((action) => ({ action: action.id, plugin_id: action.plugin_id,
+        object_class: action.concurrency.object_class, label: action.concurrency.label,
+        id_field: action.concurrency.id_field, expected_field: action.concurrency.expected_field })) },
+    // **分享**（深链 + 对方需要什么身份/侧 + 邮件正文）：入口是一个动作，不落任何东西。
+    share: { plugin_id: SHARE_PLUGIN_ID, action: 'share.object', contributions: shareContributions.length,
+      http: { note: '分享没有独立路由：入口是 `share.object` 动作（走同一个动作总线）' },
+      mechanism: '分享只拼"可复制的深链 + 对方需要什么身份/侧 + 可直接粘贴的邮件正文"：'
+        + '它不写账本、不落文件、不发邮件；"对方能不能看"由插件在 `data.object.share` 里声明，'
+        + '插件没声明时界面**不替它断言**（会如实说"插件没声明，无法断言"）' },
+    // **导出模板可配**（列选择 = 个人偏好，0600）：外壳只做列过滤与序列化，内容仍由插件生成。
+    export_prefs: { plugin_id: EXPORT_PLUGIN_ID, action: 'export.columns',
+      contributions: exportContributions.length, ...exportPrefsApi.describe('', ''),
+      http: { note: '列选择没有独立路由：入口是 `export.columns` 动作（走同一个动作总线）' },
+      source: 'report.columns（插件声明的列元数据）' },
     // **沙盘 / 演示数据**（机制）：谁能造一组可看的流转、步骤由谁声明、数据落在哪、怎么清。
     sandbox: { plugin_id: SANDBOX_PLUGIN_ID, state_file: sandboxStateFile,
       dir: join(sharedDir, 'sandbox'), on: sandboxScopes.length > 0,
@@ -1629,5 +2461,11 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     // **沙盘 / 演示数据**（机制）：场景由插件声明、外壳只串联；清空只删沙盘目录。
     sandbox: { describe: sandboxDescribe, run: runScenario, clear: (human) => sandboxWipe(human),
       entry: (human) => sandboxEntry(human), pluginId: SANDBOX_PLUGIN_ID, stateFile: sandboxStateFile },
+    // **乐观并发 / 分享 / 导出列选择**（机制）：HTTP 侧与验证脚本按会话身份用这三样。
+    versions: { current: (side, objectClass, objectId) => versionCurrent(side, objectClass, objectId),
+      describe: (side) => versionsApi.describe(side), guard: (payload) => versionGuard(payload) },
+    exportPrefs: exportPrefsApi,
+    share: { pluginId: SHARE_PLUGIN_ID, actionId: 'share.object', compose: composeShare },
+    exportPluginId: EXPORT_PLUGIN_ID, syncMechanismContributions,
     get contributions() { return contributions } }
 }

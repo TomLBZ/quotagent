@@ -78,7 +78,7 @@ export async function register(surface, host) {
           { key: 'rank', label: '名次' },
           { key: 'quote_id', label: '报价', type: 'code' },
           { key: 'supplier', label: '供应商', type: 'code' },
-          { key: 'score', label: '得分（越小越前，minmax 口径）' },
+          { key: 'score', label: '得分（越小越前，minmax 口径）', filter: 'number' },
           { key: 'components', label: '分量贡献（谁拉高了 / 拉低了）' },
           { key: 'citations', label: '引用链' },
         ],
@@ -89,8 +89,12 @@ export async function register(surface, host) {
           citations: (row.citations ?? []).slice(0, 4).join(' ') })),
         bulk: 'compare.rank',
         counts: { ranked: ranking.length, ...(json.counts ?? {}) },
+        // **乐观并发**：页面上声明"这一版权重是给哪个动作用的" ⇒ 打开「保存权重」时界面自动带上它
+        version: host.versions.current('contractor', 'compare-weights', 'current'),
+        version_for: 'compare.save-weights',
         note: `本次权重：${weightsText(weights)}（归一由服务保证；同权重下与 Python 侧 services/compare.py 同名次）`
-          + ` · 选中若干行再点「用这组权重重排」= 只排这几家` }
+          + ` · 选中若干行再点「用这组权重重排」= 只排这几家`
+          + ` · 「保存权重」受版本保护：别人先改过就会被明确拒绝并给出差异` }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'compare.rank', title: '用这组权重排一次', views: ['contractor'],
@@ -191,14 +195,14 @@ export async function register(surface, host) {
       return { ok: true, kind: 'table',
         columns: [
           { key: 'item_id', label: '行项目', type: 'code', pin: 'left' },
-          { key: 'qty', label: '量' },
+          { key: 'qty', label: '量', filter: 'number' },
           { key: 'item_min_cents', label: '本行最低价（分）' },
-          { key: 'spread_pct', label: '本行价差 %' },
+          { key: 'spread_pct', label: '本行价差 %', filter: 'number' },
           { key: 'quote_id', label: '报价', type: 'code' },
           { key: 'supplier', label: '供应商', type: 'code' },
-          { key: 'unit_price_cents', label: '单价（分）' },
+          { key: 'unit_price_cents', label: '单价（分）', filter: 'number' },
           { key: 'line_total_cents', label: '行合计（分）' },
-          { key: 'delta_pct', label: '与本行最低价差 %' },
+          { key: 'delta_pct', label: '与本行最低价差 %', filter: 'number' },
           { key: 'normalized', label: 'per-item 归一（0=本行最低）' },
           { key: 'contribution', label: '本行对本家价格分的贡献' },
           { key: 'cheapest', label: '本行最便宜' },
@@ -232,7 +236,7 @@ export async function register(surface, host) {
       }
       const columns = [
         { key: 'item_id', label: '行项目（固定列）', type: 'code', pin: 'left' },
-        { key: 'qty', label: '量' },
+        { key: 'qty', label: '量', filter: 'number' },
         { key: 'item_min_cents', label: '本行最低（分）', best_when: 'min' },
       ]
       for (const quote of quotes) {
@@ -272,8 +276,8 @@ export async function register(surface, host) {
       const matrixOf2 = new Map((matrix?.quote_summary ?? []).map((row) => [row.quote_id, row]))
       return { ok: true, kind: 'table',
         columns: [
-          { key: 'rank', label: '名次' }, { key: 'quote_id', label: '报价', type: 'code' },
-          { key: 'score', label: '总分（越小越前）' },
+          { key: 'rank', label: '名次', filter: 'number' }, { key: 'quote_id', label: '报价', type: 'code' },
+          { key: 'score', label: '总分（越小越前）', filter: 'number' },
           { key: 'components', label: '五分量贡献（全局 minmax）' },
           { key: 'matrix_contribution', label: '矩阵价格贡献（per-item）' },
           { key: 'citations', label: '引用链' },
@@ -292,6 +296,15 @@ export async function register(surface, host) {
     views: ['contractor'], group: '比价', order: 25,
     confirm: { required: true, message: '保存这组权重：写插件配置 + 落一条 compare/rank-computed（不改任何判定）：确认？' },
     hint: '权重存成插件配置（<ui-shared>/compare/weights.json，**下次打开还在**）+ 落 compare/rank-computed',
+    // **乐观并发**（机制）：这个动作保存的是"本侧当前这组比价权重"（一份全局配置，后写就盖前写）——
+    // 两个同事先后改权重时，后改的人被**明确拒绝**并看到"谁在何时把哪个分量从多少改成了多少"。
+    concurrency: { object_class: 'compare-weights', label: '本侧当前这组比价权重',
+      object_id: () => 'current',
+      state: (ctx, input) => ({ price: String(input.w_price ?? DEFAULTS.price),
+        delivery: String(input.w_delivery ?? DEFAULTS.delivery),
+        payment: String(input.w_payment ?? DEFAULTS.payment),
+        warranty: String(input.w_warranty ?? DEFAULTS.warranty),
+        deviation: String(input.w_deviation ?? DEFAULTS.deviation), by: asText(input.actor) }) },
     input: { fields: [
       { name: 'w_price', label: '权重：单价', type: 'number', min: 0, max: 1, default: DEFAULTS.price },
       { name: 'w_delivery', label: '权重：交期', type: 'number', min: 0, max: 1, default: DEFAULTS.delivery },
@@ -422,7 +435,7 @@ export async function register(surface, host) {
           { key: '行来源', value: 'ledger:compare/rank-computed（名次/得分/偏差计数逐行来自账本事实）' },
         ],
         columns: [{ key: 'no', label: '#' }, { key: 'rank', label: '名次' }, { key: 'quote_id', label: '报价' },
-          { key: 'score', label: '得分（越小越前，minmax 口径）' }, { key: 'package_id', label: '包' },
+          { key: 'score', label: '得分（越小越前，minmax 口径）', filter: 'number' }, { key: 'package_id', label: '包' },
           { key: 'package_rev', label: '包版本' }, { key: 'flags', label: '偏差计数' },
           { key: 'excluded', label: '被排除' }, { key: 'evaluation_id', label: '评估 id' },
           { key: 'ledger_seq', label: '账本行号' }, { key: 'source', label: '行来源' }],
@@ -437,6 +450,13 @@ export async function register(surface, host) {
 
   out.push(surface.report({ plugin_id: me, id: 'report.compare', title: '比价表（CSV / 可打印 HTML）',
     views: ['contractor'], formats: ['csv', 'html'], action: 'compare.print', order: 32,
+    // `columns` = 这份导出有哪些列（**元数据**：界面拿它做「列选择」个人偏好；内容仍由 action 生成）。
+    // 与 `compare.print` 的 spec.columns 逐字一致 —— 改了这里就要改那里（同一份台账）。
+    columns: [{ key: 'no', label: '#' }, { key: 'rank', label: '名次' }, { key: 'quote_id', label: '报价' },
+      { key: 'score', label: '得分（越小越前，minmax 口径）', filter: 'number' }, { key: 'package_id', label: '包' },
+      { key: 'package_rev', label: '包版本' }, { key: 'flags', label: '偏差计数' },
+      { key: 'excluded', label: '被排除' }, { key: 'evaluation_id', label: '评估 id' },
+      { key: 'ledger_seq', label: '账本行号' }, { key: 'source', label: '行来源' }],
     hint: '名次/得分/偏差计数逐行来自账本里已记录的那次评估' }))
 
   // ---- **沙盘场景**：演示流程的第 ③ 段 = **比价**（`compare.rank` 只读：账本零新增）------------------

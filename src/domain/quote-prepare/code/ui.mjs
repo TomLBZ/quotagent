@@ -73,6 +73,32 @@ const payloadOf = (host, view) => {
   return { view, as_of: facts.map((fact) => fact.ts).filter(Boolean).sort().pop() ?? null, facts }
 }
 
+/** 一次「备草稿」提交里的行（批量 `input.rows`，或用标量字段的单条）。 */
+const draftRowsOf = (input) => (Array.isArray(input?.rows) && input.rows.length ? input.rows : [input])
+/**
+ * **我方对这份包的报价草稿**（乐观并发的对象）= **这份包一个对象**（对象 id 就是包 id）。
+ *
+ * 为什么这么定：草稿是"我方对这份包的报价"这一件事 —— 界面上的"整张表一次提交"、行内改价、批量提交
+ * 写进去的都是它；两个人各改一部分行项目（一个改 L-001、一个改 L-002）时**仍然是同一个对象**，
+ * 后写覆盖前写（对方的价不见了）正是要防的。行项目集合若参与对象 id，两个人各改一行就互不冲突了
+ * （那正是漏网的口子）。逐行差异由状态（`draftStateOf`）里的价目表给出，不靠对象 id。
+ */
+const draftSlotOf = (input) => asText(input?.rfq_id)
+/** 这份草稿"写进去之后"的权威状态（乐观并发比对的字段；机制只取指纹与逐字段差异，不解读含义）。 */
+const draftStateOf = (input) => {
+  const lines = draftRowsOf(input).map((row) => ({
+    item_id: asText(row?.item_id ?? row?.id),
+    unit_price_cents: String(row?.unit_price_cents ?? input?.unit_price_cents ?? ''),
+    lead_time_days: String(row?.lead_time_days ?? input?.lead_time_days ?? '') }))
+    .sort((left, right) => (left.item_id < right.item_id ? -1 : 1))
+  return { rfq_id: asText(input?.rfq_id),
+    item_ids: lines.map((line) => line.item_id).join('+'),
+    prices: lines.map((line) => `${line.item_id}@${line.unit_price_cents}/${line.lead_time_days}d`).join(' '),
+    currency: asText(input?.currency) || 'CNY',
+    prepared_by: asText(input?.prepared_by),
+    note_sha256: sha256(String(input?.note ?? '')) }
+}
+
 /** 投递信封里**发给自己的**那一份（`delivered_to` 含本侧 realm；只出自己的包）。 */
 const myPackage = (host, realm) => {
   const file = asText(host.config?.rfq_delivery)
@@ -143,6 +169,11 @@ export async function register(surface, host) {
         editable_defaults: { rfq_id: String(spec.package_id ?? ''), currency: String(spec.currency ?? 'CNY'),
           prepared_by: '' },
         bulk: 'quote.draft',
+        // **乐观并发**：把"你打开这一页时看到的这一版草稿"交给界面（保存时带回 `expected_version`）。
+        // 对象 = 这份包 + 这一组行项目（与 `quote.draft` 的 concurrency 同一口径，逐字对齐）。
+        version: host.versions.current('supplier', 'quote-draft',
+          draftSlotOf({ rfq_id: String(spec.package_id ?? ''), rows: items.map((item) => ({ item_id: item.item_id })) })),
+        version_for: 'quote.draft',
         ref: spec.package_id ? { kind: 'package', id: String(spec.package_id),
           title: `包 ${spec.package_id} rev${envelope.rev ?? '—'}` } : null,
         counts: { items: items.length, rev: envelope.rev },
@@ -174,6 +205,9 @@ export async function register(surface, host) {
       const items = Array.isArray(spec.items) ? spec.items : []
       const drafts = new Map(typeRows(host.rows('supplier'), 'quote/drafted')
         .map((row) => [asText(bodyOf(row).item_id), bodyOf(row)]))
+      // **乐观并发**：这一页上保存动作要带的"你看到的那一版"（与 `quote.draft` 的 concurrency 同一口径）
+      const myDraftVersion = host.versions.current('supplier', 'quote-draft',
+        draftSlotOf({ rfq_id: packageId, rows: items.map((item) => ({ item_id: item.item_id })) }))
       return { ok: true, kind: 'table',
         object: { title: `包 ${packageId} rev${mine.envelope.rev ?? '—'}`, found: true,
           subtitle: `发给 ${((mine.envelope.delivered_to ?? []).map(String).join(' ') || realm || '本侧')}`
@@ -183,7 +217,18 @@ export async function register(surface, host) {
             { key: '版本 rev', value: String(mine.envelope.rev ?? '—') },
             { key: '澄清截止', value: String((spec.deadlines ?? {}).clarify_by ?? '—') },
             { key: '已备草稿', value: `${drafts.size} / ${items.length}` },
-          ], links: [] },
+            { key: '我方草稿的版本', code: true, value: myDraftVersion
+              ? `rev ${myDraftVersion.rev} · ${myDraftVersion.at} · ${myDraftVersion.by || '（未记名）'}`
+              : '还没有人保存过这份包的这一版报价草稿（第一次保存按"首次"记下来）' },
+          ],
+          links: [],
+          // 分享：这个包的可见性由插件声明（机制据此写"对方需要什么身份/侧"）
+          share: { visibility: 'both', other_side_view: 'supplier',
+            requirements: ['对方需要用**承包商侧**的身份登录（它是发包方）；这份包是按 realm 投递的，'
+              + '只出现在被邀请方的视图里'],
+            note: '包是交付件：你看到的是发给本侧的版本事实与行项目；对方那一侧只认它自己的投递信封。' },
+          // **乐观并发**：这个对象页上的保存动作要带的那一版（草稿槽 = 这份包）
+          version: myDraftVersion },
         columns: [
           { key: 'item_id', label: '行项目', type: 'code', pin: 'left' }, { key: 'description', label: '描述' },
           { key: 'qty', label: '数量' }, { key: 'unit', label: '单位' },
@@ -239,8 +284,8 @@ export async function register(surface, host) {
           links: [
             { kind: 'package', id: asText(bagOf.package_id), title: `包 ${asText(bagOf.package_id)}` },
           ].filter((link) => link.id !== '') },
-        columns: [{ key: 'item_id', label: '行项目', type: 'code' }, { key: 'qty', label: '量' },
-          { key: 'unit_price_cents', label: '单价（整数分）' }, { key: 'lead_time_days', label: '交期（天）' }],
+        columns: [{ key: 'item_id', label: '行项目', type: 'code' }, { key: 'qty', label: '量', filter: 'number' },
+          { key: 'unit_price_cents', label: '单价（整数分）', filter: 'number' }, { key: 'lead_time_days', label: '交期（天）', filter: 'number' }],
         rows: (quote.items ?? []).map((line) => ({ id: String(line.item_id), item_id: line.item_id,
           qty: line.qty, unit_price_cents: line.unit_price_cents, lead_time_days: line.lead_time_days })),
         counts: { lines: (quote.items ?? []).length },
@@ -275,10 +320,10 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table',
         columns: [{ key: 'quote_draft_id', label: '草稿', type: 'code' }, { key: 'rfq_id', label: '包', type: 'code' },
-          { key: 'line_count', label: '行数' }, { key: 'item_id', label: '首行项目', type: 'code' },
+          { key: 'line_count', label: '行数', filter: 'number' }, { key: 'item_id', label: '首行项目', type: 'code' },
           { key: 'lines_text', label: '逐行（条目@单价分）' },
-          { key: 'unit_price_cents', label: '首行单价（整数分）' },
-          { key: 'lead_time_days', label: '首行交期（天）' }, { key: 'status', label: '状态' }],
+          { key: 'unit_price_cents', label: '首行单价（整数分）', filter: 'number' },
+          { key: 'lead_time_days', label: '首行交期（天）', filter: 'number' }, { key: 'status', label: '状态', filter: 'enum' }],
         rows, row_actions: ['quote.submit'], counts: { drafts: rows.length },
         note: '草稿**不是报价**：只有人签提交（quote/submit）之后才算对外报价（AGENTS.md 规则 3）；'
           + '**一份草稿 = 一整张表**（行数 > 1 的草稿签一次就提交全部行）' }
@@ -295,11 +340,11 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table',
         columns: [{ key: 'quote_id', label: '报价', type: 'code' }, { key: 'package_id', label: '包', type: 'code' },
-          { key: 'line_count', label: '行数' }, { key: 'item_id', label: '首行项目', type: 'code' },
+          { key: 'line_count', label: '行数', filter: 'number' }, { key: 'item_id', label: '首行项目', type: 'code' },
           { key: 'lines_text', label: '逐行（条目@单价分）' },
-          { key: 'unit_price_cents', label: '首行单价（整数分）' },
-          { key: 'lead_time_days', label: '首行交期（天）' }, { key: 'approved_by', label: '签署人', type: 'code' },
-          { key: 'approval_id', label: '人工门', type: 'code' }, { key: 'submitted_at', label: '提交时刻' }],
+          { key: 'unit_price_cents', label: '首行单价（整数分）', filter: 'number' },
+          { key: 'lead_time_days', label: '首行交期（天）', filter: 'number' }, { key: 'approved_by', label: '签署人', type: 'code' },
+          { key: 'approval_id', label: '人工门', type: 'code' }, { key: 'submitted_at', label: '提交时刻', filter: 'date' }],
         rows: rows.map((row) => {
           const lines = Array.isArray(row.lines) ? row.lines : []
           return { id: row.quote_id, ...row, line_count: lines.length || 1,
@@ -352,7 +397,12 @@ export async function register(surface, host) {
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'quote.draft', title: '备报价草稿（整张表一次提交）', views: ['supplier'],
-    group: '报价', order: 10, input: {
+    group: '报价', order: 10,
+    // **乐观并发**（机制）：这个动作保存的是"我方对这份包的报价草稿"（同一组行项目 = 同一个对象）。
+    // 两个同事各自打开这份包、先后保存 ⇒ 后保存的人被**明确拒绝**并看到"谁在何时把哪条改成了什么"。
+    concurrency: { object_class: 'quote-draft', label: '我方对这份包的报价草稿',
+      object_id: (ctx, input) => draftSlotOf(input), state: (ctx, input) => draftStateOf(input) },
+    input: {
       bulk: 'rows',
       fields: [
         { name: 'rfq_id', label: 'RFQ 引用', type: 'text', required: true, help: '必须出现在本侧事实里' },

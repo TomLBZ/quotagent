@@ -139,15 +139,15 @@ export async function register(surface, host) {
       return { ok: true, kind: 'table',
         columns: [
           { key: 'approval_id', label: '门', type: 'code' },
-          { key: 'scope', label: '待批对象（scope）', type: 'code' },
+          { key: 'scope', label: '待批对象（scope）', type: 'code', filter: 'enum' },
           { key: 'ref', label: '引用（ref）', type: 'code' },
           { key: 'who', label: '卡在谁', type: 'code' },
           { key: 'waited', label: '已等（按事实时刻）' },
-          { key: 'policy_label', label: '超时策略' },
+          { key: 'policy_label', label: '超时策略', filter: 'enum' },
           { key: 'timeout_left', label: '超时剩余（按事实时刻）' },
           { key: 'overdue', label: '已超时？' },
-          { key: 'nudge_count', label: '已催次数' },
-          { key: 'last_nudged_at', label: '最后一次催办 @ts' },
+          { key: 'nudge_count', label: '已催次数', filter: 'number' },
+          { key: 'last_nudged_at', label: '最后一次催办 @ts', filter: 'date' },
           { key: 'escalated_to', label: '升级/委托给' },
         ],
         rows: gates.map((gate) => ({ id: gate.approval_id, ...gate,
@@ -324,16 +324,40 @@ export async function register(surface, host) {
   out.push(surface.shortcut({ plugin_id: me, id: 'shortcut.gate-queue', keys: 'g', action: 'gate.nudge',
     title: '催办一个门', order: 5 }))
 
+  /**
+   * 通知源：**每个视角只逐条报最急的 N 个门，其余聚合成一条**（本批 P10）。
+   *
+   * 为什么：规模下这是**唯一会把通知中心吃光**的来源（实测 400 个待批门 = 400 条通知）。
+   * 通知中心的用途是"哪件事在等我"，不是"把队列整个复述一遍"——队列本体在「审批队列」面板里，
+   * 那里有分页、筛选与逐行动作。所以这里按**急 → 不急**排序取前 N 条，再补一条"另有 N 个门在等"
+   * （带计数与去处的下一步）：一条也没丢（总数与去处都在），也不再让别的插件一条都进不来。
+   */
+  const NOTIFY_GATES_TOP = 20
   out.push(surface.notificationSource({ plugin_id: me, id: 'notify.gates', title: '审批队列（等太久的门）',
     order: 5, poll: () => {
       const items = []
       for (const view of ['contractor', 'supplier']) {
-        for (const gate of pendingRows(host.rows(view))) {
+        const gates = pendingRows(host.rows(view))
+        // 急的排前：先超时、再按等得久（`waited_seconds` 是既有的按事实时刻算出的读数；缺失按 0，不猜）
+        const ordered = [...gates].sort((left, right) => (right.overdue ? 1 : 0) - (left.overdue ? 1 : 0)
+          || Number(right.waited_seconds ?? 0) - Number(left.waited_seconds ?? 0)
+          || String(left.approval_id).localeCompare(String(right.approval_id)))
+        for (const gate of ordered.slice(0, NOTIFY_GATES_TOP)) {
           items.push({ id: `gate:${view}:${gate.approval_id}`, level: gate.overdue ? 'warn' : 'info',
             at: gate.requested_at, ref: gate.ref,
             title: `${gate.approval_id} 等 ${gate.waited}（${view}）：${gate.scope}`,
             body: `卡在 ${gate.who} · 已催 ${gate.nudge_count} 次 · ${gate.overdue ? '已超时（策略会执行，但永不自动批准）' : '未超时'}`,
             next_action: '去「审批队列」催办 / 升级 / 终止（人签）' })
+        }
+        const rest = ordered.length - Math.min(ordered.length, NOTIFY_GATES_TOP)
+        const overdue = ordered.filter((gate) => gate.overdue).length
+        if (rest > 0) {
+          items.push({ id: `gate:${view}:rest:${ordered.length}`, level: overdue ? 'warn' : 'info',
+            at: '',
+            title: `（${view}）另有 ${rest} 个门在等批（这一条把它们合成一条）`,
+            body: `共 ${ordered.length} 个待批，其中超时 ${overdue} 个；这里只逐条报了最急的 `
+              + `${Math.min(ordered.length, NOTIFY_GATES_TOP)} 个 —— 一条都没删，只是不逐条占通知位`,
+            next_action: `去「审批队列」看全部（${ordered.length} 行，可筛选/翻页/逐行催办）` })
         }
       }
       return items

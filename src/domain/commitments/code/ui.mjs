@@ -145,7 +145,7 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table',
         columns: [{ key: 'intent_id', label: '意向', type: 'code' }, { key: 'quote_id', label: '报价', type: 'code' },
-          { key: 'lines', label: '条目' }, { key: 'confirmed', label: '供应商确认' },
+          { key: 'lines', label: '条目', filter: 'number' }, { key: 'confirmed', label: '供应商确认' },
           { key: 'award_id', label: '承诺', type: 'code' }, { key: 'approved_by', label: '承诺批准人', type: 'code' },
           { key: 'po_id', label: 'PO', type: 'code' }, { key: 'chain', label: '追溯链' }],
         rows: table, counts: { intents: intents.length, awards: awards.length, po: pos.length },
@@ -280,7 +280,7 @@ export async function register(surface, host) {
         .map((row) => asText(bodyOf(row).intent_id)))
       return { ok: true, kind: 'table',
         columns: [{ key: 'intent_id', label: '意向', type: 'code' }, { key: 'package_id', label: '包', type: 'code' },
-          { key: 'quote_id', label: '我的报价', type: 'code' }, { key: 'lines', label: '条目' },
+          { key: 'quote_id', label: '我的报价', type: 'code' }, { key: 'lines', label: '条目', filter: 'number' },
           { key: 'reason', label: '对方理由' }, { key: 'confirmed', label: '我确认了吗' }],
         rows: mine.map((item) => ({ id: String(item.intent_id), intent_id: item.intent_id,
           package_id: item.package_id, quote_id: item.quote_id,
@@ -301,7 +301,7 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table',
         columns: [{ key: 'intent_id', label: '意向', type: 'code' }, { key: 'quote_id', label: '报价', type: 'code' },
-          { key: 'confirmed_by', label: '确认人', type: 'code' }, { key: 'confirmed_at', label: '确认时刻' }],
+          { key: 'confirmed_by', label: '确认人', type: 'code' }, { key: 'confirmed_at', label: '确认时刻', filter: 'date' }],
         rows: rows.map((row) => ({ id: row.intent_id, ...row })), counts: { confirmations: rows.length } }
     } }))
 
@@ -365,9 +365,9 @@ export async function register(surface, host) {
           next_action: '等承包商在 APP 里「发 PO（人签）」——发出即投递，本侧账本会多一条 po/distributed 登记' }
       }
       return { ok: true, kind: 'table',
-        columns: [{ key: 'po_id', label: 'PO', type: 'code' }, { key: 'lines', label: '行数' },
-          { key: 'total_amount', label: '金额' }, { key: 'approved_by', label: '签发人', type: 'code' },
-          { key: 'issued_at', label: '签发时刻' }, { key: 'delivered_at', label: '投递时刻' },
+        columns: [{ key: 'po_id', label: 'PO', type: 'code' }, { key: 'lines', label: '行数', filter: 'number' },
+          { key: 'total_amount', label: '金额', filter: 'number' }, { key: 'approved_by', label: '签发人', type: 'code' },
+          { key: 'issued_at', label: '签发时刻', filter: 'date' }, { key: 'delivered_at', label: '投递时刻', filter: 'date' },
           { key: 'chain', label: '追溯链' }, { key: 'ack', label: '回签' }],
         rows: delivered.map((item) => {
           const poId = asText(item.po_id)
@@ -416,7 +416,12 @@ export async function register(surface, host) {
             { key: '投递对象', value: (item.recipients ?? []).join(' / '), code: true },
             { key: '包 / 报价', value: `${asText(item.package_id)} / ${asText(item.quote_id)}`, code: true },
           ],
-          links },
+          links,
+          // **分享**（插件声明"对方能不能看"；机制据此写分享弹层与邮件正文）
+          share: { visibility: 'both', other_side_view: 'contractor',
+            requirements: ['对方要用**承包商侧**的身份登录（签发方）；这张 PO 是按 realm 投递的 —— '
+              + '只有投递到本侧的 PO 才会出现在本侧视图里'],
+            note: '这是投递给本侧的那一份（本侧账本里有投递登记）；回签件挂在这张 PO 的附件面板上。' } },
         items: [
           { key: '追溯链', value: asText(item.chain), code: true },
           { key: '我回签了吗', value: ack ? `已回签：${asText(ack.acknowledged_by)} @ ${asText(ack.acknowledged_at)}`
@@ -436,8 +441,8 @@ export async function register(surface, host) {
           columns: [{ key: 'ref_line', label: '行项目' }], rows: [] }
       }
       return { ok: true, kind: 'table',
-        columns: [{ key: 'ref_line', label: '行项目', type: 'code' }, { key: 'qty', label: '量' },
-          { key: 'unit_price', label: '单价' }, { key: 'amount', label: '行金额' },
+        columns: [{ key: 'ref_line', label: '行项目', type: 'code' }, { key: 'qty', label: '量', filter: 'number' },
+          { key: 'unit_price', label: '单价', filter: 'number' }, { key: 'amount', label: '行金额', filter: 'number' },
           { key: 'basis', label: '单价基准（中标报价条目）', type: 'code' },
           { key: 'trace', label: '追溯模式' }],
         rows: (item.lines ?? []).map((line) => ({ id: String(line.ref_line), ref_line: line.ref_line,
@@ -558,8 +563,8 @@ export async function register(surface, host) {
           { key: '账本行', value: poRow.seq === undefined ? '—'
             : `seq ${poRow.seq} · ${asText(poRow.entry_hash)}` },
         ],
-        columns: [{ key: 'no', label: '#' }, { key: 'ref_line', label: '行项目' }, { key: 'qty', label: '数量' },
-          { key: 'unit_price', label: '单价' }, { key: 'amount', label: '行金额' },
+        columns: [{ key: 'no', label: '#' }, { key: 'ref_line', label: '行项目' }, { key: 'qty', label: '数量', filter: 'number' },
+          { key: 'unit_price', label: '单价', filter: 'number' }, { key: 'amount', label: '行金额', filter: 'number' },
           { key: 'basis', label: '单价基准（可追溯）' }, { key: 'trace', label: '追溯模式' },
           { key: 'quote_id', label: '来源报价' }],
         rows: lines,
@@ -573,6 +578,12 @@ export async function register(surface, host) {
 
   out.push(surface.report({ plugin_id: me, id: 'report.po-received', title: '我收到的采购单（CSV / 可打印 HTML）',
     views: ['supplier'], object_kind: 'po', formats: ['csv', 'html'], action: 'po.export-received', order: 42,
+    // `columns` = 这份导出有哪些列（**元数据**：界面拿它做「列选择」个人偏好；内容仍由 action 生成）。
+    // 与 `po.export-received` 的 spec.columns 逐字一致 —— 改了这里就要改那里（同一份台账）。
+    columns: [{ key: 'no', label: '#' }, { key: 'ref_line', label: '行项目' }, { key: 'qty', label: '数量', filter: 'number' },
+      { key: 'unit_price', label: '单价', filter: 'number' }, { key: 'amount', label: '行金额', filter: 'number' },
+      { key: 'basis', label: '单价基准（可追溯）' }, { key: 'trace', label: '追溯模式' },
+      { key: 'quote_id', label: '来源报价' }],
     hint: '逐行带单价基准与来源报价；表头给追溯链、投递时刻、送货地址/交期与回签状态' }))
 
   // ---- 工作台（首屏「我今天要做什么」）：待人工门队列 + 待确认意向 --------------------------------
@@ -806,9 +817,9 @@ export async function register(surface, host) {
         columns: [
           { key: 'po_id', label: 'PO', type: 'code' }, { key: 'award_id', label: '承诺', type: 'code' },
           { key: 'intent_id', label: '意向', type: 'code' }, { key: 'quote_id', label: '报价', type: 'code' },
-          { key: 'line_count', label: '行数' }, { key: 'trace_mode', label: '追溯模式' },
-          { key: 'total_amount', label: '金额（元）' }, { key: 'approved_by', label: '签发人', type: 'code' },
-          { key: 'chain', label: '链路' }, { key: 'issued_at', label: '签发时刻' },
+          { key: 'line_count', label: '行数', filter: 'number' }, { key: 'trace_mode', label: '追溯模式', filter: 'enum' },
+          { key: 'total_amount', label: '金额（元）', filter: 'number' }, { key: 'approved_by', label: '签发人', type: 'code' },
+          { key: 'chain', label: '链路' }, { key: 'issued_at', label: '签发时刻', filter: 'date' },
           { key: 'delivered', label: '投递' }, { key: 'ack', label: '对方回签' },
         ],
         rows: pos.map((po) => ({ id: String(po.po_id), po_id: po.po_id, award_id: po.award_id,
@@ -869,7 +880,12 @@ export async function register(surface, host) {
             { key: '人工门', value: trace.approval_id, code: true },
             { key: '报价', value: trace.quote_id, code: true },
           ],
-          links: (trace.segments ?? []).filter((seg) => seg.kind !== 'po') },
+          links: (trace.segments ?? []).filter((seg) => seg.kind !== 'po'),
+          // **分享**（插件声明"对方能不能看"；机制据此写分享弹层与邮件正文）
+          share: { visibility: 'both', other_side_view: 'supplier',
+            requirements: ['对方要用**供应商侧**的身份登录（收件方）；这张 PO 只有**投递到它那一侧**'
+              + '才会出现在它的视图里（发 PO 即投递）'],
+            note: '这是承包商侧签发的原件；对方那一侧看到的是同一次投递的收件登记（逐行同源）。' } },
         items: [
           { key: '链路', value: trace.chain, code: true },
           { key: '追溯模式', value: `${trace.trace_mode}（full=逐行可回溯；ref-only=只给引用）` },
@@ -901,7 +917,7 @@ export async function register(surface, host) {
           columns: [{ key: 'ref_line', label: 'PO 行' }], rows: [] }
       }
       return { ok: true, kind: 'table',
-        columns: [{ key: 'ref_line', label: 'PO 行', type: 'code' }, { key: 'qty', label: '量' },
+        columns: [{ key: 'ref_line', label: 'PO 行', type: 'code' }, { key: 'qty', label: '量', filter: 'number' },
           { key: 'unit_price', label: '单价' }, { key: 'basis', label: '单价基准（中标报价条目）', type: 'code' },
           { key: 'trace', label: '追溯模式' }],
         rows: (trace.lines ?? []).map((line) => ({ id: String(line.ref_line), ...line })),
@@ -1011,8 +1027,8 @@ export async function register(surface, host) {
           ],
           links: [{ kind: 'quote', id: asText(change.quote_id), title: `报价 ${change.quote_id}` }]
             .filter((link) => link.id !== '') },
-        columns: [{ key: 'ref_line', label: '行', type: 'code' }, { key: 'old_qty', label: '原量' },
-          { key: 'new_qty', label: '新量' }, { key: 'old_unit_price', label: '原单价（只读）' }],
+        columns: [{ key: 'ref_line', label: '行', type: 'code' }, { key: 'old_qty', label: '原量', filter: 'number' },
+          { key: 'new_qty', label: '新量', filter: 'number' }, { key: 'old_unit_price', label: '原单价（只读）', filter: 'number' }],
         rows: (change.lines ?? []).map((line, index) => ({ id: `${line.ref_line ?? line.item_id ?? index}`,
           ref_line: line.ref_line ?? line.item_id, old_qty: line.old_qty, new_qty: line.new_qty,
           old_unit_price: line.old_unit_price ?? '' })),
@@ -1088,9 +1104,9 @@ export async function register(surface, host) {
         columns: [
           { key: 'change_id', label: '变更', type: 'code' }, { key: 'quote_id', label: '报价', type: 'code' },
           { key: 'lines', label: '逐行（原量→新量 @ 原单价）' },
-          { key: 'delta_amount', label: '差额（元，整数分口径见工具输出）' },
+          { key: 'delta_amount', label: '差额（元，整数分口径见工具输出）', filter: 'number' },
           { key: 'status_label', label: '状态' }, { key: 'approved_by', label: '批准人', type: 'code' },
-          { key: 'reason', label: '理由' }, { key: 'proposed_at', label: '提出 @ts' },
+          { key: 'reason', label: '理由' }, { key: 'proposed_at', label: '提出 @ts', filter: 'date' },
         ],
         rows: changes.map((change) => {
           const decision = decisions.get(change.change_id)
@@ -1124,7 +1140,7 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table',
         columns: [{ key: 'change_id', label: '变更', type: 'code' }, { key: 'quote_id', label: '我的报价', type: 'code' },
-          { key: 'lines', label: '逐行 原量→新量' }, { key: 'delta_amount', label: '差额' },
+          { key: 'lines', label: '逐行 原量→新量' }, { key: 'delta_amount', label: '差额', filter: 'number' },
           { key: 'status_label', label: '状态' }, { key: 'reason', label: '对方理由' }],
         rows: changes.map((change) => ({ id: change.change_id, change_id: change.change_id,
           quote_id: change.quote_id,
@@ -1284,8 +1300,8 @@ export async function register(surface, host) {
           { key: '账本行', value: poRow.seq === undefined ? '—'
             : `seq ${poRow.seq} · ${asText(poRow.entry_hash)}` },
         ],
-        columns: [{ key: 'no', label: '#' }, { key: 'ref_line', label: '行项目' }, { key: 'qty', label: '数量' },
-          { key: 'unit_price', label: '单价' }, { key: 'amount', label: '行金额' },
+        columns: [{ key: 'no', label: '#' }, { key: 'ref_line', label: '行项目' }, { key: 'qty', label: '数量', filter: 'number' },
+          { key: 'unit_price', label: '单价', filter: 'number' }, { key: 'amount', label: '行金额', filter: 'number' },
           { key: 'basis', label: '单价基准（可追溯）' }, { key: 'trace', label: '追溯模式' },
           { key: 'quote_id', label: '来源报价' }],
         rows: lines,
@@ -1299,6 +1315,12 @@ export async function register(surface, host) {
 
   out.push(surface.report({ plugin_id: me, id: 'report.po', title: '采购单 PO（CSV / 可打印 HTML）',
     views: ['contractor'], object_kind: 'po', formats: ['csv', 'html'], action: 'po.export', order: 32,
+    // `columns` = 这份导出有哪些列（**元数据**：界面拿它做「列选择」个人偏好；内容仍由 action 生成）。
+    // 与 `po.export` 的 spec.columns 逐字一致 —— 改了这里就要改那里（同一份台账）。
+    columns: [{ key: 'no', label: '#' }, { key: 'ref_line', label: '行项目' }, { key: 'qty', label: '数量', filter: 'number' },
+      { key: 'unit_price', label: '单价', filter: 'number' }, { key: 'amount', label: '行金额', filter: 'number' },
+      { key: 'basis', label: '单价基准（可追溯）' }, { key: 'trace', label: '追溯模式' },
+      { key: 'quote_id', label: '来源报价' }],
     hint: '逐行带单价基准与来源报价；表头给四段追溯链与账本行号' }))
 
   // ---- **沙盘场景**：演示流程的第 ④ 段 = **授标（人签）→ 发 PO（人签）→ 供应商回签** --------------

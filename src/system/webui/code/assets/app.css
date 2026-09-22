@@ -472,6 +472,38 @@ body.q-modal-open .q-toasts { top: 8px; bottom: auto; }
 
 
 
+/* ---------------------------------------------------------------- ⑧ 乐观并发（版本/冲突） —— 机制
+   冲突时给的是"谁在何时把哪个字段改成了什么"：一张事实表 + 三个出口；只读字段（`expected_version`）
+   看得见、发得出、不必手抄。这里同样没有一个业务名词。 */
+.q-field-readonly input { background: var(--bg-soft); color: var(--fg-dim); cursor: default;
+  font-variant-numeric: tabular-nums; }
+.q-field-readonly label { color: var(--fg-dim); }
+.q-version-note { border-left: 3px solid var(--accent); padding: 4px 8px; background: var(--bg-soft);
+  border-radius: 0 6px 6px 0; }
+.q-conflict { margin-top: 10px; padding: 10px 12px; border: 1.5px solid var(--bad);
+  border-radius: var(--radius); background: color-mix(in srgb, var(--bad) 8%, var(--bg-soft)); }
+.q-conflict > b { display: block; margin-bottom: 4px; }
+.q-conflict table.q-table { margin: 8px 0 4px; }
+.q-conflict .q-hint { color: var(--fg-dim); }
+.q-conflict .q-actions { margin-top: 8px; }
+
+/* 分享弹层（深链 + 对方需要什么 + 邮件正文）：只读输入/文本域，可直接选中复制 */
+#q-modal[data-kind="q-share"] .q-card { width: min(900px, 94vw); }
+#q-modal[data-kind="q-share"] input[readonly], #q-modal[data-kind="q-share"] textarea[readonly] {
+  background: var(--bg-soft); color: var(--fg); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px; }
+#q-modal[data-kind="q-share"] textarea { white-space: pre-wrap; }
+
+/* 导出列选择弹层（个人偏好：勾掉不要的列） */
+#q-modal[data-kind="q-export-columns"] .q-card { width: min(760px, 94vw); }
+.q-col-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 12px;
+  margin: 8px 0; }
+.q-col-pick { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--bg-raise); font-size: 13px; }
+.q-col-pick code { color: var(--fg-dim); font-size: 11.5px; }
+.q-col-pick input { min-width: 18px; min-height: 18px; }
+.q-export-columns { border-left: 3px solid var(--accent); padding-left: 8px; }
+
 /* ---- P7 收尾：粗指针下的命中区（放在文件**最后**：与前面同形的选择器靠顺序取胜） ----
    前面窄屏块里的 40px 是"桌面缩窄窗"的形态；真手机上（`pointer: coarse`）统一抬到 44px。 */
 @media (pointer: coarse) {
@@ -482,4 +514,75 @@ body.q-modal-open .q-toasts { top: 8px; bottom: auto; }
   .q-actions[data-toolbar] button, .q-actions[data-toolbar] .q-link { min-height: 44px; }
   footer.q-status summary { min-width: 44px; min-height: 32px; display: inline-flex;
     align-items: center; }
+}
+
+/* ============================================================================================
+   P10 长列表批（外壳机制，零业务语义）：分页 / 窗口化渲染 + 关键字搜索 + 按列筛选 + 列头排序。
+     口径：计数（共 N / 命中 M）在**全量行集**上算，本页只是窗口；筛选与排序不改任何事实。
+     声明（插件只声明，外壳只做机制）：列可带 `filter:'enum'|'text'|'number'|'date'`（不给就按
+     `type` 自动判型）；每页行数/关键字/排序按身份镜像到服务端（见 docs/scale-and-performance.md）。
+   ============================================================================================ */
+
+/* ---- 查询条（关键字 + 按列筛选 + 计数 + 翻页）---- */
+.q-qbar { margin: 6px 0 8px; padding: 6px 8px; background: var(--bg-raise);
+  border: 1px solid var(--line); border-radius: 6px; font-size: 12.5px; }
+.q-qbar-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.q-qbar .q-qkw { display: inline-flex; gap: 6px; align-items: center; }
+.q-qbar .q-qkw input[type="search"] { min-width: 220px; }
+.q-qbar input, .q-qbar select { background: var(--bg-soft); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; font: inherit; }
+.q-qbar input:focus-visible, .q-qbar select:focus-visible { border-color: var(--accent); }
+.q-qbar button { font-size: 12.5px; }
+.q-qbar button:disabled { opacity: 0.5; }
+.q-qcols { flex: 1 1 100%; }
+.q-qcols summary { color: var(--fg-dim); cursor: pointer; }
+.q-qcolwrap { display: grid; gap: 6px 12px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  margin: 6px 0; }
+.q-qcol { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.q-qcol > span { color: var(--fg-dim); font-size: 12px; min-width: 68px; }
+.q-qcol input[type="text"] { min-width: 120px; }
+.q-qcol input[type="number"], .q-qcol input[type="date"] { width: 92px; }
+.q-qhint { color: var(--fg-dim); font-size: 11.5px; }
+.q-qcount { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 6px;
+  font-family: var(--mono); font-size: 12px; color: var(--fg-dim); }
+.q-qcount b { color: var(--fg); }
+.q-qcount-on { color: var(--warn); font-family: var(--sans); }
+.q-qbar .q-qpages { margin-top: 6px; gap: 6px; }
+.q-qbar .q-qpages label { color: var(--fg-dim); display: inline-flex; gap: 4px; align-items: center; }
+.q-qbar .q-qpages input[type="number"] { width: 72px; }
+.q-qchips { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 6px; }
+.q-qchips .q-chip { cursor: pointer; }
+.q-qchips .q-chip:hover { border-color: var(--accent); }
+
+/* ---- 可排序列头（升 → 降 → 取消；`aria-sort` 同步给屏幕阅读器）---- */
+table.q-table th[data-q-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
+table.q-table th[data-q-sort]:hover { color: var(--accent); }
+table.q-table th[data-q-sort][aria-sort="asc"], table.q-table th[data-q-sort][aria-sort="desc"] {
+  color: var(--accent); }
+table.q-table th .q-sortmark { color: var(--accent); }
+
+/* ---- 加载态骨架（加载 ≠ 空；一行行占位，说明"在读"）---- */
+.q-skel { opacity: 0.75; }
+.q-skel-line { height: 10px; margin: 8px 0; border-radius: 4px;
+  background: linear-gradient(90deg, var(--bg-raise), var(--chip), var(--bg-raise));
+  background-size: 200% 100%; animation: q-skel 1.4s ease-in-out infinite; }
+.q-skel-line.short { width: 42%; }
+@keyframes q-skel { 0% { background-position: 0 0; } 100% { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .q-skel-line { animation: none; } }
+
+/* ---- 通知中心：搜索 + 分页条 ---- */
+.q-notify-pages { position: sticky; bottom: 0; background: var(--bg-raise); padding: 6px 0;
+  border-top: 1px solid var(--line); }
+.q-qcount[data-q-count="notify"] { margin: 0; }
+
+/* ---- 窄屏：查询条不挤成一行糊字 ---- */
+@media (max-width: 560px) {
+  .q-qbar .q-qkw { flex: 1 1 100%; }
+  .q-qbar .q-qkw input[type="search"] { min-width: 0; width: 100%; }
+  .q-qcolwrap { grid-template-columns: 1fr; }
+  .q-qcount { gap: 8px; }
+}
+@media (pointer: coarse) {
+  .q-qbar input, .q-qbar select, .q-qbar button { min-height: 44px; }
+  table.q-table th[data-q-sort] { min-height: 44px; }
 }

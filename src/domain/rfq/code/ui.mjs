@@ -85,8 +85,8 @@ export async function register(surface, host) {
           note: '本侧账本里还没有 rfq/published 行' }
       }
       return { ok: true, kind: 'table',
-        columns: [{ key: 'package_id', label: '包', type: 'code' }, { key: 'rev', label: '版本' },
-          { key: 'items', label: '条目数' }, { key: 'quote_by', label: '报价截止' },
+        columns: [{ key: 'package_id', label: '包', type: 'code' }, { key: 'rev', label: '版本', filter: 'number' },
+          { key: 'items', label: '条目数', filter: 'number' }, { key: 'quote_by', label: '报价截止', filter: 'date' },
           { key: 'recipients', label: '已分发（谁收到了）' }, { key: 'snapshot_hash', label: '快照哈希', type: 'code' }],
         rows: table, counts: { published: table.length },
         note: '收件人来自 rfq/distributed 的 recipients 字段（「谁在何时收到哪个版本」按版本锚定）' }
@@ -129,11 +129,11 @@ export async function register(surface, host) {
       })
       const missing = table.filter((row) => row.qty === null).length
       return { ok: true, kind: 'table',
-        columns: [{ key: 'quote_id', label: '报价', type: 'code' }, { key: 'supplier', label: '供应商' },
-          { key: 'item_id', label: '行项目', type: 'code' }, { key: 'qty', label: '数量（来自包事实）' },
-          { key: 'unit', label: '单位' }, { key: 'unit_price_cents', label: '单价（整数分）' },
-          { key: 'lead_time_days', label: '交期（天）' }, { key: 'line_count', label: '这份报价共几行' },
-          { key: 'submitted_at', label: '提交时刻' },
+        columns: [{ key: 'quote_id', label: '报价', type: 'code' }, { key: 'supplier', label: '供应商', filter: 'enum' },
+          { key: 'item_id', label: '行项目', type: 'code' }, { key: 'qty', label: '数量（来自包事实）', filter: 'number' },
+          { key: 'unit', label: '单位' }, { key: 'unit_price_cents', label: '单价（整数分）', filter: 'number' },
+          { key: 'lead_time_days', label: '交期（天）', filter: 'number' }, { key: 'line_count', label: '这份报价共几行', filter: 'number' },
+          { key: 'submitted_at', label: '提交时刻', filter: 'date' },
           { key: 'qty_source', label: '量的来源' }],
         rows: table, bulk: 'compare.rank',
         counts: { quotes: rows.length, lines: table.length, qty_known: table.length - missing },
@@ -446,11 +446,11 @@ export async function register(surface, host) {
       })
       return { ok: true, kind: 'table',
         columns: [
-          { key: 'package_id', label: '包', type: 'code' }, { key: 'rev', label: 'rev' },
-          { key: 'quote_by', label: '报价截止' }, { key: 'hours_left', label: '距截止（小时，按事实时刻）' },
+          { key: 'package_id', label: '包', type: 'code' }, { key: 'rev', label: 'rev', filter: 'number' },
+          { key: 'quote_by', label: '报价截止', filter: 'date' }, { key: 'hours_left', label: '距截止（小时，按事实时刻）', filter: 'number' },
           { key: 'invited', label: '邀请' }, { key: 'replied', label: '已回' },
-          { key: 'not_replied', label: '还没回' }, { key: 'remind_count', label: '已催次数' },
-          { key: 'last_remind_at', label: '最后一次催报 @ts' },
+          { key: 'not_replied', label: '还没回' }, { key: 'remind_count', label: '已催次数', filter: 'number' },
+          { key: 'last_remind_at', label: '最后一次催报 @ts', filter: 'date' },
         ],
         rows, row_actions: ['rfq.remind'], counts: { packages: rows.length,
           not_replied: rows.reduce((sum, row) => sum + (row.not_replied.startsWith('（') ? 0 : row.not_replied.split(' ').length), 0) },

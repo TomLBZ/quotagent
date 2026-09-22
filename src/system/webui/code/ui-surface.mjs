@@ -21,13 +21,37 @@
  *              input:{fields:[{name,label,type,required,min,max,pattern,options,help}]},
  *              permission:'none'|'human-signature', confirm:{required,message}, server(ctx, input)}`
  *              —— `server` 就是**动作的服务端一半**（插件自己的实现；外壳只负责调用与回执）；
+ *              可选 `concurrency`（**乐观并发**声明：这个动作保存的是哪一个「可编辑对象」，
+ *              以及这次保存后那个对象的新状态长什么样）—— 形状见 `CONCURRENCY` 段落；
  *   ④ `shortcut` 键盘快捷键：`{plugin_id, keys, action, title}`
  *   ⑤ `notification-source` 通知源：`{plugin_id, id, title, order, poll(ctx)}`
  *   ⑥ `status-item` 状态栏项：`{plugin_id, id, title, order, read(ctx)}`
  *   ⑦ `validator` 交互校验：`{plugin_id, id, actions?, validate(input) -> [{field, code, message}]}`
  *   ⑧ `report`   导出/打印声明：`{plugin_id, id, title, views, object_kind?, formats:['csv'|'html'|…], action,
- *              order?, hint?}` —— 只声明"这个对象/这个视图能以哪几种可读格式导出"；**内容由 `action`
- *              （插件自己的服务端一半）生成**，外壳既不懂语义也不生成内容（谁的事实谁导出）。
+ *              columns?:[{key,label}], order?, hint?}` —— 只声明"这个对象/这个视图能以哪几种可读格式导出"
+ *              **以及这份导出有哪些列**；**内容由 `action`（插件自己的服务端一半）生成**，外壳既不懂语义
+ *              也不生成内容（谁的事实谁导出）。`columns` 只是**元数据**：界面拿它做「列选择」
+ *              （个人偏好按身份落 0600，跨浏览器仍在；口径见 `app-shell.mjs` 的导出偏好段）。
+ *
+ * **乐观并发（可编辑对象的版本/指纹）** —— 声明在外壳、判据在服务端，插件只说"这是什么对象、写进去的是什么"：
+ *
+ *   · `action.concurrency = {object_class, label, id_field | object_id, state(ctx, input)}`：
+ *       - `object_class` = 对象类（形状同 `OBJECT_KIND_RE`）；`label` = 人话（界面上怎么说这个对象）；
+ *       - 对象 id：`id_field`（入参里指这个对象 id 的字段名）**或** `object_id(ctx, input)`（插件自己算，
+ *         例如"我方对这份包的报价草稿"就是 `包#行项目集合`）；两者必须给一个；
+ *       - `state(ctx, input)` = **这次保存后对象的权威新状态**（扁平的 字段 → 标量：由插件从它自己的
+ *         事实/入参给出）。外壳对它取指纹（sha256）并逐字段算差异 —— 外壳不知道字段是什么意思。
+ *   · 外壳自动往这个动作的入参里加一个 `expected_version` 字段（**只读**，界面按你打开这一页时看到的
+ *     版本自动带上）。保存时两端比对：
+ *       - 对得上 / 这个对象还没有版本记录 ⇒ 照常执行，并把新版本记下来（rev+1）；
+ *       - 对不上 ⇒ **明确拒绝**（`object-changed`），回执里给出"谁在何时改了什么"
+ *         （`result.conflict.since` = 自你那一版以来的逐字段改动，`result.conflict.mine` = 你这次要写的
+ *         值 vs 现在的值）——**绝不后写覆盖前写**，也不静默吞掉；
+ *       - 没带上版本（空）时用**安全默认**：这次要写的内容与现在**一样** ⇒ 放行（本来就没改）；
+ *         与现在不一样 ⇒ 同样按冲突拒（"没看过就改"不算读过了）。
+ *   · 面板把**你看到的那一版**交给界面：`panel.data()` 可以带 `version`（对象级）与
+ *     `version_for: '<动作 id>'`（这一版是给哪个动作用的）；行可以带 `version`（行级，行内动作/批量用它）。
+ *     版本形状 = `{rev, fingerprint, at, by, label}`（`host.versions.current(side, cls, id)` 给的就是它）。
  *
  * 交互类（表单字段与校验、可编辑表格与批量操作、右键菜单、内联动作）都由上面的**声明**拼出来：
  * 字段形状 = `action.input.fields`；表格可编辑/批量 = `panel.data()` 返回的 `editable` / `bulk`；右键菜单 =
@@ -91,12 +115,16 @@ export const ORDER_MIN = -1000
 export const ORDER_MAX = 1000
 export const TITLE_MAX = 120
 export const MAX_FIELDS = 40
+/** 乐观并发声明的上限（`concurrency.label` 是界面上唯一一句"这是什么对象"）。 */
+export const CONCURRENCY_LABEL_MAX = 80
+/** 导出列声明的上限（`report.columns`；与外壳序列化的列上限同一口径）。 */
+export const MAX_REPORT_COLUMNS = 40
 
 /** 拒收/降级原因码（闭合集合：降级一律**有名**，不静默吞）。 */
 export const REFUSAL_CODES = ['illegal-plugin-id', 'illegal-contribution-id', 'illegal-kind', 'unknown-view',
   'invalid-title', 'invalid-order', 'invalid-input', 'invalid-permission', 'invalid-confirm', 'invalid-server',
   'invalid-when', 'invalid-data', 'duplicate-contribution', 'unknown-panel-kind', 'unknown-field-type',
-  'unknown-action', 'invalid-object-kind', 'surface-disposed']
+  'unknown-action', 'invalid-object-kind', 'surface-disposed', 'invalid-concurrency', 'invalid-columns']
 
 const plainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const text = (value) => (typeof value === 'string' ? value.trim() : '')
@@ -265,7 +293,13 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
         // 但用于**长文本里 @ 人**：在正文里打 `@` 就弹这批候选，选一个就插进去。
         // 机制只认形状（本服务前缀相对路径，`/` 开头），**不认识任何建议内容的语义**（谁来提供由插件/机制自己定）。
         suggest_url: text(field.suggest_url),
-        mention_suggest_url: text(field.mention_suggest_url) })
+        mention_suggest_url: text(field.mention_suggest_url),
+        // `readonly: true` = 这个字段是**机制/插件自己带上的值**，人不必也不该手抄（例如乐观并发的
+        // `expected_version`）：界面渲染成只读，但仍**真实随请求发出**（它是要拿去比较的那一版）。
+        readonly: field.readonly === true,
+        // `version_field: true` = 这个字段装的是"你打开这一页时看到的**对象版本**"：界面按
+        // 面板/行/对象页声明的 `version` 自动填上（口径见文件头的「乐观并发」段）。
+        version_field: field.version_field === true })
     }
     // 自动补全的建议列表地址只允许**本服务前缀相对路径**（`/` 开头）：脚本与数据都只来自本服务
     // （与"脚本只来自 /assets/**"同一口径；外站地址一律拒，免得界面被引去第三方取候选人名单）。
@@ -306,6 +340,53 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       return { error: code('invalid-object-kind', `action.object_kind 形状不合法：${JSON.stringify(entry.object_kind)}`,
         '对象类写小写字母/数字/连字符；声明后该动作会出现在 `/app/<view>/<kind>/<id>` 对象页的工具栏上') }
     }
+    // ---- **乐观并发**（机制）：插件声明"这个动作保存的是哪个可编辑对象、写进去的是什么状态" ----------
+    // 外壳据此在保存前比对版本、在冲突时**明确拒绝**并给出差异（口径见文件头「乐观并发」段）。
+    let concurrency = null
+    if (entry.concurrency !== undefined) {
+      const raw = entry.concurrency
+      if (!plainObject(raw)) {
+        return { error: code('invalid-concurrency', 'concurrency 必须是对象',
+          '{concurrency: {object_class, label, id_field|object_id, state(ctx, input)}}') }
+      }
+      const objectClass = text(raw.object_class)
+      if (!OBJECT_KIND_RE.test(objectClass)) {
+        return { error: code('invalid-concurrency',
+          `concurrency.object_class 形状不合法：${JSON.stringify(raw.object_class)}`,
+          '写小写字母/数字/连字符的对象类（界面上的"这是什么对象"与拒绝原因都用它）') }
+      }
+      const label = text(raw.label)
+      if (label === '' || label.length > CONCURRENCY_LABEL_MAX) {
+        return { error: code('invalid-concurrency', `concurrency.label 必须是人话且 ≤ ${CONCURRENCY_LABEL_MAX} 字符`,
+          '给一句"这个对象在业务上叫什么"（例：我方对这份包的报价草稿）') }
+      }
+      if (typeof raw.state !== 'function') {
+        return { error: code('invalid-concurrency', 'concurrency.state 必须是函数（这次保存后的对象新状态）',
+          'state: (ctx, input) => ({字段: 值}) —— 扁平标量，外壳只取指纹与逐字段差异') }
+      }
+      const idField = text(raw.id_field)
+      if (idField !== '' && !outFields.some((field) => field.name === idField)) {
+        return { error: code('invalid-concurrency', `concurrency.id_field 不在入参字段里：${idField}`,
+          'id_field 要写这个动作入参里"指对象 id"的那个字段名（或改用 object_id(ctx, input) 自己算）') }
+      }
+      if (idField === '' && typeof raw.object_id !== 'function') {
+        return { error: code('invalid-concurrency', 'concurrency 必须给 id_field 或 object_id（二选一）',
+          'id_field: "<入参里的 id 字段>" 或 object_id: (ctx, input) => "<对象 id>"') }
+      }
+      const expectedField = text(raw.expected_field) || 'expected_version'
+      if (!outFields.some((field) => field.name === expectedField)) {
+        // 外壳**自动**给这个动作加一个只读的版本字段：界面按你打开这一页时看到的版本带上它。
+        outFields.push({ name: expectedField, label: '版本（你打开这一页时看到的）', type: 'text',
+          required: false, min: null, max: null, pattern: null, options: [], readonly: true,
+          version_field: true, identity: false, from_route: false, from_route_kind: false,
+          suggest_url: '', mention_suggest_url: '',
+          help: '界面自动带上你看到的那一版；留空 = 你没看过任何版本（服务端按安全默认判：'
+            + '会覆盖别人的改动就拒，内容没变就放行）' })
+      }
+      concurrency = { object_class: objectClass, label, id_field: idField,
+        object_id: typeof raw.object_id === 'function' ? raw.object_id : null,
+        expected_field: expectedField, state: raw.state }
+    }
     return { entry: { kind: 'action', plugin_id: text(entry.plugin_id), id: text(entry.id), title: entry.title,
       order: orderOf(entry.order), views: viewsOf, view: viewsOf[0] ?? '', group: text(entry.group) || '通用',
       icon: text(entry.icon), placement, inline: entry.inline === true,
@@ -313,7 +394,7 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       shortcut: text(entry.shortcut) || null,
       input: { fields: outFields, bulk: text(entry.input?.bulk) || null },
       permission, confirm, server: entry.server, hint: text(entry.hint),
-      panel: text(entry.panel) || null } }
+      panel: text(entry.panel) || null, concurrency } }
   })
 
   /** 快捷键：`{plugin_id, keys, action, title}`（`keys` 形如 `g c` / `mod+k` / `p`）。 */
@@ -366,10 +447,13 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
   /**
    * **导出 / 打印声明**（`kind: 'report'`）：插件声明"这个对象（或这个视图）能以哪几种**可读格式**导出"。
    *
-   * 形状：`{plugin_id, id, title, views:[…], object_kind?, formats:['csv'|'html'|…], action, order?, hint?}`
+   * 形状：`{plugin_id, id, title, views:[…], object_kind?, formats:['csv'|'html'|…], action, columns?, order?, hint?}`
    *   · `formats` = 声明的格式（闭合集合 `REPORT_FORMATS`）；每个格式在界面上是一个按钮；
    *   · `action`   = **真干活的那个动作 id**（导出内容由插件自己的服务端一半生成：谁的事实谁导出，
    *     外壳不解读语义、也不生成任何内容）；打开时外壳把 `format` 预填进该动作的入参；
+   *   · `columns`  = **这份导出有哪些列**（`[{key,label}]`，≤ 40）。它只是**元数据**：界面拿它出
+   *     「列选择」（列选择是**个人偏好**，按会话身份落 0600 —— 换浏览器/换设备仍在；
+   *     口径见 `app-shell.mjs` 的导出偏好段）。留空 ⇒ 这份导出不支持列选择（照样能导出）。
    *   · `object_kind` 非空 ⇒ 它出现在 `/app/<view>/<kind>/<id>/` **对象页**的「导出 / 打印」区；
    *     留空 ⇒ 视图级导出（例如整张比价表）。
    *
@@ -412,9 +496,26 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       return { error: code('invalid-object-kind', `report.object_kind 形状不合法：${JSON.stringify(entry.object_kind)}`,
         '对象类写小写字母/数字/连字符；留空 = 视图级导出') }
     }
+    // `columns`：这份导出有哪些列（**元数据**，供界面做列选择；内容仍由 action 自己生成）。
+    const columns = []
+    for (const column of (Array.isArray(entry.columns) ? entry.columns : [])) {
+      if (!plainObject(column) || text(column.key) === '') {
+        return { error: code('invalid-columns', `report.columns 每一项都要有 key：${JSON.stringify(column ?? null)}`,
+          'columns: [{key:"<行里的字段名>", label:"<列名（人话）>"}]') }
+      }
+      if (columns.some((known) => known.key === text(column.key))) {
+        return { error: code('invalid-columns', `report.columns 里 key 重复：${text(column.key)}`,
+          '一列一个 key（重复的列在导出的表头里会撞在一起）') }
+      }
+      columns.push({ key: text(column.key), label: text(column.label) || text(column.key) })
+    }
+    if (columns.length > MAX_REPORT_COLUMNS) {
+      return { error: code('invalid-columns', `report.columns 有 ${columns.length} 列，超过上限 ${MAX_REPORT_COLUMNS}`,
+        '把列收敛到人真的会看的那些（导出是给人看的台账）') }
+    }
     return { entry: { kind: 'report', plugin_id: text(entry.plugin_id), id: text(entry.id), title: entry.title,
       order: orderOf(entry.order), views: viewsOf, view: viewsOf[0] ?? '', formats, action: text(entry.action),
-      object_kind: objectKind, hint: text(entry.hint) } }
+      columns, object_kind: objectKind, hint: text(entry.hint) } }
   })
 
   /**
@@ -531,13 +632,19 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
     if (entry.kind === 'action') return { ...base, views: entry.views, group: entry.group, icon: entry.icon,
       placement: entry.placement, inline: entry.inline, context_menu: entry.context_menu,
       shortcut: entry.shortcut, input: entry.input, permission: entry.permission, confirm: entry.confirm,
-      hint: entry.hint, panel: entry.panel, object_kind: entry.object_kind }
+      hint: entry.hint, panel: entry.panel, object_kind: entry.object_kind,
+      // **乐观并发声明**（只给元数据：函数型的一半不进快照 —— 与 data/server/poll 同一口径）
+      concurrency: entry.concurrency
+        ? { object_class: entry.concurrency.object_class, label: entry.concurrency.label,
+          id_field: entry.concurrency.id_field, expected_field: entry.concurrency.expected_field,
+          object_id: entry.concurrency.object_id ? '<object_id(ctx, input)>' : null }
+        : null }
     if (entry.kind === 'shortcut') return { ...base, keys: entry.keys, action: entry.action }
     if (entry.kind === 'notification-source') return { ...base, hint: entry.hint }
     if (entry.kind === 'status-item') return { ...base }
     if (entry.kind === 'validator') return { ...base, actions: entry.actions }
     if (entry.kind === 'report') return { ...base, views: entry.views, formats: entry.formats,
-      action: entry.action, object_kind: entry.object_kind, hint: entry.hint }
+      action: entry.action, object_kind: entry.object_kind, columns: entry.columns, hint: entry.hint }
     if (entry.kind === 'scenario') return { ...base, scenario: entry.scenario,
       scenario_title: entry.scenario_title, view: entry.view, step_count: entry.steps.length,
       steps: entry.steps.map((step) => ({ action: step.action, as: step.as, input_keys: Object.keys(step.input) })),

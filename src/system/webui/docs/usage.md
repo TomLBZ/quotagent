@@ -5,8 +5,8 @@
 本页讲**怎么用**：起服务、两条业务闭环、每个动作落到哪条账本、接口清单与已知限制、身份与会话。
 机制与规则见 `docs/design/29-webui-gui-app.md` 与 `docs/design/27-plugin-architecture.md` §6。
 
-**新人不看文档的两条路**：① 首屏「演示数据（沙盘）」一键造一组可看的流转（`包 → 报价 → 比价 → 授标 → PO`，
-真动作真账本、落沙盘目录、随时清空、真实账本零新增）→ 见 `docs/sandbox-and-demo.md`；② 面板与动作自带"下一步"。
+**新人不看文档的两条路**：① 首屏「演示数据（沙盘）」一键造一条真实流转（真动作真账本、落沙盘目录、
+随时清空、真实账本零新增）→ 见 `docs/sandbox-and-demo.md`；② 面板与动作自带"下一步"。
 
 ## 0. 一条命令起服务（人类可用）
 
@@ -19,36 +19,34 @@
 换端口/数据目录：`./run up --port 8207 --data-dir tmp/gui-run`（或 `node host/cli.mjs webui --help`；路径类开关有
 同名环境变量 `QUOTAGENT_UI_*`）。首屏是**工作台**（「我今天要做什么」），不是报告列表；页面脚本**只来自本服务**
 （`assets/app.js`/`app.css`），不引外网 CDN。空数据目录下面板**如实报 degraded + next_action**，不编假数据。
-
 ## 1. 界面骨架（机制在外壳、功能在插件）
 
 | 部位 | 怎么用 |
 |---|---|
 | 顶栏 | `工作台 / 承包商 / 供应商`（运维/管理走旧页）+ 命令面板/最近/通知/插件/身份/重载；点导航即切视图，URL 变深链 |
-| 工作台（首屏） | 「**你现在该做什么**」把各插件待办汇成一张卡（warn/bad 优先 + 一键按钮/深链，带「我的 / 我指派的 / 全部」筛选，§10） |
-| 对象页 | 行内「打开 →」= 该对象深链；只出该对象类的面板与动作（其余收进「本视图的其它动作」）；标了 `from_route`/`from_route_kind` 的入参按地址预填 |
+| 工作台（首屏） | 「**你现在该做什么**」把各插件待办汇成一张卡（warn/bad 优先 + 一键按钮/深链，带筛选，§10） |
+| 对象页 | 行内「打开 →」= 该对象深链；只出该对象类的面板与动作；`from_route`/`from_route_kind` 入参按地址预填 |
 | 插件面 | 「插件」：贡献条数 / 文件 mtime / **重载**（热更）/ 卸载 / 装载 |
 | 命令面板 | `⌘K` / `Ctrl+K`：列全部动作/视图/对象类，`↑↓` 选、回车即开表单 |
 | 状态栏 | 插件注册的状态读数（>8 项收进「更多 N 项」）+ 当前视图与可复制深链 |
-| 快捷键 | 外壳：`g h/c/s` 切视图、`?` 帮助、`r` 重载、`Esc` 关弹层；插件：`p` 发包、`d` 备草稿、`c` 比价、`a` 提意向（卸载后一起消失）；通知/布局/键盘/标签页见 **§9** |
-| 表格 | 单元格里改 →「提交编辑」批量提交（键盘与小计见 §9）；勾选 + 批量按钮（「全选」只作用于**本表**）；右键出行动作并按该行字段预填 |
+| 快捷键 | 外壳：`g h/c/s` 切视图、`?` 帮助、`r` 重载、`Esc` 关弹层；插件：`p` 发包、`d` 备草稿、`c` 比价、`a` 提意向（卸载后一起消失）；见 **§9** |
+| 表格 | 单元格里改 →「提交编辑」批量提交（键盘/小计见 §9）；勾选 + 批量按钮；右键出行动作并按该行字段预填。**长列表/查询见 §9.6** |
 | 人工门 | 需要人签的动作标题带 `✍`：表单里必须写 `human:<你的名字>`，执行前再确认一次 |
 
 ## 2. 供应商侧闭环（看包 → 备报价 → 人签提交 → 回读）
 
 1. **看包**：「发给我的 RFQ 包」只出**发给自己的**那份（投递信封 `delivered_to` 不含自己就不显示）。
-2. **备报价（可续草稿）**：表里「单价/交期」直接改 →「提交编辑」（或 `d`）→ **`quote.draft`**：校验
-   （整数分/上下界/发言人 `human:`）→ 0600 待办件 → 唯一写者 `quote-draft.py` 落 `quote/drafted`（**非签名**）。
+2. **备报价**：表里「单价/交期」直接改 →「提交编辑」（或 `d`）→ **`quote.draft`** → 0600 待办件 →
+   唯一写者 `quote-draft.py` 落 `quote/drafted`（**非签名**，可续）。
 3. **提交（人工门）**：草稿行「人签提交」→ 确认 → **`quote.submit`** → `quote-sign.py` 落
-   `approval/requested`→`granted`→`quote/submitted`（顺序不可颠倒），并在**承包商账本**登记一条。
-4. **回读**：「已提交的报价」显示报价 id / 整数分单价 / 交期 / **签署人** / 人工门 id / 提交时刻 —— 全来自事实行。
+   `approval/requested`→`granted`→`quote/submitted`，并在**承包商账本**登记一条。
+4. **回读**：「已提交的报价」给出报价 id / 单价（整数分）/ 交期 / **签署人** / 人工门 id / 提交时刻 —— 全来自事实行。
 
 ## 3. 承包商侧闭环（发布 RFQ → 比价 → 批准 → 授标 → 发 PO）
 
 1. **发布 RFQ**（`p`）：包 id/标题/币种/截止/行项目/受邀 realm/发言人 → 确认 → **`rfq.publish`** 落
    `rfq/published`+`rfq/distributed` + 写投递信封。
-2. **比价与授权**：「比价排名」= **`compare.rank`**（名次/得分/贡献/引用链；只读，账本零新增）；「并排对比」见
-   §9；「授权区间」页回答「谁能批到多少 / 越界怎么办」。
+2. **比价**：「比价排名」= **`compare.rank`**（名次/得分/贡献/引用链；只读、账本零新增）；「并排对比」见 §9。
 3. **授标意向（不产生义务）**：报价行右键/行内 → **`award.propose`** → 落 `award/intent-proposed` + 意向信封。
 4. **供应商确认**：供应商道「确认授标」→ **`award.confirm`**（人签）→ 两侧账本各一条。
 5. **授标承诺（人签）**：**`award.commit`** 门 = 意向仍 proposed + 供应商确认 + 人工批准 → `award/committed`。
@@ -69,9 +67,8 @@
 
 动作的**服务端一半一律是**：插件校验 → 落 0600 待办件 → spawn **唯一写者**（`compare.rank` 例外，只读）；
 `quote.submit`/`award.confirm`/`award.commit`/`po.issue` 是 **human-signature**（署名 == 会话身份）。写者与账本事件、
-逐动作入参见各插件 docs 与 `/api/ui/surface` 的动作 `hint`；`collab.*`/`people.*` **不调写者、账本零新增**（§10/§11）。
+逐动作的键、落点与 `hint` 见各插件 docs 与 `/api/ui/surface`；`collab.*`/`people.*` **不调写者、账本零新增**（§10/§11）。
 等价命令行：`python3 src/domain/<插件>/tools/<写者>.py --step <步骤> --request <0600待办件> --now … --ui-shared …`。
-
 验收/复现（都不写账本）：`src/system/webui/tools/{gui-walkthrough,gui-readback,gui-unload}.py` ·
 `sh tmp/p4-collab-verify.sh` · `python3 tmp/p5-people-verify.py`。改任一 `code/ui.mjs` → 顶栏「插件」→「重载」即可在线复现。
 
@@ -84,27 +81,18 @@
 
 ### 5.1 写者回执 = **唯一判据**（响应体的 `ok`/`code`/`ledger_added` 必须与它同源）
 
-写者跑完只有两样东西算数：**退出码**与**stdout 最后一行 JSON**。插件用 `host.writerReceipt(run)` 取它
-（`{rc, said, ok, code, reason, ledger_added, applied, duplicates, refused, skipped}`，`ok = rc === 0 &&
-stdout.ok === true`），归属用 `receipt.item({file: staged.name, draft_id})` **只认本动作那一条** —— 邮箱式写者
-一次消费多条时 `applied[0]` 不是你的那条，**修前的假失败**就是这么来的。机制在动作返回后两端对账，响应里因此
-多了两个只读字段：`writer_consistency`（`consistent`/`fake-failure`/`fake-failure-suspected`/`no-writer-run`…）
-与 `writer`（每次运行的 rc、stdout 自述、`ledger_added`、逐条 files、被拒码）。`fake-failure` = 写者回执说本动作
-的行**真的落了**、响应却报失败（用户会据此重复提交，比真失败更坏）。邮箱式写者（`quote-draft.py`）的回执逐条给
-`file`/`quote_draft_id`/`line_count`（这份报价几行，单行也是 1）/`ledger_added`（**这一条**真落几行）与
-`refused`/`skipped`（不静默丢件）；**别人**的件列进 `result.others`。
-**两个邮箱式写者已按同一判据改正**：`gate.nudge`（`system/approval/code/ui.mjs`）与 `exchange.requote-now`
-（`domain/change/code/ui.mjs`）都用 `receipt.item({file: staged.name, …})` 指认**自己那一条**，别人那条（含
-"上次被拒后留在邮箱里"的件）只进 `result.others`。
-复跑：`python3 tmp/fix6-verify.py`（审计表 `tmp/fix6-audit-table.json`；修前/修后对照
-`python3 tmp/fix6-before-after.py`）· `python3 tmp/fix9-verify.py`（两个邮箱式写者的四格 + 真失败负控）。
+写者跑完只有两样东西算数：**退出码**与**stdout 最后一行 JSON**（`host.writerReceipt(run)`：
+`{rc, said, ok, code, reason, ledger_added, applied, duplicates, refused, skipped}`，`ok = rc === 0 && stdout.ok === true`）。
+归属用 `receipt.item({file: staged.name, draft_id})` **只认本动作那一条** —— 邮箱式写者一次消费多条时
+`applied[0]` 不是你的那条（**修前的假失败**就是这么来的）。机制在动作返回后两端对账，响应因此有两个只读字段：
+`writer_consistency`（`consistent`/`fake-failure`/`no-writer-run`…）与 `writer`（rc、stdout 自述、`ledger_added`、
+逐条 files、被拒码）；`fake-failure` = 写者说**真落了**、响应却报失败（用户会重复提交，比真失败更坏）。
+邮箱式写者的回执逐条给 `file`/`quote_draft_id`/`line_count`/`ledger_added` 与 `refused`/`skipped`（不静默丢件），
+**别人**的件进 `result.others`。复跑：`python3 tmp/fix6-verify.py` · `python3 tmp/fix9-verify.py`。
 
 ## 6. 卸载一个注册了 UI 的插件（可撤销）
 
-```bash
-# 撤销一个插件的全部 UI 贡献（视图/面板/动作/快捷键/通知源/状态项 + 旧槽位区块）
-curl -s -X POST 'http://127.0.0.1:8093/quotagent/api/ui/plugins/domain%2Frfq/unload'
-```
+（撤销一个插件的全部 UI 贡献 = `POST /api/ui/plugins/<插件 id>/unload`，见 §4 的插件行；也可在顶栏「插件」点。）
 
 卸载后：该插件的入口（含快捷键与右键菜单项）在界面与 `/api/ui/surface` 里**同时消失**，其余插件的面板
 **逐字节不变**；恢复 `POST …/{load,reload}`（§4，不必重启），`plugin.json` 类插件走 `/admin/api/user-plugins/**`。
@@ -112,18 +100,20 @@ curl -s -X POST 'http://127.0.0.1:8093/quotagent/api/ui/plugins/domain%2Frfq/unl
 插件把自己搬上界面只需一件事：在 `code/ui.mjs` 里 `export register(surface, host)`，用
 `surface.view/panel/action/shortcut/notificationSource/statusItem/validator` 注册并返回回执数组（示例见
 `src/domain/commitments/code/ui.mjs`）；`host` = 机制（`rows/publicRows`、`runPython`、`stage`、`readJson`、
-`sharedFile`、`service`、`note`、`now`、`collab`、`writerReceipt` §5.1）。**外壳不认识任何业务名词**
-（可声明的键见 `ui-surface.mjs` 头注释）。
+`sharedFile`、`service`、`note`、`now`、`collab`、`writerReceipt` §5.1）。**外壳不认识任何业务名词**（可声明的键见
+`ui-surface.mjs` 头注释）。
 
 ## 7. 已知限制（如实登记，不假装完成）
 
 1. **比价口径**：`compare-rank.py` 按 `quote_id` 排名，与 `bid-heuristics` 的 per-item 归一**尚未统一**（真源仍是 `services/compare.py`）。
 2. **投递是单收件人 P0**：多 realm 时写者**明确拒绝**；登记行**追加** `items`/`envelope`/`quote_by`/`subject`。
 3. **realm 与时间**：界面以账本 `realm` 为准；写者**不读墙钟**（`--now` 必填、待办件 `submitted_at` 为空）。
-4. **通知/布局/已读/筛选**都是**本浏览器**的（`quotagent.notif`/`.layout`/`.filters`）—— 换浏览器要重标/重排；
-   都不是账本事实。
-5. **只读调用会被合并**：`runPython(tool, args, {read:true})` 同一组 `(工具, 参数)` 一次渲染只 spawn 一次、
+4. 通知偏好/已读/布局/筛选**按会话身份存服务端**（0600，换设备仍在；未登录时只在本浏览器）——
+   都**不是账本事实**（§9）。
+5. 只读调用会被合并：`runPython(tool, args, {read:true})` 同一组 `(工具, 参数)` 一次渲染只 spawn 一次、
    `python_cache_ms` 内复用；动作/落待办件清空缓存（`QUOTAGENT_UI_PYTHON_CACHE_MS=0` 关掉）。
+6. 长列表是**分页窗口**（不是滚动虚拟化）；`/api/ui/panels` 仍发全量行（筛选/排序才能与全量一致），
+   服务端分页要改路由形状。边界见 `scale-and-performance.md` §8。
 
 ## 8. 身份与会话 + 自助面
 
@@ -134,45 +124,55 @@ curl -s -X POST 'http://127.0.0.1:8093/quotagent/api/ui/plugins/domain%2Frfq/unl
 
 ## 9. 可用性（通知/布局/键盘/标签页）
 
-全是**外壳**机制（`assets/app.js`/`app.css`/`app-shell.mjs`），插件只声明（键见 `ui-surface.mjs` 头注释）。
+全是**外壳**机制（`assets/app.js`/`app.css`/`app-shell.mjs`；插件只声明，键见 `ui-surface.mjs` 头注释）。
 
-- **通知中心**（顶栏「通知」）：徽标只数**未读**；每条可「去处理」（表单预填该对象）/「打开 <对象> →」/标已读；
-  筛选 全部/未读/待处理/失败 + 协作标签（§10）；只看 `warn` 以上、按插件静音；同一件事只出一条（`×N`），一次
-  先给 12 条 +「还有 N 条」；轮询发现多条只弹**一条汇总**。
-- **面板布局**：拖 `⠿` 换序（键盘 `Alt+↑/↓`）、`▾/▸` 收起、可恢复默认；按「视图+对象类」存**服务端**（0600，
-  按身份）⇒ 换浏览器/换设备仍是这套布局（见 `docs/people-and-roles.md` §5）。
-- **可编辑表格**：`Tab/Shift+Tab` 走格 · `Enter`/`↑`/`↓` 走同列 · `Esc` 还原 · `Ctrl/⌘+Enter` 提交；列带
-  `line_total_of` ⇒ 格旁实时 `×量 = 行合计`；`data.totals` ⇒ 编辑栏小计。
-- **对比 + 列固定**：`group`+`group_label` + `data.compare={min,max}` ⇒ 勾 2–3 组并排；`pin:'left'` ⇒ 横滚时关键列
-  不跑掉；`data.group_totals` ⇒ 底部每组合计。
-- **多标签页 / 最近**：打开地址即一个标签、`Alt+1..9` 切、`Alt+W` 关；「最近 N」/`Ctrl+E` 给最近 12 条深链。
+- **通知中心**（顶栏「通知」）：徽标只数**未读**；每条可「去处理」/「打开 <对象> →」/标已读；筛选
+  （级别 / 标签 / **关键字**）+ 页码与每页条数 + 清空；只看 `warn` 以上、按插件静音；同一件事只出一条（`×N`）。
+- **长列表 / 查询 / 五种状态**：见 **§9.6**（每块表都有查询条；计数在全量上算、DOM 只渲染本页）。
+- **面板布局**：拖 `⠿` 换序（键盘 `Alt+↑/↓`）、`▾/▸` 收起、可恢复默认；按「视图+对象类」存**服务端**（0600，按身份）
+  ⇒ 换浏览器/换设备仍在（见 `docs/people-and-roles.md` §5）。
+- **可编辑表格**：`Tab/Shift+Tab` 走格 · `Enter`/`↑`/`↓` 走同列 · `Esc` 还原 · `Ctrl/⌘+Enter` 提交；`line_total_of`
+  ⇒ 格旁实时 `×量 = 行合计`；`data.totals` ⇒ 编辑栏小计。
+- **对比 + 列固定**：`group`+`group_label` + `data.compare={min,max}` ⇒ 勾 2–3 组并排；`pin:'left'` ⇒ 横滚时关键列不跑掉。
+- **多标签页 / 最近**：地址即标签、`Alt+1..9` 切、`Alt+W` 关；「最近 N」/`Ctrl+E` 给最近 12 条深链。
 - **身份**：顶栏「身份」看当前 `human:<名字>`/侧别，登录后**自动回原页**（`?next=`）；`signature` 与标
   `identity:true` 的字段按会话预填（§8）。
 
+### 9.6 长列表、查询与状态（机制）
+
+- 每块 `table`/`files`/`list` 顶部一条**查询条**：关键字 · 按列筛选（数值/日期区间、枚举、包含）· 点列头排序
+  （升→降→取消）· 分页（每页 10…250 / 全部）· 清空 · 跨页「选中全部命中行」。插件通常一行不改就有。
+- **计数在全量行集上算**（`共 N / 命中 M`，机器可读 `data-count-*`）；小计按命中行集算；编辑跨页不丢。
+- 五种状态互不冒充：`loading`（先清旧数据）/`error`（读不到，带 code+下一步+"重新读一次"）/`empty`/
+  `empty:filtered-out`（筛选后 0 行）/`degraded`；通知读不到时保留上次读数并**标为陈旧**。
+- 口径、声明与实测数字见 `scale-and-performance.md`。
+
 ## 10. 多人协作（同侧人类之间；**不写账本**）
 
-同一侧的两个人能把活交出去、叫人看、在对象上说话 —— 全在界面内，且**不进账本**（协同痕迹不是合同事实，
-理由见 `code/collab.mjs` 文件头）。数据落 `<ui_shared>/collab/<side>.json`（0700 / 文件 **0600**，原子写），
-**按侧隔离**：另一侧身份读同一个对象 id 只读到**自己那侧**（0 命中，不是「过滤掉」）。
+同一侧的两个人能把活交出去、叫人看、在对象上说话 —— 全在界面内，且**不进账本**（协同痕迹不是合同事实，理由见
+`code/collab.mjs` 文件头）。数据落 `<ui_shared>/collab/<side>.json`（0700 / 文件 **0600**，原子写），**按侧隔离**：
+另一侧身份读同一个对象 id 只读到**自己那侧**（0 命中，不是「过滤掉」）。
 
 - **指派 / 转交**：任意对象页（包/报价/授标/PO/变更/审批门）工具栏「指派 / 转交给同事」→ **名册**里的人 +
-  **原因（必填）+ 截止**；已有人时同一动作 = 转交（历史留痕），只有**归我/我指派的**（或有资格的角色）能转
-  （`transfer-not-yours`），名册外的人一律拒（`unknown-colleague`）。
-- **关注 + 活动流**：「关注 / 取消关注」；对象页「协作：评论与活动流」列出谁何时做了什么与关注者；关注
-  **每人一份**，只影响自己的通知。
-- **评论与 @同事**：正文写 `@<名字>` 即通知同侧那位；跨侧 `@` 拒（`cross-side-mentioned`），不存在的名字如实
-  记进 `unresolved`（**不假装通知到了**）。
-- **我的 / 我指派的 / 全部**：协作面板、**工作台待办卡**、**通知中心**都有筛选片；通知带 `我的/@我/我关注的`
-  标签，点「打开 <对象> →」**直接进对象页**；已读**每人一份**。
-- **机制**：协作面是外壳的机制贡献（「插件」面里可卸载/重建），按**插件声明的对象类**自动挂上；插件只需给
-  条目/行加 `bucket`/`bucket_label`、给通知加 `tags`，动作字段标 `from_route_kind`。
-  复跑：`sh tmp/p4-collab-verify.sh`（47 条断言：跨侧 0 命中、账本 md5 全程不变）。
+  **原因（必填）+ 截止**；已有人时同一动作 = 转交（留痕），只有**归我/我指派的**（或 `transfer.override_roles`
+  里的角色）能转（`transfer-not-yours`）；名册外一律拒（`unknown-colleague`）。
+- **关注 + 活动流**：「关注 / 取消关注」；对象页列出谁何时做了什么与关注者；关注**每人一份**，只影响自己的通知。
+- **评论与 @同事**：正文写 `@<名字>` 即通知同侧那位；跨侧 `@` 拒（`cross-side-mentioned`），不存在的名字如实记进
+  `unresolved`（**不假装通知到了**）。
+- **我的 / 我指派的 / 全部**：协作面板、**工作台待办卡**、**通知中心**都有筛选片；通知带 `我的/@我/我关注的` 标签。
+- **机制**：协作面是外壳的机制贡献（可卸载/重建），按**插件声明的对象类**自动挂上；插件只需给条目/行加
+  `bucket`/`bucket_label`、给通知加 `tags`，动作字段标 `from_route_kind`。复跑：`sh tmp/p4-collab-verify.sh`。
 
 ## 11. 人员名册与角色（「同事」来自名册；**按角色限动作**；不写账本）
 
 名册是**权威取值处**：`<ui_shared>/people/roster.json`（0700/**0600**、按侧隔离），带**角色**与**直属关系**；
-`@提及/指派/转交`的候选与校验都从它来（未知名字拒）；第一次在某一侧登录 ⇒ 自动进名册（角色「待指派」=
-有名字、**没有权限**）。界面：工作台/两侧视图的**「人员名册与角色」**面板 + **「名册表（逐行可改）」**。
-**按角色限动作**（不是限视图）：转交别人的活要「归我/我指派的」或在 `transfer.override_roles` 里；额度规则超过
-**我角色**的额度 ⇒ `role-limit-exceeded` 并告诉你该找谁。**角色不改变签署权**（人签仍要求署名 == 会话身份；
-越权一律拒且账本零新增）。细节与边界见 **`docs/people-and-roles.md`**；复跑 `python3 tmp/p5-people-verify.py`。
+`@提及/指派/转交`的候选与校验都从它来（未知名字拒）；**登录即入册**（角色「待指派」= 有名字、没有权限）。
+界面：「人员名册与角色」面板 + 「名册表（逐行可改）」。**按角色限动作**（不是限视图）：转交别人的活要
+「归我/我指派的」或 `transfer.override_roles` 里的角色；额度越界 ⇒ `role-limit-exceeded` 并给出该找谁。
+**角色不改变签署权**（人签仍是署名 == 会话身份，越权一律拒、账本零新增）。见 `docs/people-and-roles.md`。
+
+## 12. 两个人同时干活（乐观并发）/ 分享 / 导出列（都不写账本）
+
+① 并发保存会**明确拒绝**（`object-changed` + 谁何时改了哪个字段 + 三个出口）；② 对象页页头「分享（含邮件
+正文）」给深链 + **对方需要什么身份/侧才能看**；③ 导出的「列（N/M）」是**个人偏好**（按身份落 0600，换浏览器仍在）。
+机制与判据见 **`docs/concurrency-and-sharing.md`**；复跑 `python3 tmp/p9-verify.py`。

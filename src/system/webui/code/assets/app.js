@@ -182,8 +182,585 @@
   }
 
 
+  // ---------------------------------------------------------------- 长列表：查询 / 排序 / 分页 + 窗口化渲染
+  /**
+   * 这一节是**机制**（0 业务语义）：任何形状为 `table` / `files` / `list` 的面板都自动获得
+   * 「关键字搜索 · 按列筛选（枚举 / 文本 / 数值区间 / 时间区间）· 点列头排序 · 分页 / 窗口化渲染」——
+   * 插件一行不改就有；想更精确的插件可以给列加 `filter:'enum'|'text'|'number'|'date'` 覆盖自动判型。
+   *
+   * 为什么必须有（用户口径）："干一天活的规模也顺"——包几百个、报价上千行、通知几百条时，全量渲染
+   * 会把首屏拖到几秒、把 DOM 撑到几万节点；而**搜索 / 筛选 / 排序**在规模下才是真正干活的入口。
+   *
+   * **正确性纪律（性能不得换来错的数字）**：
+   *   · **计数在全集上算**：`共 N 行`（面板给的全部行）与 `命中 M 行`（筛选后）都在全量行集上算，
+   *     与"不分页时看到的一样"；本页只代表窗口（`本页 K 行`），不参与任何计数口径；
+   *   · **排序是全序且稳定**（同值按原始行序），所以"排序后第 k 行"与全量排序的第 k 行**逐行相同**；
+   *   · **筛选可组合**（关键字 ∧ 每列条件）且**可一键清空**；它只改"看到哪些"，不改任何事实、不写账本；
+   *   · **小计按命中行集算**（客户端已改的格子优先），翻页不丢编辑（编辑按「面板|行键」存在 `state.edits`）；
+   *   · **窗口化渲染**：DOM 里最多只有本页那么多个 `<tr>`；每页行数可以选「全部」，那是**明确选择**
+   *     全量渲染（界面上写着），不是偷偷的。
+   * 唯一口径与实测数字见 `src/system/webui/docs/scale-and-performance.md`。
+   */
+  const QUERY_KEY = 'quotagent.query'
+  /** 每页行数（`0` = 全部；选了它界面会明说"这一页会全量渲染"）。 */
+  const QUERY_SIZES = [10, 25, 50, 100, 250, 0]
+  const QUERY_DEFAULT_SIZE = 25
+  const QUERY_MIRROR_MAX = 40          // 服务端镜像最多这么多块面板（超出只在本浏览器，界面如实说）
+  state.query = store.get(QUERY_KEY, {})
+  if (!state.query || typeof state.query !== 'object' || Array.isArray(state.query)) state.query = {}
+  const emptyQuery = () => ({ kw: '', cols: {}, sort: '', page: 0, size: QUERY_DEFAULT_SIZE })
+  /** 一块面板当前的查询状态（坏值一律回落到默认 —— 不猜、不半坏着用）。 */
+  const queryOf = (panelId) => {
+    const raw = state.query[panelId] || {}
+    const size = QUERY_SIZES.includes(Number(raw.size)) ? Number(raw.size) : QUERY_DEFAULT_SIZE
+    return { kw: String(raw.kw ?? ''), sort: String(raw.sort ?? ''),
+      cols: (raw.cols && typeof raw.cols === 'object' && !Array.isArray(raw.cols)) ? { ...raw.cols } : {},
+      page: Math.max(0, Number(raw.page) || 0), size }
+  }
+  const colFilterValues = (q) => Object.entries(q.cols).filter(([, value]) => String(value ?? '').trim() !== '')
+  const queryActive = (q) => q.kw.trim() !== '' || q.sort !== '' || colFilterValues(q).length > 0
+  /** 查询状态的人话摘要（提示条/计数用；不解读业务）。 */
+  const querySummary = (q) => [q.kw.trim() ? `关键字「${q.kw.trim()}」` : '',
+    colFilterValues(q).length ? `${colFilterValues(q).length} 个列条件` : '', q.sort ? `排序 ${q.sort}` : '']
+    .filter(Boolean).join(' · ')
+
+  /**
+   * 服务端镜像（按会话身份，跨浏览器/跨设备仍在）：关键字 / 排序 / 每页行数各占一个**扁平键**
+   * （`k.<面板>` / `s.<面板>` / `z.<面板>`）—— 服务端那份状态是**有界洗净的标量表**（见 `webui.mjs`），
+   * 塞结构化对象进去会被如实丢掉，所以这里只镜像这三个小的。**列条件与页码只在本浏览器**
+   * （它们组合起来能超长；界面上的提示条会如实说明这一点）。镜像键有上限（超出丢最早的，界面说明）。
+   */
+  const QUERY_MIRROR_RE = /^[ksz]\./
+  function mirrorQuery(panelId) {
+    const q = queryOf(panelId)
+    const mirror = { ...state.filters }
+    const put = (key, value) => { if (value === '' || value === null) delete mirror[key]; else mirror[key] = String(value) }
+    put(`k.${panelId}`, q.kw.trim().slice(0, 48))
+    put(`s.${panelId}`, q.sort)
+    put(`z.${panelId}`, q.size === QUERY_DEFAULT_SIZE ? '' : String(q.size))
+    const keys = Object.keys(mirror).filter((key) => QUERY_MIRROR_RE.test(key))
+    for (const key of keys.slice(0, Math.max(0, keys.length - QUERY_MIRROR_MAX))) delete mirror[key]
+    state.filters = mirror
+    store.set(FILTER_KEY, state.filters)
+    pushNotifState()
+  }
+  /** 启动/换设备时把服务端镜像读回本地查询状态（服务端那份是"换设备仍在"的来源）。 */
+  function hydrateQueryFromMirror() {
+    const panelIds = new Set(Object.keys(state.query))
+    for (const [key, value] of Object.entries(state.filters || {})) {
+      if (!QUERY_MIRROR_RE.test(key)) continue
+      const kind = key[0]
+      const panelId = key.slice(2)
+      if (panelId === '') continue
+      panelIds.add(panelId)
+      const q = queryOf(panelId)
+      if (kind === 'k') q.kw = String(value)
+      if (kind === 's') q.sort = String(value)
+      if (kind === 'z') q.size = QUERY_SIZES.includes(Number(value)) ? Number(value) : q.size
+      state.query[panelId] = q
+    }
+    store.set(QUERY_KEY, state.query)
+    return panelIds
+  }
+  const saveQuery = (panelId, next) => {
+    const clean = { kw: next.kw, cols: next.cols, sort: next.sort, page: next.page, size: next.size }
+    const pristine = clean.kw.trim() === '' && clean.sort === '' && !colFilterValues(clean).length
+      && clean.page === 0 && clean.size === QUERY_DEFAULT_SIZE && !Object.keys(clean.cols).length
+    if (pristine) delete state.query[panelId]
+    else state.query[panelId] = clean
+    store.set(QUERY_KEY, state.query)
+    mirrorQuery(panelId)
+  }
+  /** 改查询状态：**条件变了就回第 1 页**（留在第 7 页看一份只剩 2 页的结果是坑）；然后只重绘这一块。 */
+  const setQuery = (panelId, patch, { keepPage = false } = {}) => {
+    const next = { ...queryOf(panelId), ...patch }
+    if (!keepPage && patch.page === undefined) next.page = 0
+    saveQuery(panelId, next)
+    forgetSelection(panelId)            // 选择与当前查询绑定：条件一变，跨页选择作废（比静默发错 id 安全）
+    repaintPanel(panelId)
+  }
+  /** 清空这一块的查询（关键字 + 列条件 + 排序；页码回第 1 页；每页行数保留）。 */
+  const clearQuery = (panelId) => {
+    saveQuery(panelId, { ...emptyQuery(), size: queryOf(panelId).size })
+    repaintPanel(panelId)
+    toast('ok', '查询已清空', '关键字 / 列条件 / 排序都清掉了；每页行数保留（那是显示偏好，不是筛选）')
+  }
+
+  // ---- 求值：全量行集 → （筛选）→ （排序）→ （分页窗口）--------------------------------------------
+  /** 列筛选控件类型：插件显式声明优先，其余按列 `type` 自动判型（不猜业务，只认形状）。 */
+  const columnFilterKind = (column) => {
+    const declared = String(column?.filter ?? '')
+    if (['enum', 'text', 'number', 'date'].includes(declared)) return declared
+    if (column?.type === 'number') return 'number'
+    if (column?.type === 'date' || column?.type === 'datetime') return 'date'
+    return 'text'
+  }
+  /** 一行的"可搜文本"：**所有标量字段**（含没显示的列、id、时刻）—— 搜一个 id 不该先去找它在哪一列。 */
+  const rowHaystack = (row, columns) => {
+    const parts = []
+    for (const column of columns) parts.push(textOf(row?.[column.key]))
+    for (const [key, value] of Object.entries(row || {})) {
+      if (key === 'ref' || key === 'row_actions' || key === 'preset') continue
+      if (value === null || typeof value === 'object') continue
+      parts.push(String(value))
+    }
+    return parts.join(' \u0000 ').toLowerCase()
+  }
+  const haystackCache = new WeakMap()
+  const haystackOf = (row, columns, signature) => {
+    if (!row || typeof row !== 'object') return textOf(row).toLowerCase()
+    const hit = haystackCache.get(row)
+    if (hit && hit.signature === signature) return hit.text
+    const text = rowHaystack(row, columns)
+    haystackCache.set(row, { signature, text })
+    return text
+  }
+  const textOf = (value) => (value === null || value === undefined ? '' : String(value))
+  const cellText = (row, key) => textOf(row?.[key])
+  /** 单列条件：`数值/时间` 用 `min~max`、枚举用全等、文本用包含（都忽略大小写）。 */
+  const matchColumn = (row, column, raw) => {
+    const value = String(raw ?? '').trim()
+    if (value === '') return true
+    const kind = columnFilterKind(column)
+    const cell = cellText(row, column.key)
+    if (kind === 'number') {
+      const [min, max] = value.split('~')
+      const n = Number(cell)
+      if (!Number.isFinite(n) || cell.trim() === '') return false
+      if (min !== undefined && min.trim() !== '' && n < Number(min)) return false
+      if (max !== undefined && max.trim() !== '' && n > Number(max)) return false
+      return true
+    }
+    if (kind === 'date') {
+      const [from, to] = value.split('~')
+      const day = cell.slice(0, 10)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false
+      if (from !== undefined && from.trim() !== '' && day < from.trim()) return false
+      if (to !== undefined && to.trim() !== '' && day > to.trim()) return false
+      return true
+    }
+    if (kind === 'enum') return cell === value
+    return cell.toLowerCase().includes(value.toLowerCase())
+  }
+  /**
+   * **全量行集 → 命中行集**（关键字 ∧ 每个列条件）。返回 `{rows, matched, total}`：
+   * `total` 是面板给的全部行（计数口径的基准），`matched` 是筛选后剩下的那些（仍保持原始行序）。
+   */
+  function applyQuery(columns, rows, q) {
+    const total = rows.length
+    const conditions = colFilterValues(q).map(([key]) => columns.find((column) => column.key === key)
+      || { key, type: 'text' })
+    const needle = q.kw.trim().toLowerCase()
+    const signature = `${columns.length}|${columns.map((column) => column.key).join(',')}`
+    let matched = rows
+    if (conditions.length) {
+      matched = matched.filter((row) => conditions.every((column) => matchColumn(row, column, q.cols[column.key])))
+    }
+    if (needle !== '') {
+      matched = matched.filter((row) => haystackOf(row, columns, signature).includes(needle))
+    }
+    return { rows, matched, total }
+  }
+  /** **稳定全序排序**（同值按原始行序）⇒ "排序后第 k 行"与全量排序逐行一致；不认的排序列=不排。 */
+  function sortRows(items, columns, sort) {
+    const at = String(sort).indexOf(':')
+    const key = at < 0 ? '' : sort.slice(0, at)
+    const dir = at < 0 ? '' : sort.slice(at + 1)
+    if (key === '' || (dir !== 'asc' && dir !== 'desc')) return items
+    const column = columns.find((item) => item.key === key)
+    if (!column) return items
+    const numeric = columnFilterKind(column) === 'number'
+    const factor = dir === 'desc' ? -1 : 1
+    return items.slice().sort((left, right) => {
+      const a = left.row?.[key]
+      const b = right.row?.[key]
+      let cmp = 0
+      if (numeric) {
+        const x = Number(a); const y = Number(b)
+        const xf = Number.isFinite(x) && String(textOf(a)).trim() !== ''
+        const yf = Number.isFinite(y) && String(textOf(b)).trim() !== ''
+        cmp = xf && yf ? (x - y) : (xf === yf ? 0 : (xf ? -1 : 1))
+      } else {
+        const x = textOf(a); const y = textOf(b)
+        cmp = x.localeCompare(y, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' })
+      }
+      return cmp !== 0 ? cmp * factor : (left.index - right.index)
+    })
+  }
+  /** 分页窗口（`size === 0` ⇒ 全部；页号越界一律夹回合法范围，不返回空页）。 */
+  function pageView(items, size, page) {
+    if (!size) return { page: 0, pages: 1, start: 0, end: items.length, window: items }
+    const pages = Math.max(1, Math.ceil(items.length / size))
+    const at = Math.min(Math.max(0, Number(page) || 0), pages - 1)
+    const start = at * size
+    return { page: at, pages, start, end: Math.min(items.length, start + size),
+      window: items.slice(start, start + size) }
+  }
+  /**
+   * 一块面板的**视图**（全量→筛选→排序→窗口，一次算完）；同时缓存起来供"小计重算/批量选择"用：
+   * 小计与批量必须按**命中全集**算，不能只按这一页的 DOM 算（否则翻页就把别的行漏掉了）。
+   */
+  const panelViews = {}
+  function queryView(panelId, columns, rows, q, rowKeyOf) {
+    const filtered = applyQuery(columns, rows, q)
+    const sorted = sortRows(filtered.matched.map((row, index) => ({ row, index })), columns, q.sort)
+    const paged = pageView(sorted, q.size, q.page)
+    const view = { panelId, columns, q, total: filtered.total, matched: filtered.matched,
+      sorted, window: paged.window.map((item) => item.row), page: paged.page, pages: paged.pages,
+      start: paged.start, end: paged.end, size: q.size, active: queryActive(q),
+      rowKeyOf, byKey: new Map(rows.map((row, index) => [rowKeyOf(row, index), row])) }
+    panelViews[panelId] = view
+    return view
+  }
+  const firstKeyOf = (panel, row, index) => String(row?.id ?? row?.[(panel?.data?.columns || [])[0]?.key] ?? index)
+  /** 一个格子的值：**客户端已改的优先**（小计、排序、筛选看到的都是"你正要提交的那份"）。 */
+  const editValueOf = (panelId, rowKey, field, row) => {
+    const typed = (state.edits[`${panelId}|${rowKey}`] || {})[field]
+    return typed === undefined ? (row ? row[field] : undefined) : typed
+  }
+
+  // ---- 查询状态的持久化边界（给界面一句人话）------------------------------------------------------
+  const mirrorNote = () => (notifSource === 'server'
+    ? `关键字/排序/每页行数按你的身份存服务端（换浏览器/换设备仍在，最多 ${QUERY_MIRROR_MAX} 块面板）；列条件与页码只在本浏览器`
+    : `未登录：查询状态只在本浏览器（登录后关键字/排序/每页行数落服务端，换设备仍在）`)
+
+  // ---- 选择（跨页批量）--------------------------------------------------------------------------
+  /** 「选中全部命中行」的选择记在面板名下；查询一变就作废（比静默发错 id 安全）。 */
+  const forgetSelection = (panelId) => {
+    if (state.selectedAll && state.selectedAll[panelId]) {
+      for (const key of state.selectedAll[panelId]) {
+        delete state.selected[key]
+        delete state.selectedRows[key]
+      }
+      delete state.selectedAll[panelId]
+    }
+  }
+  const selectedAllOf = (panelId) => ((state.selectedAll || {})[panelId] || [])
+  function selectAllMatched(panelId) {
+    const view = panelViews[panelId]
+    if (!view) return
+    const keys = view.matched.map((row, index) => view.rowKeyOf(row, index))
+    state.selectedAll = { ...(state.selectedAll || {}), [panelId]: keys }
+    for (const [index, row] of view.matched.entries()) {
+      const key = view.rowKeyOf(row, index)
+      state.selected[key] = true
+      state.selectedRows = { ...(state.selectedRows || {}), [key]: row }
+    }
+    repaintPanel(panelId)
+    toast('ok', `已选中全部命中行（${keys.length} 行）`,
+      '批量动作会把它们一起送出去（含不在本页的行）；换筛选条件会自动取消这份选择')
+  }
+  function clearSelection(panelId) {
+    const view = panelViews[panelId]
+    if (view) {
+      for (const [index, row] of view.rows.entries()) {
+        const key = view.rowKeyOf(row, index)
+        delete state.selected[key]
+        delete state.selectedRows[key]
+      }
+    }
+    delete (state.selectedAll || {})[panelId]
+    repaintPanel(panelId)
+  }
+
+  // ---- 计数条（机器可对账：`data-count-*` 就是可核对的数字）----------------------------------------
+  function countBarHtml(panelId, view, extra = '') {
+    const attrOf = (name, value) => ` data-${name}="${attr(value)}"`
+    return `<div class="q-qcount" data-q-count="${attr(panelId)}"`
+      + attrOf('count-total', view.total) + attrOf('count-matched', view.matched.length)
+      + attrOf('count-window', view.window.length) + attrOf('page', view.page + 1)
+      + attrOf('pages', view.pages) + attrOf('page-size', view.size)
+      + attrOf('q-active', view.active ? 1 : 0) + attrOf('sort', view.q.sort || '') + '>'
+      + `<span>共 <b>${view.total}</b> 行</span>`
+      + `<span>命中 <b data-count-matched-num="1">${view.matched.length}</b> 行</span>`
+      + (view.size
+        ? `<span>第 <b data-count-page-num="1">${view.page + 1}</b>/<b>${view.pages}</b> 页`
+          + `（本页 <b data-count-window-num="1">${view.window.length}</b> 行；DOM 里也只渲染这么多行）</span>`
+        : `<span>本页 <b>${view.window.length}</b> 行（**选了「全部」= 全量渲染**）</span>`)
+      + (view.active ? `<span class="q-qcount-on">正在筛选：${esc(querySummary(view.q))}</span>` : '')
+      + (extra ? `<span>${extra}</span>` : '')
+      + '</div>'
+  }
+
+  // ---- 查询条（关键字 / 列条件 / 分页 / 清空）-----------------------------------------------------
+  /** 枚举候选：值不多且短时才给下拉（>24 个不同值就给文本框 —— 不猜、也不摆一个没法用的下拉）。 */
+  function enumOptions(rows, column) {
+    const seen = new Map()
+    for (const row of rows) {
+      const value = cellText(row, column.key).trim()
+      if (value === '' || value.length > 24) continue
+      seen.set(value, (seen.get(value) || 0) + 1)
+      if (seen.size > 26) return null
+    }
+    if (!seen.size || seen.size > 24) return null
+    return [...seen.entries()].sort((left, right) => right[1] - left[1]
+      || left[0].localeCompare(right[0], 'zh-Hans-CN')).map(([value, count]) => ({ value, count }))
+  }
+  /** 一列的筛选控件（形状由 `columnFilterKind` 定；值来自当前查询状态）。 */
+  function columnFilterControl(panelId, column, q, rows) {
+    const key = String(column.key)
+    const raw = String(q.cols[key] ?? '')
+    const kind = columnFilterKind(column)
+    const label = esc(column.label || key)
+    const base = `data-q-col="${attr(`${panelId}:${key}`)}" data-q-kind="${attr(kind)}" aria-label="按 ${label} 筛选"`
+    if (kind === 'number' || kind === 'date') {
+      const [min = '', max = ''] = raw.split('~')
+      const type = kind === 'number' ? 'number' : 'date'
+      const extra = kind === 'number' ? ' inputmode="decimal" step="any"' : ''
+      return `<label class="q-qcol"><span>${label}${kind === 'number' ? '（数值区间）' : '（时间区间）'}</span>`
+        + `<input type="${type}"${extra} ${base} data-q-bound="min" value="${attr(min)}" placeholder="≥">`
+        + `<input type="${type}"${extra} ${base} data-q-bound="max" value="${attr(max)}" placeholder="≤"></label>`
+    }
+    if (kind === 'enum') {
+      const options = enumOptions(rows, column)
+      if (options && options.length) {
+        return `<label class="q-qcol"><span>${label}</span><select ${base} data-q-enum="1">`
+          + `<option value="">（全部）</option>`
+          + options.map((option) => `<option value="${attr(option.value)}"`
+            + `${option.value === raw ? ' selected' : ''}>${esc(option.value)}（${option.count}）</option>`).join('')
+          + '</select></label>'
+      }
+    }
+    return `<label class="q-qcol"><span>${label}（包含）</span>`
+      + `<input type="text" ${base} value="${attr(raw)}" placeholder="含…" autocomplete="off"></label>`
+  }
+  function queryBar(panelId, columns, view, rows) {
+    const q = view.q
+    const conds = colFilterValues(q).length
+    const sortAt = q.sort.indexOf(':')
+    const sortKey = sortAt < 0 ? '' : q.sort.slice(0, sortAt)
+    const sortDir = sortAt < 0 ? '' : q.sort.slice(sortAt + 1)
+    const selected = selectedAllOf(panelId).length
+    const pageBtn = (label, page, title) => `<button data-q-page="${attr(panelId)}" data-q-to="${attr(page)}"`
+      + ` title="${attr(title)}"${view.size === 0 ? ' disabled' : ''}>${label}</button>`
+    return `<div class="q-qbar" data-query-bar="${attr(panelId)}">`
+      + `<div class="q-qbar-row">`
+      + `<label class="q-qkw">搜这块：<input type="search" data-q-kw="${attr(panelId)}" value="${attr(q.kw)}"`
+      + ` placeholder="关键字（id / 供应商 / 时刻 / 任何一列的值…）" autocomplete="off"`
+      + ` aria-label="在这块里搜关键字"></label>`
+      + `<button data-q-clear="${attr(panelId)}"${view.active ? '' : ' disabled'}>清空查询</button>`
+      + (columns.length ? `<details class="q-qcols"${conds ? ' open' : ''}><summary>按列筛选`
+        + `${conds ? `（${conds} 条生效）` : `（${columns.length} 列可选）`}</summary>`
+        + `<div class="q-qcolwrap">${columns.map((column) => columnFilterControl(panelId, column, q, rows)).join('')}</div>`
+        + `<div class="q-qhint">数值列给区间（≥ / ≤）、时间列给日期区间、短枚举列给下拉、其余列是"包含"；`
+        + `条件之间是**并且**，与关键字一起生效。筛选只改"看到哪些"，不改任何事实、不写账本。</div></details>` : '')
+      + `</div>`
+      + countBarHtml(panelId, view,
+        `${selected ? `已跨页选中 ${selected} 行 ` : ''}`
+        + (view.matched.length > view.window.length && view.size
+          ? `<button data-q-selectall="${attr(panelId)}">选中全部命中行（${view.matched.length}）</button> ` : '')
+        + (selected ? `<button data-q-unselect="${attr(panelId)}">取消选择</button> ` : '')
+        + `${sortKey ? `排序：<code>${esc(sortKey)}</code> ${sortDir === 'desc' ? '↓ 降序' : '↑ 升序'}` : '点列头可排序（升→降→取消）'}`)
+      + `<div class="q-qbar-row q-qpages">`
+      + pageBtn('⏮ 首页', 0, '第 1 页') + pageBtn('上一页', view.page - 1, '上一页')
+      + `<label>跳到第 <input type="number" min="1" max="${view.pages}" data-q-jump="${attr(panelId)}"`
+      + ` value="${view.page + 1}" aria-label="跳到第几页"> 页</label>`
+      + pageBtn('下一页', view.page + 1, '下一页') + pageBtn('末页 ⏭', view.pages - 1, '最后一页')
+      + `<label>每页 <select data-q-size="${attr(panelId)}" aria-label="每页显示多少行">`
+      + QUERY_SIZES.map((size) => `<option value="${size}"${size === q.size ? ' selected' : ''}>`
+        + `${size === 0 ? '全部（全量渲染）' : size}</option>`).join('') + '</select></label>'
+      + `<button data-q-reset="${attr(panelId)}">恢复默认显示</button>`
+      + `<span class="q-qhint">${esc(mirrorNote())}</span>`
+      + `</div></div>`
+  }
+  /** 已生效的筛选项做成"可以一条条摘掉"的片（不用回去翻哪一列设过什么）。 */
+  function activeFilterChips(panelId, view) {
+    const chips = []
+    if (view.q.kw.trim()) {
+      chips.push(`<span class="q-chip on" data-q-drop="${attr(`${panelId}:kw`)}"`
+        + ` role="button" tabindex="0" title="点一下去掉这个关键字">关键字「${esc(view.q.kw.trim())}」✕</span>`)
+    }
+    for (const [key, value] of colFilterValues(view.q)) {
+      const column = view.columns.find((item) => item.key === key)
+      chips.push(`<span class="q-chip on" data-q-drop="${attr(`${panelId}:${key}`)}" role="button" tabindex="0"`
+        + ` title="点一下去掉这一列的筛选">${esc(column ? (column.label || key) : key)} = ${esc(value)} ✕</span>`)
+    }
+    if (view.q.sort) {
+      chips.push(`<span class="q-chip on" data-q-drop="${attr(`${panelId}:sort`)}"`
+        + ` role="button" tabindex="0" title="点一下取消排序">排序 ${esc(view.q.sort)} ✕</span>`)
+    }
+    return chips.length ? `<div class="q-qchips">${chips.join('')}</div>` : ''
+  }
+
+  // ---- 单块面板重绘（只换这一块，别的面板不动）-----------------------------------------------------
+  /**
+   * 重绘一块面板 = 换掉那个 `<section>` 的 DOM 后**在这一块内**重新绑定交互。
+   * 为什么换节点而不是改 innerHTML：旧节点上的监听器会跟着节点一起消失（不会累积重复监听）；
+   * 查询条自己的事件走 `#q-view` 上的**委托**（只绑一次），所以换完节点仍然好用。
+   */
+  function repaintPanel(panelId) {
+    const panel = state.panels.find((item) => item.id === panelId)
+    const section = el('q-view')?.querySelector(`section[data-panel="${panelId}"]`)
+    if (!panel || !section) return
+    const active = document.activeElement
+    let focus = null
+    if (active && section.contains(active)) {
+      const key = active.dataset.qKw !== undefined ? `[data-q-kw="${panelId}"]`
+        : (active.dataset.qCol ? `[data-q-col="${attr(active.dataset.qCol)}"][data-q-bound="${attr(active.dataset.qBound || '')}"]`
+          : (active.dataset.qJump !== undefined ? `[data-q-jump="${panelId}"]` : ''))
+      if (key) focus = { key, start: active.selectionStart, end: active.selectionEnd }
+    }
+    const collapsed = section.classList.contains('collapsed')
+    section.outerHTML = panelSection(panel, collapsed)
+    const fresh = el('q-view')?.querySelector(`section[data-panel="${panelId}"]`)
+    if (!fresh) return
+    bindPanels(fresh)
+    bindInteractions(fresh)
+    bindFiles(fresh)
+    if (focus) {
+      const node = fresh.querySelector(focus.key)
+      if (node && typeof node.focus === 'function') {
+        node.focus()
+        if (focus.start !== null && focus.start !== undefined && node.setSelectionRange
+          && node.type !== 'number' && node.type !== 'date' && node.type !== 'search') {
+          try { node.setSelectionRange(focus.start, focus.end) } catch (err) { /* 类型不支持就算了 */ }
+        }
+      }
+    }
+  }
+  /** 重绘所有有查询状态的面板（例如服务端镜像读回来后）。 */
+  function repaintQueriedPanels(panelIds) {
+    for (const panelId of panelIds || []) if (panelViews[panelId] || state.query[panelId]) repaintPanel(panelId)
+  }
+
+  /**
+   * 查询条的**委托**事件（`#q-view` 上只绑一次）：关键字输入（180ms 去抖）、列条件、翻页、
+   * 每页行数、点列头排序、清空、摘掉某一个条件、跨页全选。委托的好处：重绘面板不会丢事件。
+   */
+  const queryInputTimers = {}
+  function bindQueryDelegates() {
+    const root = el('q-view')
+    if (!root || root.dataset.qDelegated === '1') return
+    root.dataset.qDelegated = '1'
+    const panelIdOf = (node, name) => String(node?.dataset?.[name] ?? '')
+    root.addEventListener('input', (ev) => {
+      const node = ev.target
+      if (!node || !node.dataset) return
+      if (node.dataset.qKw !== undefined) {
+        const panelId = panelIdOf(node, 'qKw')
+        clearTimeout(queryInputTimers[panelId])
+        const value = node.value
+        // 去抖：一边打字一边把 5000 行重算 5 次没有意义；180ms 后一次算完
+        queryInputTimers[panelId] = setTimeout(() => setQuery(panelId, { kw: value }), 180)
+        return
+      }
+      if (node.dataset.qCol !== undefined) {
+        const [panelId, key] = String(node.dataset.qCol).split(':')
+        if (!panelId || !key) return
+        const scope = node.closest('[data-query-bar]')
+        const bounds = [...(scope?.querySelectorAll(`[data-q-col="${attr(node.dataset.qCol)}"]`) || [])]
+        const readBound = (name) => (bounds.find((item) => item.dataset.qBound === name) || {}).value ?? ''
+        const value = node.dataset.qBound
+          ? `${String(readBound('min')).trim()}~${String(readBound('max')).trim()}`
+          : node.value
+        const next = { ...queryOf(panelId).cols }
+        if (String(value).trim() === '' || String(value) === '~') delete next[key]
+        else next[key] = value
+        // 列条件也去抖（区间两个框、回车前不要每敲一下都重算）
+        const token = `${panelId}:${key}`
+        clearTimeout(queryInputTimers[token])
+        queryInputTimers[token] = setTimeout(() => setQuery(panelId, { cols: next }), 180)
+        queryInputTimers[panelId] = null
+        return
+      }
+      if (node.dataset.qJump !== undefined) return          // 翻页框在 change 上处理
+    })
+    root.addEventListener('change', (ev) => {
+      const node = ev.target
+      if (!node || !node.dataset) return
+      if (node.dataset.qSize !== undefined) {
+        return setQuery(panelIdOf(node, 'qSize'), { size: Number(node.value) })
+      }
+      if (node.dataset.qEnum !== undefined) {
+        const [panelId, key] = String(node.dataset.qCol).split(':')
+        const next = { ...queryOf(panelId).cols }
+        if (String(node.value).trim() === '') delete next[key]; else next[key] = node.value
+        return setQuery(panelId, { cols: next })
+      }
+      if (node.dataset.qJump !== undefined) {
+        const panelId = panelIdOf(node, 'qJump')
+        return setQuery(panelId, { page: Math.max(0, Number(node.value) - 1) }, { keepPage: true })
+      }
+      if (node.dataset.qSort !== undefined) return applySortToggle(panelIdOf(node, 'qSort'), node.dataset.qSortKey)
+    })
+    root.addEventListener('click', (ev) => {
+      const node = ev.target?.closest?.('[data-q-page],[data-q-clear],[data-q-reset],[data-q-selectall],'
+        + '[data-q-unselect],[data-q-drop],[data-q-sort],[data-reload-page]')
+      if (!node) return
+      if (node.dataset.reloadPage !== undefined) return loadAll(true)
+      if (node.dataset.qPage !== undefined) {
+        return setQuery(panelIdOf(node, 'qPage'), { page: Number(node.dataset.qTo) }, { keepPage: true })
+      }
+      if (node.dataset.qClear !== undefined) return clearQuery(panelIdOf(node, 'qClear'))
+      if (node.dataset.qReset !== undefined) {
+        const panelId = panelIdOf(node, 'qReset')
+        saveQuery(panelId, { ...emptyQuery() })
+        return repaintPanel(panelId)
+      }
+      if (node.dataset.qSelectall !== undefined) return selectAllMatched(panelIdOf(node, 'qSelectall'))
+      if (node.dataset.qUnselect !== undefined) return clearSelection(panelIdOf(node, 'qUnselect'))
+      if (node.dataset.qSort !== undefined) return applySortToggle(panelIdOf(node, 'qSort'), node.dataset.qSortKey)
+      if (node.dataset.qDrop !== undefined) {
+        const [panelId, what] = String(node.dataset.qDrop).split(':')
+        const q = queryOf(panelId)
+        if (what === 'kw') return setQuery(panelId, { kw: '' })
+        if (what === 'sort') return setQuery(panelId, { sort: '' })
+        const cols = { ...q.cols }; delete cols[what]
+        return setQuery(panelId, { cols })
+      }
+    })
+    root.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return
+      const node = ev.target?.closest?.('[data-q-drop],[data-q-sort]')
+      if (!node) return
+      ev.preventDefault()
+      if (node.dataset.qSort !== undefined) return applySortToggle(panelIdOf(node, 'qSort'), node.dataset.qSortKey)
+      const [panelId, what] = String(node.dataset.qDrop).split(':')
+      if (what === 'kw') return setQuery(panelId, { kw: '' })
+      if (what === 'sort') return setQuery(panelId, { sort: '' })
+      const cols = { ...queryOf(panelId).cols }; delete cols[what]
+      return setQuery(panelId, { cols })
+    })
+  }
+  /** 点列头排序：升 → 降 → 取消（三态；不改任何事实）。 */
+  function applySortToggle(panelId, key) {
+    if (!panelId || !key) return
+    const current = queryOf(panelId).sort
+    const dir = current === `${key}:asc` ? 'desc' : (current === `${key}:desc` ? '' : 'asc')
+    setQuery(panelId, { sort: dir === '' ? '' : `${key}:${dir}` })
+  }
+
+  // ---- 性能探针（**测量面**：只读、可关、不参与任何业务）--------------------------------------------
+  /**
+   * 每次主区渲染记一条读数（`paint_ms` = 渲染这段同步代码花了多久；`frame_ms` = 到下一帧画完）+
+   * 当时的 DOM 节点数与**真的渲染了多少行**（窗口化的证据）。它是机制的一部分：验收要"性能测量"
+   * 就得有一个可读的、同一口径的读数，而不是靠感觉。读数在 `window.__Q_GUI_METRICS` 里，只读。
+   */
+  const perfProbe = { version: 1, count: 0, last: null, history: [] }
+  const metricOf = (t0, extra = {}) => {
+    try {
+      const rows_api = state.panels.reduce((sum, panel) => sum + ((panel.data?.rows || panel.data?.items
+        || panel.data?.files || []).length), 0)
+      const entry = { at: new Date().toISOString(), route: routeLabel(state.route),
+        state: state.loading ? 'loading' : (state.panelsError || state.objectError ? 'error' : 'ready'),
+        paint_ms: Math.round((performance.now() - t0) * 10) / 10, panels: state.panels.length,
+        rows_api, rows_dom: document.querySelectorAll('tr[data-row-key]').length,
+        dom_nodes: document.getElementsByTagName('*').length,
+        paged_panels: state.panels.filter((panel) => {
+          const view = panelViews[panel.id]
+          return view && view.size > 0 && view.matched.length > view.window.length
+        }).length, ...extra }
+      perfProbe.count += 1
+      perfProbe.last = entry
+      perfProbe.history = [...perfProbe.history.slice(-19), entry]
+      return entry
+    } catch (err) { return null }
+  }
+  window.__Q_GUI_METRICS = perfProbe
+
   const html = (parts) => parts.join('')
   const badge = (text, level) => `<span class="q-badge ${level || ''}">${esc(text)}</span>`
+
   const attr = (value) => esc(value).replace(/'/g, '&#39;')
 
   /** 对象/视图的**深链**（可复制分享）：对象地址 = `/app/<view>/<kind>/<id>/`。 */
@@ -432,10 +1009,19 @@
         'q-status-all')))
   }
 
-  // ---------------------------------------------------------------- 通用状态块（空态/错误态/降级）
+  // ---------------------------------------------------------------- 通用状态块（空态/错误态/加载态/降级）
+  /**
+   * 四种状态**各有各的样子**（`data-state` 是机器可读的那一维），且**永不互相冒充**：
+   *   · `loading`  = 正在读（还不知道有没有数据）—— 绝不留上一页的行在屏幕上；
+   *   · `empty`    = 读到了，真的是空的（带 `reason` 说明为什么空）；
+   *   · `degraded` = 读到了但降级（不冒充健康）；
+   *   · `error`    = **没读到**（带 code/reason/下一步）—— 绝不显示成"空"。
+   */
   function stateBlock({ kind, title, reason, next_action, hint }) {
     const level = kind === 'error' ? 'bad' : (kind === 'degraded' ? 'warn' : 'info')
-    return `<div class="q-state ${level}" data-state="${attr(kind)}" data-state-reason="${attr(reason || '')}">`
+    const role = kind === 'error' ? 'alert' : (kind === 'loading' ? 'status' : '')
+    return `<div class="q-state ${level}" data-state="${attr(kind)}" data-state-reason="${attr(reason || '')}"`
+      + `${role ? ` role="${role}"` : ''}${kind === 'loading' ? ' aria-busy="true"' : ''}>`
       + `<b>${esc(title)}</b>${reason ? ` <code>${esc(reason)}</code>` : ''}`
       + `${hint ? `<div>${esc(hint)}</div>` : ''}`
       + `${next_action ? `<div class="q-hint">下一步：<code>${esc(next_action)}</code></div>` : ''}</div>`
@@ -450,11 +1036,9 @@
   }
 
   // ---------------------------------------------------------------- 可编辑表格的取值（编辑优先，原值兜底）
-  const cellValue = (rowKey, field, row) => {
-    const edited = (state.edits[rowKey] || {})[field]
-    if (edited !== undefined) return edited
-    return row ? row[field] : undefined
-  }
+  /** 单元格取值：**客户端已改的优先，原值兜底**（键是「面板|行键」，见 `editValueOf`）。
+   *  翻页/重绘后格子里显示的仍是"你改的那个值"，不会看起来像把改动丢了。 */
+  const cellValue = (panelId, rowKey, field, row) => editValueOf(panelId, rowKey, field, row)
   const numOf = (value) => {
     const n = Number(value)
     return Number.isFinite(n) ? n : 0
@@ -524,7 +1108,10 @@
       return stateBlock({ kind: 'empty', title: '没有行', reason: data.reason || 'no-rows',
         next_action: data.next_action || (data.note || '') })
     }
+    // **行键按全量行集算一次**：分页只换窗口，行键不能跟着页变（否则编辑/勾选会串行）。
     const rowKeyOf = (row, index) => String(row.id ?? row[allColumns[0]?.key] ?? index)
+    const keyOf = new Map(rows.map((row, index) => [row, rowKeyOf(row, index)]))
+    const keyFor = (row, index) => keyOf.get(row) ?? (index === undefined ? '' : rowKeyOf(row, index))
     // ---- ④ 对比模式：勾选 2–3 个列组（如"哪几家的报价"）并排看；关键列（无 group）不参与勾选、恒显示 ----
     const groups = compareGroups(allColumns)
     let columns = allColumns
@@ -544,31 +1131,74 @@
         + `${over ? `<span class="q-cmp-warn">最多 ${max} 组：已有的勾选先取消一个再看新的</span>` : ''}`
         + `<button class="q-link" data-cmp-reset="${attr(panel.id)}">全选</button></div>`
     }
+    // ---- 查询视图（全量 → 筛选 → 排序 → 窗口）：计数、排序、筛选都在**全量行集**上算 ----------
+    const q = queryOf(panel.id)
+    const view = queryView(panel.id, columns, rows, q, keyFor)
+    const windowRows = view.window
+    const qbar = queryBar(panel.id, columns, view, rows) + activeFilterChips(panel.id, view)
+    if (!view.matched.length) {
+      // **筛选后 0 行 ≠ 没有数据**：两个状态分开说，且这里给一键清空（否则用户会以为这块坏了）
+      return html([qbar, countBarHtml(panel.id, view),
+        `<div class="q-state info" data-state="empty" data-state-reason="filtered-out">`
+        + `<b>筛选后 0 行（不是这块没有数据）</b> <code>filtered-out</code>`
+        + `<div class="q-hint">这块本来有 <b>${view.total}</b> 行：${esc(querySummary(view.q))} 把这些行全滤掉了。`
+        + '筛选只改“看到哪些”，账本与事实一条都没动。</div>'
+        + `<div class="q-actions">`
+        + `<button class="primary" data-q-clear="${attr(panel.id)}">清空查询，看全部 ${view.total} 行</button>`
+        + `<button data-q-reset="${attr(panel.id)}">恢复默认显示</button></div></div>`])
+    }
+    // 列头：可点排序（升 → 降 → 取消）；`aria-sort` 让屏幕阅读器也知道现在是按哪列排的
+    const sortOf = (column) => (q.sort === `${column.key}:asc` ? 'asc'
+      : (q.sort === `${column.key}:desc` ? 'desc' : 'none'))
+    const thOf = (column) => {
+      const sorted = sortOf(column)
+      return `<th class="${attr(colClass(column))}" data-q-sort="${attr(panel.id)}"`
+        + ` data-q-sort-key="${attr(column.key)}" role="button" tabindex="0"`
+        + ` aria-sort="${sorted}" title="点一下：升序 → 降序 → 不排序（只改看到哪些，不改任何事实）">`
+        + `${esc(column.label || column.key)}<span class="q-sortmark" aria-hidden="true">${
+          sorted === 'asc' ? ' ↑' : (sorted === 'desc' ? ' ↓' : '')}</span></th>`
+    }
     const editable = columns.some((column) => column.editable)
-    const head = html([bulk ? '<th class="q-rowsel"><input type="checkbox" data-select-all aria-label="全选"></th>' : '',
-      columns.map((column) => `<th class="${attr(colClass(column))}">${esc(column.label || column.key)}</th>`).join(''),
-      '<th>动作</th>'])
-    const body = rows.map((row, index) => {
-      const rowKey = rowKeyOf(row, index)
+    const head = html([bulk ? `<th class="q-rowsel"><input type="checkbox" data-select-all`
+      + ` aria-label="全选本页（不含其它页）" title="只勾本页这几行；要跨页选全部命中的行，用上面的「选中全部命中行」"></th>` : '',
+      columns.map(thOf).join(''), '<th>动作</th>'])
+    // `best_when:'min'`（一列里的最小值高亮）：**在命中行集上**算 —— 最小值是数据的性质，不是这一页的性质
+    const mins = {}
+    for (const column of columns) {
+      if (column.best_when !== 'min') continue
+      let best = Infinity
+      for (const row of view.matched) {
+        const raw = row[column.key]
+        if (raw === '' || raw === undefined) continue
+        best = Math.min(best, numOf(raw))
+      }
+      mins[column.key] = best
+    }
+    const body = windowRows.map((row) => {
+      const rowKey = keyFor(row)
       const cells = columns.map((column) => {
         const raw = row[column.key]
         const value = raw === null || raw === undefined ? '' : String(raw)
         const cls = colClass(column)
-        const best = column.best_when === 'min' && raw !== '' && raw !== undefined && numOf(raw)
-          === Math.min(...rows.map((other) => (other[column.key] === '' || other[column.key] === undefined
-            ? Infinity : numOf(other[column.key]))))
+        const best = column.best_when === 'min' && raw !== '' && raw !== undefined
+          && numOf(raw) === mins[column.key]
         if (column.editable) {
+          // **取值顺序：客户端已改的格子 > 面板数据里的原值**（`editValueOf` 按「面板|行键」取 —— 分页换页
+          // 后重绘时，别的页上改过的格子也必须显示成你改的值，否则看起来"翻页就把改动丢了"）。
           const extra = column.line_total_of
             ? `<span class="q-linetotal" data-linetotal="${attr(rowKey)}:${attr(column.key)}" data-factor="${attr(column.line_total_of)}">`
-              + `×${esc(String(cellValue(rowKey, column.line_total_of, row) ?? '—'))} = `
-              + `${numOf(cellValue(rowKey, column.key, row)) * numOf(cellValue(rowKey, column.line_total_of, row))}</span>`
+              + `×${esc(String(editValueOf(panel.id, rowKey, column.line_total_of, row) ?? '—'))} = `
+              + `${numOf(editValueOf(panel.id, rowKey, column.key, row))
+                * numOf(editValueOf(panel.id, rowKey, column.line_total_of, row))}</span>`
             : ''
           // 触控可用性：可编辑格在手机上要能看见自己在改哪一列（`data-label` 让小屏卡片视图带列名），
           // 数字格给对键盘（`inputmode`），回车键按语义（`enterkeyhint`）——都是浏览器原生能力。
           const numeric = column.type === 'number'
+          const current = editValueOf(panel.id, rowKey, column.key, row)
+          const shown = current === null || current === undefined ? '' : String(current)
           return `<td class="${attr(cls)}" data-label="${attr(column.label || column.key)}">`
             + `<input data-edit="${attr(rowKey)}" data-field="${attr(column.key)}"`
-            + ` data-type="${attr(column.type || 'text')}" value="${attr(value)}"`
+            + ` data-type="${attr(column.type || 'text')}" value="${attr(shown)}"`
             + ` data-orig="${attr(value)}"${numeric ? ' inputmode="decimal" enterkeyhint="next"' : ''}`
             + ` placeholder="${attr(column.help || '')}" aria-label="${attr(column.label || column.key)}">${extra}</td>`
         }
@@ -594,11 +1224,13 @@
         + (bulk ? `<td class="q-rowsel" data-label="选中"><input type="checkbox" data-select="${attr(rowKey)}" aria-label="选中这一行"></td>` : '')
         + `${cells}<td class="q-rowacts" data-label="动作">${inline} ${rowRefCell(row)}</td></tr>`
     }).join('')
-    const totals = totalsOf(data, rows, (row, index) => rowKeyOf(row, index))
+    // 小计（`data.totals`）按**命中行集**算（不是本页）：翻页不会让合计变小；客户端已改的格子优先。
+    const valueOf = (rowKey, field) => editValueOf(panel.id, rowKey, field, view.byKey.get(rowKey))
+    const totals = totalsOf(data, view.matched, (row) => keyFor(row), valueOf)
     // ④ 对比模式下**每组一列合计**（如"每家报价的行合计总和"）：插件声明 `data.group_totals = {key, unit}`。
     const groupTotals = (data.group_totals && groups.length >= 2 && data.compare) ? groups.map((group) => {
       let sum = 0
-      for (const row of rows) {
+      for (const row of view.matched) {
         for (const column of allColumns) {
           if (String(column.group) !== group.id) continue
           const wanted = data.group_totals.key === undefined ? null : String(data.group_totals.key)
@@ -614,23 +1246,26 @@
     const controls = html([bulk ? `<button data-bulk="${attr(bulk.id)}" class="primary">${esc(bulk.title)}`
       + `（已选 <span data-selected-count="1">0</span> 行）</button>` : '',
       editable ? `<button data-submit-edits data-panel="${attr(panel.id)}" class="primary">`
-        + `提交编辑（<span data-edit-count="${attr(panel.id)}">0</span> 行）</button>`
+        + `提交编辑（<span data-edit-count="${attr(panel.id)}">${editRowsOf(panel.id).length}</span> 行）</button>`
         + `<button data-cancel-edits data-panel="${attr(panel.id)}">放弃改动</button>` : ''])
     const totalBar = (editable || totals.length || groupTotals.length)
       ? `<div class="q-editbar" data-editbar="${attr(panel.id)}">`
-        + `${editable ? `<span>已改 <b data-edit-count="${attr(panel.id)}">0</b> 行</span>` : ''}`
+        + `${editable ? `<span>已改 <b data-edit-count="${attr(panel.id)}">${editRowsOf(panel.id).length}</b> 行</span>` : ''}`
         + totals.map((item) => `<span class="q-sum" data-total="${attr(item.key)}:${attr(item.factor ?? '')}">`
           + `${esc(item.label)}：<b>${item.value}</b>${item.unit ? ` ${esc(item.unit)}` : ''}</span>`).join('')
         + groupTotals.map((item) => `<span class="q-sum">`
           + `${item.raw ? item.label : esc(item.label)}：<b>${item.value}</b>${item.unit ? ` ${esc(item.unit)}` : ''}</span>`).join('')
+        + `<span class="q-hint">小计按**命中行集**算（${view.matched.length} 行；不是本页 ${view.window.length} 行）`
+        + `，客户端已改的格子优先</span>`
         + `${editable ? `<span class="q-keys">Tab/Shift+Tab 左右走 · Enter/Shift+Enter 上下走 · Esc 还原这一格 · Ctrl/Cmd+Enter 提交</span>`
           : '<span class="q-keys">这一组勾选只影响看到的列（关键列固定不参与勾选）</span>'}`
         + `</div>`
       : ''
     const wideTable = columns.length > 6 || columns.some((column) => column.pin)
-    return html([cmpBar, `<div class="q-scroll${columns.some((column) => column.pin) ? ' q-scroll-wide' : ''}">`
+    return html([qbar, cmpBar, `<div class="q-scroll${columns.some((column) => column.pin) ? ' q-scroll-wide' : ''}">`
       + `<table class="q-table${wideTable ? ' q-wide' : ''}" data-panel-table="${attr(panel.id)}">`
-      + `<caption class="q-caption">${esc(panel.title)}</caption>`
+      + `<caption class="q-caption">${esc(panel.title)}` + `（本页 ${view.window.length} / 共 ${view.total} 行`
+      + `${view.active ? `，命中 ${view.matched.length}` : ''}）</caption>`
       + `<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`,
       controls ? `<div class="q-actions">${controls}</div>` : '', totalBar])
   }
@@ -647,7 +1282,20 @@
         reason: current === '' ? (data.reason || 'no-items') : `bucket=${current}`,
         next_action: data.next_action || (current === '' ? '' : '点筛选片上的「全部」看所有条目') })
     }
-    return bar + `<ul class="q-list">${items.map((item) => {
+    // 长列表同样**窗口化渲染 + 关键字搜索**（工作台的待办可能上百条：一次全渲染会把首屏拖慢，
+    // 而且翻不到"还有没有别的"）。计数与表一样在**全量/命中集**上算，本页只代表窗口。
+    const columns = (data.columns || []).concat(data.columns ? [] : [{ key: 'title', label: '标题' },
+      { key: 'body', label: '详情' }, { key: 'next_action', label: '下一步' }])
+    const q = queryOf(panel.id)
+    const view = queryView(panel.id, columns, items, q, (row, index) => String(row.id ?? index))
+    const qbar = queryBar(panel.id, columns, view, items) + activeFilterChips(panel.id, view)
+    if (!view.matched.length) {
+      return bar + qbar + `<div class="q-state info" data-state="empty" data-state-reason="filtered-out">`
+        + `<b>筛选后 0 条（不是这块没有条目）</b> <code>filtered-out</code>`
+        + `<div class="q-hint">这一桶本来有 ${view.total} 条：${esc(querySummary(view.q))} 把它们全滤掉了。</div>`
+        + `<div class="q-actions"><button class="primary" data-q-clear="${attr(panel.id)}">清空查询</button></div></div>`
+    }
+    const listBody = view.window.map((item) => {
       const action = item.action ? actionOf(item.action) : null
       const href = refLink(item.ref)
       return `<li data-level="${attr(item.level || 'info')}"${item.bucket ? ` data-bucket="${attr(item.bucket)}"` : ''}>`
@@ -662,7 +1310,8 @@
           ? `<a class="q-deeplink" href="${attr(href)}" data-open-object="1" data-k="${attr(item.ref.kind)}"`
             + ` data-id="${attr(item.ref.id)}">打开 ${esc(refLabel(item.ref))} →</a>` : ''}</div>` : ''}`
         + `${item.next_action ? `<div class="q-hint">下一步：<code>${esc(item.next_action)}</code></div>` : ''}</li>`
-    }).join('')}</ul>`
+    }).join('')
+    return bar + qbar + `<ul class="q-list">${listBody}</ul>`
   }
 
   function renderData(panel, data) {
@@ -681,7 +1330,15 @@
    * 机制不认识"附件"这个业务概念：上传地址、删除动作、可见性选项都由插件在 `data` 里声明。
    */
   function renderFiles(panel, data) {
-    const rows = data.files || []
+    const allFiles = data.files || []
+    // 附件同样**可搜 + 窗口化渲染**（一个对象上挂几百个回签件/质检报告时，一次全渲染既慢又找不到）。
+    const fileColumns = [{ key: 'name', label: '文件名' }, { key: 'uploader', label: '上传人' },
+      { key: 'at', label: '时间' }, { key: 'sha256', label: 'sha256', filter: 'text' },
+      { key: 'visibility_label', label: '给谁看', filter: 'enum' }, { key: 'bytes', label: '大小', filter: 'number' }]
+    const q = queryOf(panel.id)
+    const view = queryView(panel.id, fileColumns, allFiles, q, (row, index) => String(row.id ?? index))
+    const rows = view.window
+    const qbar = allFiles.length > 0 ? queryBar(panel.id, fileColumns, view, allFiles) + activeFilterChips(panel.id, view) : ''
     const upload = data.upload || null
     const rowAction = (Array.isArray(data.row_actions) ? data.row_actions : []).find((id) => actionOf(id))
     const visSelect = (upload && upload.visibility && (upload.visibility.options || []).length)
@@ -724,21 +1381,35 @@
           : `<a class="q-deeplink" href="${attr(row.url)}" download="${attr(row.name)}">下载</a>` +
             `${rowRowDelete(row, rowAction)}`}</td></tr>`
     }).join('') : ''
+    const live = view.matched.filter((row) => row.deleted !== true).length
+    const dead = view.matched.length - live
+    const fileCounts = `<div class="q-qcount" data-q-count="${attr(panel.id)}"`
+      + ` data-count-total="${attr(view.total)}" data-count-matched="${attr(view.matched.length)}"`
+      + ` data-count-window="${attr(view.window.length)}" data-page="${attr(view.page + 1)}"`
+      + ` data-pages="${attr(view.pages)}"><span>共 <b>${view.total}</b> 个文件记录</span>`
+      + `<span>命中 <b>${view.matched.length}</b>（活的 ${live}`
+      + `${dead ? `，已删留痕 ${dead}` : ''}）</span>`
+      + `<span>第 ${view.page + 1}/${view.pages} 页（本页 ${view.window.length} 行）</span></div>`
     const table = rows.length
       ? `<div class="q-scroll"><table class="q-table q-files-table" data-panel-table="${attr(panel.id)}">` +
-        `<caption class="q-caption">${esc(panel.title)}（${rows.filter((row) => !row.deleted).length} 个活的` +
-        `${rows.some((row) => row.deleted) ? `，${rows.filter((row) => row.deleted).length} 个已删（留痕）` : ''}）` +
+        `<caption class="q-caption">${esc(panel.title)}（本页 ${rows.length} / 共 ${view.total} 个文件记录` +
+        `${view.active ? `，命中 ${view.matched.length}` : ''}）` +
         `</caption>${head}<tbody>${body}</tbody></table></div>`
-      : stateBlock({ kind: 'empty', title: '这个对象上还没有附件（不是坏了）', reason: 'no-attachments',
-        hint: '现实采购里这一步是硬需求：技术规格、质检报告、回签的 PO 都挂在这里。',
-        next_action: data.next_action || '把文件拖到上面的方块里，或点「选择文件」' })
+      : (allFiles.length
+        ? `<div class="q-state info" data-state="empty" data-state-reason="filtered-out">`
+          + `<b>筛选后 0 个附件（不是没有附件）</b> <code>filtered-out</code>`
+          + `<div class="q-hint">这个对象上本来挂着 ${view.total} 个：${esc(querySummary(view.q))} 把它们全滤掉了。</div>`
+          + `<div class="q-actions"><button class="primary" data-q-clear="${attr(panel.id)}">清空查询</button></div></div>`
+        : stateBlock({ kind: 'empty', title: '这个对象上还没有附件（不是坏了）', reason: 'no-attachments',
+          hint: '现实采购里这一步是硬需求：技术规格、质检报告、回签的 PO 都挂在这里。',
+          next_action: data.next_action || '把文件拖到上面的方块里，或点「选择文件」' }))
     const countsBar = data.counts
       ? `<p class="q-hint" data-file-counts="1">活的 ${esc(data.counts.live ?? 0)} · 本侧上传 ${esc(data.counts.mine ?? 0)}` +
         ` · 已删（留痕）${esc(data.counts.deleted ?? 0)}` +
         `${data.counts.visible_ids !== undefined ? ` · 本侧可见的同类对象 ${esc(data.counts.visible_ids)} 个` : ''}` +
         `${data.visibility_rule ? ` · ${esc(data.visibility_rule)}` : ''}</p>`
       : ''
-    return html([zone, table, countsBar])
+    return html([zone, qbar, fileCounts, table, countsBar])
   }
 
   /** 一行的删除入口（做成"打开那个动作"的按钮：行内动作与表格同一套机制，不懂业务）。
@@ -1029,6 +1700,9 @@
     el('q-view').innerHTML = html([
       `<div class="q-viewhead"><nav class="q-crumbs" aria-label="面包屑">${crumbs}</nav>`
       + `<button class="q-link" data-copy="${attr(linkOf(route.view, route.kind, route.id))}">复制这条深链</button>`
+      // **分享**（机制贡献 `share.object`）：深链 + 对方需要什么身份/侧 + 可直接粘贴的邮件正文
+      + `${actionOf('share.object') ? `<button class="q-link" data-share-object="1" title="把这条对象整理成`
+        + `「链接 + 对方需要什么身份/侧 + 邮件正文」，直接发给同事">分享（含邮件正文）</button>` : ''}`
       + `<button class="q-link" data-tab-pin="1" title="把这条对象地址固定成一个标签页，方便来回切">钉成标签页</button></div>`,
       head,
       toolbarHtml([...objectActions(), ...objectRouteActions()], `${route.view}/${route.kind}`),
@@ -1070,10 +1744,49 @@
     loadBlocks()
   }
 
+  /**
+   * **加载态**（③）：导航/重载一进来先显示它 —— 上一页的行**已经被清掉**，屏幕上不留旧数据；
+   * 读失败会走 `renderErrorPage`（错误态），**不会**变成"空白/没有数据"。
+   */
+  function renderLoadingPage() {
+    const route = state.route
+    el('q-view').innerHTML = html([
+      `<div class="q-viewhead"><h1>${esc(route.kind && route.id ? `${route.kind} ${route.id}`
+        : viewTitle(route.view))}</h1><p>读取中…（已把上一页清掉：屏幕上不留旧数据）</p></div>`,
+      stateBlock({ kind: 'loading', title: '正在读取这一页', reason: 'loading',
+        hint: '读面板数据 / 通知 / 状态；读不到会如实报错（带 code 与下一步），不会显示成"空"。' }),
+      `<div class="q-panels" aria-hidden="true">${Array.from({ length: 3 }, () =>
+        `<section class="q-panel q-skel"><div class="q-skel-line"></div><div class="q-skel-line short"></div>`
+        + `<div class="q-skel-line"></div></section>`).join('')}</div>`])
+  }
+
+  /** **错误态**（③）："没读到"必须自成一种样子 —— 绝不伪装成空列表，也给出可复制的下一步。 */
+  function renderErrorPage(error) {
+    const route = state.route
+    el('q-view').innerHTML = html([
+      `<div class="q-viewhead"><h1>${esc(route.kind && route.id ? `${route.kind} ${route.id}`
+        : viewTitle(route.view))}</h1><p>这一页没读到</p></div>`,
+      stateBlock({ kind: 'error', title: '这一页没读到（不是"没有数据"）',
+        reason: error.code || 'read-failed', hint: error.reason || '',
+        next_action: error.next_action || '点「重新读一次」；还是失败就看服务日志（./run logs）' }),
+      `<div class="q-actions"><button class="primary" data-reload-page="1">重新读一次</button>`
+      + `<button data-copy="${attr(linkOf(route.view, route.kind, route.id))}">复制这个地址</button></div>`])
+  }
+
   function renderMain() {
-    if (state.route.kind && state.route.id) renderObjectPage()
+    const t0 = performance.now()
+    // 主区只有这四条路：读中 / 读不到 / 对象页 / 视图页（互不冒充 —— 见 stateBlock 的口径）
+    if (state.loading) renderLoadingPage()
+    else if (state.panelsError || state.objectError) renderErrorPage(state.panelsError || state.objectError)
+    else if (state.route.kind && state.route.id) renderObjectPage()
     else renderViewPage()
     renderStatus()
+    bindQueryDelegates()
+    const entry = metricOf(t0)
+    // `frame_ms` = 到**下一帧画完**（含样式/布局/绘制）：与 `paint_ms` 一起给出同一口径的前后对照
+    if (entry) requestAnimationFrame(() => requestAnimationFrame(() => {
+      entry.frame_ms = Math.round((performance.now() - t0) * 10) / 10
+    }))
   }
 
   /**
@@ -1093,8 +1806,7 @@
   window.addEventListener('resize', () => markScrollables(document))
 
   /** ② 面板层交互：拖拽排序、折叠、布局按钮、钉标签页。 */
-  function bindPanels() {
-    const root = el('q-view')
+  function bindPanels(root = el('q-view')) {
     markScrollables(document)      // 顶栏/标签页/动作条同样是横向滚动容器：一样要给出提示
     root.querySelectorAll('[data-collapse]').forEach((node) => node.addEventListener('click', () =>
       toggleCollapse(node.dataset.collapse)))
@@ -1243,8 +1955,128 @@
       (item.formats || []).map((format) => `<button data-action="${attr(item.action)}"` +
         ` data-preset='${attr(JSON.stringify({ format }))}' title="${attr(item.hint || '')}">` +
         `${format === 'html' ? '打印 / HTML' : `导出 ${format.toUpperCase()}`}</button>`).join('') +
+      // **导出模板可配**（机制）：声明了 `columns` 的导出多一个「列…」入口 —— 列选择是**个人偏好**
+      //（按身份落 0600 ⇒ 换浏览器/换设备仍是这套列），外壳只按它过滤列，不生成内容。
+      `${(item.columns || []).length ? `<button data-export-columns="${attr(item.id)}"` +
+        ` title="挑这份导出要哪些列（你的个人偏好，按身份存服务端；换浏览器仍在）">` +
+        `列（${exportSelectionText(item)}）</button>` : ''}` +
       `</span>`).join('') +
-      `<span class="q-hint">导出内容由注册它的插件生成（与账面同源、逐行可对）；HTML 可直接打印</span></div>`
+      `<span class="q-hint">导出内容由注册它的插件生成（与账面同源、逐行可对）；HTML 可直接打印；`
+      + `带「列…」的导出可以按你自己的偏好挑列</span></div>`
+  }
+  /** 你对这份导出保存过的列选择（真源：面板声明的 `export_prefs`，或一次**只读**动作调用）。 */
+  function exportPrefOf(reportId) {
+    if (state.exportPrefs && state.exportPrefs[reportId]) return state.exportPrefs[reportId]
+    for (const panel of state.panels) {
+      const prefs = (panel.data || {}).export_prefs
+      if (prefs && typeof prefs === 'object' && prefs[reportId]) return prefs[reportId]
+    }
+    return null
+  }
+  /**
+   * 把"我这一套列选择"读回来（机制）：面板有那块 `export_prefs` 就直接用；没有（例如在**对象页**上，
+   * 那块面板按对象类过滤掉了）就问服务端一次 —— `export.columns` 的**只读模式**（`report_id` 留空）。
+   * 于是「列…」按钮上的 `N/M` 与勾选状态在任何页面上都对；换浏览器也一样（0600 按身份）。
+   */
+  async function hydrateExportPrefs() {
+    const reports = (state.surface.reports || []).filter((item) => (item.columns || []).length)
+    if (!reports.length) return false
+    const fromPanels = {}
+    for (const panel of state.panels) {
+      const prefs = (panel.data || {}).export_prefs
+      if (prefs && typeof prefs === 'object') Object.assign(fromPanels, prefs)
+    }
+    state.exportPrefs = fromPanels
+    if (Object.keys(fromPanels).length) return false
+    const action = actionOf('export.columns')
+    if (!action) return false
+    const out = await postJson(`/api/action/${encodeURIComponent(action.id)}`,
+      { view: state.route.view, route: state.route, input: { report_id: '' } })
+    const all = out.result?.export_prefs_all
+    if (!out.ok || !Array.isArray(all)) return false
+    state.exportPrefs = Object.fromEntries(all.map((item) => [item.report_id, item]))
+    return true
+  }
+  const exportSelectionText = (report) => {
+    const saved = exportPrefOf(report.id)
+    const total = (report.columns || []).length
+    return saved ? `${(saved.columns || []).length}/${total} 你选的` : `全部 ${total} 列`
+  }
+  /**
+   * **列选择弹层**（机制）：勾掉不要的列 ⇒ POST 机制动作 `export.columns`（按会话身份落 0600）。
+   * 这里不做任何内容生成：勾选结果只决定"导出时用哪几列"，内容仍由插件自己的动作生成。
+   */
+  function openColumnsPicker(reportId) {
+    const report = (state.surface.reports || []).find((item) => item.id === reportId) || null
+    if (!report) return toast('bad', '没有这份导出', `注册面里没有 ${reportId}（刷新页面看当前的导出声明）`)
+    const columns = report.columns || []
+    const saved = exportPrefOf(reportId)
+    const picked = new Set(saved ? saved.columns : columns.map((column) => column.key))
+    const action = actionOf('export.columns')
+    const draw = () => {
+      const holder = el('q-modal')?.querySelector('[data-cols-form]')
+      if (!holder) return
+      holder.innerHTML = columns.map((column) => `<label class="q-col-pick"><input type="checkbox"` +
+        ` data-col="${attr(column.key)}"${picked.has(column.key) ? ' checked' : ''}> ` +
+        `<span>${esc(column.label)}</span> <code>${esc(column.key)}</code></label>`).join('')
+      holder.querySelectorAll('[data-col]').forEach((node) => node.addEventListener('change', () => {
+        if (node.checked) picked.add(node.dataset.col); else picked.delete(node.dataset.col)
+        const count = el('q-modal')?.querySelector('[data-cols-count]')
+        if (count) count.textContent = String(picked.size)
+      }))
+    }
+    openModal(html([
+      `<h2 id="q-action-title">导出列选择：${esc(report.title)}</h2>`,
+      `<p class="q-src">导出 <code>${esc(report.id)}</code> · 由 <code>${esc(report.plugin_id)}</code> 声明 `
+      + `（${report.formats.join(' / ')}）· 内容仍由 <code>${esc(report.action)}</code> 从它自己那一侧的事实生成</p>`,
+      '<div class="q-modal-body">',
+      `<p class="q-hint">勾掉不要的列 ⇒ 这份导出以后只出你选的列（列顺序按声明的顺序，不跟手抖跑）。`
+      + `选择是<b>你的个人偏好</b>：按会话身份落服务端 0600 文件 —— <b>换浏览器、换设备仍是这套列</b>；`
+      + `${saved ? `你上次保存于 <code>${esc(saved.saved_at || '')}</code>` : '你还没保存过（现在是全部列）'}。`
+      + `列选择<b>不进账本</b>：它不是业务事实。</p>`,
+      `<div class="q-col-picks" data-cols-form="1"></div>`,
+      `<div class="q-actions"><span class="q-hint">已选 <b data-cols-count="1">${picked.size}</b> / ${columns.length} 列</span>`,
+      `<button class="primary" data-cols-save="1">保存我的列选择</button>`,
+      `<button data-cols-all="1">全选</button>`,
+      `<button data-cols-none="1">全不选</button>`,
+      `${saved ? `<button data-cols-reset="1">用全部列（清掉我的选择）</button>` : ''}`,
+      `<button data-close="1">取消</button></div>`,
+      `<p class="q-hint">保存后再导出：预览里会写明"用了哪几列、跳过了哪几列"，逐列可核对；`
+      + `一个都没选中时不会导出（服务端会**如实拒**，不偷偷导全表）。</p>`,
+      '</div>']), 'q-export-columns')
+    draw()
+    const modal = el('q-modal')
+    if (!modal) return
+    modal.querySelector('[data-close]')?.addEventListener('click', closeModal)
+    modal.querySelector('[data-cols-all]')?.addEventListener('click', () => {
+      for (const column of columns) picked.add(column.key)
+      draw()
+      const count = modal.querySelector('[data-cols-count]')
+      if (count) count.textContent = String(picked.size)
+    })
+    modal.querySelector('[data-cols-none]')?.addEventListener('click', () => {
+      picked.clear(); draw()
+      const count = modal.querySelector('[data-cols-count]')
+      if (count) count.textContent = '0'
+    })
+    const save = async (input, done) => {
+      if (!action) return toast('bad', '这个界面上没有列选择动作', '外壳没装上 export.columns（重新加载页面）')
+      const out = await postJson(`/api/action/${encodeURIComponent(action.id)}`,
+        { view: state.route.view, route: state.route, input })
+      notifyAction(out, action)
+      if (!out.ok) return toast('bad', `列选择没保存（${out.code || 'refused'}）`, out.reason || '')
+      await loadAll(true)
+      closeModal()
+      done(out)
+      if (out.result?.export_prefs) {
+        toast('ok', `列选择已保存（${(out.result.export_prefs.columns || []).length} 列）`,
+          `按你的身份存在服务端（0600）：${out.result.export_prefs.file || ''} —— 换浏览器/换设备仍是这套列`)
+      }
+    }
+    modal.querySelector('[data-cols-save]')?.addEventListener('click', () => save(
+      { report_id: reportId, columns: [...picked].join(' ') }, () => {}))
+    modal.querySelector('[data-cols-reset]')?.addEventListener('click', () => save(
+      { report_id: reportId, reset: true }, () => {}))
   }
   /** 打印：把导出的 HTML 放进一个隐藏 iframe 里打印（不打印界面本身；弹窗被拦也能用下载的那份）。 */
   function printExport(htmlText) {
@@ -1261,6 +2093,9 @@
   /** 导出预览 + 打印（一屏内完成：看得见内容、点得到打印、也能再下载一次）。 */
   function exportPreview(exp, action) {
     const rows = exp.rows === undefined || exp.rows === null ? '' : `${exp.rows} 行`
+    const used = Array.isArray(exp.columns_used) && exp.columns_used.length
+      ? `本次列（${exp.columns_used.length}）：${exp.columns_used.map((column) => column.label).join(' · ')}`
+      : ''
     openModal(html([
       `<h2 id="q-action-title">导出：${esc(exp.filename || '')}</h2>`,
       `<p class="q-src">由 <code>${esc(action ? action.plugin_id : '')}</code> 的 <code>${
@@ -1268,12 +2103,28 @@
       `${rows ? ` · ${esc(rows)}` : ''}${exp.digest ? ` · 内容指纹 <code>${esc(String(exp.digest).slice(0, 19))}…</code>` : ''}`,
       ` · 与账面同源（导出用的就是这一侧账本里的行）</p>`,
       `<div class="q-export-holder" data-export-holder="1"></div>`,
+      used || exp.columns_pref || exp.columns_note
+        ? `<div class="q-hint q-export-columns" data-export-columns-note="1">`
+          + `${exp.columns_pref ? `<b>列选择来自你的个人偏好</b>（report <code>${esc(exp.columns_pref.report_id)}</code>`
+            + `${exp.columns_pref.saved_at ? `，保存于 ${esc(exp.columns_pref.saved_at)}` : ''}`
+            + `，${esc(exp.columns_pref.source || '')}）：这是"跨浏览器仍在"的那一份` : ''}`
+          + `${used ? `<div>${esc(used)}</div>` : ''}`
+          + `${(exp.columns_dropped || []).length ? `<div>按你的选择跳过：${
+            esc((exp.columns_dropped || []).map((column) => column.label).join(' · '))}</div>` : ''}`
+          + `${exp.columns_note ? `<div>${esc(exp.columns_note)}</div>` : ''}`
+          + `${(exp.columns_available || []).length && exp.columns_pref ? `<button data-export-columns="${
+            attr(exp.columns_pref.report_id)}">改用别的列…</button>` : ''}</div>`
+        : '',
       `<div class="q-actions"><button class="primary" data-print="1">打印</button>`,
       `<button data-download="1">下载这份文件</button><button data-close="1">关闭</button></div>`,
       `<p class="q-hint">打印走浏览器自己的打印对话框（可以"另存为 PDF"）；下载得到的是同内容的一份文件。</p>`]),
     'q-export-modal')
     const modal = el('q-modal')
     if (!modal) return
+    modal.querySelectorAll('[data-export-columns]').forEach((node) => node.addEventListener('click', () => {
+      closeModal()
+      openColumnsPicker(node.dataset.exportColumns)
+    }))
     const holder = modal.querySelector('[data-export-holder]')
     if (holder) {
       if ((exp.format || '') === 'html') {
@@ -1321,17 +2172,21 @@
     return true
   }
 
-  function bindInteractions() {
-    const root = el('q-view')
+  function bindInteractions(root = el('q-view')) {
+    const panelOf = (node) => {
+      const section = node.closest('[data-panel]')
+      const id = section?.dataset?.panel
+      return (id && state.panels.find((item) => item.id === id)) || null
+    }
     root.querySelectorAll('[data-action]').forEach((node) => node.addEventListener('click', () => {
       let preset = {}
       try { preset = JSON.parse(node.dataset.preset || '{}') } catch (err) { preset = {} }
-      openAction(node.dataset.action, preset)
+      openAction(node.dataset.action, preset, null, { panel: panelOf(node) })
     }))
     root.querySelectorAll('[data-row-action]').forEach((node) => node.addEventListener('click', () => {
       let row = {}
       try { row = JSON.parse(node.dataset.row) } catch (err) { row = {} }
-      openAction(node.dataset.rowAction, row)
+      openAction(node.dataset.rowAction, row, null, { panel: panelOf(node) })
     }))
     root.querySelectorAll('[data-open-object]').forEach((node) => node.addEventListener('click', (ev) => {
       if (ev.metaKey || ev.ctrlKey) return
@@ -1340,6 +2195,11 @@
     }))
     root.querySelectorAll('[data-copy]').forEach((node) =>
       node.addEventListener('click', () => copyText(node.dataset.copy)))
+    root.querySelectorAll('[data-share-object]').forEach((node) => node.addEventListener('click', () =>
+      openAction('share.object', { kind: state.route.kind, id: state.route.id })))
+    // **导出模板可配**（机制）：声明了 `columns` 的导出多一个「列…」入口
+    root.querySelectorAll('[data-export-columns]').forEach((node) =>
+      node.addEventListener('click', () => openColumnsPicker(node.dataset.exportColumns)))
     root.querySelectorAll('[data-open="palette"]').forEach((node) => node.addEventListener('click', openPalette))
     // 桶筛选片（「我的 / 我指派的 / 全部」）：只改"看到哪些"，不改任何事实；选择存本浏览器
     root.querySelectorAll('[data-bucket-filter]').forEach((node) => {
@@ -1454,8 +2314,11 @@
     }))
     root.querySelectorAll('[data-bulk]').forEach((node) => node.addEventListener('click', () => {
       const holder = node.closest('[data-panel]') || root
-      // 只取**本表**勾上的行（跨表面板串选会把别的表的 id 一起发出去）
-      const ids = [...holder.querySelectorAll('[data-select]:checked')].map((box) => box.dataset.select)
+      // 只取**本表**勾上的行（跨表面板串选会把别的表的 id 一起发出去）+ **本面板**的跨页选择
+      // （「选中全部命中行」把不在本页的行也选中了：分页后批量必须覆盖全部命中，不是只有这一页）
+      const panelId = holder.dataset?.panel || ''
+      const domIds = [...holder.querySelectorAll('[data-select]:checked')].map((box) => box.dataset.select)
+      const ids = [...new Set([...domIds, ...selectedAllOf(panelId)])]
       // 已经改了单元格但没勾行 ⇒ 直接提交这些改动（不逼用户先勾一遍；改了东西却只收到"没有选中"是最气人的）
       if (!ids.length && Object.keys(state.edits).length) {
         return submitEdits(holder)
@@ -1465,7 +2328,8 @@
           '勾选表格左侧的复选框（或点表头全选），或者直接改单元格再点这个按钮')
       }
       const rows = ids.map((id) => (state.selectedRows || {})[id] || { id })
-      openAction(node.dataset.bulk, { ids, rows: rows.filter(Boolean) })
+      const panel = state.panels.find((item) => item.id === holder.dataset?.panel) || null
+      openAction(node.dataset.bulk, { ids, rows: rows.filter(Boolean) }, null, { panel })
     }))
     root.querySelectorAll('tr[data-row-key]').forEach((node) => node.addEventListener('contextmenu', (ev) => {
       const actions = state.surface.actions.filter((action) => action.context_menu
@@ -1480,10 +2344,13 @@
     }))
   }
   function updateSelectedCount() {
-    // 计数按**本表里真的勾上的**算（不是全局 state：全局计数在跨表时会把别的表的勾选也算进来）
+    // 计数按**本表里真的勾上的**算（不是全局 state：全局计数在跨表时会把别的表的勾选也算进来）；
+    // 跨页选择（「选中全部命中行」）单独标出来 —— 否则用户以为只选了本页那几行。
     document.querySelectorAll('[data-selected-count]').forEach((node) => {
       const scope = node.closest('[data-panel]') || document
-      node.textContent = String(scope.querySelectorAll('[data-select]:checked').length)
+      const dom = scope.querySelectorAll('[data-select]:checked').length
+      const extra = selectedAllOf(scope.dataset?.panel || '').length
+      node.textContent = extra > dom ? `${dom}（含跨页共 ${extra}）` : String(dom)
     })
   }
   // ---------------------------------------------------------------- ③ 编辑区：取值 / 键盘流转 / 实时小计
@@ -1494,7 +2361,13 @@
     .filter(([key, fields]) => key.startsWith(`${panelId}|`) && Object.keys(fields).length > 0)
     .map(([key, fields]) => {
       const id = key.slice(panelId.length + 1)
-      return { id, item_id: id, ...fields }
+      const panel = state.panels.find((item) => item.id === panelId)
+      const firstKey = panel?.data?.columns?.[0]?.key
+      // **原行也要带上**：插件在行里声明的 `version`（"你看到的那一版"）得跟着这次提交回去；
+      // 改过的格覆盖原值（`...fields` 在后）——机制只搬运，不解读任何字段。
+      const original = (panel?.data?.rows || []).find((row, index) =>
+        String(row.id ?? row[firstKey] ?? index) === id) || {}
+      return { ...original, ...fields, id, item_id: id }
     })
   /**
    * **实时重算**（不提交、不问服务端）：① 每行的行合计（列声明 `line_total_of`）
@@ -1521,6 +2394,8 @@
     const valueOf = (rowKey, field) => {
       const typed = dom.get(rowKey)?.[field]
       if (typed !== undefined) return typed
+      const typedAnywhere = (state.edits[`${panelId}|${rowKey}`] || {})[field]
+      if (typedAnywhere !== undefined) return typedAnywhere
       return original.get(rowKey)?.[field]
     }
     panelNode.querySelectorAll('[data-linetotal]').forEach((node) => {
@@ -1529,9 +2404,12 @@
       const factor = valueOf(rowKey, node.dataset.factor) ?? ''
       node.textContent = `×${factor === '' ? '—' : factor} = ${numOf(base) * numOf(factor)}`
     })
-    const keys = [...dom.keys()]
-    const live = totalsOf(panel?.data ?? {}, keys.map((key) => original.get(key) ?? {}),
-      (row, index) => keys[index], valueOf)
+    // **小计按命中行集算**（与首屏渲染同一口径）：分页后本页只有几十行，若按 DOM 算，
+    // 合计会随翻页变小 —— 那是错的数字。命中行集来自面板视图缓存（全量→筛选后的那批）。
+    const view = panelViews[panelId]
+    const rowsForTotals = view ? view.matched : [...dom.keys()].map((key) => original.get(key) ?? {})
+    const keyOfRow = view ? (row) => view.rowKeyOf(row) : (row, index) => String(row.id ?? index)
+    const live = totalsOf(panel?.data ?? {}, rowsForTotals, keyOfRow, valueOf)
     panelNode.querySelectorAll('[data-total]').forEach((node, index) => {
       const rule = live[index]
       const holder = node.querySelector('b')
@@ -1584,7 +2462,7 @@
     }
     if (!actionId) return toast('bad', '这个面板没有声明可编辑动作', '可编辑表格要在 data.editable_action 里声明动作 id')
     openAction(actionId, { rows, ...defaults, unit_price_cents: rows[0].unit_price_cents,
-      lead_time_days: rows[0].lead_time_days })
+      lead_time_days: rows[0].lead_time_days }, null, { panel })
   }
 
   function openContextMenu(x, y, actions, rowOf) {
@@ -1616,6 +2494,54 @@
   // ---------------------------------------------------------------- 动作表单（客户端校验 + 界内确认）
   const actionOf = (id) => state.surface.actions.find((action) => action.id === id) || null
 
+  // ---------------------------------------------------------------- 乐观并发：把"你看到的那一版"填进表单
+  /**
+   * **机制**：动手保存前，界面要把"你打开这一页时看到的对象版本"带回服务端（否则服务端只能按
+   * 安全默认判 —— 会覆盖别人的改动就拒）。版本由插件声明（`panel.data.version` / 行的 `version` /
+   * 对象页页头的 `version`），面板可以再用 `version_for:'<动作 id>'` 说明"这一版是给哪个动作用的"。
+   * 取值顺序（都有出处，不猜）：
+   *   ① 打开这个动作时明确给的预填值（`editable_defaults` / 行里那个字段）
+   *   ② 行的 `version`（行内动作 / 批量 / 右键菜单）
+   *   ③ 打开它的那块面板的 `data.version`（可编辑表格"提交编辑"这一路）
+   *   ④ 页面上声明 `version_for` 命中这个动作的面板
+   *   ⑤ 对象页页头的 `version`
+   * 一个都取不到 ⇒ 空串（服务端按安全默认判：**会覆盖别人的改动就拒**）。
+   */
+  const fingerprintOfVersion = (version) => {
+    if (!version) return ''
+    if (typeof version === 'string') return version.trim()
+    if (typeof version !== 'object') return ''
+    const hash = String(version.fingerprint ?? '').trim()
+    if (hash !== '') return hash
+    return version.rev === undefined || version.rev === null ? '' : `rev:${version.rev}`
+  }
+  const versionFieldOf = (action) => (action.input?.fields || []).find((field) => field.version_field === true) || null
+  function versionPreset(action, { preset = {}, panel = null, fresh = false } = {}) {
+    const field = versionFieldOf(action)
+    if (!field) return { preset: {}, note: null }
+    const fromPanel = (item) => (item?.data?.version_for === action.id || item?.id === panel?.id
+      ? fingerprintOfVersion(item?.data?.version) : '')
+    const candidates = fresh
+      ? [fingerprintOfVersion(panel?.data?.version), fromPanel(panel), fingerprintOfVersion(preset.version),
+        ...state.panels.map(fromPanel), fingerprintOfVersion(state.object?.version)]
+      : [preset[field.name], fingerprintOfVersion(preset.version), fingerprintOfVersion(panel?.data?.version),
+        ...state.panels.map(fromPanel), fingerprintOfVersion(state.object?.version)]
+    const value = candidates.find((item) => typeof item === 'string' && item.trim() !== '') ?? ''
+    // 版本的人话说明（有 `rev/at/by` 就说出来；只有指纹就把指纹摆出来）——界面不编，只搬运
+    const sources = [preset.version, panel?.data?.version, ...state.panels.map((item) => item.data?.version),
+      state.object?.version].filter((item) => item && typeof item === 'object')
+    const found = sources.find((item) => fingerprintOfVersion(item) === value) ?? null
+    const note = value === ''
+      ? '这一次**没有带上版本**（这一页没有声明"你看到的那一版"）：服务端按安全默认判 ——'
+        + '内容与现在一样就放行，**会覆盖别人的改动就拒**'
+      : `你带上的版本：${found
+        ? `rev ${esc(String(found.rev ?? '?'))}${found.by ? ` · ${esc(String(found.by))}` : ''}`
+          + `${found.at ? ` @ ${esc(String(found.at).slice(0, 19))}` : ''}`
+        : '（只有指纹）'} ｜ \`${esc(String(value).slice(0, 23))}…\` —— `
+        + '别人在你打开这一页之后先保存过，这次保存就会被明确拒绝并给出差异'
+    return { preset: { [field.name]: value }, note }
+  }
+
   function fieldHtml(field, value) {
     const v = value === undefined || value === null ? (field.default ?? '') : value
     const fromSession = (field.identity === true || field.type === 'signature')
@@ -1623,6 +2549,13 @@
     const help = field.help || fromSession
       ? `<span class="q-help">${esc(field.help || '')}${fromSession ? esc(fromSession) : ''}</span>` : ''
     const id = `f-${field.name}`
+    // **只读字段**（机制/插件自己带上的值：如乐观并发的 `expected_version`）：看得见、发得出、不必手抄。
+    if (field.readonly === true) {
+      return `<div class="q-field q-field-readonly"><label for="${attr(id)}">${esc(field.label)}`
+        + `${field.required ? ' *' : ''} <span class="q-tag">只读</span></label>`
+        + `<input id="${attr(id)}" name="${attr(field.name)}" type="text" value="${attr(v)}" readonly`
+        + `${field.version_field ? ' data-version-field="1"' : ''}>${help}</div>`
+    }
     if (field.type === 'textarea') {
       return `<div class="q-field"><label for="${attr(id)}">${esc(field.label)}${field.required ? ' *' : ''}</label>`
         + `<textarea id="${attr(id)}" name="${attr(field.name)}" rows="4">${esc(v)}</textarea>${help}`
@@ -1699,7 +2632,7 @@
     return input
   }
 
-  function openAction(id, presets, priorResult) {
+  function openAction(id, presets, priorResult, options = {}) {
     const action = actionOf(id)
     if (!action) {
       return toast('bad', '动作不存在', `注册面里没有 ${id}（插件卸载后它的入口会消失：刷新页面看当前可用的动作）`)
@@ -1736,18 +2669,25 @@
         if (String(values[field.name] ?? '').trim() === '') values[field.name] = me.human
       }
     }
+    // **乐观并发**：把"你打开这一页时看到的那一版"填进只读字段（插件声明了 `version_field` 才有）
+    const versionInfo = versionPreset(action, { preset: values, panel: options.panel || null,
+      fresh: options.fresh === true })
+    Object.assign(values, versionInfo.preset)
     const body = html([
       `<h2 id="q-action-title">${esc(action.title)}</h2>`,
       `<p class="q-src">动作 <code>${esc(action.id)}</code> · 由 <code>${esc(action.plugin_id)}</code> 注册 · `
       + `权限 <code>${esc(action.permission)}</code>`
       + `${action.confirm?.required ? ' · 提交前会再确认一次' : ''}`
-      + `${action.object_kind ? ` · 作用于 <code>${esc(action.object_kind)}</code>` : ''}</p>`,
+      + `${action.object_kind ? ` · 作用于 <code>${esc(action.object_kind)}</code>` : ''}`
+      + `${action.concurrency ? ` · 受版本保护：<code>${esc(action.concurrency.object_class)}</code>`
+        + `（${esc(action.concurrency.label)}）` : ''}</p>`,
       '<div class="q-modal-body">',
       action.hint ? `<p class="q-hint">${esc(action.hint)}</p>` : '',
       action.permission === 'human-signature'
         ? `<p class="q-degraded">这一步是人工门：<code>signature</code> 里的署名会随请求送到插件自己的`
           + `服务端一半，再由 Python 侧唯一写者落账本（界面不是第二条事实写路径）。</p>` : '',
       fields.map((field) => fieldHtml(field, values[field.name])).join(''),
+      versionInfo.note ? `<p class="q-hint q-version-note" data-version-note="1">${versionInfo.note}</p>` : '',
       (action.input?.bulk && values.ids ? `<p class="q-hint">批量：${esc(values.ids.length)} 行</p>` : ''),
       (values.rows && values.rows.length ? `<p class="q-hint">这次提交会带上 <b>${values.rows.length}</b> 行`
         + `（表格里改过的行）：${values.rows.map((row) => `<code>${esc(row.item_id ?? row.id ?? '')}</code>`)
@@ -1776,17 +2716,24 @@
       if (out.ok) {
         // **导出/打印**（`result.export`）：落一份文件 + 打开预览（打印在预览里一键完成）
         const exported = out.result && out.result.export ? { ...out.result.export } : null
+        // **分享**（`result.share`）：深链 + "对方需要什么身份/侧" + 可粘贴的邮件正文
+        const shared = out.result && out.result.share ? out.result.share : null
         closeModal()
         await loadAll()
         if (exported) deliverExport({ result: { export: exported } }, action)
+        if (shared) return shareModal(shared, action)
         return
       }
       // 失败：**回到表单**（确认弹层已经不在 DOM 里了，把结果写进它等于丢掉）并逐字段标红
-      openAction(action.id, input, out)
+      openAction(action.id, input, out, { panel: options.panel || null })
       const back = el('q-modal')
       for (const error of (out.errors || []).filter((item) => item.field)) {
         const node = back?.querySelector(`[data-err="${error.field}"]`)
         if (node) node.textContent = `${error.code}：${error.message}`
+      }
+      // **乐观并发冲突**：第二条写的人看到的不是"失败了"四个字，而是"谁在何时把哪个字段改成了什么"
+      if (out.code === 'object-changed' && out.result?.conflict) {
+        wireConflict(back, action, input, out.result.conflict, options.panel || null)
       }
     }
     modal.querySelector('[data-run]').addEventListener('click', async () => {
@@ -1832,6 +2779,116 @@
     card.querySelector('[data-yes]').focus()
     card.querySelector('[data-back]').addEventListener('click', () => openAction(action.id, input))
     card.querySelector('[data-yes]').addEventListener('click', () => onYes())
+  }
+
+  /**
+   * **乐观并发的冲突视图**（机制）：第二条保存的人不该只看到"失败了"四个字 —— 他要看到
+   * **谁在何时把哪个字段改成了什么**（服务端给的差异，界面只渲染），并能**带上最新版本重做**。
+   * 三个出口：① 刷新看最新的（页面上的值换成别人改过的）② 带上最新版本重做（我填的还留着）
+   * ③ 放弃这次保存（什么都不写）。
+   */
+  function wireConflict(modal, action, input, conflict, panel) {
+    const host = modal?.querySelector('[data-result]')
+    if (!host) return
+    const table = (rows, head) => (rows.length
+      ? `<div class="q-scroll"><table class="q-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`
+      : '')
+    const sinceRows = (conflict.since || []).map((item) => `<tr><td><code>${esc(item.field)}</code></td>`
+      + `<td>${esc(item.from)}</td><td>${esc(item.to)}</td>`
+      + `<td>${esc(item.by || '（未记名）')}${item.at ? ` @ ${esc(String(item.at).slice(0, 19))}` : ''}</td>`
+      + `<td>rev ${esc(String(item.rev ?? ''))}</td></tr>`).join('')
+    const mineRows = (conflict.mine || []).map((item) => `<tr><td><code>${esc(item.field)}</code></td>`
+      + `<td>${esc(item.from)}</td><td>${esc(item.to)}</td></tr>`).join('')
+    host.innerHTML = html([
+      `<div class="q-conflict" data-conflict="1">`,
+      `<b>这次保存被拒：${esc(conflict.label || action.concurrency?.label || '这个对象')} 在你打开之后被别人改过</b>`,
+      `<div>现在是 <code>rev ${esc(String(conflict.current?.rev ?? '?'))}</code>`
+      + `${conflict.current?.by ? `，最后改动 <code>${esc(conflict.current.by)}</code>` : ''}`
+      + `${conflict.current?.at ? ` @ ${esc(String(conflict.current.at).slice(0, 19))}` : ''}`
+      + `${conflict.seen ? `；你手上那一版是 rev ${esc(String(conflict.seen.rev ?? '?'))}`
+        + `${conflict.seen.by ? `（${esc(conflict.seen.by)}）` : ''}` : '；这一次没有带上你看到的版本'}`
+      + `。<b>这一次什么都没写</b>（没有被覆盖，也没有静默吞掉）。</div>`,
+      table(sinceRows, '<th>字段</th><th>改前</th><th>改后</th><th>谁改的 / 何时</th><th>版本</th>'),
+      sinceRows ? '' : '<p class="q-hint">服务端没有留下"自你那一版以来的逐字段改动"'
+        + '（你的那一版已经不在它保留的改动历史里了）—— 下面是"现在是什么 vs 你要写什么"。</p>',
+      `<div class="q-hint">你要写进去的值 vs 现在对象里的值（${(conflict.mine || []).length} 处不同）：</div>`,
+      table(mineRows, '<th>字段</th><th>现在</th><th>你要写的</th>'),
+      `<div class="q-actions"><button class="primary" data-conflict-retry="1">带上最新版本重做（我填的留着）</button>`,
+      `<button data-conflict-refresh="1">刷新看最新的</button>`,
+      `<button data-conflict-dismiss="1">放弃这次保存</button></div>`,
+      `<p class="q-hint">重做 = 界面重新读一遍这一页的最新值，把最新版本带进表单，再执行一次；`
+      + '如果你想保留的是别人的那一版，就点「放弃这次保存」。</p>',
+      `</div>`])
+    const freshPanel = () => panel || null
+    host.querySelector('[data-conflict-refresh]')?.addEventListener('click', async () => {
+      await loadAll(true)
+      toast('ok', '已刷新', '页面上的值已经换成最新的（别人改过的地方就在表里）；'
+        + '要接着保存就点「带上最新版本重做」')
+    })
+    host.querySelector('[data-conflict-retry]')?.addEventListener('click', async () => {
+      const vfield = versionFieldOf(action)
+      const next = { ...input }
+      if (vfield) delete next[vfield.name]
+      delete next.confirm_ack          // 重做时再确认一次（上一次的确认对不上新版本）
+      const panel = freshPanel()
+      await loadAll(true)
+      openAction(action.id, next, null, { fresh: true, panel })
+      toast('ok', '带上最新版本重开表单', vfield
+        ? `版本字段 ${vfield.name} 已换成刚读到的那一版；你填的值都还在`
+        : '这一页没有版本字段：服务端会按"现在是什么 vs 你要写什么"判')
+    })
+    host.querySelector('[data-conflict-dismiss]')?.addEventListener('click', () => closeModal())
+  }
+
+  /** **分享弹层**（机制）：可复制的深链 + "对方需要什么身份/侧" + 可直接粘贴的邮件正文。 */
+  function shareModal(share, action) {
+    const abs = (path) => `${location.origin}${path}`
+    const link = abs(share.path || '')
+    const alt = (share.other_views || []).map((item) => `${item.title}（${item.view}）：${abs(item.path)}`).join('\n')
+    const email = share.email || {}
+    const body = (email.lines || []).join('\n').split(email.link_token || '{{LINK}}').join(link)
+      .split(email.alt_links_token || '{{ALT_LINKS}}').join(alt || '（没有别的视角）')
+    const subject = String(email.subject || '')
+    const requirementRows = (share.requirements || []).map((item) => `<tr>`
+      + `<td>${esc(item.key)}</td><td>${esc(item.value)}${item.ok === false ? ' ⚠' : ''}</td></tr>`).join('')
+    openModal(html([
+      `<h2 id="q-action-title">分享：${esc(share.title || `${share.kind} ${share.id}`)}</h2>`,
+      `<p class="q-src">对象 <code>${esc(share.kind)} ${esc(share.id)}</code> · 视角 `
+      + `<code>${esc(share.view)}</code>（${esc(share.view_title || share.view)}）· 由 `
+      + `<code>${esc(action ? action.plugin_id : '')}</code> 的 <code>share.object</code> 拼出来的`
+      + `（分享**不写账本、不落文件、不发邮件**）</p>`,
+      '<div class="q-modal-body">',
+      `${share.found === false ? `<p class="q-degraded">这条地址在**本视图里现在是未命中**`
+        + `（${esc(share.reason || 'object-not-found')}）：分享出去对方也看不到 —— 先修这条地址。</p>` : ''}`,
+      `<div class="q-field"><label>可复制的深链（贴到哪里都能打开）</label>`,
+      `<input type="text" value="${attr(link)}" readonly data-share-link="1">`,
+      `<span class="q-help">刷新不丢；<b>对方需要什么身份/侧才能看</b>见下表。`
+      + `打开时如果不在对方那一侧的投影里，页面会**如实未命中**（不会回落成"能看"）。</span></div>`,
+      `<div class="q-actions"><button class="primary" data-copy="${attr(link)}">复制深链</button>`,
+      `${(share.other_views || []).length ? (share.other_views || []).map((item) => `<button data-copy="${
+        attr(abs(item.path))}" title="同一个 id 在 ${attr(item.title)} 视角下的地址（对方那一侧更可能直接命中）">`
+        + `复制 ${esc(item.title)} 视角的链接</button>`).join('') : ''}</div>`,
+      `<dl class="q-kv">${(share.facts || []).map((fact) => `<dt>${esc(fact.key)}</dt><dd>${
+        fact.code ? `<code>${esc(fact.value)}</code>` : esc(fact.value)}</dd>`).join('')}</dl>`,
+      `<table class="q-table"><caption>对方需要什么才能看到（一条一条写清楚）</caption>`,
+      `<thead><tr><th>这一条</th><th>答案</th></tr></thead><tbody>${requirementRows}</tbody></table>`,
+      `<div class="q-field"><label>邮件主题</label>`,
+      `<input type="text" value="${attr(subject)}" readonly></div>`,
+      `<div class="q-field"><label>邮件正文（可直接粘贴到你的邮件客户端）</label>`,
+      `<textarea rows="12" readonly data-share-body="1">${esc(body)}</textarea>`,
+      `<span class="q-help">正文里已经写好：链接、对方需要的身份/侧、打开后是什么、`
+      + `打不开时该怎么看 —— 对方不用先问你"我该用什么身份打开"。</span></div>`,
+      `<div class="q-actions"><button class="primary" data-share-copy-email="1">复制邮件正文（含主题）</button>`,
+      `<button data-close="1">关闭</button></div>`,
+      `<p class="q-hint">分享不产生任何对外承诺，也不落任何记录：它只是把地址与前提整理成一段人能直接用的文字。</p>`,
+      '</div>']), 'q-share')
+    const modal = el('q-modal')
+    if (!modal) return
+    modal.querySelectorAll('[data-copy]').forEach((node) =>
+      node.addEventListener('click', () => copyText(node.dataset.copy)))
+    modal.querySelector('[data-close]')?.addEventListener('click', closeModal)
+    modal.querySelector('[data-share-copy-email]')?.addEventListener('click', () =>
+      copyText(`主题：${subject}\n\n${body}`))
   }
 
   function resultHtml(out, action) {
@@ -2064,6 +3121,16 @@
   // ---------------------------------------------------------------- ① 通知中心（未读 / 标已读 / 按对象跳转 / 不刷屏）
   const LEVEL_RANK = { bad: 3, warn: 2, info: 1, ok: 1 }
   const LEVEL_TEXT = { bad: '失败/被拒', warn: '待办', info: '进展', ok: '进展' }
+  /**
+   * 通知中心的**查询状态**（会话内）：关键字 / 每页条数 / 页码 / 级别筛选。
+   * 为什么也要有它：规模下"先给 12 条 + 还有 N 条"在多到几百条时等于没法用（点一次只多 12 条、
+   * 也不能搜"那条讲哪个报价的"）。这里与各面板里的表同一口径：全集计数 + 关键字 + 页码。
+   */
+  const NOTIF_SIZES = [10, 25, 50, 100, 250]
+  state.notifKw = String(state.notifKw || '')
+  state.notifSize = NOTIF_SIZES.includes(Number(state.notifSize)) ? Number(state.notifSize) : 25
+  state.notifPage = Math.max(0, Number(state.notifPage) || 0)
+  state.notifFilter = state.notifFilter || 'all'
   /** 通知的**稳定 id**：同一件事在多次轮询里 id 不变 —— 已读状态才站得住（否则刷新就"又未读"）。 */
   const notifId = (item) => String(item.id || `${item.plugin_id || ''}:${item.title || ''}`)
   /**
@@ -2099,8 +3166,11 @@
     const unread = unreadCount()
     const total = notifVisible().length
     node.textContent = String(unread)
-    node.className = `q-badge ${unread ? 'warn' : ''}`
-    node.title = `未读 ${unread} / 共 ${total} 条（点开是通知中心）`
+    node.className = `q-badge ${unread || state.notifError ? 'warn' : ''}`
+    node.title = state.notifError
+      ? `未读 ${unread} / 共 ${total} 条（**这两行是上一次成功读到的**：现在读不到通知源 ——`
+        + ` ${state.notifError.code}；点开看原因与下一步）`
+      : `未读 ${unread} / 共 ${total} 条（点开是通知中心）`
   }
   function markRead(ids, value = true) {
     for (const id of ids) { if (value) state.notif.read.add(id); else state.notif.read.delete(id) }
@@ -2126,9 +3196,19 @@
     const tags = Object.keys(tagCounts).sort((left, right) => tagCounts[right] - tagCounts[left]
       || (left < right ? -1 : 1))
     const tag = tags.includes(filterOf('notifTag')) ? filterOf('notifTag') : ''
-    const picked = tag === '' ? shown : shown.filter((item) => (item.tags || []).includes(tag))
-    const cap = state.notifCap || 12
-    const page = picked.slice(0, cap)
+    const afterTag = tag === '' ? shown : shown.filter((item) => (item.tags || []).includes(tag))
+    // **关键字搜索**（同一套机制：标题/正文/下一步/插件/对象 id 都算命中）+ **真分页**
+    // （原来是"先给 12 条 + 还有 N 条"，规模下点一次只多 12 条：这里换成页码/每页行数，
+    //  并且计数都在**全集**上算 —— 与工作台上那些表同一口径）。
+    const kw = String(state.notifKw || '').trim().toLowerCase()
+    const picked = kw === '' ? afterTag : afterTag.filter((item) => [
+      item.title, item.body, item.next_action, item.plugin_id, item.ref?.kind, item.ref?.id,
+      item.ref?.title, ...(item.tags || [])].map(textOf).join(' \u0000 ').toLowerCase().includes(kw))
+    const size = NOTIF_SIZES.includes(Number(state.notifSize)) ? Number(state.notifSize) : 25
+    const pages = Math.max(1, Math.ceil(picked.length / size))
+    const at = Math.min(Math.max(0, Number(state.notifPage) || 0), pages - 1)
+    const page = picked.slice(at * size, at * size + size)
+    state.notifPage = at
     const plugins = [...new Set(all.map((item) => item.plugin_id))].sort()
     const groups = [['bad', '失败 / 被拒'], ['warn', '要你处理'], ['info', '进展与信息']]
     const rows = []
@@ -2163,7 +3243,23 @@
     }
     const body = `<h2 id="q-action-title">通知中心</h2>`
       + `<p class="q-src">动作结果、插件通知源与待人工门都排在这里（有界、不编造）；`
-      + `同一件事只出一条（重复的合成 <code>×N</code>），批数多时先给最急的 ${cap} 条 —— 不一次糊满屏。</p>`
+      + `同一件事只出一条（重复的合成 <code>×N</code>）。规模大时用关键字与页码翻，`
+      + `计数（共 / 命中 / 未读）都在**全集**上算 —— 与各面板里的表同一口径。</p>`
+      + `${state.notifError ? `<div class="q-state warn" data-state="degraded" data-state-reason="${attr(state.notifError.code)}">`
+        + `<b>通知没读到最新的一版（不是"没有通知"）</b> <code>${esc(state.notifError.code)}</code>`
+        + `<div>下面这份是**上一次成功读到**的（${esc(String(state.notifReadAt || '').slice(0, 19))}）：`
+        + `${esc(state.notifError.reason || '')}</div>`
+        + `<div class="q-hint">下一步：${esc(state.notifError.next_action || '点顶部「重载」重试')}</div></div>` : ''}`
+      + `<div class="q-notify-tools">`
+      + `<label class="q-qkw">搜通知：<input type="search" data-notify-kw="1" value="${attr(state.notifKw || '')}"`
+      + ` placeholder="标题 / 正文 / 插件 / 对象 id…" autocomplete="off" aria-label="在通知里搜关键字"></label>`
+      + `<button data-notify-clear="1"${(kw || filter !== 'all' || tag) ? '' : ' disabled'}>清空筛选</button>`
+      + `<span class="q-qcount" data-q-count="notify" data-count-total="${attr(all.length)}"`
+      + ` data-count-matched="${attr(picked.length)}" data-count-window="${attr(page.length)}"`
+      + ` data-page="${attr(at + 1)}" data-pages="${attr(pages)}" data-unread="${attr(counts.unread)}">`
+      + `<span>共 <b>${all.length}</b> 条</span><span>命中 <b>${picked.length}</b></span>`
+      + `<span>未读 <b>${counts.unread}</b></span>`
+      + `<span>第 <b>${at + 1}</b>/${pages} 页（本页 ${page.length} 条）</span></div></div>`
       + `<div class="q-notify-tools">`
       + `<span class="q-chip${filter === 'all' ? ' on' : ''}" data-notify-filter="all">全部 ${counts.all}</span>`
       + `<span class="q-chip${filter === 'unread' ? ' on' : ''}" data-notify-filter="unread">未读 ${counts.unread}</span>`
@@ -2176,6 +3272,11 @@
       + `<label>静音 <select data-notify-mute="1"><option value="">（不静音）</option>`
       + `${plugins.map((plugin) => `<option value="${attr(plugin)}"${state.notif.muted.includes(plugin)
         ? ' selected' : ''}>${esc(plugin)}</option>`).join('')}</select></label>`
+      + `<label>每页 <select data-notify-size="1" aria-label="通知每页多少条">`
+      + NOTIF_SIZES.map((n) => `<option value="${n}"${n === size ? ' selected' : ''}>${n}</option>`).join('')
+      + `</select></label>`
+      + `<button data-notify-page="prev"${at === 0 ? ' disabled' : ''}>上一页</button>`
+      + `<button data-notify-page="next"${at >= pages - 1 ? ' disabled' : ''}>下一页</button>`
       + `<span class="q-hint" data-notify-state-note="1">${esc(notifStateNote)}</span></div>`
       + (tags.length ? `<div class="q-notify-tools q-notify-tags" data-notify-tag-bar="1">`
         + `<span class="q-bucketbar-label">按协作筛选</span>`
@@ -2185,8 +3286,17 @@
         + `<span class="q-hint">「我的」= 指派给我 / @我 / 我关注的；「我指派的」= 我交出去的活的进展</span></div>`
         : '')
       + `<ul>${rows.length ? rows.join('') : '<li class="q-empty">这一类里没有通知（不是坏了）</li>'}</ul>`
-      + `${picked.length > page.length ? `<p class="q-hint"><button data-notify-more="1">`
-        + `还有 ${picked.length - page.length} 条（点开继续）</button></p>` : ''}`
+      + `<div class="q-qbar-row q-qpages q-notify-pages">`
+      + `<span class="q-hint" data-notify-counts="1">共 ${all.length} 条 · 命中 ${picked.length} 条 · `
+      + `第 ${at + 1}/${pages} 页（本页 ${page.length} 条）`
+      + `${kw ? ` · 关键字「${esc(state.notifKw)}」` : ''}${tag ? ` · 协作标签「${esc(tag)}」` : ''}`
+      + ` · 过滤后仍未读 ${picked.filter((item) => item.unread).length} 条</span>`
+      + `<button data-notify-page="first"${at === 0 ? ' disabled' : ''}>⏮ 首页</button>`
+      + `<button data-notify-page="prev"${at === 0 ? ' disabled' : ''}>上一页</button>`
+      + `<button data-notify-page="next"${at >= pages - 1 ? ' disabled' : ''}>下一页</button>`
+      + `<button data-notify-page="last"${at >= pages - 1 ? ' disabled' : ''}>末页 ⏭</button>`
+      + `<button data-notify-read-picked="1" title="把当前筛选命中的这些条全部标为已读（不是全部通知）">`
+      + `标记本页 ${page.length} 条为已读</button></div>`
     openModal(body, 'q-notify')
     const modal = el('q-modal')
     modal.querySelectorAll('[data-notify-action]').forEach((node) => node.addEventListener('click', () => {
@@ -2205,6 +3315,44 @@
     }))
     modal.querySelector('[data-notify-read-all]')?.addEventListener('click', () => {
       markRead(picked.map((item) => item.id), true)
+      openNotify()
+    })
+    // ---- 通知中心的查询交互（关键字 / 页码 / 每页条数 / 清空筛选）----
+    const notifKwInput = modal.querySelector('[data-notify-kw]')
+    if (notifKwInput) {
+      let timer = null
+      notifKwInput.addEventListener('input', () => {
+        clearTimeout(timer)
+        const value = notifKwInput.value
+        timer = setTimeout(() => {
+          state.notifKw = value
+          state.notifPage = 0
+          openNotify()
+          const node = el('q-modal')?.querySelector('[data-notify-kw]')
+          if (node) { node.focus(); node.setSelectionRange(node.value.length, node.value.length) }
+        }, 180)
+      })
+    }
+    modal.querySelector('[data-notify-clear]')?.addEventListener('click', () => {
+      state.notifKw = ''
+      state.notifPage = 0
+      state.notifFilter = 'all'
+      setFilter('notifTag', '')
+      openNotify()
+    })
+    modal.querySelector('[data-notify-size]')?.addEventListener('change', (ev) => {
+      state.notifSize = NOTIF_SIZES.includes(Number(ev.target.value)) ? Number(ev.target.value) : 25
+      state.notifPage = 0
+      openNotify()
+    })
+    modal.querySelectorAll('[data-notify-page]').forEach((node) => node.addEventListener('click', () => {
+      const where = node.dataset.notifyPage
+      state.notifPage = where === 'first' ? 0 : (where === 'last' ? pages - 1
+        : (where === 'next' ? at + 1 : at - 1))
+      openNotify()
+    }))
+    modal.querySelector('[data-notify-read-picked]')?.addEventListener('click', () => {
+      markRead(page.map((item) => item.id), true)
       openNotify()
     })
     // 协作标签筛选片（「我的 / 我指派的 / @我 / 我关注的」）：选择存本浏览器，不改任何事实
@@ -2414,11 +3562,29 @@
   })
 
   // ---------------------------------------------------------------- 加载
+  /**
+   * **一次加载 = 四步，顺序不许变**（③ 状态纪律的落点）：
+   *   ① 清提示条 → ② **清空上一页的数据并进入 loading**（屏幕上立刻只剩加载态，绝不残留旧行，
+   *   也不会让人把旧数据当成新页面）→ ③ 并行拉三份数据 → ④ 按每份**各自的 ok** 决定渲染什么，
+   *   **读不到就渲染错误态**（`panelsError` / `objectError`），而不是"空数组 ⇒ 看起来像没有数据"。
+   *   通知读不到时**不清空**旧通知（清空会让徽标变 0 = 假装"没有待办"更坏）：保留最后一次成功的
+   *   那份并标记为陈旧，通知中心里如实说明，状态栏与提示条同时上报。
+   */
   async function loadAll(force) {
     state.banners = []          // 先清上一次的提示条（**再**装载注册面：它的失败提示不能被这行抹掉）
     if (force || !state.surface.actions.length) await loadSurface()
     const route = state.route
     const object = route.kind && route.id
+    // ② 清空 + loading（这一行是"不残留旧数据"的判据本身）
+    state.panels = []
+    state.object = null
+    state.panelsError = null
+    state.objectError = null
+    state.status = []
+    state.statusError = null
+    state.notifError = null
+    state.loading = { at: new Date().toISOString(), view: route.view, kind: route.kind, id: route.id }
+    renderMain(); renderBanners()
     const [panels, notifications, status] = await Promise.all([
       object ? getJson(`/api/ui/object?view=${encodeURIComponent(route.view)}&kind=${encodeURIComponent(route.kind)}`
         + `&id=${encodeURIComponent(route.id)}`)
@@ -2426,17 +3592,45 @@
       getJson('/api/ui/notifications'),
       getJson('/api/ui/status'),
     ])
+    state.loading = null
     if (object) {
-      state.object = panels.ok ? panels : null
-      state.panels = (panels.panels || []).filter((panel) => panel.visible !== false)
+      if (panels.ok) {
+        state.object = panels
+        state.panels = (panels.panels || []).filter((panel) => panel.visible !== false)
+      } else {
+        state.objectError = { code: panels.code || 'object-read-failed', reason: panels.reason || '',
+          next_action: panels.next_action || '点「重新读一次」；还是失败就看服务日志（./run logs）' }
+        state.panels = []
+      }
     } else {
       state.object = null
-      state.panels = panels.panels || []
+      if (panels.ok) {
+        state.panels = panels.panels || []
+      } else {
+        state.panelsError = { code: panels.code || 'panels-read-failed', reason: panels.reason || '',
+          next_action: panels.next_action || '点「重新读一次」；还是失败就看服务日志（./run logs）' }
+        state.panels = []
+      }
     }
-    state.notifications = notifications.items || []
-    state.status = status.items || []
-    if (!panels.ok) banner('bad', object ? '对象页读取失败' : '面板读取失败', panels.reason || panels.code || '',
-      panels.next_action || '点顶部「重载」重试')
+    if (notifications.ok) {
+      state.notifications = notifications.items || []
+      state.notifReadAt = new Date().toISOString()
+    } else {
+      state.notifError = { code: notifications.code || 'notifications-read-failed',
+        reason: notifications.reason || '', next_action: notifications.next_action || '点顶部「重载」重试' }
+    }
+    if (status.ok) state.status = status.items || []
+    else state.statusError = { code: status.code || 'status-read-failed', reason: status.reason || '' }
+    if (state.panelsError || state.objectError) {
+      banner('bad', state.objectError ? '对象页读取失败（这一页没读到，不是没有数据）' : '面板读取失败（不是没有面板）',
+        (state.objectError || state.panelsError).reason || (state.objectError || state.panelsError).code,
+        (state.objectError || state.panelsError).next_action)
+    }
+    if (state.notifError) {
+      banner('warn', '通知没读到（徽标与通知中心保留上一次成功的读数，已标记为陈旧）',
+        [state.notifError.code, state.notifError.reason].filter(Boolean).join(' · '),
+        state.notifError.next_action)
+    }
     const errors = state.panels.filter((panel) => panel.error)
     if (errors.length) banner('warn', `${errors.length} 块面板渲染失败`,
       errors.map((panel) => `${panel.id}: ${panel.error.reason}`).join('；'), '修插件里这些面板的 data()')
@@ -2456,6 +3650,9 @@
     }
     rememberRoute(state.route)
     renderTabs()
+    // **导出列选择**（机制）：把"我这一套列"读回来（面板有就用面板的；否则问一次只读动作），
+    // 读完若拿到了新东西就再画一遍 —— 「列…」按钮上的 N/M 在任何页面上都对。
+    hydrateExportPrefs().then((changed) => { if (changed) renderMain() }).catch(() => {})
   }
 
   async function loadSurface() {
@@ -2469,7 +3666,13 @@
   state.route = parsePath(location.pathname)
   renderChrome(); renderTabs(); loadAll(true)
   // 身份先解析（顶栏「身份」徽标 + 人签字段预填都读它），再拉**服务端**通知偏好（0600 文件；未登录则回落到本浏览器）
-  loadIdentity().then(() => loadNotifState()).then(() => paintBadge())
+  loadIdentity().then(() => loadNotifState()).then((out) => {
+    // 服务端那份（若在）是"换设备仍在"的来源：读回来后把受影响的块重绘一遍（查询状态就是它给的）
+    const affected = hydrateQueryFromMirror()
+    repaintQueriedPanels([...affected])
+    paintBadge()
+    return out
+  })
   /**
    * 通知轮询（15s）：只更**徽标**，并且**最多弹一条**汇总提示 —— 一次来 8 条也不刷屏。
    * 首次看到某条 id 时才提示（`state.seenNotifs` 是本次会话的内存集合）。
@@ -2477,7 +3680,15 @@
   const seenNotifs = new Set()
   const pollNotify = async () => {
     const out = await getJson('/api/ui/notifications')
-    if (!out.ok) return
+    if (!out.ok) {
+      // 轮询失败**不静默**（否则徽标会一直显示"没有新事情"）：记下来、在上报面上如实标陈旧。
+      state.notifError = { code: out.code || 'notifications-read-failed', reason: out.reason || '',
+        next_action: out.next_action || '点顶部「重载」重试' }
+      paintBadge()
+      return
+    }
+    state.notifError = null
+    state.notifReadAt = new Date().toISOString()
     state.notifications = out.items || []
     const fresh = notifVisible().filter((item) => item.unread && !seenNotifs.has(item.id))
     for (const item of notifList()) seenNotifs.add(item.id)

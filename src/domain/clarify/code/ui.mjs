@@ -237,7 +237,7 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table',
         columns: [{ key: 'package_id', label: '包', type: 'code' }, { key: 'rev', label: '最新 rev' },
-          { key: 'items', label: '行项目' }, { key: 'qty', label: '数量（rev 明细）' },
+          { key: 'items', label: '行项目' }, { key: 'qty', label: '数量（rev 明细）', filter: 'number' },
           { key: 'quote_by', label: '报价截止' }, { key: 'ack', label: '我认收了吗' },
           { key: 'promise', label: '我承诺的回文时限' }, { key: 'quotes', label: '我已提交报价' },
           { key: 'sources', label: '可见口径' }],

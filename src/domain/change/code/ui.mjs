@@ -157,7 +157,7 @@ export async function register(surface, host) {
       return { ok: true, kind: 'table',
         columns: [{ key: 'change_id', label: '变更单', type: 'code' }, { key: 'package_id', label: '包', type: 'code' },
           { key: 'quote_id', label: '原报价', type: 'code' }, { key: 'lines', label: '逐行差异（原量 → 新量）' },
-          { key: 'delta_amount', label: '差额' }, { key: 'status', label: '状态' },
+          { key: 'delta_amount', label: '差额', filter: 'number' }, { key: 'status', label: '状态', filter: 'enum' },
           { key: 'response', label: '我的回应' }],
         rows: proposed.map((row) => {
           const body = bodyOf(row)
@@ -170,7 +170,9 @@ export async function register(surface, host) {
             delta_amount: body.delta_amount ?? '—',
             status: approved.has(changeId) ? '已生效' : (response ? '已回应' : '待我回应'),
             response: response ? `${asText(response.decision) === 'accept' ? '接受' : '异议'}：${asText(response.note)}`
-              : '（待回应）' }
+              : '（待回应）',
+            // **乐观并发**：这一行上的回应现在是什么版本（小屏卡片视图也会显示它）
+            version: host.versions.current('supplier', 'change-response', changeId) }
         }),
         row_actions: ['exchange.change-respond'],
         counts: { changes: proposed.length, responded: responded.size, approved: approved.size },
@@ -194,7 +196,7 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table',
         columns: [{ key: 'quote_id', label: '报价', type: 'code' }, { key: 'item_id', label: '行项目', type: 'code' },
-          { key: 'unit_price_cents', label: '单价（整数分）' }, { key: 'based_on_rev', label: '基于 rev' },
+          { key: 'unit_price_cents', label: '单价（整数分）', filter: 'number' }, { key: 'based_on_rev', label: '基于 rev', filter: 'number' },
           { key: 'latest_rev', label: '最新 rev' }, { key: 'status', label: '状态' },
           { key: 'rev_diff', label: 'rev 差异（本包行项目）' }, { key: 'requote', label: '重报登记' }],
         rows: quotes.map((quote) => {
@@ -314,8 +316,8 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table',
         columns: [{ key: 'quote_id', label: '报价', type: 'code' }, { key: 'package_id', label: '包', type: 'code' },
-          { key: 'item_id', label: '行项目', type: 'code' }, { key: 'unit_price_cents', label: '原单价（整数分）' },
-          { key: 'qty', label: '原数量（快照）' }, { key: 'unit', label: '单位' },
+          { key: 'item_id', label: '行项目', type: 'code' }, { key: 'unit_price_cents', label: '原单价（整数分）', filter: 'number' },
+          { key: 'qty', label: '原数量（快照）', filter: 'number' }, { key: 'unit', label: '单位' },
           { key: 'basis', label: '单价基准引用', type: 'code' }
         ],
         rows, row_actions: ['exchange.change-propose'],
@@ -370,7 +372,7 @@ export async function register(surface, host) {
       return { ok: true, kind: 'table',
         columns: [{ key: 'package_id', label: '包', type: 'code' }, { key: 'rev', label: '当前 rev' },
           { key: 'item_id', label: '行项目', type: 'code' }, { key: 'description', label: '描述' },
-          { key: 'unit', label: '单位' }, { key: 'qty', label: '数量（可直接改）', editable: true, type: 'number' }],
+          { key: 'unit', label: '单位' }, { key: 'qty', label: '数量（可直接改）', editable: true, type: 'number', filter: 'number' }],
         rows, editable_action: 'exchange.rev-amend',
         editable_defaults: { package_id: rows[0].package_id, signature: 'human:（请改成你的名字）', from_rev: rows[0].rev },
         counts: { packages: snapshots.size, lines: rows.length },
@@ -381,6 +383,12 @@ export async function register(surface, host) {
   out.push(surface.action({ plugin_id: me, id: 'exchange.change-respond', title: '回应变更（接受 / 异议）',
     views: ['supplier'], group: '变更', order: 10,
     confirm: { required: true, message: '回应会镜像给承包商（对方看得到接受或异议）：确认？' },
+    // **乐观并发**（机制）：这个动作保存的是"这份变更单上的回应"（读的人只看最后一条回应）——
+    // 两个同事先后回应同一份变更单时，后回应的人被**明确拒绝**并看到"谁在何时把回应改成了什么"。
+    concurrency: { object_class: 'change-response', label: '这份变更单的回应', id_field: 'change_id',
+      state: (ctx, input) => ({ change_id: asText(input.change_id),
+        decision: asText(input.decision) || 'accept', actor: asText(input.actor),
+        note_sha256: sha(String(input.note ?? '')) }) },
     input: { fields: [
       { name: 'change_id', label: '变更单 id', type: 'text', required: true, help: '从「变更单」表里复制' },
       { name: 'decision', label: '我的回应', type: 'select', options: ['accept', 'dispute'], default: 'accept' },
