@@ -1,0 +1,210 @@
+EV-168 —— 运行期装卸（`--live`）+ `user-space` 单一源 + `./run logs|config init`（T-317）
+================================================================================
+
+批次：T-317（P2）· 提交面：运行期装卸机制与客户端 / 路由注册面 / 用户空间收敛 / 一键运行两个子命令 /
+门（`plugin-lifecycle` 扩 L1–L13、D4/D5；`run-once` 扩 R12/R13/R14 + 4 处新变异）
+编号说明：EV-167 已被并发批次占用（`docs/work/evidence/EV-167-plugin-requirements.txt`），本批取 **EV-168**（查重号后）。
+
+--------------------------------------------------------------------------------
+一、动态装卸：**运行中的服务**真能 load / reload / unload，页面区块真出现、真消失
+--------------------------------------------------------------------------------
+命令面（写进 `src/system/runtime/docs/lifecycle-contract.md` §5 与
+`src/system/runtime/docs/one-command-run.md` §2）：
+
+    tools/plugin.sh <动词> <插件> --live          # 六动词 + --live = 装进正在服务的那个进程
+    ./run plugin <动词> <插件>                    # 同一个东西（./run 只转发）
+
+取证对象：`userspace/demo-ns/badge`（**不在任何启动装配里**，只能由运行期通道装进来 → 才能证明"运行期"）。
+控制通道：`POST /quotagent/api/plugins/control`（一条**注册到路由注册面**的动态路由，
+`/api/routes` 里可见：method=POST、auth=control-token、source=uiRoutes）。
+
+原始行（`tools/verify.sh plugin-lifecycle` 的 L 段；完整输出见 `tmp/pl-run2.txt`）：
+
+[ok] L7 装载前：badge 未装载（`status --live` loaded=false）、页面上没有它的区块、注册面只有 2 条
+     http=200 blocks=2 status_loaded=False sha=360acdd5ef735cc5
+[ok] L8 `tools/plugin.sh load … --live` 真装载进**运行中的服务**：uid/effects 可回读，且它注册的只读区块**真出现在页面上**
+     rc=0 uid=35 effects=3 区块元数据=[{'plugin_id': 'userspace/demo-ns/badge', 'slot': 'page.supplier', 'order': 40,
+       'title': '运行期装载演示区块（demo-ns.badge 注册的只读区块）', 'key': 'page.supplier\x00userspace/demo-ns/badge'}]
+     页面块数=3 原始行=data-ui-block="userspace/demo-ns/badge" data-ui-block-slot="page.supplier" data-ui-block-order="40"
+[ok] L9 装载只**增加**那一块：摘掉 badge 的 `<section>` 后与装载前的页面**逐字节相同**（sha256 相等）
+     装载前 sha256=360acdd5ef735cc50bab896c034ab3b661c775460003dca8a41cf3f4a854fa8b
+     装载后去块 sha256=360acdd5ef735cc50bab896c034ab3b661c775460003dca8a41cf3f4a854fa8b | 页面 8028 → 8546 字节
+[ok] L10 `reload --live` 真热重载：新 uid（≠ 装载时的 uid）+ 新 instance，回读 uid/effects 可查，且**重载前后 effects 计数不涨**
+     load_uid=35 reload_uid=37 from_effects=3 effects=3 status_uid=37 status_effects=3
+[ok] L11 `unload --live` 真移除：区块从页面消失、`/api/ui/blocks` 回到 2 条、`effects_after=0`、**页面逐字节还原**；
+     重复卸载 ⇒ `not-loaded`
+     sha 前=360acdd5ef735cc50bab896c034ab3b661c775460003dca8a41cf3f4a854fa8b 后=<同一个 sha> 相同=True
+     effects 3→0 块数=2 重复卸载=not-loaded
+[ok] L12 `./run plugin status <插件>` = 同一件事（`./run` 把动词原样转给 `tools/plugin.sh … --live`）
+     rc=0 loaded=False 原始行={"ok":true,"verb":"status","id":"userspace/demo-ns/badge","control":"live","loaded":false,…}
+[ok] L13 零写面：整轮 load/reload/unload 前后 `src/**`+`host/**` 逐字节不变，且数据根（账本/待办件）逐字节不变
+     产品树不变=True 数据根不变=True
+
+人工复算（同一台机器、同一条命令，独立于门）：
+
+    BEFORE   sha256=360acdd5ef735cc50bab896c034ab3b661c775460003dca8a41cf3f4a854fa8b bytes=10344
+    LOADED   sha256=27c2178adfb0d881850f41994d649d6d538738ed04fac5fdc9fbac5454895237 bytes=11130
+             block=data-ui-block="userspace/demo-ns/badge"
+    UNLOADED sha256=360acdd5ef735cc50bab896c034ab3b661c775460003dca8a41cf3f4a854fa8b bytes=10344 badge_block_count=0
+    其余部分逐字节不变（load 后去掉 badge 区块 == load 前）: True
+    卸载后整页逐字节还原: True
+    前后块清单: ['userspace/demo-ns/hello'] -> ['userspace/demo-ns/hello','userspace/demo-ns/badge'] -> ['userspace/demo-ns/hello']
+
+⇒ 这正是 `docs/work/plans/plugin-migration-plan.md` §5.3 那条一直未验的断言（"卸载后页面其余部分逐字节不变"）。
+
+装卸序列（live 服务，同一进程内连续跑；uid/effects 都是 cordis 内核实测）：
+
+    load     -> {'ok': True, 'uid': '35', 'instance': 'userspace/demo-ns/badge#1', 'effects': 3}
+    unload   -> {'ok': True, 'from_uid': '35', 'effects': 0, 'effects_before': 3, 'effects_after': 0}
+    load     -> {'ok': True, 'uid': '37', 'instance': 'userspace/demo-ns/badge#2', 'effects': 3}
+    reload   -> {'ok': True, 'uid': '39', 'from_uid': '37', 'from_effects': 3, 'instance': '#3', 'effects': 3}
+    status   -> {'ok': True, 'uid': '39', 'instance': '…/badge#3', 'effects': 3}
+    unload   -> {'ok': True, 'from_uid': '39', 'effects': 0}
+    unload   -> {'ok': False, 'code': 'not-loaded'}          # 可重复：重复卸载就是这条
+
+围栅（四道，全部 fail-closed；机制层纯函数直驱 + 真 HTTP 两条路都验过）：
+
+    [ok] L1 no_token=plugin-control-disabled 缺头=plugin-control-unauthorized 错令牌=plugin-control-unauthorized
+            缺确认=confirmation-required 未知动词=unknown-verb
+    [ok] L2 codes=[503, 403, 403, 409, 400, 404] locked=['system', None, None] token_source=absent
+    [ok] L4 控制通道登记在 `/api/routes`：[{'path': '/quotagent/api/plugins/control', 'method': 'POST',
+            'auth': 'control-token', 'source': 'uiRoutes', …}]
+    [ok] L5 真 HTTP 围栅：403/plugin-control-unauthorized 409/confirmation-required 403/layer-locked 404/unknown-plugin
+    [ok] L6 客户端围栅：rc=1 code=plugin-control-disabled（没令牌就地拒，不猜默认值）
+    [ok] D5 `host/cli.mjs` 的 webui 装配段里 **0 处** `inner.provide =`
+
+**本批修掉的真缺陷（这一条比新功能更重要）**：`host/cli.mjs` 的 webui 装配段用
+`inner.provide = …` 去"抓"服务句柄。实测该赋值会落在**共享的 ctx 对象**上并沿原型链传给**全树** ⇒ 之后装载的
+插件把自己的服务注册在**别人的 fiber** 上（回执里那句 `service "demo-ns.badge.stamp" has been registered at
+<audit-hook>`）⇒ 卸载摘不掉、服务名留在注册表里、**运行期再装载必红**。已改为装配完 `ctx.get(...)` 读，
+并把"webui 装配段 0 处 monkey-patch"做成门 D5（负控：写回一处 ⇒ 红）。
+
+--------------------------------------------------------------------------------
+二、`user-space/**` → `src/userspace/**`：单一源 + 兼容链接
+--------------------------------------------------------------------------------
+唯一事实源：`src/userspace/**`（`git ls-files src/userspace` 可见）。旧位置 `user-space` 改成**指向它的
+符号链接**（tracked symlink；`.gitignore` 的 `user-space/` 规则只匹配目录，所以链接本身入库）：
+
+    $ ls -la user-space
+    lrwxrwxrwx 1 hermes hermes 13 Sep 22 08:47 user-space -> src/userspace
+
+产物 / 哈希 / 账本引用**全部仍然有效**（搬的是位置，字节没动）：
+
+    dffeff77fbf497048efd0b4c5f592025821efb56441925adf9e57c94c8086db7  src/userspace/con-a/quote-trend/code/index.mjs
+      （11742 字节；与 plugin.json 里声明的 sha256 **逐字相同** —— 装载器会核这一条）
+    33f46dbe63904e125a1ceff59369beccc63c13d4b42b332e3fb5062c777368fe  src/userspace/con-a/quote-trend/data/observations.jsonl（297 字节）
+
+两份装载器（平台六动词装载器 + 用户空间隔离内核）对收敛后的三个插件都成立（真跑，`host/lib/user-space.mjs`，
+根 = `src/userspace`；即"旧路径的读方不必改一行"）：
+
+    {"demo-ns/hello":     {"uid":"demo-ns.hello#1","keys":["demo-ns.hello.bucket","demo-ns.hello.status"],"effects":3,"unload":true,"effects_after":0},
+     "con-a/quote-trend": {"uid":"con-a.quote-trend#2","keys":["con-a.quote-trend.observationLog","con-a.quote-trend.quoteTrend"],"effects":2,"unload":true,"effects_after":0},
+     "demo-ns/badge":     {"uid":"demo-ns.badge#3","keys":["demo-ns.badge.stamp","demo-ns.badge.status"],"effects":3,"unload":true,"effects_after":0}}
+
+`tools/verify.sh user-space`（隔离内核门，21 条）：**21/21 PASS**（跑在收敛后的树上）。
+`tools/plugin.sh list --layer userspace --json`：3 个插件、`valid:true`、`degraded` 空。
+
+不丢内容：旧 `user-space/demo-ns/hello/index.mjs`（12 行，与 `code/index.mjs` 是同一插件的两份实现）
+逐字留档在 `src/userspace/demo-ns/hello/docs/migration-note.md`；其能力是新实现的**子集**（对照表在该文件里）。
+一处**行为差异**如实登记：`con-a/quote-trend` 在被**直接挂载**（宿主不给 `config.root`/文件服务）时用自己的产物目录
+当文件根 —— 落到标准布局后该目录由 `<插件>/` 变成 `<插件>/code/`；宿主给根的路径不受影响（数据文件仍在
+`<插件>/data/observations.jsonl`）。
+
+--------------------------------------------------------------------------------
+三、`./run logs` 与 `./run config init`（原始输出）
+--------------------------------------------------------------------------------
+`./run logs`（路径 + **有界**尾部；没有日志时如实失败）：
+
+    [logs] path=/workspace/projects/quotagent/tmp/run/webui-8199.log bytes=7437 file_lines=5（尾部 40 行，上限 200）
+    <尾部若干行>
+    {"ok":true,"action":"logs","path":"…/tmp/run/webui-8199.log","exists":true,"bytes":7437,"file_lines":5,
+     "tail_lines":40,"bounded":true,"max_lines":200,"next_action":"要更多行：./run logs --lines 80（上限 200；日志按端口分开）"}
+
+    没有日志文件时：rc=1，{"ok":false,"action":"logs","code":"log-missing","path":"…/webui-44317.log","exists":false,
+     "tail_lines":0,"bounded":true,"next_action":"./run up 起一次服务（日志写在 tmp/run/webui-<port>.log；端口不同 = 文件不同）"}
+
+`./run config init`（只含白名单键、不覆盖已有真配置、打印指纹与逐条 next_action）：
+
+    [config init] /workspace/projects/quotagent/tmp/ev168-cfg.yaml（1546 字节；权限 600；指纹 0ff6809e；白名单键 36 个）
+    [config init] approval.auto_approve: 现在值 = 默认层（false）；要改就填进 …/tmp/ev168-cfg.yaml 的 project 段，然后走人工门…
+    …（36 行，每个白名单键一行）
+    {"ok":true,"action":"config-init","path":"…/tmp/ev168-cfg.yaml","bytes":1546,"mode":"600","fingerprint":"0ff6809e",
+     "keys":36,"credentials_written":false,"next_action":"填值：编辑该文件（白名单键已就位）→ 改已有值走人工门
+     `python3 tools/config-apply.py … --actor human:<名>`；凭据值放 0600 文件或 env（本文件只登记键，不含值）"}
+
+生成文件的形状（白名单真源 = `host/lib/config-keys.mjs` 的 `PROJECT_KEYS`；段只有 apiVersion/project/plugins/credentials）：
+
+    apiVersion: quotagent/v1
+    project:
+      approval:
+        auto_approve: false
+        queue:
+          enabled: true
+      authority:
+        bands: {buyer: null, director: null, lead: null}
+        currency: "CNY"
+        …
+    plugins: {}
+    credentials: {}
+
+已存在时的拒绝（第二次跑同一条命令，真文件一个字节都没动）：
+
+    {"ok":false,"action":"config-init","code":"config-exists","path":"…/tmp/ev168-cfg.yaml","fingerprint":"…",
+     "overwritten":false,"next_action":"已有真配置文件 ⇒ **不覆盖**（`./run config init` 只做首次脚手架）：改已有值走人工门…"}
+
+门对这一段的独立复算（`run-once` R13a-c）：用 `tools/config-apply.py` 的解析器读生成出来的文件 ⇒
+leaf 键集合与 `PROJECT_KEYS` **双向相等**（36/36）、值 = 默认层、`plugins`/`credentials` 为空、段集合 = 那四个、
+权限 600、指纹 == sha256 前 8 位、逐条 next_action 行数 == 键数；`/workspace/config.yaml` 跑完 sha256 相同。
+
+--------------------------------------------------------------------------------
+四、空 HOME + 断网的一键运行（含**没做到的那一半**）
+--------------------------------------------------------------------------------
+本环境 `unshare -n` 被权限拒绝（实测 `unshare: unshare failed: Operation not permitted`），**做不到内核级断网**。
+因此验收用的是**进程级等效**手段：`tools/netblock.c` 编译成 `LD_PRELOAD` 垫片（拦 libc 层的 `connect()` 到非回环
+地址、`getaddrinfo()` 非本机名字），外加代理黑洞 env 与包管理器离线开关。**它只能拦 libc 层**：静态链接的二进制、
+raw syscall 不受它管 —— 这一行写进 `netblock.c` 的头注释，也在门的 detail 里打出来。
+
+原始行（`tools/verify.sh run-once` R14a-f）：
+
+    [ok] R14a 空 HOME + 断网下 `./run up` 成功：rc=0 healthy=True page200=True 垫片=编译成功（/usr/bin/gcc）
+    [ok] R14b 断网判据**非空转自证**：垫片真的拦住了一次对外 connect
+         connect 到 1.1.1.1 返回 101；留痕=['connect 1.1.1.1:80']
+    [ok] R14c **不写 HOME**：`./run up` 之后空 HOME 里 0 个文件   HOME=…/empty-home-48675 内容=[]
+    [ok] R14d 断网运行的 up 期间**零次非回环连接尝试**（垫片留痕为空）  留痕=[]（0 条）
+    [ok] R14e 断网运行的服务能停干净：`down` 退出码 0 + 端口**真释放**
+    [ok] R14f 能重启，且第二次 up 幂等：restart rc=0 pid=156950 二次 up=already-up pid 不变=True status 一致=True
+
+**没做到的部分（如实标注）**：
+ 1. 没有内核级断网（网络命名空间不可用）⇒ "物理上发不出字节"这句话**不能**据此声称；
+    能声称的是"在 libc 层被拦且启动路径**零次**尝试、up 仍成功"。
+ 2. 垫片不覆盖绕过 libc 的调用（静态二进制 / raw syscall）；本仓启动路径（sh/python/node/curl）都走 libc，
+    所以这一条对本仓的结论有效，但不能外推成"任何程序都断网"。
+ 3. 空 HOME 只证明"仓库外的用户目录不被写"（`HOME` 里 0 文件）；`/tmp`、`/workspace/config.yaml` 等
+    仓库外路径**没有**做写入面证明（`./run` 的纪律是只写 `tmp/`，但本批没做全盘写入面快照）。
+
+--------------------------------------------------------------------------------
+五、门与变异（本批跑过的原始汇总行）
+--------------------------------------------------------------------------------
+    tools/verify.sh plugin-lifecycle   -> RESULT: PASS（59/59）        # 44 → 59：+D4/D5、+L1–L13
+    tools/verify.sh run-once           -> RESULT: PASS（34/34）        # 18 → 34：+R12a-c、R13a-c、R14a-f、R11-5..8
+    tools/verify.sh user-space         -> passed=21 total=21 failures=0
+    run-once 单点变异：4 处原有（幂等判断 / 健康探针 / status 墙钟 / pid 读面）+ **4 处本批新增**
+      （`logs` 尾部无上界 / `logs` 缺日志假成功 / `config init` 覆盖已有配置 / `config init` 骨架多出非白名单段）
+      —— **8 处全红**，且每处先在**未变异基线**上确认不红（R11-0）；产品树字节不变（R11-5）。
+    防假变异：不存在的锚点 ⇒ None（R11-5 的 fake 断言）。
+
+--------------------------------------------------------------------------------
+六、本批**没**验证的东西（防"看起来完整"）
+--------------------------------------------------------------------------------
+ 1. 运行期装卸只验了 `userspace/**` 的插件（badge / 也手工跑过 con-a 与 hello 的隔离内核装载）。
+    `domain/**` 与 `system/**` 的插件走**同一条** live 代码路径但**没有**逐个真跑（`system/**` 被层锁刻意拒绝，
+    只验了拒绝路径）。
+ 2. 只验了"卸载后页面逐字节还原"这一条页面不变性；**没有**验"卸载后它注册的 *HTTP 路由* 消失"
+    （27 §6.3 第 3 条的另一半）—— 本批的取证对象 badge 不注册路由。
+ 3. 运行期装卸的**并发**（两个 load 同时打进来）与**长稳**（跑几小时/多轮 reload 后的内存水位）未验。
+ 4. 控制令牌**只在 env 与 0600 文件两条来源**上验过；轮换（跑到一半换令牌）未验。
+ 5. `./run config init` 生成的文件只被 `tools/config-apply.py` 的解析器与门解析过；**没有**用管理道 UI 的
+    "干跑/提交"路径真跑一遍（那需要人工门 + 0600 待办件全链路）。
+ 6. 断网垫片只在本环境（Linux + glibc）上验过，没在别的 libc/平台上验。
+ 7. `docs/design/28` 契约文本里"健康检查 GET /healthz"与实现的 `<prefix>/api/health` 这处偏差**本批没改**
+    （已登记在 `one-command-run.md` §2 的诚实标注里）。

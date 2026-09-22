@@ -75,3 +75,54 @@ tools/plugin.sh --runtime start|stop|status      # 运行时进程管理（**不
 `--root <目录>`（或 `$QUOTAGENT_PLUGIN_ROOT`）把同一套动词跑在另一个仓库根上：门用它造夹具根
 （环状依赖 / 坏清单）与变异根，产品树因此**不被写**。宿主内核解析顺序：
 `$QUOTAGENT_CORDIS` → `<root>/host/node_modules/cordis` → 裸 `cordis`（阶段 4.4 宿主依赖搬进本插件后收敛）。
+
+## 5. 运行期装卸（`--live`）：装进**正在服务的那个进程**
+
+§2 的六个动词把插件挂进一个**独立的常驻运行时进程**（`tmp/plugin-runtime/`）—— 装载事实活在那里，
+页面看不见。`--live` 走的是另一条路：把插件挂进**长驻 WebUI 进程自身的 ctx**，于是：
+
+```bash
+tools/plugin.sh load   userspace/demo-ns/badge --live    # 也支持 reload / unload / status / list / deps
+./run plugin load userspace/demo-ns/badge                # 同一个东西（./run 只是转发）
+```
+
+| 事实 | 怎么来的 |
+|---|---|
+| `control:"live"` | 回执里的模式标记（与 §3 的常驻运行时进程回执区分开：那是 `runtime{…}`） |
+| `uid` / `instance` / `effects` | 与 §2 同一套（cordis 内核实测）；`reload` 必须给**新 uid**，且 `from_effects` 可查 |
+| 页面区块 | 插件注册的只读区块**真的出现在页面上**（`data-ui-block="<插件 id>"`）；卸载后消失且**页面其余部分逐字节不变**（门 `plugin-lifecycle` 的 L 段用 sha256 对比） |
+
+实现：`src/system/runtime/code/live-control.mjs`（机制）+ `src/system/runtime/tools/plugin-live.mjs`（客户端）。
+控制通道是一条**注册到路由注册面**的 HTTP 路由（`host/lib/ui-route.mjs`，webui 只提供注册面，不认识它是什么）：
+
+```
+POST <prefix>/api/plugins/control      # 头：X-Plugin-Control-Token；体：{"verb":…,"id":…,"confirm":true}
+```
+
+### 5.1 围栅（四道，全部 fail-closed；"防 agent 误操作"是设计目标）
+
+| # | 围栅 | 违反时的 `code`（+ HTTP 状态） |
+|---|---|---|
+| ① | **控制令牌**：`$QUOTAGENT_PLUGIN_CONTROL_TOKEN` 或 0600 文件 `<root>/../config/quotagent-plugin-control-token`；**没配 = 整条通道关闭** | `plugin-control-disabled`（503）；令牌不匹配/缺头 ⇒ `plugin-control-unauthorized`（403） |
+| ② | **显式确认**：`load/reload/unload` 必须带 `{"confirm":true}` | `confirmation-required`（409） |
+| ③ | **层锁定**：`system/**`（宿主 harness 自己）不许热插拔 | `layer-locked`（403） |
+| ④ | **只认显式动词与显式 id**：未知动词、未注册路径一律有名拒绝（不通配、不猜） | `unknown-verb`（400）/ `unknown-plugin`（404） |
+
+令牌**只比 sha256 摘要**（`crypto.timingSafeEqual`），**不回显、不落盘**；客户端没令牌时**就地**拒绝
+（`plugin-control-disabled` + next_action），不去猜一个默认值。
+
+### 5.2 零写面与失败语义
+
+- 运行期装卸**只改宿主内存里的装配**：不写文件、不写账本、不联网（门 L13 在整轮装卸前后比对
+  `src/**`+`host/**` 与数据根，逐字节不变）。
+- 失败一律给 `code` + `reason` + `next_action`（`unknown-plugin` 带候选列表；`already-loaded` 指路 `reload`；
+  `not-loaded` 指路 `load`；`mount-failed` 带原因）。
+- 回执里带 `token_source`（`env` / `file:0600` / `absent` / `file:mode-XXX-refused`）——**只报来源，不报值**。
+
+### 5.3 与 §2 的分工（诚实标注）
+
+| 场景 | 用哪条路 |
+|---|---|
+| 只想验证插件本身能不能装（含依赖/effects/uid），与页面无关 | §2 常驻运行时进程（`tmp/plugin-runtime/`，可跑在任意 `--root` 上） |
+| 要看"装进去之后页面真的变了"，或让**正在服务用户的进程**用上这个插件 | §5 `--live`（只能跑在本仓那个真服务上） |
+| 重启服务 | 两条路的装载事实都在内存里，重启即清空（没有"第二份记录"，所以不存在记录与现实的漂移） |

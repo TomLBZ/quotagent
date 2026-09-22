@@ -9,6 +9,15 @@
 #                 起服务 → 健康检查 → 打印 URL 与端口；重复执行不重建、不覆盖数据。
 #   ./run down    [--port N]        停服务并回收**本次启动的**进程（不删数据）
 #   ./run status  [--port N]        一行 JSON：{ok, service, pid, port, url, healthy, ready_ms, degraded[]}
+#   ./run logs    [--port N] [--lines N]
+#                 最近日志的**路径** + **有界尾部**（缺省 40 行、上限 200 行；摘要一行 JSON 收尾）
+#   ./run config init [--config-file P]
+#                 生成 config.yaml（**只含白名单键** = host/lib/config-keys.mjs 的 PROJECT_KEYS + 两个空段）；
+#                 **不覆盖已存在的真配置文件**（存在即拒 `config-exists`）；生成后打印指纹与逐条 next_action。
+#                 写权限 0600、原子写（同目录 tmp + mv）；**不写账本**（真正的"改已有配置"走 Python 侧唯一落盘者
+#                 `tools/config-apply.py`，那里才有人工门与审计）。
+#   ./run plugin <动词> <插件>      运行期装卸（= `tools/plugin.sh <动词> <插件> --live`）：装进**正在服务的进程**；
+#                                 围栅与回执见 src/system/runtime/docs/lifecycle-contract.md §4
 #   ./run doctor  [--port N]        只读体检（解释器/Node/cordis/端口/配置与凭据指纹/门是否可跑），
 #                                   逐项给 next_action；退出码 0 = 这机器能跑，非 0 = 不能跑。
 #
@@ -26,20 +35,45 @@ QUOTAGENT_ROOT=$ROOT
 export QUOTAGENT_ROOT
 
 ACTION=${1:-}
-[ -n "$ACTION" ] || { echo "用法: ./run up|down|status|doctor [--port N] [+见文件头]" >&2; exit 2; }
+[ -n "$ACTION" ] || { echo "用法: ./run up|down|status|logs|doctor|config init|plugin [--port N] [+见文件头]" >&2; exit 2; }
 shift
+
+# `./run plugin <动词> <插件>`：本脚本**不解析**它的参数，整串交给 `tools/plugin.sh … --live`
+# （运行期装卸的薄入口；客户端自己解析 --port/--prefix）。放在参数解析之前 = 参数原样透传。
+if [ "$ACTION" = "plugin" ]; then
+  if [ $# -lt 1 ]; then
+    printf '{\"ok\":false,\"action\":\"plugin\",\"code\":\"usage\",\"reason\":\"缺动词\",\"next_action\":\"./run plugin load userspace/demo-ns/badge（动词：list|status|load|reload|unload|deps）\"}\n' >&2
+    exit 2
+  fi
+  exec sh "$ROOT/tools/plugin.sh" "$@" --live
+fi
+
+# `./run config <子动词>`：目前只有 `init`（生成白名单配置骨架；存在即拒）。
+if [ "$ACTION" = "config" ]; then
+  CONFIG_SUB=${1:-}
+  case "$CONFIG_SUB" in
+    init) shift ;;
+    "") printf '{\"ok\":false,\"action\":\"config\",\"code\":\"usage\",\"reason\":\"缺子动词\",\"next_action\":\"./run config init [--config-file P]\"}\n' >&2; exit 2 ;;
+    *) printf '{\"ok\":false,\"action\":\"config\",\"code\":\"usage\",\"reason\":\"未知子动词：%s\",\"next_action\":\"./run config init\"}\n' "$(jesc "$CONFIG_SUB")" >&2; exit 2 ;;
+  esac
+  ACTION=config-init
+fi
 
 PORT=8093
 HOST=127.0.0.1
 PREFIX=/quotagent
 DATA_DIR=""
 SEED=1
+LINES=40
+CONFIG_FILE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --port) [ $# -ge 2 ] || { echo './run: --port 需要一个值' >&2; exit 2; }; PORT=$2; shift 2 ;;
     --host) [ $# -ge 2 ] || { echo './run: --host 需要一个值' >&2; exit 2; }; HOST=$2; shift 2 ;;
     --prefix) [ $# -ge 2 ] || { echo './run: --prefix 需要一个值' >&2; exit 2; }; PREFIX=$2; shift 2 ;;
     --data-dir) [ $# -ge 2 ] || { echo './run: --data-dir 需要一个值' >&2; exit 2; }; DATA_DIR=$2; shift 2 ;;
+    --lines) [ $# -ge 2 ] || { echo './run: --lines 需要一个值' >&2; exit 2; }; LINES=$2; shift 2 ;;
+    --config-file) [ $# -ge 2 ] || { echo './run: --config-file 需要一个值' >&2; exit 2; }; CONFIG_FILE=$2; shift 2 ;;
     --no-seed) SEED=0; shift ;;
     --seed) SEED=1; shift ;;
     *) echo "./run: 未知参数 $1" >&2; exit 2 ;;
@@ -336,6 +370,114 @@ do_status() {
   [ "$_healthy" = true ] && return 0 || return 1
 }
 
+# ---------------------------------------------------------------------------------------------
+# logs：最近日志的路径 + **有界**尾部（缺省 40 行、上限 200 行）
+# ---------------------------------------------------------------------------------------------
+do_logs() {
+  _lines=$LINES
+  case "$_lines" in ''|*[!0-9]*) _lines=40 ;; esac
+  [ "$_lines" -gt 200 ] && _lines=200
+  [ "$_lines" -lt 1 ] && _lines=1
+  if [ ! -f "$LOG_FILE" ]; then
+    printf '[logs] 没有日志文件：%s\n' "$LOG_FILE"
+    printf '{"ok":false,"action":"logs","code":"log-missing","path":"%s","exists":false,"tail_lines":0,"bounded":true,"next_action":"./run up 起一次服务（日志写在 tmp/run/webui-<port>.log；端口不同 = 文件不同）"}\n' \
+      "$(jesc "$LOG_FILE")"
+    return 1
+  fi
+  _bytes=$(wc -c <"$LOG_FILE" 2>/dev/null | tr -d ' ')
+  _total=$(wc -l <"$LOG_FILE" 2>/dev/null | tr -d ' ')
+  printf '[logs] path=%s bytes=%s file_lines=%s（尾部 %s 行，上限 200）\n' \
+    "$LOG_FILE" "${_bytes:-0}" "${_total:-0}" "$_lines"
+  tail -n "$_lines" "$LOG_FILE" 2>/dev/null
+  printf '{"ok":true,"action":"logs","path":"%s","exists":true,"bytes":%s,"file_lines":%s,"tail_lines":%s,"bounded":true,"max_lines":200,"next_action":"要更多行：./run logs --lines %s（上限 200；日志按端口分开）"}\n' \
+    "$(jesc "$LOG_FILE")" "${_bytes:-0}" "${_total:-0}" "$_lines" "$(( _lines < 200 ? _lines + 40 : 200 ))"
+  return 0
+}
+
+# ---------------------------------------------------------------------------------------------
+# config init：生成**只含白名单键**的 config.yaml（存在即拒；不写账本）
+# ---------------------------------------------------------------------------------------------
+# 白名单真源 = host/lib/config-keys.mjs 的 PROJECT_KEYS（**跨语言单一真源**：Python 侧按同一份文件的
+# 规整字面量逐行解析；本脚本只读不写它）。抽取形状：`  '<点分键>': { type: '<类型>', default: <默认值>, note: …`。
+config_whitelist() {
+  sed -n "s/^  '\([a-z0-9._-]*\)': { type: '\([a-z]*\)', default: \(.*\), note: .*/\1|\2|\3/p" \
+    "$ROOT/host/lib/config-keys.mjs" | LC_ALL=C sort
+}
+
+# 白名单 → 嵌套 YAML（与 `tools/config-apply.py` 的渲染约定一致：缩进 2 空格、字符串加双引号、
+# null/布尔/数字原样）。纯 awk：本脚本在"还没有解释器"的裸机上也要能跑。
+config_init_yaml() {
+  printf '# quotagent 项目配置（由 `./run config init` 生成；**只含白名单键**）\n'
+  printf '# 白名单真源：host/lib/config-keys.mjs 的 PROJECT_KEYS（本文件不含凭据值、不含凭据指针）\n'
+  printf '# 生成时间：%s（例：%s）· 权限：0600\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf 'unknown')" "$(config_path)"
+  printf '# 改这个文件请走人工门：`tools/config-apply.py`（Python 侧唯一落盘者；本脚本只在文件**不存在**时生成骨架）\n'
+  printf '# 段：project（下面这些键）/ plugins（插件配置）/ credentials（凭据只登记指针与指纹）\n'
+  printf 'apiVersion: quotagent/v1\n'
+  printf 'project:\n'
+  config_whitelist | awk -F'|' '
+    function scalar(t, d) {
+      if (d == "null") return "null"
+      if (t == "string") { v = d; sub(/^'"'"'/, "", v); sub(/'"'"'$/, "", v); return "\"" v "\"" }
+      return d
+    }
+    { key[NR] = $1; typ[NR] = $2; def[NR] = $3; total = NR }
+    END {
+      prevn = 0
+      for (i = 1; i <= total; i++) {
+        n = split(key[i], parts, ".")
+        common = 0
+        while (common + 1 < n && common < prevn && parts[common + 1] == prev[common + 1]) common++
+        for (j = common + 1; j < n; j++) printf "%*s%s:\n", j * 2, "", parts[j]
+        printf "%*s%s: %s\n", n * 2, "", parts[n], scalar(typ[i], def[i])
+        for (j = 1; j <= n; j++) prev[j] = parts[j]
+        prevn = n
+      }
+    }'
+  printf 'plugins: {}\n'
+  printf 'credentials: {}\n'
+}
+
+do_config_init() {
+  _target=${CONFIG_FILE:-$(config_path)}
+  _dir=$(dirname -- "$_target")
+  if [ -e "$_target" ]; then
+    _fp=$(sha8 "$_target")
+    printf '{"ok":false,"action":"config-init","code":"config-exists","path":"%s","fingerprint":"%s","overwritten":false,"next_action":"已有真配置文件 ⇒ **不覆盖**（`./run config init` 只做首次脚手架）：改已有值走人工门 `python3 tools/config-apply.py --inbox <dir> --file %s --approval-ref ap-NNNN --actor human:<名> --now <ISO>`，或经系统管理道 UI 的配置面（干跑 → 0600 待办件 → Python 侧落盘）"}\n' \
+      "$(jesc "$_target")" "$_fp" "$(jesc "$_target")"
+    return 1
+  fi
+  mkdir -p "$_dir" 2>/dev/null || {
+    printf '{"ok":false,"action":"config-init","code":"config-dir-unwritable","path":"%s","next_action":"目录不可写：%s（换 --config-file 或修权限）"}\n' \
+      "$(jesc "$_target")" "$(jesc "$_dir")"
+    return 1
+  }
+  _tmp="$_dir/.$(basename -- "$_target").tmp.$$"
+  (umask 077; config_init_yaml >"$_tmp") || {
+    rm -f "$_tmp" 2>/dev/null || true
+    printf '{"ok":false,"action":"config-init","code":"config-write-failed","path":"%s","next_action":"检查目录写权限与磁盘空间"}\n' "$(jesc "$_target")"
+    return 1
+  }
+  # 原子落盘 + 权限 0600（同目录 tmp + mv；不写账本 —— 真正的"改配置"由 Python 侧唯一落盘者做）
+  chmod 600 "$_tmp" 2>/dev/null || true
+  mv "$_tmp" "$_target" || {
+    rm -f "$_tmp" 2>/dev/null || true
+    printf '{"ok":false,"action":"config-init","code":"config-write-failed","path":"%s","next_action":"检查目录写权限（mv 失败）"}\n' "$(jesc "$_target")"
+    return 1
+  }
+  _mode=$(stat -c '%a' "$_target" 2>/dev/null || printf '?')
+  _fp=$(sha8 "$_target")
+  _bytes=$(wc -c <"$_target" 2>/dev/null | tr -d ' ')
+  _keys=$(config_whitelist | wc -l | tr -d ' ')
+  printf '[config init] %s（%s 字节；权限 %s；指纹 %s；白名单键 %s 个）\n' \
+    "$_target" "${_bytes:-0}" "$_mode" "$_fp" "$_keys"
+  # 逐条 next_action（每个白名单键一行：怎么填、填了之后谁读它）
+  config_whitelist | awk -F'|' -v file="$_target" '
+    { printf "[config init] %s: 现在值 = 默认层（%s）；要改就填进 %s 的 project 段，然后走人工门（tools/config-apply.py）或管理道 UI\n", $1, $3, file }'
+  printf '{"ok":true,"action":"config-init","path":"%s","bytes":%s,"mode":"%s","fingerprint":"%s","keys":%s,"credentials_written":false,"next_action":"填值：编辑该文件（白名单键已就位）→ 改已有值走人工门 `python3 tools/config-apply.py … --actor human:<名>`；凭据值放 0600 文件或 env（本文件只登记键，不含值）"}\n' \
+    "$(jesc "$_target")" "${_bytes:-0}" "$_mode" "$_fp" "$_keys"
+  return 0
+}
+
 do_doctor() {
   resolve_python
   resolve_node
@@ -460,7 +602,9 @@ case "$ACTION" in
   up) do_up ;;
   down) do_down ;;
   status) do_status ;;
+  logs) do_logs ;;
+  config-init) do_config_init ;;
   doctor) do_doctor ;;
-  help|-h|--help) sed -n '2,20p' "$0" ;;
-  *) echo "用法: ./run up|down|status|doctor [--port N]" >&2; exit 2 ;;
+  help|-h|--help) sed -n '2,30p' "$0" ;;
+  *) echo "用法: ./run up|down|status|logs|doctor|config init|plugin [--port N]" >&2; exit 2 ;;
 esac

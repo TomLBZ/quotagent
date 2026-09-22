@@ -280,3 +280,36 @@
    结果是"看起来加上了、其实没加"。纪律：**每次文本替换后 assert 命中**，否则报错退出（本次已对后续替换这么做）。
 **共同点**：都是"我以为"对上"真数据"时的失败 —— 与 D-065（哈希口径）同类。
 
+
+## D-016 — 比较表导出以 CSV 交付，`.xlsx` 不在 P1（2026-09-21）
+
+- 背景：roadmap S1.13 写「CSV/Excel」（FR-UX-003 同）。内核/服务层受"仅用标准库"约束，手写 xlsx（zip + OOXML）属于重复造轮子，引入 `openpyxl` 又会打破零依赖约束。
+- 裁决：P1 交付 **CSV**（stdlib `csv`，带 UTF-8 BOM 使 Excel 双击不乱码，列头稳定）；`.xlsx` 若确需，由**宿主层**（Node/cordis 侧，可正常用第三方库）承接，不在内核。
+- 后果：FR-UX-003 的"Excel"按"Excel 可直接打开的 CSV"满足；需求方若要原生 xlsx，走宿主层或另开 ADR。
+## 归档指针（正文已移入 `decisions-archive.md`，ID 仍在此处可索引）
+- D-029 —— 见 `decisions-archive*.md`
+- D-043 —— 见 `decisions-archive-b.md`（本批为控制单文件预算移入；正文未改）
+- D-063 —— 见 `decisions-archive-b.md`（D-074 批次为控制单文件预算移入；正文未改）
+- D-064 —— 见 `decisions-archive-b.md`（D-074 批次为控制单文件预算移入；正文未改）
+- D-066 —— 见 `decisions-archive-b.md`（D-074 批次为控制单文件预算移入；正文未改）
+- D-067 —— 见 `decisions-archive-b.md`（D-074 批次为控制单文件预算移入；正文未改）
+- D-027 —— 见 `decisions-archive.md`（本批为控制单文件预算移入；正文未改）
+- D-045 —— 见 `decisions-archive*.md`
+- D-035 —— 见 `decisions-archive*.md`
+- D-036 —— 见 `decisions-archive.md`
+- D-047 —— 见 `decisions-archive.md`
+- D-046 —— 见 `decisions-archive.md`
+- D-039 —— 见 `decisions-archive.md`
+- D-048 —— 见 `decisions-archive.md`
+- D-057 —— 见 `decisions-archive.md`
+- D-038 —— 见 `decisions-archive.md`
+- D-040 —— 见 `decisions-archive.md`
+- D-041 —— 见 `decisions-archive.md`
+- D-053 —— 见 `decisions-archive.md`
+- D-051 —— 见 `decisions-archive.md`
+- D-050 —— 见 `decisions-archive.md`
+- D-017 —— 见 `decisions-archive.md`
+- D-021 —— 见 `decisions-archive.md`
+- D-044 —— 见 `decisions-archive.md`
+以下决策的完整记录已整段搬到 `decisions-archive.md`，内容未改、门未改；此处保留 ID 以便引用可解析。
+- D-015 —— 见 `decisions-archive.md`

@@ -8,6 +8,11 @@
 #   tools/plugin.sh unload <插件>              # 卸载并归零 effects（可重复）
 #   tools/plugin.sh deps   <插件>              # 依赖闭包（有环给环上的 id）
 #
+#   tools/plugin.sh <动词> <插件> --live        # **装进正在服务的那个进程**（长驻 WebUI，真路由/真页面）
+#                                             #   加 --live 后本入口改 exec 客户端 src/system/runtime/tools/plugin-live.mjs；
+#                                             #   围栅与回执见 src/system/runtime/docs/lifecycle-contract.md §4
+#                                             #   （需要控制令牌；没配 = 通道整体关闭）
+#
 # 说明（本入口只做三件事，逻辑全在实现里 —— 薄入口纪律，见 docs/design/27 §9 未决 3）：
 #   ① 解析 Node（$QUOTAGENT_NODE → PATH → 工作区运行时），与 tools/cordis.sh 同一套；
 #   ② 把 `--root` 默认钉成本仓（调用方不必关心相对路径）；
@@ -16,6 +21,7 @@ set -u
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$HERE/.." && pwd)
 IMPL="$ROOT/src/system/runtime/tools/plugin-lifecycle.mjs"
+IMPL_LIVE="$ROOT/src/system/runtime/tools/plugin-live.mjs"
 
 resolve_node() {
   if [ -n "${QUOTAGENT_NODE:-}" ] && [ -x "${QUOTAGENT_NODE}" ]; then echo "$QUOTAGENT_NODE"; return 0; fi
@@ -45,6 +51,27 @@ case "${1:-}" in
     exec "$NODE" "$IMPL" --help
     ;;
 esac
+
+# `--live` = 装进**正在服务的那个进程**（长驻 WebUI）：改 exec 客户端（薄入口，不留中间进程）。
+# 纪律：`--live` 是**模式开关**（不属于六动词的参数），因此先把它摘掉，再把剩下的参数原样交给客户端
+# （逐行一个参数重建参数表：插件 id/旗标里不含换行，值里的空格因此不会被拆开）。
+LIVE=0
+LIVE_ARGS=""
+for _arg in "$@"; do
+  if [ "$_arg" = "--live" ]; then LIVE=1; continue; fi
+  LIVE_ARGS="$LIVE_ARGS
+$_arg"
+done
+if [ "$LIVE" = "1" ]; then
+  _ifs_save=$IFS
+  IFS='
+'
+  set -f
+  set -- $LIVE_ARGS
+  set +f
+  IFS=$_ifs_save
+  exec "$NODE" "$IMPL_LIVE" --root "$ROOT" "$@"
+fi
 
 # `--root` 缺省 = 本仓（调用方从任何 cwd 调都一致）；显式传了就尊重调用方。
 case " $* " in

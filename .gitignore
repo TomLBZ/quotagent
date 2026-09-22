@@ -24,4 +24,6 @@ docs/work/evidence/**/tmp/
 USER-GOALS.md
 
 # 用户空间插件（运行时产物：独立 instance / 独立文件根 / 独立凭据作用域）
+# 注意（阶段 5.1，EV-168）：这条规则只匹配**目录**；仓库现在把 `user-space` 放成一个**指向 `src/userspace/`
+# 的符号链接**（唯一事实源 = `src/userspace/**`，且它是被跟踪的）。所以旧路径照样可读，但磁盘上只有一份内容。
 user-space/

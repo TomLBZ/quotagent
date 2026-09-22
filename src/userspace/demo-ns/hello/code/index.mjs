@@ -1,10 +1,16 @@
 // 用户空间插件（演示，src/userspace/demo-ns/hello/）：只在自己的命名空间里注册服务；
 // 不碰平台保留名（approval / ledger* / kernel.* / webui…），不写别人目录，零写面。
 //
-// 阶段 1：本插件是**实体搬迁**（用户空间样本体量小），不是 wrapper —— 运行时副本
-// `user-space/demo-ns/hello/` 保持不动，阶段 5.1 收敛成"运行时根 gitignore + 跟踪的 EXAMPLE"。
-// 服务键按用户空间约定是**基础名**：宿主装载期命名空间化为 `<ns>.<plugin>.<svc>`
-// （= `demo-ns.hello.bucket` / `demo-ns.hello.status`）；本文件直接挂载时也按同一命名空间注册。
+// 阶段 5.1：本插件是 `user-space/demo-ns/hello/` 的**收敛目标**（旧副本已删，`user-space` 现在是指向
+// `src/userspace` 的兼容链接 ⇒ 只有一处事实源）。旧副本那 12 行实现逐字留档在 `docs/migration-note.md`。
+//
+// 两份装载器的形状差异（本文件同时满足，**不是**两份实现）：
+//   · 平台装载器（`src/system/runtime/code/plugin-registry.mjs`，六动词 + 运行期装卸）：**不**替插件加前缀，
+//     所以本文件自己注册 `<ns>.<plugin>.<svc>`（= `demo-ns.hello.bucket` / `demo-ns.hello.status`）；
+//   · 用户空间隔离内核（`host/lib/user-space.mjs`）：装载时把 `config.prefix`（`<ns>.<plugin>`）交给插件，
+//     且**只收不带点的基础名**（`SERVICE_RE`），由装载器命名空间化。
+//   ⇒ 判据：有 `config.prefix` 就注册基础名 `bucket` / `status`（交给装载器加前缀）；没有就自己加前缀。
+//     两条路径互相排斥，不会出现同一个服务被注册两次。
 export const name = 'hello'
 export const inject = []
 export const provides = ['bucket', 'status']
@@ -28,8 +34,11 @@ export const apply = (ctx, config) => {
     size: () => store.size,
   }
   const status = { version: config?.version ?? '1.0.0', ns: config?.ns ?? 'demo-ns', plugin: 'hello' }
-  ctx.provide(`${NAMESPACE}.bucket`, bucket)
-  ctx.provide(`${NAMESPACE}.status`, status)
+  // 装载器给了前缀 = 用户空间隔离内核路径（基础名由它命名空间化）；没给 = 平台装载器路径（自己加前缀）。
+  const hostPrefix = typeof config?.prefix === 'string' ? config.prefix.trim() : ''
+  const ownPrefix = hostPrefix === '' ? `${NAMESPACE}.` : ''
+  ctx.provide(`${ownPrefix}bucket`, bucket)
+  ctx.provide(`${ownPrefix}status`, status)
 
   // 注入式 UI 注册面（机制见 host/lib/ui-slot.mjs）：动态依赖，依赖消失自动 dispose（零残留）。
   // `scope.effect()` 的返回值必须是**反注册函数**（返回一个带 dispose 字段的对象会被 cordis 当成

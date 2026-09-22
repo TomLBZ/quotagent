@@ -4,11 +4,11 @@
 
 ## 现在在哪
 
-P2 中。①–③见 EV-160…166（真写闭环 / 规范 27-28+ADR-0021 / 阶段 1 骨架 + 六动词 + 注入式 UI + `./run`）。④ **需求归属落成**（EV-167/T-316）：`docs/work/plugin-requirements-map.md`（63 行，166/166 FR 唯一归属）+ 9 份插件需求文档（6 在 `docs/work/`）+ `14` 先归档再加行（27390 B）+ 新门 `plugin-requirements` 17/17（变异全红）。同树有并发批次在飞 ⇒ `plugin-lifecycle` 43/44。
+P2 中。①–④见 EV-160…167（T-288/313/314/315/316）。⑤ **本批**（EV-168/T-317）：**运行中的服务真能装卸**（`tools/plugin.sh … --live`／`./run plugin …`：真挂进 webui 自身 ctx，区块真上页面、卸载后其余逐字节不变；四道围栅；零写面）+ `user-space`→`src/userspace` 收敛为唯一源（兼容符号链接）+ `./run logs|config init`；门 `plugin-lifecycle` 59/59、`run-once` 34/34（8 处变异全红）、`user-space` 21/21。
 
 ## 下一步唯一动作
 
-`docs/work/plans/plugin-migration-plan.md` §2 续做**阶段 2**（services → `code/`，逐个搬 + 跑 AC）；建插件目录时同步 `plugin-lifecycle` 的 A13/A14（裸目录被当已知插件，见映射表 §4.2）。
+`docs/work/plans/plugin-migration-plan.md` §2 续做**阶段 2**（services → `code/`，逐个搬 + 跑 AC）；建插件目录时同步 `plugin-lifecycle` 的 A13/A14。
 
 ## 不变量与阻塞
 

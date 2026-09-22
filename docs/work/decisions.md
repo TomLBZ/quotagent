@@ -62,39 +62,6 @@
 要么注入假时钟，要么以数据自身的时刻为基准推算。否则门会随墙上时间自己变红/变绿，
 而"门自己会漂"比"门红"更危险（会让人怀疑门、进而绕过门）。
 
-## D-016 — 比较表导出以 CSV 交付，`.xlsx` 不在 P1（2026-09-21）
-
-- 背景：roadmap S1.13 写「CSV/Excel」（FR-UX-003 同）。内核/服务层受"仅用标准库"约束，手写 xlsx（zip + OOXML）属于重复造轮子，引入 `openpyxl` 又会打破零依赖约束。
-- 裁决：P1 交付 **CSV**（stdlib `csv`，带 UTF-8 BOM 使 Excel 双击不乱码，列头稳定）；`.xlsx` 若确需，由**宿主层**（Node/cordis 侧，可正常用第三方库）承接，不在内核。
-- 后果：FR-UX-003 的"Excel"按"Excel 可直接打开的 CSV"满足；需求方若要原生 xlsx，走宿主层或另开 ADR。
-## 归档指针（正文已移入 `decisions-archive.md`，ID 仍在此处可索引）
-- D-029 —— 见 `decisions-archive*.md`
-- D-043 —— 见 `decisions-archive-b.md`（本批为控制单文件预算移入；正文未改）
-- D-063 —— 见 `decisions-archive-b.md`（D-074 批次为控制单文件预算移入；正文未改）
-- D-064 —— 见 `decisions-archive-b.md`（D-074 批次为控制单文件预算移入；正文未改）
-- D-066 —— 见 `decisions-archive-b.md`（D-074 批次为控制单文件预算移入；正文未改）
-- D-067 —— 见 `decisions-archive-b.md`（D-074 批次为控制单文件预算移入；正文未改）
-- D-027 —— 见 `decisions-archive.md`（本批为控制单文件预算移入；正文未改）
-- D-045 —— 见 `decisions-archive*.md`
-- D-035 —— 见 `decisions-archive*.md`
-- D-036 —— 见 `decisions-archive.md`
-- D-047 —— 见 `decisions-archive.md`
-- D-046 —— 见 `decisions-archive.md`
-- D-039 —— 见 `decisions-archive.md`
-- D-048 —— 见 `decisions-archive.md`
-- D-057 —— 见 `decisions-archive.md`
-- D-038 —— 见 `decisions-archive.md`
-- D-040 —— 见 `decisions-archive.md`
-- D-041 —— 见 `decisions-archive.md`
-- D-053 —— 见 `decisions-archive.md`
-- D-051 —— 见 `decisions-archive.md`
-- D-050 —— 见 `decisions-archive.md`
-- D-017 —— 见 `decisions-archive.md`
-- D-021 —— 见 `decisions-archive.md`
-- D-044 —— 见 `decisions-archive.md`
-以下决策的完整记录已整段搬到 `decisions-archive.md`，内容未改、门未改；此处保留 ID 以便引用可解析。
-- D-015 —— 见 `decisions-archive.md`
-
 ## D-052 T-258：邮件集成先做"不假装发送"的一半（2026-09-21T11:46:33Z）
 
 **决定**：`FR-INTEG-003` 拆两半。**本轮做**报文构造/解析 + 幂等投递记录 + 可解释失败（纯标准库，`email`）；
@@ -308,3 +275,21 @@ D-071 第 3 条（判据不得覆盖无关写入者）在**文档门**上的落�
 
 **判据**：`tools/verify.sh plugin-lifecycle`（43/43，含 4 处单点变异全红 + 产品树字节不变）与 `tools/verify.sh run-once`
 （15→18/18，含 4 处变异全红 + 双击 `status` 逐字节一致）；证据 EV-165 / EV-166。
+
+## D-076 运行期装卸（`--live`）：装进正在服务的那只进程；`user-space` 收敛为兼容链接（2026-09-22）
+
+**决定**：① 运行期装卸挂在**宿主自身的 ctx 树**里（`tools/plugin.sh … --live` → `POST <prefix>/api/plugins/control`
+（路由注册面 `host/lib/ui-route.mjs`）→ `src/system/runtime/code/live-control.mjs`）—— 只有这样才能让插件的
+`ctx.inject(['uiSlots'])` 解析得到，"装载后区块真上页面"才成立；再起一个进程只能证明"能 import"。② 四道围栅
+**fail-closed**：控制令牌（不配 = 通道整体关闭；只比 sha256 摘要、不回显不落盘）/ 显式 `confirm` / `system/**`
+层锁 / 只认显式动词与 id。③ `--live` 与常驻运行时进程**并行**（前者要页面、后者要可跑在任意 `--root`），两条路的
+装载事实都只在内存里。④ `user-space` → `src/userspace/**` 收敛为**唯一源**：旧位置改成指向它的**符号链接**
+（`.gitignore` 的 `user-space/` 只匹配目录 ⇒ 链接入库），旧路径的 12 处读方一行不动。
+
+**实测坑（已写进源码注释与门）**：① `host/cli.mjs` 用 `inner.provide = …` 抓句柄会污染**全树** provide ⇒
+之后装载的插件把服务注册在**别人的 fiber** 上、卸载留残注册（运行期再装载必红）；正解 `ctx.get(...)`，
+门 D5 扫"webui 装配段 0 处 monkey-patch"；② 断网验收里 `NO_PROXY` 不能留空（否则本机健康检查走死代理）；
+③ 变异夹具的 `config init` 目标路径必须每次全新。
+
+**判据**：`plugin-lifecycle`（44→**59/59**）与 `run-once`（18→**34/34**，8 处变异全红）；细节与原始行见
+`docs/work/evidence/EV-168-live-plugin-lifecycle-and-userspace.txt`、清单 T-317。

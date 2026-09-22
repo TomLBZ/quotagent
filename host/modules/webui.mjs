@@ -19,6 +19,9 @@ import { openLedger } from '../lib/ledger-view.mjs'
 // 注入式 UI 注册面（**机制**，见 host/lib/ui-slot.mjs）：本文件不知道任何区块是什么、由谁注册。
 // 用户原话（逐字）："不需要让 webui 耦合展示其他插件的 UI 或者耦合某种具体的业务逻辑。"
 import { createSlotRegistry, SLOTS as UI_SLOTS } from '../lib/ui-slot.mjs'
+// 注入式 UI 的**路由注册面**（机制，见 host/lib/ui-route.mjs）：与槽位面姊妹 —— 插件自己注册 HTTP 路由
+// （27 §6.1 把"路由注册"列为 webui 必须提供的注册面之一）。本文件不知道任何路由的业务含义。
+import { createRouteRegistry } from '../lib/ui-route.mjs'
 
 export const name = 'webui'
 
@@ -279,6 +282,11 @@ export function apply(ctx, config) {
   const uiSlots = createSlotRegistry({ slots: config.ui_slots })
   ctx.effect(() => () => uiSlots.dispose())      // 卸载即释放注册表（零残留）
   const slotsHtmlOf = (view) => uiSlots.render(`page.${view}`)
+  // 路由注册面（**机制**，与槽位面同构）：`host/lib/ui-route.mjs` 只管"谁在哪条路径上注册了什么"，
+  // 本文件只做两件通用的事：① 请求进来时查表（精确匹配，命中了就把响应权交给注册者）；
+  // ② 把动态路由与静态路由登记在同一张 `/api/routes` 表里。**不解读**任何路由的语义。
+  const uiRoutes = createRouteRegistry()
+  ctx.effect(() => () => uiRoutes.dispose())     // 卸载即释放（注册者随之失去服务，零残留）
   // 视角 → 账本：配了自有账本就用它（结构性隔离），否则退回注入的只读视图（fixture/单账本模式）
   const ledgerOf = (view) => {
     const own = view === 'contractor' ? config.ledger_contractor : config.ledger_supplier
@@ -2413,6 +2421,23 @@ ${sortForm('events', '筛查事件')}
         { allow: 'GET' })
     }
 
+    // ---- 动态路由（**路由注册面**，见 `host/lib/ui-route.mjs`）：精确匹配，命中即把响应权交给注册者 ----
+    // 纪律：注册表里没有这条 ⇒ 落到下面既有的静态路由/404 语义（不通配、不猜）；注册者自己给有名
+    // code + next_action，本文件**不替它编响应**；注册者抛错 ⇒ 500 + `handler-failed`（不静默吞）。
+    const dynamicHit = uiRoutes.match(path, method)
+    if (dynamicHit !== null) {
+      const request = { req, res, url, prefix, path, method, json, send, readBody, route: dynamicHit.route }
+      const failed = (err) => json(500, { ok: false, route: dynamicHit.route.path, code: 'handler-failed',
+        reason: String(err && err.message ? err.message : err).slice(0, 240),
+        next_action: '这是注册者的处理器抛错：修它的 handler（机制层不兜底、不编替代响应）' })
+      try {
+        const out = dynamicHit.handler(request)
+        return out && typeof out.then === 'function' ? out.catch(failed) : out
+      } catch (err) {
+        return failed(err)
+      }
+    }
+
     if (path === '/api/ui/blocks') {
       // 注册面自述（**只回执元数据**）：谁注册了什么槽位 —— 本文件只把注册表读出来，不解读内容。
       const described = uiSlots.describe()
@@ -2495,6 +2520,9 @@ ${sortForm('events', '筛查事件')}
           // 注入式 UI 注册面（机制；`host/lib/ui-slot.mjs`）：只回执"谁注册了哪个槽位"，不解读区块内容
           { path: `${prefix}/api/ui/blocks`, method: 'GET', auth: 'none',
             what: '注入式 UI 注册面自述（槽位闭合集合 + 已注册区块的 plugin_id/slot/order/title；webui 不懂业务语义）' },
+          // 动态路由（**路由注册面**，`host/lib/ui-route.mjs`）：注册者是插件，本表只登记元数据
+          ...uiRoutes.list().map((row) => ({ path: `${prefix}${row.path}`, method: row.method,
+            auth: row.auth, what: row.what, source: row.source })),
           // WebUI 反馈闭环（ui-feedback 插件）：SSR 表单页（**0 内联脚本**）+ 只落 0600 待办件 + 只读观察面
           ...config.views.flatMap((v) => [
             { path: `${prefix}/${v}/feedback`, method: 'GET', auth: 'none',
@@ -3133,6 +3161,7 @@ ${sortForm('events', '筛查事件')}
       // port=0 → 由内核分配临时端口；实际端口**必须**从 server.address() 读（fixture 靠它做 HTTP 检查）
       const port = server.address().port
       ctx.provide('uiSlots', uiSlots)      // 注入式 UI 注册面（机制）：插件据此提交自己的区块
+      ctx.provide('uiRoutes', uiRoutes)    // 路由注册面（机制）：插件据此注册自己的 HTTP 路由
       ctx.provide('webui', {
         url: `http://${config.listen_host}:${port}${prefix}/`,
         port,

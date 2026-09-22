@@ -1,0 +1,29 @@
+{
+  "name": "badge",
+  "version": "1.0.0",
+  "layer": "userspace",
+  "ns": "demo-ns",
+  "provides": ["stamp", "status"],
+  "entry": "code/index.mjs",
+  "artifact": "code/index.mjs",
+  "sha256": "94f1e7780e526461c1827fb49abe09eadd8f51190bd4c53e2a1d139f9144a1fb",
+  "files": true,
+  "description": "运行期装卸的演示/取证插件（demo-ns.badge）：不在任何启动装配里，只能由运行期控制通道装进运行中的服务；装进来后向 WebUI 注册面提交一个只读区块，卸掉后区块消失且页面其余部分逐字节不变。零写面。",
+  "inject": [],
+  "depends_on": ["system/webui"],
+  "external_deps": {},
+  "permissions": {
+    "writes": [],
+    "ledger": "none"
+  },
+  "source": "user-space",
+  "requirements": ["FR-USERPLUG-001", "FR-USERPLUG-002", "FR-USERPLUG-006", "FR-PLUGIN-003"],
+  "tests": ["tools/verify.sh plugin-lifecycle", "tools/verify.sh user-space"],
+  "migration": {
+    "stage": 5.1,
+    "mode": "new",
+    "from": null,
+    "impl": "code/index.mjs",
+    "note": "阶段 5.1 新增（运行期装卸的取证对象）：与 demo-ns/hello 同形，但**不**被任何 profile/CLI 静态装配。"
+  }
+}

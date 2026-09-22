@@ -1,0 +1,42 @@
+{
+  "ns": "con-a",
+  "name": "quote-trend",
+  "version": "1.0.0",
+  "layer": "userspace",
+  "entry": "code/index.mjs",
+  "artifact": "code/index.mjs",
+  "description": "承包商 con-a 的报价趋势记录（用户空间插件）：按项目维度 append 记录每次报价金额，并从自己的观测日志算出涨跌方向与差值。自包含：inject=[]、不消费任何平台服务；服务只注册在自己命名空间（quoteTrend / observationLog）；数据只落自己的文件根 data/observations.jsonl（append-only）；纯标准库 ESM、零第三方依赖、子进程/网络/随机/定时器全零。",
+  "provides": [
+    "quoteTrend",
+    "observationLog"
+  ],
+  "created_from": "承包商想按项目维度记录每次报价金额，并能看出趋势——哪个项目在涨、哪个在跌、涨跌多少。",
+  "source_prompt_digest": "313c31f09ce93893035b8ff49e4a10892dfafae413bbe7bd5617d36d9655ce91",
+  "source_prompt_digest_rule": "sha256(utf8(created_from))",
+  "data_file": "data/observations.jsonl",
+  "data_file_shape": "{\"project_id\":<string>,\"amount_minor\":<integer>,\"at\":<ISO-8601 string>} 一行一条；只追加，从不改写已有行",
+  "interface": {
+    "quoteTrend.record": "(project_id, amount_minor, at_iso) -> {ok, count} | {ok:false, code:'invalid-observation', reason, next_action}（非法入参不写文件）",
+    "quoteTrend.trend": "(project_id) -> {project_id, points, first, last, delta_minor, direction:'up'|'down'|'flat', pct_bp}（0 条另带 note:'no-observation'）",
+    "observationLog.path": "() -> 本插件数据文件的绝对路径",
+    "observationLog.stats": "() -> {lines, projects}（只读）"
+  },
+  "sha256": "dffeff77fbf497048efd0b4c5f592025821efb56441925adf9e57c94c8086db7",
+  "files": true,
+  "inject": [],
+  "external_deps": {},
+  "permissions": {
+    "writes": ["own-ns-root"],
+    "ledger": "none"
+  },
+  "source": "user-space",
+  "requirements": ["FR-USERPLUG-001", "FR-USERPLUG-002", "FR-USERPLUG-006", "FR-USERPLUG-009", "FR-STORAGE-006"],
+  "tests": ["tools/verify.sh user-space", "tools/verify.sh storage"],
+  "migration": {
+    "stage": 5.1,
+    "mode": "converged",
+    "from": "user-space/con-a/quote-trend/",
+    "impl": "code/index.mjs",
+    "note": "唯一事实源 = src/userspace/con-a/quote-trend/；`user-space/` 改为指向 `src/userspace/` 的兼容链接。产物字节与声明哈希**未变**（sha256 仍是 dffeff77…，11742 字节）；`artifact` 由 `index.mjs` 改指 `code/index.mjs`（同一份字节，落到标准目录布局的 `code/`）。"
+  }
+}

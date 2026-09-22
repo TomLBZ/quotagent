@@ -257,12 +257,12 @@
 | `tools/v-kit.sh` | `src/system/repo-gate/tools/v-kit.sh` |  |
 | `tools/webui-serve.py` | `src/system/webui/tools/webui-serve.py` |  |
 | `tools/ws-integrate.py` | `src/system/runtime/tools/ws-integrate.py` |  |
-| `user-space/README.txt` | `src/userspace/README.txt` |  |
-| `user-space/con-a/quote-trend/data/observations.jsonl` | `src/userspace/con-a/quote-trend/data/observations.jsonl` |  |
-| `user-space/con-a/quote-trend/index.mjs` | `src/userspace/con-a/quote-trend/index.mjs` |  |
-| `user-space/con-a/quote-trend/plugin.json` | `src/userspace/con-a/quote-trend/plugin.json` |  |
-| `user-space/demo-ns/hello/index.mjs` | `src/userspace/demo-ns/hello/index.mjs` |  |
-| `user-space/demo-ns/hello/plugin.json` | `src/userspace/demo-ns/hello/plugin.json` |  |
+| `user-space/README.txt` | `src/userspace/README.txt` |  | 已落（阶段 5.1，EV-168） |
+| `user-space/con-a/quote-trend/data/observations.jsonl` | `src/userspace/con-a/quote-trend/data/observations.jsonl` |  | 已落（字节未变，297 B / sha256 33f46dbe…） |
+| `user-space/con-a/quote-trend/index.mjs` | `src/userspace/con-a/quote-trend/code/index.mjs` |  | 已落（**偏表格原意**：按硬规范 §2.1 落进 `code/`；字节未变，11742 B / sha256 dffeff77…） |
+| `user-space/con-a/quote-trend/plugin.json` | `src/userspace/con-a/quote-trend/plugin.json` |  | 已落（合并清单：加 `layer`/`entry`，`artifact` 指 `code/index.mjs`） |
+| `user-space/demo-ns/hello/index.mjs` | —— |  | **删**（与 `code/index.mjs` 是同一插件的两份实现；那 12 行逐字留档在 `src/userspace/demo-ns/hello/docs/migration-note.md`） |
+| `user-space/demo-ns/hello/plugin.json` | `src/userspace/demo-ns/hello/plugin.json` |  | 已落（合并清单：与阶段 1 的新清单合成一份） |
 | `host/modules/quote-prepare.mjs` | `src/domain/quote-prepare/quote-prepare.mjs` | 在飞（未跟踪） |
 | `host/t286-quote-draft-gate.mjs` | `src/domain/quote-prepare/tests/t286-quote-draft-gate.mjs` | 在飞（未跟踪） |
 | `host/t287-rfq-visibility-gate.mjs` | `src/system/projection/tests/t287-rfq-visibility-gate.mjs` | 在飞（未跟踪） |
@@ -301,5 +301,10 @@
 | `host/{package.json,package-lock.json,README.md,smoke.mjs,cli.mjs,profiles.mjs}` | `src/system/runtime/` | 宿主运行时清单与入口 |
 | `tools/<name>`（除 5 个薄入口） | `src/{system|domain}/<plugin>/{tests|tools}/<name>` | `check-*` 归 `tests/`；落账本/落盘工具归 `tools/` |
 | `user-space/**` | `src/userspace/**` | 相对路径不变 |
+
+**阶段 5.1 的收敛结论（EV-168）**：`src/userspace/**` 是**唯一事实源**；`user-space` 现在是指向它的
+**兼容链接**（tracked symlink —— `.gitignore` 的 `user-space/` 规则只匹配目录，不匹配符号链接），
+所以旧路径的读方（`tools/webui-serve.py` 的 `--user-space-root`/`--market-user-space`、`host/lib/user-space.mjs`
+的默认根、若干宿主门）不必改一行，而磁盘上只有一份内容。
 
 （完）

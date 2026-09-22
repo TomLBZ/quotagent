@@ -5,7 +5,10 @@
   "ns": "demo-ns",
   "provides": ["bucket", "status"],
   "entry": "code/index.mjs",
-  "description": "用户空间演示插件（demo-ns.hello）：在自己命名空间里提供一个只读问候/计数服务，并向 WebUI 注册面提交一个只读区块；不改平台、不碰保留名、零写面。",
+  "artifact": "code/index.mjs",
+  "sha256": "14865cfd4ac07d78973121a2382d98d0f1026feb59f6d4fe6a3e735fe69a429c",
+  "files": true,
+  "description": "用户空间演示插件（demo-ns.hello）：在自己命名空间里提供一个只读问候/计数服务，并向 WebUI 注册面提交一个只读区块；不改平台、不碰保留名、零写面。同时满足两份装载器（平台六动词装载器自命名空间化；用户空间隔离内核给前缀时注册基础名）。",
   "inject": [],
   "depends_on": ["system/webui"],
   "external_deps": {},
@@ -17,10 +20,10 @@
   "requirements": ["FR-USERPLUG-001", "FR-USERPLUG-002", "FR-USERPLUG-006", "FR-USERPLUG-009"],
   "tests": ["tools/verify.sh user-space", "tools/verify.sh plugin-lifecycle"],
   "migration": {
-    "stage": 1,
-    "mode": "migrated",
+    "stage": 5.1,
+    "mode": "converged",
     "from": "user-space/demo-ns/hello/",
     "impl": "code/index.mjs",
-    "note": "用户空间插件体量小：本批**实体搬迁**（不是 wrapper）。运行时副本 user-space/demo-ns/hello/ 保持不动，阶段 5.1 收敛"
+    "note": "唯一事实源 = src/userspace/demo-ns/hello/；旧运行时副本已删，`user-space` 改为指向 `src/userspace` 的兼容链接。旧副本那 12 行实现在 docs/migration-note.md 里逐字留档（其能力是 code/index.mjs 的子集）。"
   }
 }

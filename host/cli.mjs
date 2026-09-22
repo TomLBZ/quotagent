@@ -121,31 +121,22 @@ const main = async () => {
       apply: (inner, cfg) => projectionApply(inner, cfg),
     }, projectionConfig.parse({}))
     // 观测来源：留痕（audit-hook）与分流（canary）——都是独立插件，权重 0 = 零影响
+    // 注意（实测踩过，别改回去）：**不要**用 `inner.provide = …` 去"抓"服务的句柄 —— 那个赋值会落在
+    // 共享的 ctx 对象上并沿原型链传给**全树**，于是**之后**装载的插件把自己的服务注册在**别人的 fiber** 上：
+    // 卸载自己时效果摘不掉、服务名留在注册表里（再次装载 ⇒ `service … has been registered at <别的插件>`）。
+    // 运行期装卸（`src/system/runtime/code/live-control.mjs`）第一个撞上这条：load 之后再 load 必红。
+    // 正确做法：装配完用 `ctx.get('<服务键>')` 读（本文件下面 observability / webui 就是这么拿的）。
     const { apply: auditApply, Config: auditConfig } = await import('./modules/audit-hook.mjs')
-    const abox = {}
     await ctx.plugin({ name: 'audit-hook', inject: [], Config: auditConfig,
-      apply: async (inner, cfg) => {
-        const original = inner.provide.bind(inner)
-        inner.provide = (service, value) => { if (service === 'audit') abox.handle = value; return original(service, value) }
-        await auditApply(inner, cfg)
-      } }, auditConfig.parse({ capacity: 200 }))
+      apply: (inner, cfg) => auditApply(inner, cfg) }, auditConfig.parse({ capacity: 200 }))
     const { apply: canaryApply2, Config: canaryConfig2 } = await import('./modules/canary.mjs')
-    const cbox2 = {}
     await ctx.plugin({ name: 'canary', inject: [], Config: canaryConfig2,
-      apply: async (inner, cfg) => {
-        const original = inner.provide.bind(inner)
-        inner.provide = (service, value) => { if (service === 'canary') cbox2.handle = value; return original(service, value) }
-        await canaryApply2(inner, cfg)
-      } }, canaryConfig2.parse({ weight_bps: 0 }))
+      apply: (inner, cfg) => canaryApply2(inner, cfg) }, canaryConfig2.parse({ weight_bps: 0 }))
     // 观测聚合（独立插件）：只读；它 inject 前三个
     const { apply: obsApply, Config: obsConfig } = await import('./modules/observability.mjs')
-    const obox = {}
     await ctx.plugin({ name: 'observability', inject: ['governor', 'audit', 'canary'], Config: obsConfig,
-      apply: async (inner, cfg) => {
-        const original = inner.provide.bind(inner)
-        inner.provide = (service, value) => { if (service === 'observability') obox.handle = value; return original(service, value) }
-        await obsApply(inner, cfg)
-      } }, obsConfig.parse({}))
+      apply: (inner, cfg) => obsApply(inner, cfg) }, obsConfig.parse({}))
+    const observabilityHandle = ctx.get('observability')
     // 价格序列插件（自进化产出，T-237/T-238）：按行项目分组
     const { apply: historyApply, Config: historyConfig } = await import('./modules/price-history.mjs')
     await ctx.plugin({ name: 'price-history', inject: [], Config: historyConfig,
@@ -257,16 +248,13 @@ const main = async () => {
       apply: (inner, cfg) => evApply(inner, cfg) }, evConfig.parse({}))
     const contractorLedger = String(args['ledger-contractor'] ?? ledgerPath)
     ctx.provide('ledgerView', openLedger(contractorLedger))
-    const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
       inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare'],   // 全部是独立插件
       Config: webuiConfig,
-      apply: async (inner, config) => {
-        const original = inner.provide.bind(inner)
-        inner.provide = (service, value) => { if (service === 'webui') box.handle = value; return original(service, value) }
-        await webuiApply(inner, config)
-      },
+      // 不再用 `inner.provide = …` 抓句柄（那个赋值会污染全树，见上面 audit-hook 处的说明）；
+      // 装配完从 ctx 读同一个服务。
+      apply: (inner, config) => webuiApply(inner, config),
     }, {
       port: Number(args.port ?? 8093),
       listen_host: String(args.host ?? '127.0.0.1'),
@@ -285,6 +273,7 @@ const main = async () => {
       // RFQ 投递信封（发送方放到共享交换目录的交付件）：被邀供应商由此看到"发给自己的包"
       rfq_delivery: String(args['rfq-delivery'] ?? process.env.QUOTAGENT_UI_RFQ_DELIVERY ?? ''),
     })
+    const webuiHandle = ctx.get('webui')     // 装配完从 ctx 读句柄（不再 monkey-patch provide，见上）
     // 注意：这里**不能**用 emit()（它写完就 process.exit）——UI 是常驻服务
     // 用户空间样板（阶段 1）：注入式 UI 的第二个注册者（证明机制与业务无关：webui 不知道它是什么）。
     // 阶段 1 暂时挂进平台 ctx（独立 Context 装载由阶段 5.1/5.2 收敛，见该插件 README 的已知偏差）。
@@ -297,10 +286,16 @@ const main = async () => {
       await ctx.plugin({ name: 'userspace/demo-ns/hello', inject: [], Config: helloConfig,
         apply: (inner, cfg) => helloApply(inner, cfg) }, helloCfg)
     }
+    // 运行期装卸面（机制，阶段 5.2 收口件）：挂在 **webui 自己的 ctx** 上 —— 它必须能看见注册面
+    // （`uiRoutes` 用来注册控制通道；装进来的插件因而是它的子树 ⇒ 也看得见 `uiSlots`，区块才上得了页面）。
+    // 围栅/动词/回执/零写面见 `src/system/runtime/docs/lifecycle-contract.md` §4。
+    const { apply: liveApply } = await import('../src/system/runtime/code/live-control.mjs')
+    await fiber.ctx.plugin({ name: 'runtime/live-control', inject: [], provides: ['livePluginControl'],
+      apply: (inner, liveCfg) => liveApply(inner, liveCfg) }, { root: REPO_ROOT })
     process.stdout.write(JSON.stringify({ ok: true, action: 'webui', profile: profileName, pid: process.pid,
-           url: box.handle?.url, port: box.handle?.port, prefix: box.handle?.prefix,
-           views: Object.keys(VIEW_RULES), routes: (box.handle ? Object.keys(VIEW_RULES) : [])
-             .map((view) => box.handle.viewUrl(view)),
+           url: webuiHandle?.url, port: webuiHandle?.port, prefix: webuiHandle?.prefix,
+           views: Object.keys(VIEW_RULES), routes: (webuiHandle ? Object.keys(VIEW_RULES) : [])
+             .map((view) => webuiHandle.viewUrl(view)),
            ledgers: { contractor: contractorLedger, supplier: String(args['ledger-supplier'] ?? '') },
            observability_route: `${String(args.prefix ?? '/quotagent')}/api/obs`,
            history_routes: ['contractor', 'supplier'].map((v) => `${String(args.prefix ?? '/quotagent')}/${v}/api/history`),
@@ -318,7 +313,7 @@ const main = async () => {
            admin_route: `${String(args.prefix ?? '/quotagent')}/admin/`,
            view_domain_routes: ['contractor', 'supplier'].flatMap((v) => [`${String(args.prefix ?? '/quotagent')}/${v}/api/negotiation`,
              `${String(args.prefix ?? '/quotagent')}/${v}/api/faq`]),
-           observability: obox.handle ? obox.handle.summary() : null,
+           observability: observabilityHandle ? observabilityHandle.summary() : null,
            note: '每方视角读自己的账本（结构性隔离）+ 投影白名单（纵深防御）；宿主不写账本' }) + '\n')
     // 保活：直到收到信号（ws-gateway 以 SIGTERM 停服）
     await new Promise((resolve) => {

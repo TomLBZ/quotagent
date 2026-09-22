@@ -50,6 +50,7 @@ CORDIS = ROOT / "host" / "node_modules" / "cordis" / "lib" / "index.js"
 
 ID_ADVICE = "domain/advice"
 ID_HELLO = "userspace/demo-ns/hello"
+BADGE = "userspace/demo-ns/badge"          # 运行期装卸的取证对象（不在任何启动装配里）
 TITLE_ADVICE = "决策建议（domain/advice 插件注册的只读区块）"
 TITLE_HELLO = "用户空间插件区块（demo-ns.hello 注册的只读区块）"
 ENGINE_NOTE = "本页建议由确定性规则从投影/快照派生，不含模型推测"
@@ -479,6 +480,255 @@ def assert_registration(port: int, prefix: str) -> None:
           f"routes 命中={len(registered)} {registered}")
 
 
+def assert_live_lifecycle() -> None:
+    """L：**运行中服务的运行期装卸**（长驻 WebUI 进程里真 load/reload/unload；页面区块真出现/真消失）。
+
+    这一段的判据就是 `docs/work/plans/plugin-migration-plan.md` §5.3 那条一直没落地的断言：
+    「卸载一个业务插件后其路由消失、**页面其余部分逐字节不变**」。
+    """
+    node = node_bin()
+    live = ROOT / "src" / "system" / "runtime" / "code" / "live-control.mjs"
+
+    # L1 机制层负控（纯函数，直接驱动；快且确定性）：围栅四道 + 回执码映射
+    script = """
+import { fence, statusFor, resolveToken, lockedLayer, MUTATING, VERBS } from '%s'
+const facts = {}
+facts.no_token = fence({ headers: {}, body: { verb: 'load', id: 'userspace/demo-ns/badge' }, token: '' })
+facts.no_header = fence({ headers: {}, body: { verb: 'load', id: 'userspace/demo-ns/badge' }, token: 'T' })
+facts.bad_token = fence({ headers: { 'x-plugin-control-token': 'X' }, body: { verb: 'load', id: 'userspace/demo-ns/badge' }, token: 'T' })
+facts.no_confirm = fence({ headers: { 'x-plugin-control-token': 'T' }, body: { verb: 'load', id: 'userspace/demo-ns/badge' }, token: 'T' })
+facts.ok = fence({ headers: { 'x-plugin-control-token': 'T' }, body: { verb: 'load', id: 'userspace/demo-ns/badge', confirm: true }, token: 'T' })
+facts.bad_verb = fence({ headers: { 'x-plugin-control-token': 'T' }, body: { verb: 'frobnicate', id: 'x', confirm: true }, token: 'T' })
+facts.status_codes = [statusFor('plugin-control-disabled'), statusFor('plugin-control-unauthorized'),
+  statusFor('layer-locked'), statusFor('confirmation-required'), statusFor('unknown-verb'), statusFor('unknown-plugin')]
+facts.locked = [lockedLayer('system/runtime'), lockedLayer('domain/advice'), lockedLayer('userspace/demo-ns/badge')]
+facts.mutating = MUTATING
+facts.resolve_absent = resolveToken({ env: {}, root: '/nonexistent-root' })
+facts.verbs = VERBS
+console.log(JSON.stringify(facts))
+""" % (str(live),)
+    proc = subprocess.run([node, "--input-type=module", "-e", script], cwd=str(ROOT), capture_output=True,
+                          text=True, timeout=120)
+    facts = json_line(proc.stdout)
+    check("L1 围栅（机制层，纯函数直驱）：**没配令牌 = 整条通道关闭**（fail-closed）、缺头/错令牌各有名拒、"
+          "改名动作缺 `confirm` ⇒ `confirmation-required`、未知动词 ⇒ `unknown-verb`",
+          facts.get("no_token", {}).get("code") == "plugin-control-disabled"
+          and facts.get("no_header", {}).get("code") == "plugin-control-unauthorized"
+          and facts.get("bad_token", {}).get("code") == "plugin-control-unauthorized"
+          and facts.get("no_confirm", {}).get("code") == "confirmation-required"
+          and facts.get("bad_verb", {}).get("code") == "unknown-verb"
+          and facts.get("ok", {}).get("ok") is True,
+          f"no_token={facts.get('no_token', {}).get('code')} 缺头={facts.get('no_header', {}).get('code')} "
+          f"错令牌={facts.get('bad_token', {}).get('code')} 缺确认={facts.get('no_confirm', {}).get('code')} "
+          f"未知动词={facts.get('bad_verb', {}).get('code')}")
+    check("L2 回执码映射与层锁：通道关闭 503 / 未授权与层锁 403 / 冲突 409 / 未知名 400 / 未知插件 404；"
+          "只有 `system/*` 被锁（domain/userspace 可装卸）；令牌来源缺失时如实报 `absent`（不猜默认值）",
+          facts.get("status_codes") == [503, 403, 403, 409, 400, 404]
+          and facts.get("locked") == ["system", None, None]
+          and facts.get("mutating") == ["load", "reload", "unload"]
+          and facts.get("resolve_absent", {}).get("token") == ""
+          and facts.get("resolve_absent", {}).get("source") == "absent",
+          f"codes={facts.get('status_codes')} locked={facts.get('locked')} "
+          f"token_source={facts.get('resolve_absent', {}).get('source')}")
+
+    # L3+ 真 HTTP / 真页面 / 真命令：起一个**带控制令牌**的服务
+    token = "pl-live-gate-token"
+    port = free_port()
+    data_dir = f"tmp/plugin-lifecycle-gate/live-{port}"
+    env_live = {"QUOTAGENT_PLUGIN_CONTROL_TOKEN": token}
+    shutdown_live = lambda: run_sh(RUN, ["down", "--port", str(port)])
+    shutdown_live()
+    up_rc, up_out, up_err = run_sh(RUN, ["up", "--port", str(port), "--data-dir", data_dir, "--no-seed"], env_live)
+    healthy = wait_health(port, "/quotagent")
+    try:
+        check("L3 运行中服务起得来且控制通道在（`./run up` + 令牌；通道只看令牌，不看调用者是谁）",
+              up_rc == 0 and healthy, f"up_rc={up_rc} healthy={healthy} err={up_err.strip()[-160:]}")
+        if not (up_rc == 0 and healthy):
+            return
+        prefix = "/quotagent"
+        base = f"http://127.0.0.1:{port}{prefix}"
+        control = f"{base}/api/plugins/control"
+        supplier_page = f"{base}/supplier/"
+        tree_before = tree_digest(ROOT / "src") + tree_digest(ROOT / "host")
+        ledger_before = tree_digest(ROOT / data_dir)
+
+        # L4 控制路由**登记在路由表里**（动态路由由注册面登记，不是藏在 webui 里的私货）
+        code, body, _ = http_get(f"{base}/api/routes")
+        rows = []
+        try:
+            rows = json.loads(body).get("routes", [])
+        except json.JSONDecodeError:
+            pass
+        control_rows = [row for row in rows if row.get("path") == f"{prefix}/api/plugins/control"]
+        check("L4 控制通道**登记在 `/api/routes`**（method=POST、auth=control-token、source=uiRoutes）",
+              code == 200 and len(control_rows) == 1 and control_rows[0].get("method") == "POST"
+              and control_rows[0].get("auth") == "control-token" and control_rows[0].get("source") == "uiRoutes",
+              f"命中={control_rows}")
+
+        # L5 围栅在**真 HTTP** 上也成立（缺令牌 / 缺确认 / 层锁 / 未知插件）
+        s1, b1 = http_post_json(control, {"verb": "load", "id": BADGE, "confirm": True})
+        s2, b2 = http_post_json(control, {"verb": "load", "id": BADGE}, {"x-plugin-control-token": token})
+        s3, b3 = http_post_json(control, {"verb": "load", "id": "system/runtime", "confirm": True},
+                                {"x-plugin-control-token": token})
+        s4, b4 = http_post_json(control, {"verb": "load", "id": "domain/nope", "confirm": True},
+                                {"x-plugin-control-token": token})
+        check("L5 真 HTTP 围栅：缺令牌 403 `plugin-control-unauthorized` / 缺确认 409 `confirmation-required` / "
+              "system 层 403 `layer-locked` / 未知插件 404 `unknown-plugin`（逐条有名 code + next_action，"
+              "且**都没改装配**）",
+              s1 == 403 and b1.get("code") == "plugin-control-unauthorized"
+              and s2 == 409 and b2.get("code") == "confirmation-required"
+              and s3 == 403 and b3.get("code") == "layer-locked"
+              and s4 == 404 and b4.get("code") == "unknown-plugin"
+              and all(isinstance(item.get("next_action"), str) and item.get("next_action") for item in (b1, b2, b3, b4)),
+              f"{s1}/{b1.get('code')} {s2}/{b2.get('code')} {s3}/{b3.get('code')} {s4}/{b4.get('code')}")
+
+        # L6 客户端围栅：**客户端**在没有令牌时也要就地拒绝（不假装成功、不去猜默认值）
+        client_env = dict(os.environ)
+        client_env.pop("QUOTAGENT_PLUGIN_CONTROL_TOKEN", None)
+        client_env["QUOTAGENT_PLUGIN_CONTROL_TOKEN_FILE"] = str(ROOT / "tmp" / "no-such-token-file")
+        rc_cli, out_cli, _err = run_sh(PLUGIN_SH, ["status", BADGE, "--live", "--port", str(port)],
+                                       client_env)
+        cli_payload = json_line(out_cli)
+        check("L6 客户端围栅：没有令牌时 `tools/plugin.sh <动词> --live` 就地拒（`plugin-control-disabled` + "
+              "next_action；退出码非 0）",
+              rc_cli != 0 and cli_payload.get("code") == "plugin-control-disabled"
+              and cli_payload.get("next_action"),
+              f"rc={rc_cli} code={cli_payload.get('code')} next_action={str(cli_payload.get('next_action'))[:80]}")
+
+        # L7 装载前：页面上**没有** badge 的区块；/api/ui/blocks 只有 2 条（启动期静态装配的那两个）
+        page_before_code, page_before, _ = http_get(supplier_page)
+        sha_before = hashlib.sha256(page_before.encode("utf-8")).hexdigest()
+        blocks_before = ui_blocks(base)
+        status_before = live_verb(PLUGIN_SH, ["status", BADGE, "--port", str(port)], token)[1]
+        check("L7 装载前：badge 未装载（`status --live` loaded=false）、页面上没有它的区块、注册面只有 2 条",
+              page_before_code == 200 and BADGE not in page_before
+              and len(blocks_before) == 2 and status_before.get("loaded") is False,
+              f"http={page_before_code} blocks={len(blocks_before)} status_loaded={status_before.get('loaded')} "
+              f"sha={sha_before[:16]}")
+
+        # L8 **装载**：真命令 → 真装载 → 区块**真出现在页面上**
+        rc_load, load_payload = live_verb(PLUGIN_SH, ["load", BADGE, "--port", str(port)], token)
+        page_after_code, page_after, _ = http_get(supplier_page)
+        sha_after = hashlib.sha256(page_after.encode("utf-8")).hexdigest()
+        blocks_after = ui_blocks(base)
+        badge_block = [item for item in blocks_after if item.get("plugin_id") == BADGE]
+        check("L8 `tools/plugin.sh load … --live` 真装载进**运行中的服务**：uid/effects 可回读，"
+              "且它注册的只读区块**真出现在页面上**（`data-ui-block=…`）",
+              rc_load == 0 and load_payload.get("ok") is True and load_payload.get("uid")
+              and (load_payload.get("effects") or 0) > 0
+              and load_payload.get("control") == "live"
+              and f'data-ui-block="{BADGE}"' in page_after
+              and len(badge_block) == 1 and badge_block[0].get("slot") == "page.supplier"
+              and len(blocks_after) == 3,
+              f"rc={rc_load} uid={load_payload.get('uid')} effects={load_payload.get('effects')} "
+              f"区块元数据={badge_block} 页面块数={len(blocks_after)} "
+              f"原始行={(re.findall(r'data-ui-block=\"' + re.escape(BADGE) + r'\"[^>]*', page_after) or ['(无)'])[0][:120]}")
+
+        # L9 **页面其余部分逐字节不变**：把 badge 那段 `<section>` 摘掉后必须与装载前**逐字节相同**
+        stripped = re.sub(r'\n<section data-ui-block="' + re.escape(BADGE) + r'".*?</section>', "", page_after,
+                          flags=re.S)
+        sha_stripped = hashlib.sha256(stripped.encode("utf-8")).hexdigest()
+        check("L9 装载只**增加**那一块：摘掉 badge 的 `<section>` 后与装载前的页面**逐字节相同**（sha256 相等）",
+              sha_stripped == sha_before,
+              f"装载前 sha256={sha_before} 装载后去块 sha256={sha_stripped} | 页面 {len(page_before)} → "
+              f"{len(page_after)} 字节")
+
+        # L10 **重载不得泄漏 effects**：新 uid（新实例）、卸载前 effects 计数可查、卸载后归零
+        rc_reload, reload_payload = live_verb(PLUGIN_SH, ["reload", BADGE, "--port", str(port)], token)
+        rc_status, status_payload = live_verb(PLUGIN_SH, ["status", BADGE, "--port", str(port)], token)
+        check("L10 `reload --live` 真热重载：新 uid（≠ 装载时的 uid）+ 新 instance，回读 uid/effects 可查，"
+              "且**重载前后 effects 计数不涨**（不泄漏）",
+              rc_reload == 0 and reload_payload.get("ok") is True
+              and reload_payload.get("uid") not in (None, load_payload.get("uid"))
+              and reload_payload.get("from_uid") == load_payload.get("uid")
+              and reload_payload.get("from_effects") == load_payload.get("effects")
+              and reload_payload.get("effects") == load_payload.get("effects")
+              and status_payload.get("uid") == reload_payload.get("uid")
+              and status_payload.get("effects") == reload_payload.get("effects"),
+              f"load_uid={load_payload.get('uid')} reload_uid={reload_payload.get('uid')} "
+              f"from_effects={reload_payload.get('from_effects')} effects={reload_payload.get('effects')} "
+              f"status_uid={status_payload.get('uid')} status_effects={status_payload.get('effects')}")
+
+        # L11 **卸载**：区块消失 + 页面逐字节还原 + effects 归零 + 可重复
+        rc_unload, unload_payload = live_verb(PLUGIN_SH, ["unload", BADGE, "--port", str(port)], token)
+        page_final_code, page_final, _ = http_get(supplier_page)
+        sha_final = hashlib.sha256(page_final.encode("utf-8")).hexdigest()
+        blocks_final = ui_blocks(base)
+        rc_unload2, unload_again = live_verb(PLUGIN_SH, ["unload", BADGE, "--port", str(port)], token)
+        check("L11 `unload --live` 真移除：区块从页面消失、`/api/ui/blocks` 回到 2 条、`effects_after=0`、"
+              "**页面逐字节还原**（与装载前 sha256 相同）；重复卸载 ⇒ `not-loaded`",
+              rc_unload == 0 and unload_payload.get("ok") is True and unload_payload.get("zero_effects") is True
+              and (unload_payload.get("effects_before") or 0) > 0 and unload_payload.get("effects_after") == 0
+              and f'data-ui-block="{BADGE}"' not in page_final and len(blocks_final) == 2
+              and sha_final == sha_before
+              and rc_unload2 != 0 and unload_again.get("code") == "not-loaded",
+              f"sha 前={sha_before} 后={sha_final} 相同={sha_final == sha_before} "
+              f"effects {unload_payload.get('effects_before')}→{unload_payload.get('effects_after')} "
+              f"块数={len(blocks_final)} 重复卸载={unload_again.get('code')}")
+
+        # L12 `./run plugin …`：一键运行的同一件事（薄入口只是转发 `--live`）
+        run_rc, run_out, run_err = run_sh(RUN, ["plugin", "status", BADGE, "--port", str(port)], env_live)
+        run_payload = json_line(run_out)
+        check("L12 `./run plugin status <插件>` = 同一件事（`./run` 把动词原样转给 `tools/plugin.sh … --live`）",
+              run_rc == 0 and run_payload.get("ok") is True and run_payload.get("control") == "live"
+              and run_payload.get("loaded") is False,
+              f"rc={run_rc} loaded={run_payload.get('loaded')} 原始行={run_out.strip()[:180]}")
+
+        # L13 零写面：整轮装卸**不改产品树、不改账本/数据根**（宿主不写文件、不写账本）
+        tree_after = tree_digest(ROOT / "src") + tree_digest(ROOT / "host")
+        ledger_after = tree_digest(ROOT / data_dir)
+        check("L13 零写面：整轮 load/reload/unload 前后 `src/**`+`host/**` 逐字节不变，且数据根（账本/待办件）"
+              "逐字节不变（宿主只改自己的内存装配）",
+              tree_after == tree_before and ledger_after == ledger_before,
+              f"产品树不变={tree_after == tree_before} 数据根不变={ledger_after == ledger_before}")
+    finally:
+        shutdown_live()
+
+
+def live_verb(script: Path, args: list[str], token: str) -> tuple[int, dict]:
+    """跑一条 `--live` 动词（动词参数 + `--live`；环境里带控制令牌）。"""
+    env = dict(os.environ)
+    env["QUOTAGENT_PLUGIN_CONTROL_TOKEN"] = token
+    rc, out, _err = run_sh(script, list(args) + ["--live"], env)
+    return rc, json_line(out)
+
+
+def ui_blocks(base: str) -> list[dict]:
+    code, body, _ = http_get(f"{base}/api/ui/blocks")
+    if code != 200:
+        return []
+    try:
+        return json.loads(body).get("blocks", [])
+    except json.JSONDecodeError:
+        return []
+
+
+def http_post_json(url: str, payload: dict, headers: dict | None = None) -> tuple[int, dict]:
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=data, method="POST",
+                                    headers={"Content-Type": "application/json", **(headers or {})})
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            return response.status, json.loads(response.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as err:
+        try:
+            return err.code, json.loads(err.read().decode("utf-8", "replace"))
+        except json.JSONDecodeError:
+            return err.code, {}
+
+
+def tree_digest(root: Path) -> str:
+    """目录的**内容摘要**（相对路径 + sha256，按路径排序）：判断"这一轮有没有改到它"。"""
+    items = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        if "node_modules" in path.parts or "__pycache__" in path.parts:
+            continue
+        items.append(f"{path.relative_to(root)}:{hashlib.sha256(path.read_bytes()).hexdigest()}")
+    return hashlib.sha256("\n".join(items).encode("utf-8")).hexdigest()
+
+
 def assert_webui_knows_nothing() -> None:
     webui = WEBUI.read_text(encoding="utf-8")
     slot = UI_SLOT.read_text(encoding="utf-8")
@@ -497,6 +747,26 @@ def assert_webui_knows_nothing() -> None:
         [noun for noun in BUSINESS_NOUNS if noun in slot]
     check("D3 机制实现 `host/lib/ui-slot.mjs` 自身也 0 命中插件 id/标题/业务名词",
           not slot_hits, f"命中={slot_hits}")
+    # D4/D5：阶段 5.2+ 的两条机制纪律（运行期装卸让它们从"应该"变成"必须"）
+    route_path = ROOT / "host" / "lib" / "ui-route.mjs"
+    route = route_path.read_text(encoding="utf-8") if route_path.exists() else ""
+    route_hits = [needle for needle in needles if needle in route] + \
+        [noun for noun in BUSINESS_NOUNS if noun in route]
+    check("D4 路由注册面机制 `host/lib/ui-route.mjs` 同样 0 命中插件 id/标题/业务名词（与槽位面同纪律）",
+          route_path.exists() and bool(route) and not route_hits, f"命中={route_hits}")
+    cli_text = (ROOT / "host" / "cli.mjs").read_text(encoding="utf-8")
+    start = cli_text.find("if (action === 'webui')")
+    end = cli_text.find("\n  if (action === 'status')", start)
+    webui_action = cli_text[start:end] if start >= 0 and end > start else ""
+    # 只数**真赋值**（注释里为说明而写的字面量不算）
+    live_patches = [line for line in webui_action.splitlines()
+                    if "inner.provide =" in line and not line.strip().startswith(("//", "*", "/*"))]
+    # 为什么查这条：`inner.provide = …` 抓句柄会污染**全树**的 provide，之后装载的插件把自己的服务注册在
+    # 别人的 fiber 上 ⇒ 卸载摘不掉、服务名留在注册表里、运行期再装载必红（实测踩过，见文件内注释）。
+    check("D5 `host/cli.mjs` 的 webui 装配段里 **0 处** `inner.provide =`（monkey-patch 不许逃出 apply —— "
+          "否则运行期装卸留残注册）",
+          start >= 0 and end > start and not live_patches,
+          f"webui 段 {len(webui_action)} 字符；真赋值命中={len(live_patches)} 处 {live_patches[:2]}")
 
 
 def assert_mechanism_refusals() -> None:
@@ -693,6 +963,7 @@ def main() -> int:
     assert_fixture_refusals(fixture)
     assert_webui_knows_nothing()
     assert_mechanism_refusals()
+    assert_live_lifecycle()
     assert_mutations()
     # 收摊：门自己造的每个根都要**停掉它的运行时进程**再清目录（否则门会留下常驻进程；
     # 实测踩到过：夹具根的运行时没人停，三次跑留了三个 daemon）。

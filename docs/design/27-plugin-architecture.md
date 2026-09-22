@@ -148,8 +148,14 @@ tools/plugin.sh deps  domain/bid-heuristics    # 依赖闭包（可视化插件 
 | 依赖闭包 | `tools/plugin.sh deps`（`depends_on` + `inject` 服务键的传递闭包；有环给环上的 id） | 同左 | 同左 |
 
 ⇒ §4.2 的六动词**已全部落地**（实现 `src/system/runtime/`，门 `tools/verify.sh plugin-lifecycle`，EV-165）。
-**仍未做**（诚实标注）：① 宿主**长驻服务（WebUI 进程）里逐插件装卸**（今天由 `host/profiles.mjs` 启动期静态装配；收口见阶段 5.2）；
-② `./run` 的 `logs` 与 `config init` 两个动词（阶段 5.4 的剩余项）；③ 依赖闭包**自动拓扑装配**（今天只回答闭包，不代装）。
+**本批补齐**（阶段 5.2/5.3 的收口件，EV-168）：① 宿主**长驻服务（WebUI 进程）里逐插件装卸**已成立 ——
+`tools/plugin.sh <动词> <插件> --live`（或 `./run plugin <动词> <插件>`）把插件挂进**正在服务的进程自身**，
+其注册的 UI 区块真出现在页面上；卸载后区块消失且**页面其余部分逐字节不变**（sha256 对比，门 L 段）；
+四道围栅（控制令牌 fail-closed / 显式确认 / system 层锁定 / 只认显式动词与 id）逐条有名 `code` + `next_action`；
+装卸全程零写面（不写文件、不写账本）。契约见 `src/system/runtime/docs/lifecycle-contract.md` §5。
+**仍未做**（诚实标注）：① `./run` 的动词面里 `logs` 与 `config init` 已实现，但**依赖闭包自动拓扑装配**
+（今天只回答闭包，不代装）仍未做；② `src/domain/**` 的业务插件里只有样板（advice）从插件入口装配，
+其余仍由 `host/modules/**` + `host/cli.mjs` 静态装配（阶段 4.1/5.3 的剩余项）。
 本规范要求的是**接口收敛**：三个层最终都由 `tools/plugin.sh` 一个入口驱动。
 
 ## 5. 依赖规则
