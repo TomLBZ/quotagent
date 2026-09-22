@@ -1,0 +1,870 @@
+EV-158 —— 员工工作流驱动的 UI 重做：以两个员工角色逐步实测「现有 UI 能不能做事」（规格的证据面）
+
+生成时间（UTC）：2026-09-22T06:59:50Z
+仓库：/workspace/projects/quotagent    HEAD：9715ed0bcbd766e287b67084453ba19d2e1036b3
+本批性质：**只产出规格与证据，不改代码、不改门、不改 AC/FR 定义**。
+本批产出：
+  A docs/work/plans/ui-workflow-rework.md            员工工作流驱动的 UI 重做规格 §0–§2
+  A docs/work/plans/ui-workflow-rework-part2.md      §3 目标交互规格
+  A docs/work/plans/ui-workflow-rework-part3.md      §4 视觉规格 + §5–§7
+  A docs/work/evidence/EV-158-ui-workflow-rework.txt 本文件
+  M docs/work/progress-checklist.md                  加一行（UI-WF1）
+
+工作区（本批新增的未跟踪探针脚本放在 gitignored 的 tmp/，不进提交）：
+M docs/work/functional-requirements.md
+?? docs/work/functional-requirements-archive-b.md
+?? docs/work/plans/ui-workflow-rework-part2.md
+?? docs/work/plans/ui-workflow-rework-part3.md
+?? docs/work/plans/ui-workflow-rework.md
+?? tools/ui-feedback-monitor.sh
+
+怎么复现：
+  # 全部探测都是"裸 curl"，逐条命令与逐字响应在本文件 §二/§三（可直接粘贴重跑）。
+  # 本批用的驱动脚本是 gitignored 的 scratch（不进提交；需要时按 §二/§三 的命令重建）：
+  #   tmp/wf-steps.py（逐步骤表 + 假成功 sha 对照 + 账本前后 sha）
+  #   tmp/wf-visual.py（26 页 × 16 项 CSS 事实）
+  #   tmp/wf-evidence.sh / tmp/wf-write-probe.sh（全量重跑与写探针）
+  # ① 真服务（只读探测 + 对不存在路径的 POST；无副作用）
+  pgrep -af "cli.mjs webui" | grep 8093
+  # ② 沙箱实例（写探针；tmp/ui-rework-probe 是 tmp/ui-shared 的副本）
+  node host/cli.mjs webui --profile webui --port 8099 --host 127.0.0.1 --prefix /quotagent \
+    --ledger-contractor tmp/ui-rework-probe/contractor/ledger.jsonl \
+    --ledger-supplier tmp/ui-rework-probe/supplier/ledger.jsonl \
+    --retention-plan tmp/ui-rework-probe/retention-plan.json \
+    --pipeline-snapshot tmp/ui-rework-probe/pipeline.json \
+    --mail-snapshot tmp/ui-rework-probe/mail.json \
+    --admin-snapshot tmp/ui-rework-probe/admin.json \
+    --admin-inbox tmp/ui-rework-probe/admin-submissions \
+    --ui-shared tmp/ui-rework-probe
+
+口径声明（三处故意分开，别混）：
+  · 8093 = 真服务（tmp/ui-shared）。只读探测 + 对不存在路径的 POST（404，无副作用）；
+    有两条 POST 会落 0600 待办件（/contractor/deadlines/promise → 受理；/supplier/feedback → 受理），
+    跑完后新落的两个待办件已删除，真服务待办件目录恢复到本批之前的状态。
+  · 8099 = 沙箱实例（tmp/ui-rework-probe，真 tmp/ui-shared 的副本，rm -rf 重建过）。
+    所有"账本会不会动"的判定都在这里做，因此结论不受真服务并发写入干扰。
+  · 账本 sha 一律取 sha256 前 16 位十六进制。
+
+== 一、事实基线（真服务 8093） ==
+$ curl -s http://127.0.0.1:8093/quotagent/api/health
+{
+  "status": "ok",
+  "service": "quotagent-webui"
+}
+
+$ curl -s http://127.0.0.1:8093/quotagent/api/routes   # write_surface 段（逐字）
+{
+  "service": "quotagent-webui",
+  "route_prefix": "/quotagent",
+  "views": [
+    "contractor",
+    "supplier"
+  ],
+  "write_surface": {
+    "browser_writable": [
+      "/quotagent/admin/**",
+      "/quotagent/<view>/gates/nudge",
+      "/quotagent/<view>/deadlines/promise"
+    ],
+    "note": "浏览器永远不能签的五个动作：批准 / 提交报价 / 定标 / 发 PO / 变更批准（人工门在终端）；宿主也不发信（`rfq-deadline` 的 `can_send=false`）：登记承诺只落 0600 待办件"
+  }
+}
+GET: 54 POST: 13 total: 67
+
+$ 账本基线（真服务）：
+  contractor lines=34 bytes=26746 sha256:16=20782771447a5583
+  supplier lines=20 bytes=15990 sha256:16=85c400e522ebe4bf
+
+$ 事件类型分布（真服务投影）
+  contractor: count=21 {'approval/granted': 3, 'approval/requested': 3, 'award/committed': 1, 'award/intent-proposed': 1, 'change/approved': 1, 'change/priced': 1, 'change/proposed': 1, 'compare/flag-raised': 1, 'compare/rank-computed': 1, 'compare/table-exported': 1, 'quote/cost-built': 1, 'quote/human-approved': 1, 'quote/price-proposed': 1, 'rfq/amended': 1, 'rfq/distributed': 2, 'rfq/published': 1}
+  supplier: count=6 {'clarification/answered': 1, 'clarification/asked': 1, 'quote/cost-built': 1, 'quote/human-approved': 1, 'quote/price-proposed': 1, 'quote/submitted': 1}
+
+== 二、逐步骤实测表（58 次真请求 + 假成功对照 + 账本前后 sha） ==
+== 逐步骤实测（真发请求；服务 8093；2026-09-22）==
+命令前缀：`curl -s -X <METHOD> http://127.0.0.1:8093/quotagent<PATH>`（POST 带 `-d '<DATA>'`）
+
+| 角色 | 步骤 | 动作 | 方法 | 路径 | HTTP | 能不能推进状态 |
+|---|---|---|---|---|---|---|
+| 承包商采购员 | C1 开 RFQ | 打开 RFQ 列表/新建 | GET | `/contractor/rfq/` | 404 | 无此页面（没有这个动作的入口） |
+| 承包商采购员 | C1 开 RFQ | 发布包 | POST | `/contractor/rfq/publish` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C1 开 RFQ | 发布包（短路径） | POST | `/contractor/rfq` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C1 开 RFQ | 新建包 | POST | `/contractor/packages` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C1 开 RFQ | 看已发布包的账本事实 | GET | `/contractor/api/events?type=rfq/` | 200 | 能看（只读页面/JSON） |
+| 承包商采购员 | C2 收报价 | 打开报价页 | GET | `/contractor/quotes/` | 200 | 能看（只读页面/JSON） |
+| 承包商采购员 | C2 收报价 | 认领/签收报价 | POST | `/contractor/quotes/receive` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C2 收报价 | 接受某条报价 | POST | `/contractor/quotes/q-ui-seed/accept` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C2 收报价 | 报价 JSON | GET | `/contractor/api/quotes` | 404 | 无此页面（没有这个动作的入口） |
+| 承包商采购员 | C3 比价 | 改权重后重排（GET 表单） | GET | `/contractor/heuristics/?w_price=0.5&w_lead=0.2&w_quality=0.1&w_risk=0.1&w_terms=0.1` | 200 | 能看（只读页面/JSON） |
+| 承包商采购员 | C3 比价 | 把权重存下来 | POST | `/contractor/heuristics` | 200 | **假成功**：200 但返回的是同一个 GET 页面 |
+| 承包商采购员 | C3 比价 | 导出比较表 | POST | `/contractor/compare/export` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C3 比价 | 发起比价评估 | POST | `/contractor/compare` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C4 选标 | 打开授标页 | GET | `/contractor/award/` | 404 | 无此页面（没有这个动作的入口） |
+| 承包商采购员 | C4 选标 | 提授标意向 | POST | `/contractor/award/intent` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C4 选标 | 授标承诺 | POST | `/contractor/award/commit` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C4 选标 | 对某条报价定标 | POST | `/contractor/quotes/q-ui-seed/award` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C5 发 PO | 打开 PO 页 | GET | `/contractor/po/` | 404 | 无此页面（没有这个动作的入口） |
+| 承包商采购员 | C5 发 PO | 签发 PO | POST | `/contractor/po/issue` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C5 发 PO | 从授标签发 PO | POST | `/contractor/award/aw-0001/po` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C5 发 PO | 看某张 PO | GET | `/contractor/po/po-0001/` | 404 | 无此页面（没有这个动作的入口） |
+| 承包商采购员 | C6 变更单 | 看变更单逐行明细 | GET | `/contractor/changes/chg-0001/` | 200 | 能看（只读页面/JSON） |
+| 承包商采购员 | C6 变更单 | 变更单 JSON | GET | `/contractor/api/changes/chg-0001` | 200 | 能看（只读页面/JSON） |
+| 承包商采购员 | C6 变更单 | 提出变更 | POST | `/contractor/change/chg-0001/propose` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C6 变更单 | 批准变更（网页签署 ✗） | POST | `/contractor/change/chg-0001/approve` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | C6 变更单 | 列全部变更 | POST | `/contractor/changes` | 404 | **卡住**：无此写路由 |
+| 承包商采购员 | ★ 催办 | 催办已决门 ap-0001 | POST | `/contractor/gates/nudge` | 404 | **卡住**：无此写路由（拒绝码 gate-not-found） |
+| 承包商采购员 | ★ 催办 | 催办已决门 ap-0002 | POST | `/contractor/gates/nudge` | 404 | **卡住**：无此写路由（拒绝码 gate-not-found） |
+| 承包商采购员 | ★ 催办 | 催办意向 id awin-0001 | POST | `/contractor/gates/nudge` | 404 | **卡住**：无此写路由（拒绝码 gate-not-found） |
+| 承包商采购员 | ★ 催办 | 催办页面示例 id ap-0007 | POST | `/contractor/gates/nudge` | 404 | **卡住**：无此写路由（拒绝码 gate-not-found） |
+| 承包商采购员 | ★ 登记承诺 | 为包承诺回文时限 | POST | `/contractor/deadlines/promise` | 202 | 受理（只落 0600 待办件，需 Python 侧消费） |
+| 供应商报价员 | S1 收 RFQ | 打开供应商首页 | GET | `/supplier/` | 200 | 能看（只读页面/JSON） |
+| 供应商报价员 | S1 收 RFQ | 找本视角的 RFQ 事件 | GET | `/supplier/api/events?type=rfq/` | 200 | 能看（只读页面/JSON） |
+| 供应商报价员 | S1 收 RFQ | 打开收到的包 | GET | `/supplier/rfq/` | 404 | 无此页面（没有这个动作的入口） |
+| 供应商报价员 | S1 收 RFQ | 认收（收件确认） | POST | `/supplier/rfq/ack` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S1 收 RFQ | 看回文时限页 | GET | `/supplier/deadlines/` | 200 | 能看（只读页面/JSON） |
+| 供应商报价员 | S1 收 RFQ | 为收到的包登记承诺 | POST | `/supplier/deadlines/promise` | 404 | **卡住**：无此写路由（拒绝码 rfq-not-found） |
+| 供应商报价员 | S2 报价/改报 | 打开报价页 | GET | `/supplier/quotes/` | 200 | 能看（只读页面/JSON） |
+| 供应商报价员 | S2 报价/改报 | 提交报价 | POST | `/supplier/quotes/submit` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S2 报价/改报 | 改报（修订） | POST | `/supplier/quotes/q-ui-seed/amend` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S2 报价/改报 | 按新版重报 | POST | `/supplier/quotes/q-ui-seed/requote` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S2 报价/改报 | 提交报价（短路径） | POST | `/supplier/quote` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S3 澄清 | 打开澄清页 | GET | `/supplier/clarifications/` | 200 | 能看（只读页面/JSON） |
+| 供应商报价员 | S3 澄清 | 提问 | POST | `/supplier/clarifications/ask` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S3 澄清 | 回答工单 | POST | `/supplier/clarifications/ct-0001/answer` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S3 澄清 | 提问（短路径） | POST | `/supplier/clarify` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S3 澄清 | 承包商侧澄清页（提问的另一半） | GET | `/contractor/clarifications/` | 404 | 无此页面（没有这个动作的入口） |
+| 供应商报价员 | S4 确认中标 | 打开审批与变更页 | GET | `/supplier/gates/` | 200 | 能看（只读页面/JSON） |
+| 供应商报价员 | S4 确认中标 | 确认中标 | POST | `/supplier/award/confirm` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S4 确认中标 | 确认某个授标 | POST | `/supplier/award/aw-0001/confirm` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S4 确认中标 | 确认承诺 | POST | `/supplier/commitments/confirm` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S4 确认中标 | 对某报价确认中标 | POST | `/supplier/quotes/q-ui-seed/accept-award` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S5 处理变更 | 打开变更单逐行明细 | GET | `/supplier/changes/chg-0001/` | 404 | 无此页面（没有这个动作的入口） |
+| 供应商报价员 | S5 处理变更 | 接受变更 | POST | `/supplier/change/chg-0001/accept` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S5 处理变更 | 回执变更 | POST | `/supplier/changes/chg-0001/ack` | 404 | **卡住**：无此写路由 |
+| 供应商报价员 | S5 处理变更 | 看授权区间 | GET | `/supplier/authority/` | 200 | 能看（只读页面/JSON） |
+| 供应商报价员 | ★ 催办 | 催办（供应商侧） | POST | `/supplier/gates/nudge` | 404 | **卡住**：无此写路由（拒绝码 gate-not-found） |
+| 供应商报价员 | ★ 反馈 | 提交产品反馈 | POST | `/supplier/feedback` | 202 | 受理（只落 0600 待办件，需 Python 侧消费） |
+
+== 假成功对照（POST 到已存在的 GET 页面）==
+- `POST /contractor/quotes/` → HTTP 200；与 `GET /contractor/quotes/` 逐字节相同：True（3935 B vs 3935 B）
+- `POST /contractor/heuristics` → HTTP 200；与 `GET /contractor/heuristics` 逐字节相同：True（7882 B vs 7882 B）
+- `POST /supplier/quotes` → HTTP 200；与 `GET /supplier/quotes` 逐字节相同：True（4393 B vs 4393 B）
+- `POST /supplier/clarifications` → HTTP 200；与 `GET /supplier/clarifications` 逐字节相同：True（3944 B vs 3944 B）
+
+== 账本对照（全部请求跑完之后 vs 跑之前）==
+- contractor：before lines=34 sha=20782771447a5583 → after lines=34 sha=20782771447a5583
+- supplier：before lines=20 sha=85c400e522ebe4bf → after lines=20 sha=85c400e522ebe4bf
+
+== 统计（按角色 × 判定类别）==
+- 承包商采购员：总 31 步；**卡住/假成功 20 步**；假成功（200 但啥也没发生）=1，卡住：写路由存在但当前不可用（拒绝码）=4，卡住：没有写路由=15，受理（待办件，账本零新增）=1，无此页面=5，能看（只读）=5
+- 供应商报价员：总 27 步；**卡住/假成功 16 步**；卡住：写路由存在但当前不可用（拒绝码）=2，卡住：没有写路由=14，受理（待办件，账本零新增）=1，无此页面=3，能看（只读）=7
+- 合计：58 步；卡住/假成功 36 步（62%）；能看 12 步；受理待消费 2 步
+
+== 三、逐步骤原始响应（真服务；404 的 hint 体已压缩为一行，状态码与 code 逐字未改） ==
+### 说明：本节全部打在真服务 8093 上。GET 是只读；对不存在的路径 POST 一律 404（无副作用）；
+###       对**已存在的 GET 页面** POST 会 200 并逐字节返回同一个页面（下一节给出 sha 对照）——这是
+###       『假成功』陷阱：动作既没发生，HTTP 也没报错。
+
+########## 承包商采购员：C1 开 RFQ（发布 + 分发） ##########
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/
+HTTP 200  body(bytes)=12132
+<!doctype html><html lang="zh" data-ui-revision="r2" data-ui-view="contractor"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 承包商视角</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;border-radius:3px}tab
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/rfq/
+HTTP 404  body(bytes)=893
+{
+  "error": "not-found",
+  "path": "/contractor/rfq/",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline / /q
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/rfq/new
+HTTP 404  body(bytes)=896
+{
+  "error": "not-found",
+  "path": "/contractor/rfq/new",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline /
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/rfq/publish
+HTTP 404  body(bytes)=900
+{
+  "error": "not-found",
+  "path": "/contractor/rfq/publish",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeli
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/rfq
+HTTP 404  body(bytes)=892
+{
+  "error": "not-found",
+  "path": "/contractor/rfq",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline / /qu
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/packages
+HTTP 404  body(bytes)=897
+{
+  "error": "not-found",
+  "path": "/contractor/packages",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline 
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/api/events?type=rfq/
+HTTP 200  body(bytes)=6941
+{
+  "view": "contractor",
+  "count": 21,
+  "events": [
+    {
+      "seq": 1,
+      "type": "rfq/published",
+      "correlation_id": "pkg-g1",
+      "actor": "agent:sourcing",
+      "ts": "2026-09-21T22:37:12Z",
+      "summary": "hash=sha256:9b6c5e2df8560b254419f0291572ead36 items=2 package_id=pkg-g1
+----
+########## C2 收报价（看 + 认领 + 退回） ##########
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/quotes/
+HTTP 200  body(bytes)=3935
+<!doctype html><html lang="zh" data-ui-revision="r2" data-ui-view="contractor"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 承包商视角 · 报价</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;border-radi
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/quotes/receive
+HTTP 404  body(bytes)=903
+{
+  "error": "not-found",
+  "path": "/contractor/quotes/receive",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pip
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/quotes/q-ui-seed/accept
+HTTP 404  body(bytes)=912
+{
+  "error": "not-found",
+  "path": "/contractor/quotes/q-ui-seed/accept",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagen
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/api/quotes
+HTTP 404  body(bytes)=899
+{
+  "error": "not-found",
+  "path": "/contractor/api/quotes",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipelin
+----
+########## C3 比价（调权重 + 导出比较表） ##########
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/heuristics/?w_price=0.5&w_lead=0.2&w_quality=0.1&w_risk=0.1&w_terms=0.1
+HTTP 200  body(bytes)=7973
+<!doctype html><html lang="zh" data-ui-revision="r2" data-ui-view="contractor"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 承包商视角 · 比价口径</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;borde
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/compare
+HTTP 404  body(bytes)=896
+{
+  "error": "not-found",
+  "path": "/contractor/compare",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline /
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/compare/export
+HTTP 404  body(bytes)=903
+{
+  "error": "not-found",
+  "path": "/contractor/compare/export",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pip
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/heuristics
+HTTP 200  body(bytes)=7882
+<!doctype html><html lang="zh" data-ui-revision="r2" data-ui-view="contractor"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 承包商视角 · 比价口径</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;borde
+----
+########## C4 选标（意向 + 授标承诺） ##########
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/award/
+HTTP 404  body(bytes)=895
+{
+  "error": "not-found",
+  "path": "/contractor/award/",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline / 
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/award/intent
+HTTP 404  body(bytes)=901
+{
+  "error": "not-found",
+  "path": "/contractor/award/intent",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipel
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/award/commit
+HTTP 404  body(bytes)=901
+{
+  "error": "not-found",
+  "path": "/contractor/award/commit",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipel
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/commitments/award
+HTTP 404  body(bytes)=906
+{
+  "error": "not-found",
+  "path": "/contractor/commitments/award",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/quotes/q-ui-seed/award
+HTTP 404  body(bytes)=911
+{
+  "error": "not-found",
+  "path": "/contractor/quotes/q-ui-seed/award",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent
+----
+########## C5 发 PO ##########
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/po/
+HTTP 404  body(bytes)=892
+{
+  "error": "not-found",
+  "path": "/contractor/po/",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline / /qu
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/po/issue
+HTTP 404  body(bytes)=897
+{
+  "error": "not-found",
+  "path": "/contractor/po/issue",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline 
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/award/aw-0001/po
+HTTP 404  body(bytes)=905
+{
+  "error": "not-found",
+  "path": "/contractor/award/aw-0001/po",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/p
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/po/po-0001/
+HTTP 404  body(bytes)=900
+{
+  "error": "not-found",
+  "path": "/contractor/po/po-0001/",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeli
+----
+########## C6 变更单（提出 / 批准） ##########
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/changes/chg-0001/
+HTTP 200  body(bytes)=5551
+<!doctype html><html lang="zh" data-ui-revision="r2" data-ui-view="contractor"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 承包商视角 · 变更单明细 chg-0001</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1e
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/api/changes/chg-0001
+HTTP 200  body(bytes)=4614
+{
+  "view": "contractor",
+  "change_id": "chg-0001",
+  "service": "gate-timeline",
+  "source": "gate-timeline（domain 插件规则 ⑤：确定性规则；不读账本、不写账本、不取墙钟、不调模型）",
+  "engine": "rules",
+  "engine_note": "本页由确定性规则从投影/快照�
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/change/chg-0001/propose
+HTTP 404  body(bytes)=912
+{
+  "error": "not-found",
+  "path": "/contractor/change/chg-0001/propose",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagen
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/change/chg-0001/approve
+HTTP 404  body(bytes)=912
+{
+  "error": "not-found",
+  "path": "/contractor/change/chg-0001/approve",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagen
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/changes
+HTTP 404  body(bytes)=896
+{
+  "error": "not-found",
+  "path": "/contractor/changes",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline /
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/gates/
+HTTP 200  body(bytes)=6085
+<!doctype html><html lang="zh" data-ui-revision="r2" data-ui-view="contractor"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 承包商视角 · 审批与变更</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;bo
+----
+########## 承包商：催办（唯一的业务写面之一） ##########
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/gates/nudge -d 'id=ap-0001&reason=现场催一下'
+HTTP 404000  body(bytes)=370
+{
+  "service": "gate-timeline",
+  "view": "contractor",
+  "ok": false,
+  "code": "gate-not-found",
+  "gate_id": "",
+  "reason_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "bytes": 0,
+  "id": "",
+  "record": null,
+  "next_action": "给出目标人工门 id（�
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/gates/nudge -d 'id=ap-0002&reason=现场催一下'
+HTTP 404000  body(bytes)=370
+{
+  "service": "gate-timeline",
+  "view": "contractor",
+  "ok": false,
+  "code": "gate-not-found",
+  "gate_id": "",
+  "reason_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "bytes": 0,
+  "id": "",
+  "record": null,
+  "next_action": "给出目标人工门 id（�
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/gates/nudge -d 'id=awin-0001&reason=授标流程催一下'
+HTTP 404000  body(bytes)=370
+{
+  "service": "gate-timeline",
+  "view": "contractor",
+  "ok": false,
+  "code": "gate-not-found",
+  "gate_id": "",
+  "reason_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "bytes": 0,
+  "id": "",
+  "record": null,
+  "next_action": "给出目标人工门 id（�
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/gates/nudge -d 'id=ap-0007&reason=现场催一下'
+HTTP 404000  body(bytes)=370
+{
+  "service": "gate-timeline",
+  "view": "contractor",
+  "ok": false,
+  "code": "gate-not-found",
+  "gate_id": "",
+  "reason_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "bytes": 0,
+  "id": "",
+  "record": null,
+  "next_action": "给出目标人工门 id（�
+----
+########## 供应商报价员：S1 收 RFQ（看 + 认收） ##########
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/supplier/
+HTTP 200  body(bytes)=8997
+<!doctype html><html lang="zh" data-ui-revision="r0" data-ui-view="supplier"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 供应商视角</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;border-radius:3px}table
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/supplier/api/events?type=rfq/
+HTTP 200  body(bytes)=2027
+{
+  "view": "supplier",
+  "count": 6,
+  "events": [
+    {
+      "seq": 3,
+      "type": "quote/submitted",
+      "correlation_id": "qg-fresh",
+      "actor": "agent:supplier",
+      "ts": "2026-09-21T22:37:12Z",
+      "summary": "approval_id=ap-0001 approved_by=human:liangzi currency=CNY lines={0,1}
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/supplier/rfq/
+HTTP 404  body(bytes)=891
+{
+  "error": "not-found",
+  "path": "/supplier/rfq/",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline / /quo
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/rfq/ack
+HTTP 404  body(bytes)=894
+{
+  "error": "not-found",
+  "path": "/supplier/rfq/ack",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline / /
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/supplier/deadlines/
+HTTP 200  body(bytes)=7339
+<!doctype html><html lang="zh" data-ui-revision="r0" data-ui-view="supplier"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 供应商视角 · 回文时限</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;border-
+----
+########## S2 报价 / 改报 ##########
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/supplier/quotes/
+HTTP 200  body(bytes)=4394
+<!doctype html><html lang="zh" data-ui-revision="r0" data-ui-view="supplier"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 供应商视角 · 报价</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;border-radius
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/quotes/submit
+HTTP 404  body(bytes)=900
+{
+  "error": "not-found",
+  "path": "/supplier/quotes/submit",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeli
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/quotes/q-ui-seed/amend
+HTTP 404  body(bytes)=909
+{
+  "error": "not-found",
+  "path": "/supplier/quotes/q-ui-seed/amend",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/a
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/quotes/q-ui-seed/requote
+HTTP 404  body(bytes)=911
+{
+  "error": "not-found",
+  "path": "/supplier/quotes/q-ui-seed/requote",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/quote
+HTTP 404  body(bytes)=892
+{
+  "error": "not-found",
+  "path": "/supplier/quote",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline / /qu
+----
+########## S3 澄清（提问 / 回答） ##########
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/supplier/clarifications/
+HTTP 200  body(bytes)=3945
+<!doctype html><html lang="zh" data-ui-revision="r0" data-ui-view="supplier"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 供应商视角 · 澄清</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;border-radius
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/clarifications/ask
+HTTP 404  body(bytes)=905
+{
+  "error": "not-found",
+  "path": "/supplier/clarifications/ask",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/p
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/clarifications/ct-0001/answer
+HTTP 404  body(bytes)=916
+{
+  "error": "not-found",
+  "path": "/supplier/clarifications/ct-0001/answer",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quot
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/clarify
+HTTP 404  body(bytes)=894
+{
+  "error": "not-found",
+  "path": "/supplier/clarify",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeline / /
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/contractor/clarifications/
+HTTP 404  body(bytes)=904
+{
+  "error": "not-found",
+  "path": "/contractor/clarifications/",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pi
+----
+########## S4 确认中标 ##########
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/supplier/gates/
+HTTP 200  body(bytes)=5923
+<!doctype html><html lang="zh" data-ui-revision="r0" data-ui-view="supplier"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 供应商视角 · 审批与变更</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;bord
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/award/confirm
+HTTP 404  body(bytes)=900
+{
+  "error": "not-found",
+  "path": "/supplier/award/confirm",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/pipeli
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/award/aw-0001/confirm
+HTTP 404  body(bytes)=908
+{
+  "error": "not-found",
+  "path": "/supplier/award/aw-0001/confirm",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/ap
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/commitments/confirm
+HTTP 404  body(bytes)=906
+{
+  "error": "not-found",
+  "path": "/supplier/commitments/confirm",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api/
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/quotes/q-ui-seed/accept-award
+HTTP 404  body(bytes)=916
+{
+  "error": "not-found",
+  "path": "/supplier/quotes/q-ui-seed/accept-award",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quot
+----
+########## S5 处理变更 ##########
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/supplier/changes/chg-0001/
+HTTP 404  body(bytes)=5377
+<!doctype html><html lang="zh" data-ui-revision="r0" data-ui-view="supplier"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 供应商视角 · 变更单明细 chg-0001</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em 
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/change/chg-0001/accept
+HTTP 404  body(bytes)=909
+{
+  "error": "not-found",
+  "path": "/supplier/change/chg-0001/accept",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/a
+----
+$ curl -s -X POST http://127.0.0.1:8093/quotagent/supplier/changes/chg-0001/ack
+HTTP 404  body(bytes)=907
+{
+  "error": "not-found",
+  "path": "/supplier/changes/chg-0001/ack",
+  "hint": "可用：/quotagent/ / /quotagent/contractor/ / /quotagent/supplier/ / /quotagent/ops/ / /quotagent/ops/mail/ / /quotagent/api/status / /quotagent/api/obs / /quotagent/api/ops / /quotagent/api/retention / /quotagent/api
+----
+$ curl -s -X GET http://127.0.0.1:8093/quotagent/supplier/authority/
+HTTP 200  body(bytes)=6999
+<!doctype html><html lang="zh" data-ui-revision="r0" data-ui-view="supplier"><head><meta charset="utf-8">
+<title>quotagent 控制台 · 供应商视角 · 授权区间</title><style>body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;border-
+----
+
+== 四、假成功对照（POST 到已存在的 GET 页面 = 200 且逐字节相同） ==
+$ curl -s http://127.0.0.1:8093/quotagent/contractor/quotes/ -o /tmp/a.html && curl -s -X POST http://127.0.0.1:8093/quotagent/contractor/quotes/ -d "item=L-001&price=80" -o /tmp/b.html
+GET  bytes=3935 sha256=7772e6e2e2929b1e4abacd7af9bf6bd580dbd439d2f9a61c12a3b76a74ffb157
+POST bytes=3935 sha256=7772e6e2e2929b1e4abacd7af9bf6bd580dbd439d2f9a61c12a3b76a74ffb157
+逐字节相同：yes
+
+### 账本对照（真服务，两次请求前后）：
+  contractor lines=34 sha256:16=20782771447a5583
+  supplier lines=20 sha256:16=85c400e522ebe4bf
+
+== 五、沙箱写探针：唯一的业务写面 + 唯一被证明可行的闭环 ==
+沙箱实例：http://127.0.0.1:8099/quotagent（--ui-shared tmp/ui-rework-probe = tmp/ui-shared 的副本，真服务的待办件目录不被污染）
+
+## 写探针前
+  contractor lines=34 bytes=26746 sha256:16=20782771447a5583
+  supplier lines=20 bytes=15990 sha256:16=85c400e522ebe4bf
+## 承包商 · 催办（目标门 ap-0002 / awin-0001，都已被决定）
+
+$ curl -s -X POST http://127.0.0.1:8099/quotagent/contractor/gates/nudge --data-urlencode id=ap-0002 --data-urlencode reason=现场催一下
+{
+  "service": "gate-timeline",
+  "view": "contractor",
+  "ok": false,
+  "code": "gate-not-found",
+  "gate_id": "ap-0002",
+  "reason_sha256": "sha256:822497cc9848e0b900b56a7cadcabf6badeaa7e5fa16cc797f4ad781c66ff82f",
+  "bytes": 15,
+  "id": "",
+  "record": null,
+  "next_action": "门 ap-0002 不在**本视角投影**的待办门列表里（可能已决、或不属于本视角）→ 不改任何状态、**账本零新增**；看 /quotagent/contractor/gates/ 列出的真 id 再催",
+  "file": ""
+}
+
+HTTP 404
+
+$ curl -s -X POST http://127.0.0.1:8099/quotagent/contractor/gates/nudge --data-urlencode id=awin-0001 --data-urlencode reason=授标流程催一下
+{
+  "service": "gate-timeline",
+  "view": "contractor",
+  "ok": false,
+  "code": "gate-not-found",
+  "gate_id": "awin-0001",
+  "reason_sha256": "sha256:ef6b320044f352b29e6b630ef1de168fa8b0406019f287ed4dd5f484e56b821e",
+  "bytes": 21,
+  "id": "",
+  "record": null,
+  "next_action": "门 awin-0001 不在**本视角投影**的待办门列表里（可能已决、或不属于本视角）→ 不改任何状态、**账本零新增**；看 /quotagent/contractor/gates/ 列出的真 id 再催",
+  "file": ""
+}
+
+HTTP 404
+## 供应商 · 登记承诺（唯一能拿到的包 id = pkg-g1，出自承包商账本）
+
+$ curl -s -X POST http://127.0.0.1:8099/quotagent/supplier/deadlines/promise --data-urlencode id=pkg-g1 --data-urlencode by=human:sup-probe --data-urlencode due_at=2026-09-26T00:00:00Z --data-urlencode note=周五前回
+{
+  "service": "rfq-deadline",
+  "view": "supplier",
+  "ok": false,
+  "code": "rfq-not-found",
+  "rfq_id": "pkg-g1",
+  "promise_by": "human:sup-probe",
+  "due_at": "2026-09-26T00:00:00Z",
+  "note_sha256": "sha256:a30cfc1135b5eb866cadfd166f7e0b27fdb59fc07d9e05ca9f7d4aad62124ec9",
+  "bytes": 12,
+  "id": "",
+  "record": null,
+  "next_action": "包 pkg-g1 不在**本视角投影**的 RFQ 列表里（可能写错、或不属于本视角）→ 不改任何状态、**账本零新增**；看 /quotagent/supplier/deadlines/ 列出的真 id 再登记",
+  "file": ""
+}
+
+HTTP 404
+## 承包商 · 登记承诺（同一 id 在自己投影里有 rfq/published）
+
+$ curl -s -X POST http://127.0.0.1:8099/quotagent/contractor/deadlines/promise --data-urlencode id=pkg-g1 --data-urlencode by=human:con-probe --data-urlencode due_at=2026-09-26T00:00:00Z --data-urlencode note=周五前必回
+{
+  "service": "rfq-deadline",
+  "view": "contractor",
+  "ok": true,
+  "code": "accepted",
+  "rfq_id": "pkg-g1",
+  "promise_by": "human:con-probe",
+  "due_at": "2026-09-26T00:00:00Z",
+  "note_sha256": "sha256:e35bfd9aa5a53d5a22a68e9f5a82e04e55fdb2298df805d95b3c4ae7a1116123",
+  "bytes": 15,
+  "id": "rp-contractor-9391b234327a",
+  "record": {
+    "schema": 1,
+    "kind": "rfq-promise",
+    "view": "contractor",
+    "rfq_id": "pkg-g1",
+    "promised_by": "human:con-probe",
+    "requested_action": "promise",
+    "due_at": "2026-09-26T00:00:00Z",
+    "note": "周五前必回",
+    "note_sha256": "sha256:e35bfd9aa5a53d5a22a68e9f5a82e04e55fdb2298df805d95b3c4ae7a1116123",
+    "bytes": 15,
+    "submitted_at": "",
+    "note_text": "宿主只落本条 0600 待办件（含发言人 + 承诺回文时限 + RFQ id + sha256）；不写账本、不发信、不改任何判定状态；时间由 Python 侧按 --now 落账"
+  },
+  "next_action": "待办件已存在（同一份 RFQ + 发言人 + 时限 + 原话）：跑 tools/rfq-promise.py --now <ISO8601> 消费它（唯一落账本者）",
+  "duplicate": true,
+  "file": "rfq-promises/rp-contractor-9391b234327a.json"
+}
+
+HTTP 202
+## 供应商 · 反馈（产品反馈，不是业务流程动作）
+
+$ curl -s -X POST http://127.0.0.1:8099/quotagent/supplier/feedback --data-urlencode text=报价页没有提交按钮
+{
+  "service": "ui-feedback",
+  "ok": true,
+  "code": "accepted",
+  "duplicate": true,
+  "id": "fb-supplier-ef5e2eedcecf",
+  "view": "supplier",
+  "bytes": 27,
+  "text_sha256": "sha256:ef5e2eedcecfd634452e02b537a0e736f77b52803bb9461280a270d7f4fd0ea9",
+  "revision_at_submit": "r0",
+  "next_action": "待办件已存在（同一份正文）：跑 tools/ui-feedback-apply.py --view supplier --now <ISO8601> 消费它（唯一落账本者）"
+}
+
+HTTP 202
+
+## 待办件落点（0600）
+tmp/ui-rework-probe/gate-nudges:
+
+tmp/ui-rework-probe/rfq-promises:
+-rw------- 1 hermes 10000 542 Sep 22 06:55 rp-contractor-9391b234327a.json
+
+tmp/ui-rework-probe/ui-feedback:
+-rw------- 1 hermes 10000 396 Sep 22 06:55 fb-supplier-ef5e2eedcecf.json
+
+## 写探针后（账本零新增 ⇒ 页面事实不变）
+  contractor lines=34 bytes=26746 sha256:16=20782771447a5583
+  supplier lines=20 bytes=15990 sha256:16=85c400e522ebe4bf
+
+## 消费待办件（唯一落账本者 = Python 侧 CLI）
+$ python3 tools/rfq-promise.py --ui-shared tmp/ui-rework-probe --view contractor --now 2026-09-22T07:00:00Z
+{"applied": [{"actor": "human:con-probe", "body_keys": ["actor", "due_at", "ok", "promise_sha256", "rfq_id", "view"], "due_at": "2026-09-26T00:00:00Z", "file": "rp-contractor-9391b234327a.json", "ledger": "tmp/ui-rework-probe/contractor/ledger.jsonl", "promise_sha256": "e35bfd9aa5a53d5a22a68e9f5a82e04e55fdb2298df805d95b3c4ae7a1116123", "rfq_id": "pkg-g1", "view": "contractor"}], "counts": {"contractor": 35, "supplier": 20}, "dry_run": false, "duplicates": [], "event": "rfq/promised", "inbox": "tmp/ui-rework-probe/rfq-promises", "ledger_added": 1, "ledgers": {"contractor": "tmp/ui-rework-probe/contractor/ledger.jsonl", "supplier": "tmp/ui-rework-probe/supplier/ledger.jsonl"}, "note": "登记承诺**不是发信**：本脚本只落 rfq/promised（body 恰 6 键、不含原话正文与凭据），不碰任何邮件通道；它也不改任何判定状态", "now": "2026-09-22T07:00:00Z", "ok": true, "pending_seen": 1, "refused": []}
+
+## 消费后账本（对照：唯一真的推进了状态的一步）
+  contractor lines=35 bytes=27366 sha256:16=bc725af1bd04d654
+  supplier lines=20 bytes=15990 sha256:16=85c400e522ebe4bf
+## 末行（逐字）
+{"actor":"human:con-probe","body":{"actor":"human:con-probe","due_at":"2026-09-26T00:00:00Z","ok":true,"promise_sha256":"e35bfd9aa5a53d5a22a68e9f5a82e04e55fdb2298df805d95b3c4ae7a1116123","rfq_id":"pkg-g1","view":"contractor"},"body_hash":"sha256:e8ceccd6f7a798c9d2916aedd0be4ce066e1343574cf83be20efc39b395af21e","class":"fact","correlation_id":"pkg-g1","entry_hash":"sha256:2e196c67b9bd090507bfb56054e738db4ced2dd071e6c492da9da2bb53573300","prev_hash":"sha256:979e2e507e7daa4e81b317afc43d9003fb7c0e03e26f6bfea61fdd7d1324f20e","realm":"contractor:g1","refs":{},"seq":35,"ts":"2026-09-22T07:00:00Z","type":"rfq/promised"}
+
+## 页面事实随之改变：/contractor/api/deadlines 的 rfqs[0]
+{
+  "can_send": false,
+  "rfqs": [
+    {
+      "rfq_id": "pkg-g1",
+      "subject": "pkg-g1 rev=1（清单 2 条）",
+      "due_ts": "2026-09-26T00:00:00Z",
+      "due_basis": "due_ts=2026-09-26T00:00:00Z 取自事实 `rfq/promised`（该事实 ts=2026-09-22T07:00:00Z）；as_of=2026-09-22T07:00:00Z（本视角投影里最大的事实 ts）—— 事实时间戳之差，**不取墙钟**",
+      "responded": [],
+      "silent": [
+        "supplier:g1"
+      ],
+      "overdue": false,
+      "remaining_seconds": 320400,
+      "severity": "scheduled",
+      "next_action": "还有时间：按名单逐个确认（本页不能代发）；需要书面承诺就走\"登记承诺\"入口留下痕迹\n登记承诺（宿主只落 0600 待办件、**账本零新增**）：curl -s -X POST /quotagent/contractor/deadlines/promise -d id=pkg-g1 -d by=human:<你> -d due_at=<ISO8601> -d note=<一句话>；落账本：python3 tools/rfq-promise.py --now <ISO8601>（唯一落账本者）",
+      "blocked_by": "邮件通道 **available=false**（mail-smtp-unconfigured）：**无法代发**任何催报/通知；通道自己给的下一步：把 SMTP 接入点配置：mail.smtp.host / port / from（凭据 mail.smtp.username / password 可选）。环境变量 QUOTAGENT_MAIL_SMTP_HOST 等优先于 /workspace/config.yaml 的 project 段；配好后先真发一封或调 probe('smtp')，本服务只按证据报可用 —— 本页只列名单与时限，**不声称任何\"发过了\"的事实**（本插件一个字节都发不出去）"
+    }
+  ],
+  "degraded": false,
+  "reason": null
+}
+
+## 同一动作在对方视角是否可见（供应商侧 deadlines）：
+{
+  "rfqs": [],
+  "degraded": true,
+  "reason": "no-usable-inputs"
+}
+
+== 六、「UI 给的下一步命令」真跑一遍（证明它不是员工能做的动作） ==
+$ rm -rf tmp/manual && mkdir -p tmp/manual
+
+页面 /contractor/gates/ 的『下一步（可复制）』逐字是：
+['PYTHONPATH=src python3 -m quotagent.g1side supplier tmp/manual 3   # 提出变更请求（同阶段落 change/proposed + change/priced）\n催办/转交（只落待办件，账本零新增）：POST /quotagent/contractor/gates/nudge']
+
+$ PYTHONPATH=src python3 -m quotagent.g1side supplier tmp/manual 3
+[contractor] 缺少对方产物: /workspace/projects/quotagent/tmp/manual/contractor/08-award-intent.json
+exit=0
+
+$ PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 1
+{"step": "contractor-1", "rev": 1, "role": "contractor", "phase": 1, "pid": 1399623, "realm": "contractor:g1", "ledger": "/workspace/projects/quotagent/tmp/manual/contractor/ledger.jsonl", "ledger_count": 2}
+exit=0
+
+# 结论：g1side 是**有阶段耦合的走查脚本**（每相位读对方相位写的共享文件），不是「一个动作一条命令」的产品 CLI。
+tmp/manual:
+contractor
+supplier
+
+tmp/manual/contractor:
+01-package.json
+ledger.jsonl
+rfq-ops.json
+
+tmp/manual/supplier:
+ledger.jsonl
+
+== 七、视觉现状量测（26 页 × 16 项 CSS 事实 + 唯一的 <style> 块逐字） ==
+== 26 个页面 × 16 项 CSS 事实（实测，2026-09-22，服务 8093）==
+页面                          HTTP  字节      css_var(--*)    :focus          :hover          @media          <button>        type=submit     aria-*          class=          card/panel/tile data-empty      <table>         <style>         display:grid|flexborder-radius   box-shadow      transition      
+/                           200   1359    0               0               0               0               0               0               0               0               0               0               0               1               0               1               0               0               
+/start/                     200   7071    0               0               0               0               0               0               0               0               0               0               1               1               0               1               0               0               
+/contractor/                200   12132   0               0               0               0               4               4               0               0               0               0               2               1               0               1               0               0               
+/supplier/                  200   8997    0               0               0               0               5               5               0               0               0               0               2               1               0               1               0               0               
+/ops/                       200   4838    0               0               0               0               0               0               0               0               0               0               2               1               0               1               0               0               
+/ops/mail/                  200   3873    0               0               0               0               0               0               1               0               0               0               3               1               0               1               0               0               
+/contractor/events/         200   8599    0               0               0               0               1               1               1               2               0               0               1               1               0               1               0               0               
+/contractor/quotes/         200   3935    0               0               0               0               1               1               1               2               0               0               1               1               0               1               0               0               
+/contractor/approvals/      200   3588    0               0               0               0               1               1               1               3               0               2               0               1               0               1               0               0               
+/contractor/evidence/       200   4507    0               0               0               0               1               1               1               2               0               0               1               1               0               1               0               0               
+/contractor/heuristics/     200   7882    0               0               0               0               1               1               1               2               0               0               2               1               0               1               0               0               
+/contractor/advice/         200   5901    0               0               0               0               0               0               1               0               0               0               1               1               0               1               0               0               
+/contractor/gates/          200   6085    0               0               0               0               1               1               1               0               0               0               1               1               0               1               0               0               
+/contractor/authority/      200   6662    0               0               0               0               1               1               1               2               0               0               0               1               0               1               0               0               
+/contractor/deadlines/      200   8597    0               0               0               0               1               1               1               0               0               0               1               1               0               1               0               0               
+/contractor/feedback        200   2024    0               0               0               0               1               1               0               0               0               0               0               1               0               1               0               0               
+/supplier/events/           200   4905    0               0               0               0               2               2               1               2               0               0               1               1               0               1               0               0               
+/supplier/quotes/           200   4394    0               0               0               0               2               2               1               2               0               0               1               1               0               1               0               0               
+/supplier/approvals/        200   3919    0               0               0               0               2               2               1               3               0               2               0               1               0               1               0               0               
+/supplier/clarifications/   200   3945    0               0               0               0               2               2               1               2               0               0               1               1               0               1               0               0               
+/supplier/heuristics/       200   8208    0               0               0               0               2               2               1               2               0               0               2               1               0               1               0               0               
+/supplier/advice/           200   6417    0               0               0               0               1               1               1               0               0               0               1               1               0               1               0               0               
+/supplier/gates/            200   5923    0               0               0               0               2               2               1               1               0               0               0               1               0               1               0               0               
+/supplier/authority/        200   6999    0               0               0               0               2               2               1               2               0               0               0               1               0               1               0               0               
+/supplier/deadlines/        200   7339    0               0               0               0               2               2               1               1               0               0               0               1               0               1               0               0               
+/supplier/feedback          200   2372    0               0               0               0               2               2               0               0               0               0               0               1               0               1               0               0               
+
+合计： {"css_var(--*)": 0, ":focus": 0, ":hover": 0, "@media": 0, "<button>": 37, "type=submit": 37, "aria-*": 19, "class=": 28, "card/panel/tile": 0, "data-empty": 4, "<table>": 24, "<style>": 26, "display:grid|flex": 0, "border-radius": 26, "box-shadow": 0, "transition": 0}
+
+== 唯一的 <style> 块逐字（来自 /contractor/，26 页共用同一份）==
+body{font:14px/1.6 system-ui,sans-serif;margin:2rem;max-width:60rem}
+code{background:#f3f3f3;padding:.1em .3em;border-radius:3px}table{border-collapse:collapse;width:100%}
+td,th{border:1px solid #ddd;padding:.35rem .5rem;text-align:left;font-size:13px}
+nav a{margin-right:1rem}details{margin:.6rem 0}summary{cursor:pointer}
+
+== 注：页面里出现的 class 属性共 28 处，全部来自 admin 提权表单与 /start/ 的表格样式钩子；业务页面（contractor/supplier 各子视图）里 0 处 card/panel/tile，0 处 aria-*，0 个 <button>。
+
+== 八、结论（与规格 §0 一致） ==
+1. 两个角色各按真实工作链逐步走完：能完整完成的步骤 = 0（承包商 0/6，供应商 0/5）。
+2. 58 次探测中 36 次卡住或假成功（62%）；全部跑完两侧账本 sha 逐字节不变。
+3. 唯二真能闭环的动作是 `gates/nudge` 与 `deadlines/promise`，两条都只落 0600 待办件、
+   需终端命令才落账；而 `nudge` 在真实状态下 4/4 id 全拒（`gate-not-found`），
+   `promise` 对供应商 100% 拒绝（`rfq-not-found`，因供应商视角投影里没有 `rfq/*`）。
+4. 「假成功」（POST 200 且与 GET 逐字节相同）是这套 UI 对"想做事的人"的默认反馈（4 例）。
+5. 视觉：26 页共享同一份 6 条 CSS 规则，0 CSS 变量、0 `:focus`/`:hover`/`@media`、0 `<button>`、
+   0 `card/panel/tile` 类、0 `display:grid|flex`。
