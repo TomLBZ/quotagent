@@ -85,3 +85,28 @@ RESULT: PASS（plugin-assets 门 14/14）
 
 主文件 `plugin-file-map.md` §分类 A 节：10 行 `插件·待搬` → `插件·已搬`；A 节计数行与 §分类 口径第 4 条
 同步为 `已搬 10 + 待搬 54`；台账叙事见 `plugin-file-map-batches.md`。
+
+## 四、收尾（**提交之后**）
+
+三个功能提交：`592a5b5`（① AC-COMPARE-004 + `tools/*.sh` 执行位）→ `99ce7d9`（② 18 服务实体 + 9 处读方）
+→ `253fd3f`（③ 10 项 `tools/**`）；清单/交接/state 的提交在其后。
+
+**全量门**（工作树逐道真跑；`run-clone` 校验 HEAD ⇒ 提交后复跑）：`docs` PASS、`coverage` 8/8、
+`ac-registry` 通过、`plugins` 5/5、`webui` 51/51、`modules` 521/521、`wiring` 5/5、`invariants` 22/22、
+`events` 一致、`storage` 19/19、`plugin-assets` 14/14、`plugin-requirements` 18/18、`plugin-lifecycle` 66/66、
+`run-once` 34/34、**`run-clone` 20/20**（K2 执行位已修）、`p0-no-node` rc=0、**`ac AC-COMPARE-004` rc=0**
+—— **17 项全绿、零 rc≠0**。
+
+```text
+$ git status --porcelain                 # 提交之后
+（原文为空：0 行）
+
+$ git ls-remote origin refs/heads/main
+e4853ba9a16c42e53bc19be53dfe0ba099e1991f	refs/heads/main
+$ git rev-parse HEAD
+e4853ba9a16c42e53bc19be53dfe0ba099e1991f
+```
+
+**本批没验证的**：① 各项 `git log --follow` 连续性未逐项验；② `clean-copy`、`g0/g1/g2`、`all`、
+`ui-mutate`、`bridge`/`cordis` 未跑；③ `docs/design/15-requirements-coverage.md` 的承载体列仍写旧路径
+（薄重导 ⇒ 门照绿），按计划留阶段 5.5；④ 未验断网/`npm install` 路径；⑤ 无人眼评审。
