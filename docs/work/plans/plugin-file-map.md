@@ -288,7 +288,7 @@
 | 现路径模式 | 目标 | 说明 |
 |---|---|---|
 | `src/quotagent/kernel/<f>.py` | `src/system/kernel/code/<f>.py` | 内核冻结（ADR-0002），不随自进化改；旧路径留**薄重导**（阶段 5 第一小片，EV-173） |
-| `src/quotagent/services/<name>.py` | `src/{system|domain}/<plugin>/code/<name>.py` | 旧路径留**薄重导**（阶段 5 第二小片，`EV-174`：已搬 12 项；仍有读方按旧路径读源码的 7 个模块本批不动，见 `plugin-file-map-batches.md`） | 归属表：`norm/measures/realm/approval/mail(_transport)/relay/retention(_exec)/evaldata|evalmetrics|scenarios→eval/admin_blocks→admin` 为 system；`rfq/intake/compare/guard/costmodel/pricing/commitments/deviation/capacity/change/clarify/faq/negotiation/quotes/sync/terms/export` 为 domain |
+| `src/quotagent/services/<name>.py` | `src/{system|domain}/<plugin>/code/<name>.py` | 旧路径留**薄重导**（阶段 5 第二/三小片：`EV-174` 12 项 + `EV-175` 18 项 = **30/30 搬完**；有读方的 7 个模块在 `EV-175` 里**先改读方再搬**，见 `plugin-file-map-batches.md`） | 归属表：`norm/measures/realm/approval/mail(_transport)/relay/retention(_exec)/evaldata|evalmetrics|scenarios→eval/admin_blocks→admin` 为 system；`rfq/intake/compare/guard/costmodel/pricing/commitments/deviation/capacity/change/clarify/faq/negotiation/quotes/sync/terms/export` 为 domain |
 | `src/quotagent/qa/checks_*.py` | `src/{system|domain}/<plugin>/tests/checks_*.py` | 检查随被检查的插件搬家（47 个映射逐条写在脚手架里） |
 | `src/quotagent/qa/{__init__,__main__,registry}.py` | `src/system/qa-runner/` | AC 运行器（跨插件的运行入口） |
 | `src/quotagent/{__init__,paths}.py` | `src/system/runtime/` | 运行时与路径解析 |

@@ -112,3 +112,51 @@
 > 另外：`AC-RUNTIME-001`（`p0-no-node`）的扫描面本批**同时收紧到实体目录**（`src/<层>/<插件>/code/*.py`），
 > 否则"服务不依赖宿主运行时"这条也会在薄重导上判绿（实测扫描面 62 个文件：内核 18 + 服务实体 12 + 旧路径 31）。
 
+### 阶段 5 第三小片：余下 18 个服务实体 + **先改读方再搬**（`EV-175`）
+
+口径与上面一样（`git mv` 实体 + 旧位置**薄重导** + 逐项 byte 守恒 + 旧导入路径实测可用）。
+本批的关键差别：上一批"仍有读方按旧路径读源码"的 7 个模块**这次搬了**，因此**先**把读方改指实体
+（否则静态断言会在十几行的薄重导上**静默判绿** = 断言变空）。8 处读方的改法：
+
+| 读方 | 原来读哪 | 现在读哪 | 改法 |
+|---|---|---|---|
+| `src/system/mail/tests/checks_mail.py` | `mail.__file__` | 实体 | 新增 `_impl_source()`：`__file__` 是薄重导 ⇒ 跟到它声明的实体 |
+| `src/domain/faq/tests/checks_faq.py` | `faq.__file__` | 实体 | 同上 |
+| `src/domain/negotiation/tests/checks_negotiation.py` | `negotiation.__file__` | 实体 | 同上 |
+| `src/system/retention/tests/checks_retention_exec.py` | `retention_exec.__file__` | 实体 | 同上（`scanned` 走 `_impl_source()`） |
+| `src/system/retention/tests/checks_retention.py` | 写死旧路径 | 实体 | 常量 `RETENTION_SOURCE` 直接指 `src/system/retention/code/retention.py` |
+| `src/system/admin/tests/checks_admin.py` | 写死旧路径 + `git show HEAD:旧路径` | 实体 + `HEAD:新路径` | 常量 `SERVICE` 改指实体；HEAD 回归点同步 |
+| `tools/check-mail-transport.py` | 写死旧路径（G1 的 AST 扫描） | 实体 | 路径改指 `src/system/mail/code/mail.py` |
+| `tools/check-plugin-inventory.py` | `src/quotagent/services/*.py` 单一 glob（P3 功能归属） | 旧路径 ∪ 实体 | `service_names()` = 两边都扫（名字集合同口径，实体不再无人管） |
+
+**反向验证（逐条真跑，原始行在 `docs/work/evidence/EV-175-*`）**：对每个读方做两次单点变异 ——
+① 往**实体**尾部加一行（`import subprocess` / `import smtplib` / `import shutil`）⇒ 对应门/AC **必红**
+（例如 `AC-AUDIT-005` 的 `scanned=src/system/retention/code/retention_exec.py`、
+`AC-MAIL-001` 的 `实现=…/src/system/mail/code/mail.py` 直接印在 detail 里）；
+② 往**旧路径薄重导**尾部加同一行 ⇒ 该门 **仍绿**（证明判据已不看旧路径）。两次都逐字节复原并核对 sha256。
+
+18 项「旧位置 → 归属 → 新位置」：
+
+| 资产（旧位置） | 归属插件 | 新位置 |
+|---|---|---|
+| `src/quotagent/services/admin_blocks.py` | `system/admin` | `src/system/admin/code/admin_blocks.py` |
+| `src/quotagent/services/approval.py` | `system/approval` | `src/system/approval/code/approval.py` |
+| `src/quotagent/services/evaldata.py` | `system/eval` | `src/system/eval/code/evaldata.py` |
+| `src/quotagent/services/evalmetrics.py` | `system/eval` | `src/system/eval/code/evalmetrics.py` |
+| `src/quotagent/services/scenarios.py` | `system/eval` | `src/system/eval/code/scenarios.py` |
+| `src/quotagent/services/faq.py` | `domain/faq` | `src/domain/faq/code/faq.py` |
+| `src/quotagent/services/mail.py` | `system/mail` | `src/system/mail/code/mail.py` |
+| `src/quotagent/services/mail_transport.py` | `system/mail` | `src/system/mail/code/mail_transport.py` |
+| `src/quotagent/services/negotiation.py` | `domain/negotiation` | `src/domain/negotiation/code/negotiation.py` |
+| `src/quotagent/services/pricing.py` | `domain/pricing` | `src/domain/pricing/code/pricing.py` |
+| `src/quotagent/services/quotes.py` | `domain/quotes` | `src/domain/quotes/code/quotes.py` |
+| `src/quotagent/services/realm.py` | `system/realm` | `src/system/realm/code/realm.py` |
+| `src/quotagent/services/relay.py` | `system/relay` | `src/system/relay/code/relay.py` |
+| `src/quotagent/services/retention.py` | `system/retention` | `src/system/retention/code/retention.py` |
+| `src/quotagent/services/retention_exec.py` | `system/retention` | `src/system/retention/code/retention_exec.py` |
+| `src/quotagent/services/rfq.py` | `domain/rfq` | `src/domain/rfq/code/rfq.py` |
+| `src/quotagent/services/sync.py` | `domain/sync` | `src/domain/sync/code/sync.py` |
+| `src/quotagent/services/terms.py` | `domain/terms` | `src/domain/terms/code/terms.py` |
+
+至此 `src/quotagent/services/**` 的 **30/30** 实体都在 `src/<层>/<插件>/code/`，旧目录只剩薄重导。
+

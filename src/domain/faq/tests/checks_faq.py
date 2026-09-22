@@ -137,11 +137,30 @@ def _faq_rows(ledger: Ledger) -> list:
     return [row for row in ledger.read() if str(row["type"]).startswith("faq/")]
 
 
+#: 旧路径（`src/quotagent/services/*.py`）在**阶段 5** 变成薄重导：实现已搬到 `src/<层>/<插件>/code/`。
+_REEXPORT_MARK = "薄重导（迁移阶段 5）"
+
+
+def _impl_source(module: object) -> tuple:
+    """模块的**实现文件**：`__file__` 指向的若是一份薄重导，跟到它声明的那份实体。
+
+    薄重导不含实现 ⇒ 静态断言必须扫**实体**，否则会在十几行的转发文件上**静默判绿**。
+    """
+    path = Path(getattr(module, "__file__", "") or "")
+    if path.is_file():
+        text = path.read_text(encoding="utf-8")
+        if _REEXPORT_MARK in text:
+            for rel in re.findall(r'"([A-Za-z0-9_./-]+\.py)"', text):
+                candidate = path.resolve().parents[3] / rel
+                if candidate.is_file():
+                    return candidate, candidate.read_text(encoding="utf-8")
+        return path, text
+    return path, ""
+
+
 def _module_source() -> tuple:
-    """实际被加载的那个实现文件（影子变异体也在这里被读到）。"""
-    path = Path(getattr(faq_module, "__file__", "") or "")
-    text = path.read_text(encoding="utf-8") if path.exists() else ""
-    return path, text
+    """实际被加载的那个实现文件（薄重导时跟到实体；影子变异体也在这里被读到）。"""
+    return _impl_source(faq_module)
 
 
 def _calls_names_imports(tree: ast.AST) -> tuple:

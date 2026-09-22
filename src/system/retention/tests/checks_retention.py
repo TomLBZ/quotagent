@@ -51,6 +51,11 @@ OLD = "2020-01-01T00:00:00Z"
 OLD_AGE_DAYS = 2455.0
 SECRET = "SUPPLIER-SECRET-999"
 
+#: 静态零残留扫的**实现文件**：阶段 5（EV-175）把实体搬到了 `src/system/retention/code/retention.py`，
+#: 旧路径 `src/quotagent/services/retention.py` 只剩**薄重导**。这里必须指实体 —— 扫旧路径的话，
+#: 十几行的转发文件会让「没有 open()/write/unlink…」这类断言**静默判绿**（= 断言变空）。
+RETENTION_SOURCE = repo_root() / "src/system/retention/code/retention.py"
+
 POLICY = {
     "quote/submitted": {"retain_days": 365, "after": "archive"},
     "evidence/pack-exported": {"retain_days": 30, "after": PURGE_COPY, "requires_approval": True},
@@ -214,7 +219,7 @@ def check_audit_003() -> list[Assertion]:
                          f"bytes={len(policy.render(result).encode('utf-8'))} digest={result['policy_digest'][:24]}…"))
 
     # --- 7. 零残留：静态扫描 + 动态 --------------------------------------
-    source = (repo_root() / "src/quotagent/services/retention.py").read_text(encoding="utf-8")
+    source = RETENTION_SOURCE.read_text(encoding="utf-8")
     write_needles = ("open(", "write_text", "write_bytes", "unlink", "os.remove", "shutil", "rmtree",
                      "mkdir", "import os", "import shutil", "os.replace", "truncate(",
                      "from ..kernel.ledger", "self.ledger")

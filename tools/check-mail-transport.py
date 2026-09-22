@@ -667,7 +667,7 @@ try:
     # =======================================================================
     import ast  # noqa: PLC0415 —— 只在断言里用一次，放这里读起来更贴近断言
 
-    mail_tree = ast.parse((ROOT / "src" / "quotagent" / "services" / "mail.py").read_text(encoding="utf-8"))
+    mail_tree = ast.parse((ROOT / "src" / "system" / "mail" / "code" / "mail.py").read_text(encoding="utf-8"))
     mail_imports: set = set()
     for node_ in ast.walk(mail_tree):
         if isinstance(node_, ast.Import):

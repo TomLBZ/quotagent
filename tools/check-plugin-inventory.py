@@ -24,6 +24,26 @@ INVENTORY = ROOT / 'docs' / 'design' / '14-plugin-inventory.md'
 INVENTORY_ARCHIVE_GLOB = '14-plugin-inventory-archive*.md'
 PROFILES = ROOT / 'host' / 'profiles.mjs'
 SERVICES = ROOT / 'src' / 'quotagent' / 'services'
+#: 服务**实体**（阶段 5）：`src/{system,domain}/<插件>/code/*.py`（内核不是「服务」，排除）。
+SERVICES_ENTITY = ROOT / 'src'
+SERVICES_ENTITY_EXCLUDE = {'kernel'}
+
+
+def service_names() -> list[str]:
+    """「服务」的名字集合 = 旧路径模块名 ∪ 实体文件名。
+
+    阶段 5（EV-175）把实体搬进 `src/<层>/<插件>/code/`、旧路径只剩**薄重导** ⇒ 只扫旧目录的话，
+    「功能有归属」这条会在转发文件上成立，而**实体**（真正的那份实现）没人管；两边都扫才不空转。
+    名字去重后与旧口径逐名相同（薄重导与实体同名）。
+    """
+    names = {p.stem for p in SERVICES.glob('*.py') if p.stem != '__init__'}
+    for layer in ('system', 'domain'):
+        for plugin_dir in (SERVICES_ENTITY / layer).glob('*/code/*.py'):
+            if plugin_dir.parent.parent.name in SERVICES_ENTITY_EXCLUDE:
+                continue
+            if plugin_dir.stem != '__init__':
+                names.add(plugin_dir.stem)
+    return sorted(names)
 
 results: list[tuple[str, bool, str]] = []
 
@@ -45,7 +65,7 @@ def inventory_text() -> tuple[str, dict[str, int]]:
     （后者与 P3 的"功能有归属"同一口径：服务名以子串出现即算）。归档必须**真的贡献登记名**，
     否则"两边都空"会让 P1/P3 静默通过。
     """
-    services = sorted(p.stem for p in SERVICES.glob('*.py') if p.stem != '__init__')
+    services = service_names()
     modules = sorted(p.stem for p in MODULE_DIR.glob('*.mjs') if p.stem != 'index')
     per: dict[str, int] = {}
     chunks: list[str] = []
@@ -96,7 +116,7 @@ def main() -> int:
           not [n for n in unwired if n not in allowed_unwired],
           f'profile 引用={sorted(wired)}；未接线={unwired}（已显式标注={allowed_unwired}）')
 
-    services = sorted(p.stem for p in SERVICES.glob('*.py') if p.stem != '__init__')
+    services = service_names()
     missing_owner = [name for name in services if name not in text]
     check('P3 Python 功能归属：每个 `services/*.py` 在清单里出现（功能有归属）',
           not missing_owner, f'服务 {len(services)} 个；未归属={missing_owner}')

@@ -14,8 +14,11 @@ from pathlib import Path
 from quotagent.qa.registry import Assertion, register
 
 ROOT = Path(__file__).resolve().parents[4]
-FILES = {'transport': ROOT / 'src' / 'quotagent' / 'services' / 'mail_transport.py',
-         'mail': ROOT / 'src' / 'quotagent' / 'services' / 'mail.py',
+#: 阶段 5（EV-175）：`transport` / `mail` 的**实体**已搬到 `src/system/mail/code/`，旧路径只剩**薄重导**。
+#: 这里必须指实体 —— 读旧路径的话，"专属 reason / 异常洗过" 这类**源码文本**判据会在 14 行转发上判红
+#: （实测：`p0-no-node` 的 AC-MAIL-002 就是这样红的）。
+FILES = {'transport': ROOT / 'src' / 'system' / 'mail' / 'code' / 'mail_transport.py',
+         'mail': ROOT / 'src' / 'system' / 'mail' / 'code' / 'mail.py',
          'view': ROOT / 'host' / 'modules' / 'mail-view.mjs',
          'keys': ROOT / 'host' / 'lib' / 'config-keys.mjs',
          'gate': ROOT / 'tools' / 'check-mail-transport.py'}

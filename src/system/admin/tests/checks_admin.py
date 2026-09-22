@@ -60,7 +60,10 @@ from quotagent.services.admin_blocks import (ALLOWED_TRANSITIONS, CHECKLIST_STAT
 from quotagent.qa.registry import Assertion, register
 
 ROOT = Path(__file__).resolve().parents[4]
-SERVICE = ROOT / "src" / "quotagent" / "services" / "admin_blocks.py"
+#: 静态扫描的实现文件：阶段 5（EV-175）把实体搬进 `src/system/admin/code/admin_blocks.py`，旧路径
+#: `src/quotagent/services/admin_blocks.py` 只剩**薄重导**。这里必须指实体 —— 扫旧路径的话，十几行的
+#: 转发文件会让「不写账本 / 不读墙钟 / 不读环境变量」这些文本判据**静默判绿**（= 断言变空）。
+SERVICE = ROOT / "src" / "system" / "admin" / "code" / "admin_blocks.py"
 WRITER = ROOT / "tools" / "refresh-admin-snapshot.py"
 REAL_STATE = ROOT / ".agents" / "state.json"
 REAL_CHECKLIST = ROOT / "docs" / "work" / "progress-checklist.md"
@@ -634,7 +637,7 @@ def _legacy_module(scratch: Path) -> tuple[object | None, str]:
     import importlib.util  # noqa: PLC0415 —— 只有这条回归路径需要它
 
     try:
-        proc = subprocess.run(["git", "show", "HEAD:src/quotagent/services/admin_blocks.py"], cwd=str(ROOT),
+        proc = subprocess.run(["git", "show", "HEAD:src/system/admin/code/admin_blocks.py"], cwd=str(ROOT),
                               capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.SubprocessError) as exc:
         return None, f"git 不可用（{type(exc).__name__}: {exc}）"

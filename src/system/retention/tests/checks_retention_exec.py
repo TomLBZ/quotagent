@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import re
 import shutil
 from pathlib import Path
 
@@ -62,6 +63,26 @@ from quotagent.services.retention_exec import (ARCHIVE_EVENT, PURGE_EVENT, R_APP
                                        S_ALREADY_ARCHIVED, ApprovalMissing,
                                        RetentionExecutionError, RetentionExecutor, TargetSealed)
 from quotagent.qa.registry import Assertion, register
+
+#: 旧路径（`src/quotagent/services/*.py`）在**阶段 5** 变成薄重导：实现已搬到 `src/<层>/<插件>/code/`。
+_REEXPORT_MARK = "薄重导（迁移阶段 5）"
+
+
+def _impl_source(module: object) -> tuple[Path, str]:
+    """模块的**实现文件**：`__file__` 指向的若是一份薄重导，跟到它声明的那份实体。
+
+    薄重导不含实现 ⇒ 静态断言必须扫**实体**，否则会在十几行的转发文件上**静默判绿**。
+    """
+    path = Path(getattr(module, "__file__", "") or "")
+    if path.is_file():
+        text = path.read_text(encoding="utf-8")
+        if _REEXPORT_MARK in text:
+            for rel in re.findall(r'"([A-Za-z0-9_./-]+\.py)"', text):
+                candidate = path.resolve().parents[3] / rel
+                if candidate.is_file():
+                    return candidate, candidate.read_text(encoding="utf-8")
+        return path, text
+    return path, ""
 
 NOW = "2026-09-21T00:00:00Z"
 OLD = "2020-01-01T00:00:00Z"                      # 手算 age_days = 2455（同 AC-AUDIT-003）
@@ -392,10 +413,11 @@ def check_audit_005() -> list[Assertion]:
                          f"would={sorted(dry_targets)} real={real['counts']['purged']}"))
 
     # ============ 9~10. 静态零残留 + 不递归删目录 ============
-    # 扫的是**当前进程里真正被 import 的那份源码**（而不是仓库里的固定路径）：变异副本（tmp/t253-mutate.py）
-    # 会被扫到，静态变异因而同样能变红。
-    scanned = Path(retention_exec_module.__file__).resolve()
-    source = scanned.read_text(encoding="utf-8")
+    # 扫的是**当前进程里真正被 import 的那一份实现**（而不是仓库里的固定路径）：变异副本（tmp/t253-mutate.py）
+    # 会被扫到，静态变异因而同样能变红。阶段 5（EV-175）：旧路径只剩**薄重导** ⇒ `_impl_source` 跟到实体，
+    # 否则十几行的转发文件会让下面的静态断言**静默判绿**。
+    scanned, source = _impl_source(retention_exec_module)
+    scanned = scanned.resolve()
     needles = ("shutil", "subprocess", "glob.", "import glob", "rmtree", "os.system", "popen",
                "os.remove", "os.rmdir", "scandir", "os.walk", ".walk(", "rglob(", "fnmatch")
     hits = [needle for needle in needles if needle in source]
