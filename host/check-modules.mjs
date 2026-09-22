@@ -343,6 +343,33 @@ const STUBS = {
     config: () => ({ max_items: 20, route_prefix: '/quotagent', note_max_bytes: 2048,
       due_clock: 'facts-only', critical_seconds: 3600, soon_seconds: 86400 }),
   },
+  quotePrepare: {
+    // fixture 的 stub：只满足"能派生行项目目录/草稿列表、能产待办件载荷、能字段级拒绝"；
+    // 口径（不取墙钟、不编行项目、字段级错误码、**不能签名**）与 4 处变异由 quote-prepare 自己的门验（t286）
+    fields: () => [{ name: 'item_id', label: '行项目', kind: 'text', required: true,
+      placeholder: 'L-001', rule: 'stub' }],
+    limits: () => ({ unit_price_cents_min: 1, unit_price_cents_max: 100000000,
+      lead_time_days_min: 1, lead_time_days_max: 3650, note_bytes_max: 2000, money_unit: 'cents' }),
+    views: () => ['supplier'],
+    meta: () => ({ engine: 'rules', event: 'quote/drafted', kind: 'quote-draft', action: 'draft',
+      schema: 1, sections: ['facts'], error_codes: [], degraded_reasons: [],
+      can_sign: false, signature_required: true, can_submit: false, sends: 0, money_unit: 'cents',
+      fields: ['item_id'], views: ['supplier'], limits: { money_unit: 'cents' },
+      ref_pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$', pending_prefix: 'qd-', engine_note: 'stub' }),
+    privacy: () => ({ reads: ['facts'], reads_ledger: false, writes: 0, sends: 0, reads_clock: false,
+      calls_model: false, uses_network: false, approves: false, signs: false, note_body_written: false }),
+    prepare: () => ({ view: '', engine: 'rules', engine_note: 'stub', as_of: null, as_of_basis: 'stub',
+      views: ['supplier'], can_sign: false, signature_required: true, signature_note: 'stub',
+      money_unit: 'cents', limits: { money_unit: 'cents' },
+      catalogue: { items: [], rfq_ids: [], omitted: 0 }, drafts: [],
+      counts: { items: 0, rfq_ids: 0, drafts: 0 }, degraded: true, reason: 'stub' }),
+    validate: () => ({ ok: false, code: 'validation-failed',
+      errors: [{ field: 'item_id', code: 'item-not-found', message: 'stub', next_action: 'stub' }],
+      record: null }),
+    handoff: () => ({ required: true, can_sign: false, view: '', why: 'stub', draft_id: '<draft-id>',
+      rfq_id: '', item_id: '', unit_price_cents: null, money_unit: 'cents', commands: ['stub', 'stub'],
+      data_signature_required: '1', page_note: 'stub' }),
+  },
 }
 
 /** 起一个带句柄的模块实例：句柄在插件自己的 ctx 里取（那里才有 inject 权限）。 */

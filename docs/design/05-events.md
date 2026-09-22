@@ -88,6 +88,7 @@
 | `quote/human-approved` | emit | ✔ | 人工 → qep | 批准记录（不可由 agent 产生） |
 | `quote/submitted` | emit | ✔ | `ctx.qep` → compare | 报价事实（含 `rfq_rev`） |
 | `quote/superseded` | emit | ✔ | `ctx.quotes` | 包升版后基于旧版本的报价标记过期并可重报（FR-RFQ-006） |
+| `quote/drafted` | emit | ✔ | `host/modules/quote-prepare.mjs` → `tools/quote-draft.py`（**唯一落账本者**） | 报价草稿「已准备好」（**非签名动作**：不是 `quote/submitted`）；两侧登记（供应商自己的事实 + 承包商侧的「供应商已准备报价（待签署）」）；body 不含备注正文 |
 | `capacity/committed` | emit | ✔ | `ctx.capacity` | 交期/产能承诺建立与修订（含 binding 与 revision） |
 | `capacity/firm-change-refused` | emit | ✔ | `ctx.capacity` | `firm` 交期在有效期内被模型改动 → 拒绝留痕 |
 | `capacity/conflict` | emit | ✔ | `ctx.capacity` | 产能/交期不可行 → 只提请人工（不否决、不改交期） |

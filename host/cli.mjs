@@ -209,6 +209,11 @@ const main = async () => {
       apply: (inner, cfg) => rdApply(inner, { ...cfg, route_prefix: String(args.prefix ?? '/quotagent') }) },
       rdConfig.parse({}))
 
+    // 报价草稿（本批）：只吃白名单事实载荷的纯函数插件（不读账本、不取墙钟、**不能签名**）
+    const { apply: qpApply, Config: qpConfig } = await import('./modules/quote-prepare.mjs')
+    await ctx.plugin({ name: 'quote-prepare', inject: [], Config: qpConfig,
+      apply: (inner, cfg) => qpApply(inner, cfg) }, qpConfig.parse({}))
+
     const { apply: mvApply, Config: mvConfig } = await import('./modules/mail-view.mjs')
     await ctx.plugin({ name: 'mail-view', inject: [], Config: mvConfig,
       apply: (inner, cfg) => mvApply(inner, { ...cfg,
@@ -253,7 +258,7 @@ const main = async () => {
     const box = {}
     const fiber = await ctx.plugin({
       name: 'webui',
-      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline'],   // 全部是独立插件
+      inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare'],   // 全部是独立插件
       Config: webuiConfig,
       apply: async (inner, config) => {
         const original = inner.provide.bind(inner)
@@ -275,6 +280,8 @@ const main = async () => {
       ledger_evolve: String(args['ledger-evolve'] ?? join(REPO_ROOT, 'tmp', 'evolve', 'ledger.jsonl')),
       // 宿主侧共享目录（催办待办件落 `<ui_shared>/gate-nudges/`；与 ui-feedback 同口径）
       ui_shared: String(args['ui-shared'] ?? process.env.QUOTAGENT_UI_SHARED ?? 'tmp/ui-shared'),
+      // RFQ 投递信封（发送方放到共享交换目录的交付件）：被邀供应商由此看到"发给自己的包"
+      rfq_delivery: String(args['rfq-delivery'] ?? process.env.QUOTAGENT_UI_RFQ_DELIVERY ?? ''),
     })
     // 注意：这里**不能**用 emit()（它写完就 process.exit）——UI 是常驻服务
     process.stdout.write(JSON.stringify({ ok: true, action: 'webui', profile: profileName, pid: process.pid,

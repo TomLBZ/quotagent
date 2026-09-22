@@ -177,6 +177,21 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     "${QUOTAGENT_NODE:-node}" "$HERE/../host/t283-change-detail-gate.mjs" || exit 1
     exec "$QUOTAGENT_PY" "$HERE/check-change-detail-route.py" "$@"
     ;;
+  rfq-visibility)
+    # 「供应商看不到自己的 RFQ 包」这个根因（本批）：`rfq/*` 只落在**发送方** realm 的账本里，供应商那本
+    # 账本里一条都没有 ⇒ 供应商看不到要报的包、看不到 @rev、看不到报价截止。修法 = 投递信封 + 收件人
+    # 作用域 + 字段白名单（`host/modules/projection.mjs`）。
+    #   ① 围栏门（26 条断言：**被邀的看得到 / 没被邀的看不到**（同一次调用对比）/ 他家供应商代号与他家包
+    #      0 命中 / **带哨兵与不带哨兵输出逐字节一致** / rev 与截止逐字取事实（不取墙钟）/ 确定性 /
+    #      有界 + `omitted` / 七种有名降级 / 派生行形状（账本行不增不减）/ 承包商侧不得减少 / 零写面 /
+    #      页面块 0 内联脚本；**4 处单点变异全红**（含"把包发给所有供应商"这种越权变异）+ 防假变异 +
+    #      还原字节一致）
+    #   ② 真 HTTP 端到端（真起两个进程、两种身份、同一份投递目录：被邀的看得到包（逐字）/ 未被邀的
+    #      看不到 / 追加"只发给别家"的信封后输出**逐字节不变** / 追加"同时发给两家"的信封后**必须变化** /
+    #      哨兵 0 命中 / 承包商侧不减少 / 只读 + 确定性 / 0 内联脚本）。两半都跑，任一失败即红。
+    "${QUOTAGENT_NODE:-node}" "$HERE/../host/t287-rfq-visibility-gate.mjs" || exit 1
+    exec "$QUOTAGENT_PY" "$HERE/check-rfq-visibility-route.py" "$@"
+    ;;
   rfq-deadline)
     # RFQ 回文时限（本批：「来不及回 RFQ：谁还没回 / 还差多久 / 催了没有」——P-10「截止时间与催报
     # 没有入口」+ P-04「被迫回电脑前再算、错过截止」的原话）：
@@ -190,6 +205,18 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     #    幂等 duplicates / 两条拒绝路径 / 私域哨兵 0 命中）。两半都跑，任一失败即红。
     "${QUOTAGENT_NODE:-node}" "$HERE/../host/t285-rfq-deadline-gate.mjs" || exit 1
     exec "$QUOTAGENT_PY" "$HERE/check-rfq-deadline-route.py" "$@"
+    ;;
+  quote-draft)
+    # 「不要假成功」+ 报价草稿写闭环（本批：「员工填了单价点了提交、浏览器回一页 200、什么都没发生」）：
+    # ① 插件围栏门（17 条断言 + 4 处单点变异 + 还原字节一致；服务面**恰 8 键**且无签名/提交/发信方法 /
+    #    字段级拒绝码闭合 / 草稿恒为**待签署** / 行项目读不出来不编 / 确定性（载荷墙钟入口读都不读）/
+    #    私域哨兵零泄漏 / 零写面）② 真 HTTP 端到端（真进程真回读：**逐条只读路由 POST ⇒ 405 +
+    #    method-not-allowed + `Allow: GET`**，反向对照写路由不返回该 code / 字段级 errors / 待办件恰 0600 /
+    #    宿主账本零新增 / 真跑 `tools/quote-draft.py` 两侧账本各 +1 且 body 恰 12 键不含备注正文 / 幂等 /
+    #    拒绝码 / 两视角页面都回读那份草稿 + 承包商侧「已准备报价（待签署）」/ 真跑 `tools/quote-sign.py`
+    #    证明「签名只能由人」）。两半都跑，任一失败即红。
+    "${QUOTAGENT_NODE:-node}" "$HERE/../host/t286-quote-draft-gate.mjs" || exit 1
+    exec "$QUOTAGENT_PY" "$HERE/check-quote-draft-route.py" "$@"
     ;;
   ui-feedback)
     # WebUI 反馈闭环（用户反馈 → agent 产新版本 → 自动重载 → 页面提示"请刷新"）：

@@ -137,6 +137,7 @@ class EventBus:
         "quote/human-approved": ("emit", True, ""),
         "quote/submitted": ("emit", True, ""),
         "quote/superseded": ("emit", True, ""),
+        "quote/drafted": ("emit", True, "报价草稿已准备好（**非签名动作**；宿主只落 0600 待办件，落账本归 tools/quote-draft.py）"),
         "capacity/committed": ("emit", True, ""),
         "capacity/firm-change-refused": ("emit", True, ""),
         "capacity/conflict": ("emit", True, ""),

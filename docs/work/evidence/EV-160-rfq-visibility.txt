@@ -1,0 +1,128 @@
+EV-160 · 「供应商看不到自己的 RFQ 包」根因修复（投递信封 + 收件人作用域 + 字段级白名单）
+关联：FR-RFQ-009 / AC-RFQ-007 / T-287；契约 docs/design/26-rfq-delivery-visibility.md
+命令：
+  node host/t287-rfq-visibility-gate.mjs           （围栏门：26/26）
+  python3 tools/check-rfq-visibility-route.py       （真路由门：RESULT: PASS（rfq-visibility 路由门 10/10））
+  tools/verify.sh rfq-visibility                    （上面两条的组合门，exit 0）
+  tools/verify.sh <门名>（本批要求全绿）
+  sh tmp/rfq-visibility-readback.sh                 （重启真服务后的真回读，原始行见 §三）
+
+§一 围栏门原始输出（一行 JSON 的 checks 摘要）
+  passed=26 total=26 failures=0
+  4 处单点变异：
+    · {"S1 被邀供应商看得到包":true,"S2 未被邀供应商看不到":true,"S3 他家供应商代号与私域键 0 命中":true,"S4 发放对象只出自己":true,"S5 rev/截止逐字一致（不取墙钟）":true,"S6 有界如实报 omitted":true}
+    · 必须红的场景=S2 未被邀供应商看不到；实际变红=["S1 被邀供应商看得到包","S2 未被邀供应商看不到","S3 他家供应商代号与私域键 0 命中","S4 发放对象只出自己","S6 有界如实报 omitted"]；字节已变=true（越权/泄漏型变异由**两道结构性负控**兜住 ⇒ 表现常常是"该看到的看不到了"，那是 fail-closed 的必然结果，不是"门很稳"）
+    · 必须红的场景=S1 被邀供应商看得到包；实际变红=["S1 被邀供应商看得到包","S4 发放对象只出自己","S6 有界如实报 omitted"]；字节已变=true（越权/泄漏型变异由**两道结构性负控**兜住 ⇒ 表现常常是"该看到的看不到了"，那是 fail-closed 的必然结果，不是"门很稳"）
+    · 必须红的场景=S4 发放对象只出自己；实际变红=["S1 被邀供应商看得到包","S4 发放对象只出自己","S6 有界如实报 omitted"]；字节已变=true（越权/泄漏型变异由**两道结构性负控**兜住 ⇒ 表现常常是"该看到的看不到了"，那是 fail-closed 的必然结果，不是"门很稳"）
+    · 必须红的场景=S5 rev/截止逐字一致（不取墙钟）；实际变红=["S5 rev/截止逐字一致（不取墙钟）"]；字节已变=true（越权/泄漏型变异由**两道结构性负控**兜住 ⇒ 表现常常是"该看到的看不到了"，那是 fail-closed 的必然结果，不是"门很稳"）
+    · 变异1：**把包发给所有供应商**（越权：去掉收件人作用域判定 ⇒ 谁都能看到任何一份信封）→变红场景=["S1 被邀供应商看得到包","S2 未被邀供应商看不到","S3 他家供应商代号与私域键 0 命中","S4 发放对象只出自己","S6 有界如实报 omitted"]（必须含「S2 未被邀供应商看不到」）；变异2：发放对象不再只出自己（`recipient` 取整份 `delivered_to` 名单）→变红场景=["S1 被邀供应商看得到包","S4 发放对象只出自己","S6 有界如实报 omitted"]（必须含「S1 被邀供应商看得到包」）；变异3：把整份 `delivered_to` 当成第 10 个键塞进 `rfq`（"另有几家"随之外泄）→变红场景=["S1 被邀供应商看得到包","S4 发放对象只出自己","S6 有界如实报 omitted"]（必须含「S4 发放对象只出自己」）；变异4：报价截止改成**墙钟推算**（不再逐字取事实里的 `quote_by`）→变红场景=["S5 rev/截止逐字一致（不取墙钟）"]（必须含「S5 rev/截止逐字一致（不取墙钟）」）
+    · 不存在的锚点→已判假变异；自我替换→已判假变异
+    · projection 未变=true；webui 未变=true；hooks=true
+
+§二 真路由门原始输出
+[ok]   ① 夹具就绪：两份**真哈希链**账本（`supplier:alpha` 被邀 / `supplier:gamma` 未被邀）+ 承包商账本 + 投递目录（信封 A 发给 alpha：rev2/报价截止/两条行项目 + 刻意混进承包商私域键与哨兵）；**供应商账本里 `rfq/*` 一条都没有**（这就是被修掉的根因形态）
+        账本={'supplier-alpha.jsonl': 1, 'supplier-alpha.jsonl.realm': 'supplier:alpha', 'supplier-gamma.jsonl': 1, 'supplier-gamma.jsonl.realm': 'supplier:gamma', 'contractor.jsonl': 1, 'contractor.jsonl.realm': 'contractor:con-B', 'contractor': 3, 'healthy': True, 'supplier_rfq_rows': 0}；投递目录=['01-pkg-alpha.json']；供应商账本里的 rfq 行数=0
+[ok]   ② 两个真进程就绪（同一份投递目录、两种身份；`/api/health` 200）
+        alpha pid=34820 port=55405；gamma pid=34821 port=58599
+[ok]   ③ **被邀的供应商看得到包**（正控，逐字）：`/supplier/api/events` 里出现 `rfq/published` 行，`package_id`/`rev`/`quote_by`/`clarify_by`/`delivered_at`/行项目与数量**全部等于本脚本手写的夹具事实值**；首页出现投递块（抓手齐、省略 0、身份对）
+        status=200/200；rfq 行=1；行={"seq": null, "type": "rfq/published", "correlation_id": "pkg-alpha", "ts": "2026-09-23T09:00:00Z", "rfq": {"package_id": "pkg-alpha", "rev": 2, "quote_by": "2026-09-25T00:00:00Z", "clarify_by": "2026-09-23T00:00:00Z", "currency": "CNY", "items": [{"item_id": "L-001", "code": "P-100", "qty": 150, "unit": "m"}, {"item_id": "L-002", "code": "S-200", "qty": 480, "unit": "kg"}], "recipient": "supplier；页面缺抓手=[]
+[ok]   ④ **未被邀的供应商看不到**（负控）：同一份投递目录、身份 `supplier:gamma` ⇒ 事件里 `rfq/*` **0 条**；首页投递块是 `degraded:true` + `reason=no-deliveries-visible` + 计数 0（「没有发给我」是个**有名**状态，不是空白页）
+        status=200/200；rfq 行=0；页面缺抓手=[]
+[ok]   ⑤ **带哨兵与不带哨兵输出逐字节一致**（真 HTTP）：把「只发给别家」的信封（含他家代号与私域哨兵）追加进投递目录后，alpha 的事件 JSON 与首页 HTML **逐字节不变**（不是「藏起来」，是根本没进输出）；顺带：**坏信封**（非法 JSON）既不崩服务也不计入（服务仍 200）
+        事件字节一致=True（sha256 d2f23d61cfea…/d2f23d61cfea…）；页面字节一致=True
+[ok]   ⑥ **非空转对照**：追加「同时发给两家」的信封后，alpha 的事件与首页**必须**变化，且多出 `pkg-shared`（作用域是**按身份**的，不是「把所有人都挡住」）
+        事件变化=True；包列表=['pkg-alpha', 'pkg-shared']
+[ok]   ⑦ **他家供应商代号 / 他家包 / 承包商私域值 0 命中**：两个身份的四份响应 + 承包商两份响应里搜不到 `supplier:beta-SENTINEL-9f3`、`pkg-beta`、`BETA-ONLY`、`L-777` 与三个私域哨兵值；**私域键名**在**视图 JSON** 里 0 命中（页面里那句「本视角拒收私域键 …」是既有的**口径声明**，不是数据 —— 断言不把声明的键名当泄漏）；**非空转对照**：这些哨兵**确实**写在投递目录的信封里（「0 命中」因此才有意义）
+        命中=无；夹具里确实有哨兵=['supplier:beta-SENTINEL-9f3', 'pkg-beta', 'BETA-ONLY', 'SENTINEL-COST-FLOOR-3a1', 'SENTINEL-INTERNAL-NOTE-7f2', 'SENTINEL-RESERVE-5c8']
+[ok]   ⑧ **承包商侧不得减少、也不得多出供应商私域**：承包商视图（事实来自**它自己的账本**）仍 200、仍含 `rfq/published` 与 `rfq/distributed`，且响应里 0 个供应商侧哨兵（他不读投递信封）
+        status=200/200；类型=['quote/submitted', 'rfq/published', 'rfq/distributed']
+[ok]   ⑨ **只读 + 确定性**：同一 URL 两次 GET **逐字节一致**；跑完前后三份账本**逐字节不变**、夹具投递信封也**逐字节不变**（宿主对投递信封只有读面，不写任何东西）
+        两次一致=True；账本前后一致=True；信封未被改=True；指纹={"alpha": "2faa8b65539d", "gamma": "7f3e8d3ffbfb", "contractor": "83d7df28434b"}
+[ok]   ⑩ 既有路由没被弄坏：`/api/health` 200、`/api/status` 两本账本都健康、三个页面 200 且 **0 行 `<script>` / 0 内联事件**（扫描器非空转对照），未提权 `/admin/` 仍是 **401 固定体**
+        health=200；ledgers=['contractor', 'supplier']；含脚本=无；/admin/=401 固定体=True
+RESULT: PASS（rfq-visibility 路由门 10/10）
+
+§三 重启后真服务（8093）的真回读原始行（tmp/rfq-visibility-run.out）
+== 真 PID（先看再看结果） ==
+33302 /workspace/runtime/node/current/bin/node /workspace/projects/quotagent/host/cli.mjs webui --profile webui --port 8093 --host 127.0.0.1 --prefix /quotagent --ledger-contractor /workspace/projects/quotagent/tmp/ui-shared/contractor/ledger.jsonl --ledger-supplier /workspace/projects/quotagent/tmp/ui-shared/supplier/ledger.jsonl --retention-plan /workspace/projects/quotagent/tmp/ui-shared/retention-plan.json --pipeline-snapshot /workspace/projects/quotagent/tmp/ui-shared/pipeline.json --mail-snapshot /workspace/projects/quotagent/tmp/ui-shared/mail.json --admin-snapshot /workspace/projects/quotagent/tmp/ui-shared/admin.json --admin-inbox /workspace/projects/quotagent/tmp/ui-shared/admin-submissions --ui-shared /workspace/projects/quotagent/tmp/ui-shared --rfq-delivery /workspace/projects/quotagent/tmp/ui-shared/contractor/01-package.json --market-modules /workspace/projects/quotagent/host/modules --market-inventory /workspace/projects/quotagent/docs/design/14-plugin-inventory.md --market-user-space /workspace/projects/quotagent/user-space --user-space-root /workspace/projects/quotagent/user-space
+
+== 供应商视角首页：最新 RFQ 包那一行 + 投递块抓手 ==
+最新 RFQ 包：<code>pkg-g1@rev1</code> 报价截止 <code>2026-09-25T00:00:00Z</code>（发给本视角；投递事实）
+<p>最新 RFQ 包：<code>pkg-g1@rev1</code> 报价截止 <code>2026-09-25T00:00:00Z</code>（发给本视角；投递事实）</p>
+<section data-rfq="inbox" data-rfq-degraded="false"
+data-rfq-reason="" data-rfq-count="1" data-rfq-omitted="0"
+data-rfq-identity="supplier:g1" data-rfq-visible="1">
+<table data-rfq="packages"><tr><th>包</th><th>版本</th><th>报价截止</th><th>澄清截止</th><th>行项目</th><th>收到于</th></tr><tr data-rfq-package="pkg-g1" data-rfq-rev="1"><td><code>pkg-g1</code></td><td>@rev1</td><td><code>2026-09-25T00:00:00Z</code></td><td><code>2026-09-23T00:00:00Z</code></td><td>2 条（L-001×120m、L-002×480kg）</td><td><code>2026-09-22T09:00:00Z</code></td></tr></table>
+<p data-rfq="basis">口径：只出**发给本视角**的包（投递信封的 <code>delivered_to</code> 命中本视角身份 <code>supplier:g1</code>）；字段只出白名单 —— <code>package_id</code> / <code>rev</code> / <code>quote_by</code> / <code>clarify_by</code> / <code>currency</code> / <code>items[item_id,code,qty,unit]</code> / <code>recipient</code> / <code>delivered_at</code> / <code>basis</code>。</p>
+<p data-rfq="privacy">发放对象只出「本视角自己」这一个；其他供应商代号、比价基准、其他供应商的报价等私域键**读都不读**（带哨兵与不带哨兵输出**逐字节一致**）。</p>
+</section><details><summary>供应商绩效记分卡（折叠）</summary><h3>供应商绩效记分卡</h3><p>（本视角暂无可聚合的供应商行）</p></details><details><summary>谈判轮次与 FAQ（折叠）</summary><h3>谈判轮次（本视角）</h3><p>线程 <b>1</b> / 轮次 <b>1</b> / 被拒 <b>1</b></p><p>最近：<code>nt-0001#1(conceded)</code></p><h3>FAQ（本视角）</h3><p>条目 <b>1</b>（版本 1）</p><p>最近：<code>fq-0001@rev1</code></p><p>JSON：<code>/quotagent/supplier/api/negotiation</code> · <code>/quotagent/supplier/api/faq</code></p></details><details><summary>价格序列（按行项目，折叠）</summary><h3>价格序列（按行项目）</h3><p>由自进化产出的插件 <code>price-history</code> 计算</p><table><tr><th>行项目</th><th>次数</th><th>最低</th><th>中位</th><th>最高</th><th>最新</th><th>趋势</th></tr><tr><td>L-001</td><td>1</td><td>86</td><td>86</td><td>86</td><td>86</td><td>flat</td></tr><tr><td>L-002</td><td>1</td><td>11.5</td><td>11.5</td><td>11.5</td><td>11.5</td><td>flat</td></tr></table></details><details><summary>最近事件（原始表，最多 40 行，折叠）</summary><h3>最近事件</h3><table><tr><th>seq</th><th>type</th><th>摘要</th><th>ts</th></tr><tr><td></td><td>rfq/published</td><td>package_id=pkg-g1 rev=1 quote_by=2026-09-25T00:00:00Z clarify_by=2026-09-23T00:00:00Z currency=CNY items={0,1}</td><td>2026-09-22T09:00:00Z</td></tr><tr><td>24</td><td>quote/submitted</td><td>approval_id=ap-6770 approved_by=human:liangzi currency=CNY item_id=L-001 lead_time_days=7 package_id=pkg-g1</td><td>2026-09-22T09:00:00Z</td></tr><tr><td>21</td><td>quote/drafted</td><td>currency=CNY item_id=L-001 lead_time_days=7 lines_sha256=7e1910ef42a72dca77d6a47f1fa459f5842a094a note_sha256=5673ceb1b315954ab161e37745b7f353aaba5ef7 ok=true</td><td>2026-09-22T09:00:00Z</td></tr><tr><td>16</td><td>clarification/answered</td><td>broadcast_at=null by=human:ui-seed fields={deadline_note,unit} package_id=pkg-ui-seed-sup rfq_rev=1 stripped={}</td><td>2026-09-21T12:00:00Z</td></tr><tr><td>15</td><td>clarification/asked</td><td>asker_realm=supplier:g1 package_id=pkg-ui-seed-sup question=UI 种子演示问题（supplier 侧）：保温层厚度按哪一版附表取值？ refs={item_ids} rfq_rev=1 status=open</td><td>2026-09-21T12:00:00Z</td></tr><tr><td>6</td><td>quote/human-approved</td><td>approval_id=null decided_by=human:ui-seed final_price=85.92889536 item_id=L-001 proposal_id=pp-0001 proposed_price=85.92889536</td><td>2026-09-21T12:00:00Z</td></tr><tr><td>5</td><td>quote/price-proposed</td><td>approval_id=null citations={0,1} cost_baseline=74.4876 in_band=true item_id=L-001 proposal_id=pp-0001</td><td>2026-09-21T12:00:00Z</td></tr><tr><td>4</td><td>quote/cost-built</td><td>artifact_hash=sha256:a4a5d6806d86d470a51b89fa320f58827 artifact_note=私域明细在 realm 私域存储中，账本只带哈希引用（rule 2 / P4） elements={0,1,2} items={0} quote_id=q-ui-seed realm=supplier:g1</td><td>2026-09-21T12:00:00Z</td></tr><tr><td>3</td><td>quote/submitted</td><td>approval_id=ap-0001 approved_by=human:liangzi currency=CNY lines={0,1} package_id=null proposal_ref=null</td><td>2026-09-22T07:54:16Z</td></tr></table><p><a href="/quotagent/supplier/events/">带筛选/翻页的事件子视图 →</a></p></details><details><summary>系统管理提权（业务用户无需使用；入口保留）</summary>
+
+== 供应商视角 /supplier/api/events 里的 rfq/* 行（原始 JSON） ==
+count=9
+{"seq": null, "type": "rfq/published", "correlation_id": "pkg-g1", "ts": "2026-09-22T09:00:00Z", "rfq": {"package_id": "pkg-g1", "rev": 1, "quote_by": "2026-09-25T00:00:00Z", "clarify_by": "2026-09-23T00:00:00Z", "currency": "CNY", "items": [{"item_id": "L-001", "code": "P-100", "qty": 120, "unit": "m"}, {"item_id": "L-002", "code": "S-200", "qty": 480, "unit": "kg"}], "recipient": "supplier:g1", "delivered_at": "2026-09-22T09:00:00Z", "basis": "delivery-envelope"}, "summary": "package_id=pkg-g1 rev=1 quote_by=2026-09-25T00:00:00Z clarify_by=2026-09-23T00:00:00Z currency=CNY items={0,1}"}
+
+== 承包商视角 /contractor/api/events 里的 rfq/* 行（对照：他自己账本里的，不是投递信封） ==
+count=23
+{"seq": 1, "type": "rfq/published", "correlation_id": "pkg-g1", "actor": "agent:sourcing", "ts": "2026-09-22T07:54:16Z", "summary": "hash=sha256:5de850674c1935c73aac5fb4fda6abfbe items=2 package_id=pkg-g1 payload_bytes=892 quote_by=2026-09-25T00:00:00Z rev=1"}
+{"seq": 2, "type": "rfq/distributed", "correlation_id": "pkg-g1", "actor": "agent:sourcing", "ts": "2026-09-22T07:54:16Z", "summary": "channel=relay envelopes={0} package_id=pkg-g1 recipients={0} rev=1 sent_at=2026-09-22T09:00:00Z"}
+{"seq": 3, "type": "rfq/amended", "correlation_id": "pkg-g1", "actor": "agent:sourcing", "ts": "2026-09-22T07:54:16Z", "summary": "delta_count=1 deltas={0} from_rev=1 hash=sha256:6912fcc8e8268b2f01128d9357e51bd68 package_id=pkg-g1 rev=2"}
+{"seq": 4, "type": "rfq/distributed", "correlation_id": "pkg-g1", "actor": "agent:sourcing", "ts": "2026-09-22T07:54:16Z", "summary": "channel=relay envelopes={0} package_id=pkg-g1 recipients={0} rev=2 sent_at=2026-09-23T09:00:00Z"}
+
+== 哨兵扫描（供应商两页 + 事件 JSON；他家供应商代号 / 承包商私域键） ==
+命中 supplier:beta-SENTINEL-9f3 ：页面=0 事件JSON=0
+命中 pkg-beta ：页面=0 事件JSON=0
+命中 BETA-ONLY ：页面=0 事件JSON=0
+命中 cost_floor ：页面=1 事件JSON=0
+命中 reserve_price ：页面=0 事件JSON=0
+命中 cost_model ：页面=0 事件JSON=0
+命中 markup_pct ：页面=1 事件JSON=0
+命中 internal_notes ：页面=1 事件JSON=0
+命中 other_quotes ：页面=0 事件JSON=0
+命中 bidders_private ：页面=1 事件JSON=0
+命中 authorized_band ：页面=1 事件JSON=0
+
+== 投递信封原文（真源：谁被邀） ==
+delivered_to= ['supplier:g1']  rev= 1  sent_at= 2026-09-22T09:00:00Z
+deadlines= {'clarify_by': '2026-09-23T00:00:00Z', 'quote_by': '2026-09-25T00:00:00Z'}
+items= [('L-001', 120, 'm'), ('L-002', 480, 'kg')]
+
+== 供应商账本里的 rfq/* 行数（根因形态：仍然是 0 —— 事实不在他那本账本里） ==
+0
+
+§四 本批要求的九道门（最终一次运行，exit 0）
+  rfq-visibility: RESULT: PASS（rfq-visibility 路由门 10/10）
+  webui: RESULT: PASS（webui 门 51/51）
+  modules: (见 tmp/gate-modules.log)
+  wiring: "failures": 0,
+  plugins: RESULT: PASS（插件清单门 4/4）
+  coverage: "failures": 0
+  docs: RESULT: PASS
+  ac-registry: (见 tmp/gate-ac-registry.log)
+  gates: "failures": 0
+
+§五 本批文件与字节数
+  host/modules/projection.mjs  19542 B
+  host/lib/ledger-view.mjs  2738 B
+  host/modules/webui.mjs  236506 B
+  host/cli.mjs  46963 B
+  tools/webui-serve.py  11817 B
+  tools/verify.sh  18953 B
+  host/t287-rfq-visibility-gate.mjs  40812 B
+  tools/check-rfq-visibility-route.py  24676 B
+  host/webui.mjs  67747 B
+  host/t279-heuristics-gate.mjs  55228 B
+  host/t280-ui-feedback-gate.mjs  38168 B
+  host/t281-advice-gate.mjs  55622 B
+  host/t282-gate-timeline-gate.mjs  70496 B
+  host/t283-change-detail-gate.mjs  54776 B
+  host/t284-authority-gate.mjs  62198 B
+  docs/design/26-rfq-delivery-visibility.md  9134 B
+  docs/design/14-plugin-inventory.md  28564 B
+  docs/design/15-requirements-coverage.md  28272 B
+  docs/work/functional-requirements.md  32090 B
+  docs/work/acceptance-criteria.md  32639 B
+  docs/work/progress-checklist.md  29656 B
+  docs/work/handover.md  1020 B
+  docs/work/evidence/INDEX-P2.md  5160 B
+  .agents/state.json  17044 B
+  tmp/rfq-visibility-run.out  8894 B

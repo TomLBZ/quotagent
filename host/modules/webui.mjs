@@ -11,18 +11,19 @@
  */
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync,
+  writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { array, number, object, string } from '../lib/std-schema.mjs'
 import { openLedger } from '../lib/ledger-view.mjs'
 
 export const name = 'webui'
 
-export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环 / 决策建议 / 审批与变更时间线 / 授权区间 / RFQ 回文时限）
+export const inject = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare']   // 每个都是独立插件（准入 / 观测 / 视图 / 系统管理 / 市场 / 配置与凭据 / 邮件 / 比价 heuristics / 反馈闭环 / 决策建议 / 审批与变更时间线 / 授权区间 / RFQ 回文时限）
 
 export const builtin = []   // 本模块不使用事件：声明即事实（D-015 / A1 双向断言）
 
-export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline']
+export const usedServices = ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare']
 
 export const provides = ['webui']
 
@@ -41,6 +42,12 @@ export const Config = object({
   admin_snapshot: string().default(''),     // 系统管理快照（阻塞/进度）的**绝对路径**（同上）
   admin_inbox: string().default(''),        // 待处理提交目录（宿主写这里；Only Python 消费，账号不写账本）
   ui_shared: string().default('tmp/ui-shared'),  // 宿主侧共享目录（`gate-nudges/` = 催办待办件；与 ui-feedback 同口径）
+  // RFQ **投递信封**的位置（发送方放到共享交换目录里的交付件：`{delivered_to, rev, sent_at, spec}`）。
+  // 修「供应商看不到自己的 RFQ 包」这个根因：被邀供应商的投影里要能看到**发给它的**包事实。
+  // 可以是**一个文件**（单包）或一个**目录**（读其中 `*.json`，按文件名排序、有界）。
+  // 缺省空 = 没有投递来源（视图如实报 degraded + reason，不编数据）。
+  rfq_delivery: string().default(''),
+  rfq_delivery_max: number().default(8),    // 每视角最多展示几个包（有界；超出如实报 omitted）
 })
 
 const html = (title, body, prefix) => `<!doctype html><html lang="zh"><head><meta charset="utf-8">
@@ -74,6 +81,57 @@ const PAGE_DEFAULT = 1
 const SORTS = ['desc', 'asc']
 const SORT_DEFAULT = SORTS[0]
 const LIMIT_CHOICES = [10, 20, 50, 200]
+
+/**
+ * **假成功围栏**（本批）：只应为 `GET` 的路由收到其它方法时，返回 **405 + `Allow: GET`** 与同形 JSON
+ * （`{ok:false, code:'method-not-allowed', next_action}`），**绝不**把 POST 当 GET 处理。
+ *
+ * 为什么必须做（实测，逐字）：`curl -s GET /quotagent/contractor/quotes/` 与
+ * `curl -s -X POST 同路径 -d 'item=L-001&price=80'` 返回**逐字节相同**的 200 页面
+ * （两者 bytes=3935、sha256 相同）。⇒ 员工填了单价点提交，浏览器给一页正常页面，
+ * **什么都没发生**（账本没动、对方没收到、页面没变）—— 这是最伤信任的一条，必须由宿主结构性禁止。
+ *
+ * 两张表都是**静态声明**：新增只读路由必须同步 `GET_ONLY_PATTERNS`，新增写路由必须同步
+ * `WRITE_PATTERNS`。门（`host/webui.mjs`）拿 `/api/routes` **逐条反向对照**：路由表里 `method=GET`
+ * 且没有同路径 POST 行的，POST 必须 405；路由表里 `method=POST` 的，POST 必须**不是**该 code
+ * （非空转对照）—— 漏一处就红。
+ */
+const GET_ONLY_PATTERNS = [
+  /^\/?$/,                                                     // 总览
+  /^\/start\/?$/,
+  /^\/api\/(health|status|obs|ops|mail|pipeline|retention|routes|ui-feedback)\/?$/,
+  /^\/ops\/?$/,
+  /^\/ops\/mail\/?$/,
+  /^\/ops\/ui-feedback\/?$/,
+  /^\/[a-z]+\/?$/,                                             // 视角首页（含 /contractor/ /supplier/ /ops/ /admin/）
+  /^\/admin\/config\/?$/,
+  /^\/admin\/api\/(session|blocks|market|user-plugins|config|credentials)\/?$/,
+  /^\/admin\/api\/config\/audit\/?$/,
+  /^\/[a-z]+\/(events|quotes|approvals|evidence|clarifications|feedback)\/?$/,   // 道内子视图 + 反馈页
+  /^\/[a-z]+\/(heuristics|advice|gates|authority|deadlines)\/?$/,
+  /^\/[a-z]+\/changes\/[A-Za-z0-9_.:-]+\/?$/,
+  /^\/[a-z]+\/api\/(events|evidence|negotiation|faq|heuristics|advice|gates|authority|deadlines|scorecard|history|approvals)\/?$/,
+  /^\/[a-z]+\/api\/changes\/[A-Za-z0-9_.:-]+\/?$/,
+]
+
+/** **真的会处理写**的路径（POST 白名单）：只有这几条能把请求变成一条待办件或一次状态变化。 */
+const WRITE_PATTERNS = [
+  /^\/admin\/api\/elevate\/?$/,
+  /^\/admin\/api\/blocks\/[^/]+\/resolve\/?$/,
+  /^\/admin\/api\/user-plugins\/(load|unload|reload|request|elevate)\/?$/,
+  /^\/admin\/api\/config\/(preview|project)\/?$/,
+  /^\/admin\/api\/config\/plugins(?:\/[^/]+\/[^/]+)?\/?$/,
+  /^\/admin\/api\/credentials\/[^/]+\/?$/,
+  /^\/[a-z]+\/gates\/nudge\/?$/,
+  /^\/[a-z]+\/deadlines\/promise\/?$/,
+  /^\/[a-z]+\/feedback\/?$/,
+  /^\/[a-z]+\/quotes\/prepare\/?$/,                            // 报价草稿（只有准备视角有这一步）
+]
+
+/** 该路径是不是「只应为 GET」的（收到非 GET ⇒ 405）。 */
+const isGetOnlyRoute = (path) => GET_ONLY_PATTERNS.some((pattern) => pattern.test(path))
+/** 该路径是不是**真的会处理写**的（收到 POST ⇒ 放行；其余落到各自的处理器）。 */
+const isWriteRoute = (path) => WRITE_PATTERNS.some((pattern) => pattern.test(path))
 
 /** ops / admin 两道的道内导航（本步不新增子路由，用**页内锚点**：一跳可达这件事本身保留）。 */
 const OPS_SECTIONS = [['runtime', '运行期'], ['pipeline', '三域流水'], ['mail', '邮件（SMTP/IMAP）'], ['retention', '留存计划'],
@@ -214,13 +272,61 @@ export function apply(ctx, config) {
     return own ? openLedger(own) : ctx.ledgerView
   }
 
-  const rowsFor = (view) => {
-    const { publicRows, audit } = projection.projectWithAudit(view, ledgerOf(view).rows())
-    if (audit.length) {
-      // 审计只走 stderr（宿主日志）；响应体里不得出现私域键名
-      console.error(`[webui] ${view} 视角抑制 ${audit.length} 行：${audit.map((item) => item.suppressed_key).join(',')}`)
+  const rowsFor = (view) => projectionOf(view).publicRows
+
+  /**
+   * 投递信封（**只读、有界、确定性**）：发送方放进共享交换目录的交付件，每份形如
+   * `{delivered_to: [...], rev, sent_at, snapshot_hash, spec: {...}}`（真供应商进程在 g1 走查里读的
+   * 就是这份文件 —— 见 `src/quotagent/g1side.py` 的 `_read(shared, "contractor", "01-package")`）。
+   *
+   * 纪律：宿主**只读**这些文件（零写面）；读不到 / 坏文件 ⇒ 不加猜测、不编包（投影侧如实报 skipped）。
+   * 目录形态按**文件名排序**且有界（`RFQ_DELIVERY_MAX_FILES`）：同一批文件在任何时刻给出同一结果。
+   */
+  const RFQ_DELIVERY_MAX_FILES = 64
+  const deliveryEnvelopes = () => {
+    const target = String(config.rfq_delivery ?? '').trim()
+    if (target === '') return []
+    let files = [target]
+    try {
+      if (!existsSync(target)) return []
+      if (statSync(target).isDirectory()) {
+        files = readdirSync(target).filter((name) => name.endsWith('.json')).sort()
+          .slice(0, RFQ_DELIVERY_MAX_FILES).map((name) => join(target, name))
+      }
+    } catch (err) {
+      console.error(`[webui] 投递信封目录不可读（按无投递处理）：${String(err).slice(0, 120)}`)
+      return []
     }
-    return publicRows
+    const out = []
+    for (const file of files) {
+      try {
+        const parsed = JSON.parse(readFileSync(file, 'utf8'))
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) out.push(parsed)
+      } catch (err) {
+        console.error(`[webui] 投递信封不可解析（跳过，不猜）：${file}`)
+      }
+    }
+    return out
+  }
+
+  /**
+   * 本视角的**一次**投影：账本公开行 + （只对声明消费投递事实的视角）**发给本视角的** RFQ 包事实。
+   * 身份来自**本视角自己的账本**（`realms()`），绝不来自信封 —— 否则等于让发送方决定收件人是谁。
+   */
+  const projectionOf = (view) => {
+    const ledger = ledgerOf(view)
+    const realms = typeof ledger.realms === 'function' ? ledger.realms() : []
+    const deliveries = (projection.deliveryViews ?? []).includes(view) ? deliveryEnvelopes() : undefined
+    const out = projection.projectWithAudit(view, ledger.rows(), { deliveries, realms,
+      maxPackages: config.rfq_delivery_max })
+    if (out.audit.length) {
+      // 审计只走 stderr（宿主日志）；响应体里不得出现私域键名
+      console.error(`[webui] ${view} 视角抑制 ${out.audit.length} 行：${out.audit.map((item) => item.suppressed_key).join(',')}`)
+    }
+    for (const item of out.deliveries?.audit ?? []) {
+      console.error(`[webui] ${view} 视角投递事实抑制：${item.reason}（package_id=${item.package_id}）`)
+    }
+    return out
   }
 
   const governor = ctx.governor
@@ -264,6 +370,7 @@ export function apply(ctx, config) {
   const gates = ctx.gateTimeline             // 审批等多久 / 变更单谁卡着（domain 插件）：只吃白名单载荷，不读账本、不取墙钟
   const authority = ctx.authorityBand        // 授权区间（domain 插件，本批）：只读配置快照（authority.* 键），不读账本、不取墙钟、**不能批准**
   const deadline = ctx.rfqDeadline           // RFQ 回文时限（domain 插件，本批）：只吃白名单事实载荷，不读账本、不发信、不取墙钟、**不能代发**
+  const prepare = ctx.quotePrepare           // 报价草稿（domain 插件，本批）：只吃白名单事实载荷，不读账本、不写文件、不取墙钟、**不能签名**
   const feedback = ctx.uiFeedback            // WebUI 反馈闭环（ui-feedback 插件）：版本事实只读 + 只落 0600 待办件
 
   /** 三域快照（谈判/FAQ/邮件）：由 Python 侧写入 `tmp/ui-shared/pipeline.json`，宿主只读。 */
@@ -1579,6 +1686,231 @@ export function apply(ctx, config) {
   const LEDGER_COLUMNS = [['seq', 'seq'], ['type', 'type'], ['correlation_id', '关联号'], ['actor', 'actor'],
     ['ts', 'ts'], ['summary', '摘要']]
 
+  // ==========================================================================================
+  // 报价草稿（`quote-prepare` domain 插件，本批）—— **「把报价准备好：行项目 / 单价 / 交期 / 备注」**
+  //   · 为什么要有这一步：**「员工填了单价、点了提交，浏览器回一页 200，什么都没发生」**是最伤信任的
+  //     一条。本仓铁律「浏览器不得直接签署人工动作」不等于「浏览器什么都做不了」：**不需要签名的写动作
+  //     必须在 APP 里真做成**。所以这里把闭环拆成三段，每段各自可验证：
+  //       ① 准备（本页）：把「员工想报的这份报价」变成一条**结构化草稿载荷**，字段级校验；
+  //       ② 落待办件（宿主）：`POST /<supplier>/quotes/prepare/` **只落一条 0600 待办件**（目录 0700、
+  //          原子写），**账本零新增**（H1：宿主没有写账本的能力），回 202 + `next_action`；
+  //       ③ 落账本（Python 侧 `tools/quote-draft.py`，**唯一落账本者**）：落 `quote/drafted`
+  //          （**非签名动作**：只表示「报价已准备好」，body 不含备注正文）。
+  //   · **双向可见性**：`quote/drafted` 在供应商账本（本方事实）与承包商账本（「供应商 X 已准备报价
+  //     （待签署）」）各落一条；两侧页面都从**自己的**账本投影里读，不互相读对方的账本。
+  //   · 「下一步（签署）」区域给**可复制的** CLI 命令（真实 RFQ / 行项目 / 金额整数分），并写清
+  //     **本 APP 不代签**（页面标记 `data-signature-required="1"`，服务面 `can_sign=false`）。
+  //   · 页面 **0 行脚本 / 0 内联事件**：全是 SSR 表格与文本。
+  // ==========================================================================================
+  /** 白名单事实键（多出来的键读都不读）。 */
+  const PREP_FACT_KEYS = ['package_id', 'quote_id', 'supplier', 'item_id', 'item_ids', 'items', 'lines',
+    'quote_draft_id', 'rfq_id', 'ok', 'currency', 'prepared_by', 'note_sha256', 'lines_sha256',
+    'unit_price_cents', 'lead_time_days']
+  /** 只读这两类事实行（草稿的目录与报价都从它们派生）。 */
+  const PREP_ROW_TYPES = ['rfq/', 'quote/']
+  /** 「准备报价」这一步属于哪个视角（真源在插件配置里；默认 `supplier`）。 */
+  const prepView = () => (prepare.views()[0] ?? 'supplier')
+
+  /** 本视角账本的 `realm`（供应商身份的真源；读不出来就空着，**不猜**）。
+   *  口径：优先用只读视图的 `realms()`（它按设计保留 realm）；旧视图（fixture stub）没有这个方法时
+   *  退回逐行读 `realm` 字段。 */
+  const realmOf = (view) => {
+    try {
+      const ledger = ledgerOf(view)
+      if (typeof ledger.realms === 'function') {
+        const found = ledger.realms()
+        if (Array.isArray(found) && found.length > 0) return String(found[0]).trim()
+      }
+      const row = ledger.rows()
+        .find((item) => item && typeof item.realm === 'string' && item.realm.trim() !== '')
+      return row ? row.realm.trim() : ''
+    } catch (err) { return '' }
+  }
+
+  /** 白名单事实行：只读 `rfq/*` 与 `quote/*`；带私域键的行**整行跳过**（与其它道同一口径）。 */
+  const prepFacts = (view) => {
+    const out = []
+    for (const row of ledgerOf(view).rows()) {
+      const type = String((row && row.type) ?? '')
+      if (!PREP_ROW_TYPES.some((prefix) => type.startsWith(prefix))) continue
+      const raw = row && row.body
+      const body = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+      if (hasPrivateKey(body, view)) continue
+      const fact = { type, ts: row.ts }
+      for (const key of PREP_FACT_KEYS) {
+        if (body[key] === undefined || body[key] === null) continue
+        fact[key] = body[key]
+      }
+      // 草稿 id 的规范位置是 `correlation_id`（行 body 里也会写一份，缺了就用它兜底）
+      if (type.startsWith('quote/drafted') && fact.quote_draft_id === undefined
+        && typeof row.correlation_id === 'string') fact.quote_draft_id = row.correlation_id
+      if (type.startsWith('quote/drafted')) fact.ok = body.ok === true
+      out.push(fact)
+      if (out.length >= 256) break
+    }
+    return out
+  }
+  const prepPayload = (view) => ({ view, as_of: lastTsOf(ledgerOf(view).rows()), facts: prepFacts(view) })
+  const prepRun = (view) => prepare.prepare(prepPayload(view))
+
+  /** 结构化行的**规范化 JSON**：与 `tools/quote-draft.py` 的 `canonical_lines()` 逐字节一致。 */
+  const PREP_CANON = (record) => JSON.stringify({ currency: String(record.currency ?? ''),
+    item_id: String(record.item_id ?? ''), lead_time_days: record.lead_time_days,
+    rfq_id: String(record.rfq_id ?? ''), unit_price_cents: record.unit_price_cents })
+  const prepSha = (text) => createHash('sha256').update(String(text), 'utf8').digest('hex')
+  const prepBytes = (text) => Buffer.byteLength(String(text ?? ''), 'utf8')
+
+  /** 字段规则表（**单一真源**：字段与上下界都由插件给，宿主只排版）。 */
+  const prepRulesHtml = () => {
+    const limits = prepare.limits()
+    const rows = prepare.fields().map((field) => `<tr data-prep-field="${esc(field.name)}">`
+      + `<td><code>${esc(field.name)}</code>${field.required ? ' <b>必填</b>' : ''}</td>`
+      + `<td>${esc(field.label)}</td><td>${esc(field.rule)}</td></tr>`).join('')
+    return `<table data-prep-fields="table"><tr><th>字段</th><th>名称</th><th>校验规则</th></tr>${rows}</table>`
+      + `<p data-prep-limits="1">数值上下界：单价 <b>${esc(String(limits.unit_price_cents_min))}</b>..`
+      + `<b>${esc(String(limits.unit_price_cents_max))}</b> 分（<code>money_unit=${esc(limits.money_unit)}</code>）；`
+      + `交期 <b>${esc(String(limits.lead_time_days_min))}</b>..<b>${esc(String(limits.lead_time_days_max))}</b> 天；`
+      + `备注 ≤ <b>${esc(String(limits.note_bytes_max))}</b> 字节。**越界一律拒、不夹取**`
+      + `（夹取会合成一个你没报过的数）。校验失败会按字段给具体错误码，不吞成一句「参数错误」。</p>`
+  }
+
+  /** 行项目目录（**从本视角事实里读出来的真值**；读不出来就说读不出来，不编）。 */
+  const prepCatalogueHtml = (run) => {
+    const items = run.catalogue.items
+    const table = items.length
+      ? `<table data-prep-catalogue="table"><tr><th>行项目</th><th>参考单价（分）</th><th>来源</th></tr>`
+        + items.map((item) => `<tr data-prep-item="${esc(item.item_id)}">`
+          + `<td><code>${esc(item.item_id)}</code></td>`
+          + `<td>${item.unit_price_cents === null ? '—' : esc(String(item.unit_price_cents))}</td>`
+          + `<td><code>${esc(item.source || '—')}</code></td></tr>`).join('') + '</table>'
+      : `<p data-prep-catalogue="empty"><b>不编行项目</b>：本视角的事实里读不到任何行项目`
+        + `（<code>${esc(run.reason)}</code>）—— 先让 RFQ 事实进账本，再回来准备报价。</p>`
+    const rfqIds = run.catalogue.rfq_ids
+    const rfq = rfqIds.length
+      ? rfqIds.map((id) => `<code data-prep-rfq="${esc(id)}">${esc(id)}</code>`).join(' ')
+      : '<span data-prep-rfq-none="1">（本视角事实里还没有 RFQ 引用）</span>'
+    return `<h3 id="catalogue">行项目目录与 RFQ 引用（本视角账本里的真值）</h3><p>RFQ 引用：${rfq}</p>${table}`
+  }
+
+  /** 草稿表（准备页 / 报价子视图 / 视角首页共用同一份排版）。 */
+  const prepDraftTable = (run) => {
+    if (!run.drafts.length) {
+      return `<p data-prep-drafts="empty" data-prep-drafts-count="0">还没有报价草稿：本视角投影里没有 `
+        + `<code>quote/drafted</code> 行。</p>`
+    }
+    const rows = run.drafts.map((draft) => `<tr data-prep-draft="${esc(draft.quote_draft_id)}">`
+      + `<td><code>${esc(draft.item_id)}</code></td>`
+      + `<td>${draft.unit_price_cents === null ? '—' : esc(String(draft.unit_price_cents))}</td>`
+      + `<td>${draft.lead_time_days === null ? '—' : esc(String(draft.lead_time_days))}</td>`
+      + `<td>${esc(draft.status_text)}（<code>${esc(draft.status)}</code>）</td>`
+      + `<td><code>${esc(draft.ref)}</code></td><td>${esc(draft.prepared_by)}</td>`
+      + `<td>${esc(draft.supplier || '—')}</td><td><code>${esc(draft.ts || '—')}</code></td></tr>`).join('')
+    return `<table data-prep-drafts="table" data-prep-drafts-count="${run.drafts.length}">`
+      + `<tr><th>行项目</th><th>单价（分）</th><th>交期（天）</th><th>状态</th><th>引用（草稿 id）</th>`
+      + `<th>发言人</th><th>供应商</th><th>事实 ts</th></tr>${rows}</table>`
+  }
+
+  /** 草稿的一句话（承包商侧必须能读到「供应商 X 已准备报价（待签署）」）。 */
+  const prepDraftHeadline = (view, run) => {
+    if (!run.drafts.length) return ''
+    const suppliers = [...new Set(run.drafts.map((draft) => draft.supplier).filter((name) => name !== ''))]
+      .sort()
+    const names = suppliers.length ? suppliers.join(' / ') : '（账本没写 realm）'
+    return view === 'contractor'
+      ? `<p data-prep-headline="contractor">供应商 <b>${esc(names)}</b> 已准备报价（<b>待签署</b>）：`
+        + `${run.drafts.length} 条草稿。**待签署 = 还没有对外义务**（草稿不是报价）。</p>`
+      : `<p data-prep-headline="supplier">你已准备 ${run.drafts.length} 条报价草稿（**待签署**）：`
+        + `签署前它们**还不是报价**；承包商侧看到的是「已准备报价（待签署）」。</p>`
+  }
+
+  /** 「下一步（签署）」区域：可复制的 CLI 命令 + **本 APP 不代签**（`data-signature-required="1"`）。 */
+  const prepSignatureHtml = (view, run) => {
+    const draft = run.drafts[0] ?? null
+    const out = prepare.handoff({ view, draft })
+    const params = draft
+      ? `<p data-signature-params="1">这份草稿的真实参数：RFQ <code>${esc(out.rfq_id)}</code> / `
+        + `行项目 <code>${esc(out.item_id)}</code> / 金额 <b>${esc(String(out.unit_price_cents ?? '—'))}</b> `
+        + `<code>${esc(out.money_unit)}</code> / 草稿 <code>${esc(out.draft_id)}</code></p>`
+      : '<p data-signature-params="0">还没有草稿：先在上面提交一份，命令里的草稿 id 会换成真值。</p>'
+    return `<section id="sign" data-signature-required="${esc(out.data_signature_required)}"`
+      + ` data-can-sign="${out.can_sign ? '1' : '0'}"><h3>下一步（签署）—— 本 APP 不代签</h3>`
+      + `<p data-signature-why="1">${esc(out.why)}</p>${params}`
+      + `<pre data-signature-command="1">${esc(out.commands[0])}</pre>`
+      + `<pre data-signature-command-dry-run="1">${esc(out.commands[1])}</pre>`
+      + `<p><small>${esc(out.page_note)}</small></p></section>`
+  }
+
+  /** 准备报价页（SSR；`<form method="post">` 指向**真的会处理写**的同一路径）。 */
+  const prepPageHtml = (view, url) => {
+    const run = prepRun(view)
+    const submit = String(url.searchParams.get('submitted') ?? '') === '1'
+    const input = (field) => (field.kind === 'textarea'
+      ? `<p><label>${esc(field.label)}<br><textarea name="${esc(field.name)}" rows="3" cols="72"`
+        + ` placeholder="${esc(field.placeholder)}"></textarea></label></p>`
+      : `<p><label>${esc(field.label)} <input name="${esc(field.name)}" size="18"`
+        + ` placeholder="${esc(field.placeholder)}"></label></p>`)
+    const form = `<form method="post" action="${prefix}/${esc(view)}/quotes/prepare/">`
+      + prepare.fields().map(input).join('')
+      + `<p><button type="submit">提交草稿（只落待办件，不写账本）</button></p></form>`
+    return subNav(prefix, view, 'quotes')
+      + `<p><a href="${prefix}/${view}/quotes/">← 回报价与行项目</a></p>`
+      + `<p data-prepare="page" data-money-unit="${esc(prepare.limits().money_unit)}">`
+      + `<b>这一步做什么</b>：把「你想报的这份报价」结构化地交给系统（行项目 / 单价 / 交期 / 备注）。`
+      + `提交后**只落一条 0600 待办件**（账本零新增）；真正落账本的是 Python 侧 `
+      + `<code>tools/quote-draft.py</code>（落 <code>quote/drafted</code>，**不是签名动作**）。</p>`
+      + `<p data-prepare-engine="1">${esc(prepare.meta().engine_note)}</p>`
+      + (submit ? '<p data-prepare-submitted="1">上一次提交已受理（回 202）：见下方「草稿」表。</p>' : '')
+      + prepCatalogueHtml(run)
+      + `<h3 id="form">填这份草稿</h3>${form}`
+      + `<h3 id="rules">字段与校验规则</h3>${prepRulesHtml()}`
+      + `<h3 id="drafts">本视角已有的草稿</h3>${prepDraftHeadline(view, run)}${prepDraftTable(run)}`
+      + prepSignatureHtml(view, run)
+      + `<p><small>本页 **0 行脚本、0 内联事件**：表单是普通 POST，提交失败按字段回具体错误码。</small></p>`
+  }
+
+  /** 提交草稿：插件只产载荷与字段级错误，**宿主只落一条 0600 待办件**（账本零新增）。 */
+  const submitDraft = (view, form) => {
+    const out = prepare.validate({ view, form, payload: prepPayload(view) })
+    if (!out.ok) return { ...out, file: '', next_action: '按 errors 里每个字段的 next_action 改后再提交（本次**什么都没落盘**）' }
+    const supplier = realmOf(view)
+    const record = { ...out.record, supplier, submitted_at: '' }
+    record.note_sha256 = prepSha(record.note)
+    record.lines_sha256 = prepSha(PREP_CANON(record))
+    record.bytes = prepBytes(record.note)
+    record.quote_draft_id = `qd-${view}-` + prepSha(
+      [view, supplier, PREP_CANON(record), record.note, record.prepared_by].join('\n')).slice(0, 12)
+    const shared = String(config.ui_shared ?? '').trim()
+    if (shared === '') {
+      return { ...out, ok: false, code: 'pending-write-failed', file: '',
+        next_action: '宿主未配置 ui_shared：无法确定待办件目录，拒绝写任何地方' }
+    }
+    const dir = join(shared, 'quote-drafts')
+    try {
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+      try { chmodSync(dir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
+      const file = join(dir, `${record.quote_draft_id}.json`)
+      const rel = `quote-drafts/${record.quote_draft_id}.json`
+      if (existsSync(file)) {
+        return { ...out, duplicate: true, id: record.quote_draft_id, file: rel, record,
+          payload_sha256: record.lines_sha256,
+          next_action: `待办件已存在（同一份草稿，幂等）：跑 tools/quote-draft.py --now <ISO8601> 消费它`
+            + `（唯一落账本者），然后按本页「下一步（签署）」在终端签名` }
+      }
+      const tmp = join(dir, `.${record.quote_draft_id}.${process.pid}.tmp`)
+      writeFileSync(tmp, JSON.stringify(record, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
+      chmodSync(tmp, 0o600)                      // 显式 chmod：不受 umask 影响（待办件必须**恰为** 0600）
+      renameSync(tmp, file)
+      return { ...out, duplicate: false, id: record.quote_draft_id, file: rel, record,
+        payload_sha256: record.lines_sha256,
+        next_action: `跑 tools/quote-draft.py --now <ISO8601> 落 quote/drafted（唯一落账本者）；`
+          + `签名是**人的动作**：用页面上「下一步（签署）」里的可复制命令 tools/quote-sign.py`
+          + `（--actor human:<你的名字>）在终端签（本 APP 不代签）` }
+    } catch (err) {
+      return { ...out, ok: false, code: 'pending-write-failed', file: '',
+        next_action: `待办件写失败（${String(err && err.code ? err.code : err).slice(0, 40)}）：先修目录权限再重提` }
+    }
+  }
+
   /** 子视图数据源：**只读**现有服务/注入参数（不新增口径、不自己算业务数）。 */
   const subSource = (view, sub, publicRows) => {
     if (sub === 'events') {
@@ -1588,8 +1920,21 @@ export function apply(ctx, config) {
     if (sub === 'quotes' || sub === 'clarifications') {
       const prefixOf = sub === 'quotes' ? 'quote/' : 'clarification/'
       const picked = publicRows.filter((row) => String(row.type).startsWith(prefixOf))
+      // 报价子视图多一段「草稿（待签署）」：写闭环的**回读面**——员工提交草稿、Python 侧落账本之后，
+      // 这里必须真的显示那份草稿（行项目 / 单价 / 状态 / 引用），**不是一句「提交成功」的自我表扬**。
+      const extra = sub === 'quotes' ? (() => {
+        const run = prepRun(view)
+        return `<h3 id="drafts">报价草稿（待签署）</h3>`
+          + prepDraftHeadline(view, run) + prepDraftTable(run)
+          + (view === prepView()
+            ? `<p><a href="${prefix}/${view}/quotes/prepare/" data-prepare-link="1">准备一份报价草稿 →</a></p>`
+              + prepSignatureHtml(view, run)
+            : `<p data-prepare-link="0" data-signature-required="1">签署是**供应商侧**的动作：`
+              + `草稿在供应商页上「下一步（签署）」区域里签（本页不代签、也不给别人的签名入口）。</p>`)
+      })() : undefined
       return { rows: ledgerRowsOf(view, picked), what: `本视角 ${prefixOf}* 事件（公开投影后的行）`,
-        columns: (rules[view]?.fields ?? []).map((field) => ({ key: field, label: (LEDGER_COLUMNS.find(([k]) => k === field) ?? [field, field])[1] })) }
+        columns: (rules[view]?.fields ?? []).map((field) => ({ key: field, label: (LEDGER_COLUMNS.find(([k]) => k === field) ?? [field, field])[1] })),
+        ...(extra === undefined ? {} : { extra }) }
     }
     if (sub === 'approvals') {
       const pending = pendingApprovals(view)
@@ -1679,7 +2024,9 @@ export function apply(ctx, config) {
    * 每块里"能做的动作"必须是**表单/链接**（筛选、翻页、跳子视图），不是一句说明文字。
    */
   const viewPageHtml = (view) => {
-    const rows = rowsFor(view)
+    const projectionResult = projectionOf(view)          // **一次请求一次投影**（canary 采样不会翻倍）
+    const rows = projectionResult.publicRows
+    const inbox = projectionResult.deliveries            // 投递事实（只有消费它的视角才有：见 projection.deliveryViews）
     const suppressed = rows.filter((row) => row.suppressed).length
     let report = { ok: false, count: rows.length }
     try { report = ledgerOf(view).verify() } catch (err) { report = { ok: false, count: rows.length, reason: String(err).slice(0, 80) } }
@@ -1720,9 +2067,45 @@ ${sortForm('approvals', '看待批')}
 <a href="${prefix}/admin/">系统管理（提权后可达）</a></p>
 </section>`
 
+    /**
+     * 发往本视角的 RFQ 包（**投递事实**，本批修复的核心：根因是 `rfq/*` 事实只落在发送方 realm 的账本里，
+     * 供应商那本账本里一条都没有 ⇒ 供应商看不到要报的包）。本视角要看到「要报的包」只能走**投递信封**
+     * （收件人作用域 + 字段白名单，见 `host/modules/projection.mjs` 的块注释与
+     * `docs/design/21-rfq-delivery-visibility.md`）。
+     *   · 页面 **0 行脚本 / 0 内联事件**：纯表格 + 文字，没有任何写动作；
+     *   · `degraded` / `reason` / `omitted` / 计数都**照抄**投影插件的返回值（宿主不自己算、不自己编文案）；
+     *   · `data-rfq-*` 是门的抓手（机检"谁看到了哪些包"），不是装饰。
+     */
+    const rfqInboxHtml = !inbox ? '' : `<section data-rfq="inbox" data-rfq-degraded="${inbox.degraded}"
+data-rfq-reason="${esc(inbox.reason)}" data-rfq-count="${inbox.packages.length}" data-rfq-omitted="${inbox.omitted}"
+data-rfq-identity="${esc(inbox.identity)}" data-rfq-visible="${inbox.counts.visible}">
+<h3>发往本视角的 RFQ 包（投递事实）</h3>
+${inbox.packages.length
+      ? `<table data-rfq="packages"><tr><th>包</th><th>版本</th><th>报价截止</th><th>澄清截止</th><th>行项目</th><th>收到于</th></tr>${
+        inbox.packages.map((pkg) => `<tr data-rfq-package="${esc(pkg.rfq.package_id)}" data-rfq-rev="${esc(pkg.rfq.rev ?? '')}">`
+          + `<td><code>${esc(pkg.rfq.package_id)}</code></td><td>@rev${esc(pkg.rfq.rev ?? '—')}</td>`
+          + `<td><code>${esc(pkg.rfq.quote_by ?? '—')}</code></td>`
+          + `<td><code>${esc(pkg.rfq.clarify_by ?? '—')}</code></td>`
+          + `<td>${pkg.rfq.items.length} 条（${esc(pkg.rfq.items.map((item) => `${item.item_id}×${item.qty ?? '—'}${item.unit}`).join('、') || '—')}）</td>`
+          + `<td><code>${esc(pkg.rfq.delivered_at ?? '—')}</code></td></tr>`).join('')}</table>`
+      : `<p data-rfq="empty">还没有发往本视角的 RFQ 包（<code>reason=${esc(inbox.reason)}</code>）—— `
+        + '这不是页面坏了：投递事实里没有任何一份把包发给本视角。</p>'}
+<p data-rfq="basis">口径：只出**发给本视角**的包（投递信封的 <code>delivered_to</code> 命中本视角身份 `
+      + `<code>${esc(inbox.identity)}</code>）；字段只出白名单 —— <code>package_id</code> / <code>rev</code> / `
+      + `<code>quote_by</code> / <code>clarify_by</code> / <code>currency</code> / `
+      + `<code>items[item_id,code,qty,unit]</code> / <code>recipient</code> / <code>delivered_at</code> / `
+      + `<code>basis</code>${inbox.omitted > 0 ? `；另有 <b>${inbox.omitted}</b> 个包未展示（omitted）` : ''}。</p>
+<p data-rfq="privacy">发放对象只出「本视角自己」这一个；其他供应商代号、比价基准、其他供应商的报价等私域键**读都不读**（带哨兵与不带哨兵输出**逐字节一致**）。</p>
+</section>`
+
     const inProgressBlock = `<section data-block="in-progress">
 <h2>进行中</h2>
-<p>最新 RFQ 包：${lastRfq ? `<code>seq ${esc(lastRfq.seq)}</code> ${esc(lastRfq.summary || lastRfq.type)}` : '—（本视角暂无 RFQ 事件）'}</p>
+<p>最新 RFQ 包：${lastRfq
+      ? (lastRfq.rfq
+        ? `<code>${esc(lastRfq.rfq.package_id)}@rev${esc(lastRfq.rfq.rev ?? '—')}</code> 报价截止 `
+          + `<code>${esc(lastRfq.rfq.quote_by ?? '—')}</code>（发给本视角；投递事实）`
+        : `<code>seq ${esc(lastRfq.seq)}</code> ${esc(lastRfq.summary || lastRfq.type)}`)
+      : '—（本视角暂无 RFQ 事件）'}</p>
 <p>报价 <b>${quoteCount}</b> 条 · 比价评估 ${lastCompare
       ? `<code>seq ${esc(lastCompare.seq)}（${esc(lastCompare.type)}）</code>` : '—（本视角不可见 compare/*）'}
 · 偏差标记 <b>${flags}</b> 个 · 价格序列 <b>${series.length}</b> 组${medians.length
@@ -1730,6 +2113,13 @@ ${sortForm('approvals', '看待批')}
 ${sortForm('quotes', '看报价')}
 <p><a href="${prefix}/${view}/quotes/">报价与行项目 →</a> ·
 <a href="${prefix}/${view}/events/?type=quote/">只看 quote/* 事件 →</a></p>
+${(() => { const run = prepRun(view)
+  return `<h3 id="drafts">报价草稿（待签署）</h3>${prepDraftHeadline(view, run)}${prepDraftTable(run)}`
+    + (view === prepView()
+      ? `<p><a href="${prefix}/${view}/quotes/prepare/" data-prepare-link="1">准备一份报价草稿 →</a>`
+        + `（行项目 / 单价 / 交期 / 备注；提交只落待办件，落账本归 Python 侧）</p>${prepSignatureHtml(view, run)}`
+      : '') })()}
+${rfqInboxHtml}
 </section>`
 
     const healthBlock = `<section data-block="health">
@@ -1992,6 +2382,22 @@ ${sortForm('events', '筛查事件')}
       return json(code, out)
     }
 
+    // ---- 假成功围栏（本批，**在任何处理器之前**）：只应为 GET 的路由收到非 GET ⇒ 405 + `Allow: GET` ----
+    // 绝不把 POST 当 GET 处理：实测过 `POST /quotagent/contractor/quotes/` 与 GET 返回**逐字节相同**的
+    // 200 页面（bytes=3935、sha256 相同）—— 员工填了单价点提交，浏览器给一页正常页面，什么都没发生。
+    // 位置：`send` 与 `json` 都已就绪（这里的 return 会走 `send` → `decorateHtml`，两者都必须在射程内）。
+    const method = String(req.method ?? 'GET').toUpperCase()
+    if (method !== 'GET' && method !== 'HEAD' && !isWriteRoute(path) && isGetOnlyRoute(path)) {
+      return send(405, 'application/json; charset=utf-8',
+        JSON.stringify({ ok: false, service: 'quotagent-webui', code: 'method-not-allowed',
+          method, path, allow: 'GET',
+          next_action: '本路由**只读**（GET）。要推进状态请用页面上**指向真写路由**的表单：'
+            + `催办 ${prefix}/<view>/gates/nudge · 登记承诺 ${prefix}/<view>/deadlines/promise · `
+            + `反馈 ${prefix}/<view>/feedback · 准备报价 ${prefix}/supplier/quotes/prepare/`
+            + '（宿主只落 0600 待办件；落账本归 Python 侧）' }, null, 2) + '\n',
+        { allow: 'GET' })
+    }
+
     if (path === '/api/routes') {
       // 路由表（**静态声明**，只列本模块真的在服务的路由；新增路由必须同步这里）
       return json(200, {
@@ -2051,6 +2457,13 @@ ${sortForm('events', '筛查事件')}
             { path: `${prefix}/${v}/deadlines/promise`, method: 'POST', auth: 'none',
               what: `${v} 道的登记承诺（承诺回文时限）：**只落 0600 待办件**、账本零新增；202 + next_action；登记不是发信` },
           ]),
+          // 报价草稿（`quote-prepare` 插件，本批）：**不需要人类签名的写动作**必须在 APP 里真做成 ——
+          //   准备（GET 表单 + 字段级校验规则）→ 落 0600 待办件（202）→ Python 侧落 `quote/drafted`
+          //   （**非签名动作**）→ 两侧页面都能回读到那份草稿 → 「下一步（签署）」给可复制命令（不代签）。
+          { path: `${prefix}/supplier/quotes/prepare/`, method: 'GET', auth: 'none',
+            what: '供应商道的**报价草稿准备页**（行项目 / 单价整数分 / 交期 / 备注；字段级校验规则 + 行项目目录 + 已有草稿 + 「下一步（签署）」可复制命令；0 内联脚本）' },
+          { path: `${prefix}/supplier/quotes/prepare/`, method: 'POST', auth: 'none',
+            what: '提交报价草稿（**只落 0600 待办件**、账本零新增；202 + next_action；校验失败 400 + 字段级 errors）' },
           { path: `${prefix}/api/routes`, method: 'GET', auth: 'none', what: '本表' },
           // WebUI 反馈闭环（ui-feedback 插件）：SSR 表单页（**0 内联脚本**）+ 只落 0600 待办件 + 只读观察面
           ...config.views.flatMap((v) => [
@@ -2084,11 +2497,50 @@ ${sortForm('events', '筛查事件')}
           { path: `${prefix}/admin/api/credentials`, method: 'GET', auth: 'admin-session', what: '凭据状态（configured/source/required_mode/指纹前 8/next_action；**不出值**）' },
           { path: `${prefix}/admin/api/credentials/<name>`, method: 'POST', auth: 'admin-session', what: '提交/轮换凭据（只写不回显：响应只有 ok + next_action）' }],
         write_surface: { browser_writable: [`${prefix}/admin/**`, `${prefix}/<view>/gates/nudge`,
-          `${prefix}/<view>/deadlines/promise`],
+          `${prefix}/<view>/deadlines/promise`, `${prefix}/supplier/quotes/prepare/`],
           note: '浏览器永远不能签的五个动作：批准 / 提交报价 / 定标 / 发 PO / 变更批准（人工门在终端）；'
             + '宿主也不发信（`rfq-deadline` 的 `can_send=false`）：登记承诺只落 0600 待办件' },
       })
     }
+    // ---- 报价草稿（`quote-prepare` domain 插件，本批）：唯一写面 = POST **只落一条 0600 待办件** ----
+    //   · `GET  /<prepare-view>/quotes/prepare/`：SSR 准备页（表单 + 字段校验规则 + 行项目目录 +
+    //     已有草稿 + 「下一步（签署）」可复制命令；页面 **0 内联脚本**）；
+    //   · `POST 同路径`：**字段级**校验 → 通过则只落 0600 待办件（**账本零新增**）→ **202** + `next_action`；
+    //     校验失败 **400** + `errors[{field, code, message, next_action}]`（逐字段，不吞成一句「参数错误」）；
+    //     **绝不**返回与 GET 相同的 200 页面（那是「假成功」，本批结构性禁止）。
+    const preparePath = /^\/([a-z]+)\/quotes\/prepare\/?$/.exec(path)
+    if (preparePath) {
+      const view = preparePath[1]
+      if (!rules[view] || view !== prepView()) {
+        return json(404, { ok: false, code: 'prepare-route-not-found', view,
+          next_action: `「准备报价」只有 ${prepView()} 道有这一步：${prefix}/${prepView()}/quotes/prepare/` })
+      }
+      if (String(req.method) !== 'POST') {
+        return send(200, 'text/html; charset=utf-8',
+          html(`${config.page_title} · ${rules[view].title} · 准备报价草稿`, prepPageHtml(view, url), prefix))
+      }
+      return readBody((body) => {
+        const out = submitDraft(view, new URLSearchParams(body))
+        if (!out.ok && out.code === 'validation-failed') {
+          return json(400, { service: 'quote-prepare', view, ok: false, code: out.code,
+            errors: out.errors, counts: { errors: out.errors.length }, next_action: out.next_action })
+        }
+        if (!out.ok) {
+          return json(out.code === 'pending-write-failed' ? 500 : 400,
+            { service: 'quote-prepare', view, ok: false, code: out.code ?? 'refused',
+              next_action: out.next_action })
+        }
+        return json(202, { service: 'quote-prepare', view, ok: true, code: 'accepted', id: out.id,
+          pending: out.file, duplicate: Boolean(out.duplicate), payload_sha256: out.payload_sha256,
+          money_unit: prepare.limits().money_unit,
+          fields: { rfq_id: out.record.rfq_id, item_id: out.record.item_id,
+            unit_price_cents: out.record.unit_price_cents, lead_time_days: out.record.lead_time_days,
+            currency: out.record.currency, prepared_by: out.record.prepared_by,
+            note_sha256: out.record.note_sha256, lines_sha256: out.record.lines_sha256 },
+          next_action: out.next_action })
+      })
+    }
+
     // WebUI 反馈闭环（ui-feedback 插件）：反馈页（GET）/ 提交（POST，只落 0600 待办件、账本零新增）/ 观察面（只读）
     const feedbackPath = /^\/([A-Za-z0-9-]+)\/feedback\/?$/.exec(path)
     if (feedbackPath && config.views.includes(feedbackPath[1])) {

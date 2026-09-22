@@ -1,0 +1,140 @@
+EV-161 — AC-QUOTE-001: 报价草稿写闭环：宿主只落 0600 待办件（账本零新增）→ Python 侧唯一落账本者落 quote/drafted（非签名动作、body 恰 12 键、不含备注正文、两侧登记 ⇒ 双向可见）→ 签名只能由人（quote-sign.py 拒 agent:*，human:* 才落 quote/submitted）；宿主对只读路由的写请求一律 405
+
+时间: 2026-09-22T07:52:46Z
+命令: tools/verify.sh ac AC-QUOTE-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-QUOTE-001
+commit: ac8194a
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-QUOTE-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "① 五件产物齐备（插件 / 唯一落账本者 / 人工签名入口 / 围栏门 / 真 HTTP 门）且门已登记",
+      "ok": true,
+      "detail": "plugin=21126B draft=26104B sign=12051B gate=29718B route=32464B"
+    },
+    {
+      "name": "② 宿主侧：只读路由的写请求围栏（405 + `Allow: GET` + `method-not-allowed`）、`GET|POST /supplier/quotes/prepare/` 两条路由、`data-signature-required` 页面标记、准备页模板段 **0 行脚本 / 0 内联事件**",
+      "ok": true,
+      "detail": "{\"guard_tables\": true, \"method_code\": true, \"prepare_route\": true, \"signature_mark\": true, \"no_sign_in_service\": true, \"zero_inline_script\": true}"
+    },
+    {
+      "name": "③ 插件**不能签名/不能批准/不能发信**：服务面声明 `provides=[quotePrepare]`、`can_sign: false`、`signature_required: true`，且服务面里没有 sign/approve/decide/send 这类方法；源码不 import `node:fs`、不出现 `Date.now`（零写面、不取墙钟）",
+      "ok": true,
+      "detail": "禁止词命中=[]；含 node:fs=False；含 Date.now=False"
+    },
+    {
+      "name": "④ 真跑 `tools/quote-draft.py`（唯一落账本者）：**两侧账本各 +1** `quote/drafted`（一方是自己准备的事实、另一方是「供应商已准备报价」的通知）、body **恰 12 键**、**不含备注正文**（只留 `note_sha256`）、待办件移入 `applied/`",
+      "ok": true,
+      "detail": "rc=0 ledger_added=2 键=['currency', 'item_id', 'lead_time_days', 'lines_sha256', 'note_sha256', 'ok', 'prepared_by', 'quote_draft_id', 'rfq_id', 'supplier', 'unit_price_cents', 'view'] applied=['qd-supplier-0123456789ab.json']"
+    },
+    {
+      "name": "⑤ 幂等 + 四条拒绝路径：同一份草稿重新写回再跑 ⇒ `duplicates`（`already-drafted`）+ **账本零新增**；0644 待办件 ⇒ `pending-insecure-mode`、被改过 ⇒ `pending-tampered`、行项目不存在 ⇒ `item-not-found`、动作不是 draft ⇒ `action-not-draft` —— 四条**拒绝时账本零新增**且各自给 `next_action`",
+      "ok": true,
+      "detail": "幂等=True（matched=already-drafted）；拒绝码={'qd-supplier-aaaa00000000.json': 'pending-insecure-mode', 'qd-supplier-bbbb00000000.json': 'pending-tampered', 'qd-supplier-cccc00000000.json': 'item-not-found', 'qd-supplier-dddd00000000.json': 'action-not-draft'}；四条账本零新增=True；账本行=2"
+    },
+    {
+      "name": "⑥ **签名只能由人**：`tools/quote-sign.py --actor agent:bot` ⇒ 退出码 2 + `human-required` + **账本零新增**；`--actor human:<人名>` ⇒ 落 `approval/requested → approval/granted → quote/submitted`（顺序 = INV-005）并同步给承包商账本一条 `quote/submitted`",
+      "ok": true,
+      "detail": "agent rc=2/human-required 零新增=True；human rc=0 added=4 尾部=['approval/requested', 'approval/granted', 'quote/submitted']"
+    },
+    {
+      "name": "⑦ 登记齐备：插件清单有 `host/modules/quote-prepare.mjs` 一行；`host/profiles.mjs` 装配了 `quote-prepare`；`webui.mjs` 的 inject 含 `quotePrepare`",
+      "ok": true,
+      "detail": "清单=True"
+    }
+  ],
+  "evidence_refs": [
+    "EV-158",
+    "EV-161"
+  ],
+  "command": "tools/verify.sh ac AC-QUOTE-001",
+  "phase": "P2",
+  "title": "报价草稿写闭环：宿主只落 0600 待办件（账本零新增）→ Python 侧唯一落账本者落 quote/drafted（非签名动作、body 恰 12 键、不含备注正文、两侧登记 ⇒ 双向可见）→ 签名只能由人（quote-sign.py 拒 agent:*，human:* 才落 quote/submitted）；宿主对只读路由的写请求一律 405",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-QUOTE-001 — 报价草稿写闭环：宿主只落 0600 待办件（账本零新增）→ Python 侧唯一落账本者落 quote/drafted（非签名动作、body 恰 12 键、不含备注正文、两侧登记 ⇒ 双向可见）→ 签名只能由人（quote-sign.py 拒 agent:*，human:* 才落 quote/submitted）；宿主对只读路由的写请求一律 405
+  ok   ① 五件产物齐备（插件 / 唯一落账本者 / 人工签名入口 / 围栏门 / 真 HTTP 门）且门已登记
+  ok   ② 宿主侧：只读路由的写请求围栏（405 + `Allow: GET` + `method-not-allowed`）、`GET|POST /supplier/quotes/prepare/` 两条路由、`data-signature-required` 页面标记、准备页模板段 **0 行脚本 / 0 内联事件**
+  ok   ③ 插件**不能签名/不能批准/不能发信**：服务面声明 `provides=[quotePrepare]`、`can_sign: false`、`signature_required: true`，且服务面里没有 sign/approve/decide/send 这类方法；源码不 import `node:fs`、不出现 `Date.now`（零写面、不取墙钟）
+  ok   ④ 真跑 `tools/quote-draft.py`（唯一落账本者）：**两侧账本各 +1** `quote/drafted`（一方是自己准备的事实、另一方是「供应商已准备报价」的通知）、body **恰 12 键**、**不含备注正文**（只留 `note_sha256`）、待办件移入 `applied/`
+  ok   ⑤ 幂等 + 四条拒绝路径：同一份草稿重新写回再跑 ⇒ `duplicates`（`already-drafted`）+ **账本零新增**；0644 待办件 ⇒ `pending-insecure-mode`、被改过 ⇒ `pending-tampered`、行项目不存在 ⇒ `item-not-found`、动作不是 draft ⇒ `action-not-draft` —— 四条**拒绝时账本零新增**且各自给 `next_action`
+  ok   ⑥ **签名只能由人**：`tools/quote-sign.py --actor agent:bot` ⇒ 退出码 2 + `human-required` + **账本零新增**；`--actor human:<人名>` ⇒ 落 `approval/requested → approval/granted → quote/submitted`（顺序 = INV-005）并同步给承包商账本一条 `quote/submitted`
+  ok   ⑦ 登记齐备：插件清单有 `host/modules/quote-prepare.mjs` 一行；`host/profiles.mjs` 装配了 `quote-prepare`；`webui.mjs` 的 inject 含 `quotePrepare`
+--- 追加运行 2026-09-22T07:55:26Z ---
+EV-161 — AC-QUOTE-001: 报价草稿写闭环：宿主只落 0600 待办件（账本零新增）→ Python 侧唯一落账本者落 quote/drafted（非签名动作、body 恰 12 键、不含备注正文、两侧登记 ⇒ 双向可见）→ 签名只能由人（quote-sign.py 拒 agent:*，human:* 才落 quote/submitted）；宿主对只读路由的写请求一律 405
+
+时间: 2026-09-22T07:55:26Z
+命令: tools/verify.sh ac AC-QUOTE-001
+实际调用: /workspace/projects/quotagent/.venv/bin/python -m quotagent.qa ac AC-QUOTE-001
+commit: ac8194a
+退出码: 0
+运行环境: quotagent 0.1.0 · profile=minimal-mock · qep_version=1.0 · python=3.13.13
+
+--- 原始输出（stdout JSON） ---
+{
+  "ac": "AC-QUOTE-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "① 五件产物齐备（插件 / 唯一落账本者 / 人工签名入口 / 围栏门 / 真 HTTP 门）且门已登记",
+      "ok": true,
+      "detail": "plugin=21126B draft=26104B sign=12051B gate=29718B route=33964B"
+    },
+    {
+      "name": "② 宿主侧：只读路由的写请求围栏（405 + `Allow: GET` + `method-not-allowed`）、`GET|POST /supplier/quotes/prepare/` 两条路由、`data-signature-required` 页面标记、准备页模板段 **0 行脚本 / 0 内联事件**",
+      "ok": true,
+      "detail": "{\"guard_tables\": true, \"method_code\": true, \"prepare_route\": true, \"signature_mark\": true, \"no_sign_in_service\": true, \"zero_inline_script\": true}"
+    },
+    {
+      "name": "③ 插件**不能签名/不能批准/不能发信**：服务面声明 `provides=[quotePrepare]`、`can_sign: false`、`signature_required: true`，且服务面里没有 sign/approve/decide/send 这类方法；源码不 import `node:fs`、不出现 `Date.now`（零写面、不取墙钟）",
+      "ok": true,
+      "detail": "禁止词命中=[]；含 node:fs=False；含 Date.now=False"
+    },
+    {
+      "name": "④ 真跑 `tools/quote-draft.py`（唯一落账本者）：**两侧账本各 +1** `quote/drafted`（一方是自己准备的事实、另一方是「供应商已准备报价」的通知）、body **恰 12 键**、**不含备注正文**（只留 `note_sha256`）、待办件移入 `applied/`",
+      "ok": true,
+      "detail": "rc=0 ledger_added=2 键=['currency', 'item_id', 'lead_time_days', 'lines_sha256', 'note_sha256', 'ok', 'prepared_by', 'quote_draft_id', 'rfq_id', 'supplier', 'unit_price_cents', 'view'] applied=['qd-supplier-0123456789ab.json']"
+    },
+    {
+      "name": "⑤ 幂等 + 四条拒绝路径：同一份草稿重新写回再跑 ⇒ `duplicates`（`already-drafted`）+ **账本零新增**；0644 待办件 ⇒ `pending-insecure-mode`、被改过 ⇒ `pending-tampered`、行项目不存在 ⇒ `item-not-found`、动作不是 draft ⇒ `action-not-draft` —— 四条**拒绝时账本零新增**且各自给 `next_action`",
+      "ok": true,
+      "detail": "幂等=True（matched=already-drafted）；拒绝码={'qd-supplier-aaaa00000000.json': 'pending-insecure-mode', 'qd-supplier-bbbb00000000.json': 'pending-tampered', 'qd-supplier-cccc00000000.json': 'item-not-found', 'qd-supplier-dddd00000000.json': 'action-not-draft'}；四条账本零新增=True；账本行=2"
+    },
+    {
+      "name": "⑥ **签名只能由人**：`tools/quote-sign.py --actor agent:bot` ⇒ 退出码 2 + `human-required` + **账本零新增**；`--actor human:<人名>` ⇒ 落 `approval/requested → approval/granted → quote/submitted`（顺序 = INV-005）并同步给承包商账本一条 `quote/submitted`",
+      "ok": true,
+      "detail": "agent rc=2/human-required 零新增=True；human rc=0 added=4 尾部=['approval/requested', 'approval/granted', 'quote/submitted']"
+    },
+    {
+      "name": "⑦ 登记齐备：插件清单有 `host/modules/quote-prepare.mjs` 一行；`host/profiles.mjs` 装配了 `quote-prepare`；`webui.mjs` 的 inject 含 `quotePrepare`",
+      "ok": true,
+      "detail": "清单=True"
+    }
+  ],
+  "evidence_refs": [
+    "EV-161"
+  ],
+  "command": "tools/verify.sh ac AC-QUOTE-001",
+  "phase": "P2",
+  "title": "报价草稿写闭环：宿主只落 0600 待办件（账本零新增）→ Python 侧唯一落账本者落 quote/drafted（非签名动作、body 恰 12 键、不含备注正文、两侧登记 ⇒ 双向可见）→ 签名只能由人（quote-sign.py 拒 agent:*，human:* 才落 quote/submitted）；宿主对只读路由的写请求一律 405",
+  "first_failure": "",
+  "exit_code": 0
+}
+
+--- 断言摘要（stderr 内容） ---
+[PASS] AC-QUOTE-001 — 报价草稿写闭环：宿主只落 0600 待办件（账本零新增）→ Python 侧唯一落账本者落 quote/drafted（非签名动作、body 恰 12 键、不含备注正文、两侧登记 ⇒ 双向可见）→ 签名只能由人（quote-sign.py 拒 agent:*，human:* 才落 quote/submitted）；宿主对只读路由的写请求一律 405
+  ok   ① 五件产物齐备（插件 / 唯一落账本者 / 人工签名入口 / 围栏门 / 真 HTTP 门）且门已登记
+  ok   ② 宿主侧：只读路由的写请求围栏（405 + `Allow: GET` + `method-not-allowed`）、`GET|POST /supplier/quotes/prepare/` 两条路由、`data-signature-required` 页面标记、准备页模板段 **0 行脚本 / 0 内联事件**
+  ok   ③ 插件**不能签名/不能批准/不能发信**：服务面声明 `provides=[quotePrepare]`、`can_sign: false`、`signature_required: true`，且服务面里没有 sign/approve/decide/send 这类方法；源码不 import `node:fs`、不出现 `Date.now`（零写面、不取墙钟）
+  ok   ④ 真跑 `tools/quote-draft.py`（唯一落账本者）：**两侧账本各 +1** `quote/drafted`（一方是自己准备的事实、另一方是「供应商已准备报价」的通知）、body **恰 12 键**、**不含备注正文**（只留 `note_sha256`）、待办件移入 `applied/`
+  ok   ⑤ 幂等 + 四条拒绝路径：同一份草稿重新写回再跑 ⇒ `duplicates`（`already-drafted`）+ **账本零新增**；0644 待办件 ⇒ `pending-insecure-mode`、被改过 ⇒ `pending-tampered`、行项目不存在 ⇒ `item-not-found`、动作不是 draft ⇒ `action-not-draft` —— 四条**拒绝时账本零新增**且各自给 `next_action`
+  ok   ⑥ **签名只能由人**：`tools/quote-sign.py --actor agent:bot` ⇒ 退出码 2 + `human-required` + **账本零新增**；`--actor human:<人名>` ⇒ 落 `approval/requested → approval/granted → quote/submitted`（顺序 = INV-005）并同步给承包商账本一条 `quote/submitted`
+  ok   ⑦ 登记齐备：插件清单有 `host/modules/quote-prepare.mjs` 一行；`host/profiles.mjs` 装配了 `quote-prepare`；`webui.mjs` 的 inject 含 `quotePrepare`

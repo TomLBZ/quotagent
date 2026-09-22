@@ -799,6 +799,8 @@ try {
   await mountReal('gate-timeline.mjs', {}, 'gateTimeline', 'gate-timeline')
   await mountReal('authority-band.mjs', {}, 'authorityBand', 'authority-band')
   await mountReal('rfq-deadline.mjs', {}, 'rfqDeadline', 'rfq-deadline')
+  // 同批新增的 `quote-prepare`（webui 的 inject 依赖它）：同为 domain 插件，默认配置即可
+  await mountReal('quote-prepare.mjs', {}, 'quotePrepare', 'quote-prepare')
   await mountReal('ui-feedback.mjs', { ui_shared: '' }, 'uiFeedback', 'ui-feedback')
   const projection = await import(pathToFileURL(join(HERE, 'modules', 'projection.mjs')).href)
   await httpCtx.plugin({ name: 'projection#t282', inject: [], Config: projection.Config,

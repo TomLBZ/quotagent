@@ -40,6 +40,7 @@ import { Config as advConfig3, apply as advApply3 } from './modules/advice-panel
 import { Config as gtConfig3, apply as gtApply3 } from './modules/gate-timeline.mjs'
 import { Config as abConfig3, apply as abApply3 } from './modules/authority-band.mjs'
 import { Config as rdConfig3, apply as rdApply3 } from './modules/rfq-deadline.mjs'
+import { Config as qpConfig3, apply as qpApply3 } from './modules/quote-prepare.mjs'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
@@ -223,6 +224,8 @@ const mountObs = async (targetCtx) => {
   await wrap({ apply: abApply3, Config: abConfig3, inject: [] }, {}, 'authorityBand', 'authority-band')
   // RFQ 回文时限（本批）：webui 的 inject 需要它（wiring 门 B1）；纯函数插件，无需夹具输入
   await wrap({ apply: rdApply3, Config: rdConfig3, inject: [] }, {}, 'rfqDeadline', 'rfq-deadline')
+  // 报价草稿（本批）：webui 的 inject 需要它（wiring 门 B1）；纯函数插件，无需夹具输入
+  await wrap({ apply: qpApply3, Config: qpConfig3, inject: [] }, {}, 'quotePrepare', 'quote-prepare')
   // WebUI 反馈闭环（ui-feedback）：版本事实指向**夹具临时目录**（不读真 `tmp/ui-shared`）→
   // 版本事实缺失 ⇒ 全视图 `r0`、无横幅，门的其它断言与机器状态无关（确定性）
   const fbFixtureDir = mkdtempSync(join(tmpdir(), 'wui-fb-'))
@@ -266,7 +269,7 @@ writeFileSync(pipeFixture, JSON.stringify({
 const box = {}
 const fiber = await ctx.plugin({
   name: 'webui#probe',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline'],   // 与 webui 模块声明的 inject 保持一致
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare'],   // 与 webui 模块声明的 inject 保持一致
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)
@@ -364,7 +367,7 @@ await brokenCtx.plugin({
 }, projectionConfig.parse({}))
 const brokenFiber = await brokenCtx.plugin({
   name: 'webui#broken',
-  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline'],
+  inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare'],
   Config: webuiConfig,
   apply: async (inner, config) => {
     const original = inner.provide.bind(inner)

@@ -252,12 +252,16 @@ const e2e = async ({ weightBps, candidate }) => {
   const { apply: rdApplyE2E, Config: rdConfigE2E } = await import('./modules/rfq-deadline.mjs')
   await ctx.plugin({ name: 'rfq-deadline', inject: [], Config: rdConfigE2E,
     apply: (inner, cfg) => rdApplyE2E(inner, cfg) }, rdConfigE2E.parse({}))
+  // 报价草稿（quote-prepare）：webui 的 inject 需要它（wiring 门 B2）；纯函数插件，无需夹具输入
+  const { apply: qpApplyE2E, Config: qpConfigE2E } = await import('./modules/quote-prepare.mjs')
+  await ctx.plugin({ name: 'quote-prepare', inject: [], Config: qpConfigE2E,
+    apply: (inner, cfg) => qpApplyE2E(inner, cfg) }, qpConfigE2E.parse({}))
   const { apply: mvApplyE2E, Config: mvConfigE2E } = await import('./modules/mail-view.mjs')
   await ctx.plugin({ name: 'mail-view', inject: [], Config: mvConfigE2E,
     apply: (inner, cfg) => mvApplyE2E(inner, { ...cfg, mail_state: '', ui_shared: '' }) }, mvConfigE2E.parse({}))
   const wbox = {}
   const wfiber = await ctx.plugin({
-    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline'], Config: webuiConfig,
+    name: 'webui#e2e', inject: ['ledgerView', 'projection', 'governor', 'observability', 'priceHistory', 'evidenceSummary', 'opsView', 'evolveJournal', 'supplierScorecard', 'approvalDigest', 'retentionView', 'pipelineView', 'adminGuard', 'adminView', 'pluginMarket', 'userPluginManager', 'configView', 'mailView', 'bidHeuristics', 'uiFeedback', 'advicePanel', 'gateTimeline', 'authorityBand', 'rfqDeadline', 'quotePrepare'], Config: webuiConfig,
     apply: async (inner, cfg) => {
       const original = inner.provide.bind(inner)
       inner.provide = (service, value) => { if (service === 'webui') wbox.handle = value; return original(service, value) }

@@ -115,6 +115,7 @@
 | FR-PRICE-003 | host/modules/price-history.mjs | AC-PRICE-002（见 §4 的机检命令） | 映射 |
 | FR-RFQ-007 | host/modules/sourcing.mjs | AC-RFQ-005（见 §4 的机检命令） | 映射 |
 | FR-RFQ-008 | host/modules/rfq-deadline.mjs、tools/rfq-promise.py | 见 §2 的 `rfq-deadline` 行（围栏门 23/23 + 真路由门 11/11 的逐条计数与断言在那个格子里，避免两处重复） | 直引 |
+| FR-RFQ-009 | host/modules/projection.mjs、host/lib/ledger-view.mjs、host/modules/webui.mjs、host/t287-rfq-visibility-gate.mjs、tools/check-rfq-visibility-route.py | 投递信封 + 收件人作用域 + 字段级白名单（契约 `docs/design/26-rfq-delivery-visibility.md`）：围栏门 26/26 + 真路由门 10/10（`verify.sh rfq-visibility`） | 直引 |
 | FR-EVAL-005 | host/modules/supplier-scorecard.mjs | AC-EVAL-003（见 §4 的机检命令） | 映射 |
 | FR-UX-004 | host/modules/ops-view.mjs | AC-RUNTIME-010（见 §4 的机检命令） | 映射 |
 
@@ -178,6 +179,7 @@
 | FR-USREQ-001 | host/modules/webui.mjs + host/modules/config-view.mjs | 四类写操作各有门（config-route / gates / rfq-deadline / ui-feedback），但「每一步」完整性无机检 | 缺口 |
 | FR-USREQ-002 | host/modules/webui.mjs | 只有结构切片（0 内联脚本 / 三块顺序 / `data-empty`），视觉本身**零判据** | 缺口 |
 | FR-USREQ-003 | host/profiles.mjs + src/quotagent/g1side.py | `verify.sh g1` 只覆盖「两侧各自跑完工作流」；「像员工」无机检 | 缺口 |
+| FR-QUOTE-001 | host/modules/quote-prepare.mjs、tools/quote-draft.py、tools/quote-sign.py | **报价草稿写闭环**（`verify.sh quote-draft`）：围栏门（服务面恰 8 键且无 `approve/decide/submit/send`、`can_sign=false`、字段级拒绝码闭合、确定性、墙钟入口读都不读、私域哨兵逐字节一致、行项目读不出来不编、**4 处单点变异全红且还原字节一致**）+ 真路由门（真进程真回读）：假成功杀死（`/api/routes` 里每个 GET 只读路由 POST ⇒ 405 + `Allow: GET` + `method-not-allowed`；**反向对照**真写路由 POST ⇒ 不是该 code）/ 字段级 errors / 待办件恰 0600 / 宿主账本零新增 / 真跑工具后两侧账本各 +1 且 body 恰 12 键不含备注正文 / 幂等 / 拒绝码 / 双向可见 / 0 内联脚本 / 假成功对照（改前 GET 与 POST 逐字节相同） | 直引 |
 
 > 末段 12 行 = **用户诉求批次**（`FR-USREQ-001..012`，契约见 `../../work/functional-requirements.md` §6.1；状态真源 `../../work/requirements-traceability.md`）。
 
@@ -188,6 +190,7 @@
 | gate-timeline | FR-GATE-001（「审批等多久 / 变更单谁卡着」：等待时长口径 = 事实 ts 之差（不取墙钟）/ 卡点用队列里的真审批人 / 超时策略三种后果 / 每条变更单带账本事件–计数 basis / **不能批准**（无审批类方法 + `can_approve=false`）/ 催办只产 nudge 载荷；4 处单点变异自证）、FR-GATE-002（**变更单逐行明细**：`/<view>/changes/<id>/` 与 `/<view>/api/changes/<id>` 金额整数分逐行可对账 / 缺依据的行不入小计 / 无可用行必降级且明细空 / 私域列仅业主侧可见；4 处单点变异自证） | 强 |
 | authority-band | FR-AUTH-001（「授权区间」：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁；`authority.*` 白名单配置（人工专属键，YAML 可初始化）；三例边界手算对账；未配置 ⇒ `unconfigured` **不编限额**；越界 ⇒ 可复制升级命令且**不能批准**；4 处单点变异自证） | 强 |
 | rfq-deadline | FR-RFQ-008（「来不及回 RFQ：谁还没回 / 还差多久 / 催了没有」：`due_ts` 来自**事实行**（`rfq/published.quote_by` / `rfq/promised.due_at`，取事实 ts 最晚者）且 `remaining_seconds = due_ts − as_of` **不取墙钟**（两个墙钟入口读都不读 ⇒ 同一份快照逐字节一致）；**没凭据不得假装能发**（`available=false` ⇒ `blocked_by` 写「无法代发」+ `can_send=false`，输出里无任何「发过了」表述）；**竞标人名册是业主私域**（非业主视角对 `invited`/`quotes` 读都不读）；空投影必降级且条目为空；有界 + `omitted`；零写面；登记承诺只产 0600 待办件载荷、落账本归 `tools/rfq-promise.py`；4 处单点变异自证） | 强 |
+| quote-prepare | FR-QUOTE-001（报价草稿写闭环；逐条断言见该 FR 行；门 `verify.sh quote-draft`） | 强 |
 | advice-panel | FR-ADV-001（确定性规则建议层：`engine=rules` / 每条建议 `basis` 指向投影真键 / 空投影必 degraded 且建议数 0 / 有界 + `omitted` / 私域零泄漏；4 处单点变异自证） | 强 |
 | approval-digest | FR-UX-001 | 部分 |
 | user-plugin-manager | FR-USERPLUG-003、FR-USERPLUG-004、FR-USERPLUG-006、FR-USERPLUG-008（T-268 subagent 产出） | 强 |
@@ -214,7 +217,7 @@
 | observability | AC-RUNTIME-007（本次登记） | — |
 | ops-view | AC-RUNTIME-010（本次登记） | — |
 | price-history | AC-PRICE-002（本次登记） | — |
-| projection | FR-UX-002, AC-TRUST-001 | 强 / 部分 |
+| projection | FR-UX-002, AC-TRUST-001、FR-RFQ-009 | 强 / 部分 |
 | sourcing | AC-RFQ-005（本次登记） | — |
 | supplier-scorecard | AC-EVAL-003（本次登记） | — |
 | timeline | AC-RUNTIME-008（本次登记） | — |

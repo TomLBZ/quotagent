@@ -43,5 +43,12 @@ export function openLedger(path, { repoRoot = ROOT } = {}) {
     verify,
     /** 按事件前缀过滤（视图用）。 */
     byType: (prefix) => read().filter((row) => String(row.type).startsWith(prefix)),
+    /**
+     * 本视角**自己**的 realm（= 身份）：取本账本里出现过的 realm 去重排序。
+     * 用途：投递事实（RFQ 包）要按"发给谁"做收件人作用域过滤，而**身份只能来自本视角自己的账本**
+     * （不能来自信封本身——那等于让发送方决定收件人是谁）。0 个 ⇒ 还没落过事实（`no-identity`）。
+     */
+    realms: () => [...new Set(read().map((row) => (typeof row.realm === 'string' ? row.realm.trim() : ''))
+      .filter((item) => item !== ''))].sort(),
   }
 }

@@ -183,7 +183,12 @@ def main(argv: list[str]) -> int:
                 "QUOTAGENT_UI_ADMIN", str(ROOT / "tmp" / "ui-shared" / "admin.json")),
             "--admin-inbox", os.environ.get(
                 "QUOTAGENT_UI_ADMIN_INBOX", str(ROOT / "tmp" / "ui-shared" / "admin-submissions")),
-            "--ui-shared", os.environ.get("QUOTAGENT_UI_SHARED", str(ROOT / "tmp" / "ui-shared")),
+            '--ui-shared', os.environ.get("QUOTAGENT_UI_SHARED", str(ROOT / "tmp" / "ui-shared")),
+            # RFQ 投递信封：发送方（承包商侧）写进共享交换目录的交付件 —— 被邀供应商由此看到"发给自己的包"
+            # （`delivered_to` 收件人作用域 + 字段白名单在 host/modules/projection.mjs）；缺省指向 g1 走查
+            # 产出的那份 `01-package.json`（真供应商进程读的同一份文件）。
+            '--rfq-delivery', os.environ.get(
+                "QUOTAGENT_UI_RFQ_DELIVERY", str(ROOT / "tmp" / "ui-shared" / "contractor" / "01-package.json")),
             "--market-modules", str(ROOT / "host" / "modules"),
             "--market-inventory", str(ROOT / "docs" / "design" / "14-plugin-inventory.md"),
             "--market-user-space", str(ROOT / "user-space"),

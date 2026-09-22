@@ -45,6 +45,7 @@ PROVIDERS = {
     "gateTimeline": "gate-timeline",
     "authorityBand": "authority-band",
     "rfqDeadline": "rfq-deadline",
+    "quotePrepare": "quote-prepare",
 }
 
 
