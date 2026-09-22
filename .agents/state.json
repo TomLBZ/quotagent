@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-22T13:05:00Z",
+  "updated_at": "2026-09-22T13:40:00Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
   "next_task": "阶段 2（插件迁移）续批：**阶段 4.2 余下 64 项 `tools/**`**（`docs/work/plans/plugin-file-map.md` §分类 A 节的`插件·待搬`；门名与 `tools/verify.sh` 分支是接口、一行不改）；随后**阶段 5 续搬** `src/quotagent/services/**` → `src/<层>/<插件>/`。本批（EV-173 / T-322）已把 `host/*-gate.mjs` **20/20 搬完**、`qa/checks_*.py` 搬走 22/47、内核实体落 `src/system/kernel/code/`（旧路径薄重导）。",
@@ -8,7 +8,7 @@
   "last_verified_command": "tools/verify.sh docs | coverage | ac-registry | plugins | webui | modules | wiring | plugin-assets | plugin-requirements | plugin-lifecycle | run-once | invariants | events | p0-no-node（本批提交前的工作树，逐道 rc=0；plugin-lifecycle/p0-no-node 带 `env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN`）｜ 单条 AC 31 条（搬前/搬后各一次）｜ tools/verify.sh run-clone（提交之后，在 `git archive HEAD` 解出的仓库外干净副本里真跑）",
   "last_verified_result": "PASS。提交前全绿：`docs` PASS、`coverage` 8/8、`ac-registry` 通过、`plugins` 5/5、`webui` 51/51、`modules` 521/521、`wiring` 通过、`plugin-assets` **14/14**（PA7 非薄入口 64 ≤ 基线 64，**未放宽**；RELOCATED 8→49）、`plugin-requirements` **18/18**、`plugin-lifecycle` **66/66**、`run-once` **34/34**、`invariants` 22/22、`events` 一致、`p0-no-node` **全绿**（本批修 3 处「检查器读旧门路径 ⇒ 读到 5 行薄转发」的真缺陷后由红转绿）。本批三件实测：① **剩 10 个围栅门搬完（20/20）**——`pipeline-view` 13/13、`plugin-market` 13/13、`user-space` 21/21、`agent-runtime` 22/22、`bid-heuristics` 32/32+12/12、`advice` 30/30+14/14、`gates` 33/33+11/11、`change-detail` 22/22+9/9、`t271-admin` 18/18（**此前无门在跑 ⇒ 本批接进 `admin-route`**）、`storage` 18/19（**搬前即红**，符号链接事实区判据；与搬迁无关）；逐项 rc 对拍一致，掩掉端口/pid/耗时/临时目录后断言名与 ok 全同 ② **21 个 `qa/checks_*.py` 搬进各自 `tests/`**，31 条相关 AC 全部 `names_same/ok_same`；`AC-QUOTE-001`/`AC-UIFB-001` 由红转绿 ③ **阶段 5 第一小片**：内核 9 个 `.py` 进 `src/system/kernel/code/`，逐条 sha256 与 `git show HEAD:` 相同，旧导入路径 `import quotagent.kernel.*` 实测可用（`Ledger.append.__code__.co_filename` = 新位置 ⇒ 跑的是实体）。提交之后 `tools/verify.sh run-clone` 在 HEAD 上 20/20 PASS。",
   "last_verified_evidence": "docs/work/evidence/EV-173-plugin-relocation-batch3.md（+ EV-173-batch3-raw.json）",
-  "last_verified_commit": "9032ee1cc51ba21c280cdb0f5c5e3268b8e24a09",
+  "last_verified_commit": "5b796c4f584d16cd74d806165cc6b5884386c3cd",
   "blockers": [],
   "human_required": [
     "T-117 现场验证 V-001..V-012：备料已完成；**P1 按用户指令以\"V 全部通过\"为前提推进**（planning_assumptions，非结论），V 的正式 conclusion 与 G0/G1 签署仍需人工",
@@ -74,7 +74,7 @@
     "userspace_single_source": "**src/userspace/ 是唯一事实源**（阶段 5.1，EV-168）：旧的 `user-space` 改成一个**指向 src/userspace 的 tracked 兼容符号链接**（.gitignore 的 `user-space/` 只匹配目录 ⇒ 链接本身入库），所以 tools/webui-serve.py 的 --user-space-root/--market-user-space、host/lib/user-space.mjs 的默认根与若干宿主门都不必改一行；两份用户插件（con-a/quote-trend、demo-ns/hello）的产物字节与声明哈希未变（11742 B/dffeff77…、297 B/33f46dbe…），旧 12 行实现逐字留档在 hello 的 docs/migration-note.md",
     "plugin_assets": "**资产归属一致性门**（阶段 4.1，EV-170）：`tools/verify.sh plugin-assets` → `tools/check-plugin-assets.py`。登记真源 = `docs/work/plans/plugin-file-map.md` §分类（143 行）；已搬 8 项的旧位置是**薄转发**（`runpy`/`importlib`），门名与 `tools/verify.sh` 的分支一行未改；`tools/**` 非薄入口数由门冻结（`BASELINE_NONTHIN = 63`，只减不增）；**阶段 4.2（EV-172 / T-321）**：`host/*-gate.mjs` 20 个里前 10 个搬进各自插件的 `tests/`（旧位置 5 行薄转发，门名/分支/输出形状逐项对拍一致），`RELOCATED` 8 → 18 项，§分类 B 节拆成「已搬 10 + 待搬 10」；`BASELINE_NONTHIN` 仍 64（**未放宽**）。"
   },
-  "last_verified_commit_semantics": "指向本批主提交（阶段 4.2：收紧 + 归位 + 10 个围栅门搬迁）；其后的提交只追加证据/状态（EV-172 §四 + INDEX-P2 行 + state.json + 交接）",
+  "last_verified_commit_semantics": "指向本批主提交（阶段 4.2 续批 + `qa` 检查搬家 + 阶段 5 第一小片）；其后的提交只追加证据/状态（EV-173 §五/§六/§七 + INDEX-P2 行 + state.json + 交接）",
   "done_p2": [
     "T-222",
     "T-223",
