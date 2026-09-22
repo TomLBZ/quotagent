@@ -830,12 +830,15 @@
    ],
    "git_status_porcelain_lines": 2,
    "git_status_porcelain_raw": " M .agents/state.json\n M docs/work/evidence/EV-174-plugin-relocation-batch4.md\n",
+   "local_head_after_push": "5dda93e26f396e21e68cd3ae8ca3310e77dc2dae",
+   "ls_remote_head_after_push_raw": "5dda93e26f396e21e68cd3ae8ca3310e77dc2dae\tHEAD",
    "ls_remote_head_before_push_note": "提交本文件时尚在本机（未 push），所以这一行是 push 前的远端 HEAD；push 后的回读见 ls_remote_head_after_push_raw（紧随其后的一次提交写入）",
    "ls_remote_head_before_push_raw": "c983f19c9f1f1ae7d17217486ae54db68b6e6f1a\tHEAD",
    "p0_no_node_tail": [
     "P0 阶段 63 条 AC 在无 Node 环境下全绿（P0 不因引入宿主而失去可复跑性）；无瞬时命中（日志: /workspace/projects/quotagent/tmp/p0-no-node.MJfx97）",
     "rc=0"
    ],
+   "readback_match": true,
    "run_clone_tail": [
     "RESULT: PASS（run-clone 门 20/20）",
     "rc=0"
