@@ -822,6 +822,38 @@
     }
    ]
   },
+  "post_commit": {
+   "commit_sha": "028144ce48a9c5e56f2ab4115acc931140c42956",
+   "commit_subject": "feat(plugin): 迁移终批（EV-174 / T-323）：qa 检查 47/47 搬完 + 阶段 5 第二小片 12 服务 + 修 storage 遗留红",
+   "docs_tail": [
+    "RESULT: PASS"
+   ],
+   "git_status_porcelain_lines": 2,
+   "git_status_porcelain_raw": " M .agents/state.json\n M docs/work/evidence/EV-174-plugin-relocation-batch4.md\n",
+   "ls_remote_head_before_push_note": "提交本文件时尚在本机（未 push），所以这一行是 push 前的远端 HEAD；push 后的回读见 ls_remote_head_after_push_raw（紧随其后的一次提交写入）",
+   "ls_remote_head_before_push_raw": "c983f19c9f1f1ae7d17217486ae54db68b6e6f1a\tHEAD",
+   "p0_no_node_tail": [
+    "P0 阶段 63 条 AC 在无 Node 环境下全绿（P0 不因引入宿主而失去可复跑性）；无瞬时命中（日志: /workspace/projects/quotagent/tmp/p0-no-node.MJfx97）",
+    "rc=0"
+   ],
+   "run_clone_tail": [
+    "RESULT: PASS（run-clone 门 20/20）",
+    "rc=0"
+   ],
+   "storage_mutate5_raw": null,
+   "two_halves_head_raw": [
+    "src/quotagent/services/measures.py               927 B 薄转发/薄重导 ✓",
+    "旧半边：37 只剩薄转发/薄重导 / 0 异常（共 37）"
+   ],
+   "unverified": [
+    "修前实体的完整 stdout 只在 tmp/ 与证据 JSON 里留了修前三条构造的原文；修前那次「真实落盘」只是本机实测，未在别的机器/别的 cwd 复现（口径是同一构造、同一 cwd）。",
+    "`AC-COMPARE-004`（P1）仍红 —— 与本批无关（`D-016` 已归档），**本批未修、也未验证它在别处的行为**。",
+    "`tools/**` 里 64 项非薄入口**一个都没搬**（本批只搬了 checks 与 12 个服务模块）；`services/**` 还有 7 个模块带旧路径读方未搬。",
+    "干净克隆那一半（`run-clone`）只在本机跑过一次（20/20）；未在空 HOME / 无缓存的另一台机器上复跑。",
+    "`storage` 门的 `--mutate 5` 只验证了「改产品实体 ⇒ 门必红」；未对 `_zone_forms` 单独做 4 种形态组合的穷举测试（由第 8 条的 7 种构造 + 反向自证覆盖）。",
+    "`p0-no-node` 的 63 条 P0 AC 是在本工作树（含未提交的文档改动）上跑的；提交后的复跑只有 `run-clone` 那条路径。"
+   ]
+  },
   "services_moved": {
    "byte_conserved": 12,
    "count": 12,

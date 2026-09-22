@@ -1,14 +1,14 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-22T13:40:00Z",
+  "updated_at": "2026-09-22T11:51:42Z",
   "phase": "P2-advisor-and-live-canary",
   "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "阶段 2（插件迁移）续批：**阶段 4.2 余下 64 项 `tools/**`**（`docs/work/plans/plugin-file-map.md` §分类 A 节的`插件·待搬`；门名与 `tools/verify.sh` 分支是接口、一行不改）；随后**阶段 5 续搬** `src/quotagent/services/**` → `src/<层>/<插件>/`。本批（EV-173 / T-322）已把 `host/*-gate.mjs` **20/20 搬完**、`qa/checks_*.py` 搬走 22/47、内核实体落 `src/system/kernel/code/`（旧路径薄重导）。",
-  "next_action": "下批照本批的范式（逐项对拍 + 两半边 + 分类表登记 + `plugin-assets` 基线**只减不增**）：① 挑 `tools/**` 里带门的 `check-*.py`（`system/repo-gate` 归口最大）先搬；② 阶段 5 续搬 `services/**` 时同样要处理「读方按旧路径读实体」的引用（本批实测：围栅门搬走后，检查器按 `host/<门>.mjs` 读会读到薄转发 ⇒ 断言静默变空 ⇒ 必须改成读实体）；③ 遗留：`tools/storage.py` 的事实区判据对 `user-space` 符号链接失效（`verify.sh storage` 18/19，搬前即红）。",
-  "last_verified_command": "tools/verify.sh docs | coverage | ac-registry | plugins | webui | modules | wiring | plugin-assets | plugin-requirements | plugin-lifecycle | run-once | invariants | events | p0-no-node（本批提交前的工作树，逐道 rc=0；plugin-lifecycle/p0-no-node 带 `env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN`）｜ 单条 AC 31 条（搬前/搬后各一次）｜ tools/verify.sh run-clone（提交之后，在 `git archive HEAD` 解出的仓库外干净副本里真跑）",
-  "last_verified_result": "PASS。提交前全绿：`docs` PASS、`coverage` 8/8、`ac-registry` 通过、`plugins` 5/5、`webui` 51/51、`modules` 521/521、`wiring` 通过、`plugin-assets` **14/14**（PA7 非薄入口 64 ≤ 基线 64，**未放宽**；RELOCATED 8→49）、`plugin-requirements` **18/18**、`plugin-lifecycle` **66/66**、`run-once` **34/34**、`invariants` 22/22、`events` 一致、`p0-no-node` **全绿**（本批修 3 处「检查器读旧门路径 ⇒ 读到 5 行薄转发」的真缺陷后由红转绿）。本批三件实测：① **剩 10 个围栅门搬完（20/20）**——`pipeline-view` 13/13、`plugin-market` 13/13、`user-space` 21/21、`agent-runtime` 22/22、`bid-heuristics` 32/32+12/12、`advice` 30/30+14/14、`gates` 33/33+11/11、`change-detail` 22/22+9/9、`t271-admin` 18/18（**此前无门在跑 ⇒ 本批接进 `admin-route`**）、`storage` 18/19（**搬前即红**，符号链接事实区判据；与搬迁无关）；逐项 rc 对拍一致，掩掉端口/pid/耗时/临时目录后断言名与 ok 全同 ② **21 个 `qa/checks_*.py` 搬进各自 `tests/`**，31 条相关 AC 全部 `names_same/ok_same`；`AC-QUOTE-001`/`AC-UIFB-001` 由红转绿 ③ **阶段 5 第一小片**：内核 9 个 `.py` 进 `src/system/kernel/code/`，逐条 sha256 与 `git show HEAD:` 相同，旧导入路径 `import quotagent.kernel.*` 实测可用（`Ledger.append.__code__.co_filename` = 新位置 ⇒ 跑的是实体）。提交之后 `tools/verify.sh run-clone` 在 HEAD 上 20/20 PASS。",
-  "last_verified_evidence": "docs/work/evidence/EV-173-plugin-relocation-batch3.md（+ EV-173-batch3-raw.json）",
-  "last_verified_commit": "5b796c4f584d16cd74d806165cc6b5884386c3cd",
+  "next_task": "阶段 2（插件迁移）续批：**阶段 4.2 余下 64 项 `tools/**`**（`docs/work/plans/plugin-file-map.md` §分类 A 节的`插件·待搬`；门名与 `tools/verify.sh` 分支是接口、一行不改）；随后**阶段 5 续搬** `src/quotagent/services/**` 里**仍有读方按旧路径读源码**的 7 个模块（`mail`/`mail_transport`/`admin_blocks`/`retention`/`retention_exec`/`faq`/`negotiation`）—— **先改读方再搬**，否则静态断言会在薄重导上静默判绿。本批（EV-174 / T-323）已把 `qa/checks_*.py` **47/47 搬完**、12 个服务实体落 `src/<层>/<插件>/code/`（旧路径薄重导、字节守恒 12/12）、修掉 `storage` 遗留红（门 18/19 → 19/19）。",
+  "next_action": "下批照本批的范式（逐项对拍 + 两半边 + 分类表登记 + `plugin-assets` 基线**只减不增**）：① 挑 `tools/**` 里带门的 `check-*.py` 先搬；② 阶段 5 续搬 `services/**` 前先改读方（`tools/check-mail-transport.py`、`tools/check-plugin-inventory.py`、`checks_retention.py`/`checks_admin.py`/`checks_faq.py`/`checks_negotiation.py` 的 `__file__` / `git show HEAD:` 路径读取），否则断言会在薄重导上静默判绿；③ 已知红：`AC-COMPARE-004`（P1，`D-016` 已归档 ⇒ 断言红，与本批无关）。",
+  "last_verified_command": "tools/verify.sh docs | coverage | ac-registry | plugins | webui | modules | wiring | invariants | events | storage | plugin-assets | plugin-requirements | plugin-lifecycle | run-once | p0-no-node（本批提交前的工作树，逐道 rc=0；全带 `env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN`）｜ 85 条已注册 AC 三份快照对拍（搬前 / ①后 / ②后）｜ tools/verify.sh run-clone（提交之后，在 `git archive HEAD` 解出的仓库外干净副本里真跑）",
+  "last_verified_result": "PASS。提交前全绿：`docs` PASS、`coverage` 8/8、`ac-registry` 通过、`plugins` 5/5、`webui` 51/51、`modules` 521/521、`wiring` 5/5、`invariants` 22/22、`events` 一致、`storage` **19/19**（修前 18/19）、`plugin-assets` **14/14**（RELOCATED 49→74；`tools/**` 非薄入口**仍 64 ≤ 基线 64，未放宽** ✗）、`plugin-requirements` 18/18、`plugin-lifecycle` 66/66、`run-once` 34/34、`p0-no-node` **63 条 P0 AC 全绿**。本批三件实测：① **25 个 `qa/checks_*.py` 搬进各自 `tests/`**（至此 47/47；旧位置 `importlib` 薄转发；**85 条 AC 的断言名与 ok 逐条对拍全同**）② **12 个服务实体**进 `src/<层>/<插件>/code/`（`git show HEAD:` blob **逐字节守恒 12/12**；旧路径薄重导保住相对导入；实测旧导入路径可用且 `co_filename` 指向实体）③ **修 `storage` 遗留红**：事实区判据在 `user-space` 符号链接下失效（**修前实测**：`--root user-space/<别人的 ns> open-append` 被放行并真在 `src/userspace/` 下落 2 B；已删净、`git status` 无残留）⇒ `_inside_zone` 词法×真实两形态交叉判（收紧）+ 门第 8 条反向自证 + 新增 `--mutate 5`（必红）。",
+  "last_verified_evidence": "docs/work/evidence/EV-174-plugin-relocation-batch4.md（+ EV-174-batch4-raw.json 原始行）",
+  "last_verified_commit": "028144ce48a9c5e56f2ab4115acc931140c42956",
   "blockers": [],
   "human_required": [
     "T-117 现场验证 V-001..V-012：备料已完成；**P1 按用户指令以\"V 全部通过\"为前提推进**（planning_assumptions，非结论），V 的正式 conclusion 与 G0/G1 签署仍需人工",
@@ -19,8 +19,7 @@
   ],
   "known_defects": [
     "D-001",
-    "D-002",
-    "STORAGE-SYMLINK-FACT-ZONE"
+    "D-002"
   ],
   "open_questions": [
     "V-001..V-012 结论待人工（备料与自检已完成，见 docs/work/validation/ 与 EV-036/EV-037）"
@@ -34,7 +33,7 @@
   "no_code_yet": false,
   "runtime": {
     "entry": "tools/run.sh（解释器解析 tools/runtime.sh；仓库 .venv 由 tools/bootstrap.sh 创建，gitignored）",
-    "ac_runner": "src/quotagent/qa/（`registry.py` + `__main__.py` + 25 个仍未搬的 `checks_*.py`；AC 检查资产 22/47 已搬进 `src/<层>/<插件>/tests/`，旧位置留 `importlib` 薄转发，导入面 `from . import checks_x` 不变）；AC 运行器：`python -m quotagent.qa`",
+    "ac_runner": "src/quotagent/qa/（`registry.py` + `__main__.py`；AC 检查资产 **47/47** 已搬进 `src/<层>/<插件>/tests/`，旧位置留 `importlib` 薄转发，导入面 `from . import checks_x` 不变；AC 运行器：`python -m quotagent.qa`）",
     "kernel_modules": "ledger/canon/evidence/modelgate/events/plugin/qep/delivery",
     "services": "norm/rfq/intake + measures（口径数据层）；realm/approval/costmodel/pricing/commitments/deviation（S0.9–S0.10）；compare/guard/evaldata/evalmetrics/scenarios（S0.11–S0.14）",
     "ledger_format": "docs/design/adr/0007-p0-runtime-and-ledger-format.md",
@@ -66,15 +65,15 @@
     "evolution": "host/lib/evolution.mjs（makeProposal/PatchJournal/shadowMount/gate/promote/rollback）、host/evolution.mjs（冒烟）、tools/evolve-record.py（Python 唯一写入者）、verify.sh evolution",
     "modules": "host/modules/{kernel-bridge,norm,compare}.mjs（manifest）、host/check-modules.mjs、tools/check-modules.py、tools/export-events.py、host/lib/std-schema.mjs；入口 verify.sh modules",
     "rfq_visibility": "投递事实可见性：`host/modules/projection.mjs` 的 `projectDeliveries`（收件人作用域 + 字段级白名单，恰 9 键）+ `host/lib/ledger-view.mjs` 的 `realms()` 身份 + `host/modules/webui.mjs` 的只读装配与首页投递块 + `--rfq-delivery`（缺省 tmp/ui-shared/contractor/01-package.json）；契约 docs/design/26-rfq-delivery-visibility.md；门 verify.sh rfq-visibility",
-    "plugins": "tools/plugin.sh（六动词 list/status/load/reload/unload/deps）→ src/system/runtime/tools/plugin-lifecycle.mjs；规则真源 docs/design/27 §4；契约 src/system/runtime/docs/lifecycle-contract.md；装载落在一个**常驻运行时进程**（tmp/plugin-runtime/，真 import + 真 cordis ctx.plugin；uid/state/effects 都是内核实测）；门 verify.sh plugin-lifecycle；**阶段 4.1 先行 8 项**（EV-170）：8 个检查资产搬进 `src/<层>/<插件>/tests/`，旧位置留薄转发；**阶段 4.2（EV-172 / T-321）**：**63/63 插件目录已建出**（`plugin.json` + `requirements/README.md`）：9 个清单合法的实体 + 54 个「清单先行」（`entry` 未落地 ⇒ `degraded: artifact-missing`）；`scan`/`depsClosure` 收紧为「目录里没有**合法** `plugin.json` ⇒ 不算插件」。",
+    "plugins": "tools/plugin.sh（六动词 list/status/load/reload/unload/deps）→ src/system/runtime/tools/plugin-lifecycle.mjs；规则真源 docs/design/27 §4；契约 src/system/runtime/docs/lifecycle-contract.md；装载落在一个**常驻运行时进程**（tmp/plugin-runtime/，真 import + 真 cordis ctx.plugin；uid/state/effects 都是内核实测）；门 verify.sh plugin-lifecycle；**阶段 4.1 先行 8 项**（EV-170）：8 个检查资产搬进 `src/<层>/<插件>/tests/`，旧位置留薄转发；**阶段 4.2（EV-172 / T-321）**：**63/63 插件目录已建出**（`plugin.json` + `requirements/README.md`）：9 个清单合法的实体 + 54 个「清单先行」（`entry` 未落地 ⇒ `degraded: artifact-missing`）；`scan`/`depsClosure` 收紧为「目录里没有**合法** `plugin.json` ⇒ 不算插件」。**迁移终批（EV-174 / T-323）**：`host/*-gate.mjs` 20/20 + `qa/checks_*.py` **47/47** 全搬完；阶段 5 第二小片把 12 个服务实体落 `src/<层>/<插件>/code/`（旧路径**薄重导**）。",
     "live_control": "**运行期装卸**（阶段 5.2/5.3 收口，EV-168）：`tools/plugin.sh <动词> <插件> --live`（或 `./run plugin …`）→ 客户端 src/system/runtime/tools/plugin-live.mjs → 长驻 WebUI 进程里的控制通道（POST <prefix>/api/plugins/control，机制在 src/system/runtime/code/live-control.mjs）；四道围栅（控制令牌 fail-closed / 显式确认 / system 层锁定 / 只认显式动词与 id），逐条有名 code + next_action；装载真发生在宿主 ctx 树里（因此注册的 UI 区块真上页面），卸载后区块消失且**页面其余部分逐字节不变**；契约 §5；门 plugin-lifecycle 的 L 段",
     "ui_routes": "host/lib/ui-route.mjs（路由注册面**机制**：闭合方法集 / 精确匹配 / 幂等注册 / 指名拒绝；0 插件 id、0 业务名词）+ webui 的 `uiRoutes` 服务与请求管线查表（动态路由与静态路由同登记在 /api/routes）；注册者例：live-control 的控制通道",
     "one_command": "仓库根 ./run（up|down|status|logs|doctor|config init|plugin，POSIX sh）→ tools/bootstrap.sh + tools/cordis.sh install + tools/webui-serve.py + 健康检查；doctor 只读体检 7 项逐条 next_action；logs 给路径 + 有界尾部（缺日志如实失败）；config init 生成**只含白名单键**的 config.yaml（不覆盖已有、0600、打印指纹与逐条 next_action、不写账本）；plugin 转发 --live；契约 docs/design/28 §3.1；用法 src/system/runtime/docs/one-command-run.md；门 verify.sh run-once（34/34，8 处单点变异全红）；**干净副本那一半的验收**（本批）：门 `tools/verify.sh run-clone`（`tools/check-run-clone.py`）把 `git archive HEAD` 解到**仓库外**，只含已提交内容的副本里真跑 doctor/up/status/down + 两条反向对照 + 4 处单点变异；它校验 HEAD ⇒ 与 `clean-copy` 同类，须在 commit 之后跑（实测抓到：索引里 `tools/*.sh` 是 100644 ⇒ 干净克隆装不了依赖）。",
     "ui_slots": "host/lib/ui-slot.mjs（注入式 UI 的**机制**：槽位闭合集合 / 排序 / 装配 / 拒收内联脚本 / 指名报错）+ host/modules/webui.mjs 的注册面（uiSlots 服务 + GET /api/ui/blocks）；样板注册者：src/domain/advice、src/userspace/demo-ns/hello",
     "userspace_single_source": "**src/userspace/ 是唯一事实源**（阶段 5.1，EV-168）：旧的 `user-space` 改成一个**指向 src/userspace 的 tracked 兼容符号链接**（.gitignore 的 `user-space/` 只匹配目录 ⇒ 链接本身入库），所以 tools/webui-serve.py 的 --user-space-root/--market-user-space、host/lib/user-space.mjs 的默认根与若干宿主门都不必改一行；两份用户插件（con-a/quote-trend、demo-ns/hello）的产物字节与声明哈希未变（11742 B/dffeff77…、297 B/33f46dbe…），旧 12 行实现逐字留档在 hello 的 docs/migration-note.md",
-    "plugin_assets": "**资产归属一致性门**（阶段 4.1，EV-170）：`tools/verify.sh plugin-assets` → `tools/check-plugin-assets.py`。登记真源 = `docs/work/plans/plugin-file-map.md` §分类（143 行）；已搬 8 项的旧位置是**薄转发**（`runpy`/`importlib`），门名与 `tools/verify.sh` 的分支一行未改；`tools/**` 非薄入口数由门冻结（`BASELINE_NONTHIN = 63`，只减不增）；**阶段 4.2（EV-172 / T-321）**：`host/*-gate.mjs` 20 个里前 10 个搬进各自插件的 `tests/`（旧位置 5 行薄转发，门名/分支/输出形状逐项对拍一致），`RELOCATED` 8 → 18 项，§分类 B 节拆成「已搬 10 + 待搬 10」；`BASELINE_NONTHIN` 仍 64（**未放宽**）。"
+    "plugin_assets": "**资产归属一致性门**（阶段 4.1，EV-170）：`tools/verify.sh plugin-assets` → `tools/check-plugin-assets.py`。登记真源 = `docs/work/plans/plugin-file-map.md` §分类（143 行）；已搬 8 项的旧位置是**薄转发**（`runpy`/`importlib`），门名与 `tools/verify.sh` 的分支一行未改；`tools/**` 非薄入口数由门冻结（`BASELINE_NONTHIN = 63`，只减不增）；**阶段 4.2（EV-172 / T-321）**：`host/*-gate.mjs` 20 个里前 10 个搬进各自插件的 `tests/`（旧位置 5 行薄转发，门名/分支/输出形状逐项对拍一致），`RELOCATED` 8 → 18 项，§分类 B 节拆成「已搬 10 + 待搬 10」；`BASELINE_NONTHIN` 仍 64（**未放宽**）。**EV-174**：RELOCATED 49 → **74**（qa 检查 25 项全搬），非薄入口仍 64 ≤ 基线。"
   },
-  "last_verified_commit_semantics": "指向本批主提交（阶段 4.2 续批 + `qa` 检查搬家 + 阶段 5 第一小片）；其后的提交只追加证据/状态（EV-173 §五/§六/§七 + INDEX-P2 行 + state.json + 交接）",
+  "last_verified_commit_semantics": "指向本批主提交（迁移终批：25 个 qa 检查 + 阶段 5 第二小片 12 服务 + 修 storage 遗留红）；其后的提交只追加证据/状态（EV-174 §四 + INDEX-P2 行 + state.json + 交接）",
   "done_p2": [
     "T-222",
     "T-223",
@@ -89,9 +88,11 @@
     "T-233",
     "T-234",
     "T-320",
-    "T-321"
+    "T-321",
+    "T-323"
   ],
   "notes": {
+    "t323": "done：迁移终批（EV-174 / D-077）：① 剩 25 个 qa/checks_*.py 搬进各自插件 tests/（至此 47/47；旧位置薄转发；85 条 AC 断言名与 ok 逐条对拍全同）② 阶段 5 第二小片：12 个服务实体进 src/<层>/<插件>/code/（逐字节守恒 12/12；旧路径薄重导保住相对导入）③ 修 storage 遗留红（事件区判据对 user-space 符号链接失效；_inside_zone 两形态交叉判 + 门第 8 条反向自证 + --mutate 5）；门 storage 19/19、plugin-assets 14/14（基线未放宽）、p0-no-node 63 条 P0 AC 全绿",
     "t314": "done：迁移阶段 1 的骨架与契约工具（EV-165 / D-075）：三层骨架 + 3 样板插件（system/runtime、domain/advice wrapper、userspace/demo-ns/hello）+ tools/plugin.sh 六动词（目录即清单 / 最小契约校验 / 依赖闭包含环 / 真 import + 真挂进常驻运行时进程；reload 新实例、unload 回读 effects 归零）；拒绝路径逐条有名 code；门 plugin-lifecycle 43/43",
     "t315": "done：注入式 UI 注册面 + 一键运行（EV-165/EV-166 / D-075）：host/lib/ui-slot.mjs（机制 0 插件 id、0 业务名词）+ webui 只提供注册面与通用拼接；两个样板插件各注册只读区块并真出现在页面上（两页仍 0 内联脚本）；仓库根 ./run up|down|status|doctor；门 run-once 18/18（含凭据缺失不阻塞 up 与 4 处变异全红）",
     "t235": "done：canary 探针 + 退化自动回滚已接真实命令路径（EV-070 / D-030）",

@@ -1,8 +1,8 @@
 # EV-174 迁移终批：25 个 `qa` 检查 + 阶段 5 第二小片（12 服务）+ 修 `storage` 遗留红
 
 任务 `T-323`；**逐项清单/长表/原始 JSON**在 `EV-174-batch4-raw.json`（同目录）。
-铁律：本批只有一个写批次、只 `git add` 本批改的文件、每个搬迁项**两半边**验证、提交后 `git status --porcelain` 为空。
-对拍口径：**85 条已注册 AC** 逐条记「断言名 + ok」，搬前 / ①后 / ②后三份快照比对。
+铁律：只 `git add` 本批改的文件、每个搬迁项**两半边**验证、提交后 `git status --porcelain` 为空。
+对拍口径：**85 条已注册 AC** 逐条记「断言名 + ok」，搬前/①后/②后三份快照比对。
 
 ## 一、三件
 
@@ -116,8 +116,9 @@ p0-no-node FAIL(同上：内嵌的文档门 AC 因 EV-174/T-323 未解析而红)
 ## 四、提交后（原文）
 
 ```
-git status --porcelain → （空输出）
-tools/verify.sh run-clone → PASS（在 HEAD 的 git archive 干净副本上）
-docs / p0-no-node → rc=0（§三 两道 FAIL 落盘后转绿）
-commit → <SHA7>
+git status --porcelain → （空，0 行）
+run-clone → PASS 20/20（HEAD 干净副本）
+docs/p0-no-node → rc=0（落盘后转绿）
+commit → 028144c；两半边（HEAD）新 37/37、旧 37/37
+没验证的：见 JSON `post_commit.unverified`
 ```
