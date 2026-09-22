@@ -74,3 +74,14 @@ count 2 ; ids ['system/webui','domain/advice'] ; not_plugins [] ; degraded []
 > 已把候选基准改成**宿主目录**（新增 `HOST_URL`，语义与搬前相同），复跑 rc=0、判定 10/10 不变。
 > `plugin-assets` 基线**未放宽**（PA7：`tools/**` 非薄入口 64 ≤ 基线 64）；§分类 的 10 行改「插件·已搬」+ 新增「阶段 4.2 已搬」小节，
 > 剩下 10 个（`t260/t267/t268/t271/t275/t277/t279/t281/t282/t283`）登记为**下批**。
+
+## 四 门结果（提交 **9032ee1** 之后的 HEAD）与**没验证的**
+
+- 提交前 11 道门全绿（原始行 `tmp/gate-move/final-*.txt`）：`docs` PASS · `coverage` 8/8 · `ac-registry`（135 条 AC 定义，
+  0 未解析引用）· `plugins` 5/5 · `webui` 51/51 · `modules` 41 个模块 · `wiring` · `plugin-assets` **14/14** ·
+  `plugin-requirements` **18/18** · `plugin-lifecycle` **66/66** · `run-once` 34/34；提交之后 `run-clone` **20/20**。
+- push 回读：`git ls-remote origin refs/heads/main` = `9032ee1cc51ba21c280cdb0f5c5e3268b8e24a09`（= 本地 HEAD）。
+- **没验证的**：① 只在本机跑，`tmp/**` 的门日志未入库 ② 未跑的长门（`p0-no-node`/`clean-copy`/`ui-mutate`/`g1`/
+  `agent-runtime`/`storage`/`user-space`/`retention`/`plugin-market`/`cordis` 等；本批未触及它们的路径）③ §三 的对拍是
+  「掩掉 port/pid/耗时后逐字节相同」，只有 rc 与判定数是精确相等 ④ 54 个「清单先行」插件的真实服务面/`code/` 未落地
+  （有意为之，`list` 如实报 `artifact-missing`）。
