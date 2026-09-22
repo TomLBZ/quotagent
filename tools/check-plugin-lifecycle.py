@@ -57,6 +57,8 @@ BUSINESS_NOUNS = ["决策建议", "比价", "授权", "时限", "变更", "报�
                  "证据", "谈判", "市场", "供应商", "承包商", "回文"]
 
 RESULTS: list[tuple[str, bool, str]] = []
+CREATED_ROOTS: list[Path] = []      # 门自己造的夹具/变异根（收摊时停它们的运行时进程 + 清目录）
+CREATED_DIRS: list[Path] = []
 
 
 def check(name: str, ok: bool, detail: str = "") -> None:
@@ -106,6 +108,8 @@ def runtime_stop() -> None:
 def make_fixture_root() -> Path:
     """给"依赖成环"与"清单不合法"造一个独立根：`<fixture>/src/domain/{a,b,broken}/`。"""
     fixture = Path(tempfile.mkdtemp(prefix="pl-fixture-", dir=str(ROOT / "tmp")))
+    CREATED_ROOTS.append(fixture)
+    CREATED_DIRS.append(fixture)
     for name, dep in (("a", "domain/b"), ("b", "domain/a")):
         plugin = fixture / "src" / "domain" / name
         (plugin / "code").mkdir(parents=True, exist_ok=True)
@@ -192,6 +196,7 @@ def apply_mutation(source: str, find: str, replace: str) -> str | None:
 def stage_mutant_plugin_dir(tag: str) -> Path:
     """把 `src/system/runtime/` 整块复制到 tmp/，变异副本从那里跑（相对 import 仍然成立）。"""
     target = Path(tempfile.mkdtemp(prefix=f"pl-mutant-{tag}-", dir=str(ROOT / "tmp")))
+    CREATED_DIRS.append(target)
     shutil.copytree(ROOT / "src" / "system" / "runtime", target / "runtime")
     shutil.copytree(ROOT / "src" / "domain" / "advice", target / "src-plugins" / "advice")
     return target
@@ -204,6 +209,8 @@ def make_mutant_root(tag: str) -> Path:
     的（阶段 1 的形态），夹具根里必须有同一个相对位置；链接而不是复制，避免把 node_modules 拷一遍。
     """
     root = Path(tempfile.mkdtemp(prefix=f"pl-root-{tag}-", dir=str(ROOT / "tmp")))
+    CREATED_ROOTS.append(root)
+    CREATED_DIRS.append(root)
     (root / "src" / "system").mkdir(parents=True, exist_ok=True)
     (root / "src" / "domain").mkdir(parents=True, exist_ok=True)
     (root / "src" / "userspace" / "demo-ns").mkdir(parents=True, exist_ok=True)
@@ -687,6 +694,17 @@ def main() -> int:
     assert_webui_knows_nothing()
     assert_mechanism_refusals()
     assert_mutations()
+    # 收摊：门自己造的每个根都要**停掉它的运行时进程**再清目录（否则门会留下常驻进程；
+    # 实测踩到过：夹具根的运行时没人停，三次跑留了三个 daemon）。
+    stopped = 0
+    for root in CREATED_ROOTS:
+        rc, _out, _err = run_plugin(["--runtime", "stop", "--root", str(root)], timeout=60)
+        stopped += 1 if rc == 0 else 0
+    check("C0b 门自己造的夹具/变异根：运行时进程逐个停掉并清目录（门不留常驻进程）",
+          stopped == len(CREATED_ROOTS),
+          f"根 {len(CREATED_ROOTS)} 个，停掉 {stopped} 个")
+    for path in CREATED_DIRS:
+        shutil.rmtree(path, ignore_errors=True)
     check("C0 真 HTTP 前置：`./run up` 起得来（否则 C1–C6 是空转）",
           up_rc == 0 and healthy,
           f"up_rc={up_rc} healthy={healthy} out={up_out.strip()[:160]} err={up_err.strip()[-160:]}")
