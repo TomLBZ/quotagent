@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "updated_at": "2026-09-22T17:30:00Z",
-  "phase": "P2-advisor-and-live-canary",
-  "phase_source": "docs/work/roadmap.md §3",
-  "next_task": "P2 收尾后的下一步按 `docs/work/roadmap.md` §4 推进（P3 部署面）。本批（`EV-181`/`T-331`）已收掉最后 7 个多实体插件的 `entry` ⇒ **63/63 插件 `valid`**；`tools/**` 非薄入口仍剩 1（`manual-check.py`：契约面 0 调用者 ⇒ 搬了成孤儿），按需再定。",
-  "next_action": "本批（`EV-181`/`T-331`）已完成：① 干净副本 3 条真红（`AC-AGENTRT-002/006/007`）根因 = 三条 AC 的围栏门 import **gitignored** 的 `host/node_modules/cordis`（`ERR_MODULE_NOT_FOUND`、rc=1；全量跑 82/85，依赖被靠后的 `AC-INTEG-*` 顺手装上 ⇒「单独跑也绿」是顺序不是判据）；修法 = 三条 AC 真跑门改走 `tools/cordis.sh run`（幂等 `install_deps`，**判据一格未改**），干净副本里实测三条绿、还原成裸 `node` 必红 ② 7 个多实体插件 `entry` 全部接上（`webui`/`mail` 重导出唯一自述服务的实体；`admin`/`agent-runtime`/`canary` 机制组合入口；`eval`/`kernel` Python 承载入口）⇒ `valid` 56 → **63/63**；`plugin-lifecycle` 的 A13/A14 从「真根未迁移」改指**对照根**（真 id + 真清单字节 + 入口缺失）+ 真根正控 ⇒ 断言 **66 → 68**（变异 6 未失对照）③ 可移植性扫描 142 处命中（部署挂载点 / `tmp` 夹具 / checkout 根字面量），4 处 checkout 根真缺陷已修；`plugin-assets` 的 PA9 扫描面补**无扩展名的根入口 `run`**、新增 **PA9b 扫描面自证**与 **F9** 反向变异（门 20/20）。**并发写入者**：本批执行期同一工作树里有另一个 subagent 在改同一批文件（4 处硬编码修复与 PA9 本体由它先落盘，本 agent 复核 + 追加 PA9b/F9），已在 `EV-181-closeout-and-entries.md` 与 `EV-181-raw.txt` 逐处标注归属。",
+  "updated_at": "2026-09-22T18:04:59Z",
+  "phase": "P2-webui-as-gui-app",
+  "phase_source": "docs/design/29-webui-gui-app.md（用户 2026-09-22 指令，D-086）",
+  "next_task": "WebUI P0（29 §5.1）：应用外壳 + 注册面（视图/交互/动作+服务端一半/通知状态）+ 双方各一条真闭环（供应商 看包→备报价→签名提交；承包商 发 RFQ→比价→批准→授标→PO），经人工门与唯一写者落账本；再用角色 subagent 走查补 P1（答疑/催报/变更/PO/审批队列/授权区间）。",
+  "next_action": "口径已纠正并落盘（AGENTS.md §11/§12 + docs/design/29-webui-gui-app.md，提交 80865ae）：WebUI 是**完整 GUI 应用**，不是账本投影/只读路由；插件注册 UI 元素/交互方式/动作与命令/业务逻辑钩子/通知与状态即可实现任意功能；**验收 = 双方仅通过 GUI 走完全部业务流程（含写操作）**；允许前端框架。旧口径与旧判据（UI 快照门/seed 门/ui-mutate 门、「三块锚点 + 0 JS」式 AC）按 29 §2 删除、不留副本；**推进业务功能是唯一重要的事，门禁只删不加**。",
   "last_verified_command": "tools/verify.sh docs | coverage | ac-registry | plugins | webui | modules | wiring | invariants | events | storage | plugin-assets | plugin-requirements | plugin-lifecycle | evolution | evolve-module | p0-no-node | run-once | g1 | approval-digest | budget-guard | supplier-scorecard | plugin-market | pipeline-view | retention-view（全部 `env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN`）；另：干净副本（`git archive HEAD`，无 `host/node_modules`）里三条 AC 与全量 AC",
   "last_verified_result": "PASS（本批实测，rc 全 0）：docs、coverage 9/9、ac-registry rc=0、plugins 5/5、webui 51/51、modules 521/521、wiring 5/5、invariants 22/22、events rc=0、storage 19/19、plugin-assets **16/16**（`tools/**` 非薄入口 3→**1**，PA7 双向一致）、plugin-requirements 18/18、plugin-lifecycle 66/66、evolution [PASS]、evolve-module 61/61、p0-no-node（63 条 AC 无 Node 全绿）、run-once 34/34、**g1 绿**（走查 14/14；本批修掉的正是它的红）、approval-digest 10/10、budget-guard 10/10、supplier-scorecard 10/10、plugin-market 13/13、pipeline-view 13/13、retention-view 12/12。已知红：**无**（上一批遗留的 `g1`/`tools/audit-verify.py` 执行位缺陷本批已修）。提交后：见 `docs/work/evidence/EV-180-post-commit.txt`。",
   "last_verified_evidence": "docs/work/evidence/EV-181-closeout-and-entries.md（+ 原始行 docs/work/evidence/EV-181-raw.txt）",
@@ -22,7 +22,7 @@
     "D-002"
   ],
   "open_questions": [
-    "V-001..V-012 结论待人工（备料与自检已完成，见 docs/work/validation/ 与 EV-036/EV-037）"
+    "用户空间插件隔离粒度（D-060）仍待确认；与本批无关"
   ],
   "recovery_order": [
     "docs/work/handover.md",
