@@ -8,7 +8,7 @@
   "last_verified_command": "tools/verify.sh docs | ac-registry | coverage | p0-no-node | g1（跑在「本批提交树」上：HEAD + 本批改动，且树里**存在** `tmp/` 源码副本 —— D-073 的验收条件）",
   "last_verified_result": "PASS：五道门全绿。docs（AC 定义集合 主文件 51 条 + archives=[archive-b:20, archive:62]；T 定义集合 主文件 63 条 + t_archives=[progress-checklist-archive.md:52]；617 个定义 / 3084 处引用 / 0 未解析；预算最高占用 100% = docs/design/14-plugin-inventory.md 28564/28672 B，非本批）；ac-registry（133 条 AC，P0 29 条全部已注册）；coverage 8/8；p0-no-node（无 Node 下 63 条 AC 全绿、无瞬时命中）；g1（全量 AC 85/85 + 走查报告通过）。**且树里放着 tmp/ 源码副本** ⇒ D-073 的验收成立。注 1：g1 第一次跑出现不可复现的瞬时红（三条 agent-runtime AC，随后两次重跑 85/85），见 EV-164 §6。注 2：共享工作树的 docs 门当前红，原因是**另一个并发批次**的未跟踪文件引用了尚未定义的 AC-PLUGIN-005/006（非本批改动），见 EV-164 §6。",
   "last_verified_evidence": "docs/work/evidence/EV-164-D073-doc-budget.txt",
-  "last_verified_commit": "c1d56b308cd01c6863be84b406f67f8d2b4eb34b",
+  "last_verified_commit": "477b2bf9c31c9aadca737c59e51926e870dd88a0",
   "blockers": [],
   "human_required": [
     "T-117 现场验证 V-001..V-012：备料已完成；**P1 按用户指令以\"V 全部通过\"为前提推进**（planning_assumptions，非结论），V 的正式 conclusion 与 G0/G1 签署仍需人工",

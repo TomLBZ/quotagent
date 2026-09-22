@@ -114,7 +114,16 @@ g1: rc=0
 4. 本批未审计 `AC-AGENTRT-002` 之外的哨兵类断言是否也存在"扫到无关副本"的同类形态。
 
 == 7. 提交 sha 与远端回读 ==
-（本 § 由紧随其后的"只追加证据/状态"提交补齐）
+本批提交: **477b2bf9c31c9aadca737c59e51926e870dd88a0**（"fix(qa)+docs(gate): 修 D-073 根因 + 两个文档降到 ≤ 28 KB（EV-164 / 决策 D-074）"）
+  · 只提交本批改的 12 个文件（`git diff --cached --name-only` = 12）：checks_agentrt_memory.py、tools/check-docs.py、
+    docs/design/12-documentation-standard.md、docs/work/{acceptance-criteria.md, acceptance-criteria-archive-b.md,
+    progress-checklist.md, progress-checklist-archive.md, decisions.md, decisions-archive-b.md, handover.md,
+    evidence/EV-164-D073-doc-budget.txt}、.agents/state.json
+  · **未提交**并发批次的工作（`host/modules/webui.mjs`、`host/lib/ui-slot.mjs`、`src/{system,domain,userspace}/**`）
+  · push: `c1d56b3..477b2bf  HEAD -> main`
+  · 远端回读（`git ls-remote git@github.com:TomLBZ/quotagent.git`）:
+      477b2bf9c31c9aadca737c59e51926e870dd88a0	HEAD
+      477b2bf9c31c9aadca737c59e51926e870dd88a0	refs/heads/main
 
 == 5b. 最终门复跑（把 EV-164 正文写进树之后重跑五道门，仍然树内有 tmp/ 源码副本） ==
 docs rc=0 / ac-registry rc=0 / coverage rc=0 / p0-no-node rc=0 / g1 rc=0（原始输出 tmp/final-*.txt）
