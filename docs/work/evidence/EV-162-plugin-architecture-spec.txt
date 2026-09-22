@@ -234,4 +234,99 @@ docs/work/plans/spec-persistence.md: refs=18 unresolved=[]
 
 §8 门与提交
 
-（本节由本批次在门跑完后追加：docs/coverage/ac-registry/g1 的原始尾部输出 + commit sha + `git ls-remote` 回读）
+被测提交（本批唯一提交）: 4b00c6ae10836cd99bf76e537c2a2d452988ae02
+标题: ARCH-PLUGIN1 「一切皆插件」架构与目录规范持久化成硬规范 + 逐文件迁移计划 + 一键运行契约（只改文档）
+
+门（本机实测，原始尾部输出）：
+[ok] AC-QEP-004 — 版本协商：交集为空即拒绝并留痕；特性降级有账本事件；不可降级项缺失即拒绝（6/6 断言）
+[ok] AC-QUOTE-001 — 报价草稿写闭环：宿主只落 0600 待办件（账本零新增）→ Python 侧唯一落账本者落 quote/drafted（（7/7 断言）
+[ok] AC-RFQ-001 — 清单条目缺计量规则或接口无唯一责任方 → 校验失败（6/6 断言）
+[ok] AC-RFQ-002 — 已发布版本字段不可原地修改；amend 产生新版本与字段级 delta（8/8 断言）
+[ok] AC-RFQ-003 — 分发记录可回答「谁在何时收到哪个版本」；截止时间管理与超时提醒可用（10/10 断言）
+[ok] AC-RFQ-004 — 包升版后基于旧版本的报价被标记过期（可审计不清除）、不进入排序、并产生重报请求（10/10 断言）
+[ok] AC-RUNTIME-001 — 仓库内自包含运行时：仅标准库，干净副本可用裸解释器运行（13/13 断言）
+[ok] AC-RUNTIME-002 — CLI 骨架契约：JSON 报告、退出码、未知入口非零（9/9 断言）
+[ok] AC-STORAGE-001 — 存储逃逸防线：`..`/绝对路径/符号链三例全拒且根外目标不存在；`sha256` 与磁盘一致；有界读取诚实报破（3/3 断言）
+[ok] AC-STORAGE-004 — 存储跨租户隔离：ns 逃逸与 rel 跨根一律拒且**根外/别租户哨兵不存在**（不是只返回错误）（4/4 断言）
+[ok] AC-STORAGE-006 — 存储只读观察面：有界、确定性、不出正文与私域哨兵；读它不改任何状态（3/3 断言）
+[ok] AC-SYNC-001 — 双方改同一非承诺字段→按权威方合并；改承诺字段→挂起转人工；两种情况均留痕（15/15 断言）
+[ok] AC-TERMS-001 — 条款库版本化与默认条款；冲突并列双方值并提请人工，绝不静默取其一（13/13 断言）
+[ok] AC-TRUST-001 — 对方私域字段在本侧投影、模型输入、视图中三处均不存在（INV-008）（9/9 断言）
+[ok] AC-UI-002 — 运维快照写入器：形状合规、计数可手算、只读账本、无正文/私域、无多余时间键、确定性（12/12 断言）
+[ok] AC-UIFB-001 — WebUI 自适应闭环：反馈页 SSR（0 内联脚本）→ 提交只落 0600 待办件（账本零新增）→ Python 侧唯（8/8 断言）
+[ok] AC-USERPLUG-001 — 提需求 → 产出用户空间插件 → 落 userplugin/created（幂等；正文不入账本；非法 manifest （6/6 断言）
+[ok] AC-USERPLUG-005 — 用户空间插件迭代/回滚的内容语义（版本、prev、不真不记）（10/10 断言）
+[ok] AC-USERPLUG-010 — 提权：用户空间插件 → 系统级插件（人工门 + 影子哈希 + 真写 + 不覆盖）（10/10 断言）
+[ok] AC-USREQ-006 — cron 没待处理反馈时不得发垃圾消息：探测器确定性（两次/跨 TZ 一致）+ 空待办恰一行 `pending=0` +（10/10 断言）
+[ok] AC-UXWEB-001 — GUI 控制台化第一批：第一屏三块锚点 + 子视图（GET 筛选/排序/翻页）+ 子导航 + 仍 0 JS（6/6 断言）
+[ok] AC-VIZ-001 — 比价 heuristics：权重可调且回显、贡献可分解、私域零泄漏、零写面、页面仍无内联脚本（7/7 断言）
+------------------------------------------------------------------------
+全量 AC：85/85 通过
+========================================================================
+g1 走查报告（ADR-0014 §3 的 MVP 判据逐条判定）
+========================================================================
+[ok] 判据1 两个真进程：7 个阶段进程交替推进，各自 realm / 账本
+        7 个阶段进程，pid 去重 7
+[ok] 判据1 只通过共享目录交换（两侧账本互不读写，计数各自增长）
+        共享目录条目 13 个（只数本走查自己的两个 side 目录）；contractor 账本 16 条 / supplier 账本 3 条
+[ok] 判据2 桥只开 read/compute；commit/fact 面只声明不暴露
+        exposed=['bridge.status', 'events.declared', 'ledger.count', 'ledger.head', 'ledger.healthy', 'ledger.read', 'ledger.verify', 'measures.convert', 'measures.factor', 'retention.plan'] refused=['approval.decide', 'award.commit', 'change.approve', 'po.issue', 'qep.receive', 'qep.send', 'quote.submit']
+[ok] 判据2 握手成功（内核自述版本与能力清单，唯一真源在 Python 侧）
+        {"profile": "contractor-ops", "realm": "contractor:g1", "operator": "bridge:contractor-ops", "surfaces_open": ["read", "
+[ok] 判据2 **供应商侧**的报价提交同样过人工门（无批准即抛错，有批准才落账）
+        无批准时: ApprovalRequired: 动作 'quote.submit'（ref='qg-fresh'）缺少人工批准记录：；账本 3 条
+[ok] 判据2 commit 类调用被拒（commit-refused）且留痕于账本
+        code=commit-refused
+[ok] 判据2 经桥读账本：健康且哈希链自洽（`ledger.verify` 返回逐条报告）
+        healthy=True verify.checked=17
+[ok] 判据3 供应商可见产物不含承包商私域字段（且不是空转：产物确实有内容）
+        supplier 产物 613 字符；承包商比较表 1 行
+[ok] 判据4 S1..S4 场景集全绿
+        exit={'s1': 0, 's2': 0, 's3': 0, 's4': 0}
+[ok] 判据5 审计包可被第三方独立验证（只给包文件 + 验证方密钥）
+        RESULT: PASS
+[ok] 判据5 篡改任一条后独立验证失败（篡改必被发现）
+        RESULT: FAIL — 哈希链（包内自洽）: seq 1 的记录内容与 entry_hash/body_hash 不一致
+[ok] 判据5 全程可离线重放：两侧账本非空且哈希链自洽（空/缺失账本一律不算通过）
+        contractor: ledger.jsonl 条目 17，校验 17 条，ok=True；supplier: ledger.jsonl 条目 3，校验 3 条，ok=True
+[ok] 判据6 无 Node 环境时 P0 的 AC 与文档门仍全绿（可复跑性不退化）
+        p0-no-node=0 docs=0
+[ok] 判据2 桥可干净关闭（无孤儿、退出码 0）
+        exit=0
+------------------------------------------------------------------------
+阶段时间线：contractor#1(pid 45884, 账本 2 条) → supplier#1(pid 45885, 账本 0 条) → contractor#2(pid 45886, 账本 4 条) → supplier#2(pid 45887, 账本 3 条) → contractor#3(pid 45888, 账本 8 条) → supplier#3(pid 45889, 账本 3 条) → contractor#4(pid 45890, 账本 16 条)
+结论：14/14 条通过
+[ok] 阶段门 G1：MVP 判据全部可机检项通过（逐条判定见上方走查报告）
+g1_rc=0
+
+提交内容（`git show --stat`）：
+4b00c6a ARCH-PLUGIN1 「一切皆插件」架构与目录规范持久化成硬规范 + 逐文件迁移计划 + 一键运行契约（只改文档）
+ docs/design/12-documentation-standard.md           |   8 +
+ docs/design/27-plugin-architecture.md              | 269 ++++++++++++++++++
+ docs/design/28-plugin-requirements-and-run.md      | 239 ++++++++++++++++
+ docs/design/adr/0020-everything-is-a-plugin.md     |  48 ++++
+ .../adr/0021-requirements-owned-by-plugins.md      |  59 ++++
+ .../evidence/EV-162-plugin-architecture-spec.txt   | 237 ++++++++++++++++
+ docs/work/evidence/INDEX-P2.md                     |   2 +
+ docs/work/handover.md                              |  14 +-
+ docs/work/plans/plugin-file-map.md                 | 305 +++++++++++++++++++++
+ docs/work/plans/plugin-migration-plan.md           | 142 ++++++++++
+ docs/work/plans/spec-persistence.md                |  75 +++++
+ docs/work/progress-checklist.md                    |   4 +
+ docs/work/requirements-traceability.md             |  29 +-
+ 13 files changed, 1409 insertions(+), 22 deletions(-)
+
+远端回读（`git ls-remote origin refs/heads/main`，退出码 0）：
+4b00c6ae10836cd99bf76e537c2a2d452988ae02	refs/heads/main
+
+本批**未**做的事（铁律）：未改任何代码/门/测试；未搬任何文件（迁移计划是计划，执行在后续批次）；
+未改 `.agents/state.json`（并发批次持有）；未增加/删除任何事实源内容。
+
+并发说明：本工作树内同时存在另一批（`quote-prepare`/`quote-draft`/EV-160/EV-161）的未提交改动。
+本提交只 `git add` 本批的 `docs/**` 文件；其中 `docs/work/evidence/INDEX-P2.md` 与 `docs/work/progress-checklist.md`
+是**共享文件**，因此也带入了并发批次已写在这些文件里的既有文档行（文件级提交粒度，无法按行拆分）。
+
+已定位的既存缺陷（`D-073`）：`AC-AGENTRT-002` 的"⑤ 会话哨兵不落盘"断言扫 `tmp/` 时把**源码副本**当命中
+（`tmp/usreq-clean/src/quotagent/qa/checks_agentrt_memory.py`，前一批遗留的干净副本，07:37 创建）。
+处置：把那**份遗留副本移出仓库**（→ `/tmp/quotagent-scratch/usreq-clean`，未删内容）后该 AC 全绿 ⇒ 成因确认；
+根因需改检查脚本的扫描排除，属测试改动，本批不做。
