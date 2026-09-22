@@ -24,9 +24,15 @@ FR 见 `docs/work/functional-requirements.md`，AC 见 `docs/work/acceptance-cri
 6. **每条验收标准要有可执行证据**：命令 + 输出摘要落 `docs/work/evidence/`，AC 才能置为 passed。
 7. **一轮一批**：更新 progress 与 handover → commit → push → 读回远端 refs 确认，缺一不可。
 8. **协议与账本格式变更必须新增 ADR**（`docs/design/adr/`），不得原地改语义。
-9. **文档预算**：文件头声明预算；`AGENTS.md` ≤ 4096 B，`docs/work/handover.md` ≤ 1024 B，
-   其余见 `docs/design/12-documentation-standard.md`。超预算先删冗余，不加长度。
+9. **文档预算**：文件头声明预算；`AGENTS.md` ≤ 4096 B，`handover.md` ≤ 1024 B，其余见
+   `docs/design/12-documentation-standard.md`。超预算先删冗余，不加长度。
 10. **不碰内核语义**：自进化只能发生在插件/配置/提示词/策略层；账本与 QEP 版本语义不可自改。
+11. **WebUI = 完整 GUI 应用**（不是账本投影、不是只读路由）：插件注册 **UI 元素/交互方式/动作与命令/
+    业务逻辑钩子/通知与状态**贡献任意功能；**双方必须仅通过 GUI 完成全部业务流程**（含写操作），允许前端
+    框架。真源 `docs/design/29-webui-gui-app.md`；禁止再按旧口径描述它，也禁止新增只冻旧形态的 UI 判据
+    （旧 UI 快照/seed/ui-mutate 门按 29 §2 删除）。
+12. **业务功能优先**：推进真实业务功能是唯一重要的事；门禁与测试只是安全带 —— 与需求冲突或只冻旧形态的
+    测试/门直接删除（存在不等于合理），不得为「门全绿」牺牲功能推进。
 
 ## 布局
 

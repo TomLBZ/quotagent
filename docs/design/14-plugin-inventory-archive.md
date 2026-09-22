@@ -69,7 +69,7 @@
 | `src/system/runtime/`（`system/runtime`） | 仓库内自包含运行时 + 六动词生命周期 + 一键运行 `./run` | `pluginLifecycle` | 运行时进程（`tools/plugin.sh`） | 只改本插件 `code/`（规则文本在 27） |
 | `src/domain/advice/`（`domain/advice`） | 决策建议层：没有可分的数据就不给建议 | `advicePanel` | wrapper → `host/modules/advice-panel.mjs`（阶段 4.1 实体搬迁） | 只改本插件 `code/` + 围栏门 |
 | `src/userspace/demo-ns/hello/`（`userspace/demo-ns/hello`） | 用户空间样板：命名空间服务 + 只读区块，零写面 | `bucket`、`status` | 宿主运行时（副本 `user-space/demo-ns/hello/`） | 只改本插件目录（隔离四件套在 `host/lib/user-space.mjs`） |
-| `src/system/webui/` | 双方视角 WebUI + 注入式 UI 注册面（0 业务语义） | `webui`、`uiSlots` | `webui` profile | 实体已落 `code/webui.mjs`（`EV-178`；旧路径薄重导） |
+| `src/system/webui/` | **双方（承包商/供应商）的完整 GUI 应用**：应用外壳 + 注入式注册面（插件提交视图/交互/动作/业务逻辑钩子；0 业务语义）；**双方仅用 GUI 走完全部业务流程**是验收标准（`docs/design/29-webui-gui-app.md`） | `webui`、`uiSlots` | `webui` profile | 实体已落 `code/webui.mjs`（`EV-178`；旧路径薄重导）；下一步见 29 §5 |
 | `src/system/storage/` | 按 ns 分区的文件管理 + 键值表 + 只读观察面 | `storageView` / `storage` | `storage` profile | 实体已落 `code/storage-view.mjs` + `tools/storage.py`（`EV-177`/`EV-178`；旧路径薄重导/薄转发） |
 | `src/system/market/` | 插件市场：三真源只读聚合（逐项 `source`/`wired`） | `pluginMarket` | `webui`（系统管理道） | 实体已落 `code/plugin-market.mjs`（`EV-177`；旧路径薄重导） |
 | `src/system/evolution/` | 自进化流水线 + 流水只读归纳 | `evolution` / `evolveJournal` | `webui`（运维道与管理道） | 实体已落 `code/evolution.mjs`（`EV-178`，裸 `cordis` 由模块内显式解析）+ `code/evolve-journal.mjs` |
