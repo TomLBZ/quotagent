@@ -322,9 +322,10 @@
    `插件·已搬`（实体已在新位置，旧位置**只剩薄转发**）· `插件·待搬`（实体仍在旧位置，**逐条登记**在此，不许无名散落）。
 3. **子目录**：`tests/` = 门/检查（`check-*.py`、`checks_*.py`、围栏门 `*-gate.mjs`）随被检查的插件走；
    `tools/` = 有写面的工具（写账本者只能是该账本唯一写者，27 §2.2）。
-4. **`tools/**` 的非薄入口数**（散落的度量）：搬前 **69**（75 个文件 − 6 个薄入口），本批**搬走 7 个**（旧位置变薄转发）
-   并**新增 1 个**（本节的机检门 `tools/check-plugin-assets.py` 自己，也登记为 `插件·待搬`）⇒ **63**。
-   门把 63 冻结为下界锁（`tools/check-plugin-assets.py` 的 `BASELINE_NONTHIN`）：**只减不增**，且集合必须与下表逐条相等。
+4. **`tools/**` 的非薄入口数**（散落的度量）：搬前 **69**（75 个文件 − 6 个薄入口），阶段 4.1 **搬走 7 个**（旧位置变薄转发）
+   并**新增 1 个**（本节的机检门 `tools/check-plugin-assets.py` 自己，也登记为 `插件·待搬`）⇒ **63**；
+   一键运行的干净副本验收门 `tools/check-run-clone.py`（EV-171）再 **+1** ⇒ **64**（同样是本类的平台门，登记为 `插件·待搬`）。
+   门把 64 冻结为下界锁（`tools/check-plugin-assets.py` 的 `BASELINE_NONTHIN`）：**只减不增**，且集合必须与下表逐条相等。
 5. **薄转发**：旧位置那几行只做转发（`runpy`/`importlib`，把 `__file__` 指到新位置），**不含任何实现**；
    改实现只改新位置那一份。留下的理由：`tools/verify.sh` 的门名与分支、`src/quotagent/qa/*.py` 里按路径读实现的判据、
    以及 `docs/**` 的既有引用都指向旧路径 —— 转发让它们**一行都不用改**（门名是接口）。
@@ -342,9 +343,9 @@
 | `tools/check-advice-route.py` | `domain/advice` | `src/domain/advice/tests/check-advice-route.py` | `tools/verify.sh advice` |
 | `src/quotagent/qa/checks_qprep.py` | `domain/quote-prepare` | `src/domain/quote-prepare/tests/checks_qprep.py` | `tools/verify.sh ac AC-QUOTE-001` |
 
-### 全量分类表（143 行 = 76 + 20 + 47）
+### 全量分类表（144 行 = 77 + 20 + 47）
 
-### A. `tools/**`（76 个，其中平台薄入口 6 + 本批已搬 7 + 待搬 63）
+### A. `tools/**`（77 个，其中平台薄入口 6 + 阶段 4.1 已搬 7 + 待搬 64）
 
 | 资产 | 归属插件 | 分类 | 子目录 |
 |---|---|---|---|
@@ -389,6 +390,7 @@
 | `tools/check-rfq-deadline-route.py` | `domain/rfq-deadline` | 插件·待搬 | `tests/` |
 | `tools/check-rfq-visibility-route.py` | `system/projection` | 插件·已搬 | `tests/` |
 | `tools/check-run-once.py` | `system/runtime` | 插件·待搬 | `tests/` |
+| `tools/check-run-clone.py` | `system/runtime` | 插件·待搬 | `tests/` |
 | `tools/check-ui-feedback.py` | `system/ui-feedback` | 插件·待搬 | `tests/` |
 | `tools/check-ui-seed.py` | `system/webui` | 插件·待搬 | `tests/` |
 | `tools/check-v-register.py` | `system/repo-gate` | 插件·待搬 | `tests/` |

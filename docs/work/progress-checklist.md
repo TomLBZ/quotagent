@@ -5,8 +5,8 @@
 **当前阶段：P1 mvp demo（S1.1 已完成，S1.2 起按 `roadmap.md` §3 推进）**。设计期与 P0 mock（S0.1–S0.15 备料）任务全部 `done`；
 P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假设通过**，在 `validation/register.json.planning_assumptions` 标注（非结论）。
 任务定义（描述与顺序）在 `roadmap.md`；本文件只维护**状态与证据**。
-较早的行（66 行整行 = 归档里 64 条 `T-` 定义行；`T-215a/b` 不以数字结尾，门不按定义行计）在
-`progress-checklist-archive.md`（同目录；选入规则见归档头）。
+较早的行（**74 行整行** = 归档里 **64 条 `T-<数字>` 定义行** + 10 条不以数字结尾的辅助行；门只把
+`T-<数字>` 计为定义行）在 `progress-checklist-archive.md`（同目录；选入规则见归档头）。
 **归档仍受门校验**：主文件 + 归档 = 门的 **T 定义集合**（`tools/check-docs.py` 的 `DEF_SETS["T"]`）——
 搬进归档的 T 号仍是定义，引用照解析。
 
@@ -65,9 +65,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-272 | 宿主侧 admin 门卫/视图插件 + 围栅门 18/18 + 端到端 12/12（subagent 产出，父方实跑） | B67 | done | EV-132 |
 | T-273 | admin 道接入 webui（路由/提权表单/CLI/e2e/profile/stubs/verify.sh）+ 本批 FR/AC 落表 | B67 | done | EV-132 |
 | T-273b | admin 道变异自证（统一拒绝体/投影/状态机/比较写法四处偷改必红；落表待实现） | B68 | todo | — |
-| T-264 | 系统管理 UI：`/quotagent/admin/` 道 + token 提权 + 视角切换 + agent 进度/阻塞面板 | B67 | todo | D-059 |
 | T-265b | Python 消费侧：`tools/admin-apply.py`（唯一写账本者）+ 判定器读已解决事实 + `AC-ADMIN-005` 16/16（subagent 产出，父方实跑） | B68 | done | EV-133 |
-| T-265c | 线上闭环：UI 提交 → 消费 → 面板 blocked 9→8 / resolved 0→1（真回读） | B68 | done | EV-133 |
 | T-265b2 | `approval_ref` 的**账本侧核验**（与批准记录对照，不只形状；先例 `retention_exec`） | B69 | todo | — |
 | T-265 | 阻塞解除闭环：宿主只落待处理提交 → Python 侧消费 → 账本 `admin/block-resolved` | B68 | todo | D-059 |
 | T-267a | `plugin-market` 插件：候选 + 围栅门 13/13 + 4 处变异自证（subagent 产出，父方实跑） | B69 | done | EV-134 |
@@ -75,16 +73,10 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-267 | 插件市场插件 + 用户空间插件全生命周期与隔离四件套 + 提权 | B69 | todo | D-060 |
 | T-268 | agent 运行期插件（上下文/记忆/harness，参考 deepseek harness） | B70 | todo | D-061 |
 | T-269 | 存储插件（文件管理 / 数据库，接口与隔离先行） | B70 | todo | D-061 |
-| T-263 | 三域视图**变异自证**：逐处偷改实现 → 对应门必须真变红（`verify.sh ui-mutate`，4/4 红且还原） | B65 | done | EV-098 |
-| T-262 | 快照写入器加**有界的最近列表**（谈判轮次 / FAQ 条目），供业务视角渲染 | B64 | done | EV-097 |
-| T-261 | UI 种子：`tools/ui-seed-pipeline.py` + `verify.sh ui-seed`（7/7）+ 接进 serve 启动流程 + 线上非 0 回读 | B62 | done | D-054 / EV-096 |
-| T-260 | 实现：`tools/refresh-ui-snapshots.py` + `pipeline-view`（第九个自进化产出）+ `/api/pipeline` + 门与端到端；线上与公网 200 | B60 | done | D-053 / EV-095 |
 | T-259 | 邮件**发信/收信**（需 SMTP/IMAP 凭据 + 人工决定收发对象）：接入传输实现 | B58 | blocked | 待人工提供凭据 |
 | T-258 | 邮件实现（无凭据部分）：`services/mail.py` + `AC-MAIL-001` 机检 + 事件两侧登记 + 矩阵更新 | B57 | done | D-052 / EV-094 |
 | T-257 | FAQ 实现：`services/faq.py` + `AC-FAQ-001` 机检 + 事件两侧登记 + 矩阵转正 | B55 | done | D-051 / EV-093 |
 | T-256 | 谈判轮次**实现**：`services/negotiation.py` + `AC-NEGO-003`（机检 + 变异自证）+ 事件两侧登记 + 矩阵转正 | B53 | done | D-050 / EV-092 |
-| T-254 | 留存计划可被看见：桥侧 `retention.plan`（compute，只读）+ 宿主 `retention-view`（自进化产出）→ 运维视角 `/api/retention`；线上+公网 200 | B50 | done | EV-089 / EV-090 |
-| T-253 | 留存**执行侧**：真删派生副本 + 读侧封存 + 落 `evidence/retention-*`；`AC-AUDIT-005` 机检 22/22 | B49 | done | D-048 / EV-088 |
 | T-224 | Jev 建议层插件（`advisor`）：建议不入判定、低置信转人工、外部失败降级 | B23+ | todo | — |
 
 ## P2 product（见 `roadmap.md` §4）
@@ -111,6 +103,7 @@ P0 的 34 条 AC 全绿；P1 前提（V 项）按用户 2026-09-21 指令**假�
 | T-316 | P2 | **「需求归属到插件」从口号落成完整映射与逐插件需求文档（本批，只动文档 + 一条门）**：① `docs/work/plugin-requirements-map.md`（**63 行**插件一行一表：`插件 id / 负责的 FR 号 / 承载文件 / 状态 / 证据`）—— FR 定义集合 **166 条各出现且仅出现一次**（未认领 0、重复 0），与 28 §2.2/§2.4 家族表的 **13 处偏差逐条登记**（归属真源 = `15-requirements-coverage.md`，ADR-0021 §2），**52** 个插件的需求文档缺口逐条列在 §4.1 ② **9 个插件的独立需求文档**：3 个样板在标准位置（`src/{system/runtime,domain/advice,userspace/demo-ns/hello}/requirements/README.md`）+ 6 个核心（webui/storage/market/evolution/mail/kernel）在 `docs/work/plugin-requirements-<插件>.md` （**位置偏差**逐条登记在 §4.2：先建裸插件目录会让 `plugin-lifecycle` 的 A13/A14 变红，本批不得把门改松）③ `docs/design/14-plugin-inventory.md` **先归档再加行**：库层/Python 侧/工作区/自进化四节 **4348 B 整节逐字**搬入新建 `docs/design/14-plugin-inventory-archive.md`，主文件 28564 → 24865 B，再加 9 行（3 样板 + 6 骨架）⇒ **27390 B ≤ 28 KB（实测）** ④ 新门 `plugin-requirements`（**17/17**：每条 FR 恰好一个归属 / 引用的 FR 都在定义集合内 / `plugin.sh list` 每个插件有行 / `req=` 文档真实存在 / 目录不无主 / 位置偏差与缺口清单双向登记 / 状态与证据；**4 处单点变异全红** + 防假变异 + 产品树字节不变）⑤ `plugins` 门扩成**清单文档集合**（主文件 + `14-plugin-inventory-archive*.md`，归档 0 条登记名 = 硬失败）⑥ 实测：`plugin-lifecycle` 43/44（A13/A14 对裸目录敏感，本批的文档位置选择已避开；剩余 1 项红 = 并发批次在飞的 webui 注册面 `/api/ui/blocks`，本批未改产品代码） | FR-USREQ-007, FR-PLUGIN-004 | AC-DESIGN-001, AC-PLUGIN-004 | done | EV-167 |
 | T-318 | P2 | **52 个插件逐个补齐独立需求文档 + 位置口径定案（本批，只动文档 + 一处门的变异锚点）**：① **52 份**新文档 `docs/work/plugin-requirements-<层>-<插件>.md`（模板与逐段口径见映射表 §4），6 份核心文档改名统一带层前缀 ⇒ **63/63** 插件有 `req=` ② 缺口数 **52 → 0**（映射表 §5 复算命令算出，不手写）③ 位置口径定案进 27 §2.4 + 映射表 §4：**不建裸目录**（裸目录会被 `depsClosure` 当「插件存在」⇒ `plugin-lifecycle` 的 A13/A14 变红），文档落 `docs/work/`、建目录时 `git mv`，§4.2 逐条登记位置偏差 ④ 映射表 §3 偏差表整表拆到 `plugin-requirements-deviations.md`（守住 32 KB）⑤ **互证**：58 份文档的 FR 行集合 == 映射表认领集合（并集 166、缺 0、重复 0；原始行见 EV-169）⑥ **反向验证**：假目录（有 `requirements/`、无 `plugin.json`）⇒ `plugin.sh list` 报 `manifest-missing` + 门 A6b 判红 | FR-USREQ-007, FR-PLUGIN-004 | AC-DESIGN-001, AC-PLUGIN-004 | done | EV-169 |
 | T-319 | P2 | **迁移阶段 4.1 先行 8 项：散落的检查/测试资产收进各自插件的 `tests/`，`tools/**` 瘦成薄入口（本批）**：① 清点 **143 项**（`tools/**` 76 / `host/*-gate.mjs` 20 / `src/quotagent/qa/checks_*.py` 47）**逐项分类**写进 `docs/work/plans/plugin-file-map.md` §分类（归属插件 + 三档：平台薄入口 6 / 插件·已搬 8 / 插件·待搬 129；与磁盘**双向可复算**）② **搬 8 项**（5 条真路由门 + `plugin-lifecycle` + `advice` + `checks_qprep.py`）→ `src/<层>/<插件>/tests/`，旧位置只剩**薄转发**（`runpy`/`importlib`；`tools/verify.sh` 的分支与门名**一行未改**，逐项搬前搬后 rc/关键输出对拍一致）③ 新增门 `plugin-assets`（PA1–PA7：目标在 + 旧位置只剩薄转发 + 分类表双向与全量登记 + 归属唯一 + 门接口不失联 + 散落只减不增；**4 处单点变异全红** + 防假变异 + 产品树字节不变）④ 4 个插件骨架（`system/projection`、`domain/{gate-timeline,authority-band,quote-prepare}`：`plugin.json` + README + wrapper 入口，四者真 `load`/`unload`）⑤ `tools/**` 非薄入口 **69 → 63**（搬走 7 + 本门 1）；预算表 `docs/work/plans/*.md` 32→48 KB 并把既有 5 个文件各钉在 32 KB（具体行只能收紧） | FR-PLUGIN-004, FR-USREQ-007 | AC-DESIGN-001, AC-PLUGIN-004 | done | EV-170 |
+| T-320 | P2 | **「克隆就能一键跑」落成可复现的干净副本验收（本批）**：① 新门 `run-clone`（`tools/check-run-clone.py`，K1–K12）：`git archive HEAD` 解到**仓库外**临时目录（副本里没有 `.venv`/`host/node_modules`/`tmp`；路径集合 == `git ls-tree -r HEAD` 逐条对账）→ 在其中真跑 `doctor`（7 项逐项 next_action + 退出码 0）/`up`（外部实测 health 200 + `/quotagent/` 200 + pid 是活进程 + 副本内自建 `.venv`）/`status`/二次 `up` 幂等（两次 status 逐字节一致）/`down` 真释放端口；**两条反向对照**：删掉 `host/node_modules` 后 doctor 如实报 cordis 非 ok；装不上时（断网垫片 + 空 npm 缓存，及 `QUOTAGENT_NODE` 无同级 npm）`up` 如实失败并带回 `log`/`log_tail` 真原因；**4 处单点变异全红**（依赖准备改坏 / 健康检查不检查 / down 不释放端口 / doctor 把缺失报成 ok）+ 产品树字节不变 ② **实测真缺陷并修复**：索引里 `tools/*.sh` 是 `100644`（`core.filemode=false` ⇒ `chmod +x` 不入库）⇒ 干净克隆 `./run up` 报 `host-deps-install-failed`、`doctor` 的 gates 项 FAIL；`git add --chmod=+x` 7 个脚本，并把「入口可执行位」冻结成门内断言 ③ `./run` 的依赖准备失败改为**可诊断**（原样输出落 `tmp/run/deps-install.log`，失败体带 `log` + `log_tail`）；`doctor` 的 cordis 项区分「缺失但能自动准备」（降级、不阻塞）与「无 npm」（FAIL）④ README 快速开始：克隆 → 一条命令 → URL → 凭据降级与配置 → 下一步看哪里（≤ 4096 B 预算内）⑤ 门 `plugin-assets` 基线 63→64 + 本门登记（`plugin-file-map.md` §分类 +1 行） | FR-RUNTIME-001 | AC-RUNTIME-010 | done | EV-171 |
 
 ## 缺陷与阻塞
 

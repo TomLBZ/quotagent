@@ -74,11 +74,12 @@ MAX_FORWARDER_BYTES = 1200
 MAX_FORWARDER_LINES = 20
 EXCLUDE_DIRS = frozenset({"__pycache__", ".git", "tmp", "node_modules", ".venv"})
 
-#: `tools/` 下非薄入口文件的**本批实测值**：搬前 69（75 个文件 − 6 个薄入口）− 本批搬走 7 个 + 本门自己 1 个 = **63**。
-#: 锁的语义是"只减不增"：下一批搬走本门或其它项时，这个数应随之下调（下调要改这一行，属显式动作）。
-BASELINE_NONTHIN = 63
-#: 门名数下界（搬前 69 + 本批新增 `plugin-assets` = 70；门名是接口，只增不减）。
-MIN_GATE_NAMES = 70
+#: `tools/` 下非薄入口文件的**实测值**：阶段 4.1 搬前 69（75 个文件 − 6 个薄入口）− 搬走 7 个 + `plugin-assets.py` 自己 1 个
+#: = 63；一键运行的干净副本验收门 `tools/check-run-clone.py`（EV-171）再 +1 ⇒ **64**。
+#: 锁的语义是"只减不增"：搬走本门或其它项时这个数应随之下调；**上调只允许"新增一个同级平台门"这一种理由**（改这一行是显式动作）。
+BASELINE_NONTHIN = 64
+#: 门名数下界（阶段 4.1 搬前 69 + `plugin-assets` = 70；本批新增 `run-clone` ⇒ 71；门名是接口，只增不减）。
+MIN_GATE_NAMES = 71
 #: `--help` 一类的别名不算"实现分支"。
 HELP_ALIASES = frozenset({"help", "--help", "-h"})
 

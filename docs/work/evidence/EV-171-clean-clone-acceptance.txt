@@ -1,0 +1,255 @@
+EV-171 —— 「克隆就能一键跑」变成可重现的验收：只含已提交内容的干净副本里真跑 ./run（T-320）
+================================================================================
+
+批次：T-320（P2）· 提交面：新门 `run-clone`（`tools/check-run-clone.py` + `tools/verify.sh` 分支）/
+      实测真缺陷修复（索引里 `tools/*.sh` 是 100644 ⇒ 干净克隆装不了依赖、`doctor` 的 gates 项 FAIL）/
+      `./run` 的依赖准备失败改为可诊断 / `doctor` 的 cordis 项降级口径 / README 快速开始 /
+      `plugin-assets` 基线 63→64 与本门登记 / 进度清单 + 交接 + state
+编号说明：查重后取 **EV-171**（`docs/work/evidence/` 下无 EV-171；上一批是 EV-170）。
+
+--------------------------------------------------------------------------------
+一、干净副本是怎么来的（只含已提交内容；仓库外）
+--------------------------------------------------------------------------------
+
+命令形状（两条测量与门内都是同一套）：
+
+    TREE=$(git -C <repo> write-tree)          # 索引树（手工测量；与即将提交的字节相同）
+    git -C <repo> archive "$TREE" | tar -x -C <仓库外临时目录>/copy
+    # 门内用的是 HEAD：git -C <repo> archive HEAD | tar -x -C <仓库外临时目录>/copy
+
+- 副本文件数 **670**（与 `git ls-tree -r HEAD` 逐条对账；门 K1 断言集合相等，`-z` 避免非 ASCII 路径被引号包裹）；
+- 副本里 **没有** `.venv` / `host/node_modules` / `tmp` / `__pycache__`（门 K1b 断言）；`user-space` 是 tracked 的
+  **符号链接**（→ `src/userspace`，门 K1c 断言）；
+- 入口执行位：`run`、`tools/cordis.sh`、`tools/verify.sh` 均为 `-rwxr-xr-x`（**本批修好的那一处**，见 §五）。
+
+运行环境（手工测量）：`HOME=<副本外的空目录>`、`QUOTAGENT_ROOT=<副本>`、
+`QUOTAGENT_CONFIG_FILE=<副本内不存在的路径>`、`QUOTAGENT_ADMIN_TOKEN_FILE=<副本内不存在>`、
+`unset QUOTAGENT_PY`（不借用会话注入的解释器）、`unset QUOTAGENT_PLUGIN_CONTROL_TOKEN`。
+
+--------------------------------------------------------------------------------
+二、干净副本验收原始行（doctor / up / status / 二次 up / down / HOME）
+--------------------------------------------------------------------------------
+
+（取自 `tmp/qa-accept.out`，逐字；脚本 `tmp/qa-accept.sh`）
+
+== 索引树 = 6213517205f00939998f091c6f91b0484f40cb23 ==
+== 副本文件数 = 670（仓库外：/tmp/qa-accept-hBCPzZ/copy） ==
+== 副本里有没有运行时目录 ==
+== 入口执行位 ==
+-rwxr-xr-x /tmp/qa-accept-hBCPzZ/copy/run
+-rwxr-xr-x /tmp/qa-accept-hBCPzZ/copy/tools/cordis.sh
+-rwxr-xr-x /tmp/qa-accept-hBCPzZ/copy/tools/verify.sh
+== PORT=51577 ==
+
+=== ① ./run doctor（干净副本，逐项） ===
+[ok]       interpreter  /workspace/venvs/py/bin/python (Python 3.13.13)
+[ok]       node         /workspace/runtime/node/current/bin/node (v24.21.0)
+[degraded] cordis       未安装（host/node_modules/cordis 缺失；`up` 会自动装，缺失才装）
+           next_action: 直接跑 ./run up（内部 tools/cordis.sh install）；离线机器需 npm 缓存或预先带好 host/node_modules
+[ok]       port 51577     空闲（up 会占用它）
+[degraded] config       /tmp/qa-accept-hBCPzZ/copy/tmp/run-clone/config.yaml 不存在（**不阻塞 up**：受影响的插件报 available=false）
+           next_action: 生成 config.yaml 白名单键（./run 不代写；见 docs/design/28 §3.1）
+[degraded] credentials  admin token：absent（受影响插件 available=false + reason；**不阻塞 up**）
+           next_action: 0600 文件 /workspace/config/quotagent-admin-token（token 只存指针与指纹）
+[degraded] credentials  邮件/模型凭据：0 条命中（mail 传输 available=false；发信会如实拒绝，不假装能发）
+           next_action: 在 config.yaml 里补 SMTP/IMAP（键名见 docs/design/19-mail-contract.md）
+[ok]       gates        tools/verify.sh 可执行（docs|coverage|... 离线可跑）
+{"ok":true,"action":"doctor","port":51577,"blocking":0,"items":7,"checks":[{"item":"interpreter","status":"ok","detail":"/workspace/venvs/py/bin/python","version":"3.13.13","next_action":""},{"item":"node","status":"ok","detail":"/workspace/runtime/node/current/bin/node","version":"v24.21.0","next_action":""},{"item":"cordis","status":"degraded","detail":"will-install-on-up","next_action":"./run up（内部 tools/cordis.sh install；离线机器需 npm 缓存或预先带好 host/node_modules）"},{"item":"port","status":"ok","detail":"free","port":51577,"pid":null,"next_action":""},{"item":"config","status":"degraded","detail":"absent","path":"/tmp/qa-accept-hBCPzZ/copy/tmp/run-clone/config.yaml","fingerprint":null,"next_action":"生成 config.yaml（只含白名单键）"},{"item":"credentials","status":"degraded","detail":"absent","next_action":"放 0600 token 文件（fail-closed）"},{"item":"gates","status":"ok","detail":"tools/verify.sh","next_action":""}],"next_action":"这机器能跑：./run up"}
+rc=0
+
+=== ② ./run up（干净副本，一条命令） ===
+{"ok":true,"action":"up","state":"started","service":"quotagent-webui","pid":225076,"port":51577,"url":"http://127.0.0.1:51577/quotagent/","healthy":true,"ready_ms":1015,"log":"/tmp/qa-accept-hBCPzZ/copy/tmp/run/webui-51577.log","data_dir":"/tmp/qa-accept-hBCPzZ/copy/tmp/run-shared"}
+rc=0
+--- 外部实测（不经过 ./run） ---
+health=200
+page=200
+--- 副本内自建 .venv ---
+/tmp/qa-accept-hBCPzZ/copy/.venv/bin
+--- 依赖准备留痕 tmp/run/deps-install.log ---
+[deps] 准备仓库内 .venv：/tmp/qa-accept-hBCPzZ/copy/tools/bootstrap.sh
+bootstrap: 创建仓库内虚拟环境 /tmp/qa-accept-hBCPzZ/copy/.venv
+manifest: /tmp/qa-accept-hBCPzZ/copy/.venv/quotagent-runtime.json
+quotagent 0.1.0 on Python 3.13.13
+runtime ready: /tmp/qa-accept-hBCPzZ/copy/.venv (created)
+[deps] 准备宿主依赖：/tmp/qa-accept-hBCPzZ/copy/tools/cordis.sh install
+安装 host 依赖（仓库内 host/node_modules，gitignored）...
+
+
+=== ③ ./run status ===
+{"ok":true,"service":"quotagent-webui","pid":225076,"port":51577,"url":"http://127.0.0.1:51577/quotagent/","healthy":true,"ready_ms":1015,"managed":true,"degraded":[{"plugin":"system/config","available":false,"reason":"config-file-absent","next_action":"放 /workspace/config.yaml（或设 QUOTAGENT_CONFIG_FILE）后重跑"},{"plugin":"system/admin","available":false,"reason":"admin-token-absent","next_action":"把随机 token 写到 0600 文件后重跑（token 只存指针与指纹，永不回显）"}]}
+rc=0
+
+=== ④ 二次 ./run up（幂等） ===
+{"ok":true,"action":"up","state":"already-up","service":"quotagent-webui","port":51577,"url":"http://127.0.0.1:51577/quotagent/","pid":225076,"idempotent":true,"note":"端口上已经有健康的本服务：不重建、不覆盖数据"}
+rc=0
+两次 status 逐字节一致 = true
+
+=== ⑤ ./run down（端口真释放） ===
+{"ok":true,"action":"down","state":"stopped","pid":225076,"port":51577,"stopped":true,"released":true,"next_action":"数据没删；再起用 ./run up"}
+rc=0
+down 后再探 health=000（000 = 连接被拒）
+
+
+--------------------------------------------------------------------------------
+三、反向对照（第一次测量：走的是"删掉依赖再跑一次"这条最朴素的路）
+--------------------------------------------------------------------------------
+
+**结论先写**：删掉 `host/node_modules` 之后，`doctor` **如实**报 cordis 非 ok（`degraded` + 命名 reason +
+`next_action`），`up` 也能一条命令把它重装好并起服务 —— 这是**真的成功**，不是假装成功（`cordis 重装了吗：yes`）。
+第 ⑦ 步原想造"装不上"，但它**没有失败**：事后查明原因是本会话环境里有**大写** `NPM_CONFIG_CACHE`
+指向热缓存，而我只设了小写 `npm_config_cache` ⇒ npm 仍从热缓存离线装成功（这一步因此是**空转**，本节原样留证，
+下面 §四 用大小写都指空目录重做，才真造出"装不上"）。
+
+=== ⑥ 反向对照 A：删掉 host/node_modules 后再跑 doctor/up ===
+[degraded] cordis       未安装（host/node_modules/cordis 缺失；`up` 会自动装，缺失才装）
+           next_action: 直接跑 ./run up（内部 tools/cordis.sh install）；离线机器需 npm 缓存或预先带好 host/node_modules
+[degraded] credentials  admin token：absent（受影响插件 available=false + reason；**不阻塞 up**）
+[degraded] credentials  邮件/模型凭据：0 条命中（mail 传输 available=false；发信会如实拒绝，不假装能发）
+{"ok":true,"action":"doctor","port":51577,"blocking":0,"items":7,"checks":[{"item":"interpreter","status":"ok","detail":"/tmp/qa-accept-hBCPzZ/copy/.venv/bin/python","version":"3.13.13","next_action":""},{"item":"node","status":"ok","detail":"/workspace/runtime/node/current/bin/node","version":"v24.21.0","next_action":""},{"item":"cordis","status":"degraded","detail":"will-install-on-up","next_action":"./run up（内部 tools/cordis.sh install；离线机器需 npm 缓存或预先带好 host/node_modules）"},{"item":"port","status":"ok","detail":"free","port":51577,"pid":null,"next_action":""},{"item":"config","status":"degraded","detail":"absent","path":"/tmp/qa-accept-hBCPzZ/copy/tmp/run-clone/config.yaml","fingerprint":null,"next_action":"生成 config.yaml（只含白名单键）"},{"item":"credentials","status":"degraded","detail":"absent","next_action":"放 0600 token 文件（fail-closed）"},{"item":"gates","status":"ok","detail":"tools/verify.sh","next_action":""}],"next_action":"这机器能跑：./run up"}
+doctor rc=0
+{"ok":true,"action":"up","state":"started","service":"quotagent-webui","pid":225294,"port":51577,"url":"http://127.0.0.1:51577/quotagent/","healthy":true,"ready_ms":1015,"log":"/tmp/qa-accept-hBCPzZ/copy/tmp/run/webui-51577.log","data_dir":"/tmp/qa-accept-hBCPzZ/copy/tmp/run-shared"}
+up rc=0
+cordis 重装了吗：yes
+（收摊）health=000
+
+=== ⑦ 反向对照 B：装不上（断网垫片 + 空 npm 缓存） ===
+{"ok":true,"action":"up","state":"started","service":"quotagent-webui","pid":225424,"port":51577,"url":"http://127.0.0.1:51577/quotagent/","healthy":true,"ready_ms":1016,"log":"/tmp/qa-accept-hBCPzZ/copy/tmp/run/webui-51577.log","data_dir":"/tmp/qa-accept-hBCPzZ/copy/tmp/run-shared"}
+rc=0
+
+=== ⑧ 反向对照 C：npm 不可用（QUOTAGENT_NODE 指向没有同级 npm 的 node） ===
+{"ok":true,"action":"up","state":"already-up","service":"quotagent-webui","port":51577,"url":"http://127.0.0.1:51577/quotagent/","pid":225424,"idempotent":true,"note":"端口上已经有健康的本服务：不重建、不覆盖数据"}
+rc=0
+
+=== ⑨ HOME 是否被写 ===
+HOME 文件数 = 0
+WORK=/tmp/qa-accept-hBCPzZ
+
+--------------------------------------------------------------------------------
+四、反向对照（第二次独立测量：真造出"装不上"，并逐个看它是否如实失败且可诊断）
+--------------------------------------------------------------------------------
+
+（取自 `tmp/qa-neg.out`，逐字；脚本 `tmp/qa-neg.sh`；与 §三 同样从索引树解出的**全新**副本）
+
+== 索引树 = 6213517205f00939998f091c6f91b0484f40cb23 ==
+== PORT=46749 ==
+
+=== 前置：先正常 up 一次（把依赖装好），再 down ===
+{"ok":true,"action":"up","state":"started","service":"quotagent-webui","pid":226521,"port":46749,"url":"http://127.0.0.1:46749/quotagent/","healthy":true,"ready_ms":1015,"log":"/tmp/qa-neg-48SPr3/copy/tmp/run/webui-46749.log","data_dir":"/tmp/qa-neg-48SPr3/copy/tmp/run-shared"}
+rc=0
+{"ok":true,"action":"down","state":"stopped","pid":226521,"port":46749,"stopped":true,"released":true,"next_action":"数据没删；再起用 ./run up"}
+
+=== 反向对照 A：删掉 host/node_modules 后 doctor（逐项）+ up ===
+[degraded] cordis       未安装（host/node_modules/cordis 缺失；`up` 会自动装，缺失才装）
+           next_action: 直接跑 ./run up（内部 tools/cordis.sh install）；离线机器需 npm 缓存或预先带好 host/node_modules
+[degraded] credentials  admin token：absent（受影响插件 available=false + reason；**不阻塞 up**）
+[degraded] credentials  邮件/模型凭据：0 条命中（mail 传输 available=false；发信会如实拒绝，不假装能发）
+[ok]       gates        tools/verify.sh 可执行（docs|coverage|... 离线可跑）
+{"ok":true,"action":"doctor","port":46749,"blocking":0,"items":7,"checks":[{"item":"interpreter","status":"ok","detail":"/tmp/qa-neg-48SPr3/copy/.venv/bin/python","version":"3.13.13","next_action":""},{"item":"node","status":"ok","detail":"/workspace/runtime/node/current/bin/node","version":"v24.21.0","next_action":""},{"item":"cordis","status":"degraded","detail":"will-install-on-up","next_action":"./run up（内部 tools/cordis.sh install；离线机器需 npm 缓存或预先带好 host/node_modules）"},{"item":"port","status":"ok","detail":"free","port":46749,"pid":null,"next_action":""},{"item":"config","status":"degraded","detail":"absent","path":"/tmp/qa-neg-48SPr3/copy/tmp/run-clone/config.yaml","fingerprint":null,"next_action":"生成 config.yaml（只含白名单键）"},{"item":"credentials","status":"degraded","detail":"absent","next_action":"放 0600 token 文件（fail-closed）"},{"item":"gates","status":"ok","detail":"tools/verify.sh","next_action":""}],"next_action":"这机器能跑：./run up"}
+doctor rc=0
+{"ok":true,"action":"up","state":"started","service":"quotagent-webui","pid":226660,"port":46749,"url":"http://127.0.0.1:46749/quotagent/","healthy":true,"ready_ms":1015,"log":"/tmp/qa-neg-48SPr3/copy/tmp/run/webui-46749.log","data_dir":"/tmp/qa-neg-48SPr3/copy/tmp/run-shared"}
+up rc=0
+cordis 重装了吗（诚实性：装不上就必须报失败，装得上就报成功）: yes
+
+=== 反向对照 B：断网垫片（libc 层）+ 空 npm 缓存（大小写都指空）+ offline ===
+垫片编译：OK
+{"ok":false,"action":"up","code":"host-deps-install-failed","reason":"宿主依赖装不上（host/node_modules/cordis 仍缺失）","log":"/tmp/qa-neg-48SPr3/copy/tmp/run/deps-install.log","log_tail":"[deps] 准备宿主依赖：/tmp/qa-neg-48SPr3/copy/tools/cordis.sh install|安装 host 依赖（仓库内 host/node_modules，gitignored）...|npm error code ENOTCACHED|npm error request to https://registry.npmjs.org/cosmokit/-/cosmokit-1.8.1.tgz failed: cache mode is 'only-if-cached' but no cached response is available.|npm error A complete log of this run can be found in: /tmp/qa-neg-48SPr3/emp","next_action":"看 log_tail/日志尾部的原因；备选是在能装包的机器上跑 tools/cordis.sh install，再把 host/node_modules 一起带过来（或让 npm 缓存可用）"}
+rc=1
+垫片拦下的对外尝试：getaddrinfo registry.npmjs.org 
+依赖日志全文：
+[deps] 准备宿主依赖：/tmp/qa-neg-48SPr3/copy/tools/cordis.sh install
+安装 host 依赖（仓库内 host/node_modules，gitignored）...
+npm error code ENOTCACHED
+npm error request to https://registry.npmjs.org/cosmokit/-/cosmokit-1.8.1.tgz failed: cache mode is 'only-if-cached' but no cached response is available.
+npm error A complete log of this run can be found in: /tmp/qa-neg-48SPr3/empty-cache/_logs/2026-09-22T10_07_51_651Z-debug-0.log
+
+=== 反向对照 C：npm 不可用（QUOTAGENT_NODE 指向没有同级 npm 的 node） ===
+{"ok":false,"action":"up","code":"host-deps-install-failed","reason":"宿主依赖装不上（host/node_modules/cordis 仍缺失）","log":"/tmp/qa-neg-48SPr3/copy/tmp/run/deps-install.log","log_tail":"[deps] 准备宿主依赖：/tmp/qa-neg-48SPr3/copy/tools/cordis.sh install|安装 host 依赖（仓库内 host/node_modules，gitignored）...|/tmp/qa-neg-48SPr3/copy/tools/cordis.sh: 40: /usr/bin/npm: not found|","next_action":"看 log_tail/日志尾部的原因；备选是在能装包的机器上跑 tools/cordis.sh install，再把 host/node_modules 一起带过来（或让 npm 缓存可用）"}
+rc=1
+依赖日志全文：
+[deps] 准备宿主依赖：/tmp/qa-neg-48SPr3/copy/tools/cordis.sh install
+安装 host 依赖（仓库内 host/node_modules，gitignored）...
+/tmp/qa-neg-48SPr3/copy/tools/cordis.sh: 40: /usr/bin/npm: not found
+
+=== 副本外 HOME 是否被写：文件数 = 0 ===
+WORK=/tmp/qa-neg-48SPr3
+
+原始行里的要点：
+- **A（缺依赖）**：`doctor` 的 cordis 项 `status=degraded` + `detail=will-install-on-up` + `next_action`
+  （`blocking=0` ⇒ 不阻塞，因为 `up` 能自动准备）；随后 `up` 真的重装并起服务（`cordis 重装了吗：yes`）。
+  这就是"缺什么报什么、不假装"，而不是"一律 FAIL 挡住"或"一律假装 OK"。
+- **B（装不上：断网垫片 + 空缓存）**：`up` 退出码 **1**、`ok:false`、`code=host-deps-install-failed`，
+  且失败体里带 **`log`（依赖日志路径）+ `log_tail`（尾部真原因：`npm error code ENOTCACHED` …）**；
+  垫片留痕 `getaddrinfo registry.npmjs.org`（**非空转**：确实拦下了一次对外解析尝试）。
+  修复前这里只会回一句"宿主依赖装不上"（`>/dev/null 2>&1` 把原因吞掉了，实测见 §五）。
+- **C（npm 不可用）**：`QUOTAGENT_NODE` 指向没有同级 `npm` 的 node ⇒ 同一条失败路径，
+  `log_tail` 尾部为 `.../tools/cordis.sh: 40: /usr/bin/npm: not found`（不依赖 gcc/网络，任何机器都能跑）。
+- **不写副本外的 HOME**：两次测量结束后 `HOME` 文件数都是 **0**（运行期数据全在副本自己的 `tmp/` 内）。
+
+
+--------------------------------------------------------------------------------
+五、新门 `run-clone`：断言清单，以及它在"**未修的 HEAD**"上真的变红（负控，非空转）
+--------------------------------------------------------------------------------
+
+门：`tools/verify.sh run-clone` → `tools/check-run-clone.py`（与 `clean-copy` 同类：**校验 HEAD**，须在 commit 之后跑）。
+断言（全部真跑真回读）：K1 副本只含已提交内容（路径集合 == `git ls-tree -r HEAD`）/ K1b 无运行时目录 /
+K1c `user-space` 仍是符号链接 / **K2 `run` 与每个 `tools/*.sh` 都有执行位** / K3 `doctor` 不崩 + 7 项逐项
+`next_action` + 退出码 0 / K4 `up` 一条命令成功（外部 health 200 + 页面 200 + pid 活进程 + 副本内自建 `.venv`）/
+K5 `status` 健康 + `degraded[]` 逐项 `available:false` + reason + `next_action` / K6 二次 `up` 幂等 + 两次
+`status` 逐字节一致 / K7 `down` 真释放端口 + 再 `down` 幂等 / K8 反向对照（缺依赖如实报）/ K9 反向对照
+（装不上 ⇒ 如实失败且带 `log`/`log_tail`）/ K9b 反向对照（npm 不可用，可移植）/ **K10 四处单点变异全红**
+（依赖准备改坏 / 健康检查不检查 / down 不释放端口 / doctor 把缺失报成 ok；每处先在未变异副本上确认不红）/
+K11 产品树字节不变 / K12 不写副本外的 HOME。
+
+**负控（本批最有分量的一条证据）**：门写好后、修复**提交之前**先在当时的 HEAD（= 未修的索引态）上跑了一次
+——它精确红在缺陷上（并因此证明 K2/K3/K4 不是摆设）：
+
+```
+[FAIL] K2 副本里的入口**真的可执行**：`run` 与每个 `tools/*.sh` 都有执行位（实测缺陷：索引 100644 ⇒ 干净克隆 `./run up` 报 `host-deps-install-failed`）
+        共 10 个；无执行位=['tools/bootstrap.sh', 'tools/cordis.sh', 'tools/run.sh', 'tools/runtime.sh', 'tools/ui-feedback-tick.sh', 'tools/v-kit.sh', 'tools/verify.sh']
+[FAIL] K3 干净副本里 `./run doctor` **不崩 + 7 项齐全 + 逐项 next_action + 退出码 0**（缺凭据/缺依赖只降级：`blocking=0` = 这机器能跑）
+        rc=1 ok=False blocking=2 items=['interpreter', 'node', 'cordis', 'port', 'config', 'credentials', 'gates'] 状态={'interpreter': 'ok', 'node': 'ok', 'cordis': 'failed', 'port': 'ok', 'config': 'degraded', 'credentials': 'degraded', 'gates': 'failed'} 逐项行=8 err=
+[FAIL] K4 干净副本里 `./run up` **一条命令成功**：真起服务（pid 是活进程）+ 外部实测 `/api/health` 200 + `/quotagent/` 页面 200 + 副本内自建 `.venv/`（自包含）+ 依赖准备有留痕
+        rc=1 state=None healthy=None 外部health=False page=0 pid=None 活=False .venv=False deps_log=`cordis.sh install`=False err=
+RESULT: FAIL（run-clone 门 7/20）
+```
+
+--------------------------------------------------------------------------------
+六、本批提交前的全量门扫描（工作树；`tmp/sweep.sh`，逐道 rc）
+--------------------------------------------------------------------------------
+
+```
+=================== tools/verify.sh run-once ===================
+RESULT: PASS（run-once 门 34/34）
+--- run-once rc=0 ---
+=================== tools/verify.sh docs ===================
+RESULT: PASS
+--- docs rc=0 ---
+=================== tools/verify.sh plugin-lifecycle ===================
+RESULT: PASS（plugin-lifecycle 门 59/59）
+--- plugin-lifecycle rc=0 ---
+=================== tools/verify.sh plugin-assets ===================
+RESULT: PASS（plugin-assets 门 14/14）
+--- plugin-assets rc=0 ---
+=================== tools/verify.sh plugin-requirements ===================
+RESULT: PASS（plugin-requirements 门 17/17）
+--- plugin-requirements rc=0 ---
+=================== tools/verify.sh webui ===================
+RESULT: PASS（webui 门 51/51）
+--- webui rc=0 ---
+=================== tools/verify.sh modules ===================
+--- modules rc=0 ---
+=================== tools/verify.sh wiring ===================
+--- wiring rc=0 ---
+=================== tools/verify.sh plugins ===================
+RESULT: PASS（插件清单门 5/5）
+--- plugins rc=0 ---
+=================== tools/verify.sh coverage ===================
+--- coverage rc=0 ---
+=================== tools/verify.sh ac-registry ===================
+--- ac-registry rc=0 ---
+SWEEP_RC=0
+SWEEP_RC=0
+```
+
+（`run-once` 34/34 未因本批改动而红：`./run` 的依赖准备只多了一条留痕与更详细的失败体，
+`doctor` 的 cordis 项在"已装好"的树上仍是 `ok`。）

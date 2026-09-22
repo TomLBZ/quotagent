@@ -144,6 +144,18 @@ print(" ".join(sorted({item["ac"] for item in acs if item.get("phase") != "P1"})
     #   · `run` 的 **4 处单点变异全红**（每处先在未变异基线上确认不红）+ 产品树字节不变
     exec "$QUOTAGENT_PY" "$ROOT/tools/check-run-once.py" "$@"
     ;;
+  run-clone)
+    # 「克隆就能一键跑」的**干净副本**那一半（QUOTAGENT-ONE-COMMAND v1，28 §3.1【验收】）：`git archive HEAD`
+    # 解到**仓库外**的临时目录（只含已提交内容：无 .venv/host/node_modules/tmp/user-space 目录），在其中真跑
+    #   · 入口可执行位（`run` 与每个 `tools/*.sh`；实测缺陷：索引 100644 ⇒ 干净克隆 up 装不了依赖、doctor 的 gates 项 FAIL）
+    #   · `doctor` 7 项齐全 + 逐项 next_action + 退出码 0（缺凭据/缺依赖只降级）
+    #   · `up` 一条命令成功（外部实测 health 200 + `/quotagent/` 200 + 副本内自建 .venv）
+    #   · 二次 `up` 幂等（pid 不变）+ 两次 `status` 逐字节一致 · `down` 真释放端口
+    #   · 反向对照：删掉 node_modules 后如实报；断网垫片 + 空 npm 缓存 ⇒ 如实失败且带 log/log_tail（可诊断）
+    #   · **4 处单点变异全红**（依赖准备改坏 / 健康检查不检查 / down 不释放端口 / doctor 假装能跑）+ 产品树字节不变
+    # 它校验 **HEAD 本身**：与 `clean-copy` 同类，**须在 commit 之后跑**（不进提交前的门链）。
+    exec "$QUOTAGENT_PY" "$ROOT/tools/check-run-clone.py" "$@"
+    ;;
   supplier-scorecard)
     shift
     exec node host/t247-scorecard-gate.mjs "$@"

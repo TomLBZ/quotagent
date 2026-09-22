@@ -83,6 +83,8 @@ done
 RUN_DIR="$ROOT/tmp/run"
 PID_FILE="$RUN_DIR/webui-$PORT.pid"
 LOG_FILE="$RUN_DIR/webui-$PORT.log"
+# 依赖准备的原样输出（**只为可诊断**：干净克隆里装不上时必须能说清是哪一步、什么原因）
+DEPS_LOG="$RUN_DIR/deps-install.log"
 HEALTH_PATH="$PREFIX/api/health"
 
 # ---------------------------------------------------------------------------------------------
@@ -255,17 +257,23 @@ do_up() {
       "装 Node 或 source /workspace/bin/activate.sh（设置 QUOTAGENT_NODE）"
     return 2
   fi
+  mkdir -p "$RUN_DIR" 2>/dev/null || true
   if [ ! -d "$ROOT/.venv/bin" ]; then
-    "$ROOT/tools/bootstrap.sh" >/dev/null 2>&1 || true
+    # 依赖准备的原样输出落 tmp/run/deps-install.log（干净克隆里失败时这是唯一能说清原因的东西）
+    printf '[deps] 准备仓库内 .venv：%s\n' "$ROOT/tools/bootstrap.sh" >>"$DEPS_LOG" 2>&1
+    "$ROOT/tools/bootstrap.sh" >>"$DEPS_LOG" 2>&1 || \
+      printf '[deps] bootstrap 非 0 退出（解释器已可解析时不影响 up；上面是它的原样输出）\n' >>"$DEPS_LOG" 2>&1
   fi
   if [ ! -d "$ROOT/host/node_modules/cordis" ]; then
-    "$ROOT/tools/cordis.sh" install >/dev/null 2>&1 || {
-      fail_json up host-deps-install-failed "宿主依赖装不上（host/node_modules/cordis 仍缺失）" \
-        "在能联网的机器上跑 tools/cordis.sh install，或把 host/node_modules 一起带过来"
+    printf '[deps] 准备宿主依赖：%s install\n' "$ROOT/tools/cordis.sh" >>"$DEPS_LOG" 2>&1
+    if ! "$ROOT/tools/cordis.sh" install >>"$DEPS_LOG" 2>&1; then
+      _deps_tail=$(tail -n 8 "$DEPS_LOG" 2>/dev/null | tr '\n' '|' | cut -c1-400)
+      printf '{"ok":false,"action":"up","code":"host-deps-install-failed","reason":"宿主依赖装不上（host/node_modules/cordis 仍缺失）","log":"%s","log_tail":"%s","next_action":"看 log_tail/日志尾部的原因；备选是在能装包的机器上跑 tools/cordis.sh install，再把 host/node_modules 一起带过来（或让 npm 缓存可用）"}\n' \
+        "$(jesc "$DEPS_LOG")" "$(jesc "$_deps_tail")"
       return 1
-    }
+    fi
   fi
-  mkdir -p "$RUN_DIR" "$DATA_DIR" 2>/dev/null || true
+  mkdir -p "$DATA_DIR" 2>/dev/null || true
   START_MS=$(date +%s%3N 2>/dev/null || date +%s)
   QUOTAGENT_WEBUI_PORT=$PORT \
   QUOTAGENT_WEBUI_HOST=$HOST \
@@ -516,11 +524,17 @@ do_doctor() {
   if [ -n "$CORDIS" ]; then
     printf '[ok]       cordis       %s（host/node_modules，仓库内）\n' "$CORDIS"
     J_CORDIS=$(printf '{"item":"cordis","status":"ok","detail":"host/node_modules/cordis","version":"%s","next_action":""}' "$(jesc "$CORDIS")")
+  elif [ -x "$(dirname "${NODE_BIN:-/nonexistent}")/npm" ]; then
+    # 缺失但**能在 `up` 里自动准备**（缺失才装）⇒ 降级、不阻塞：干净克隆的第一次 up 正是这个状态。
+    # 实测（EV-171）：干净副本里 cordis 缺失而 npm 可用时 `./run up` 一条命令装好并起服务（1.5 s）。
+    printf '[degraded] cordis       未安装（host/node_modules/cordis 缺失；`up` 会自动装，缺失才装）\n'
+    printf '           next_action: 直接跑 ./run up（内部 tools/cordis.sh install）；离线机器需 npm 缓存或预先带好 host/node_modules\n'
+    J_CORDIS=$(printf '{"item":"cordis","status":"degraded","detail":"will-install-on-up","next_action":"./run up（内部 tools/cordis.sh install；离线机器需 npm 缓存或预先带好 host/node_modules）"}')
   else
-    printf '[FAIL]     cordis       未安装（host/node_modules/cordis 缺失）\n'
-    printf '           next_action: tools/cordis.sh install（只在缺失时装；锁文件已在库内）\n'
+    printf '[FAIL]     cordis       未安装，且同目录下没有 npm（`up` 内准备不了）\n'
+    printf '           next_action: 装 npm，或把 host/node_modules 一起带过来\n'
     BLOCKING=$((BLOCKING + 1))
-    J_CORDIS=$(printf '{"item":"cordis","status":"failed","detail":"missing","next_action":"tools/cordis.sh install"}')
+    J_CORDIS=$(printf '{"item":"cordis","status":"failed","detail":"missing-and-no-npm","next_action":"装 npm，或把 host/node_modules 一起带过来"}')
   fi
 
   # ④ 端口

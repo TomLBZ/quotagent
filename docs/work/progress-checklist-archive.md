@@ -18,6 +18,9 @@
 **选入规则**（可复核）：主文件里第二个单元格**不为 `P0`**、`status` 列**恰为 `done`**（待办/阻塞行
 一律留在主文件 —— 面板的计数读主文件）、且由 git 引入时间 **≤ 2026-09-21T10:46:22Z** 的 T 行，
 按引入时间升序（同批保持原文件行序）整行搬入。**`P0` 行一律留在主文件**（最保守）。
+**EV-171 批的扩展**：为给新行腾预算，截止时间放宽到 **≤ 2026-09-21T14:00:00Z**，据此追加
+`T-253`/`T-254`/`T-260`/`T-261`/`T-262`/`T-263`/`T-264`/`T-265c` 八行（整行逐字、按引入时间升序追加在文末；
+既有各批也是「逐批追加」，故文末不全局单调 —— 这一点如实记在这里，不假装整文有序）。
 | T-001 | 设计期 | 分析层文档（cordis 架构 / 设计优势 / agent 仓库约定 / 领域痛点） | – | – | done | EV-002 |
 | T-002 | 设计期 | 设计层文档（00..12 + ADR-0001..0006） | – | – | done | EV-001 |
 | T-003 | 设计期 | 需求与路线图（FR / AC / roadmap / 本清单 / handover） | – | – | done | EV-001 |
@@ -87,3 +90,11 @@
 | T-270 | dashboard 可见性缺陷：清单只在进程启动时读一次 → 按 mtime 重读 + 服务名可点链接（workspace 仓库 `5d00ab6`） | B66 | done | — |
 | T-266 | P3 需求与验收规格落库（`docs/work/plans/p3-spec.json`：41 FR + 42 AC 全文）+ 3 份规划文档 | B66 | done | EV-131 |
 | T-271 | Python 侧 admin 阻塞/进度判定器 + 快照写入器 + 2 条 AC 机检（subagent 产出，父方实跑） | B67 | done | EV-132 |
+| T-260 | 实现：`tools/refresh-ui-snapshots.py` + `pipeline-view`（第九个自进化产出）+ `/api/pipeline` + 门与端到端；线上与公网 200 | B60 | done | D-053 / EV-095 |
+| T-254 | 留存计划可被看见：桥侧 `retention.plan`（compute，只读）+ 宿主 `retention-view`（自进化产出）→ 运维视角 `/api/retention`；线上+公网 200 | B50 | done | EV-089 / EV-090 |
+| T-253 | 留存**执行侧**：真删派生副本 + 读侧封存 + 落 `evidence/retention-*`；`AC-AUDIT-005` 机检 22/22 | B49 | done | D-048 / EV-088 |
+| T-264 | 系统管理 UI：`/quotagent/admin/` 道 + token 提权 + 视角切换 + agent 进度/阻塞面板 | B67 | todo | D-059 |
+| T-265c | 线上闭环：UI 提交 → 消费 → 面板 blocked 9→8 / resolved 0→1（真回读） | B68 | done | EV-133 |
+| T-263 | 三域视图**变异自证**：逐处偷改实现 → 对应门必须真变红（`verify.sh ui-mutate`，4/4 红且还原） | B65 | done | EV-098 |
+| T-262 | 快照写入器加**有界的最近列表**（谈判轮次 / FAQ 条目），供业务视角渲染 | B64 | done | EV-097 |
+| T-261 | UI 种子：`tools/ui-seed-pipeline.py` + `verify.sh ui-seed`（7/7）+ 接进 serve 启动流程 + 线上非 0 回读 | B62 | done | D-054 / EV-096 |

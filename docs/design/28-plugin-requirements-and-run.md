@@ -200,8 +200,10 @@
      （干跑预览 → 落 0600 待办件 → Python 侧唯一落盘者写入）；凭据只存指针与指纹，永不回显
   ③ doctor 必须逐项列出"缺哪条凭据、影响哪个插件、怎么补"，而不是笼统报"未配置"
 
-【验收】tools/verify.sh run-once（待建）：清洁副本 + 空 HOME + 断网条件下跑 ./run up，断言
-  健康检查 200、URL 可达、down 后端口释放、第二次 up 幂等（逐字节一致的 status 摘要）。
+【验收】tools/verify.sh run-once（工作树真跑：空 HOME + 断网 + 凭据缺失不阻塞 + 单点变异）与
+  tools/verify.sh run-clone（**只含已提交内容的副本**：git archive HEAD 解到仓库外，断言
+  健康检查 200、URL 可达、down 后端口释放、第二次 up 幂等（逐字节一致的 status 摘要）；
+  该门校验 HEAD ⇒ 与 clean-copy 同类，须在 commit 之后跑）。
 ```
 
 ### 3.2 契约必须自包含的东西（清单，逐条对应实现载体）
@@ -215,21 +217,31 @@
 | 5 | 数据根 | `tmp/`、`host-root`（默认在 `process.cwd()`） | 无（`./run --data-dir` 统一运行期数据根，默认 `tmp/run-shared`；pid/日志落 `tmp/run/`） |
 | 6 | 健康检查 | `/healthz`（已实现） | 无（`./run up` 已把它当退出码判据：连续不健康 ⇒ 非 0 + 日志路径） |
 | 7 | 离线可跑的门 | `tools/verify.sh smoke|docs|coverage` | 无 |
-| 8 | 单入口 | 仓库根 `./run`（本批新增，包装既有载体；`logs`/`config init` 未实现） | `./run` 的 `logs` 与 `config init`（阶段 5.4 剩余项） |
+| 8 | 单入口 | 仓库根 `./run`（契约六动词 `up|down|status|logs|doctor|config init` + 附加动词 `plugin`；EV-166/EV-168） | 无（`logs`/`config init` 已实现，EV-168） |
 
 ### 3.3 现状差距（诚实）
 
-**已实现（本批，EV-166 / T-315）**：仓库根 `./run up | down | status | doctor` 四个动词 + 门 `tools/verify.sh run-once`；
+**已实现（EV-166 / T-315 + EV-168 / T-317）**：仓库根 `./run up | down | status | logs | doctor | config init` 六个契约动词
+（+ 附加动词 `plugin`，运行期装卸）+ 门 `tools/verify.sh run-once`；
 `up` 幂等（重复执行不重建、不覆盖数据）、`down` 只回收**本次启动的**进程且真释放端口、
 `status` 一行 JSON（`ready_ms` 是启动时量到的常值 ⇒ 两次 `status` 逐字节一致）、
 `doctor` 只读体检 7 项（解释器/Node/cordis/端口/配置指纹/凭据/门）逐条给 `next_action`，退出码 0 = 这机器能跑；
-**外部凭据缺失不阻塞 `up`**（受影响项在 `status.degraded[]` 里报 `available:false` + 有名 reason + `next_action`）。
+**外部凭据缺失不阻塞 `up`**（受影响项在 `status.degraded[]` 里报 `available:false` + 有名 reason + `next_action`）；
+`logs`（路径 + 有界尾部，缺日志如实失败）与 `config init`（只含白名单键、存在即拒、0600、打印指纹与逐条 `next_action`、不写账本）。
 
-**仍未实现**：`logs`（容器里日志在 `tmp/run/webui-<port>.log`，`doctor`/`up` 已把路径写进输出，但没有 `logs` 动词）
-与 `config init`（今天由 `tools/config-apply.py --init` 承担，待做成薄包装）。这两条留在阶段 5.4 收口。
+**干净副本那一半的收口（EV-171 / T-320）**：契约 §3.1【验收】说的"清洁副本"以前只被 `run-once` 的
+`QUOTAGENT_RUN_ROOT` 覆盖（那是**工作树**，带着 `.venv`/`host/node_modules`/`tmp`）。现在由
+`tools/verify.sh run-clone` 在 `git archive HEAD` 解出的**只含已提交内容**的副本（仓库外）里真跑
+`doctor`/`up`/`status`/`down` + 两条反向对照 + 4 处单点变异。**实测抓到真缺陷**：索引里 `tools/*.sh` 是
+`100644`（`core.filemode=false` ⇒ `chmod +x` 不入库），干净克隆里 `./run up` 报 `host-deps-install-failed`；
+已用 `git add --chmod=+x` 修复，并把"入口可执行位"冻结为断言。
+**仍未实现（诚实）**：宿主依赖 `cordis@4.0.0-rc.10` 不入库（`host/node_modules` gitignored）⇒ 干净副本的
+第一次 `up` 需要 **npm 缓存或网络**；缓存空 + 断网时 `up` 如实失败（`host-deps-install-failed` + 日志路径 + 尾部原因），
+不假装成功。Python 侧零第三方（ADR-0007），故 `up` 本身不需要 pip/外网。
 
 今天从裸机到服务可访问是**一条命令**（`./run up`，内部串起 `tools/bootstrap.sh` → `tools/cordis.sh install`（仅缺失时）→ `tools/webui-serve.py` → 健康检查）。
-本页 §3.1 是规范原文；实现与判据：`src/system/runtime/docs/one-command-run.md`，门 `tools/verify.sh run-once`（EV-166）。
+本页 §3.1 是规范原文；实现与判据：`src/system/runtime/docs/one-command-run.md`，门 `tools/verify.sh run-once`（EV-166）与
+`tools/verify.sh run-clone`（EV-171，校验 HEAD，须在 commit 之后跑）。
 
 ## 4. 本页的验收
 
@@ -238,7 +250,7 @@
 | §2.2/§2.3 的家族表覆盖全部 165 条 FR / 133 条 AC（逐家族计数可复核） | 计数见 `docs/work/evidence/EV-162-*.txt` §2 |
 | 归属合法（`层次/插件-id`）与目录存在 | 待建的 A7（`T-312` 子项）；现在由覆盖矩阵 + 本页核对 |
 | 每条 FR 都有归属且不写"跨"作为终态 | §2.4 逐条拆分表 |
-| 契约文本与实际载体一致（§3.2 的 8 行） | `tools/verify.sh docs`（预算/ID）+ 逐行人工核对；`./run` 实现后加 `run-once` 门 |
+| 契约文本与实际载体一致（§3.2 的 8 行） | `tools/verify.sh docs`（预算/ID）+ 逐行人工核对；`run-once`（工作树）与 `run-clone`（只含已提交内容的副本）两道门 |
 
 ## 5. 未决
 
