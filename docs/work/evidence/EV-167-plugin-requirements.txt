@@ -212,3 +212,20 @@ $ ls -d src/system/*/ && tools/plugin.sh list --json | tail -1 | python3 -c "...
 5. **没有**改 `plugin-registry` / `plugin-lifecycle` 的门判据（"裸目录算不算已知插件"的口径差 → 记为映射表 §4.2 的已知交互，留待迁移批次）。
 6. **没有**验证 `docs/work/plugin-requirements-*.md` 的 6 份文档在 `git mv` 到 `src/<层>/<插件>/requirements/README.md`
    之后的门行为（那要等插件目录建出来）。
+
+--------------------------------------------------------------------------------
+§9 提交与远端回读（只追加）
+--------------------------------------------------------------------------------
+$ git add <本批 17 个文件> && git commit -F -
+[main b691b97] docs(plugin-requirements): 需求归属到插件落成完整映射 + 9 份逐插件需求文档 + 14 先归档再加行 + 新门 plugin-requirements（EV-167 / T-316）
+ 17 files changed
+$ git push
+   2025153..b691b97  main -> main
+$ git ls-remote origin HEAD
+b691b977a80581ab6f078c5f6390f84509f6f90e	HEAD
+$ git rev-parse HEAD
+b691b977a80581ab6f078c5f6390f84509f6f90e
+
+本批提交：**b691b977a80581ab6f078c5f6390f84509f6f90e**（17 个文件：13 新增/4 修改的文档与门；**未**包含同工作树的并发批次文件
+`host/cli.mjs`、`host/modules/webui.mjs`、`run`、`tools/plugin.sh`、`tools/check-plugin-lifecycle.py`、`tools/check-run-once.py`、
+`src/userspace/**`、`host/lib/ui-route.mjs`、`src/system/runtime/{code/live-control.mjs,tools/plugin-live.mjs}`）。
