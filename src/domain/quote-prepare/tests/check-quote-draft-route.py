@@ -54,7 +54,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / "src"))
 
 from quotagent.kernel.ledger import Ledger  # noqa: E402

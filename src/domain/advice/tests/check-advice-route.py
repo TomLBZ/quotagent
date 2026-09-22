@@ -34,7 +34,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[4]
 CHECKS: list[dict] = []
 # 哨兵串：承包商私域里刻意放的值，任何对外响应体里出现一次就是泄漏
 SENTINELS = ["COST-MODEL-SENTINEL-9a", "RESERVE-PRICE-SENTINEL-4b", "PRIVATE-NOTE-SENTINEL-7f", "987654321"]

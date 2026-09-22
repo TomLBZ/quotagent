@@ -20,16 +20,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..kernel.ledger import Ledger
-from ..paths import new_scratch
-from .registry import Assertion, register
+from quotagent.kernel.ledger import Ledger
+from quotagent.paths import new_scratch
+from quotagent.qa.registry import Assertion, register
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 MOD = ROOT / 'host' / 'modules' / 'quote-prepare.mjs'
 TOOL = ROOT / 'tools' / 'quote-draft.py'
 SIGNER = ROOT / 'tools' / 'quote-sign.py'
 GATE = ROOT / 'host' / 't286-quote-draft-gate.mjs'
-ROUTE_CHECK = ROOT / 'tools' / 'check-quote-draft-route.py'
+ROUTE_CHECK = ROOT / 'src' / 'domain' / 'quote-prepare' / 'tests' / 'check-quote-draft-route.py'
 WEBUI = ROOT / 'host' / 'modules' / 'webui.mjs'
 VERIFY = ROOT / 'tools' / 'verify.sh'
 INVENTORY = ROOT / 'docs' / 'design' / '14-plugin-inventory.md'
