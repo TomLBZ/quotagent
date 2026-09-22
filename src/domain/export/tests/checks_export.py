@@ -119,8 +119,18 @@ def check_compare_004() -> list[Assertion]:
                          len(exported) == 1 and exported[0]["body"]["evaluation_id"] == evaluation["evaluation_id"]
                          and exported[0]["body"]["rows"] == 3 and exported[0]["body"]["bytes"] > 0,
                          f"rows={exported[0]['body']['rows'] if exported else None}"))
-    spec = (ROOT / "docs/work/decisions.md").read_text(encoding="utf-8")
+    #: 决策的**定义集合** = 主文件 + 与它同目录、名字匹配归档 glob 的每份文件 —— 与 `tools/check-docs.py`
+    #: 的 DEF_SETS（`AC_MAIN`/`AC_ARCHIVE_GLOB` 那一套）同一口径：**归档不是豁免区**。
+    #: 搬前实测（EV-175）：`D-016` 已被归档批次搬进 `decisions-archive-b.md`，只读 `decisions.md` ⇒ 断言红。
+    #: 判据**未放宽**：集合里必须真读到 `D-016`，且其后 400 字节内出现 `CSV`（任一处成立即可）；
+    #: 临时把 `D-016` 从归档里抽走 ⇒ 集合里读不到定义 ⇒ 必红（见 EV-175 §1 的反向验证原始行）。
+    decisions_dir = ROOT / "docs" / "work"
+    decision_docs = [decisions_dir / "decisions.md",
+                     *sorted(p for p in decisions_dir.glob("decisions-archive*.md") if p.is_file())]
+    spec = "\n".join(p.read_text(encoding="utf-8") for p in decision_docs)
     out.append(Assertion("`.xlsx` 的取舍已登记在案（D-016：P1 以 CSV 交付，xlsx 走宿主层）",
-                         "D-016" in spec and "CSV" in spec.split("D-016")[1][:400],
-                         "decisions.md 缺 D-016"))
+                         "D-016" in spec
+                         and any("CSV" in chunk[:400] for chunk in spec.split("D-016")[1:]),
+                         f"决策定义集合缺 D-016（或其定义后 400 字节内没有 CSV）："
+                         f"查了 {[p.name for p in decision_docs]}"))
     return out
