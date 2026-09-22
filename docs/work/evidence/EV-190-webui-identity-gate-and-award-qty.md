@@ -69,6 +69,11 @@
 那一族断言（它们只冻旧形态）。这 9 个门文件在被禁清单里（`host/webui.mjs` 等），故只登记不动手；
 `webui` 门 26 条明细见 `tmp/gate-webui-after.txt`。
 
+> **已处置（`EV-191`）**：9 个门全部按 ① 修好（**断言只增不减、删除 0 条**）；同一根因下另发现 **3 个门**
+> （`ui-feedback`/`admin-route`/`rfq-visibility`，本清单**漏登记**）也已一并修好；另测到 4 个门的**后半**
+> 被前半红遮住（`advice`/`bid-heuristics`/`authority`/`gates` 各红 6/7/8/8、`change-detail` 后半直接崩）。
+> 见 `docs/work/evidence/EV-191-identity-gate-fixture-relogin.md`。
+
 **同一构造上的「不是我造成的红」**（`tmp/basecheck/`＝纯 `git archive HEAD`，用于归因）：`storage` 红是干净副本
 缺 `tmp/ui-shared` 的取样产物（基线同样红）；`p0-no-node` 与 `g1` 的 `AC-ADMIN-004`（进度数字 23/17 与复算不一致，
 还有 `plugin-lifecycle` 之外的旁证）在基线同样红 ⇒ 与本批无关。`g1` 全量 AC 83/84，唯一红的就是它。

@@ -38,6 +38,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -204,6 +205,77 @@ def wait_health(port: int, prefix: str, timeout: float = 90.0) -> bool:
             pass
         time.sleep(0.5)
     return False
+
+
+# ---------------------------------------------------------------------------------------------
+# 身份会话（P3：`/contractor/**`、`/supplier/**` 有了**路由级身份门槛**）——
+# 本门**先登录再取业务路由**：判据从「谁能打开」变成「**登录后按侧放行**」。
+# 登录走**真入口** `POST /identity/login`（`format=json` ⇒ 200 + `Set-Cookie: qa_identity=…`）；
+# 会话落在**本门 `./run up --data-dir`** 的数据根里（**不碰**真 `/workspace/config.yaml` 与真服务数据）。
+# 纪律：断言**一条不删、一条不放松** —— 页面区块的存在性判据照旧，只是带上本侧 cookie。
+# ---------------------------------------------------------------------------------------------
+COOKIES: dict[tuple[str, str], str] = {}     # (base, side) → 'qa_identity=…'
+
+
+def header_of(headers: dict, name: str) -> str:
+    """大小写无关地取响应头（`dict(response.headers)` 保留服务端发出时的大小写）。"""
+    for key, value in headers.items():
+        if str(key).lower() == name.lower():
+            return str(value)
+    return ""
+
+
+def side_of(url: str) -> str:
+    """这条 URL 属于哪一侧的业务路由（`/contractor/**` / `/supplier/**`）；其它路径 ⇒ 空串（不带身份）。"""
+    hit = re.search(r"/(contractor|supplier)(?:/|$)", urllib.parse.urlsplit(url).path)
+    return hit.group(1) if hit else ""
+
+
+def cookie_of(base: str, url: str) -> dict:
+    """业务路由要带的 cookie（`base` = 本次在测服务的 `http://127.0.0.1:<port><prefix>`）。"""
+    side = side_of(url)
+    if not side:
+        return {}
+    key = (base, side)
+    if key not in COOKIES:
+        payload = urllib.parse.urlencode({"name": f"gate-plugin-lifecycle-{side}", "side": side}).encode("utf-8")
+        code, body, headers = http_post(f"{base}/identity/login?format=json", payload, timeout=8)
+        cookie = header_of(headers, "set-cookie").split(";")[0]
+        if code != 200 or not cookie.startswith("qa_identity="):
+            raise RuntimeError(f"门夹具登录失败：side={side} status={code} body={body[:200]}")
+        COOKIES[key] = cookie
+    return {"Cookie": COOKIES[key]}
+
+
+def http_get_page(base: str, path: str, timeout: float = 5.0) -> tuple[int, str, dict]:
+    """取**业务路由**：先按侧登录（P3 门槛）再带 cookie 取（判据不放宽：仍要求 200 + 区块真出现）。"""
+    return http_get_with(f"{base}{path}", cookie_of(base, f"{base}{path}"), timeout)
+
+
+def login_as(base: str, side: str) -> dict:
+    """**显式**按某侧登录（越侧负控要的就是「另一侧的 cookie」——不能从 URL 推侧）。"""
+    return cookie_of(base, f"{base}/{side}/")
+
+
+def http_get_with(url: str, headers: dict, timeout: float = 5.0,
+                  follow_redirects: bool = True) -> tuple[int, str, dict]:
+    request = urllib.request.Request(url, method="GET", headers=headers or {})
+    try:
+        opener = urllib.request.urlopen if follow_redirects else _NO_REDIRECT_OPENER.open
+        with opener(request, timeout=timeout) as response:
+            return response.status, response.read().decode("utf-8", "replace"), dict(response.headers)
+    except urllib.error.HTTPError as err:
+        return err.code, err.read().decode("utf-8", "replace"), dict(err.headers)
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """**不跟** 303：身份门槛的「浏览器形状」判据就是那一次 303 本身（跟过去会变成 200 登录页）。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def run_sh(script: Path, args: list[str], env_extra: dict | None = None, timeout: int = 240) -> tuple[int, str, str]:
@@ -593,8 +665,28 @@ def assert_registration(port: int, prefix: str) -> None:
           and "html" not in json.dumps(blocks_payload),
           f"count={blocks_payload.get('count')} blocks={json.dumps(blocks, ensure_ascii=False)[:300]}")
 
-    contractor_code, contractor, _ = http_get(f"{base}/contractor/")
-    supplier_code, supplier, _ = http_get(f"{base}/supplier/")
+    contractor_code, contractor, _ = http_get_page(base, "/contractor/")
+    supplier_code, supplier, _ = http_get_page(base, "/supplier/")
+    # C7（P3）：身份门槛本身也要机检 —— 未登录拒（两种形状）/ 登录后按侧放行 / 越侧 403。
+    # 没有这一条，C2/C3「页面上真出现区块」在门槛被误删时照样绿（门就白修了）。
+    anon_json_code, anon_json_body, _ = http_get_with(f"{base}/contractor/api/events",
+                                                      {"Accept": "application/json"})
+    anon_html_code, _anon_html_body, anon_html_headers = http_get_with(
+        f"{base}/supplier/", {"Accept": "text/html"}, follow_redirects=False)
+    cross_side = http_get_with(f"{base}/supplier/", login_as(base, "contractor"))
+    cross_side_code, cross_side_body = cross_side[0], cross_side[1]
+    same_as_supplier = http_get_page(base, "/supplier/")
+    check("C7 身份门槛（P3）：**未登录**取业务路由一律拒 —— API/JSON ⇒ 401 `identity-required` + `next`；"
+          "浏览器（`Accept: text/html`）⇒ 303 回 `<前缀>/identity/?next=<原地址>`；"
+          "**登录后按侧放行**（本侧 200）、**越侧 403 `side-mismatch`**（不回落成「能看」）",
+          anon_json_code == 401 and "identity-required" in anon_json_body and '"next"' in anon_json_body
+          and anon_html_code == 303 and "/identity/?next=" in header_of(anon_html_headers, "location")
+          and same_as_supplier[0] == 200
+          and cross_side_code == 403 and "side-mismatch" in cross_side_body,
+          f"未登录 JSON={anon_json_code} HTML={anon_html_code} "
+          f"location={header_of(anon_html_headers, 'location')[:60]}；本侧={same_as_supplier[0]}；"
+          f"越侧（承包商 cookie 取 /supplier/）={cross_side_code} 含 side-mismatch="
+          f"{'side-mismatch' in cross_side_body}")
     check("C2 承包商页面上**真出现** domain/advice 注册的只读区块（原始行见门输出）",
           contractor_code == 200 and f'data-ui-block="{ID_ADVICE}"' in contractor
           and f'data-ui-block-slot="page.contractor"' in contractor
@@ -696,6 +788,11 @@ console.log(JSON.stringify(facts))
         prefix = "/quotagent"
         base = f"http://127.0.0.1:{port}{prefix}"
         control = f"{base}/api/plugins/control"
+        # **先登录**（P3：业务路由有身份门槛）——必须在下面 `tree_before`/`ledger_before` 快照**之前**：
+        # 会话文件是宿主按设计写的服务端状态（`<data-dir>/identity/`），登录要算进快照基线，
+        # 这样 L13「数据根逐字节不变」判据保持**原样**（不改成「容忍一个文件」）。
+        login_as(base, "contractor")
+        login_as(base, "supplier")
         supplier_page = f"{base}/supplier/"
         tree_before = tree_digest(ROOT / "src") + tree_digest(ROOT / "host")
         ledger_before = tree_digest(ROOT / data_dir)
@@ -744,7 +841,7 @@ console.log(JSON.stringify(facts))
               f"rc={rc_cli} code={cli_payload.get('code')} next_action={str(cli_payload.get('next_action'))[:80]}")
 
         # L7 装载前：页面上**没有** badge 的区块；/api/ui/blocks 只有 2 条（启动期静态装配的那两个）
-        page_before_code, page_before, _ = http_get(supplier_page)
+        page_before_code, page_before, _ = http_get_page(base, "/supplier/")
         sha_before = hashlib.sha256(page_before.encode("utf-8")).hexdigest()
         blocks_before = ui_blocks(base)
         status_before = live_verb(PLUGIN_SH, ["status", BADGE, "--port", str(port)], token)[1]
@@ -756,7 +853,7 @@ console.log(JSON.stringify(facts))
 
         # L8 **装载**：真命令 → 真装载 → 区块**真出现在页面上**
         rc_load, load_payload = live_verb(PLUGIN_SH, ["load", BADGE, "--port", str(port)], token)
-        page_after_code, page_after, _ = http_get(supplier_page)
+        page_after_code, page_after, _ = http_get_page(base, "/supplier/")
         sha_after = hashlib.sha256(page_after.encode("utf-8")).hexdigest()
         blocks_after = ui_blocks(base)
         badge_block = [item for item in blocks_after if item.get("plugin_id") == BADGE]
@@ -799,7 +896,7 @@ console.log(JSON.stringify(facts))
 
         # L11 **卸载**：区块消失 + 页面逐字节还原 + effects 归零 + 可重复
         rc_unload, unload_payload = live_verb(PLUGIN_SH, ["unload", BADGE, "--port", str(port)], token)
-        page_final_code, page_final, _ = http_get(supplier_page)
+        page_final_code, page_final, _ = http_get_page(base, "/supplier/")
         sha_final = hashlib.sha256(page_final.encode("utf-8")).hexdigest()
         blocks_final = ui_blocks(base)
         rc_unload2, unload_again = live_verb(PLUGIN_SH, ["unload", BADGE, "--port", str(port)], token)

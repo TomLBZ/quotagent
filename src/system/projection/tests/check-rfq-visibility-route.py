@@ -40,6 +40,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -99,14 +100,83 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def get(url: str, timeout: float = 15.0) -> tuple[int, str]:
+def raw_request(url: str, timeout: float = 15.0, headers: dict | None = None,
+                follow_redirects: bool = True, data: bytes | None = None) -> tuple[int, str]:
+    code, _body, _headers = raw_request_full(url, timeout=timeout, headers=headers,
+                                             follow_redirects=follow_redirects, data=data)
+    return code, _body
+
+
+def raw_request_full(url: str, timeout: float = 15.0, headers: dict | None = None,
+                     follow_redirects: bool = True, data: bytes | None = None) -> tuple[int, str, dict]:
+    """底层请求（状态码 / 文本 / 响应头）。"""
     try:
-        with urllib.request.urlopen(urllib.request.Request(url), timeout=timeout) as response:
-            return int(response.status), response.read().decode("utf-8", "replace")
+        request = urllib.request.Request(url, data=data, headers=headers or {})
+        opener = urllib.request.urlopen if follow_redirects else _NO_REDIRECT_OPENER.open
+        with opener(request, timeout=timeout) as response:
+            return int(response.status), response.read().decode("utf-8", "replace"), dict(response.headers)
     except urllib.error.HTTPError as err:
-        return int(err.code), err.read().decode("utf-8", "replace")
+        return int(err.code), err.read().decode("utf-8", "replace"), dict(err.headers)
     except Exception as err:  # noqa: BLE001
-        return 0, f"<error {type(err).__name__}: {err}>"
+        return 0, f"<error {type(err).__name__}: {err}>", {}
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """**不跟** 303：身份门槛的「浏览器形状」判据就是那一次 303 本身（跟过去会变成 200 登录页）。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirect)
+
+# ---------------------------------------------------------------------------
+# 身份会话（P3：`/contractor/**`、`/supplier/**` 有了**路由级身份门槛**）——
+# 本门**先登录再取业务路由**：判据从「谁能打开」变成「**登录后按侧放行**」。
+# 登录走**真入口** `POST /identity/login`（`format=json` ⇒ 200 + `Set-Cookie: qa_identity=…`）；
+# 会话落在本门私有 `--ui-shared`（**不碰**真 `/workspace/config.yaml` 与真服务数据）。
+# 纪律：断言**一条不删、一条不放松** —— 逐字/逐字节/哨兵那些判据原样保留，只是带上本侧 cookie。
+# ---------------------------------------------------------------------------
+BASE = ""                        # main() 起完第一个服务后填（够用：两个服务共用同一份 ui-shared）
+COOKIES: dict[str, str] = {}     # side → 'qa_identity=…'
+
+
+def header_of(headers: dict, name: str) -> str:
+    """大小写无关地取响应头（`dict(response.headers)` 保留服务端发出时的大小写）。"""
+    for key, value in headers.items():
+        if str(key).lower() == name.lower():
+            return str(value)
+    return ""
+
+
+def side_of(url: str) -> str:
+    """这条 URL 属于哪一侧的业务路由（`/contractor/**` / `/supplier/**`）；其它路径 ⇒ 空串（不带身份）。"""
+    hit = re.search(r"/(contractor|supplier)(?:/|$)", urllib.parse.urlsplit(url).path)
+    return hit.group(1) if hit else ""
+
+
+def login_as(side: str) -> dict:
+    """**显式**按某侧登录（越侧负控要的就是「另一侧的 cookie」）。"""
+    if side not in COOKIES:
+        payload = urllib.parse.urlencode({"name": f"gate-rfq-visibility-{side}", "side": side}).encode("utf-8")
+        code, body, headers = raw_request_full(f"{BASE}/identity/login?format=json", data=payload,
+                                               headers={"Content-Type":
+                                                        "application/x-www-form-urlencoded"},
+                                               timeout=8.0)
+        cookie = header_of(headers, "set-cookie").split(";")[0]
+        if code != 200 or not cookie.startswith("qa_identity="):
+            raise RuntimeError(f"门夹具登录失败：side={side} status={code} body={body[:200]}")
+        COOKIES[side] = cookie
+    return {"Cookie": COOKIES[side]}
+
+
+def cookie_of(url: str) -> dict:
+    side = side_of(url)
+    return login_as(side) if side else {}
+
+
+def get(url: str, timeout: float = 15.0) -> tuple[int, str]:
+    return raw_request(url, timeout=timeout, headers=cookie_of(url))
 
 
 def parse_json(body: str) -> dict:
@@ -209,6 +279,7 @@ def rfq_rows(payload: dict) -> list[dict]:
 
 
 def main() -> int:  # noqa: C901
+    global BASE
     fixture = write_fixtures()
     deliveries_before = {path.name: sha256_file(path) for path in sorted(DELIVERIES.glob("*.json"))}
     ledgers_before = {name: sha256_file(path) for name, path in
@@ -225,12 +296,36 @@ def main() -> int:  # noqa: C901
     proc_g = serve(port_g, "/rvg", LEDGER_G)
     base_a = f"http://127.0.0.1:{port_a}/rva"
     base_g = f"http://127.0.0.1:{port_g}/rvg"
+    BASE = base_a
     try:
         up_a, up_g = wait_up(base_a, proc_a), wait_up(base_g, proc_g)
         check("② 两个真进程就绪（同一份投递目录、两种身份；`/api/health` 200）",
               up_a and up_g, f"alpha pid={proc_a.pid} port={port_a}；gamma pid={proc_g.pid} port={port_g}")
         if not (up_a and up_g):
             return 2
+
+        # ---- ②b 身份门槛（P3 的判据本身也要机检；下面所有业务路由都**登录后再取**）----
+        anon_json_code, anon_json_body, _h = raw_request_full(
+            f"{base_a}/supplier/api/events", headers={"Accept": "application/json"})
+        anon_html_code, _b, anon_html_headers = raw_request_full(
+            f"{base_a}/supplier/", headers={"Accept": "text/html"}, follow_redirects=False)
+        cookie_supplier = login_as("supplier")
+        cookie_contractor = login_as("contractor")
+        same_side = raw_request_full(f"{base_g}/supplier/", headers=cookie_supplier)
+        cross_side = raw_request_full(f"{base_g}/supplier/", headers=cookie_contractor)
+        cross_json = raw_request_full(f"{base_g}/supplier/api/events", headers=cookie_contractor)
+        check("②b 身份门槛负控：**未登录**取业务路由一律拒 —— API/JSON ⇒ 401 `identity-required` + `next`；"
+              "浏览器形状（`Accept: text/html`）⇒ 303 回 `<前缀>/identity/?next=<原地址>`（不是 200、不是 404）",
+              anon_json_code == 401 and "identity-required" in anon_json_body and '"next"' in anon_json_body
+              and anon_html_code == 303 and "/identity/?next=" in header_of(anon_html_headers, "location"),
+              f"JSON={anon_json_code} 含 identity-required={'identity-required' in anon_json_body}；"
+              f"HTML={anon_html_code} location={header_of(anon_html_headers, 'location')[:80]}")
+        check("②b' 身份门槛正控：**登录后按侧放行** —— 同侧（gamma 进程上的 `/supplier/`）200；"
+              "拿承包商 cookie 去 `/supplier/`（页面与 JSON 两条形状）都 ⇒ **403 `side-mismatch`**",
+              same_side[0] == 200 and cross_side[0] == 403 and "side-mismatch" in cross_side[1]
+              and cross_json[0] == 403 and "side-mismatch" in cross_json[1],
+              f"同侧={same_side[0]} 越侧页面={cross_side[0]} 越侧 JSON={cross_json[0]} "
+              f"含 side-mismatch={'side-mismatch' in cross_side[1]}")
 
         # ---- ③ 被邀的供应商看得到包（正控，逐字）----
         a_events_1 = get(f"{base_a}/supplier/api/events")

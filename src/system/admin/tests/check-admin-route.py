@@ -22,6 +22,7 @@ import http.client
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -29,6 +30,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -287,18 +289,45 @@ try:
 
     responses: list[bytes] = []          # 所有响应体（哨兵四搜的面）
 
+    # ---------------------------------------------------------------------
+    # 身份会话（P3：`/contractor/**`、`/supplier/**` 有了**路由级身份门槛**）——
+    # 本门**先登录再取业务路由**：判据从「谁能打开」变成「**登录后按侧放行**」，
+    # 业务路径（`/quotagent/<side>/**`）自动带**本侧** cookie；登录走真入口 `POST /identity/login`
+    # （经同一个代理转发到真 webui）。断言一条不删、一条不放松。
+    # ---------------------------------------------------------------------
+    identity_cookies: dict[str, str] = {}
+
+    def login_identity(side: str) -> str:
+        if side not in identity_cookies:
+            payload = urllib.parse.urlencode({"name": f"gate-admin-route-{side}", "side": side})
+            status_l, head_l, _body_l = request(
+                admin_port, "POST", f"{PREFIX}/identity/login?format=json", body=payload,
+                headers={"content-type": "application/x-www-form-urlencoded"})
+            cookie_l = header_of(head_l, "set-cookie").split(";")[0]
+            if status_l != 200 or not cookie_l.startswith("qa_identity="):
+                raise RuntimeError(f"门夹具登录失败：side={side} status={status_l}")
+            identity_cookies[side] = cookie_l
+        return identity_cookies[side]
+
+    def identity_for(path: str) -> str:
+        """业务路由要带的身份 cookie（`/quotagent/<side>/**` 才有；其余路径不带）。"""
+        hit = re.match(rf"^{re.escape(PREFIX)}/(contractor|supplier)(?:/|$)", path)
+        return login_identity(hit.group(1)) if hit else ""
+
     def get(path: str, cookie: str | None = None, **kw):
         headers = dict(kw.pop("headers", {}) or {})
-        if cookie:
-            headers["cookie"] = cookie
+        merged = [part for part in (cookie, identity_for(path)) if part]
+        if merged:
+            headers["cookie"] = "; ".join(merged)
         status, head, body = request(admin_port, "GET", path, headers=headers, **kw)
         responses.append(body)
         return status, head, body
 
     def post(path: str, body: str, content_type: str = "application/x-www-form-urlencoded", cookie=None):
         headers = {"content-type": content_type}
-        if cookie:
-            headers["cookie"] = cookie
+        merged = [part for part in (cookie, identity_for(path)) if part]
+        if merged:
+            headers["cookie"] = "; ".join(merged)
         status, head, out = request(admin_port, "POST", path, body=body, headers=headers)
         responses.append(out)
         return status, head, out
@@ -438,6 +467,28 @@ try:
           and not private_hits,
           "；".join(f"{path} 200/200 逐字节相同={same}" for path, s1, s2, same, _b in pairs)
           + f"；数据面私域键命中={private_hits or '无'}")
+
+    # ---------------------------------------------------------------------
+    # ⑧b 身份门槛（P3 的判据本身也要机检；上面的业务路由都是**登录后取**）
+    # ---------------------------------------------------------------------
+    anon_json_code, _ajh, anon_json_body = request(admin_port, "GET", f"{PREFIX}/supplier/api/events",
+                                                   headers={"accept": "application/json"})
+    anon_html_code, anon_html_head, _abh = request(admin_port, "GET", f"{PREFIX}/contractor/",
+                                                   headers={"accept": "text/html"})
+    same_side_code, _ssh, _ssb = get(f"{PREFIX}/supplier/")            # 自动带本侧身份（supplier）
+    cross_side_code, _csh, cross_side_body = request(
+        admin_port, "GET", f"{PREFIX}/supplier/api/events",
+        headers={"accept": "application/json", "cookie": login_identity("contractor")})
+    check("⑧b 身份门槛（P3）：**未登录**取业务路由一律拒 —— API/JSON ⇒ 401 `identity-required` + `next`；"
+          "浏览器（`Accept: text/html`）⇒ 303 回 `<前缀>/identity/?next=<原地址>`；"
+          "**登录后按侧放行**（本侧 200）、**越侧 403 `side-mismatch`**（不回落成「能看」）",
+          anon_json_code == 401 and b"identity-required" in anon_json_body and b'"next"' in anon_json_body
+          and anon_html_code == 303 and "/identity/?next=" in header_of(anon_html_head, "location")
+          and same_side_code == 200
+          and cross_side_code == 403 and b"side-mismatch" in cross_side_body,
+          f"未登录 JSON={anon_json_code} HTML={anon_html_code} "
+          f"location={header_of(anon_html_head, 'location')[:60]}；本侧={same_side_code}；"
+          f"越侧={cross_side_code} 含 side-mismatch={b'side-mismatch' in cross_side_body}")
 
     # ---------------------------------------------------------------------
     # ⑨ 哨兵四搜：所有响应体里都搜不到 token 与快照哨兵（正文/私域）

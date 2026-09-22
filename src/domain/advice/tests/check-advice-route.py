@@ -31,6 +31,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -60,15 +61,79 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def get(url: str, timeout: float = 10.0) -> tuple[int, str]:
-    """真回读（返回**原始字节解码后的文本**；状态码来自 HTTP 响应本身）。"""
+def get(url: str, timeout: float = 10.0, follow_redirects: bool = True) -> tuple[int, str]:
+    """真回读（返回**原始字节解码后的文本**；状态码来自 HTTP 响应本身）—— 业务路由带本侧身份。"""
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
+        request = urllib.request.Request(url, headers=cookie_of(url))
+        opener = urllib.request.urlopen if follow_redirects else _NO_REDIRECT_OPENER.open
+        with opener(request, timeout=timeout) as response:
             return int(response.status), response.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as err:
         return int(err.code), err.read().decode("utf-8", "replace")
     except Exception as err:  # noqa: BLE001
         return 0, f"<error {type(err).__name__}: {err}>"
+
+
+def _fetch_full(url: str, data: bytes | None = None, headers: dict | None = None,
+                follow_redirects: bool = True) -> tuple[int, str, dict]:
+    """底层请求（状态码 / 文本 / 响应头）—— 登录与「两种拒绝形状」用。"""
+    try:
+        request = urllib.request.Request(url, data=data, headers=headers or {})
+        opener = urllib.request.urlopen if follow_redirects else _NO_REDIRECT_OPENER.open
+        with opener(request, timeout=15.0) as response:
+            return int(response.status), response.read().decode("utf-8", "replace"), dict(response.headers)
+    except urllib.error.HTTPError as err:
+        return int(err.code), err.read().decode("utf-8", "replace"), dict(err.headers)
+    except Exception as err:  # noqa: BLE001
+        return 0, f"<error {type(err).__name__}: {err}>", {}
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """**不跟** 303：身份门槛的「浏览器形状」判据就是那一次 303 本身（跟过去会变成 200 登录页）。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirect)
+
+# ---------------------------------------------------------------------------
+# 身份会话（P3：`/contractor/**`、`/supplier/**` 有了**路由级身份门槛**）——
+# 本门**先登录再取业务路由**：判据从「谁能打开」变成「**登录后按侧放行**」。
+# 登录走**真入口** `POST /identity/login`（`format=json` ⇒ 200 + `Set-Cookie: qa_identity=…`）。
+# 纪律：断言**一条不删、一条不放松** —— 业务路由仍逐条要求 200，只是带上本侧 cookie。
+# ---------------------------------------------------------------------------
+BASE = ""                        # main() 起完服务后填（`http://127.0.0.1:<port><prefix>`）
+COOKIES: dict[str, str] = {}     # side → 'qa_identity=…'
+
+
+def header_of(headers: dict, name: str) -> str:
+    """大小写无关地取响应头（`dict(response.headers)` 保留服务端发出时的大小写）。"""
+    for key, value in headers.items():
+        if str(key).lower() == name.lower():
+            return str(value)
+    return ""
+
+
+def side_of(url: str) -> str:
+    """这条 URL 属于哪一侧的业务路由（`/contractor/**` / `/supplier/**`）；其它路径 ⇒ 空串（不带身份）。"""
+    hit = re.search(r"/(contractor|supplier)(?:/|$)", urllib.parse.urlsplit(url).path)
+    return hit.group(1) if hit else ""
+
+
+def cookie_of(url: str) -> dict:
+    """业务路由要带的 cookie（按侧登录一次就缓存；每侧的会话只作用于本侧）。"""
+    side = side_of(url)
+    if not side:
+        return {}
+    if side not in COOKIES:
+        payload = urllib.parse.urlencode({"name": f"gate-advice-{side}", "side": side}).encode("utf-8")
+        code, body, headers = _fetch_full(f"{BASE}/identity/login?format=json", data=payload)
+        cookie = header_of(headers, "set-cookie").split(";")[0]
+        if code != 200 or not cookie.startswith("qa_identity="):
+            raise RuntimeError(f"门夹具登录失败：side={side} status={code} body={body[:200]}")
+        COOKIES[side] = cookie
+    return {"Cookie": COOKIES[side]}
 
 
 def sha256_file(path: Path) -> str:
@@ -101,7 +166,9 @@ SUPPLIER_LEDGER = SHARED / "supplier" / "ledger.jsonl"
 EMPTY_LEDGER = SHARED / "empty" / "ledger.jsonl"
 PIPELINE = SHARED / "pipeline.json"
 PIPELINE_MISSING = SHARED / "pipeline-absent.json"
-UI_SHARED = SHARED / "ui-shared"
+# 身份会话（P3）故意落在**被监视的目录之外**：会话文件是宿主按设计写的**服务端状态**（`<ui_shared>/identity/`），
+# 不是夹具数据。放进 SHARED 会让 ⑫「目录一元不增」变成「容忍一个文件」—— 那是**放松判据**，不做。
+UI_SHARED = ROOT / "tmp" / "advice-route-identity"
 
 
 def row(seq: int, type_: str, correlation: str, ts: str, body: dict, realm: str) -> dict:
@@ -179,6 +246,7 @@ def wait_up(base: str, proc: subprocess.Popen) -> bool:
 
 
 def main() -> int:  # noqa: C901
+    global BASE
     write_fixtures()
     watched = [CONTRACTOR_LEDGER, SUPPLIER_LEDGER, EMPTY_LEDGER, PIPELINE]
     before = {str(path): sha256_file(path) for path in watched}
@@ -194,12 +262,36 @@ def main() -> int:  # noqa: C901
     prefix = "/qaadv"
     proc = serve(port, prefix, CONTRACTOR_LEDGER, SUPPLIER_LEDGER, PIPELINE)
     base = f"http://127.0.0.1:{port}{prefix}"
+    BASE = base
     try:
         up = wait_up(base, proc)
         check("② 真进程就绪（`cli.mjs webui` + `/api/health` 200；**不需要**管理员 token）",
               up, f"port={port} prefix={prefix} pid={proc.pid}")
         if not up:
             return 2
+
+        # ---- ②b 身份门槛（P3 的判据本身也要机检；下面所有业务路由都**登录后再取**）----
+        anon_json_code, anon_json_body, _h = _fetch_full(
+            f"{base}/contractor/api/advice", headers={"Accept": "application/json"})
+        anon_html_code, _b, anon_html_headers = _fetch_full(
+            f"{base}/supplier/advice/", headers={"Accept": "text/html"}, follow_redirects=False)
+        cookie_contractor = cookie_of(f"{base}/contractor/advice/")
+        cookie_supplier = cookie_of(f"{base}/supplier/advice/")     # noqa: F841（两侧各登录一次）
+        same_side = _fetch_full(f"{base}/contractor/advice/", headers=cookie_contractor)
+        cross_side = _fetch_full(f"{base}/supplier/advice/", headers=cookie_contractor)
+        cross_json = _fetch_full(f"{base}/supplier/api/advice", headers=cookie_contractor)
+        check("②b 身份门槛负控：**未登录**取业务路由一律拒 —— API/JSON ⇒ 401 `identity-required` + `next`；"
+              "浏览器形状（`Accept: text/html`）⇒ 303 回 `<前缀>/identity/?next=<原地址>`（不是 200、不是 404）",
+              anon_json_code == 401 and "identity-required" in anon_json_body and '"next"' in anon_json_body
+              and anon_html_code == 303 and "/identity/?next=" in header_of(anon_html_headers, "location"),
+              f"JSON={anon_json_code} 含 identity-required={'identity-required' in anon_json_body}；"
+              f"HTML={anon_html_code} location={header_of(anon_html_headers, 'location')[:80]}")
+        check("②b' 身份门槛正控：**登录后按侧放行** —— 同侧页面 200；拿承包商 cookie 去 `/supplier/`"
+              "（页面与 JSON 两条形状）都 ⇒ **403 `side-mismatch`**（不许回落成「能看」）",
+              same_side[0] == 200 and cross_side[0] == 403 and "side-mismatch" in cross_side[1]
+              and cross_json[0] == 403 and "side-mismatch" in cross_json[1],
+              f"同侧={same_side[0]} 越侧页面={cross_side[0]} 越侧 JSON={cross_json[0]} "
+              f"含 side-mismatch={'side-mismatch' in cross_side[1]}")
 
         # ---- ③ 路由登记 ----
         code, routes_body = get(f"{base}/api/routes")

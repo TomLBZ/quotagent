@@ -279,11 +279,61 @@ const fiber = await ctx.plugin({
 }, { port: 0, route_prefix: '/quotagent', ledger_evolve: evolvePath, pipeline_snapshot: pipeFixture })
 
 const base = box.handle.url.replace(/\/$/, '')
+
+// ---------------------------------------------------------------------------
+// 身份会话夹具（P3：`/contractor/**`、`/supplier/**` 有了**路由级身份门槛**）——
+// 本门**先登录再取业务路由**：判据从「谁能打开」变成「**登录后按侧放行**」。
+// 登录走**真入口** `POST /identity/login`（`?format=json` ⇒ 200 + `Set-Cookie: qa_identity=…`）；
+// 会话落在本门服务自己的 `<ui_shared>/identity/sessions.json`（产品行为，0600）。
+// 纪律：**不放松任何断言** —— 两侧页面/JSON 仍逐条要求 200，只是带上本侧 cookie。
+// ---------------------------------------------------------------------------
+const SESSIONS = {}                       // side → cookie 头值（'qa_identity=…'）
+const loginAs = async (side) => {
+  if (SESSIONS[side]) return SESSIONS[side]
+  const res = await fetch(`${base}/identity/login?format=json`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ name: `gate-webui-${side}`, side }).toString(),
+  })
+  const body = await res.text()
+  const cookie = String(res.headers.get('set-cookie') ?? '').split(';')[0]
+  if (res.status !== 200 || !cookie.startsWith('qa_identity=')) {
+    throw new Error(`门夹具登录失败：side=${side} status=${res.status} body=${body.slice(0, 200)}`)
+  }
+  SESSIONS[side] = cookie
+  return cookie
+}
+/** 业务路由带哪张身份的 cookie：`/contractor/**` 用承包商、`/supplier/**` 用供应商；公开入口不带。 */
+const cookieFor = async (path) => {
+  const side = /^\/(contractor|supplier)(?:\/|$)/.exec(String(path))?.[1]
+  return side ? { cookie: await loginAs(side) } : {}
+}
 const get = async (path) => {
-  const res = await fetch(`${base}${path}`)
+  const res = await fetch(`${base}${path}`, { headers: await cookieFor(path) })
   const text = await res.text()
   return { status: res.status, text }
 }
+
+// 0. 身份门槛本身也要机检（P3 的判据：**未登录拒、登录后按侧放行、越侧 403**）——
+//    没有这两条，上面「业务路由 200」的断言在门槛被误删时仍会绿（门就白修了）。
+const anonJson = await fetch(`${base}/contractor/api/events`, { headers: { accept: 'application/json' } })
+const anonJsonBody = await anonJson.text()
+const anonHtml = await fetch(`${base}/supplier/`, { headers: { accept: 'text/html' }, redirect: 'manual' })
+const anonHtmlLocation = String(anonHtml.headers.get('location') ?? '')
+check('身份门槛负控：未登录（无 cookie）取两侧业务路由**一律拒** —— API/JSON ⇒ 401 `identity-required` + `next`；'
+  + '浏览器 ⇒ 303 回 `<前缀>/identity/?next=<原地址>`（不是 200、也不是 404）',
+  anonJson.status === 401 && anonJsonBody.includes('identity-required')
+  && anonJsonBody.includes('"next"') && anonHtml.status === 303
+  && anonHtmlLocation.includes('/quotagent/identity/?next='),
+  `JSON=${anonJson.status} 含 identity-required=${anonJsonBody.includes('identity-required')}；`
+  + `HTML=${anonHtml.status} location=${anonHtmlLocation.slice(0, 80)}`)
+const sameSide = await get('/contractor/')
+const crossSide = await fetch(`${base}/supplier/`, { headers: { cookie: await loginAs('contractor') } })
+const crossBody = await crossSide.text()
+check('身份门槛正控：**登录后按侧放行** —— 本侧页面 200；拿承包商 cookie 去 `/supplier/` ⇒ **403 `side-mismatch`**'
+  + '（不许回落成「能看」、也不许 303 骗一次跳转）',
+  sameSide.status === 200 && crossSide.status === 403 && crossBody.includes('side-mismatch'),
+  `同侧=${sameSide.status} 越侧=${crossSide.status} 含 side-mismatch=${crossBody.includes('side-mismatch')}`)
 
 // 1. 健康与状态
 const health = await get('/api/health')
@@ -376,7 +426,7 @@ const brokenFiber = await brokenCtx.plugin({
   },
 }, { port: 0, route_prefix: '/quotagent' })
 const brokenBase = brokenBox.handle.url.replace(/\/$/, '')
-const brokenView = await fetch(`${brokenBase}/contractor/`)
+const brokenView = await fetch(`${brokenBase}/contractor/`, { headers: { cookie: await loginAs('contractor') } })
 const brokenText = await brokenView.text()
 const stillAlive = await fetch(`${brokenBase}/api/health`)
 check('健壮性负控：账本含 null 字段时服务**不崩**（请求级兜底），随后 /api/health 仍可用',
@@ -546,7 +596,7 @@ const P02_SUBVIEWS = {
 }
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex')
 const getBytes = async (path) => {
-  const res = await fetch(`${base}${path}`)
+  const res = await fetch(`${base}${path}`, { headers: await cookieFor(path) })
   const buf = Buffer.from(await res.arrayBuffer())
   return { status: res.status, buf, text: buf.toString('utf8') }
 }

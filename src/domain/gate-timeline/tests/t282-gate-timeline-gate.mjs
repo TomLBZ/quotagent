@@ -832,10 +832,48 @@ try {
   }, webui.Config.parse({ port: 0, route_prefix: '/t282', ledger_contractor: contractorLedger,
     ledger_supplier: supplierLedger, ui_shared: uiShared }))
   const base = httpBox.webui.url.replace(/\/$/, '')
+  // 身份会话（P3：`/contractor/**`、`/supplier/**` 有了**路由级身份门槛**）——
+  // 本门**先登录再取业务路由**：判据从「谁能打开」变成「**登录后按侧放行**」，断言一条不删、一条不放松。
+  const SESSIONS = {}
+  const loginAs = async (side) => {
+    if (SESSIONS[side]) return SESSIONS[side]
+    const res = await fetch(`${base}/identity/login?format=json`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ name: `gate-t282-${side}`, side }).toString(),
+    })
+    const text = await res.text()
+    const cookie = String(res.headers.get('set-cookie') ?? '').split(';')[0]
+    if (res.status !== 200 || !cookie.startsWith('qa_identity=')) {
+      throw new Error(`门夹具登录失败：side=${side} status=${res.status} body=${text.slice(0, 200)}`)
+    }
+    SESSIONS[side] = cookie
+    return cookie
+  }
+  const cookieFor = async (path) => {
+    const side = /^\/(contractor|supplier)(?:\/|$)/.exec(String(path))?.[1]
+    return side ? { cookie: await loginAs(side) } : {}
+  }
   const get = async (path) => {
-    const res = await fetch(`${base}${path}`)
+    const res = await fetch(`${base}${path}`, { headers: await cookieFor(path) })
     return { status: res.status, text: await res.text() }
   }
+  // 身份门槛本身也要机检（P3：未登录拒 / 登录后按侧放行 / 越侧 403）
+  const anonJson = await fetch(`${base}/contractor/api/gates`, { headers: { accept: 'application/json' } })
+  const anonJsonBody = await anonJson.text()
+  const anonHtml = await fetch(`${base}/contractor/gates/`, { headers: { accept: 'text/html' }, redirect: 'manual' })
+  const anonLocation = String(anonHtml.headers.get('location') ?? '')
+  const crossSidePath = 'supplier/gates/'
+  const crossSide = await fetch(`${base}/${crossSidePath}`, { headers: { cookie: await loginAs('contractor') } })
+  const crossBody = await crossSide.text()
+  check('身份门槛（P3）：未登录取业务路由 ⇒ API 401 `identity-required` + `next`、浏览器 303 回 `/identity/?next=…`；'
+    + '登录后**按侧放行**（同侧 200）、**越侧 403 `side-mismatch`**（不回落成「能看」）',
+  anonJson.status === 401 && anonJsonBody.includes('identity-required') && anonJsonBody.includes('"next"')
+  && anonHtml.status === 303 && anonLocation.includes('/t282/identity/?next=')
+  && crossSide.status === 403 && crossBody.includes('side-mismatch')
+  && (await get('/contractor/gates/')).status === 200,
+  `未登录 JSON=${anonJson.status} HTML=${anonHtml.status} location=${anonLocation.slice(0, 60)}；`
+  + `越侧=${crossSide.status} 含 side-mismatch=${crossBody.includes('side-mismatch')}`)
   const INLINE_EVENT = /\son[a-z]+\s*=/i
   const countOf = (text, attr) => {
     const found = new RegExp(`data-gates-${attr}="(\\d+)"`).exec(String(text))
@@ -895,6 +933,7 @@ try {
 
   const REASON_HTTP = '这批料已经到场了，等您签字才能开工'
   const posted = await fetch(`${base}/contractor/gates/nudge`, { method: 'POST',
+    headers: await cookieFor('/contractor/gates/nudge'),   // 写路由同样在身份门槛之内（P3）
     body: `id=ap-0007&reason=${encodeURIComponent(REASON_HTTP)}` })
   const postedText = await posted.text()
   let postedJson = {}
