@@ -13,12 +13,12 @@
 | `host/lib/frozen.mjs` / `ledger-view.mjs` | `src/system/kernel/code/` |
 | `host/lib/ui-route.mjs` / `ui-slot.mjs` | `src/system/webui/code/` |
 
-旧位置一律写**薄重导**（`export * from '../../<新路径>'`）。**"旧导入路径仍可用"实测**：逐文件 `import('./host/lib/<x>.mjs')`
-比导出名集合（含 `name/provides/inject/usedServices/builtin` 逐字段）：
+旧位置一律写**薄重导**。**"旧导入路径仍可用"实测**：逐文件 `import('./host/lib/<x>.mjs')` 比导出名集合
+（含 `name/provides/inject/usedServices/builtin` 逐字段）：
 
 ```text
 {"old_import":"host/lib/bridge.mjs","ok":true,"keys_before":4,"keys_after":4,"exports_identical":true}
-…（13 项 + 2 个**未搬对照** evolution / user-space：共 15 行，逐行 true）
+…（13 项 + 2 个未搬对照，共 15 行全 true）
 {"TOTAL":15,"FAIL":0}
 ```
 
@@ -108,4 +108,5 @@ $ tools/plugin.sh unload system/market ⇒ effects_before=1 effects_after=0 zero
 **本批改到的读方**（防静态断言在薄重导上静默判绿）：`check-module-wiring.py` 的 `module_source()` 跟重导链、
 `host/check-modules.mjs` 的 `moduleSource()` 链式拼接（A1/A4/A6 一起跟到实体）。
 
-提交：提交前后 `git status --porcelain` 原文与本批回答收尾 §一致（提交后 0 行）。
+提交：`3a40f56`（功能提交）；提交前后 `git status --porcelain` 原文：提交前 168 行（全第一列已暂存）/ 提交后 **0 行**；
+`git ls-remote` 回读 `3a40f56 = refs/heads/main`；提交后 `run-clone` **20/20**、`clean-copy` PASS。
