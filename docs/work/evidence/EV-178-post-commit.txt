@@ -240,3 +240,25 @@ RESULT: PASS（15 道门在干净副本里全绿；已提交内容自足可复�
 [ok]   K2 副本里的入口**真的可执行**：`run` 与每个 `tools/*.sh` 都有执行位（实测缺陷：索引 100644 ⇒ 干净克隆 `./run up` 报 `host-deps-install-failed`）
 RESULT: PASS（run-clone 门 20/20）
 ```
+
+## 四、push 与 `git ls-remote` 回读（原始行）
+
+```
+$ git push origin main
+To github.com:TomLBZ/quotagent.git
+   84d86b9..818269c  main -> main
+
+$ git ls-remote origin refs/heads/main
+818269c417a0da1c7e48b820842c37fa78f81ebe	refs/heads/main
+
+$ git rev-parse HEAD
+818269c417a0da1c7e48b820842c37fa78f81ebe
+```
+
+> 说明：本机的推送凭据是 `/workspace/config/keys/id_ed25519`（`GIT_SSH_COMMAND` 指定，`IdentitiesOnly=yes`），
+> 不是 `~/.ssh` —— 直接 `git push` 会 `Permission denied (publickey)`（实测）。
+
+## 五、收尾复核（提交 3 之后）
+
+（本文件随「补记提交 3」一起入库；提交 3 的 SHA 与 push 后的回读见本次答复与页首说明。）
+

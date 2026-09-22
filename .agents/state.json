@@ -8,7 +8,7 @@
   "last_verified_command": "tools/verify.sh docs | coverage | ac-registry | plugins | webui | modules | wiring | invariants | events | storage | plugin-assets | plugin-requirements | plugin-lifecycle | evolution | evolve-module | p0-no-node | run-once（+ 提交后 run-clone / clean-copy）",
   "last_verified_result": "PASS（19 道门全绿）：docs PASS、coverage 8/8、ac-registry rc=0、plugins 5/5、webui 51/51、modules 521/521、wiring 5/5、invariants 22/22、events rc=0、storage 19/19、plugin-assets **16/16**（搬前 14/14，+PA8 +变异 F7）、plugin-requirements 18/18、plugin-lifecycle 66/66、evolution rc=0、evolve-module 61/61、p0-no-node 63 条 AC 全绿（无瞬时命中）、run-once 34/34；提交后 run-clone **20/20**、clean-copy PASS（15 道门在干净副本里全绿）。本批改到的门：plugin-assets（新增 PA8 + F7 + 参考面跟到搬家）、modules（读方改走 moduleSource）、plugin-lifecycle / storage / mail-transport / gate-timeline / advice / bid-heuristics（先改读方）",
   "last_verified_evidence": "docs/work/evidence/EV-178-plugin-relocation-batch8.md（+ plugin-file-map-batches.md §「非薄入口数的加减史」）",
-  "last_verified_commit": "(提交 1 = 6940627；本字段在提交 3 里指向最终 HEAD)",
+  "last_verified_commit": "818269c417a0da1c7e48b820842c37fa78f81ebe",
   "blockers": [],
   "human_required": [
     "T-117 现场验证 V-001..V-012：备料已完成；**P1 按用户指令以\"V 全部通过\"为前提推进**（planning_assumptions，非结论），V 的正式 conclusion 与 G0/G1 签署仍需人工",
