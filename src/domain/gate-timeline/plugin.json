@@ -9,8 +9,8 @@
   "depends_on": [],
   "external_deps": {},
   "permissions": {
-    "writes": ["own-dir"],
-    "ledger": "none"
+    "writes": ["own-dir", "request-file"],
+    "ledger": "sole-writer"
   },
   "source": "human",
   "requirements": ["FR-GATE-001", "FR-GATE-002"],

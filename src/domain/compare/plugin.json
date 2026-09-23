@@ -7,6 +7,10 @@
   ],
   "entry": "code/index.mjs",
   "description": "domain/compare：本批 EV-179 补**真实承载** —— 实体（宿主模块）`code/compare.mjs` + 入口 `code/index.mjs`（薄包装：`export *` 活绑定 + 透传自述面），`entry` 指向的入口**真实存在**（不再 `degraded: artifact-missing`）。**不新造功能**：语义仍只在 `code/compare.mjs`（宿主侧同口径排序）与 `code/compare.py`（Python 侧 `CompareService`）里。",
+  "permissions": {
+    "writes": ["own-dir", "request-file"],
+    "ledger": "sole-writer"
+  },
   "migration": {
     "stage": 4.2,
     "mode": "entity-moved-and-wrapper",

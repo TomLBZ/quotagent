@@ -30,7 +30,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | provides | `rfqDeadline`（`host/modules/rfq-deadline.mjs`）+ 落账本者 `tools/rfq-promise.py`。 |
 | 依赖（实测 import 目标） | `host/modules/rfq-deadline.mjs` → `../lib/std-schema.mjs`；`tools/rfq-promise.py` → `quotagent.kernel.ledger`（27 §5.1/§5.2：只 import 内核面或其它插件的公开服务面，不 import 别的插件实现文件） |
 | 门（映射表 §1 证据列里的 `ac` 简写已展开成可跑命令） | `tools/verify.sh rfq-deadline` |
-| 写面 | 账本唯一写者仍是内核（H1）；本插件的账本写入只在映射表 §1 证据列点名的工具里（若有） |
+| 写面 | `plugin.json.permissions = {writes: ["own-dir","request-file"], ledger: "sole-writer"}`：账本侧只有本插件写这一族事件 —— `rfq/promised`（回文时限承诺）；唯一写者 = `tools/rfq-promise.py`（经内核 `ledger` 的 H1 写路径；只读面不写）。 |
 
 ## 现状与缺口
 

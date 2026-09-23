@@ -32,7 +32,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | provides | Python 侧 `services/commitments.py`（`CommitmentGate`）。 |
 | 依赖（实测 import 目标） | `src/quotagent/services/commitments.py` → `..kernel.events`、`..kernel.ledger`、`.approval`、`.pricing`（27 §5.1/§5.2：只 import 内核面或其它插件的公开服务面，不 import 别的插件实现文件） |
 | 门（映射表 §1 证据列里的 `ac` 简写已展开成可跑命令） | `tools/verify.sh ac AC-AWARD-001` · `tools/verify.sh ac AC-AWARD-002` |
-| 写面 | 账本唯一写者仍是内核（H1）；本插件的账本写入只在映射表 §1 证据列点名的工具里（若有） |
+| 写面 | `plugin.json.permissions = {writes: ["own-dir","request-file"], ledger: "sole-writer"}`：账本侧只有本插件写这一族事件 —— `award/{intent-proposed,confirmed,committed}`（意向→确认→承诺）· `po/issued|distributed|acknowledged`（发 PO / 投递 / 回签）；唯一写者 = `tools/{commitment-apply,change-apply}.py`（经内核 `ledger` 的 H1 写路径）。 |
 
 ## 现状与缺口
 

@@ -18,7 +18,7 @@
  * 纪律：本文件不写账本（只 spawn Python 侧唯一写者）；单价一律**整数分**；备注正文只进 0600 待办件。
  */
 import { createHash } from 'node:crypto'
-import { validate, LIMITS, FIELDS, MONEY_UNIT } from './quote-prepare.mjs'
+import { buildCatalogue, validate, LIMITS, FIELDS, MONEY_UNIT } from './quote-prepare.mjs'
 
 /** 与唯一写者 `tools/quote-draft.py` 的 `canonical_lines()` **逐字节一致**的行项目规范化 JSON。
  *
@@ -117,6 +117,25 @@ const payloadOf = (host, view) => {
 
 /** 一次「备草稿」提交里的行（批量 `input.rows`，或用标量字段的单条）。 */
 const draftRowsOf = (input) => (Array.isArray(input?.rows) && input.rows.length ? input.rows : [input])
+
+/**
+ * 本视角**真的能当 RFQ 引用用**的包 id —— 与 `validate()` **同源**：同一个
+ * `buildCatalogue(payloadOf(host, 'supplier'))`。
+ *
+ * 为什么必须问这一句（P22 实测）：`buildCatalogue` 的包 id 目录**有硬上限**（`LIMITS.max_items = 64`，
+ * 行项目目录同限）—— 包多到超过上限时，**最新那些包会读不到**；而本插件的面板「发给我的 RFQ 包」
+ * 按定义读的就是**最新那个**（投递信封）⇒ 一旦 >64 个包，界面会**自动预填一个它自己会拒的包**
+ * （服务端按同一份目录判 `rfq-not-found`，P20 §5.1 的坑 + 390px 截图 `p20-390-04`）。
+ *
+ * 取不到就不预填（并如实说明「为什么这一份包现在备不了报价」）—— 「未验证不断言」在界面上的形态。
+ * `capped=true` 表示这一份目录**已经在上限上**（多的包读都读不到，不是"没有更多包"）。
+ */
+const referenceablePackages = (host) => {
+  const catalogue = buildCatalogue(payloadOf(host, 'supplier'))
+  const ids = (Array.isArray(catalogue.rfq_ids) ? catalogue.rfq_ids : []).map(asText).filter(Boolean)
+  return { ids, capped: ids.length >= LIMITS.max_items }
+}
+
 /**
  * **我方对这份包的报价草稿**（乐观并发的对象）= **这份包一个对象**（对象 id 就是包 id）。
  *
@@ -176,6 +195,12 @@ export async function register(surface, host) {
 
   out.push(surface.panel({ plugin_id: me, id: 'quote.package', title: '发给我的 RFQ 包（只出自己那份）',
     view: 'supplier', order: 10, kind: 'table',
+    // 面板 `hint` 是**渲染出来**的那句（`data.note` 只在空态/降级里当 next_action 用）——
+    // 预填口径写在这里，用户才真的看得到（P22 实测：写在 `data.note` 里等于没写）。
+    // 注意：`hint` 会被外壳 HTML 转义 ⇒ 这里写**纯文本**（不要 markdown 记号，否则用户看到的是 `**`）。
+    hint: '预填只给本侧事实里真的认得的包：包 id 目录有上限（最多 64 个包），超过上限后最新那个包读不到'
+      + ' ⇒ 这块不预填它、也不给备报价入口（免得你按下去必然被拒 rfq-not-found），只在顶上如实说明。'
+      + '能备报价时：表里填几行就交几行 —— 一次「提交编辑」= 一条草稿（多行），随后在「我的草稿」里一次人签提交整份。',
     data: (ctx) => {
       const realm = realmOf('supplier')
       const mine = myPackage(host, realm)
@@ -188,15 +213,21 @@ export async function register(surface, host) {
       const items = Array.isArray(spec.items) ? spec.items : []
       const drafts = new Map(typeRows(host.rows('supplier'), 'quote/drafted')
         .map((row) => [asText(bodyOf(row).item_id), bodyOf(row)]))
+      const packageId = String(spec.package_id ?? '')
+      const known = referenceablePackages(host)
+      // **预填的判据**：本侧事实真的认得这个包才预填（目录为空时无从判断，按旧行为预填）
+      const referenceable = packageId === '' || known.ids.length === 0 || known.ids.includes(packageId)
+      const declared = referenceable ? '（整数分，可直接改）' : '（整数分）'
       return { ok: true, kind: 'table',
         columns: [
           { key: 'item_id', label: '行项目', type: 'code', pin: 'left' },
           { key: 'description', label: '描述' },
           { key: 'qty', label: '数量' },
           { key: 'unit', label: '单位' },
-          { key: 'unit_price_cents', label: '单价（整数分，可直接改）', editable: true, type: 'number',
-            line_total_of: 'qty', help: '8600 = 86.00 元' },
-          { key: 'lead_time_days', label: '交期（天，可直接改）', editable: true, type: 'number' },
+          { key: 'unit_price_cents', label: `单价${declared}`, ...(referenceable ? { editable: true } : {}),
+            type: 'number', line_total_of: 'qty', help: '8600 = 86.00 元' },
+          { key: 'lead_time_days', label: `交期（天${referenceable ? '，可直接改' : ''}）`,
+            ...(referenceable ? { editable: true } : {}), type: 'number' },
           { key: 'draft', label: '已备草稿' },
         ],
         rows: items.map((item) => {
@@ -209,15 +240,25 @@ export async function register(surface, host) {
         // 实时小计（外壳在编辑时立刻重算：Σ 单价×数量）；Tab/Enter 走格、Esc 还原、Ctrl+Enter 提交
         totals: [{ label: '报价小计（整数分）', key: 'unit_price_cents', factor: 'qty', unit: '分' },
           { label: '已填条数', key: 'unit_price_cents', count: true, skip_empty: true }],
-        editable_action: 'quote.draft',
-        editable_defaults: { rfq_id: String(spec.package_id ?? ''), currency: String(spec.currency ?? 'CNY'),
-          prepared_by: '' },
-        bulk: 'quote.draft',
-        // **乐观并发**：把"你打开这一页时看到的这一版草稿"交给界面（保存时带回 `expected_version`）。
-        // 对象 = 这份包 + 这一组行项目（与 `quote.draft` 的 concurrency 同一口径，逐字对齐）。
-        version: host.versions.current('supplier', 'quote-draft',
-          draftSlotOf({ rfq_id: String(spec.package_id ?? ''), rows: items.map((item) => ({ item_id: item.item_id })) })),
-        version_for: 'quote.draft',
+        ...(referenceable
+          // **一份草稿 = 一整张表**：这条 `editable_action` 就是"备报价"的唯一入口（提交编辑 ⇒
+          // `editable_defaults` 把 RFQ 引用/币种带上）。**没有 `bulk`**：批量那颗按钮的 presets 只有
+          // `{ids, rows}`，`rfq_id`（必填）谁也填不上 ⇒ 点下去必然被「必填」挡在提交前（P22 实测）。
+          ? { editable_action: 'quote.draft',
+              editable_defaults: { rfq_id: packageId, currency: String(spec.currency ?? 'CNY'), prepared_by: '' },
+              // **乐观并发**：把"你打开这一页时看到的这一版草稿"交给界面（保存时带回 `expected_version`）。
+              // 对象 = 这份包 + 这一组行项目（与 `quote.draft` 的 concurrency 同一口径，逐字对齐）。
+              version: host.versions.current('supplier', 'quote-draft',
+                draftSlotOf({ rfq_id: packageId, rows: items.map((item) => ({ item_id: item.item_id })) })),
+              version_for: 'quote.draft' }
+          : { degraded: true, reason: 'package-not-in-visible-facts',
+              next_action: `本侧事实认得的包 id 目录已到上限（${LIMITS.max_items} 个${known.capped ? '，已满' : ''}）：`
+                + `这一份包（${packageId}）不在其中 ⇒ 现在提交必被拒（rfq-not-found）。因此本面板不预填这个包、`
+                + `也不给备报价入口（免得你按下去必然被拒）。能作 RFQ 引用的包：`
+                + `${known.ids.slice(0, 3).join(' / ') || '（一个都没有）'}`
+                + `${known.ids.length > 3 ? ` …（共 ${known.ids.length} 个）` : ''}`
+                + ' —— 在「我收到的包」或首页按能引用得上的那个包备报价；'
+                + '要让最新那个包也备得了，得先让它的事实进本侧账本（写者/口径问题，不是界面能补的）。' }),
         ref: spec.package_id ? { kind: 'package', id: String(spec.package_id),
           title: `包 ${spec.package_id} rev${envelope.rev ?? '—'}` } : null,
         counts: { items: items.length, rev: envelope.rev },
@@ -225,12 +266,16 @@ export async function register(surface, host) {
           + ` · 报价一律**整数分**（8600 = 86.00）；改单价时右边实时算"×量 = 行合计"，底部编辑栏给小计`
           + ` · 键盘：Tab 走格 / Enter 走同列下一行 / Esc 还原 / Ctrl+Enter 提交 —— 备多行报价不用鼠标`
           + ` · **表里填几行就交几行**：一次「备这份草稿」= 一条草稿（多行），随后**一次人签**提交整份`
-          + ` · 标题旁的「打开对象 →」是这个包的深链（可复制分享、刷新不丢）` }
+          + ` · 标题旁的「打开对象 →」是这个包的深链（可复制分享、刷新不丢）`
+          + (referenceable ? '' : ` · 这一份包（${packageId}）现在备不了报价：它不在本侧事实的包目录里`
+            + `（目录上限 ${LIMITS.max_items} 个）⇒ 提交必被拒，界面故意不预填它。`) }
     } }))
 
   // ---- **对象页**：`/app/supplier/package/<pkg-id>/`（我收到的那个包：条目 + 我的草稿进度） ----
   out.push(surface.panel({ plugin_id: me, id: 'package.mine', title: '我收到的包（对象页）', view: 'supplier',
     order: 11, kind: 'table', object_kind: 'package',
+    hint: '这一页是那个包的深链（刷新不丢、可复制）：改单价/交期 → 「提交编辑」备草稿 → 再去「我的草稿」人签提交。'
+      + '包不在本侧事实的包目录里（目录上限 64 个）时，这一页只读并说明原因（提交必被拒，界面不预填）。',
     data: (ctx) => {
       const wanted = asText(ctx.route?.id)
       const realm = realmOf('supplier')
@@ -252,6 +297,11 @@ export async function register(surface, host) {
       // **乐观并发**：这一页上保存动作要带的"你看到的那一版"（与 `quote.draft` 的 concurrency 同一口径）
       const myDraftVersion = host.versions.current('supplier', 'quote-draft',
         draftSlotOf({ rfq_id: packageId, rows: items.map((item) => ({ item_id: item.item_id })) }))
+      // 这一页也是"备报价"的入口之一 ⇒ **同一条预填判据**（见 `referenceablePackages` 的注释）：
+      // 包不在本侧事实的目录里 ⇒ 不预填、不给备报价入口（提交必被拒）。
+      const known = referenceablePackages(host)
+      const referenceable = known.ids.length === 0 || known.ids.includes(packageId)
+      const declared = referenceable ? '（整数分，可直接改）' : '（整数分）'
       return { ok: true, kind: 'table',
         object: { title: `包 ${packageId} rev${mine.envelope.rev ?? '—'}`, found: true,
           subtitle: `发给 ${((mine.envelope.delivered_to ?? []).map(String).join(' ') || realm || '本侧')}`
@@ -261,6 +311,11 @@ export async function register(surface, host) {
             { key: '版本 rev', value: String(mine.envelope.rev ?? '—') },
             { key: '澄清截止', value: String((spec.deadlines ?? {}).clarify_by ?? '—') },
             { key: '已备草稿', value: `${drafts.size} / ${items.length}` },
+            // 「能不能当 RFQ 引用」是备报价的前置判据 ⇒ 明写在对象页上（不在目录里就说不在）
+            { key: '可作 RFQ 引用', value: referenceable
+              ? '是（在本侧事实的包目录里）'
+              : `否 —— 不在本侧事实的包目录里（目录上限 ${LIMITS.max_items} 个包）`
+                + ' ⇒ 现在备报价会被 rfq-not-found 拒，本页因此只读' },
             { key: '我方草稿的版本', code: true, value: myDraftVersion
               ? `rev ${myDraftVersion.rev} · ${myDraftVersion.at} · ${myDraftVersion.by || '（未记名）'}`
               : '还没有人保存过这份包的这一版报价草稿（第一次保存按"首次"记下来）' },
@@ -276,9 +331,10 @@ export async function register(surface, host) {
         columns: [
           { key: 'item_id', label: '行项目', type: 'code', pin: 'left' }, { key: 'description', label: '描述' },
           { key: 'qty', label: '数量' }, { key: 'unit', label: '单位' },
-          { key: 'unit_price_cents', label: '单价（整数分，可直接改）', editable: true, type: 'number',
-            line_total_of: 'qty', help: '8600 = 86.00 元' },
-          { key: 'lead_time_days', label: '交期（天，可直接改）', editable: true, type: 'number' },
+          { key: 'unit_price_cents', label: `单价${declared}`, ...(referenceable ? { editable: true } : {}),
+            type: 'number', line_total_of: 'qty', help: '8600 = 86.00 元' },
+          { key: 'lead_time_days', label: `交期（天${referenceable ? '，可直接改' : ''}）`,
+            ...(referenceable ? { editable: true } : {}), type: 'number' },
           { key: 'draft', label: '已备草稿' },
         ],
         rows: items.map((item) => {
@@ -290,10 +346,15 @@ export async function register(surface, host) {
         }),
         totals: [{ label: '报价小计（整数分）', key: 'unit_price_cents', factor: 'qty', unit: '分' },
           { label: '已填条数', key: 'unit_price_cents', count: true, skip_empty: true }],
-        editable_action: 'quote.draft',
-        editable_defaults: { rfq_id: packageId, currency: String(spec.currency ?? 'CNY'),
-          prepared_by: '' },
-        bulk: 'quote.draft',
+        ...(referenceable
+          ? { editable_action: 'quote.draft',
+              editable_defaults: { rfq_id: packageId, currency: String(spec.currency ?? 'CNY'), prepared_by: '' } }
+          : { degraded: true, reason: 'package-not-in-visible-facts',
+              next_action: `这一份包（${packageId}）不在本侧事实的包目录里（上限 ${LIMITS.max_items} 个包）`
+                + ' ⇒ 现在备报价必被拒（rfq-not-found）：本页不预填这个包、也不给备报价入口。'
+                + `能作 RFQ 引用的包：${known.ids.slice(0, 3).join(' / ') || '（一个都没有）'}`
+                + `${known.ids.length > 3 ? ` …（共 ${known.ids.length} 个）` : ''}。`
+                + '要让最新那个包也备得了，得先让它的事实进本侧账本。' }),
         counts: { items: items.length, rev: mine.envelope.rev },
         note: '这一页是那个包的**对象地址**（刷新不丢、可复制）：改单价/交期 → 「备这份草稿」→ 再去「我的草稿」人签提交' }
     } }))
@@ -339,6 +400,16 @@ export async function register(surface, host) {
 
   out.push(surface.panel({ plugin_id: me, id: 'quote.drafts', title: '我的草稿（待签署）', view: 'supplier',
     order: 20, kind: 'table', actions: ['quote.submit'],
+    // **勾选语义写在这句里**（`hint` 是**真的渲染出来**的那一句；P20 把这段话写在 `data.note` 里 ——
+    // 而 table 面板的 `data.note` 只在"没有行"时当 next_action 用，用户**看不到**）。
+    // 措辞与界面上的实际字符串逐字对齐：「已选 N 行」在提交按钮上、「已跨页选中 M 行」在计数行上、
+    // 「选中全部命中行（命中数）」是计数行上那颗按钮（P22 用 390px 真点过一遍）。
+    hint: '勾选语义（说清，免得少签）：表格左侧的勾只算这一页 —— 翻页后上一页的勾不跟着走。要跨页签，'
+      + '先把命中行筛到 50 行以内，再点计数行上那颗「选中全部命中行（N）」：它把命中全集选上，'
+      + '并在计数行写「已跨页选中 M 行」（M = 全命中已选）。'
+      + '提交按钮上那个数字就是这一次真会送出的行数：本页勾的 + 跨页选中的（只跨页选、本页没勾时写成'
+      + '「已选 0（含跨页共 M）行」）。换筛选条件会自动作废跨页选择。'
+      + '本块含「已签署提交」的历史行（按「状态」列筛「待签署」只看待办的）；一次最多签 50 份。',
     data: () => {
       const drafts = new Map()
       for (const row of typeRows(host.rows('supplier'), 'quote/drafted')) {
@@ -378,7 +449,7 @@ export async function register(surface, host) {
           + '**这一块含「已签署提交」的历史行**（按「状态」列筛「待签署」只看待办的）；'
           + `**一次最多签 ${BATCH_SIGN_MAX} 份**，超过会被具名拒（batch-too-large）；`
           + '**勾选不跨页**（翻页后上一页的勾不跟着走）—— 要跨页按「命中行」签，先筛到 ≤ '
-          + `${BATCH_SIGN_MAX} 行、再点表头的「选中全部命中行（N）」` }
+          + `${BATCH_SIGN_MAX} 行、再点计数行上那颗「选中全部命中行（N）」` }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'quote.submitted', title: '已提交的报价（提交结果回读）',
@@ -717,7 +788,7 @@ export async function register(surface, host) {
         return { ok: false, code: 'batch-too-large',
           reason: `一次最多签 ${BATCH_SIGN_MAX} 份，收到 ${ids.length} 份`,
           next_action: `先用「搜这块 / 按列筛选 / 状态=待签署」把命中行缩到 ≤ ${BATCH_SIGN_MAX} 行`
-            + `（计数行会跟着变），再点表头那颗「选中全部命中行（N）」重来 —— 不要靠手工勾行：`
+            + `（计数行会跟着变），再点计数行上那颗「选中全部命中行（N）」重来 —— 不要靠手工勾行：`
             + `勾选**不跨页**（第 1 页勾的在翻页后不跟着走）。本动作账本零新增` }
       }
       const comment = String(input.comment ?? '')
@@ -847,6 +918,10 @@ export async function register(surface, host) {
       const signed = new Set(typeRows(rows, 'quote/submitted').map((row) => asText(bodyOf(row).quote_draft_id)))
       const pending = [...drafts.entries()].filter(([id]) => !signed.has(id))
       const mine = myPackage(host, realmOf('supplier'))
+      const known = referenceablePackages(host)
+      const packageId = mine.ok ? String(mine.envelope.spec?.package_id ?? '') : ''
+      // 首屏的「备这份草稿」按钮也走同一条预填口径：包不在本侧事实的目录里就别给入口
+      const draftable = mine.ok && (known.ids.length === 0 || known.ids.includes(packageId))
       const items = []
       items.push(sideScoped(ctx, 'supplier', { level: pending.length ? 'warn' : 'info',
         title: pending.length ? `供应商侧：${pending.length} 份草稿待供应商人签提交` : '供应商侧：没有待签署的草稿',
@@ -859,9 +934,15 @@ export async function register(surface, host) {
       items.push(sideScoped(ctx, 'supplier', { level: mine.ok ? 'info' : 'warn',
         title: mine.ok ? `供应商侧：发给供应商的包（${(mine.envelope.spec?.items ?? []).length} 条行项目，rev${mine.envelope.rev}）`
           : '供应商侧：还没有发给供应商的 RFQ 包',
-        body: mine.ok ? `报价截止 ${(mine.envelope.spec?.deadlines ?? {}).quote_by ?? '—'}` : mine.reason,
-        action: mine.ok ? 'quote.draft' : '', label: '备这份草稿',
-        next_action: mine.ok ? '去填单价与交期 → 备草稿' : (mine.next_action ?? ''),
+        body: mine.ok ? `报价截止 ${(mine.envelope.spec?.deadlines ?? {}).quote_by ?? '—'}`
+          + (draftable ? '' : ` · 这一份包现在备不了报价：它（${packageId}）不在本侧事实的包目录里`
+            + `（上限 ${LIMITS.max_items} 个包）⇒ 提交必被拒，界面故意不给入口`) : mine.reason,
+        action: mine.ok && draftable ? 'quote.draft' : '', label: '备这份草稿',
+        next_action: mine.ok
+          ? (draftable ? '去填单价与交期 → 备草稿'
+            : `先让这个包的事实进本侧账本（或按本侧事实里认得的包备报价：`
+              + `${known.ids.slice(0, 3).join(' / ') || '（一个都没有）'}）；这一份包现在点了也会被 rfq-not-found 拒`)
+          : (mine.next_action ?? ''),
         ref: mine.ok ? { kind: 'package', id: String(mine.envelope.spec?.package_id ?? '') } : null }))
       return { ok: true, kind: 'list', items }
     } }))

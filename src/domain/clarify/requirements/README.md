@@ -32,7 +32,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | provides | Python 侧 `services/clarify.py`（`ClarificationService`）。 |
 | 依赖（实测 import 目标） | `src/quotagent/services/clarify.py` → `..kernel.ledger`（27 §5.1/§5.2：只 import 内核面或其它插件的公开服务面，不 import 别的插件实现文件） |
 | 门（映射表 §1 证据列里的 `ac` 简写已展开成可跑命令） | `tools/verify.sh ac AC-CLARIFY-001` · `tools/verify.sh ac AC-CLARIFY-002` · `tools/verify.sh ac AC-CLARIFY-003` |
-| 写面 | 账本唯一写者仍是内核（H1）；本插件的账本写入只在映射表 §1 证据列点名的工具里（若有） |
+| 写面 | `plugin.json.permissions = {writes: ["own-dir","request-file"], ledger: "sole-writer"}`：账本侧只有本插件写这一族事件 —— `rfq/acknowledged`（认收）· `clarification/{asked,answered,reopened}`（问答串）· `award/{confirmed,lost,lost-acknowledged}` 与 `po/confirmed`（中标/落标/PO 确认，另含对方侧镜像登记）；唯一写者 = `tools/{clarify-apply,package-ops,outcome-ops}.py`（经内核 `ledger` 的 H1 写路径）。 |
 
 ## 现状与缺口
 

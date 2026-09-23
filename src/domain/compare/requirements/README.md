@@ -32,7 +32,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | provides | `compare`（`host/modules/compare.mjs`）；Python 侧 `services/compare.py`（`CompareService`）。 |
 | 依赖（实测 import 目标） | `src/quotagent/services/compare.py` → `..kernel.canon`、`..kernel.events`、`..kernel.ledger`；`host/modules/compare.mjs` → `../lib/std-schema.mjs`（27 §5.1/§5.2：只 import 内核面或其它插件的公开服务面，不 import 别的插件实现文件） |
 | 门（映射表 §1 证据列里的 `ac` 简写已展开成可跑命令） | `tools/verify.sh ac AC-COMPARE-002` · `tools/verify.sh ac AC-COMPARE-003` · `tools/verify.sh bid-heuristics` |
-| 写面 | 账本唯一写者仍是内核（H1）；本插件的账本写入只在映射表 §1 证据列点名的工具里（若有） |
+| 写面 | `plugin.json.permissions = {writes: ["own-dir","request-file"], ledger: "sole-writer"}`：账本侧只有本插件写这一族事件 —— `compare/{rank-computed,table-exported}`（比价排名与导出留痕）；唯一写者 = `tools/compare-apply.py`（经内核 `ledger` 的 H1 写路径）。 |
 
 ## 现状与缺口
 

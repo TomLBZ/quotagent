@@ -102,15 +102,31 @@ const snapshotsOf = (host) => {
   return out
 }
 
+/** 本侧 `quote/submitted` 行 → 报价（**一份报价 = 一整张表**：多行只有 `lines[]`，标量键为空）。
+ *
+ * P22 全插件自查抓到的一条（`src/system/webui/docs/row-action-prefill.md` 的规矩）：
+ * 行内动作 `exchange.requote-now` 的 `item_id` / `unit_price_cents` / `lead_time_days` **三个都必填**，
+ * 而外壳**只按字段名在行对象里取值** —— 多行报价（当前口径下最常见的那种）在这张表上三个字段全是空的
+ * ⇒ 点行内「按最新 rev 重报」就被「必填」挡在提交前。修法：标量缺了就回落到**首行**（界面上也把这两列
+ * 标成"首行"），人看到的数就是他真要重报的起点（可改）。
+ */
 const quotesOf = (host, view) => {
   const out = new Map()
+  // 注意 `null`：多行报价的标量三键在账本里是**显式 `null`**（不是缺键），而 `Number(null) === 0`
+  // ⇒ 用 `Number.isFinite(Number(v))` 直接判会把"没有值"读成**0**（首行单价显示 0 分 —— 实测踩到过）。
+  const numOf = (value) => (value === null || value === undefined || value === ''
+    ? null : (Number.isFinite(Number(value)) ? Number(value) : null))
   for (const row of typeRows(host.rows(view), 'quote/submitted')) {
     const body = bodyOf(row)
     const quoteId = asText(body.quote_id)
     if (quoteId === '') continue
+    const lines = Array.isArray(body.lines) ? body.lines.filter((line) => line && typeof line === 'object') : []
+    const first = lines[0] ?? {}
     const entry = out.get(quoteId) ?? { quote_id: quoteId, package_id: asText(body.package_id),
-      item_id: asText(body.item_id), unit_price_cents: body.unit_price_cents,
-      lead_time_days: body.lead_time_days, supplier: asText(body.supplier),
+      item_id: asText(body.item_id) || asText(first.item_id),
+      unit_price_cents: numOf(body.unit_price_cents) ?? numOf(first.unit_price_cents),
+      lead_time_days: numOf(body.lead_time_days) ?? numOf(first.lead_time_days),
+      line_count: lines.length || 1, supplier: asText(body.supplier),
       submitted_at: asText(body.submitted_at) || String(row?.ts ?? ''), approved_by: asText(body.approved_by) }
     out.set(quoteId, entry)
   }
@@ -240,7 +256,9 @@ export async function register(surface, host) {
   // ================================================================== 供应商侧：改报
   out.push(surface.panel({ plugin_id: me, id: 'exchange.requote-rail', title: '我的报价状态轨（新版作废与改报）',
     view: 'supplier', order: 22, kind: 'table', actions: ['exchange.requote-now'],
-    hint: '新版一到，基于旧版的报价就被标为 superseded；「按 revN 重报」会落事实并生成新草稿（仍需人签提交）',
+    hint: '新版一到，基于旧版的报价就被标为 superseded；「按 revN 重报」会落事实并生成新草稿（仍需人签提交）。'
+      + '多行报价（一份报价 = 一整张表）在这张轨上只显示首行的项目与单价（「行数」列写明共几行）：'
+      + '行内「按最新 rev 重报」就按你填的那一行生成新草稿，其余行在「备报价」里补齐再人签提交。',
     data: () => {
       const rows = host.rows('supplier')
       const history = revHistory(host, 'supplier')
@@ -253,8 +271,10 @@ export async function register(surface, host) {
           columns: [{ key: 'quote_id', label: '报价' }], rows: [] }
       }
       return { ok: true, kind: 'table',
-        columns: [{ key: 'quote_id', label: '报价', type: 'code' }, { key: 'item_id', label: '行项目', type: 'code' },
-          { key: 'unit_price_cents', label: '单价（整数分）', filter: 'number' }, { key: 'based_on_rev', label: '基于 rev', filter: 'number' },
+        columns: [{ key: 'quote_id', label: '报价', type: 'code' }, { key: 'item_id', label: '首行项目', type: 'code' },
+          { key: 'unit_price_cents', label: '首行单价（整数分）', filter: 'number' },
+          { key: 'line_count', label: '行数', filter: 'number' },
+          { key: 'based_on_rev', label: '基于 rev', filter: 'number' },
           { key: 'latest_rev', label: '最新 rev' }, { key: 'status', label: '状态' },
           { key: 'rev_diff', label: 'rev 差异（本包行项目）' }, { key: 'requote', label: '重报登记' }],
         rows: quotes.map((quote) => {
@@ -274,8 +294,11 @@ export async function register(surface, host) {
           return { id: quote.quote_id, quote_id: quote.quote_id, item_id: quote.item_id,
             // P15：行内动作 `exchange.requote-now` 要的是 `package_id`（必填）——而这张表**没有**「包」这一列，
             // 用户在这一行上根本无从抄起。把包 id 与旧交期带进行里：表单据此预填，人只需确认/改数。
+            // P22（全插件自查）：多行报价的标量三键在账本里本来就是空的 ⇒ `quotesOf` 回落到**首行**，
+            // 这三列现在**真的有值**（行内动作的必填字段因此不再是空框）。
             package_id: quote.package_id, lead_time_days: quote.lead_time_days ?? '',
-            unit_price_cents: quote.unit_price_cents, based_on_rev: base, latest_rev: latest ? latest.rev : '—',
+            unit_price_cents: quote.unit_price_cents ?? '', line_count: quote.line_count ?? 1,
+            based_on_rev: base, latest_rev: latest ? latest.rev : '—',
             status: stale ? (done ? '已被新版作废（superseded）' : '需作废（待落账）') : 'active',
             rev_diff: diff || '（无可比版本：只有一版）',
             requote: open ? `已登记按 rev${open.superseded_by_rev} 重报 @${asText(open.at)}` : '' }
@@ -421,6 +444,11 @@ export async function register(surface, host) {
       for (const [packageId, info] of snapshots) {
         for (const item of (info.spec?.items ?? [])) {
           rows.push({ id: `${packageId}:${item.item_id}`, package_id: packageId, rev: info.rev,
+            // **行对象字段 ≠ 外壳取值名**（P22 全插件自查抓到的一条）：动作 `exchange.rev-amend` 的
+            // 字段叫 `from_rev`，而这一行的键叫 `rev` ⇒ 行内那颗「发新版」按钮打开的表单里
+            // 「从哪个版本改」是**空的**（值就在屏幕上那一列，用户却得手抄一遍；可编辑路径靠
+            // `editable_defaults` 绕开了，行内路径没绕）。补一个同名字段，两条路就都能取到值。
+            from_rev: String(info.rev ?? ''),
             item_id: String(item.item_id), description: item.description ?? '', unit: item.unit ?? '',
             qty: item.qty, snapshot_hash: info.snapshot_hash })
         }
@@ -509,7 +537,8 @@ export async function register(surface, host) {
     input: { fields: [
       { name: 'package_id', label: '包 id', type: 'text', required: true },
       { name: 'quote_id', label: '被作废的报价 id', type: 'text', required: true, help: '从「报价状态轨」里复制' },
-      { name: 'item_id', label: '行项目（新 rev 里的）', type: 'text', required: true },
+      { name: 'item_id', label: '行项目（新 rev 里的）', type: 'text', required: true,
+        help: '多行报价只带首行；表里那一列就是它（可改成别的行项目）' },
       { name: 'unit_price_cents', label: '单价（整数分，预填旧价可改）', type: 'number', required: true, min: 1 },
       { name: 'lead_time_days', label: '交期（天）', type: 'number', required: true, min: 1 },
       { name: 'prepared_by', label: '备报价人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },

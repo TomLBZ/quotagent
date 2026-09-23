@@ -10,6 +10,13 @@
   },
   "entry": "code/index.mjs",
   "description": "用户空间插件的管理面（list/load/unload/reload/requestCreate/elevateRequest）。（本批 EV-176：实体已进 `code/`，`entry` 指真实包装入口 ⇒ 合法清单；`provides` 为实体自述的真实服务键。）",
+  "permissions": {
+    "ledger": "sole-writer",
+    "writes": [
+      "own-dir",
+      "request-file"
+    ]
+  },
   "migration": {
     "stage": 4.2,
     "mode": "entity-moved-and-wrapper",

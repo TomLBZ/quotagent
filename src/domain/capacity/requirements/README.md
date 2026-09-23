@@ -31,7 +31,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | provides | Python 侧 `services/capacity.py`（`CapacityService`）。 |
 | 依赖（实测 import 目标） | `src/quotagent/services/capacity.py` → `..kernel.ledger`（27 §5.1/§5.2：只 import 内核面或其它插件的公开服务面，不 import 别的插件实现文件） |
 | 门（映射表 §1 证据列里的 `ac` 简写已展开成可跑命令） | `tools/verify.sh ac AC-CAP-001` |
-| 写面 | 账本唯一写者仍是内核（H1）；本插件的账本写入只在映射表 §1 证据列点名的工具里（若有） |
+| 写面 | `plugin.json.permissions = {writes: ["own-dir","request-file"], ledger: "sole-writer"}`：账本侧只有本插件写这一族事件 —— `capacity/calendar|committed|conflict|firm-change-refused`（唯一写者 `tools/capacity-commit.py`，经内核 `ledger` 的 H1 写路径；请求由宿主落 0600 待办件）。日历是**本方私域**，只进本视角账本。 |
 
 ## 现状与缺口
 

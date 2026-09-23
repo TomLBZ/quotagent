@@ -2601,6 +2601,28 @@ ${sortForm('events', '筛查事件')}
       if (shedIfBusy()) return undefined
       return json(200, { ok: true, items: shell.statusItems(whom) })
     }
+    // ---- **批量动作的进度与逐条结果**（P21，机制）--------------------------------------------------
+    // 批量动作的服务端一半在 worker 线程里跑：界面在提交期间轮询这条只读路由显示"正在签哪一个/已经几份"，
+    // 刷新或崩溃之后也靠它读回"这一批到哪了"（0600、按会话身份隔离、有界）。**只读**（POST 孪生 405）。
+    if (path === '/api/ui/jobs') {
+      if (method !== 'GET') {
+        // 只读路径的 POST 孪生：405 + `Allow: GET`（与 `/api/ui/notif-state` 同一条纪律）
+        return send(405, 'application/json; charset=utf-8',
+          JSON.stringify({ ok: false, service: 'quotagent-webui', code: 'method-not-allowed', method,
+            path, route: `${prefix}/api/ui/jobs`, allow: 'GET',
+            next_action: '这条路由只读：批量进度用 GET；要**重试**就用动作总线 POST '
+              + `${prefix}/api/action/<批量动作 id>（同一个唯一写者，界面不写账本）` }, null, 2) + '\n',
+          { allow: 'GET' })
+      }
+      if (!whom.ok) {
+        return json(401, { ok: false, code: whom.code, reason: whom.reason, next_action: whom.next_action,
+          route: `${prefix}/api/ui/jobs` })
+      }
+      return json(200, { ok: true, ...shell.jobsOf(whom),
+        identity: { human: whom.human, side: whom.side },
+        next_action: '正在跑的那一批在 `running`（逐条进度在 `progress`/`last`）；没跑完的在 `recent` 里'
+          + '（`status:"interrupted"` + `pending_ids`）—— 只重试 `pending_ids`/`refused_ids` 是安全的（幂等）' })
+    }
     // ---- **同侧协作**（指派/转交、关注、评论与 @同事、活动流、已读）-------------------------------------
     // 三条只读自述/查询路由：**侧一律取会话**（请求体/查询串改不动它）⇒ 一侧的身份读不到另一侧的协作数据
     // （结构性隔离：一侧一个 0600 文件）。协作数据**不进账本**（理由见 `code/collab.mjs` 文件头）。
@@ -2900,6 +2922,13 @@ ${sortForm('events', '筛查事件')}
             what: '写通知偏好 / 已读 / 布局 / 筛选（整体替换：标已读/标未读、拖面板、切筛选都要生效；'
               + '有界 + 洗净，丢掉多少如实报 `dropped`；**只写 0600 偏好文件**，不写账本）' },
           { path: `${prefix}/api/ui/status`, method: 'GET', auth: 'none', what: '状态栏项（插件注册的状态读数）' },
+          { path: `${prefix}/api/ui/jobs`, method: 'GET', auth: 'identity',
+            what: '**批量动作的进度与逐条结果**（P21）：批量动作（注册面声明 `input.bulk=\'ids\'`）的服务端一半'
+              + '在 **worker 线程**里跑（不再把主线程占满 N×~230ms）；这里回 `running`（正在跑的那一批：'
+              + '逐条进度 `progress`/`last`/已处理几份）与 `recent`（含上一个进程留下的 `interrupted` + '
+              + '`pending_ids`/`refused_ids`，只重试这些是幂等的）。0600 落 `<ui_shared>/webui/jobs.json`、'
+              + '按会话身份隔离、有界；**只读**（POST 孪生 405 + Allow: GET）',
+            auth_note: '按会话身份：未登录 401（这一批是谁的在记录里写着，别人的看不见）' },
           { path: `${prefix}/api/action/<id>`, method: 'POST', auth: 'none',
             what: '动作总线（JSON 入参）：校验 → 调用插件自己的**服务端一半**；`permission: human-signature` 的'
               + '动作**服务端校验署名 == 会话身份**（未登录 401 / 不一致 403 signer-mismatch）；'

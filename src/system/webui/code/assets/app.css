@@ -318,8 +318,8 @@ table.q-table td.q-editing { box-shadow: inset 2px 0 0 var(--accent); }
 #q-modal .q-modal-foot { position: sticky; bottom: 0; background: var(--bg-soft);
   border-top: 1px solid var(--line); padding: 8px 0 2px; margin-top: 8px; }
 body.q-modal-open { overflow: hidden; }
-/* 弹层打开时，提示条**不压**在吸底按钮上（手机上那正是拇指所在的位置）：挪到顶部 */
-body.q-modal-open .q-toasts { top: 8px; bottom: auto; }
+/* P21（D7）：弹层打开时，**新**提示进弹层正文（见 `assets/app.js#toast` 里的 `.q-toasts-inline`）；
+   浮层那份临时隐身，免得压住全屏弹层的标题（P20 实测：导出预览的标题被两条通知盖住）。 */
 
 /* ---- ② 触控命中区：粗指针设备（手机/平板）一律 ≥44px ---- */
 @media (pointer: coarse) {
@@ -591,4 +591,145 @@ table.q-table th .q-sortmark { color: var(--accent); }
 @media (pointer: coarse) {
   .q-qbar input, .q-qbar select, .q-qbar button { min-height: 44px; }
   table.q-table th[data-q-sort] { min-height: 44px; }
+}
+
+/* ============================================================================================
+   P21 窄屏可用性批（D3 面板头 · D4 标签条 · D7 提示条让位 · D8 勾选框）+ 批量进度（D1）：
+     全部是外壳机制，零业务语义；每一条都对着 P20 实测的一个缺陷（见 `docs/scale-batch-and-narrow-screen.md`）。
+   ============================================================================================ */
+
+/* ---- D8：勾选框跟着主题走（P20 实测：未勾选时是**纯白方块**，深色主题下像缺图） ----
+   `accent-color` 只管勾上之后的颜色，没勾的那个方框仍是系统白 —— 所以这里自己画（外观、边框、勾号都用 token）。 */
+input[type=checkbox], input[type=radio] {
+  appearance: none; -webkit-appearance: none;
+  width: 20px; height: 20px; min-width: 20px; min-height: 20px; flex: 0 0 auto;
+  border: 1.5px solid var(--line); border-radius: 5px; background: var(--bg-raise);
+  position: relative; cursor: pointer; vertical-align: middle; }
+input[type=checkbox]:hover, input[type=radio]:hover { border-color: var(--accent); }
+input[type=checkbox]:checked, input[type=radio]:checked { background: var(--accent); border-color: var(--accent); }
+input[type=checkbox]:checked::after {
+  content: '✓'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: #08121d; font-size: 14px; font-weight: 700; line-height: 1; }
+input[type=radio] { border-radius: 50%; }
+input[type=radio]:checked::after {
+  content: ''; position: absolute; inset: 4px; border-radius: 50%; background: #08121d; }
+input[type=checkbox]:focus-visible, input[type=radio]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 勾过的行给一点底色：翻页回来一眼能看出"这行是勾着的"（跨页勾选会保留，P21 / D2） */
+tr.q-row-picked > td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* ---- D7：批量的实时进度 + 逐条回执（D1 / D6） ---- */
+.q-batch-progress { border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  background: var(--bg-raise); border-radius: 6px; padding: 8px 10px; margin: 0 0 10px; font-size: 12.5px; }
+.q-batch-progress b { color: var(--accent); }
+.q-batch-list { margin: 4px 0 10px; padding-left: 18px; }
+.q-batch-list li { margin: 4px 0; overflow-wrap: anywhere; }
+.q-batch-next { border-top: 1px dashed var(--line); padding-top: 8px; }
+#q-modal[data-kind="q-batch-receipt"] .q-card { width: min(860px, 94vw); }
+
+/* ---- D7：弹层打开时提示条**让位**——新提示（与已在屏幕上的）都进弹层正文（`.q-toasts-inline`）----
+   P20 实测：全屏弹层的标题被两条通知压住。让位 ≠ 丢掉：提示仍然显示，只是显示在弹层里、不覆盖标题。 */
+.q-toasts-inline { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }
+.q-toasts-inline .q-toast { max-width: none; }
+
+/* ---- D3 + D4：手机（≤560px）---- */
+@media (max-width: 560px) {
+  /* **面板头不占满首屏**：查询条折起来（一颗「搜这块 / 筛选」），露出来的只有
+     计数行 + 翻页（合成一行）；关键字/列条件/每页行数/恢复默认/镜像说明都进折叠区。 */
+  .q-qbar { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 5px 8px; }
+  .q-qbar .q-qbar-lead { flex: 1 1 100%; display: flex; align-items: center; gap: 8px; margin: 0; }
+  .q-qbar-toggle { display: inline-flex; align-items: center; gap: 4px; }
+  .q-qbar .q-qbar-fold { display: none; flex: 1 1 100%; gap: 6px; flex-wrap: wrap; }
+  .q-qbar[data-qbar-open="1"] .q-qbar-fold { display: flex; }
+  /* 计数行与翻页**合成一行**：计数条 `flex-basis:0` 才不会因为"基尺寸放不下"把翻页挤到下一行
+     （flex 的换行判定用的是**基尺寸**，不是收缩后的尺寸） */
+  .q-qbar .q-qcount { flex: 1 1 0; min-width: 0; margin-top: 0; gap: 8px; }
+  .q-qbar .q-qpages { flex: 0 0 auto; min-width: 0; margin-top: 0; gap: 8px; }
+  .q-qbar .q-qcount { font-size: 11.5px; }
+  .q-qbar .q-c-server, .q-qbar .q-c-sorthint { display: none; }      /* 服务端分页/排序提示：折叠区里还有 */
+  .q-qbar .q-qpages [data-q-page-kind="first"], .q-qbar .q-qpages [data-q-page-kind="last"],
+  .q-qbar .q-qpages .q-page-extra, .q-qbar .q-qpages .q-qhint { display: none; }  /* 只留 上一页/下一页 */
+  .q-qbar .q-qpages { justify-content: flex-start; }
+  /* 面板里的长说明（插件写的"这块怎么用"）默认收起：手机上它常占好几行 */
+  .q-panel-hint > summary { color: var(--fg-dim); font-size: 12px; cursor: pointer; }
+  .q-panel-hint[open] > p { margin: 4px 0 0; }
+  /* **标签条不互相压住**：标签横滑，「+ 新标签」吸在右边不动（原来第 2 个标签的标题被它盖住） */
+  .q-tabs { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; overflow-x: auto; max-height: 44px;
+    padding: 3px 8px 0; }
+  .q-tab, .q-tab-add { flex: 0 0 auto; max-width: 38vw; }
+  .q-tab .q-link { display: inline-block; max-width: 30vw; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; vertical-align: middle; }
+  .q-tab-add { position: sticky; right: 0; background: var(--bg-soft); padding-left: 8px;
+    box-shadow: -10px 0 10px -8px var(--bg); }
+}
+/* 宽屏：折叠按钮与它的说明不出现（查询条本来就一行） */
+@media (min-width: 561px) {
+  .q-qbar-toggle, .q-qbar-foldnote { display: none; }
+}
+/* 粗指针：折起来的那颗按钮也够大（≥44px） */
+@media (pointer: coarse) and (max-width: 560px) {
+  .q-qbar-toggle { min-height: 44px; }
+  .q-qbar .q-qpages button { min-height: 40px; }
+}
+
+/* ---- P21 / D3（续）：窄一点就把「布局」条折起来（≤900px）----
+   P20 实测首屏被"视图头 + 布局条（收起全部/展开全部/恢复默认 + 一段说明）"占掉约 500px；
+   布局是低频操作，折成一行 summary 即可，按钮一个没少（点开就是原样）。 */
+@media (max-width: 900px) {
+  details.q-layoutbar-fold > summary { cursor: pointer; color: var(--fg-dim); font-size: 12.5px;
+    list-style: none; }
+  details.q-layoutbar-fold > summary::marker { content: ''; }
+  details.q-layoutbar-fold > summary::before { content: '▸ '; }
+  details.q-layoutbar-fold[open] > summary::before { content: '▾ '; }
+  details.q-layoutbar-fold > .q-layoutbar-inner { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin-top: 6px; }
+}
+
+/* ---- P21 / D3（续）：把首屏再让给数据行 ----
+   P20 实测 390px 下面板头约 800px ⇒ 首屏 0 行数据。上面已经把查询条折起来 + 布局条折起来；
+   这里再收三处"一直在但没人第一眼看"的东西：计数行与翻页**合成一行**（把小括号那截让掉）、
+   视图头的字面、以及"机制/这块怎么用"两个 summary 并成一行。 */
+@media (max-width: 560px) {
+  /* 卡片视图里勾选框不要被拉伸（td 是 flex，`td input` 会让它撑满半个格子） */
+  table.q-table:not(.q-keep-table) td input[type=checkbox],
+  table.q-table:not(.q-keep-table) td input[type=radio] {
+    flex: 0 0 auto; width: 26px; min-width: 26px; height: 26px; min-height: 26px; }
+  /* 视图头：标题小一号、说明跟着换行，别把首屏吃掉 */
+  .q-viewhead { gap: 4px 8px; margin-bottom: 4px; }
+  .q-viewhead h1 { font-size: 17px; }
+  .q-viewhead p, .q-viewhead .q-crumbs { font-size: 12px; }
+  /* 两块折叠说明（机制 / 这块怎么用）并成一行 */
+  section[data-panel] > details.q-mech, section[data-panel] > details.q-panel-hint {
+    display: inline-block; margin: 0 10px 2px 0; }
+  section[data-panel] > details.q-mech > summary, section[data-panel] > details.q-panel-hint > summary {
+    display: inline; }
+  /* 计数行与翻页合成一行：把"（本页 N 行）"那截让掉（它在这个尺寸下只是噪音） */
+  .q-qbar .q-c-page-in { display: none; }
+  /* 计数条内部的"勾选/全选/排序"那截自己占一行 ⇒ 计数文字与翻页才排得进同一行 */
+  .q-qbar .q-qcount { flex-wrap: wrap; }
+  .q-qbar .q-qcount .q-c-extra { flex: 1 1 100%; }
+}
+
+/* ---- P21 / D3（续）：**横屏手机/矮视口**（高度 ≤520px）按同一套折叠规则走 ----
+   判据是"垂直空间不够"，不是"宽度不够"：844×390 这种横屏下面板头一样会把首屏吃光。 */
+@media (max-height: 520px) {
+  .q-qbar { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 5px 8px; }
+  .q-qbar .q-qbar-lead { flex: 1 1 100%; display: flex; align-items: center; gap: 8px; margin: 0; }
+  .q-qbar-toggle { display: inline-flex; align-items: center; gap: 4px; }
+  .q-qbar .q-qbar-fold { display: none; flex: 1 1 100%; gap: 6px; flex-wrap: wrap; }
+  .q-qbar[data-qbar-open="1"] .q-qbar-fold { display: flex; }
+  .q-qbar .q-qcount { flex: 1 1 0; min-width: 0; margin-top: 0; gap: 8px; flex-wrap: wrap; font-size: 11.5px; }
+  .q-qbar .q-qcount .q-c-extra { flex: 1 1 100%; }
+  .q-qbar .q-qpages { flex: 0 0 auto; min-width: 0; margin-top: 0; gap: 8px; }
+  .q-qbar .q-c-server, .q-qbar .q-c-sorthint, .q-qbar .q-c-page-in { display: none; }
+  .q-qbar .q-qpages [data-q-page-kind="first"], .q-qbar .q-qpages [data-q-page-kind="last"],
+  .q-qbar .q-qpages .q-page-extra, .q-qbar .q-qpages .q-qhint { display: none; }
+  section[data-panel] > details.q-mech, section[data-panel] > details.q-panel-hint {
+    display: inline-block; margin: 0 10px 2px 0; }
+  section[data-panel] > details.q-mech > summary, section[data-panel] > details.q-panel-hint > summary {
+    display: inline; }
+  details.q-layoutbar-fold > summary { cursor: pointer; color: var(--fg-dim); font-size: 12.5px; list-style: none; }
+  details.q-layoutbar-fold > summary::before { content: '▸ '; }
+  details.q-layoutbar-fold[open] > summary::before { content: '▾ '; }
+  details.q-layoutbar-fold > .q-layoutbar-inner { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin-top: 6px; }
 }

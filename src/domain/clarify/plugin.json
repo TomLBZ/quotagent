@@ -7,6 +7,10 @@
   ],
   "entry": "code/__init__.py",
   "description": "domain 插件「clarify」：本批 `EV-178` 补**真实承载** —— Python 承载入口 `code/__init__.py`（`from quotagent.services.clarify import *` 的原样重导出） + 实体 `code/clarify.py`（`entry` 指向的入口**真实存在**，`tools/plugin.sh list` 不再报 `artifact-missing`）。**不新造功能**：语义仍只在实体里。",
+  "permissions": {
+    "writes": ["own-dir", "request-file"],
+    "ledger": "sole-writer"
+  },
   "migration": {
     "stage": 5,
     "mode": "python-entry-wrapper",

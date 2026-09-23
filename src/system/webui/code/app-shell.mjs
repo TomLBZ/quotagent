@@ -17,11 +17,14 @@
  *     口径与边界见 `docs/design/29-webui-gui-app.md` §11 与 `src/system/webui/docs/sandbox-and-demo.md`。
  */
 import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, chmodSync, renameSync, writeFileSync,
+  openSync, closeSync, unlinkSync,
   rmSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
+import { Worker } from 'node:worker_threads'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
-import { join, relative, resolve } from 'node:path'
+import { join, dirname, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createUiSurface, PANEL_KINDS } from './ui-surface.mjs'
 import { createCollabStore } from './collab.mjs'
 import { createCollabSurface, COLLAB_PLUGIN_ID } from './collab-ui.mjs'
@@ -241,6 +244,194 @@ export function receiptSummary(receipt, tool = '') {
       .map(receiptFileName).filter((name) => name !== ''),
     refused_codes: receipt.refused.map((entry) => String(entry?.code ?? '')).filter((code) => code !== ''),
     stdout_tail: receipt.stdout_tail, stderr_tail: receipt.stderr_tail,
+  }
+}
+
+/**
+ * **待办件载荷 + 文件名**（纯函数，机制）—— `host.stage()` 与**动作运行时**共用的同一处实现。
+ *
+ * 为什么必须共用一份：`gate.decide-batch` 这类批量动作的幂等性是**靠文件名**成立的（同名待办件不重复落、
+ * 写者按归档摘要判 `already-applied`）。所以"同一个意图 ⇒ 同一个名字"这条判据在两个执行面里必须**逐字节**
+ * 一致 —— 抄一份出来就会漂（漂的后果是重签一次多落一个待办件，等于假重复）。
+ */
+export function pendingPayload(kind, record, { name = '' } = {}) {
+  const payload = { schema: PENDING_SCHEMA, kind, ...record, submitted_at: '' }
+  payload.bytes = Buffer.byteLength(String(payload.note ?? ''), 'utf8')
+  payload.payload_sha256 = digestOf(canonical(payload))
+  // 文件名：默认 `<kind>-<sha12>.json`；插件可以给 `{name}`（**它自己的唯一写者按文件名收件**，
+  // 例如 `qd-<view>-<12hex>.json`）—— 名字由插件定，机制不猜。
+  return { payload, name: String(name || `${kind}-${payload.payload_sha256.slice(7, 19)}.json`) }
+}
+
+/**
+ * **唯一写者闸门**（机制，0 业务语义）—— P21 由"真异步"引出的必然后果。
+ *
+ * 为什么需要它：唯一写者（Python 侧 `*-apply.py`/`*-sign.py`）**不是**并发安全的写入者 —— 它 append 到
+ * 同一份 JSONL 时要读"上一条的 `entry_hash`"再写自己那一条。P21 之前没人能撞上这件事，因为**所有**动作
+ * （含批量）都在 Node 唯一主线程上跑 `spawnSync`：一个写者跑的时候，别人的写动作根本没有机会开始
+ * （不是设计得好，是"冻结"的副产品）。批量搬进 worker 线程之后这条偶然的互斥没有了 ——
+ * P21 实测：50 份批量与另一客户端的 `rfq.publish` 同时写 ⇒ 供应商账本出现**重复 seq / 断链**
+ * （`tmp/p21-shots/concurrent-broken-chain.json`），写者随即自己发现（`哈希链校验失败`）并**冻结账本**。
+ *
+ * 形状 = **文件锁 + FIFO 排队票据**（同刻只有一个写者；先来先服务，不饿死任何一个）：
+ *   · `<ui_shared>/webui/writer.queue/<ticket>.json`：来了先领一张票（票名以毫秒时间戳开头 ⇒ 字典序 = 先来后到）；
+ *   · `<ui_shared>/webui/writer.lock`：`open(…, 'wx')` **原子争锁** —— 拿到才算"我在写"（真正的互斥靠它，
+ *     顺序靠票）；拿到后把自己的票删掉；
+ *   · 释放 = 删锁文件；放弃 = 删自己的票；
+ *   · 陈旧：锁的持有者进程没了、或票/锁超过 `staleMs` 没动（默认 180 s，远大于单次写者的 30 s 超时）⇒ 清掉；
+ *   · **每个写者调用各自领票**（不是"整批独占"）⇒ 批量进行中，另一个人的单条写只需等到**当前这一条**写完
+ *     （实测 p50 ≈ 一条写者的时间），而不是等整批（P20 的形态是整批期间全部冻结）。
+ *   · 等不到就**如实拒**（`writer-gate-timeout`），绝不"跳过闸门直接写"（那正是账本断链的来源）。
+ *
+ * 把协议实现放在**一处**（`writerGateTicket/writerGateTry/writerGateReleaseSync`），两个执行面各写自己的
+ * 驱动循环：主线程用 `await`（不阻塞事件循环），worker 用 `Atomics.wait`（等的不是主线程）。
+ */
+export const WRITER_GATE = {
+  schema: 'quotagent/writer-gate/v1',
+  /** 陈旧判据（毫秒）：持有者进程没了，或者锁/票这么久没动过。 */
+  staleMs: 180000,
+  pollMs: 25,
+  dir: (sharedDir) => join(sharedDir, 'webui', 'writer.queue'),
+  lock: (sharedDir) => join(sharedDir, 'webui', 'writer.lock'),
+}
+
+const gateTicketName = (kind) => `${String(Date.now()).padStart(15, '0')}-${createHash('sha1')
+  .update(`${process.pid}:${kind}:${Math.random()}`).digest('hex').slice(0, 8)}.json`
+
+/** 领一张票（先来后到靠票名的毫秒前缀）。票是**请求**，不是锁；拿到锁之前随时可以放弃。 */
+export function writerGateTicket({ dir, meta = {} }) {
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    const name = gateTicketName(meta.thread ?? 'writer')
+    const file = join(dir, name)
+    writeFileSync(file, `${JSON.stringify({ schema: WRITER_GATE.schema, pid: process.pid, ...meta,
+      at: new Date().toISOString() })}\n`, { encoding: 'utf8', mode: 0o600 })
+    return { ok: true, dir, name, file }
+  } catch (err) {
+    return { ok: false, dir, code: 'writer-gate-failed', reason: String(err) }
+  }
+}
+
+export function writerGateDropTicket(ticket) {
+  if (!ticket?.file) return { ok: true }
+  try { unlinkSync(ticket.file) } catch (err) { /* 票已经不在了 */ }
+  return { ok: true }
+}
+
+/** 读锁（`held` 只说明文件在，不说明活着）。 */
+export function writerGateInfo(file) {
+  let raw = null
+  let mtime = 0
+  try {
+    raw = readFileSync(file, 'utf8')
+    mtime = statSync(file).mtimeMs
+  } catch (err) { return { held: false, file, info: null, age_ms: 0 } }
+  let info = null
+  try { info = JSON.parse(raw) } catch (err) { info = null }
+  return { held: true, file, info, age_ms: Math.max(0, Date.now() - mtime) }
+}
+
+/** 陈旧就清（只在"持有者进程已不在"或"远超单次写者时长"时动手；两种判据都要真读数）。 */
+export function writerGateDropStale(file, staleMs = WRITER_GATE.staleMs) {
+  const now = writerGateInfo(file)
+  if (!now.held) return { removed: false, why: 'not-held' }
+  const pid = Number(now.info?.pid)
+  let alive = true
+  if (Number.isInteger(pid) && pid > 0) {
+    try { process.kill(pid, 0); alive = true } catch (err) { alive = err && err.code === 'EPERM' }
+  }
+  if (!alive) {
+    try { unlinkSync(file); return { removed: true, why: 'holder-gone', age_ms: now.age_ms } } catch (err) { return { removed: false, why: 'unlink-failed' } }
+  }
+  if (now.age_ms >= staleMs) {
+    try { unlinkSync(file); return { removed: true, why: 'stale', age_ms: now.age_ms } } catch (err) { return { removed: false, why: 'unlink-failed' } }
+  }
+  return { removed: false, why: 'held', age_ms: now.age_ms }
+}
+
+/** 清掉一张放太久的票（领了票却不再轮询的进程/线程留下的，不占队列）。 */
+export function writerGateDropStaleTickets(dir, staleMs = WRITER_GATE.staleMs) {
+  let names = []
+  try { names = readdirSync(dir).filter((name) => name.endsWith('.json')).sort() } catch (err) { return 0 }
+  let dropped = 0
+  for (const name of names) {
+    const file = join(dir, name)
+    try {
+      const age = Date.now() - statSync(file).mtimeMs
+      let info = null
+      try { info = JSON.parse(readFileSync(file, 'utf8')) } catch (err) { info = null }
+      const pid = Number(info?.pid)
+      let alive = true
+      if (Number.isInteger(pid) && pid > 0) {
+        try { process.kill(pid, 0) } catch (err) { alive = err && err.code === 'EPERM' }
+      }
+      if (!alive || age >= staleMs) { unlinkSync(file); dropped += 1 }
+    } catch (err) { /* 并发下票可能刚被删掉：忽略 */ }
+  }
+  return dropped
+}
+
+/**
+ * **走一步闸门协议**（一次调用 = 一次轮询，两个执行面共用这一处；调用方负责"隔多久再问一次"）：
+ *   `{held:true, file}` = 我现在在写（票已删、锁已拿）；
+ *   `{held:false, position, waiters}` = 还没轮到我；
+ *   `{held:false, code}` = 出错了（如实报，别硬闯）。
+ */
+export function writerGateTry({ lock, dir, ticket, meta = {}, staleMs = WRITER_GATE.staleMs }) {
+  const held = writerGateInfo(lock)
+  if (held.held) {
+    const dropped = writerGateDropStale(lock, staleMs)
+    if (dropped.removed) writerGateDropStaleTickets(dir, staleMs)
+    return { held: false, position: null, waiters: null, holder: dropped.removed ? null : held.info,
+      holder_age_ms: dropped.removed ? 0 : held.age_ms, dropped }
+  }
+  // 排队顺序：票名（毫秒时间戳在前）字典序；我的票不是最老的一张 ⇒ 等别人先写。
+  let names = []
+  try { names = readdirSync(dir).filter((name) => name.endsWith('.json')).sort() } catch (err) { names = [] }
+  writerGateDropStaleTickets(dir, staleMs)
+  const mine = names.indexOf(ticket.name)
+  if (mine > 0) return { held: false, position: mine + 1, waiters: names.length }
+  try {
+    const fd = openSync(lock, 'wx', 0o600)
+    try {
+      writeFileSync(fd, `${JSON.stringify({ schema: WRITER_GATE.schema, pid: process.pid, ...meta,
+        ticket: ticket.name, at: new Date().toISOString() })}\n`)
+    } finally { closeSync(fd) }
+    writerGateDropTicket(ticket)
+    return { held: true, file: lock, position: 1, waiters: names.length }
+  } catch (err) {
+    if (err?.code === 'EEXIST') return { held: false, position: 1, waiters: names.length }
+    return { held: false, code: 'writer-gate-failed', reason: String(err) }
+  }
+}
+
+/** 放闸门（幂等：锁文件已经不在了也算放开）。 */
+export function writerGateReleaseSync(file) {
+  try { unlinkSync(file); return { ok: true, file } } catch (err) { return { ok: true, file, already: true } }
+}
+
+/** **同步驱动循环**（worker 用）：`Atomics.wait` 让出时间片 —— 等的不是主线程，所以可以同步等。 */
+export function writerGateTakeSync({ lock, dir, meta = {}, timeoutMs = 120000, pollMs = WRITER_GATE.pollMs,
+  staleMs = WRITER_GATE.staleMs } = {}) {
+  const started = Date.now()
+  const deadline = started + Math.max(1, Number(timeoutMs) || 1)
+  const ticket = writerGateTicket({ dir, meta })
+  if (!ticket.ok) return { ok: false, file: lock, waited_ms: 0, code: ticket.code, reason: ticket.reason }
+  const waiter = new Int32Array(new SharedArrayBuffer(4))
+  let position = null
+  for (;;) {
+    const step = writerGateTry({ lock, dir, ticket, meta, staleMs })
+    if (step.held) return { ok: true, file: lock, waited_ms: Date.now() - started, position: 1 }
+    if (step.code) { writerGateDropTicket(ticket); return { ok: false, file: lock, waited_ms: Date.now() - started, ...step } }
+    position = step.position ?? position
+    if (Date.now() >= deadline) {
+      const holder = writerGateInfo(lock)
+      writerGateDropTicket(ticket)
+      return { ok: false, file: lock, waited_ms: Date.now() - started, code: 'writer-gate-timeout', position,
+        holder: holder.info,
+        reason: `另一个写者还在写（闸门被占 ${holder.age_ms}ms，排队第 ${position ?? '?'} 位）` }
+    }
+    try { Atomics.wait(waiter, 0, 0, pollMs) } catch (err) { /* 没有 Atomics 就退化成忙等（仍然正确） */ }
   }
 }
 
@@ -1370,12 +1561,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   /** 落一条 0600 待办件（**宿主唯一的写面**；账本零新增，落账本归 Python 侧）。 */
   const stage = (kind, record, { name: wantedName } = {}) => {
     const dir = join(effective().dir, kind)
-    const payload = { schema: PENDING_SCHEMA, kind, ...record, submitted_at: '' }
-    payload.bytes = Buffer.byteLength(String(payload.note ?? ''), 'utf8')
-    payload.payload_sha256 = digestOf(canonical(payload))
-    // 文件名：默认 `<kind>-<sha12>.json`；插件可以给 `{name}`（**它自己的唯一写者按文件名收件**，
-    // 例如 `qd-<view>-<12hex>.json`）—— 名字由插件定，机制不猜。
-    const name = String(wantedName || `${kind}-${payload.payload_sha256.slice(7, 19)}.json`)
+    // 载荷与文件名由 `pendingPayload()`（纯函数）给 —— **动作运行时**用的是同一份实现（同名判据不漂）。
+    const { payload, name } = pendingPayload(kind, record, { name: wantedName })
     try {
       mkdirSync(dir, { recursive: true, mode: 0o700 })
       try { chmodSync(dir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
@@ -2594,6 +2781,552 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     return errors
   }
 
+  // ============================================================================================
+  // **动作运行时（批量动作的真异步执行面）** —— P21
+  //
+  // 问题（P20 实测）：批量人签 = 插件自己的服务端一半里**串行**跑 N 次唯一写者，而这条路径上的唯一写者
+  // 是 `spawnSync` ⇒ N 次同步 spawn 把 **Node 唯一的主线程**占满 `N × ~230 ms`（40 份 4.27 s、
+  // 50 份 11.65 s）。期间另一个客户端的翻页请求等了 11.7 s、0 条完成（`tmp/p20-shots/concurrent-out.txt`）。
+  //
+  // 机制（**不动插件的语义一个字**）：把**批量动作的服务端一半**放进一个 **worker 线程**里跑 ——
+  //   · 插件代码照旧同步跑、照旧 `spawnSync`（它阻塞的只是那个 worker 线程，不是主线程）；
+  //   · 主线程只管收进度、发响应 ⇒ 别人的翻页/写在批量进行中照常被服务；
+  //   · 「一次署名 / 逐份落账 / 每份可独立拒绝 / 部分失败逐条如实 / 幂等 / 上限具名拒」全部仍由
+  //     **同一份插件代码**判定 —— 运行时里 import 的就是磁盘上那个 `code/ui.mjs`；机制不重写它的判据，
+  //     也不认识任何业务名词（它只按注册面声明的 `input.bulk === 'ids'` 认\"这是个批量动作\"）；
+  //   · 并发有上限（`job_concurrency`，默认 1）：批量之间排队；动作**不被拒**，只是排队（与\"动作一律不拒\"
+  //     的纪律一致：拒绝只给渲染重读）。
+  //
+  // 不丢工作：进度与逐条结果落 `<ui_shared>/webui/jobs.json`（0600、原子写、有界）—— 刷新或进程重启之后，
+  // 界面能如实说出\"这一批到哪了\"，并**只重试剩下/被拒的那几份**（幂等：重复的会如实回 duplicates/被拒）。
+  // ============================================================================================
+  const JOB_SCHEMA = 'quotagent/webui-jobs/v1'
+  const JOB_LIMITS = { keep: 12, items: 200, progress: 24, target_chars: 80 }
+  const jobEnvInt = (name, fallback) => {
+    const raw = String(process.env[name] ?? '')
+    if (raw === '') return fallback
+    const value = Number(raw)
+    return Number.isInteger(value) && value >= 0 ? value : fallback
+  }
+  const jobConcurrency = Math.max(1, jobEnvInt('QUOTAGENT_UI_JOB_CONCURRENCY',
+    Number.isInteger(config.job_concurrency) ? config.job_concurrency : 1))
+  const jobTimeoutOf = (count) => jobEnvInt('QUOTAGENT_UI_JOB_TIMEOUT_MS', 0)
+    || (Math.max(1, count) * (PYTHON_TIMEOUT_MS + 5000) + 60000)
+  const jobFile = () => join(sharedDir, 'webui', 'jobs.json')
+  // ---- **唯一写者闸门（主线程侧的异步版）**：见文件头 `WRITER_GATE` 段 ------------------------
+  const gateStats = { took: 0, waited_ms: 0, peak_wait_ms: 0, timeouts: 0, released: 0, stale_dropped: 0,
+    skipped_free: 0, held_now: 0 }
+  const gateWaitEnv = jobEnvInt('QUOTAGENT_UI_WRITER_WAIT_MS', 0)
+  const gateWaitMs = gateWaitEnv > 0 ? gateWaitEnv : 120000
+  /** 动作是否可能需要写者：**未知的一律按"要写"处理**（安全侧）；连续两次观察到"零写者"才免排队。 */
+  const writerFree = new Map()
+  const writerFreeCount = (actionId) => writerFree.get(actionId) || 0
+  const noteWriterOutcome = (actionId, ranWriter) => {
+    if (ranWriter) writerFree.set(actionId, 0)
+    else writerFree.set(actionId, Math.min(2, writerFreeCount(actionId) + 1))
+  }
+  /** 异步取闸门（主线程**不阻塞事件循环**：等的时候让出，别人的翻页照常；协议本体在 `writerGateTry`）。 */
+  const writerGateAcquire = async (action, meta = {}) => {
+    const lock = WRITER_GATE.lock(sharedDir)
+    const dir = WRITER_GATE.dir(sharedDir)
+    const started = Date.now()
+    const full = { thread: 'main', action: action.id, ...meta }
+    const ticket = writerGateTicket({ dir, meta: full })
+    if (!ticket.ok) {
+      return { ok: false, code: ticket.code, reason: ticket.reason,
+        next_action: `修 ${dir} 所在目录的权限后重提（本动作什么都没做）` }
+    }
+    for (;;) {
+      const step = writerGateTry({ lock, dir, ticket, meta: full })
+      if (step.held) {
+        const waited = Date.now() - started
+        gateStats.took += 1
+        gateStats.held_now += 1
+        gateStats.waited_ms += waited
+        gateStats.peak_wait_ms = Math.max(gateStats.peak_wait_ms, waited)
+        return { ok: true, file: lock, waited_ms: waited }
+      }
+      if (step.code) {
+        writerGateDropTicket(ticket)
+        return { ok: false, code: step.code, reason: step.reason,
+          next_action: `修 ${dir} 所在目录的权限后重提（本动作什么都没做）` }
+      }
+      if (Date.now() - started >= gateWaitMs) {
+        gateStats.timeouts += 1
+        const held = writerGateInfo(lock)
+        writerGateDropTicket(ticket)
+        return { ok: false, code: 'writer-gate-timeout',
+          reason: `另一个写者已经写了 ${held.age_ms}ms（排队第 ${step.position ?? '?'} 位）：本动作**没有开始**、账本零新增`,
+          next_action: '写者之间排队（同刻只有一个写者在写同一份账本）：等它落完再点一次 —— 界面上的批量进度'
+            + `能看到它正在做哪一条。等不到的阈值是 ${gateWaitMs}ms（可配 QUOTAGENT_UI_WRITER_WAIT_MS）`,
+          holder: held.info }
+      }
+      await new Promise((resolveWait) => setTimeout(resolveWait, WRITER_GATE.pollMs))
+    }
+  }
+  const writerGateRelease = (gate) => {
+    if (!gate?.ok) return
+    writerGateReleaseSync(gate.file)
+    gateStats.released += 1
+    gateStats.held_now = Math.max(0, gateStats.held_now - 1)
+  }
+  const ioJobs = { started: 0, done: 0, failed: 0, interrupted: 0, offloaded_items: 0,
+    running: 0, peak_running: 0, inline_fallback: 0, concurrency: jobConcurrency }
+
+  /**
+   * **批量动作的目标列表**（机制；与插件同源的取法：对象取 id 类字段，字符串就是它自己）。
+   * 只用来记\"这一批有哪几条要处理\"（进度与\"只重试剩下/被拒的\"），**不参与任何判定**。
+   */
+  const batchIdsOf = (action, input) => {
+    if (String(action?.input?.bulk ?? '') !== 'ids') return null
+    const raw = Array.isArray(input?.ids) ? input.ids : []
+    const keys = raw.map((item) => {
+      if (item !== null && typeof item === 'object') {
+        for (const key of ['draft_id', 'gate_id', 'quote_draft_id', 'id', 'object_id', 'request_id']) {
+          const value = String(item[key] ?? '').trim()
+          if (value !== '') return value
+        }
+        return ''
+      }
+      return String(item ?? '').trim()
+    }).filter((key) => key !== '')
+    const unique = [...new Set(keys)].slice(0, JOB_LIMITS.items)
+    return unique.length ? unique : null
+  }
+
+  let jobLog = null
+  const jobsReadDoc = () => {
+    try {
+      const doc = JSON.parse(readFileSync(jobFile(), 'utf8'))
+      return Array.isArray(doc?.jobs) ? doc.jobs : []
+    } catch (err) { return [] }
+  }
+  const jobsSave = () => {
+    if (!jobLog) return
+    try {
+      const dir = join(sharedDir, 'webui')
+      mkdirSync(dir, { recursive: true, mode: 0o700 })
+      const target = jobFile()
+      const tmp = `${target}.${process.pid}.tmp`
+      writeFileSync(tmp, JSON.stringify({ schema: JOB_SCHEMA, pid: process.pid, updated_at: new Date().toISOString(),
+        jobs: jobLog.slice(0, JOB_LIMITS.keep) }, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
+      chmodSync(tmp, 0o600)
+      renameSync(tmp, target)
+    } catch (err) { say(`批量进度落盘失败（如实记，不假装成功）：${flat(err)}`) }
+  }
+  const liveJobIds = new Set()
+  /**
+   * 读回这批记录（第一次调用时把**上一个进程**留下的 `running` 改成 `interrupted` —— 那是一条没有收尾的
+   * 批量：它到哪了就写到哪里，界面据此说\"到哪了\"，并只重试剩下/被拒的那几份）。
+   */
+  const jobsLoad = () => {
+    if (jobLog) return jobLog
+    const stored = jobsReadDoc()
+    let changed = false
+    jobLog = stored.map((job) => {
+      if (!['running', 'queued'].includes(job?.status) || liveJobIds.has(job.id)) return job
+      changed = true
+      ioJobs.interrupted += 1
+      // **到哪了**用进度里"写者回执"那一行推：`writer-done` 的 `target` = 这一条已经跑过写者
+      // （`code` 非空 = 它被写者拒了）。剩下没跑过的就是 `pending_ids` —— 界面据此"只重试剩下的"。
+      const done = (job.progress || []).filter((row) => row.phase === 'writer-done')
+      const settled = new Set(done.map((row) => String(row.target ?? '')).filter((id) => id !== ''))
+      const refused = done.filter((row) => String(row.code ?? '') !== '')
+        .map((row) => String(row.target ?? '')).filter((id) => id !== '')
+      const ids = Array.isArray(job.ids) ? job.ids : []
+      return { ...job, status: 'interrupted', finished_at: new Date().toISOString(),
+        done: done.length,
+        pending_ids: ids.filter((id) => !settled.has(id)),
+        refused_ids: [...new Set(refused)],
+        runtime_note: '这条是**上一个进程**留下的、没有收尾的批量（进程退出/重启）。它到哪了就记到哪：'
+          + `进度里 ${done.length} 条写者回执 = 已经跑过的那些（剩下 ${ids.filter((id) => !settled.has(id)).length} 份`
+          + '从没跑到）；已完成的那些重签会如实报 `duplicates`（幂等、账本零新增），'
+          + '所以"只重试剩下的"是安全的' }
+    })
+    if (changed) jobsSave()
+    return jobLog
+  }
+  const jobPush = (job) => {
+    jobsLoad()
+    const index = jobLog.findIndex((item) => item.id === job.id)
+    if (index >= 0) jobLog[index] = job
+    else jobLog.unshift(job)
+    jobLog = jobLog.slice(0, JOB_LIMITS.keep)
+  }
+  /** 逐条结果（从插件自己的 `result.results[]` 里**照抄**，机制不做任何判定/推断）。 */
+  const jobItemsOf = (result) => {
+    const list = result?.result?.results
+    if (!Array.isArray(list)) return []
+    return list.slice(0, JOB_LIMITS.items).map((row) => ({
+      item: String(row?.draft_id ?? row?.gate_id ?? row?.id ?? row?.object_id ?? '').trim(),
+      where: String(row?.where ?? ''), code: String(row?.code ?? ''),
+      ledger_added: Number(row?.ledger_added ?? 0) || 0,
+      reason: flat(row?.reason ?? '', 160), next_action: flat(row?.next_action ?? '', 200),
+    }))
+  }
+  const jobCountsOf = (result, items) => {
+    const batch = result?.result?.batch
+    const count = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback)
+    return {
+      applied: batch ? count(batch.decided ?? batch.signed, items.filter((row) => row.where === 'applied').length)
+        : items.filter((row) => row.where === 'applied').length,
+      duplicates: batch ? count(batch.already, items.filter((row) => row.where === 'duplicates').length)
+        : items.filter((row) => row.where === 'duplicates').length,
+      refused: batch ? count(batch.refused, items.filter((row) => row.where === 'refused').length)
+        : items.filter((row) => row.where === 'refused').length,
+      ledger_added: batch ? count(batch.ledger_added, items.reduce((sum, row) => sum + row.ledger_added, 0))
+        : items.reduce((sum, row) => sum + row.ledger_added, 0),
+    }
+  }
+  /** 尚未完成的目标（完成 = applied 或 duplicates）：\'只重试剩下/被拒的那几份\'用的就是它。 */
+  const jobPendingOf = (ids, items) => {
+    const settled = new Set(items.filter((row) => row.where === 'applied' || row.where === 'duplicates')
+      .map((row) => row.item).filter((item) => item !== ''))
+    return ids.filter((id) => !settled.has(id))
+  }
+  const jobDescribe = (job) => ({
+    id: job.id, action: job.action, title: job.title, plugin_id: job.plugin_id,
+    actor: job.actor, side: job.side, view: job.view, status: job.status,
+    total: job.total, ids: job.ids, started_at: job.started_at, finished_at: job.finished_at || '',
+    ms: job.ms ?? null, code: job.code || '', ok: job.ok === true, reason: job.reason || '',
+    next_action: job.next_action || '', items: job.items || [], progress: job.progress || [],
+    done: job.done ?? (job.items || []).length, applied: job.applied ?? 0, duplicates: job.duplicates ?? 0,
+    refused: job.refused ?? 0, ledger_added: job.ledger_added ?? 0,
+    pending_ids: job.pending_ids || [], refused_ids: job.refused_ids || [],
+    runtime: job.runtime || 'worker', runtime_note: job.runtime_note || '',
+  })
+  /**
+   * 一页界面上要的两样东西（**按会话身份隔离**）：`running`（正在跑的那一批，界面拿来显示实时进度）与
+   * `recent`（最近几批，含\"上一个进程留下的没跑完\"那种）。
+   */
+  const jobsOf = (who) => {
+    const human = String(who?.human ?? '')
+    const rows = jobsLoad().filter((job) => human === '' || job.actor === human).map(jobDescribe)
+    return { schema: JOB_SCHEMA, file: jobFile(), concurrency: jobConcurrency,
+      running: rows.filter((job) => job.status === 'running' || job.status === 'queued'),
+      recent: rows.filter((job) => job.status !== 'running' && job.status !== 'queued')
+        .slice(0, JOB_LIMITS.keep - 1),
+      io: { ...ioJobs, running_now: jobsRunning, queued: jobWaiters.length } }
+  }
+  const jobsDescribe = () => ({
+    schema: JOB_SCHEMA, file: jobFile(), concurrency: jobConcurrency, limits: JOB_LIMITS,
+    mechanism: '批量动作（注册面声明 `input.bulk=\'ids\'`）的服务端一半在 **worker 线程**里跑：主线程不被 '
+      + '`spawnSync` 占住（别人的翻页/写照常），进度与逐条结果落 0600 的 jobs.json（刷新/崩溃后仍知道\"到哪了\"）',
+    route: `${prefix}/api/ui/jobs`,
+    io: ioJobs,
+  })
+
+  // ---- 并发闸门（批量之间排队；动作不被拒，只是排队）-------------------------------------------
+  let jobsRunning = 0
+  const jobWaiters = []
+  const acquireJobSlot = () => new Promise((resolve) => {
+    if (jobsRunning < jobConcurrency) { jobsRunning += 1; return resolve() }
+    jobWaiters.push(resolve)
+    return undefined
+  })
+  const releaseJobSlot = () => {
+    jobsRunning = Math.max(0, jobsRunning - 1)
+    const next = jobWaiters.shift()
+    if (next) { jobsRunning += 1; next() }
+  }
+
+  /**
+   * **动作运行时（worker 线程）**：在**独立线程**里 import 磁盘上那个插件的 `code/ui.mjs`、用一份只含机制的
+   * `host` 把它注册起来、再调它自己的 `server(ctx, input)`。
+   *
+   * 这里是**函数源码**（`toString()` 之后作为 worker 的入口代码执行）：worker 里没有闭包、没有外层变量 ——
+   * 它只能拿 `workerData` 与 `require`。这样写的好处：这段代码仍是本文件里**可读、可语法检查**的一段 JS
+   * （不是一坨转义字符串），而且它引用的每一件事都必须显式过线（能一眼看清 worker 到底拿到了什么）。
+   */
+  const ACTION_RUNTIME_ENTRY = (threads) => {
+    const { parentPort, workerData } = threads
+    const { spawnSync } = require('node:child_process')
+    const { existsSync, mkdirSync, chmodSync, renameSync, writeFileSync, readFileSync } = require('node:fs')
+    const { join, resolve, relative } = require('node:path')
+    const { pathToFileURL } = require('node:url')
+
+    const flat = (value, limit = 400) => String(value && value.stack ? value.stack : value)
+      .replace(/\s+/g, ' ').trim().slice(0, limit)
+    const send = (message) => {
+      try { parentPort.postMessage(message) } catch (err) {
+        // **不静默**：结构化克隆失败（例如回执里带着函数）时，把"哪条消息发不出去"写进日志 ——
+        // 否则主线程只会看到"运行时退出而没有结果"，查不到根因。
+        try { console.error(`[action-runtime] 消息发不出去（${message?.type}）：${flat(err, 300)}`) } catch (e2) { /* 尽力而为 */ }
+        try { dump('send-failed', `${message?.type}: ${flat(err, 300)}`) } catch (e2) { /* 尽力而为 */ }
+      }
+    }
+    const protoKeys = (receipt) => ({ tool: receipt.tool, rc: receipt.rc, said: receipt.said, ok: receipt.ok,
+      spawn: receipt.spawn ?? '', code: receipt.code, reason: receipt.reason, next_action: receipt.next_action,
+      ledger_added: receipt.ledger_added, applied: receipt.applied, duplicates: receipt.duplicates,
+      refused: receipt.refused, skipped: receipt.skipped, json: receipt.json,
+      stdout_tail: receipt.stdout_tail, stderr_tail: receipt.stderr_tail })
+    /** 进度目标（机制，不解读业务）：`--<something>-id <值>` 的那个值 = \"正在处理哪一条\"。 */
+    const targetOf = (args) => {
+      for (let index = 0; index < args.length - 1; index += 1) {
+        if (!/^--[a-z0-9-]*id$/.test(String(args[index] ?? ''))) continue
+        const value = String(args[index + 1] ?? '')
+        if (value !== '' && !value.startsWith('--')) return value.slice(0, 80)
+      }
+      return ''
+    }
+    const rowsOfFile = (path) => {
+      if (!path || !existsSync(path)) return []
+      try {
+        return readFileSync(path, 'utf-8').split('\n').filter((line) => line.trim())
+          .map((line) => JSON.parse(line))
+          .map((row) => ({ seq: row.seq, type: row.type, correlation_id: row.correlation_id,
+            actor: row.actor, ts: row.ts, body: row.body }))
+      } catch (err) { return [] }
+    }
+
+    let writes = 0
+    const staged = []
+    const runs = []
+    const notes = new Map()
+    /** 运行时的失败原因**落一行日志**（`<ui_shared>/webui/action-runtime.log`，追加、有界、0600）：
+     *  否则主线程只看到"运行时退出而没有结果"，排查只能靠猜（这条日志是机制自述，不是业务记录）。 */
+    const dump = (label, text) => {
+      try {
+        const dir = join(workerData.sharedDir, 'webui')
+        mkdirSync(dir, { recursive: true, mode: 0o700 })
+        const file = join(dir, 'action-runtime.log')
+        writeFileSync(file, `${new Date().toISOString()} ${label} ${text}\n`, { encoding: 'utf8', mode: 0o600, flag: 'a' })
+        chmodSync(file, 0o600)
+      } catch (err) { /* 日志写不下去就算了 */ }
+    }
+    ;(async () => {
+      try {
+        const shell = await import(pathToFileURL(workerData.shellFile).href)
+        const surfaceMod = await import(pathToFileURL(join(workerData.shellDir, 'ui-surface.mjs')).href)
+        const surface = surfaceMod.createUiSurface({ slots: [], views: workerData.views })
+        const plugin = await import(pathToFileURL(workerData.pluginFile).href)
+        const register = plugin.register ?? plugin.default
+        if (typeof register !== 'function') {
+          return send({ type: 'error', stage: 'register', wrote: false,
+            message: `插件没有导出 register：${workerData.pluginFile}` })
+        }
+        const unsupported = (name) => () => {
+          throw new Error(`机制不支持在动作运行时里调用 host.${name}：这条动作回主线程跑（同名结果）`)
+        }
+        const runPython = (toolPath, args = [], options = {}) => {
+          const read = options.read === true
+          const file = resolve(workerData.root, toolPath)
+          if (!existsSync(file)) {
+            return { ok: false, code: 'tool-missing', reason: `找不到工具：${toolPath}`,
+              next_action: '先确认该插件已安装（工具路径写错时如实报，不猜）' }
+          }
+          const target = read ? '' : targetOf(args)
+          // **唯一写者闸门**（写者之间必须互斥：两份账本 JSONL 的 append 不是并发安全的）。
+          // worker 里可以同步等（`Atomics.wait`）—— 等的不是主线程；等不到就**如实拒这一条**，不硬闯。
+          let gate = null
+          if (!read) {
+            gate = shell.writerGateTakeSync({ lock: workerData.writerLock, dir: workerData.writerQueue,
+              timeoutMs: workerData.gateWaitMs,
+              meta: { thread: 'runtime', action: workerData.actionId, target, tool: toolPath } })
+            if (!gate.ok) {
+              send({ type: 'progress', phase: 'writer-blocked', tool: toolPath, target,
+                code: gate.code, waited_ms: gate.waited_ms, at: Date.now() })
+              // 形状与"写者自己拒了"一致（退出码不可用 + stdout 是拒绝 JSON）⇒ 插件的逐条回执照旧可指认。
+              return { ok: false, rc: null, code: gate.code, tool: toolPath, args, stdout: '', stderr: '',
+                ms: gate.waited_ms, reason: gate.reason ?? '写者闸门没放行',
+                json: { ok: false, ledger_added: 0, applied: [], duplicates: [], refused: [],
+                  refusal: { code: gate.code, reason: gate.reason ?? '写者闸门没放行',
+                    next_action: '写者之间要排队：等前一个写者落完再重试这一条（这一条账本零新增）' } } }
+            }
+          }
+          const startedAt = Date.now()
+          if (!read) send({ type: 'progress', phase: 'writer-start', tool: toolPath, target,
+            gate_waited_ms: gate?.waited_ms ?? 0, at: Date.now() })
+          let proc = null
+          try {
+            proc = spawnSync(workerData.pythonBin, [file, ...args], { cwd: workerData.root, encoding: 'utf8',
+              timeout: Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : workerData.pythonTimeoutMs,
+              maxBuffer: 4 * 1024 * 1024, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
+          } finally {
+            if (gate) shell.writerGateReleaseSync(gate.file)
+          }
+          const stdout = proc.stdout ?? ''
+          const lines = stdout.trim().split('\n').filter((line) => line.trim() !== '')
+          let parsed = null
+          if (lines.length) { try { parsed = JSON.parse(lines[lines.length - 1]) } catch (err) { parsed = null } }
+          const result = { ok: proc.status === 0 && parsed !== null, rc: proc.status, tool: toolPath, args, json: parsed,
+            stdout: flat(stdout, 4000), stderr: flat(proc.stderr, 1200), ms: Date.now() - startedAt,
+            reason: proc.error ? String(proc.error).slice(0, 200) : (parsed === null ? '工具没有输出 JSON' : '') }
+          if (!read) {
+            writes += 1
+            const receipt = shell.writerReceipt(result)
+            // 只发**可克隆**的那一份（原先带 `item()` 方法的回执过不了结构化克隆 —— 整条 done 消息会被丢掉）
+            runs.push({ tool: toolPath, receipt: protoKeys(receipt) })
+            send({ type: 'progress', phase: 'writer-done', tool: toolPath, target, index: runs.length,
+              ms: result.ms, rc: result.rc, ok: receipt.ok, code: receipt.code,
+              ledger_added: receipt.ledger_added, applied: receipt.applied.length,
+              duplicates: receipt.duplicates.length, refused: receipt.refused.length, at: Date.now() })
+          }
+          return result
+        }
+        // 待办件：载荷与文件名走**同一份纯函数**（`app-shell.mjs#pendingPayload`）—— 同名判据不漂。
+        const stage = (kind, record, options = {}) => {
+          const dir = join(workerData.sharedDir, kind)
+          const built = shell.pendingPayload(kind, record, { name: options?.name })
+          const name = built.name
+          const target = join(dir, name)
+          try {
+            mkdirSync(dir, { recursive: true, mode: 0o700 })
+            try { chmodSync(dir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
+            if (existsSync(target)) {
+              staged.push({ kind, name, duplicate: true })
+              send({ type: 'progress', phase: 'staged', kind, target: name, duplicate: true, at: Date.now() })
+              return { ok: true, duplicate: true, kind, file: relative(workerData.root, target), path: target,
+                name, record: built.payload }
+            }
+            const tmp = join(dir, `.${name}.${process.pid}.tmp`)
+            writeFileSync(tmp, JSON.stringify(built.payload, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
+            chmodSync(tmp, 0o600)
+            renameSync(tmp, target)
+            staged.push({ kind, name, duplicate: false })
+            send({ type: 'progress', phase: 'staged', kind, target: name, duplicate: false, at: Date.now() })
+            return { ok: true, duplicate: false, kind, file: relative(workerData.root, target), path: target,
+              name, record: built.payload }
+          } catch (err) {
+            return { ok: false, code: 'pending-write-failed', reason: flat(err, 200),
+              next_action: '先修待办件目录权限（宿主只落 0600 待办件，不改账本）' }
+          }
+        }
+        const host = {
+          prefix: workerData.prefix, root: workerData.root, views: workerData.views,
+          config: workerData.config, sharedDir: workerData.sharedDir,
+          sandbox: { ...workerData.sandbox },
+          now: () => new Date().toISOString(),
+          rows: (view) => rowsOfFile(workerData.ledgerPaths[String(view)] ?? ''),
+          publicRows: (view) => rowsOfFile(workerData.ledgerPaths[String(view)] ?? ''),
+          runPython, stage,
+          writerReceipt: (run) => shell.writerReceipt(run),
+          receiptFileName: (entry) => shell.receiptFileName(entry),
+          note: { get: (pluginId, key, fallback = null) => (notes.get(`${pluginId}\u0000${key}`) ?? fallback),
+            set: (pluginId, key, value) => { notes.set(`${pluginId}\u0000${key}`, value); return value },
+            drop: (pluginId) => { for (const key of [...notes.keys()]) if (key.startsWith(`${pluginId}\u0000`)) notes.delete(key) } },
+          service: unsupported('service'), services: unsupported('services'),
+          digest: unsupported('digest'), report: unsupported('report'),
+          collab: unsupported('collab'), people: unsupported('people'),
+          notifReadIds: unsupported('notifReadIds'), versions: unsupported('versions'),
+          exportPrefs: unsupported('exportPrefs'), share: unsupported('share'),
+        }
+        await register(surface, host, workerData.pluginId)
+        const action = surface.findAction(workerData.actionId)
+        if (!action || typeof action.server !== 'function') {
+          return send({ type: 'error', stage: 'find-action', wrote: writes > 0,
+            message: `动作不在注册面里：${workerData.actionId}` })
+        }
+        const ctx = { view: workerData.view, route: workerData.route, input: workerData.input, host,
+          now: host.now(), identity: workerData.identity ?? null,
+          action: { id: action.id, title: action.title, plugin_id: action.plugin_id, permission: action.permission } }
+        const result = await action.server(ctx, workerData.input)
+        send({ type: 'done', result: result && typeof result === 'object' ? result : null, runs, staged,
+          writes, ms: Date.now() - workerData.startedAt })
+      } catch (err) {
+        // 根因要留在日志里（否则主线程只看到"退出而没有结果"）
+        try { console.error(`[action-runtime] 运行时失败：${flat(err, 600)}`) } catch (e2) { /* 尽力而为 */ }
+        dump('runtime-failed', flat(err, 900))
+        send({ type: 'error', stage: 'runtime', message: flat(err, 600), wrote: writes > 0 || staged.length > 0 })
+      }
+    })()
+  }
+
+  /**
+   * 在动作运行时里跑一次动作的服务端一半。返回 `{ok, result, runs, staged, wrote, error}`：
+   * `ok=false` 有两种——**动过手**（`wrote:true`：如实报，绝不重跑一遍冒充新结果）与**没动过手**
+   * （`wrote:false`：调用方可以安全地回主线程原样重跑一次，语义一模一样）。
+   */
+  const runInActionRuntime = (action, ctx, input, job) => new Promise((settle) => {
+    const shellFile = fileURLToPath(import.meta.url)
+    const pluginFile = String(contributions.get(action.plugin_id)?.file ?? '') || fileOf(action.plugin_id)
+    if (!pluginFile) {
+      return settle({ ok: false, wrote: false, error: `找不到插件的 code/ui.mjs：${action.plugin_id}` })
+    }
+    const eff = effective()
+    const worker = new Worker(`(${ACTION_RUNTIME_ENTRY.toString()})(require('node:worker_threads'))`, {
+      eval: true,
+      workerData: {
+        shellFile, shellDir: dirname(shellFile), root, prefix, views,
+        pluginFile: resolve(root, pluginFile), pluginId: action.plugin_id, actionId: action.id,
+        view: ctx.view, route: ctx.route, input, identity: ctx.identity,
+        config: eff.config, sharedDir: eff.dir, startedAt: Date.now(),
+        pythonBin, pythonTimeoutMs: PYTHON_TIMEOUT_MS,
+        sandbox: { on: eff.on, actors: eff.actors, human: eff.human, dir: eff.on ? eff.dir : '' },
+        writerLock: WRITER_GATE.lock(eff.dir), writerQueue: WRITER_GATE.dir(eff.dir), gateWaitMs,
+        ledgerPaths: { contractor: String(eff.config?.ledger_contractor ?? ''),
+          supplier: String(eff.config?.ledger_supplier ?? '') },
+      },
+    })
+    let settled = false
+    let wrote = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      worker.terminate()
+      settle({ ok: false, wrote, error: `动作运行时超时（${jobTimeoutOf(job.total)}ms）：已终止该 worker；`
+        + '进度停在 jobs 记录里（这一批到哪了照实说）' })
+    }, jobTimeoutOf(job.total))
+    const finish = (verdict) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      settle(verdict)
+    }
+    worker.on('message', (message) => {
+      if (!message || typeof message !== 'object') return
+      if (message.type === 'progress') {
+        if (message.phase === 'writer-start' || message.phase === 'staged') wrote = wrote || message.phase === 'staged'
+        jobOnProgress(job, message)
+        return
+      }
+      if (message.type === 'done') {
+        wrote = Number(message.writes) > 0
+        return finish({ ok: true, result: message.result, runs: message.runs ?? [], staged: message.staged ?? [],
+          wrote, ms: message.ms })
+      }
+      if (message.type === 'error') {
+        wrote = message.wrote === true
+        say(`动作运行时失败（${message.stage ?? 'runtime'}）：${message.message ?? JSON.stringify(message).slice(0, 200)}`)
+        return finish({ ok: false, error: message.message ?? `运行时失败（${message.stage ?? 'runtime'}，没有给出原因）`,
+          wrote, runs: [], staged: [] })
+      }
+    })
+    worker.on('error', (err) => finish({ ok: false, wrote, error: `动作运行时抛错：${flat(err, 400)}` }))
+    worker.on('exit', (code) => finish({ ok: false, wrote,
+      error: `动作运行时退出（code ${code}）而没有给出结果` }))
+  })
+
+  /** 收一条进度 ⇒ 更新这一批的记录（内存 + 落盘，落盘按 150ms 节流）。 */
+  const jobOnProgress = (job, message) => {
+    const now = Date.now()
+    if (message.phase === 'writer-start') {
+      job.active = { tool: message.tool, target: message.target, at: new Date(now).toISOString() }
+      job.progress.push({ phase: 'writer-start', tool: message.tool, target: message.target,
+        at: new Date(now).toISOString() })
+    } else if (message.phase === 'staged') {
+      job.progress.push({ phase: 'staged', target: message.target, duplicate: message.duplicate === true,
+        at: new Date(now).toISOString() })
+    } else if (message.phase === 'writer-done') {
+      job.done = Number(message.index) || (job.done + 1)
+      job.writers_done = job.done
+      job.last = { target: message.target, code: message.code, ledger_added: message.ledger_added,
+        ms: message.ms, at: new Date(now).toISOString() }
+      job.ledger_seen = (job.ledger_seen || 0) + (Number(message.ledger_added) || 0)
+      job.progress.push({ phase: 'writer-done', target: message.target, code: message.code,
+        ledger_added: message.ledger_added, ms: message.ms, at: new Date(now).toISOString() })
+      job.heartbeat_at = new Date(now).toISOString()
+    }
+    if (job.progress.length > JOB_LIMITS.progress) job.progress = job.progress.slice(-JOB_LIMITS.progress)
+    job.updated_at = new Date(now).toISOString()
+    if (now - (job.saved_at || 0) >= 150) {
+      job.saved_at = now
+      jobPush(job)
+      jobsSave()
+    }
+    ioJobs.offloaded_items = job.done
+  }
+
   const runAction = async (actionId, request, who = null) => withSandbox(who, () => runActionInner(actionId, request, who))
 
   const runActionInner = async (actionId, request, who = null) => {
@@ -2661,13 +3394,127 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       pendingVersion = verdict.pending
     }
     actionScopes.push(scope)
+    // ---- **批量动作 ⇒ 走动作运行时**（P21）--------------------------------------------------------
+    // 语义一个字不改（一次署名、逐份落账、逐份可拒、部分失败逐条、幂等、上限拒都由**同一份插件代码**
+    // 判定）；改的只是"它在哪个线程跑"：批量不再把主线程占满 N×~230ms。
+    const batchIds = batchIdsOf(action, input)
+    let job = batchIds ? {
+      id: `job-${Date.now()}-${String(action.id).replace(/[^a-z0-9]+/gi, '-').slice(0, 40)}`,
+      action: action.id, title: action.title, plugin_id: action.plugin_id,
+      actor: ctx.identity ? ctx.identity.human : '', side: ctx.identity ? ctx.identity.side : '',
+      view: ctx.view, status: 'queued', total: batchIds.length, ids: batchIds, started_at: host.now(),
+      pid: process.pid, runtime: 'worker', concurrency: jobConcurrency, done: 0, applied: 0,
+      duplicates: 0, refused: 0, ledger_added: 0, pending_ids: batchIds, refused_ids: [],
+      items: [], progress: [], active: null, updated_at: host.now(),
+    } : null
+    let jobFailed = false
+    // ---- **唯一写者闸门**（P21）：非批量动作在**执行前**异步取（不阻塞事件循环）；批量动作由运行时
+    // 逐次写者取（这里取了会与 worker 互等 ⇒ 死锁）。观察到"零写者"的动作免排队（不冤枉只改偏好的动作）。
+    let gate = null
+    const gateNeeded = !job && writerFreeCount(action.id) < 2
+    if (gateNeeded) {
+      gate = await writerGateAcquire(action, { view: ctx.view, human: ctx.identity ? ctx.identity.human : '' })
+      if (!gate.ok) {
+        const index0 = actionScopes.lastIndexOf(scope)
+        if (index0 >= 0) actionScopes.splice(index0, 1)
+        return { ok: false, action: action.id, code: gate.code, reason: gate.reason,
+          next_action: gate.next_action, writer_consistency: 'no-writer-run',
+          writer: { verdict: 'no-writer-run', rows_written: 0 }, result: { writer_gate: gate.holder ?? null } }
+      }
+    } else if (!job) {
+      gateStats.skipped_free += 1
+    }
     try {
-      out = await action.server(ctx, input)
+      if (job) {
+        ioJobs.started += 1
+        jobPush(job)
+        jobsSave()                       // 先落一次：排队期间刷新页面也能看到"这一批在等" 
+        await acquireJobSlot()
+        ioJobs.running = jobsRunning
+        ioJobs.peak_running = Math.max(ioJobs.peak_running, jobsRunning)
+        liveJobIds.add(job.id)
+        job.status = 'running'
+        job.started_at = host.now()
+        let verdict = null
+        try {
+          verdict = await runInActionRuntime(action, ctx, input, job)
+        } finally {
+          liveJobIds.delete(job.id)
+          releaseJobSlot()
+          ioJobs.running = jobsRunning
+        }
+        if (verdict.ok) {
+          out = verdict.result
+          for (const run of verdict.runs) scope.runs.push(run)
+          const jobDir = effective().dir
+          for (const stagedItem of verdict.staged) {
+            scope.staged.push({ kind: stagedItem.kind, name: stagedItem.name,
+              file: `${relative(root, jobDir)}/${stagedItem.kind}/${stagedItem.name}` })
+          }
+        } else if (verdict.wrote === true) {
+          // 运行时**动过手**之后退出了：如实报（绝不回主线程重跑一遍冒充新结果）。已经跑过的写者回执在
+          // `job.progress` 里一条不丢；没跑到的那些仍在 `pending_ids` 里 —— 幂等，可以只重试剩下的。
+          jobFailed = true
+          out = { ok: false, code: 'action-runtime-failed', runner: 'action-runtime',
+            reason: `批量动作的运行时中途退出了（已处理 ${job.done}/${job.total}）：${verdict.error}`,
+            next_action: '这一批**没有**重跑：上面每一条进度都是写者回执（做过的账一条不丢）；'
+              + `没跑到的 ${(job.pending_ids || []).length} 条还在待办里 —— 点「只重试剩下的」即可`
+              + '（已完成的会如实报 duplicates：幂等、账本零新增）',
+            result: { batch: jobDescribe(job), results: [], job: jobDescribe(job) } }
+        } else {
+          // 运行时**没动过手**（装配/注册/查找失败）⇒ 回主线程原样跑一遍：语义一模一样。
+          ioJobs.inline_fallback += 1
+          job.runtime = 'worker+inline-fallback'
+          say(`动作运行时没能执行 ${action.id}（${verdict.error}）：回主线程原样执行`)
+          // 批量动作平时不取动作级闸门（写者在运行时里逐次取）；退回主线程时这里现取——否则它的写者
+          // 会和"别人正在跑的运行时写者"同时写同一份账本（P21 实测过：断链 + 冻结）。
+          if (!gate) {
+            gate = await writerGateAcquire(action, { view: ctx.view, fallback: true })
+            if (!gate.ok) {
+              jobFailed = true
+              out = { ok: false, code: gate.code, reason: gate.reason, next_action: gate.next_action,
+                result: { batch: jobDescribe(job), results: [], job: jobDescribe(job) } }
+            }
+          }
+          if (!jobFailed) out = await action.server(ctx, input)
+        }
+        const items = jobItemsOf(out)
+        const counts = jobCountsOf(out, items)
+        const settled = jobPendingOf(batchIds, items)
+        Object.assign(job, items.length ? { items } : {}, items.length ? counts : {},
+          items.length ? { pending_ids: settled,
+            refused_ids: items.filter((row) => row.where === 'refused' && row.item !== '').map((row) => row.item) }
+            : { pending_ids: jobFailed ? jobPendingOf(batchIds, []) : [] },
+          { status: jobFailed ? 'failed' : 'done', ok: jobFailed ? false : out?.ok === true,
+            code: jobFailed ? 'action-runtime-failed' : String(out?.code ?? ''),
+            finished_at: host.now(), ms: verdict.ms ?? null, active: null,
+            reason: flat(jobFailed ? verdict.error : (out?.reason ?? ''), 300),
+            next_action: flat(out?.next_action ?? '', 600),
+            runtime_note: jobFailed
+              ? '运行时中途退出：已跑过的都在 `progress` 里（每条都是写者回执），剩下的在 `pending_ids`'
+              : '' })
+        jobPush(job)
+        jobsSave()
+        ioJobs.done += 1
+      } else {
+        out = await action.server(ctx, input)
+      }
     } catch (err) {
       out = { ok: false, code: 'action-failed', reason: flat(err), next_action: '修该动作的服务端一半（不静默吞）' }
+      if (job) {
+        jobFailed = true
+        ioJobs.failed += 1
+        Object.assign(job, { status: 'failed', ok: false, code: 'action-failed', finished_at: host.now(),
+          active: null, reason: flat(err, 300), pending_ids: jobPendingOf(batchIds, jobItemsOf(out)) })
+        jobPush(job)
+        jobsSave()
+      }
     } finally {
       const index = actionScopes.lastIndexOf(scope)
       if (index >= 0) actionScopes.splice(index, 1)
+      // 写者闸门**必然放开**（成功/失败/抛错都放）；同时记下"这一步到底跑没跑写者"（下一次要不要排队）。
+      if (gate) writerGateRelease(gate)
+      noteWriterOutcome(action.id, scope.runs.length > 0)
     }
     const result = out && typeof out === 'object' ? out : { ok: false, code: 'invalid-result',
       reason: '服务端一半没有返回对象', next_action: '返回 {ok, code, reason, next_action, result}' }
@@ -2703,6 +3550,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     return { ok: result.ok === true, action: action.id, code: result.code ?? null, reason: result.reason ?? null,
       next_action: result.next_action ?? null, result: result.result ?? null, note: result.note ?? null,
       errors: result.errors ?? null, refresh: result.refresh ?? ['panels', 'notifications', 'status'],
+      // **批量动作的这一次记录**（机制）：逐条结果、还剩哪几条没做、哪几条被拒 —— 界面据此给
+      // 「只重试被拒的 N 份 / 只签前 N 份」，刷新或崩过之后看 `/api/ui/jobs` 也是同一份。
+      job: job ? jobDescribe(job) : null,
       // 乐观并发：这次保存之后的**版本**（rev/指纹；`unchanged:true` = 内容没变，没有制造新版本）
       version: versionAfter,
       conflict: result.result?.conflict ?? null,
@@ -3342,6 +4192,15 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         note: '事件循环滞后 ≥ shed_ms 时，新到的**重读**请求回 429 + Retry-After（code=ui-busy）并说明多久后重试；'
           + '动作/身份/偏好/健康不受影响。真读数，不是估计值' },
       notify_cache_ttl_ms: notifyCacheTtlMs,
+      // **动作运行时（批量动作）**（P21）：批量动作的服务端一半在 worker 线程里跑，主线程不被 `spawnSync`
+      // 占住。`offloaded_items` = 已跑过的写者次数、`peak_running` = 同时跑过的批次数（上限 `concurrency`）、
+      // `inline_fallback` = 运行时没能装配、回主线程原样执行过几次（如实记，不假装修好了）。
+      jobs: { ...jobsDescribe(), running_now: jobsRunning, queued: jobWaiters.length },
+      // **唯一写者闸门**（P21）：真异步之后写者之间必须显式互斥（同刻只有一个写者在写）。
+      // `waited_ms/peak_wait_ms` = 动作等闸门的真实读数；`timeouts` = 等不到而如实拒的次数（0 才是常态）。
+      writer_gate: { ...WRITER_GATE, ...gateStats, wait_ms: gateWaitMs,
+        held: writerGateInfo(WRITER_GATE.lock(sharedDir)),
+        queued: (() => { try { return readdirSync(WRITER_GATE.dir(sharedDir)).length } catch (err) { return 0 } })() },
       // **上一次页面渲染**的代价（本批新增）：`spawns` = 这一次 `/api/ui/panels` 起了几个 Python 进程。
       // 用途：长列表改造前后的"渲染耗时 / DOM 节点数 / Python spawn 次数"三件套里最后一件的前后对照。
       last_render: ioStats.last_render ?? null,
@@ -3449,6 +4308,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   })
 
   return { surface, host, loadContributions, unload, loadPlugin, reloadPlugin, pluginsJson, runAction,
+    // **动作运行时 / 批量进度**（P21）：HTTP 路由（`webui.mjs`）与验证脚本按会话身份读这一份。
+    jobsOf, jobsDescribe, ioJobs,
     panelsOf, objectOf, notifications, statusItems, normalizeRoute: normRoute, ioStats, clearReadCache,
     // **渲染准入/背压**（P13）：路由在跑"重读"之前问一次 —— 过载时回 429 + Retry-After（如实报忙）。
     admission, admissionStats, ledgerStats: ledgerStats ?? null, notifyCacheTtlMs,

@@ -22,7 +22,7 @@
 |---|---|
 | provides | `attachments`（`code/attachments.mjs` 的存储与权限面：`put/get/list/remove/visibleObjects/describe`） |
 | 依赖 | `uiRoutes`（路由注册面，由 `system/webui` 提供；本插件**不改** `webui.mjs` 的静态路由表）；`code/identity.mjs` 的 `whoOf` 用来解析会话身份（只读，不重抄 cookie/会话解析） |
-| 写面 | 只写自己的目录 `<ui_shared>/attachments/`（目录 0700 / 文件 0600 / 原子写 / 内容寻址）；**账本零新增**（`ledger_added: 0`） |
+| 写面 | `plugin.json.permissions = {ledger: "none", writes: ["own-dir"], network: "loopback-only"}`：只写自己的目录 `<ui_shared>/attachments/`（目录 0700 / 文件 0600 / 原子写 / 内容寻址）；**账本零新增**（`ledger_added: 0`，插件不写账本 ⇒ `ledger: none`） |
 | 门 | 本批**不新建门**（AGENTS.md 规则 12）；验证脚本在 `tmp/p6-verify.py`，证据与截图落 `tmp/p6-shots/` |
 
 ## 本插件不承载

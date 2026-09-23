@@ -41,7 +41,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | provides | `userPluginManager`（`host/modules/user-plugin-manager.mjs`）+ `host/lib/user-space.mjs`；落账本侧 `tools/userplugin-{record,elevate}.py`。 |
 | 依赖（实测 import 目标） | `host/modules/user-plugin-manager.mjs` → `../lib/std-schema.mjs`、`../lib/user-space.mjs`；`tools/userplugin-record.py` → `quotagent.kernel.ledger`；`tools/userplugin-elevate.py` → `quotagent.kernel.ledger`（27 §5.1/§5.2：只 import 内核面或其它插件的公开服务面，不 import 别的插件实现文件） |
 | 门（映射表 §1 证据列里的 `ac` 简写已展开成可跑命令） | `tools/verify.sh user-space` · `tools/verify.sh plugin-lifecycle` |
-| 写面 | 账本唯一写者仍是内核（H1）；本插件的账本写入只在映射表 §1 证据列点名的工具里（若有） |
+| 写面 | `plugin.json.permissions = {ledger: "sole-writer", writes: ["own-dir", "request-file"]}`：账本侧**只有本插件写** `userplugin/*` 这一族事件（唯一写者 `tools/userplugin-record.py` 与 `tools/userplugin-elevate.py`，经内核 `kernel.ledger` 的 H1 写路径）；请求由宿主落 0600 待办件（`request-file`）后由这两个写者消费；正文不进账本。 |
 
 ## 现状与缺口
 

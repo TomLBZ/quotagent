@@ -562,6 +562,17 @@
     ? `关键字/排序/每页行数按你的身份存服务端（换浏览器/换设备仍在，最多 ${QUERY_MIRROR_MAX} 块面板）；列条件与页码只在本浏览器`
     : `未登录：查询状态只在本浏览器（登录后关键字/排序/每页行数落服务端，换设备仍在）`)
 
+  // ---- 窄屏查询条折叠（P21 / D3）------------------------------------------------------------------
+  /**
+   * 手机上默认**折叠**查询条：一块面板的头（标题 + 机制 + 关键字 + 列筛选 + 计数 + 翻页 + 恢复默认 + 镜像说明）
+   * 在 390px 下曾占约 800px ⇒ 844px 的手机**首屏看不到任何数据行**（P20 实测）。
+   * 折叠状态记在本浏览器（不改服务端偏好、不影响任何事实）；展开后所有控件照旧。
+   */
+  const qbarOpenOf = (panelId) => (state.qbarOpen || {})[panelId] === true
+  const setQbarOpen = (panelId, open) => {
+    state.qbarOpen = { ...(state.qbarOpen || {}), [panelId]: open === true }
+  }
+
   // ---- 选择（跨页批量）--------------------------------------------------------------------------
   /** 「选中全部命中行」的选择记在面板名下；查询一变就作废（比静默发错 id 安全）。 */
   const forgetSelection = (panelId) => {
@@ -574,6 +585,28 @@
     }
   }
   const selectedAllOf = (panelId) => ((state.selectedAll || {})[panelId] || [])
+  /**
+   * **手工勾选（跨页保留）**（P21 / D2）：勾选按**面板**记一份（`state.picked[panelId][行键] = true`）。
+   *
+   * 为什么按面板记：翻页之后上一页的行不在 DOM 里，`[data-select]:checked` 查不到它们 —— 只认 DOM 的话
+   * 用户在第 1 页勾的行会**静默消失**（P20 实测：勾 2 行只送出 1 行，少签）。按面板记之后：翻回去勾还在，
+   * 批量提交送的是**真的勾过的那些**（含不在本页的），计数行也照实说。
+   */
+  const pickedOf = (panelId) => ((state.picked || {})[panelId] || {})
+  const pickedKeysOf = (panelId) => Object.keys(pickedOf(panelId))
+  const pickSet = (panelId, key, on) => {
+    const bucket = { ...(state.picked || {})[panelId] }
+    if (on) bucket[key] = true
+    else delete bucket[key]
+    state.picked = { ...(state.picked || {}), [panelId]: bucket }
+  }
+  const pickClear = (panelId) => {
+    if (!state.picked || !state.picked[panelId]) return
+    const next = { ...state.picked }
+    delete next[panelId]
+    state.picked = next
+  }
+  const selectionCountOf = (panelId) => new Set([...pickedKeysOf(panelId), ...selectedAllOf(panelId)]).size
   /**
    * 「选中全部命中行」（跨页）。服务端窗口下命中全集的行键是**按需**取的：先按一次带 `keys=true` 的
    * 重取（只这一块），拿到行键再选中 —— 所以这一步可能是异步的（按钮先变成"正在取行键…"）。
@@ -611,11 +644,12 @@
   function clearSelection(panelId) {
     const view = panelViews[panelId]
     const keys = new Set([...(view ? view.window.map((row, index) => view.rowKeyOf(row, index)) : []),
-      ...selectedAllOf(panelId)])
+      ...selectedAllOf(panelId), ...pickedKeysOf(panelId)])
     for (const key of keys) {
       delete state.selected[key]
       delete state.selectedRows[key]
     }
+    pickClear(panelId)
     delete (state.selectedAll || {})[panelId]
     repaintPanel(panelId)
     updateSelectedCount()
@@ -632,19 +666,19 @@
       + attrOf('page', view.page + 1)
       + attrOf('pages', view.pages) + attrOf('page-size', view.size)
       + attrOf('q-active', view.active ? 1 : 0) + attrOf('sort', view.q.sort || '') + '>'
-      + `<span>共 <b>${view.total}</b> 行</span>`
-      + `<span>命中 <b data-count-matched-num="1">${view.matchedCount}</b> 行</span>`
+      + `<span class="q-c-total">共 <b>${view.total}</b> 行</span>`
+      + `<span class="q-c-matched">命中 <b data-count-matched-num="1">${view.matchedCount}</b> 行</span>`
       + (view.size
-        ? `<span>第 <b data-count-page-num="1">${view.page + 1}</b>/<b>${view.pages}</b> 页`
-          + `（本页 <b data-count-window-num="1">${view.window.length}</b> 行）</span>`
-        : `<span>本页 <b>${view.window.length}</b> 行（**选了「全部」= 全量渲染**）</span>`)
+        ? `<span class="q-c-page">第 <b data-count-page-num="1">${view.page + 1}</b>/<b>${view.pages}</b> 页`
+          + `<span class="q-c-page-in">（本页 <b data-count-window-num="1">${view.window.length}</b> 行）</span></span>`
+        : `<span class="q-c-page">本页 <b>${view.window.length}</b> 行（**选了「全部」= 全量渲染**）</span>`)
       + (view.server
-        ? `<span class="q-qhint" data-q-server="1" title="行由服务端按窗口给（w=1）；计数/排序/筛选都在服务端全集上算，`
+        ? `<span class="q-qhint q-c-server" data-q-server="1" title="行由服务端按窗口给（w=1）；计数/排序/筛选都在服务端全集上算，`
           + `客户端照抄 —— 不是把全量拿下来自己截">服务端分页</span>`
         : '')
-      + (busy ? `<span class="q-qhint" data-q-fetching="1">正在取这一页…（数字还是上一次的）</span>` : '')
-      + (view.active ? `<span class="q-qcount-on">正在筛选：${esc(querySummary(view.q))}</span>` : '')
-      + (extra ? `<span>${extra}</span>` : '')
+      + (busy ? `<span class="q-qhint q-c-busy" data-q-fetching="1">正在取这一页…（数字还是上一次的）</span>` : '')
+      + (view.active ? `<span class="q-qcount-on q-c-filter">正在筛选：${esc(querySummary(view.q))}</span>` : '')
+      + (extra ? `<span class="q-c-extra">${extra}</span>` : '')
       + '</div>'
   }
 
@@ -700,10 +734,20 @@
     const sortKey = sortAt < 0 ? '' : q.sort.slice(0, sortAt)
     const sortDir = sortAt < 0 ? '' : q.sort.slice(sortAt + 1)
     const selected = selectedAllOf(panelId).length
-    const pageBtn = (label, page, title) => `<button data-q-page="${attr(panelId)}" data-q-to="${attr(page)}"`
-      + ` title="${attr(title)}"${view.size === 0 ? ' disabled' : ''}>${label}</button>`
-    return `<div class="q-qbar" data-query-bar="${attr(panelId)}">`
-      + `<div class="q-qbar-row">`
+    const manual = pickedKeysOf(panelId).length
+    const open = qbarOpenOf(panelId)
+    const pageBtn = (label, page, title, kind) => `<button data-q-page="${attr(panelId)}" data-q-to="${attr(page)}"`
+      + ` data-q-page-kind="${attr(kind)}" title="${attr(title)}"${view.size === 0 ? ' disabled' : ''}>${label}</button>`
+    // **窄屏折叠（P21 / D3）**：`data-qbar-open` 是状态，CSS 决定"折叠时露什么" ——
+    // 窄屏上露「🔍 搜这块 / 筛选」一颗按钮 + 计数行 + 翻页；关键字/列条件/每页行数/恢复默认在折叠区里。
+    // 展开/折叠记在本浏览器（`state.qbarOpen`），不改服务端状态、不影响任何事实。
+    return `<div class="q-qbar" data-query-bar="${attr(panelId)}" data-qbar-open="${open ? 1 : 0}">`
+      + `<div class="q-qbar-row q-qbar-lead">`
+      + `<button class="q-qbar-toggle" data-q-toggle="${attr(panelId)}" aria-expanded="${open ? 'true' : 'false'}"`
+      + ` title="手机上默认折叠：点一下展开关键字与按列筛选">🔍 搜这块 / 筛选</button>`
+      + `<span class="q-qbar-foldnote q-qhint">${view.active ? '正在筛选' : '关键字 / 列条件'}</span>`
+      + `</div>`
+      + `<div class="q-qbar-row q-qbar-fold">`
       + `<label class="q-qkw">搜这块：<input type="search" data-q-kw="${attr(panelId)}" value="${attr(q.kw)}"`
       + ` placeholder="关键字（id / 供应商 / 时刻 / 任何一列的值…）" autocomplete="off"`
       + ` aria-label="在这块里搜关键字"></label>`
@@ -715,7 +759,9 @@
         + `条件之间是**并且**，与关键字一起生效。筛选只改"看到哪些"，不改任何事实、不写账本。</div></details>` : '')
       + `</div>`
       + countBarHtml(panelId, view,
-        `${selected ? `已跨页选中 ${selected} 行 ` : ''}`
+        `${manual ? `已勾选 <span data-picked-count="1">${manual}</span> 行 ` : ''}`
+        + `${selected ? `已跨页选中 ${selected} 行 ` : ''}`
+        + `${manual && !selected ? `<button data-q-unselect="${attr(panelId)}">取消勾选</button> ` : ''}`
         + (view.matchedCount > view.window.length && view.size
           ? `<button data-q-selectall="${attr(panelId)}"${view.matchedKeysCapped
             ? ` disabled title="命中超过 ${view.matchedKeysCap} 行：跨页全选要先缩小筛选范围"`
@@ -724,16 +770,16 @@
               : '把命中全集的行一起选中（含不在本页的）'}"`}>`
             + `选中全部命中行（${view.matchedCount}）</button> ` : '')
         + (selected ? `<button data-q-unselect="${attr(panelId)}">取消选择</button> ` : '')
-        + `${sortKey ? `排序：<code>${esc(sortKey)}</code> ${sortDir === 'desc' ? '↓ 降序' : '↑ 升序'}` : '点列头可排序（升→降→取消）'}`)
+        + `<span class="q-c-sorthint">${sortKey ? `排序：<code>${esc(sortKey)}</code> ${sortDir === 'desc' ? '↓ 降序' : '↑ 升序'}` : '点列头可排序（升→降→取消）'}</span>`)
       + `<div class="q-qbar-row q-qpages">`
-      + pageBtn('⏮ 首页', 0, '第 1 页') + pageBtn('上一页', view.page - 1, '上一页')
-      + `<label>跳到第 <input type="number" min="1" max="${view.pages}" data-q-jump="${attr(panelId)}"`
+      + pageBtn('⏮ 首页', 0, '第 1 页', 'first') + pageBtn('上一页', view.page - 1, '上一页', 'prev')
+      + `<label class="q-page-extra">跳到第 <input type="number" min="1" max="${view.pages}" data-q-jump="${attr(panelId)}"`
       + ` value="${view.page + 1}" aria-label="跳到第几页"> 页</label>`
-      + pageBtn('下一页', view.page + 1, '下一页') + pageBtn('末页 ⏭', view.pages - 1, '最后一页')
-      + `<label>每页 <select data-q-size="${attr(panelId)}" aria-label="每页显示多少行">`
+      + pageBtn('下一页', view.page + 1, '下一页', 'next') + pageBtn('末页 ⏭', view.pages - 1, '最后一页', 'last')
+      + `<label class="q-page-extra">每页 <select data-q-size="${attr(panelId)}" aria-label="每页显示多少行">`
       + QUERY_SIZES.map((size) => `<option value="${size}"${size === q.size ? ' selected' : ''}>`
         + `${size === 0 ? '全部（全量渲染）' : size}</option>`).join('') + '</select></label>'
-      + `<button data-q-reset="${attr(panelId)}">恢复默认显示</button>`
+      + `<button class="q-page-extra" data-q-reset="${attr(panelId)}">恢复默认显示</button>`
       + `<span class="q-qhint">${esc(mirrorNote())}</span>`
       + `</div></div>`
   }
@@ -781,6 +827,8 @@
     bindPanels(fresh)
     bindInteractions(fresh)
     bindFiles(fresh)
+    // 重绘之后把"已选 N 行"按**面板里真勾着的**再算一遍（P21 / D2：翻页回来勾还在，计数也得对得上）
+    updateSelectedCount()
     if (focus) {
       const node = fresh.querySelector(focus.key)
       if (node && typeof node.focus === 'function') {
@@ -862,9 +910,16 @@
     })
     root.addEventListener('click', (ev) => {
       const node = ev.target?.closest?.('[data-q-page],[data-q-clear],[data-q-reset],[data-q-selectall],'
-        + '[data-q-unselect],[data-q-drop],[data-q-sort],[data-reload-page]')
+        + '[data-q-unselect],[data-q-drop],[data-q-sort],[data-q-toggle],[data-reload-page]')
       if (!node) return
       if (node.dataset.reloadPage !== undefined) return loadAll(true)
+      // 查询条折叠/展开（P21 / D3）：只换这一块的重绘，不发任何请求、不改任何事实
+      if (node.dataset.qToggle !== undefined) {
+        const panelId = panelIdOf(node, 'qToggle')
+        setQbarOpen(panelId, !qbarOpenOf(panelId))
+        repaintPanel(panelId)
+        return
+      }
       if (node.dataset.qPage !== undefined) {
         return setQuery(panelIdOf(node, 'qPage'), { page: Number(node.dataset.qTo) }, { keepPage: true })
       }
@@ -1130,13 +1185,28 @@
   }
 
   // ---------------------------------------------------------------- 通知 / 提示条
+  /**
+   * 一条提示条。
+   *
+   * **P21（D7）：弹层打开时不再浮在弹层上面** —— 那会压住全屏弹层的标题（390px 实测：导出预览的标题被两条
+   * 通知盖住）。让位的做法不是"丢掉不显示"，而是**搬到弹层正文的最上面**（`[data-toast-host]`）：它跟着正文
+   * 滚、不覆盖标题、也不压吸底按钮；弹层关掉之后新提示回到右下角浮层。
+   */
   function toast(kind, title, detail) {
-    const box = el('q-toasts')
-    if (!box) return
     const node = document.createElement('div')
     node.className = `q-toast ${kind}`
     node.setAttribute('role', 'status')
     node.innerHTML = `<b>${esc(title)}</b>${detail ? `<div>${esc(detail)}</div>` : ''}`
+    const bodyHost = document.querySelector('#q-modal .q-modal-body')
+    let inline = bodyHost ? bodyHost.querySelector('[data-toast-host]') : null
+    if (bodyHost && !inline) {
+      inline = document.createElement('div')
+      inline.className = 'q-toasts-inline'
+      inline.setAttribute('data-toast-host', '1')
+      bodyHost.prepend(inline)
+    }
+    const box = inline || el('q-toasts')
+    if (!box) return
     box.appendChild(node)
     setTimeout(() => node.remove(), kind === 'bad' ? 12000 : 6000)
   }
@@ -1166,9 +1236,18 @@
       `<div class="q-banner ${item.kind}" data-banner="${index}"><b>${esc(item.title)}</b>`
       + `${item.detail ? ` <span>${esc(item.detail)}</span>` : ''}`
       + `${item.next_action ? ` <div class="q-hint">${esc(item.next_action)}</div>` : ''}`
+      // **提示条上的动作**（P21：上一批没跑完 ⇒ 一条「只重试剩下的 N 份」）；没有动作就只有「知道了」
+      + `${item.retry ? `<button class="primary" data-banner-retry="${index}">`
+        + `只重试剩下的 ${(item.retry.ids || []).length} 份</button>` : ''}`
       + `<button data-banner-close="${index}" aria-label="关闭这条提示">知道了</button></div>`).join('')
     box.querySelectorAll('[data-banner-close]').forEach((node) => node.addEventListener('click', () => {
       state.banners.splice(Number(node.dataset.bannerClose), 1); renderBanners()
+    }))
+    box.querySelectorAll('[data-banner-retry]').forEach((node) => node.addEventListener('click', () => {
+      const item = state.banners[Number(node.dataset.bannerRetry)]
+      if (!item?.retry) return
+      // 同一个动作 + 同一份署名（署名由会话身份自动预填），只把 ids 换成"剩下的那些"
+      openAction(item.retry.action, { ids: item.retry.ids })
     }))
   }
 
@@ -1246,7 +1325,7 @@
   function navigate(view, kind, id, { replace = false, quiet = false } = {}) {
     const next = { view: view || 'home', kind: kind || '', id: id || '' }
     state.route = next; state.edits = {}; state.editOrigin = {}
-    state.selected = {}; state.selectedRows = {}
+    state.selected = {}; state.selectedRows = {}; state.picked = {}; state.selectedAll = {}
     const url = routeUrl(next)
     if (replace) history.replaceState(next, '', url)
     else history.pushState(next, '', url)
@@ -1511,7 +1590,12 @@
           sorted === 'asc' ? ' ↑' : (sorted === 'desc' ? ' ↓' : '')}</span></th>`
     }
     const editable = columns.some((column) => column.editable)
+    // **勾选状态从 state 回填**（P21 / D2）：翻页之后回到本页，之前勾的行**还是勾着的**（`state.picked`）。
+    const picked = pickedOf(panel.id)
+    const pageKeys = view.window.map((row, index) => view.rowKeyOf(row, index))
+    const pickedOnPage = pageKeys.filter((key) => picked[key]).length
     const head = html([bulk ? `<th class="q-rowsel"><input type="checkbox" data-select-all`
+      + `${pageKeys.length && pickedOnPage === pageKeys.length ? ' checked' : ''}`
       + ` aria-label="全选本页（不含其它页）" title="只勾本页这几行；要跨页选全部命中的行，用上面的「选中全部命中行」"></th>` : '',
       columns.map(thOf).join(''), '<th>动作</th>'])
     // `best_when:'min'`（一列里的最小值高亮）：**在命中行集上**算 —— 最小值是数据的性质，不是这一页的性质
@@ -1576,8 +1660,9 @@
           + ` title="${attr(action.hint || '')}">`
           + `${esc(action.title)}${action.permission === 'human-signature' ? ' ✍' : ''}</button>`
       }).join(' ')
-      return `<tr data-row-key="${attr(rowKey)}">`
-        + (bulk ? `<td class="q-rowsel" data-label="选中"><input type="checkbox" data-select="${attr(rowKey)}" aria-label="选中这一行"></td>` : '')
+      return `<tr data-row-key="${attr(rowKey)}"${picked[rowKey] ? ' class="q-row-picked" data-picked="1"' : ''}>`
+        + (bulk ? `<td class="q-rowsel" data-label="选中"><input type="checkbox" data-select="${attr(rowKey)}"`
+          + `${picked[rowKey] ? ' checked' : ''} aria-label="选中这一行"></td>` : '')
         + `${cells}<td class="q-rowacts" data-label="动作">${inline} ${rowRefCell(row)}</td></tr>`
     }).join('')
     // 小计（`data.totals`）按**命中行集**算（不是本页）：翻页不会让合计变小；客户端已改的格子优先。
@@ -1889,8 +1974,7 @@
     const layout = layoutOf()
     const collapsed = layout.collapsed.length
     const saved = layout.order.length || collapsed
-    return `<div class="q-layoutbar" data-layout-bar="${attr(layout.key)}">`
-      + `<span>布局（这块是你自己的）：${count} 块面板`
+    const inner = `<span>布局（这块是你自己的）：${count} 块面板`
       + `${collapsed ? ` · 收起 ${collapsed}` : ''}`
       + `${saved ? ` · 已保存过（刷新后仍在）` : ' · 未改过'}</span>`
       + `<button data-layout="collapse-all">收起全部</button>`
@@ -1898,7 +1982,15 @@
       + `<button data-layout="reset">恢复默认布局</button>`
       + `<span class="q-hint">拖动面板标题左边的 ⠿ 换顺序；键盘：焦点在 ⠿ 上按 Alt+↑/↓`
       + `${notifSource === 'server' ? '｜布局按你的身份存在服务端（换浏览器/换设备仍在）'
-        : '｜布局只在本浏览器（登录后落服务端）'}</span></div>`
+        : '｜布局只在本浏览器（登录后落服务端）'}</span>`
+    // **窄屏把它折起来**（P21 / D3）：布局是低频操作，而这一条 + 视图头在手机上占掉首屏一半。
+    // 折起来 ≠ 少按钮：点开 summary 就是原来那一行（`data-layout-bar` 仍在根节点上，脚本照旧找得到）。
+    return narrowUi(900)
+      ? `<details class="q-layoutbar q-layoutbar-fold" data-layout-bar="${attr(layout.key)}">`
+        + `<summary>布局：${count} 块面板${collapsed ? ` · 收起 ${collapsed}` : ''}`
+        + `${saved ? ' · 已保存过' : ''}（点开：收起/展开/恢复默认 · 拖动排序说明）</summary>`
+        + `<div class="q-layoutbar-inner">${inner}</div></details>`
+      : `<div class="q-layoutbar" data-layout-bar="${attr(layout.key)}">${inner}</div>`
   }
 
   /**
@@ -1929,8 +2021,30 @@
       + `<button class="q-panel-btn" data-collapse="${attr(panel.id)}" aria-expanded="${collapsed ? 'false' : 'true'}"`
       + ` title="${collapsed ? '展开这块' : '收起这块（收起后标题与深链仍在）'}">${collapsed ? '▸' : '▾'}</button></div>`
       + `<details class="q-mech"><summary>机制（这块是谁注册的）</summary><div class="q-src">${mech}</div></details>`
-      + `${panel.hint ? `<p class="q-hint">${esc(panel.hint)}</p>` : ''}`
+      // **手机上面板说明默认收起**（P21 / D3）：插件写的"这块怎么用"常有几行，390px 下它就是首屏杀手；
+      // 收起来不等于删掉 —— summary 上写着"怎么用"，点开就是原文。
+      + `${hintBlock(panel.hint)}`
       + `<div class="q-body">${body}</div></section>`
+  }
+
+  /** 窄屏判据（机制，一处定义）：`narrowUi(560)` = 手机上那一档（面板说明/查询条折叠也用同一把尺子）。 */
+  function narrowUi(maxPx) {
+    try {
+      return window.matchMedia(`(max-width: ${Number(maxPx) || 560}px)`).matches
+        // **横屏手机**：高度比宽度更紧（844×390 实测：面板头一样把首屏吃光）—— 所以判据里带上高度
+        || window.matchMedia('(max-height: 520px)').matches
+    } catch (err) { return false }
+  }
+
+  /**
+   * 面板说明（插件写的"这块怎么用"）：宽屏照旧一行 `q-hint`；**手机（≤560px）默认收起**（P21 / D3）
+   * —— 390px 下几行说明就是"首屏看不到数据行"的主因之一。收起来 ≠ 删掉：summary 点开就是原文。
+   */
+  function hintBlock(hint) {
+    if (!hint) return ''
+    if (!narrowUi(560)) return `<p class="q-hint">${esc(hint)}</p>`
+    return `<details class="q-panel-hint"><summary>这块怎么用（说明）</summary>`
+      + `<p class="q-hint">${esc(hint)}</p></details>`
   }
 
   /** 只重画面板区（折叠 / 拖拽 / 对比模式都是纯客户端状态，不必再问服务端要一遍数据）。 */
@@ -1944,6 +2058,7 @@
     bindPanels()
     bindInteractions()
     bindFiles(el('q-view'))          // ⑥ 文件集合面板（附件）：拖拽上传 / 选择文件 / 键盘
+    updateSelectedCount()            // 重绘后计数按**真勾着的**算（P21 / D2）
   }
 
 
@@ -2662,17 +2777,21 @@
       if (last) navigate(last.view, last.kind, last.id)
     }))
     // 全选只在**本表**里生效（P3 走查实测：不 scope 的话一个表的"全选"会把整页所有表的复选框都勾上，
-    // 计数与批量 ids 都会串到别的表）
+    // 计数与批量 ids 都会串到别的表）；勾选记进**本面板**的桶（翻页回来还是勾着的，P21 / D2）。
     root.querySelectorAll('[data-select-all]').forEach((node) => node.addEventListener('change', () => {
       const table = node.closest('table') || root
+      const panelId = node.closest('[data-panel]')?.dataset?.panel || ''
       table.querySelectorAll('[data-select]').forEach((box) => {
         box.checked = node.checked
         state.selected[box.dataset.select] = node.checked
+        pickSet(panelId, box.dataset.select, node.checked)
       })
       updateSelectedCount()
     }))
     root.querySelectorAll('[data-select]').forEach((node) => node.addEventListener('change', () => {
       state.selected[node.dataset.select] = node.checked
+      pickSet(node.closest('[data-panel]')?.dataset?.panel || '', node.dataset.select, node.checked)
+      node.closest('tr')?.classList.toggle('q-row-picked', node.checked)
       if (node.checked) {
         let row = {}
         try { row = JSON.parse(node.closest('tr').querySelector('[data-row-action]')?.dataset.row || '{}') } catch (err) { row = {} }
@@ -2749,17 +2868,18 @@
       submitEdits(node.closest('[data-panel]'))))
     root.querySelectorAll('[data-cancel-edits]').forEach((node) => node.addEventListener('click', (ev) => {
       state.edits = {}; state.editOrigin = {}; state.selected = {}; state.selectedRows = {}
+      state.picked = {}; state.selectedAll = {}
       const panelId = ev.currentTarget?.dataset?.panel
       if (panelId) renderPanels()
       else loadAll(true)
     }))
     root.querySelectorAll('[data-bulk]').forEach((node) => node.addEventListener('click', () => {
       const holder = node.closest('[data-panel]') || root
-      // 只取**本表**勾上的行（跨表面板串选会把别的表的 id 一起发出去）+ **本面板**的跨页选择
-      // （「选中全部命中行」把不在本页的行也选中了：分页后批量必须覆盖全部命中，不是只有这一页）
+      // 送出的 ids = **本面板勾过的行**（含不在本页的：翻页不会把勾弄丢，P21 / D2）+ **「选中全部命中行」**。
+      // 只取本表/本面板（跨表面板串选会把别的表的 id 一起发出去 —— P3 实测过）。
       const panelId = holder.dataset?.panel || ''
       const domIds = [...holder.querySelectorAll('[data-select]:checked')].map((box) => box.dataset.select)
-      const ids = [...new Set([...domIds, ...selectedAllOf(panelId)])]
+      const ids = [...new Set([...domIds, ...pickedKeysOf(panelId), ...selectedAllOf(panelId)])]
       // 已经改了单元格但没勾行 ⇒ 直接提交这些改动（不逼用户先勾一遍；改了东西却只收到"没有选中"是最气人的）
       if (!ids.length && Object.keys(state.edits).length) {
         return submitEdits(holder)
@@ -2785,13 +2905,20 @@
     }))
   }
   function updateSelectedCount() {
-    // 计数按**本表里真的勾上的**算（不是全局 state：全局计数在跨表时会把别的表的勾选也算进来）；
-    // 跨页选择（「选中全部命中行」）单独标出来 —— 否则用户以为只选了本页那几行。
+    // 计数按**本面板真的勾上的**算（不是全局 state：全局计数在跨表时会把别的表的勾选也算进来）；
+    // 跨页/跨页勾选（翻页前的勾 + 「选中全部命中行」）单独标出来 —— 否则用户以为只选了本页那几行。
+    // 计数条里那句"已勾选 N 行"也一起更新（它在重绘时是烘进去的，勾选时面板并不重绘）
+    document.querySelectorAll('[data-picked-count]').forEach((node) => {
+      const scope = node.closest('[data-panel]') || document
+      node.textContent = String(pickedKeysOf(scope.dataset?.panel || '').length)
+    })
     document.querySelectorAll('[data-selected-count]').forEach((node) => {
       const scope = node.closest('[data-panel]') || document
+      const panelId = scope.dataset?.panel || ''
       const dom = scope.querySelectorAll('[data-select]:checked').length
-      const extra = selectedAllOf(scope.dataset?.panel || '').length
-      node.textContent = extra > dom ? `${dom}（含跨页共 ${extra}）` : String(dom)
+      const all = new Set([...pickedKeysOf(panelId), ...selectedAllOf(panelId)])
+      const extra = all.size
+      node.textContent = extra > dom ? `${dom}（含不在本页共 ${extra}）` : String(dom)
     })
   }
   // ---------------------------------------------------------------- ③ 编辑区：取值 / 键盘流转 / 实时小计
@@ -3092,6 +3219,159 @@
     return input
   }
 
+  // ---------------------------------------------------------------- 批量动作：进度 / 回执 / 出口（P21）
+  /**
+   * **批量动作**（注册面声明 `input.bulk === 'ids'`：一次署名、逐份落账的那几颗）。
+   *
+   * P21 这一批给它的界面加三样东西：
+   *   ① **实时进度**（D1）：服务端把这一批的进度落在 `/api/ui/jobs`（写者逐条回执）—— 提交期间轮询它，
+   *      把"正在签哪一个 / 已经几份"写在弹层里，而不是让用户对着一个不动的按钮等；
+   *   ② **只重试被拒/未完成的那些**（D6）：回执里逐条写明哪几条被拒、哪几条没做 —— 界面给一颗按钮
+   *      只把这几个 id 再送一次（幂等：重复的会如实报 duplicates，账本零新增）；
+   *   ③ **超限的出口**（D6）：`batch-too-large` 时给「只签前 N 份」（N 取服务端自己说的那个上限）。
+   *
+   * 这里**不替插件做任何判定**：哪几条被拒、上限是多少，全部照抄回执/拒绝里的字面量。
+   */
+  const isBatchAction = (action) => String(action?.input?.bulk ?? '') === 'ids'
+  const batchTotalOf = (out) => Number(out?.job?.total ?? (out?.result?.results || []).length) || 0
+  const batchRefusedOf = (out) => {
+    const named = out?.job?.refused_ids
+    if (Array.isArray(named) && named.length) return named
+    return (out?.result?.results || []).filter((row) => row?.where === 'refused')
+      .map((row) => row.draft_id || row.gate_id || row.id || '').filter(Boolean)
+  }
+  const batchPendingOf = (out) => (Array.isArray(out?.job?.pending_ids) ? out.job.pending_ids : [])
+  const batchIdsOf = (out) => (Array.isArray(out?.job?.ids) ? out.job.ids : [])
+  /** 服务端自己说的"一次最多几份"（从拒绝文案里取第一个整数；取不到就写'上限'，不编一个数）。 */
+  const batchCapOf = (out) => {
+    const match = /(\d+)\s*(份|条)/.exec(String(out?.reason || ''))
+    const value = match ? Number(match[1]) : null
+    return Number.isFinite(value) && value > 0 ? value : null
+  }
+  /** 「还能做什么」的按钮（要被 `wireBatchNext` 接上；没有出口时返回空串，界面不摆按不动的按钮）。 */
+  function batchNextHtml(action, out) {
+    const buttons = []
+    const ids = batchIdsOf(out)
+    const pending = batchPendingOf(out)
+    const refused = batchRefusedOf(out)
+    const retry = [...new Set([...refused, ...pending])]
+    const cap = batchCapOf(out)
+    if (out?.code === 'batch-too-large' && ids.length && cap && ids.length > cap) {
+      buttons.push(`<button class="primary" data-batch-slice="${attr(cap)}">只签前 ${cap} ${action.input?.bulk === 'ids' ? '份' : '条'}`
+        + `（服务端说一次最多 ${cap}）</button>`)
+    }
+    if (retry.length) {
+      buttons.push(`<button class="primary" data-batch-retry="1">只重试被拒/未完成的 ${retry.length} `
+        + `${retry.length > 1 ? '份' : '份'}（幂等：已完成的会如实报"已经签过"）</button>`)
+    }
+    return buttons.length ? `<div class="q-actions q-batch-next" data-batch-next="1">${buttons.join('')}</div>` : ''
+  }
+  /** 接上「只重试被拒项 / 只签前 N 份」：都是**同一个动作 + 同一份署名**，只是 ids 换成要重做的那些。 */
+  function wireBatchNext(host, action, out, input, options = {}) {
+    if (!host) return
+    const keep = { ...(input || {}) }
+    delete keep.confirm_ack
+    const ids = batchIdsOf(out)
+    const cap = Number(host.querySelector('[data-batch-slice]')?.dataset?.batchSlice || 0)
+    const slice = host.querySelector('[data-batch-slice]')
+    if (slice && cap > 0) {
+      slice.addEventListener('click', () => {
+        openAction(action.id, { ...keep, ids: ids.slice(0, cap) }, null, { panel: options.panel || null })
+      })
+    }
+    const retry = host.querySelector('[data-batch-retry]')
+    if (retry) {
+      retry.addEventListener('click', () => {
+        const wanted = [...new Set([...batchRefusedOf(out), ...batchPendingOf(out)])]
+        openAction(action.id, { ...keep, ids: wanted }, null, { panel: options.panel || null })
+      })
+    }
+  }
+  /**
+   * **批量进度**：提交期间轮询 `/api/ui/jobs`（只读、按会话身份），把"正在签哪一个 / 已经几份"写进弹层。
+   * 服务端不可达/离线时**不假装有进度**（写一行"读不到进度"，别的照旧）。
+   */
+  function startBatchProgress(modal, action) {
+    const holder = modal?.querySelector?.('.q-modal-body') || modal
+    if (!holder) return () => {}
+    let node = holder.querySelector('[data-batch-progress]')
+    if (!node) {
+      node = document.createElement('div')
+      node.className = 'q-batch-progress'
+      node.setAttribute('data-batch-progress', '1')
+      node.setAttribute('role', 'status')
+      holder.prepend(node)
+    }
+    let stopped = false
+    const paint = (jobs) => {
+      if (stopped) return
+      const run = (jobs.running || [])[0] || null
+      if (run) {
+        const active = run.active || {}
+        node.innerHTML = `<b>正在逐份落账：${run.done ?? 0}/${run.total}</b>`
+          + `${active.target ? ` · 当前 <code>${esc(active.target)}</code>` : ''}`
+          + `${run.total ? ` · ${Math.round(((run.done ?? 0) / run.total) * 100)}%` : ''}`
+          + `<div class="q-hint">服务端在 worker 线程里逐条跑唯一写者（界面不写账本）：`
+          + `已完成 ${run.done ?? 0} 次写者调用${run.ledger_seen ? ` · 账本 +${run.ledger_seen} 行` : ''}；`
+          + `这一批的记录在 <code>/api/ui/jobs</code>，刷新页面也读得回来</div>`
+        return
+      }
+      const recent = (jobs.recent || [])[0]
+      if (recent && recent.id) {
+        node.innerHTML = `<b>上一批：${recent.status === 'interrupted' ? '没有跑完（进程中断）' : '已结束'}</b>`
+          + `<div class="q-hint">${esc(recent.title || '')} · 共 ${recent.total} · 已签 ${recent.applied} · `
+          + `已签过 ${recent.duplicates} · 被拒 ${recent.refused} · 待办 ${(recent.pending_ids || []).length}</div>`
+      } else {
+        node.textContent = '正在提交这一批…（还没拿到逐条进度）'
+      }
+    }
+    const tick = async () => {
+      if (stopped) return
+      const out = await getJson('/api/ui/jobs')
+      if (stopped) return
+      if (out && out.ok) paint(out)
+      else if (out && out.code === 'offline') node.textContent = '离线：读不到逐条进度（提交仍在服务端跑）。'
+      else node.textContent = '读不到逐条进度（/api/ui/jobs 不可达）—— 提交本身照旧。'
+    }
+    tick()
+    const timer = setInterval(tick, 800)
+    return () => { stopped = true; clearInterval(timer) }
+  }
+  /** **批量回执弹层**：逐条结果 + 「只重试被拒/未完成」/「只签前 N 份」两个出口（有才给）。 */
+  function batchReceipt(action, out, input, options = {}) {
+    const job = out?.job || {}
+    const rows = (out?.result?.results || []).map((row) => ({
+      id: row.draft_id || row.gate_id || row.id || '',
+      where: row.where, code: row.code || '', added: Number(row.ledger_added ?? 0),
+      reason: row.reason || '', next: row.next_action || '' }))
+    const group = (kind) => rows.filter((row) => row.where === kind)
+    const list = (kind, label) => {
+      const picked = group(kind)
+      if (!picked.length) return ''
+      return `<h4>${label}（${picked.length}）</h4><ul class="q-batch-list">`
+        + picked.map((row) => `<li><code>${esc(row.id)}</code> ${row.code ? `· <code>${esc(row.code)}</code>` : ''}`
+          + `${row.added ? ` · 账本 +${row.added}` : ''}${row.reason ? `<div class="q-hint">${esc(row.reason)}</div>` : ''}`
+          + `${row.next ? `<div class="q-hint">下一步：${esc(row.next)}</div>` : ''}</li>`).join('') + '</ul>'
+    }
+    openModal(html([
+      `<h2 id="q-action-title">回执：${esc(action.title)}</h2>`,
+      '<div class="q-modal-body">',
+      `<p class="q-degraded" data-batch-summary="1">共 <b>${job.total ?? rows.length}</b> 份：`
+      + `已签 <b>${job.applied ?? group('applied').length}</b> · 已经签过（幂等）`
+      + `<b>${job.duplicates ?? group('duplicates').length}</b> · 被拒 <b>${job.refused ?? group('refused').length}</b>`
+      + `（本次账本 +${job.ledger_added ?? rows.reduce((sum, row) => sum + row.added, 0)} 行）`
+      + `<span class="q-hint">这份逐条回执也落服务端（<code>/api/ui/jobs</code>）：刷新或换设备都读得回来</span></p>`,
+      list('applied', '已签'),
+      list('duplicates', '已经签过（幂等，零新增）'),
+      list('refused', '被拒（每一条各自的原因）'),
+      batchNextHtml(action, out),
+      '<div class="q-actions q-modal-foot"><button data-close="1">关闭</button></div>',
+      '</div>']), 'q-batch-receipt')
+    const modal = el('q-modal')
+    modal?.querySelector('[data-close]')?.addEventListener('click', closeModal)
+    wireBatchNext(modal, action, out, input, options)
+  }
+
   function openAction(id, presets, priorResult, options = {}) {
     const action = actionOf(id)
     if (!action) {
@@ -3170,8 +3450,12 @@
     const first = modal.querySelector('input, textarea, select')
     if (first) first.focus()
     const run = async (input) => {
+      // **批量动作：先挂上实时进度**（P21 / D1）—— 提交期间弹层里一直显示"正在逐份落账 N/M · 当前是哪一个"。
+      const batch = isBatchAction(action)
+      const stopProgress = batch ? startBatchProgress(el('q-modal'), action) : null
       const out = await postJson(`/api/action/${encodeURIComponent(action.id)}`,
         { view: state.route.view, route: state.route, input })
+      if (stopProgress) stopProgress()
       notifyAction(out, action)
       if (out.ok) {
         // **导出/打印**（`result.export`）：落一份文件 + 打开预览（打印在预览里一键完成）
@@ -3182,6 +3466,10 @@
         await loadAll()
         if (exported) deliverExport({ result: { export: exported } }, action)
         if (shared) return shareModal(shared, action)
+        // **批量回执**（P21）：逐条结果 + 「只重试被拒/未完成的那几份」出口（部分失败时这正是用户要的）
+        if (batch && (out.result?.results || out.job)) {
+          return batchReceipt(action, out, input, { panel: options.panel || null })
+        }
         return
       }
       // 失败：**回到表单**（确认弹层已经不在 DOM 里了，把结果写进它等于丢掉）并逐字段标红
@@ -3190,6 +3478,14 @@
       for (const error of (out.errors || []).filter((item) => item.field)) {
         const node = back?.querySelector(`[data-err="${error.field}"]`)
         if (node) node.textContent = `${error.code}：${error.message}`
+      }
+      // **批量被拒的出口**（P21 / D6）：`batch-too-large` ⇒ 「只签前 N 份」；部分被拒 ⇒ 「只重试被拒的 N 份」。
+      if (batch && back) {
+        const holder = back.querySelector('[data-result]') || back.querySelector('.q-modal-body')
+        if (holder) {
+          holder.insertAdjacentHTML('beforeend', batchNextHtml(action, out))
+          wireBatchNext(holder, action, out, input, { panel: options.panel || null })
+        }
       }
       // **乐观并发冲突**：第二条写的人看到的不是"失败了"四个字，而是"谁在何时把哪个字段改成了什么"
       if (out.code === 'object-changed' && out.result?.conflict) {
@@ -3224,11 +3520,22 @@
       return `<dt>${esc(field.label)}</dt><dd>${field.type === 'signature' ? `<code>${esc(shown)}</code>`
         : esc(shown)}</dd>`
     }).join('')
+    // **确认页要复述"这一批几份"**（P21 / D5）：P20 实测确认页只有字段值（`ids` 是数组，渲染成 `（空）`），
+    // 用户要签 88 份却看不到这个数字 —— 而它正是"一次署名"这句话里唯一需要用户确认的量。
+    const ids = Array.isArray(input.ids) ? input.ids.length : 0
+    const rowsCount = Array.isArray(input.rows) ? input.rows.length : 0
+    const isBatch = isBatchAction(action)
+    const countLine = isBatch && ids
+      ? `<p class="q-consequence" data-confirm-count="1">这一批共 <b>${ids}</b> 份：`
+        + `<b>一次署名</b>，服务端**逐份**各跑一次唯一写者（每份各自落账、各自可被拒）——`
+        + `部分失败会逐条如实告诉你，已完成的重新提交会如实报"已经签过"（幂等，零新增）。</p>`
+      : (rowsCount ? `<p class="q-consequence" data-confirm-count="1">这次提交会带上 <b>${rowsCount}</b> 行。</p>` : '')
     const card = modal.querySelector('.q-card')
     card.innerHTML = html([
       `<h2 id="q-action-title">确认：${esc(action.title)}</h2>`,
       '<div class="q-modal-body">',
       `<p class="q-degraded" data-confirm-message="1">${esc(action.confirm?.message || '确认执行这个动作？')}</p>`,
+      countLine,
       `<dl class="q-kv" data-confirm-kv="1">${rows}</dl>`,
       action.permission === 'human-signature'
         ? `<p class="q-consequence">后果：产生对外义务；签名与载荷指纹会写进账本（不可撤销，只能再走一次变更）。`
@@ -3482,6 +3789,17 @@
     modal.setAttribute('aria-labelledby', titled ? 'q-modal-title' : '')
     if (id) modal.dataset.kind = id
     modal.innerHTML = `<div class="q-card" role="document">${withId}</div>`
+    // **D7：弹层打开时，已经在屏幕上的提示条**也搬进弹层正文（不是让它们消失）—— 固定浮层会压住
+    // 全屏弹层的标题；搬进去之后提示仍然看得见（跟着正文滚），标题与吸底按钮都不被盖。
+    const floatBox = el('q-toasts')
+    const inlineBox = modal.querySelector('.q-modal-body')
+    if (floatBox && inlineBox && floatBox.children.length) {
+      const host = document.createElement('div')
+      host.className = 'q-toasts-inline'
+      host.setAttribute('data-toast-host', '1')
+      inlineBox.prepend(host)
+      while (floatBox.firstChild) host.appendChild(floatBox.firstChild)
+    }
     modal.addEventListener('click', (ev) => { if (ev.target === modal) closeModal() })
     modal.addEventListener('keydown', (ev) => { if (ev.key === 'Tab') trapTab(ev, modal) })
     // 背景 inert：Tab 与辅助技术都停在弹层里（浏览器原生 inert，不需要自己数元素）
@@ -3508,6 +3826,11 @@
   }
   function closeModal() {
     const modal = el('q-modal')
+    // **弹层里那份提示条搬回浮层**（P21 / D7）：不然"发出去的提示"会跟着弹层一起被丢掉
+    // （弹层里那份是 Node 的 DOM 子树，remove() 一并带走）—— 关门不等于把话咽回去。
+    const floatBox = el('q-toasts')
+    const inlineToasts = modal ? [...modal.querySelectorAll('.q-toasts-inline .q-toast')] : []
+    if (floatBox && inlineToasts.length) for (const node of inlineToasts) floatBox.appendChild(node)
     const restore = modalOpener
     modalOpener = null
     // 通知中心的异步取数在弹层关掉之后可能才回来 ⇒ 记下"已关"，回来时不再往空气里画
@@ -4107,6 +4430,28 @@
 
   // ---------------------------------------------------------------- 加载
   /**
+   * **没跑完的那一批**（P21 / D1）：`GET /api/ui/jobs` 里 `recent` 有 `interrupted`/`failed` 且还有
+   * `pending_ids` ⇒ 摆一条提示条：「到哪了」+ 一颗「只重试剩下的 N 份」（幂等：已完成的会报 duplicates）。
+   * 读不到进度时**不假装没有**（说清"读不到"），也不影响页面上别的东西。
+   */
+  async function noteUnfinishedJobs() {
+    const out = await getJson('/api/ui/jobs')
+    if (!out || out.ok !== true) return
+    const stuck = (out.recent || []).find((job) => (job.status === 'interrupted' || job.status === 'failed')
+      && ((job.pending_ids || []).length || (job.refused_ids || []).length))
+    if (!stuck) return
+    const left = [...new Set([...(stuck.pending_ids || []), ...(stuck.refused_ids || [])])]
+    state.banners = state.banners.filter((item) => !String(item.title).startsWith('上一批没有跑完'))
+    state.banners.push({ kind: 'warn', title: `上一批没有跑完：${stuck.title || stuck.action}（共 ${stuck.total}）`,
+      detail: `已签 ${stuck.applied} · 已签过（幂等）${stuck.duplicates} · 被拒 ${stuck.refused} · `
+        + `**还没做的 ${left.length} 份**（${stuck.status === 'interrupted' ? '进程中断过' : '运行时失败'}）`,
+      next_action: `点下面那颗按钮：**只重试这 ${left.length} 份**（同一份署名；已完成的会如实报"已经签过"、`
+        + '账本零新增）。这一批的逐条记录在 `/api/ui/jobs`，刷新或换设备都读得回来。',
+      retry: { action: stuck.action, ids: left, title: stuck.title || stuck.action } })
+    renderBanners()
+  }
+
+  /**
    * **一次加载 = 四步，顺序不许变**（③ 状态纪律的落点）：
    *   ① 清提示条 → ② **清空上一页的数据并进入 loading**（屏幕上立刻只剩加载态，绝不残留旧行，
    *   也不会让人把旧数据当成新页面）→ ③ 并行拉三份数据 → ④ 按每份**各自的 ok** 决定渲染什么，
@@ -4139,6 +4484,9 @@
       getJson(notifUrl(state.notifPage)),
       getJson('/api/ui/status'),
     ])
+    // **上一批没跑完要如实说**（P21 / D1 的另一半：工作不丢）：服务端把每一批的进度落在
+    // `/api/ui/jobs`，进程中断/刷新之后照样读得回来 —— 有没跑完的就摆一条提示条（含"只重试剩下的"入口）。
+    noteUnfinishedJobs()
     state.loading = null
     if (object) {
       if (panels.ok) {

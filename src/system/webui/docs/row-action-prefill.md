@@ -1,8 +1,9 @@
 # 行内/批量动作的预填：**字段名必须能在行对象里找到同名键**
 
-<!-- 预算：5 KB。机制真源：外壳 `code/assets/app.js#openAction`（`values = {…routePreset, …identityPreset, …presets}`，
+<!-- 预算：8 KB。机制真源：外壳 `code/assets/app.js#openAction`（`values = {…routePreset, …identityPreset, …presets}`，
      `presets` 就是那一行的对象）+ `#submitEdits`（批量走 `data.editable_action`）。本页讲一条**给插件作者**的规矩：
-     字段名与行键名对不上 = 用户在表单里看到一个空字段，而值其实就在他刚点的那一行上。 -->
+     字段名与行键名对不上 = 用户在表单里看到一个空字段，而值其实就在他刚点的那一行上。
+     全插件自查脚本与 P22 的逐条读数：`src/system/webui/docs/prefill-and-selection.md` §4。 -->
 
 ## 0. 一句话
 
@@ -26,16 +27,22 @@
 改后浏览器实测（表单字段值）：`seen_rev=1`、`rfq_rev=1`、`package_id=SCALE-PKG-0002`、`lead_time_days=4`；
 原始输出与截图见 `tmp/p15-report.md` §2。
 
-## 2. 自查（不写测试，一条命令）
-
-先拿一份行数据，再用注册面里的字段清单对一遍。**空值也算对不上**（`rev ?? ''` 这类兜底要显式写）：
+## 2. 自查（**可重跑**：一条命令扫全部视图 + 全部对象页）
 
 ```bash
-# ① 行数据（服务端算出来的那一份）
+python3 tmp/p22-shots/check-row-fields.py --base http://127.0.0.1:8491/quotagent
+# → 必填挡住 N 条 / 可选手填 M 条 + JSON 留档（覆盖面、逐条面板·动作·字段、行里相近的键）
+```
+
+它扫 `/api/ui/panels`（全部视图）× `/api/ui/object`（对象 id 从面板行里现取），对每个能点到的动作逐个字段判
+「行里能不能取到值」，分两档：**`必填挡住`**（required 且取不到 ⇒ 用户被一个空字段挡在提交前）与
+**`可选手填`**（人还能手打，但按 §0 那条规矩该对齐）。P22 覆盖面：3 视图 · 223 块面板 · 71 个对象页 · 125 处字段；
+逐条读数与**修前/修后**在 `prefill-and-selection.md` §4。手工对账的老版本（只扫一个视图、只拿第一行）：
+
+```bash
+# ① 行数据（服务端算出来的那一份）   ② 注册面（每个动作的 fields）
 curl -s "$BASE/api/ui/panels?view=supplier" -o /tmp/panels.json
-# ② 注册面（每个动作的 fields）
 curl -s "$BASE/api/ui/surface" -o /tmp/surface.json
-# ③ 对账：row_actions 里的动作，字段名在行里取不到值的有哪些
 python3 - <<'PY'
 import json
 S=json.load(open('/tmp/surface.json')); A={a['id']:a for a in S['actions']}
@@ -59,6 +66,9 @@ PY
 
 打印出「必填」的行 = **用户会被一个空字段挡住**（P3 走查教训：批量受理曾被「报价 id 必填」挡在确认层之前）；
 只打印「可选」的，人还能手填，但按上面那条规矩也该对齐（例：`new_qty` 可以预填行里的 `qty` 当前值）。
+**P22 的两处真缺口就是这么抓到的**：多行报价的标量三键在账本里本来就是空的（`item_id: ""` /
+`unit_price_cents: null`）⇒ 状态轨上三个必填字段全空（修法：回落到首行）；`from_rev` 要的值就在
+「当前 rev」那一列上（修法：行里补同名键）。
 
 ## 3. 边界（别把这条规矩用错）
 

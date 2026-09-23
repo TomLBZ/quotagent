@@ -34,7 +34,7 @@ FR 正文只在定义集合（`docs/work/functional-requirements.md` + 同目录
 | provides | `evidenceSummary`（`host/modules/evidence-summary.mjs`，自进化产出）；Python 侧 `kernel/evidence.py`（`export`/`verify`/`sign_pack`）、`kernel/modelgate.py`（`ModelGateway.rebuild_matches`）。 |
 | 依赖（实测 import 目标） | `src/quotagent/kernel/evidence.py` → `.canon`、`.ledger`；`src/quotagent/kernel/modelgate.py` → `.canon`、`.ledger`；`host/modules/evidence-summary.mjs` → `../lib/std-schema.mjs`（27 §5.1/§5.2：只 import 内核面或其它插件的公开服务面，不 import 别的插件实现文件） |
 | 门（映射表 §1 证据列里的 `ac` 简写已展开成可跑命令） | `tools/verify.sh ac AC-AUDIT-001` · `tools/verify.sh ac AC-AUDIT-002` · `tools/verify.sh evolve-module` |
-| 写面 | 账本唯一写者仍是内核（H1）；本插件的账本写入只在映射表 §1 证据列点名的工具里（若有） |
+| 写面 | `plugin.json.permissions = {ledger: "sole-writer", writes: ["own-dir"]}`：账本侧**只有本插件写** `evidence/pack-exported` 这一条事件（唯一写者 `tools/evidence-pack-export.py`，经内核 `kernel.ledger` 的 H1 写路径；导出件 ≥ 0 行即 +1）；导出件正文落自己的目录（目录内容寻址、文件 0600）。其余面（`evidence-summary` 读面 / `audit-verify.py` / `evidence-pack-verify.py` / `export-events.py`）一律只读。 |
 
 ## 现状与缺口
 

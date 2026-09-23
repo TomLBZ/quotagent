@@ -10,7 +10,7 @@
   "external_deps": {},
   "permissions": {
     "writes": ["own-dir", "request-file"],
-    "ledger": "none"
+    "ledger": "sole-writer"
   },
   "source": "human",
   "requirements": ["FR-QUOTE-001"],
