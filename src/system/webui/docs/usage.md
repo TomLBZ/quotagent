@@ -53,24 +53,10 @@
 6. **发 PO（人签）**：**`po.issue`** 门 = 只能由承诺派生 + 逐行引用中标条目且不得改价 + 人工批准 → `po/issued`
    （`po→award→intent→quote` 链 + 行内 `basis`）。没签的那两列是空的（**不假装已承诺**）。
 
-## 4. 动作与接口清单（机器可读；完整表见 `/api/routes` 与 `/api/ui/surface`）
+## 4. 动作与接口清单
 
-| 路由 | 方法 | 说明 |
-|---|---|---|
-| `/quotagent/`、`/app/<view>/`、`/app/<view>/<kind>/<id>/` | GET | GUI 首屏（工作台）/ 视图 / **对象深链**（`kind` 由插件 `object_kind` 声明；对方视角 ⇒ 如实未命中） |
-| `/assets/app.js`·`app.css` | GET | 客户端资源（**只来自本服务**） |
-| `/api/ui/surface`·`panels`·`notifications`·`status`·`blocks?slot=` | GET | 注册面自述 / 面板数据 / 通知中心 / 状态栏 / 旧槽位区块 |
-| `/api/action/<id>` | POST | **动作总线**：`{"view":"…","input":{…}}`；校验 → 插件自己的服务端一半 |
-| `/api/collab/{object,hub,store}`、`/api/people/{roster,suggest,store}` | GET | 同侧协作（§10）/ 人员名册与角色（§11）：未登录 `401`；非 GET ⇒ **405 + `Allow: GET`** |
-| `/api/ui/notif-state` | GET/POST | 通知偏好 / 已读 / **布局** / 筛选（按身份、0600；§9） |
-| `/api/ui/plugins`；`…/<plugin_id>/{load,reload,unload}` | GET/POST | 装载清单；**热重载**（改 `code/ui.mjs` 不必重启）/ 卸载 |
-
-动作的**服务端一半一律是**：插件校验 → 落 0600 待办件 → spawn **唯一写者**（`compare.rank` 例外，只读）；
-`quote.submit`/`award.confirm`/`award.commit`/`po.issue` 是 **human-signature**（署名 == 会话身份）。写者与账本事件、
-逐动作的键、落点与 `hint` 见各插件 docs 与 `/api/ui/surface`；`collab.*`/`people.*` **不调写者、账本零新增**（§10/§11）。
-等价命令行：`python3 src/domain/<插件>/tools/<写者>.py --step <步骤> --request <0600待办件> --now … --ui-shared …`。
-验收/复现（都不写账本）：`src/system/webui/tools/{gui-walkthrough,gui-readback,gui-unload}.py` ·
-`sh tmp/p4-collab-verify.sh` · `python3 tmp/p5-people-verify.py`。改任一 `code/ui.mjs` → 顶栏「插件」→「重载」即可在线复现。
+**以 API 为准，本文件不复制该表（避免与实现漂移）**：`GET /api/routes` 给路由/auth/what；
+`GET /api/ui/surface` 给动作 id、入参 schema、权限档（`human-signature` 等）、确认策略、快捷键与对象类。
 
 ## 5. 写路径纪律（GUI 不是第二条事实写路径）
 
@@ -112,8 +98,10 @@
    都**不是账本事实**（§9）。
 5. 只读调用会被合并：`runPython(tool, args, {read:true})` 同一组 `(工具, 参数)` 一次渲染只 spawn 一次、
    `python_cache_ms` 内复用；动作/落待办件清空缓存（`QUOTAGENT_UI_PYTHON_CACHE_MS=0` 关掉）。
-6. 长列表是**分页窗口**（不是滚动虚拟化）；`/api/ui/panels` 仍发全量行（筛选/排序才能与全量一致），
-   服务端分页要改路由形状。边界见 `scale-and-performance.md` §8。
+6. 长列表是**分页窗口**（不是滚动虚拟化），而且**行由服务端按窗口给**（本批）：界面每次请求都带 `w=1`
+   （+ 每块的 `pq`），服务端只回那一页的行，并把 `共 N / 命中 M / 第几页 / 小计 / 命中行键` 这些
+   在**全集**上算出来的数字一起给（客户端照抄 ⇒ 不是"先拿全量再截断"）。请求里**不带 `w`/`pq`** 时
+   仍是整份下发（既有工具与脚本行为不变）。口径、数字与边界见 `scale-and-performance.md`。
 
 ## 8. 身份与会话 + 自助面
 
@@ -140,9 +128,12 @@
 
 ### 9.6 长列表、查询与状态（机制）
 
-- 每块 `table`/`files`/`list` 顶部一条**查询条**：关键字 · 按列筛选（数值/日期区间、枚举、包含）· 点列头排序
-  （升→降→取消）· 分页（每页 10…250 / 全部）· 清空 · 跨页「选中全部命中行」。插件通常一行不改就有。
-- **计数在全量行集上算**（`共 N / 命中 M`，机器可读 `data-count-*`）；小计按命中行集算；编辑跨页不丢。
+- 每块 `table`/`files`/`list`/`kv` 顶部一条**查询条**：关键字 · 按列筛选（数值/日期区间、枚举、包含）·
+  点列头排序（升→降→取消）· 分页（每页 10…250 / 全部）· 清空 · 跨页「选中全部命中行」。插件通常一行不改就有。
+- **行由服务端按窗口给**：改一次筛选/排序/翻页只重取**那一块**的一页（`only=` + `pq=`），响应里带
+  `data-count-*` 那一套数字与 `data-q-server="1"`；读数中如实标 `data-q-fetching`，读不到保留上一页并弹黄条。
+- **计数在全量行集上算**（`共 N / 命中 M`，机器可读 `data-count-*`；`data-count-full` 是面板给的全部行）；小计 /
+  枚举候选 / 桶筛选片的数字都由服务端在命中集上算；编辑跨页不丢（改动通过 `pq.edits` 回给服务端算小计）。
 - 五种状态互不冒充：`loading`（先清旧数据）/`error`（读不到，带 code+下一步+"重新读一次"）/`empty`/
   `empty:filtered-out`（筛选后 0 行）/`degraded`；通知读不到时保留上次读数并**标为陈旧**。
 - 口径、声明与实测数字见 `scale-and-performance.md`。

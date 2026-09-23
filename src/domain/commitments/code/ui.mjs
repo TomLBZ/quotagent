@@ -601,7 +601,7 @@ export async function register(surface, host) {
       const items = []
       for (const [id, gate] of last) {
         if (gate.type === 'approval/granted' || gate.type === 'approval/aborted') continue
-        items.push({ level: 'warn', title: `人工门 ${id} 还在等（${gate.scope}）`,
+        items.push({ level: 'warn', title: `承包商侧：人工门 ${id} 还在等（${gate.scope}）`,
           body: `对象 ${gate.ref}`, next_action: '打开这条门看卡在哪/等多久；门本身的人签动作在「授标与订单」里，界面不代签',
           // 门自己也是一个**可协作的对象**（`/app/<view>/gate/<id>/`）：指派/关注/评论由外壳的协作面提供，
           // 这里只声明"门后面那个对象是哪一类"（scope→kind 是本插件的领域知识）。

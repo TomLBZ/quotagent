@@ -41,6 +41,8 @@
     route: { view: Q.route.view || 'home', kind: Q.route.kind || '', id: Q.route.id || '' },
     panels: [], object: null, notifications: [], status: [], plugins: [],
     edits: {}, editOrigin: {}, selected: {}, selectedRows: {}, banners: [],
+    // **服务端窗口**：这一块正在向服务端取新的一页（读数中如实标出来，数字不冒充已更新）
+    panelBusy: {}, wantKeys: {},
     // ⑤ 多标签页 / 最近访问：地址栏仍是唯一位置来源，这两个只是"摆给用户看的入口"
     tabs: store.get(KEYS.tabs, []), recentRoutes: store.get(KEYS.recent, []),
     // ② 面板布局（顺序 / 折叠）：按「视图 + 对象类」分桶持久化
@@ -168,15 +170,18 @@
   }
   const countInBucket = (rows, key) => rows.filter((row) => String(row?.bucket ?? '') === key).length
   const byBucket = (rows, key) => (key === '' ? rows : rows.filter((row) => String(row?.bucket ?? '') === key))
-  /** 筛选片：`全部 N` + 每个桶（`label N`）。点一下只改"看到哪些"，不改任何事实。 */
-  function bucketBar(scope, buckets, current, rows) {
+  /** 筛选片：`全部 N` + 每个桶（`label N`）。点一下只改"看到哪些"，不改任何事实。
+   *  `counts` = 服务端在全集上算好的桶计数（客户端只有一页时用它，免得片上的数字跟着这一页变小）。 */
+  function bucketBar(scope, buckets, current, rows, counts) {
     if (!buckets.length) return ''
+    const pick = (key) => (counts && counts[key] !== undefined ? counts[key]
+      : (key === '' ? rows.length : countInBucket(rows, key)))
     const chip = (key, label, count) => `<span class="q-chip${current === key ? ' on' : ''}"`
       + ` data-bucket-filter="${attr(scope)}" data-bucket-key="${attr(key)}" role="button" tabindex="0">`
-      + `${esc(label)} ${Number.isFinite(Number(count)) ? Number(count) : countInBucket(rows, key)}</span>`
+      + `${esc(label)} ${Number.isFinite(Number(count)) ? Number(count) : pick(key)}</span>`
     return `<div class="q-bucketbar" data-bucket-bar="${attr(scope)}">`
       + `<span class="q-bucketbar-label">筛选</span>`
-      + chip('', '全部', rows.length)
+      + chip('', '全部', null)
       + buckets.map((item) => chip(item.key, item.label, item.count)).join('')
       + `<span class="q-hint">只看你关心的那一类（按你的身份存在服务端：换浏览器/换设备仍是这套筛选；不改任何事实）</span></div>`
   }
@@ -269,21 +274,107 @@
     if (pristine) delete state.query[panelId]
     else state.query[panelId] = clean
     store.set(QUERY_KEY, state.query)
+    // 查询一变，之前按需取回来的命中行键就作废了（再带着 `keys=true` 只会白花几十 KB）
+    if (state.wantKeys && state.wantKeys[panelId]) delete state.wantKeys[panelId]
     mirrorQuery(panelId)
   }
-  /** 改查询状态：**条件变了就回第 1 页**（留在第 7 页看一份只剩 2 页的结果是坑）；然后只重绘这一块。 */
+  /**
+   * 改查询状态：**条件变了就回第 1 页**（留在第 7 页看一份只剩 2 页的结果是坑）；然后**只重取这一块**。
+   * 服务端窗口开着 ⇒ 走 `refreshPanel`（向服务端要这一页：筛选/排序/分页与计数都在服务端全集上算）；
+   * 没开（形状没有行数组 / 旧数据）⇒ 本地重绘，行为与本批之前一致。
+   */
   const setQuery = (panelId, patch, { keepPage = false } = {}) => {
     const next = { ...queryOf(panelId), ...patch }
     if (!keepPage && patch.page === undefined) next.page = 0
     saveQuery(panelId, next)
     forgetSelection(panelId)            // 选择与当前查询绑定：条件一变，跨页选择作废（比静默发错 id 安全）
-    repaintPanel(panelId)
+    repaintPanel(panelId)               // 先把查询条上你刚点的那个状态画出来（立即反馈）
+    return refreshPanel(panelId)        // 再按需取页（服务端只回这一块的那一页）
   }
   /** 清空这一块的查询（关键字 + 列条件 + 排序；页码回第 1 页；每页行数保留）。 */
   const clearQuery = (panelId) => {
     saveQuery(panelId, { ...emptyQuery(), size: queryOf(panelId).size })
     repaintPanel(panelId)
+    refreshPanel(panelId)
     toast('ok', '查询已清空', '关键字 / 列条件 / 排序都清掉了；每页行数保留（那是显示偏好，不是筛选）')
+  }
+
+  // ---- 服务端窗口：把"这一块要哪一页"送到服务端（**不是**本地截断）---------------------------------
+  /** 这一块上客户端已改的格子（服务端据此把小计算成"你正要提交的那份"；只发这一块的）。 */
+  function editsSpecOf(panelId) {
+    const out = {}
+    for (const [key, fields] of Object.entries(state.edits || {})) {
+      if (!key.startsWith(`${panelId}|`) || !fields || !Object.keys(fields).length) continue
+      out[key.slice(panelId.length + 1)] = { ...fields }
+    }
+    return Object.keys(out).length ? out : null
+  }
+  /** 一块面板的查询说明（送到服务端的形状；未知/坏值由服务端洗净并在回执里如实计数）。 */
+  function specOf(panelId) {
+    const q = queryOf(panelId)
+    const spec = { kw: q.kw, sort: q.sort, page: q.page, size: q.size }
+    if (Object.keys(q.cols).length) spec.cols = q.cols
+    const bucket = filterOf(panelId)          // 桶筛选片（list）也是"看到哪些"的一部分 ⇒ 一起送
+    if (bucket !== '') spec.bucket = bucket
+    const edits = editsSpecOf(panelId)
+    if (edits) spec.edits = edits
+    // 命中行键（跨页全选用）**按需要**：默认不发（几十 KB 的行键只有点了那颗按钮才需要）
+    if (state.wantKeys?.[panelId] === true) spec.keys = true
+    return spec
+  }
+  /** 服务端窗口的请求地址（`w=1` 常开；`only` 只取这几块；`pq` = 每块的查询状态）。 */
+  function panelsUrl(only) {
+    const params = ['w=1']
+    const pq = {}
+    const ids = (only && only.length) ? only : Object.keys(state.query || {})
+    for (const panelId of ids) if (panelId) pq[panelId] = specOf(panelId)
+    if (only && only.length) params.push(`only=${encodeURIComponent(only.join(','))}`)
+    if (Object.keys(pq).length) params.push(`pq=${encodeURIComponent(JSON.stringify(pq))}`)
+    const view = state.route.view || 'home'
+    if (state.route.kind && state.route.id) {
+      return `/api/ui/object?view=${encodeURIComponent(view)}&kind=${encodeURIComponent(state.route.kind)}`
+        + `&id=${encodeURIComponent(state.route.id)}&${params.join('&')}`
+    }
+    return `/api/ui/panels?view=${encodeURIComponent(view)}&${params.join('&')}`
+  }
+  /**
+   * **按需取页**（本批的核心动作）：把这一块的查询状态送到服务端，只换这一块的 `data`（别的面板一字不动）。
+   * 纪律：读数中**如实标出来**（`data-q-busy`）；读不到**不冒充成功**（保留上一次的行 + 黄条说明 + 下一步）。
+   */
+  async function refreshPanel(panelId) {
+    const panel = state.panels.find((item) => item.id === panelId)
+    if (!panel || !panel.data || panel.data.query?.server !== true) { repaintPanel(panelId); return false }
+    state.panelBusy = { ...(state.panelBusy || {}), [panelId]: true }
+    repaintPanel(panelId)                                   // 先标"读数中"（数字不冒充已更新）
+    const out = await getJson(panelsUrl([panelId]))
+    state.panelBusy = { ...(state.panelBusy || {}), [panelId]: false }
+    const fresh = (out && out.ok && Array.isArray(out.panels))
+      ? out.panels.find((item) => item.id === panelId) : null
+    if (!fresh) {
+      banner('warn', '这一块没读到新的一页（显示的还是上一次的那一页）',
+        `${(out && (out.code || out.reason)) || 'read-failed'}`,
+        (out && out.next_action) || '点这一块的「重新读一次」或页面顶部「重载」重试')
+      repaintPanel(panelId)
+      return false
+    }
+    state.panels = state.panels.map((item) => (item.id === panelId ? fresh : item))
+    repaintPanel(panelId)
+    return true
+  }
+  /** 一次重取多块（服务端镜像读回来时用：把"换设备也在"的那套查询喂给服务端）。 */
+  async function refreshPanels(panelIds) {
+    const ids = (panelIds || []).filter((id) => id && state.panels.some((panel) => panel.id === id
+      && panel.data && panel.data.query?.server === true))
+    if (!ids.length) return false
+    const out = await getJson(panelsUrl(ids))
+    if (!out || !out.ok || !Array.isArray(out.panels)) {
+      for (const id of ids) repaintPanel(id)
+      return false
+    }
+    const byId = new Map(out.panels.map((item) => [item.id, item]))
+    state.panels = state.panels.map((item) => byId.get(item.id) ?? item)
+    for (const id of ids) repaintPanel(id)
+    return true
   }
 
   // ---- 求值：全量行集 → （筛选）→ （排序）→ （分页窗口）--------------------------------------------
@@ -399,18 +490,59 @@
   /**
    * 一块面板的**视图**（全量→筛选→排序→窗口，一次算完）；同时缓存起来供"小计重算/批量选择"用：
    * 小计与批量必须按**命中全集**算，不能只按这一页的 DOM 算（否则翻页就把别的行漏掉了）。
+   *
+   * **两条路（本批新增服务端窗口）**：
+   *   · 面板的 `data.query.server === true` ⇒ 走**服务端窗口**：`rows` 就是服务端给的那一页，
+   *     计数/页号/命中数/小计/命中行键**照抄服务端**（客户端不再自己截断，也没有全量行可截）；
+   *   · 否则照旧走**本地**：全量→筛选→排序→窗口（形状没有行数组的面板、或没带 `w=1` 的旧数据）。
    */
   const panelViews = {}
-  function queryView(panelId, columns, rows, q, rowKeyOf) {
+  function queryView(panelId, columns, rows, q, rowKeyOf, serverQuery) {
+    const view = (serverQuery && serverQuery.server === true)
+      ? serverView(panelId, columns, rows, q, rowKeyOf, serverQuery)
+      : localView(panelId, columns, rows, q, rowKeyOf)
+    panelViews[panelId] = view
+    return view
+  }
+  /** 本地路径（原样保留：它仍是"服务端不可用/旧数据"时的兜底，也是两条路对拍时的参照）。 */
+  function localView(panelId, columns, rows, q, rowKeyOf) {
     const filtered = applyQuery(columns, rows, q)
     const sorted = sortRows(filtered.matched.map((row, index) => ({ row, index })), columns, q.sort)
     const paged = pageView(sorted, q.size, q.page)
-    const view = { panelId, columns, q, total: filtered.total, matched: filtered.matched,
-      sorted, window: paged.window.map((item) => item.row), page: paged.page, pages: paged.pages,
-      start: paged.start, end: paged.end, size: q.size, active: queryActive(q),
-      rowKeyOf, byKey: new Map(rows.map((row, index) => [rowKeyOf(row, index), row])) }
-    panelViews[panelId] = view
-    return view
+    return { panelId, columns, q, server: false, total: filtered.total,
+      matched: filtered.matched, matchedCount: filtered.matched.length, matchedKeys: null,
+      matchedKeysCapped: false, sorted, window: paged.window.map((item) => item.row),
+      page: paged.page, pages: paged.pages, start: paged.start, end: paged.end, size: q.size,
+      active: queryActive(q), rowKeyOf, byKey: new Map(rows.map((row, index) => [rowKeyOf(row, index), row])),
+      rowKeys: paged.window.map((item) => rowKeyOf(item.row, item.index)),
+      totals: null, groupTotals: null, mins: null, enumOptions: null, bucketCounts: null,
+      filesCounts: null, rowsFull: rows.length, applied: null }
+  }
+  /**
+   * **服务端窗口路径**：行是服务端给的那一页，数字是服务端在全集上算的。
+   * 这里**不做任何截断**（没有全量行可截）——这正是"服务端分页"与"前端先拿全量再截断"的区别。
+   */
+  function serverView(panelId, columns, rows, q, rowKeyOf, sq) {
+    const keys = Array.isArray(sq.row_keys) && sq.row_keys.length === rows.length ? sq.row_keys : null
+    const keyAt = keys ? (row, index) => String(keys[index]) : rowKeyOf
+    return { panelId, columns, q, server: true, total: Number(sq.total) || 0,
+      matched: rows, matchedCount: Number(sq.matched) || 0,
+      matchedKeys: Array.isArray(sq.matched_keys) && sq.matched_keys.length ? sq.matched_keys : null,
+      matchedKeysCapped: sq.matched_keys_capped === true, matchedKeysCap: Number(sq.matched_keys_cap) || 0,
+      matchedKeysAvailable: Number(sq.matched_keys_available) || 0, matchedKeysOnDemand: sq.matched_keys_on_demand === true,
+      sorted: rows.map((row, index) => ({ row, index })), window: rows, rowKeys: rows.map(keyAt),
+      page: Number(sq.page) || 0, pages: Math.max(1, Number(sq.pages) || 1),
+      start: Number(sq.start) || 0, end: Number(sq.end) || rows.length, size: Number(sq.size) || 0,
+      active: sq.active === true, rowKeyOf: keyAt,
+      byKey: new Map(rows.map((row, index) => [keyAt(row, index), row])),
+      totals: Array.isArray(sq.totals) && sq.totals.length ? sq.totals : null,
+      groupTotals: Array.isArray(sq.group_totals) && sq.group_totals.length ? sq.group_totals : null,
+      mins: sq.mins && Object.keys(sq.mins).length ? sq.mins : null,
+      enumOptions: sq.enum_options && Object.keys(sq.enum_options).length ? sq.enum_options : null,
+      bucketCounts: sq.bucket_counts ?? null, levelCounts: sq.level_counts ?? null,
+      levelByBucket: sq.level_by_bucket ?? null, head: Array.isArray(sq.head) ? sq.head : null,
+      filesCounts: sq.files_counts ?? null, rowsFull: Number(sq.total_full) || 0, applied: sq.applied ?? null,
+      shape: sq.field ?? '' }
   }
   const firstKeyOf = (panel, row, index) => String(row?.id ?? row?.[(panel?.data?.columns || [])[0]?.key] ?? index)
   /** 一个格子的值：**客户端已改的优先**（小计、排序、筛选看到的都是"你正要提交的那份"）。 */
@@ -436,55 +568,86 @@
     }
   }
   const selectedAllOf = (panelId) => ((state.selectedAll || {})[panelId] || [])
-  function selectAllMatched(panelId) {
-    const view = panelViews[panelId]
+  /**
+   * 「选中全部命中行」（跨页）。服务端窗口下命中全集的行键是**按需**取的：先按一次带 `keys=true` 的
+   * 重取（只这一块），拿到行键再选中 —— 所以这一步可能是异步的（按钮先变成"正在取行键…"）。
+   */
+  async function selectAllMatched(panelId) {
+    let view = panelViews[panelId]
     if (!view) return
-    const keys = view.matched.map((row, index) => view.rowKeyOf(row, index))
+    if (view.server && !view.matchedKeys && view.matchedCount > 0 && !view.matchedKeysCapped) {
+      state.wantKeys = { ...(state.wantKeys || {}), [panelId]: true }
+      await refreshPanel(panelId)
+      view = panelViews[panelId]
+      if (!view) return
+    }
+    const keys = view.server
+      ? (view.matchedKeys || [])
+      : view.matched.map((row, index) => view.rowKeyOf(row, index))
+    if (!keys.length) {
+      return toast('warn', '这一块没法跨页全选（不是没选中）',
+        `命中行数超过服务端一次给得出行键的上限（${view.matchedKeysCap || 0} 行）：先用关键字/列条件把范围缩小，再点一次`)
+    }
     state.selectedAll = { ...(state.selectedAll || {}), [panelId]: keys }
-    for (const [index, row] of view.matched.entries()) {
+    for (const [index, row] of view.window.entries()) {
       const key = view.rowKeyOf(row, index)
-      state.selected[key] = true
       state.selectedRows = { ...(state.selectedRows || {}), [key]: row }
     }
+    // 不在本页的那些行只有 id（插件按 id 取事实，与"勾单行"走同一条路）
+    for (const key of keys) state.selected[key] = true
     repaintPanel(panelId)
+    updateSelectedCount()
+    const onPage = view.window.length
     toast('ok', `已选中全部命中行（${keys.length} 行）`,
-      '批量动作会把它们一起送出去（含不在本页的行）；换筛选条件会自动取消这份选择')
+      `批量动作会把它们一起送出去（含不在本页的那 ${Math.max(0, keys.length - onPage)} 行）；`
+      + '换筛选条件会自动取消这份选择')
   }
   function clearSelection(panelId) {
     const view = panelViews[panelId]
-    if (view) {
-      for (const [index, row] of view.rows.entries()) {
-        const key = view.rowKeyOf(row, index)
-        delete state.selected[key]
-        delete state.selectedRows[key]
-      }
+    const keys = new Set([...(view ? view.window.map((row, index) => view.rowKeyOf(row, index)) : []),
+      ...selectedAllOf(panelId)])
+    for (const key of keys) {
+      delete state.selected[key]
+      delete state.selectedRows[key]
     }
     delete (state.selectedAll || {})[panelId]
     repaintPanel(panelId)
+    updateSelectedCount()
   }
 
   // ---- 计数条（机器可对账：`data-count-*` 就是可核对的数字）----------------------------------------
   function countBarHtml(panelId, view, extra = '') {
     const attrOf = (name, value) => ` data-${name}="${attr(value)}"`
+    const busy = state.panelBusy?.[panelId] === true
     return `<div class="q-qcount" data-q-count="${attr(panelId)}"`
-      + attrOf('count-total', view.total) + attrOf('count-matched', view.matched.length)
-      + attrOf('count-window', view.window.length) + attrOf('page', view.page + 1)
+      + attrOf('count-total', view.total) + attrOf('count-matched', view.matchedCount)
+      + attrOf('count-window', view.window.length) + attrOf('count-full', view.rowsFull)
+      + attrOf('server-paged', view.server ? 1 : 0) + attrOf('q-busy', busy ? 1 : 0)
+      + attrOf('page', view.page + 1)
       + attrOf('pages', view.pages) + attrOf('page-size', view.size)
       + attrOf('q-active', view.active ? 1 : 0) + attrOf('sort', view.q.sort || '') + '>'
       + `<span>共 <b>${view.total}</b> 行</span>`
-      + `<span>命中 <b data-count-matched-num="1">${view.matched.length}</b> 行</span>`
+      + `<span>命中 <b data-count-matched-num="1">${view.matchedCount}</b> 行</span>`
       + (view.size
         ? `<span>第 <b data-count-page-num="1">${view.page + 1}</b>/<b>${view.pages}</b> 页`
-          + `（本页 <b data-count-window-num="1">${view.window.length}</b> 行；DOM 里也只渲染这么多行）</span>`
+          + `（本页 <b data-count-window-num="1">${view.window.length}</b> 行）</span>`
         : `<span>本页 <b>${view.window.length}</b> 行（**选了「全部」= 全量渲染**）</span>`)
+      + (view.server
+        ? `<span class="q-qhint" data-q-server="1" title="行由服务端按窗口给（w=1）；计数/排序/筛选都在服务端全集上算，`
+          + `客户端照抄 —— 不是把全量拿下来自己截">服务端分页</span>`
+        : '')
+      + (busy ? `<span class="q-qhint" data-q-fetching="1">正在取这一页…（数字还是上一次的）</span>` : '')
       + (view.active ? `<span class="q-qcount-on">正在筛选：${esc(querySummary(view.q))}</span>` : '')
       + (extra ? `<span>${extra}</span>` : '')
       + '</div>'
   }
 
   // ---- 查询条（关键字 / 列条件 / 分页 / 清空）-----------------------------------------------------
-  /** 枚举候选：值不多且短时才给下拉（>24 个不同值就给文本框 —— 不猜、也不摆一个没法用的下拉）。 */
-  function enumOptions(rows, column) {
+  /** 枚举候选：**服务端在全集上算好的**优先（客户端只有一页时自己算会少几个选项）；否则从行里算。
+   *  >24 个不同值就给文本框 —— 不猜、也不摆一个没法用的下拉。 */
+  function enumOptions(rows, column, view) {
+    const fromServer = view?.enumOptions?.[column.key]
+    if (Array.isArray(fromServer) && fromServer.length) return fromServer
     const seen = new Map()
     for (const row of rows) {
       const value = cellText(row, column.key).trim()
@@ -497,7 +660,7 @@
       || left[0].localeCompare(right[0], 'zh-Hans-CN')).map(([value, count]) => ({ value, count }))
   }
   /** 一列的筛选控件（形状由 `columnFilterKind` 定；值来自当前查询状态）。 */
-  function columnFilterControl(panelId, column, q, rows) {
+  function columnFilterControl(panelId, column, q, rows, view) {
     const key = String(column.key)
     const raw = String(q.cols[key] ?? '')
     const kind = columnFilterKind(column)
@@ -512,7 +675,7 @@
         + `<input type="${type}"${extra} ${base} data-q-bound="max" value="${attr(max)}" placeholder="≤"></label>`
     }
     if (kind === 'enum') {
-      const options = enumOptions(rows, column)
+      const options = enumOptions(rows, column, view)
       if (options && options.length) {
         return `<label class="q-qcol"><span>${label}</span><select ${base} data-q-enum="1">`
           + `<option value="">（全部）</option>`
@@ -541,14 +704,19 @@
       + `<button data-q-clear="${attr(panelId)}"${view.active ? '' : ' disabled'}>清空查询</button>`
       + (columns.length ? `<details class="q-qcols"${conds ? ' open' : ''}><summary>按列筛选`
         + `${conds ? `（${conds} 条生效）` : `（${columns.length} 列可选）`}</summary>`
-        + `<div class="q-qcolwrap">${columns.map((column) => columnFilterControl(panelId, column, q, rows)).join('')}</div>`
+        + `<div class="q-qcolwrap">${columns.map((column) => columnFilterControl(panelId, column, q, rows, view)).join('')}</div>`
         + `<div class="q-qhint">数值列给区间（≥ / ≤）、时间列给日期区间、短枚举列给下拉、其余列是"包含"；`
         + `条件之间是**并且**，与关键字一起生效。筛选只改"看到哪些"，不改任何事实、不写账本。</div></details>` : '')
       + `</div>`
       + countBarHtml(panelId, view,
         `${selected ? `已跨页选中 ${selected} 行 ` : ''}`
-        + (view.matched.length > view.window.length && view.size
-          ? `<button data-q-selectall="${attr(panelId)}">选中全部命中行（${view.matched.length}）</button> ` : '')
+        + (view.matchedCount > view.window.length && view.size
+          ? `<button data-q-selectall="${attr(panelId)}"${view.matchedKeysCapped
+            ? ` disabled title="命中超过 ${view.matchedKeysCap} 行：跨页全选要先缩小筛选范围"`
+            : ` title="${view.matchedKeysOnDemand
+              ? '点一下：先按需取回命中的行键（这一块，不下载整份数据），再跨页选中'
+              : '把命中全集的行一起选中（含不在本页的）'}"`}>`
+            + `选中全部命中行（${view.matchedCount}）</button> ` : '')
         + (selected ? `<button data-q-unselect="${attr(panelId)}">取消选择</button> ` : '')
         + `${sortKey ? `排序：<code>${esc(sortKey)}</code> ${sortDir === 'desc' ? '↓ 降序' : '↑ 升序'}` : '点列头可排序（升→降→取消）'}`)
       + `<div class="q-qbar-row q-qpages">`
@@ -618,9 +786,12 @@
       }
     }
   }
-  /** 重绘所有有查询状态的面板（例如服务端镜像读回来后）。 */
+  /** 重绘/重取所有有查询状态的面板（例如服务端镜像读回来后——换个浏览器也要是同一套查询）。
+   *  服务端窗口开路时**要重取**（客户端手里没有全量行，光重绘只会画出旧窗口）。 */
   function repaintQueriedPanels(panelIds) {
-    for (const panelId of panelIds || []) if (panelViews[panelId] || state.query[panelId]) repaintPanel(panelId)
+    const ids = (panelIds || []).filter((panelId) => panelViews[panelId] || state.query[panelId])
+    if (!ids.length) return false
+    return refreshPanels(ids)
   }
 
   /**
@@ -695,7 +866,8 @@
       if (node.dataset.qReset !== undefined) {
         const panelId = panelIdOf(node, 'qReset')
         saveQuery(panelId, { ...emptyQuery() })
-        return repaintPanel(panelId)
+        repaintPanel(panelId)
+        return refreshPanel(panelId)
       }
       if (node.dataset.qSelectall !== undefined) return selectAllMatched(panelIdOf(node, 'qSelectall'))
       if (node.dataset.qUnselect !== undefined) return clearSelection(panelIdOf(node, 'qUnselect'))
@@ -736,19 +908,24 @@
    * 当时的 DOM 节点数与**真的渲染了多少行**（窗口化的证据）。它是机制的一部分：验收要"性能测量"
    * 就得有一个可读的、同一口径的读数，而不是靠感觉。读数在 `window.__Q_GUI_METRICS` 里，只读。
    */
-  const perfProbe = { version: 1, count: 0, last: null, history: [] }
+  const perfProbe = { version: 2, count: 0, last: null, history: [] }
   const metricOf = (t0, extra = {}) => {
     try {
+      const windowed = state.panels.filter((panel) => (panel.data || {}).query?.server === true)
       const rows_api = state.panels.reduce((sum, panel) => sum + ((panel.data?.rows || panel.data?.items
         || panel.data?.files || []).length), 0)
+      const rows_full = windowed.reduce((sum, panel) => sum + (Number((panel.data || {}).query?.total_full) || 0), 0)
       const entry = { at: new Date().toISOString(), route: routeLabel(state.route),
         state: state.loading ? 'loading' : (state.panelsError || state.objectError ? 'error' : 'ready'),
         paint_ms: Math.round((performance.now() - t0) * 10) / 10, panels: state.panels.length,
-        rows_api, rows_dom: document.querySelectorAll('tr[data-row-key]').length,
+        // `rows_api` = 这次**真下发**的行（服务端窗口之后就是那一页）；`rows_full_server` = 面板给的全量行；
+        // `server_windowed_panels` = 有几块走服务端窗口 —— 三个数一起看才说明"首屏不再整份下发"
+        rows_api, rows_full_server: rows_full, server_windowed_panels: windowed.length,
+        rows_dom: document.querySelectorAll('tr[data-row-key]').length,
         dom_nodes: document.getElementsByTagName('*').length,
         paged_panels: state.panels.filter((panel) => {
           const view = panelViews[panel.id]
-          return view && view.size > 0 && view.matched.length > view.window.length
+          return view && view.size > 0 && view.matchedCount > view.window.length
         }).length, ...extra }
       perfProbe.count += 1
       perfProbe.last = entry
@@ -1133,10 +1310,10 @@
     }
     // ---- 查询视图（全量 → 筛选 → 排序 → 窗口）：计数、排序、筛选都在**全量行集**上算 ----------
     const q = queryOf(panel.id)
-    const view = queryView(panel.id, columns, rows, q, keyFor)
+    const view = queryView(panel.id, columns, rows, q, keyFor, data.query)
     const windowRows = view.window
     const qbar = queryBar(panel.id, columns, view, rows) + activeFilterChips(panel.id, view)
-    if (!view.matched.length) {
+    if (!view.matchedCount) {
       // **筛选后 0 行 ≠ 没有数据**：两个状态分开说，且这里给一键清空（否则用户会以为这块坏了）
       return html([qbar, countBarHtml(panel.id, view),
         `<div class="q-state info" data-state="empty" data-state-reason="filtered-out">`
@@ -1163,9 +1340,11 @@
       + ` aria-label="全选本页（不含其它页）" title="只勾本页这几行；要跨页选全部命中的行，用上面的「选中全部命中行」"></th>` : '',
       columns.map(thOf).join(''), '<th>动作</th>'])
     // `best_when:'min'`（一列里的最小值高亮）：**在命中行集上**算 —— 最小值是数据的性质，不是这一页的性质
+    // （服务端窗口开路时这个值由服务端给：客户端手里只有一页，自己算出来的"最小"会随翻页变）
     const mins = {}
     for (const column of columns) {
       if (column.best_when !== 'min') continue
+      if (view.mins && view.mins[column.key] !== undefined) { mins[column.key] = view.mins[column.key]; continue }
       let best = Infinity
       for (const row of view.matched) {
         const raw = row[column.key]
@@ -1174,8 +1353,10 @@
       }
       mins[column.key] = best
     }
-    const body = windowRows.map((row) => {
-      const rowKey = keyFor(row)
+    const body = windowRows.map((row, windowIndex) => {
+      // 行键 **按全量行集算一次**（服务端窗口下由服务端给 `row_keys`）：翻页/换筛选后行键不跟着页变，
+      // 所以编辑（`state.edits` 的键）与跨页选择不会串行。
+      const rowKey = view.rowKeyOf(row, windowIndex)
       const cells = columns.map((column) => {
         const raw = row[column.key]
         const value = raw === null || raw === undefined ? '' : String(raw)
@@ -1225,24 +1406,26 @@
         + `${cells}<td class="q-rowacts" data-label="动作">${inline} ${rowRefCell(row)}</td></tr>`
     }).join('')
     // 小计（`data.totals`）按**命中行集**算（不是本页）：翻页不会让合计变小；客户端已改的格子优先。
+    // 服务端窗口：`view.totals` 就是服务端在命中行集上算好的（已改的格子通过 `pq.edits` 一起送过去）。
     const valueOf = (rowKey, field) => editValueOf(panel.id, rowKey, field, view.byKey.get(rowKey))
-    const totals = totalsOf(data, view.matched, (row) => keyFor(row), valueOf)
+    const totals = view.totals ?? totalsOf(data, view.matched, (row) => keyFor(row), valueOf)
     // ④ 对比模式下**每组一列合计**（如"每家报价的行合计总和"）：插件声明 `data.group_totals = {key, unit}`。
-    const groupTotals = (data.group_totals && groups.length >= 2 && data.compare) ? groups.map((group) => {
-      let sum = 0
-      for (const row of view.matched) {
-        for (const column of allColumns) {
-          if (String(column.group) !== group.id) continue
-          const wanted = data.group_totals.key === undefined ? null : String(data.group_totals.key)
-          const prefix = data.group_totals.key_prefix === undefined ? null : String(data.group_totals.key_prefix)
-          if (wanted !== null && column.key !== wanted) continue
-          if (prefix !== null && !String(column.key).startsWith(prefix)) continue
-          sum += numOf(row[column.key])
+    const groupTotals = view.groupTotals ?? ((data.group_totals && groups.length >= 2 && data.compare)
+      ? groups.map((group) => {
+        let sum = 0
+        for (const row of view.matched) {
+          for (const column of allColumns) {
+            if (String(column.group) !== group.id) continue
+            const wanted = data.group_totals.key === undefined ? null : String(data.group_totals.key)
+            const prefix = data.group_totals.key_prefix === undefined ? null : String(data.group_totals.key_prefix)
+            if (wanted !== null && column.key !== wanted) continue
+            if (prefix !== null && !String(column.key).startsWith(prefix)) continue
+            sum += numOf(row[column.key])
+          }
         }
-      }
-      return { label: `${group.label} ${esc(data.group_totals.label_suffix || '合计')}`, value: sum,
-        unit: String(data.group_totals.unit || ''), raw: true }
-    }) : []
+        return { label: `${group.label} ${esc(data.group_totals.label_suffix || '合计')}`, value: sum,
+          unit: String(data.group_totals.unit || ''), raw: true }
+      }) : [])
     const controls = html([bulk ? `<button data-bulk="${attr(bulk.id)}" class="primary">${esc(bulk.title)}`
       + `（已选 <span data-selected-count="1">0</span> 行）</button>` : '',
       editable ? `<button data-submit-edits data-panel="${attr(panel.id)}" class="primary">`
@@ -1255,8 +1438,11 @@
           + `${esc(item.label)}：<b>${item.value}</b>${item.unit ? ` ${esc(item.unit)}` : ''}</span>`).join('')
         + groupTotals.map((item) => `<span class="q-sum">`
           + `${item.raw ? item.label : esc(item.label)}：<b>${item.value}</b>${item.unit ? ` ${esc(item.unit)}` : ''}</span>`).join('')
-        + `<span class="q-hint">小计按**命中行集**算（${view.matched.length} 行；不是本页 ${view.window.length} 行）`
-        + `，客户端已改的格子优先</span>`
+        + (view.server
+          ? `<span class="q-hint">小计由**服务端**在命中行集上算（${view.matchedCount} 行；本页只有 ${view.window.length} 行）`
+            + `，改格子后自动重算一次（重算前不拿本页的数字冒充全集）</span>`
+          : `<span class="q-hint">小计按**命中行集**算（${view.matchedCount} 行；不是本页 ${view.window.length} 行）`
+            + `，客户端已改的格子优先</span>`)
         + `${editable ? `<span class="q-keys">Tab/Shift+Tab 左右走 · Enter/Shift+Enter 上下走 · Esc 还原这一格 · Ctrl/Cmd+Enter 提交</span>`
           : '<span class="q-keys">这一组勾选只影响看到的列（关键列固定不参与勾选）</span>'}`
         + `</div>`
@@ -1265,17 +1451,21 @@
     return html([qbar, cmpBar, `<div class="q-scroll${columns.some((column) => column.pin) ? ' q-scroll-wide' : ''}">`
       + `<table class="q-table${wideTable ? ' q-wide' : ''}" data-panel-table="${attr(panel.id)}">`
       + `<caption class="q-caption">${esc(panel.title)}` + `（本页 ${view.window.length} / 共 ${view.total} 行`
-      + `${view.active ? `，命中 ${view.matched.length}` : ''}）</caption>`
+      + `${view.active ? `，命中 ${view.matchedCount}` : ''}）</caption>`
       + `<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`,
       controls ? `<div class="q-actions">${controls}</div>` : '', totalBar])
   }
 
   function renderList(panel, data) {
+    const server = data.query?.server === true
     const all = data.items || []
     const buckets = bucketsOf(data, all)
     const current = filterOf(panel.id)
-    const bar = bucketBar(panel.id, buckets, current, all)
-    const items = byBucket(all, current)
+    // 桶筛选片的数字：服务端窗口开路时用**服务端在全集上算好的桶计数**（否则只有一页，片上的数字会跟着变小）
+    const counts = server ? { '': Number(data.query.total_full) || 0, ...(data.query.bucket_counts || {}) } : null
+    const bar = bucketBar(panel.id, buckets, current, all, counts)
+    // 服务端窗口：桶筛选**已经在服务端做过**（`pq.<面板>.bucket`），这里别再筛第二遍（会把窗口再切小）
+    const items = server ? all : byBucket(all, current)
     if (!items.length) {
       return bar + stateBlock({ kind: 'empty',
         title: current === '' ? '没有条目' : '这一桶里没有条目（不是坏了）',
@@ -1287,9 +1477,9 @@
     const columns = (data.columns || []).concat(data.columns ? [] : [{ key: 'title', label: '标题' },
       { key: 'body', label: '详情' }, { key: 'next_action', label: '下一步' }])
     const q = queryOf(panel.id)
-    const view = queryView(panel.id, columns, items, q, (row, index) => String(row.id ?? index))
+    const view = queryView(panel.id, columns, items, q, (row, index) => String(row.id ?? index), data.query)
     const qbar = queryBar(panel.id, columns, view, items) + activeFilterChips(panel.id, view)
-    if (!view.matched.length) {
+    if (!view.matchedCount) {
       return bar + qbar + `<div class="q-state info" data-state="empty" data-state-reason="filtered-out">`
         + `<b>筛选后 0 条（不是这块没有条目）</b> <code>filtered-out</code>`
         + `<div class="q-hint">这一桶本来有 ${view.total} 条：${esc(querySummary(view.q))} 把它们全滤掉了。</div>`
@@ -1336,7 +1526,7 @@
       { key: 'at', label: '时间' }, { key: 'sha256', label: 'sha256', filter: 'text' },
       { key: 'visibility_label', label: '给谁看', filter: 'enum' }, { key: 'bytes', label: '大小', filter: 'number' }]
     const q = queryOf(panel.id)
-    const view = queryView(panel.id, fileColumns, allFiles, q, (row, index) => String(row.id ?? index))
+    const view = queryView(panel.id, fileColumns, allFiles, q, (row, index) => String(row.id ?? index), data.query)
     const rows = view.window
     const qbar = allFiles.length > 0 ? queryBar(panel.id, fileColumns, view, allFiles) + activeFilterChips(panel.id, view) : ''
     const upload = data.upload || null
@@ -1381,19 +1571,21 @@
           : `<a class="q-deeplink" href="${attr(row.url)}" download="${attr(row.name)}">下载</a>` +
             `${rowRowDelete(row, rowAction)}`}</td></tr>`
     }).join('') : ''
-    const live = view.matched.filter((row) => row.deleted !== true).length
-    const dead = view.matched.length - live
+    const live = view.filesCounts ? view.filesCounts.live : view.matched.filter((row) => row.deleted !== true).length
+    const dead = view.filesCounts ? view.filesCounts.dead : view.matchedCount - live
     const fileCounts = `<div class="q-qcount" data-q-count="${attr(panel.id)}"`
-      + ` data-count-total="${attr(view.total)}" data-count-matched="${attr(view.matched.length)}"`
+      + ` data-count-total="${attr(view.total)}" data-count-matched="${attr(view.matchedCount)}"`
       + ` data-count-window="${attr(view.window.length)}" data-page="${attr(view.page + 1)}"`
+      + ` data-count-full="${attr(view.rowsFull)}" data-server-paged="${attr(view.server ? 1 : 0)}"`
       + ` data-pages="${attr(view.pages)}"><span>共 <b>${view.total}</b> 个文件记录</span>`
-      + `<span>命中 <b>${view.matched.length}</b>（活的 ${live}`
+      + `<span>命中 <b>${view.matchedCount}</b>（活的 ${live}`
       + `${dead ? `，已删留痕 ${dead}` : ''}）</span>`
-      + `<span>第 ${view.page + 1}/${view.pages} 页（本页 ${view.window.length} 行）</span></div>`
+      + `<span>第 ${view.page + 1}/${view.pages} 页（本页 ${view.window.length} 行）</span>`
+      + `${state.panelBusy?.[panel.id] === true ? '<span class="q-hint">正在取这一页…</span>' : ''}</div>`
     const table = rows.length
       ? `<div class="q-scroll"><table class="q-table q-files-table" data-panel-table="${attr(panel.id)}">` +
         `<caption class="q-caption">${esc(panel.title)}（本页 ${rows.length} / 共 ${view.total} 个文件记录` +
-        `${view.active ? `，命中 ${view.matched.length}` : ''}）` +
+        `${view.active ? `，命中 ${view.matchedCount}` : ''}）` +
         `</caption>${head}<tbody>${body}</tbody></table></div>`
       : (allFiles.length
         ? `<div class="q-state info" data-state="empty" data-state-reason="filtered-out">`
@@ -1428,7 +1620,22 @@
         `<div class="q-metric"><b>${esc(item.value)}</b><span>${esc(item.label)}</span></div>`).join('')}</div>`
     }
     if (kind === 'kv') {
-      return `<dl class="q-kv">${(data.items || []).map((item) =>
+      // kv 也是"行"（`key/value` 一对一行）：同样按需取窗口 —— 一个对象上挂 900 条预填读数时，
+      // 一次全渲染既慢又翻不到后面；计数/搜索/分页与表同一条机制（服务端窗口有就照抄服务端的数字）。
+      const cols = [{ key: 'key', label: '键' }, { key: 'value', label: '值' }]
+      const items = data.items || []
+      const q = queryOf(panel.id)
+      const view = queryView(panel.id, cols, items, q, (row, index) => String(row.id ?? index), data.query)
+      // 只有"真的多到要翻页"或"用户筛过"才摆查询条（一两行的读数不该长出一条搜索框）
+      const showBar = view.total > view.size || view.active || view.window.length < view.total
+      const qbar = (view.size && showBar) ? queryBar(panel.id, cols, view, items) + activeFilterChips(panel.id, view) : ''
+      if (view.size && !view.matchedCount) {
+        return qbar + `<div class="q-state info" data-state="empty" data-state-reason="filtered-out">`
+          + `<b>筛选后 0 条（不是这块没有数据）</b> <code>filtered-out</code>`
+          + `<div class="q-hint">这块本来有 ${view.total} 条：${esc(querySummary(view.q))} 把它们全滤掉了。</div>`
+          + `<div class="q-actions"><button class="primary" data-q-clear="${attr(panel.id)}">清空查询</button></div></div>`
+      }
+      return qbar + `<dl class="q-kv">${view.window.map((item) =>
         `<dt>${esc(item.key)}</dt><dd>${item.code ? `<code>${esc(item.value)}</code>` : esc(item.value)}</dd>`).join('')}</dl>`
     }
     if (kind === 'list') return renderList(panel, data)
@@ -1565,20 +1772,57 @@
   }
 
   // ---------------------------------------------------------------- 工作台：「你现在该做什么」
+  /**
+   * 待办聚合（机制）：把这一页上各面板报的条目汇到一起，按级别排（急的在前）。
+   *
+   * **服务端窗口**：面板只下发"排在前面的那几条"（`data.query.head`）—— 但**数字**一个都不能少：
+   * `total_full` / `level_counts` / `bucket_counts` / `level_by_bucket` 都是服务端在**全集**上算的，
+   * 所以"有 N 件需要你处理"仍然是全集上的数字（不是"有 8 件"）。
+   */
   function todoItems() {
     const out = []
+    let total = 0
+    let urgent = 0
+    const bucketTotal = {}
+    const bucketUrgent = {}
+    let windowed = false
     for (const panel of state.panels) {
+      const q = (panel.data || {}).query
+      if (q && q.server === true && Array.isArray(q.head)) {
+        windowed = true
+        total += Number(q.total_full) || 0
+        const levels = q.level_counts || {}
+        urgent += (Number(levels.warn) || 0) + (Number(levels.bad) || 0)
+        for (const [key, n] of Object.entries(q.bucket_counts || {})) {
+          bucketTotal[key] = (bucketTotal[key] || 0) + (Number(n) || 0)
+        }
+        for (const [key, lv] of Object.entries(q.level_by_bucket || {})) {
+          bucketUrgent[key] = (bucketUrgent[key] || 0) + (Number(lv.warn) || 0) + (Number(lv.bad) || 0)
+        }
+        for (const item of q.head) out.push({ ...item, panel_id: panel.id, plugin_id: panel.plugin_id })
+        continue
+      }
       const items = ((panel.data || {}).items || [])
+      total += items.length
       for (const item of items) {
+        const key = String(item.bucket ?? '')
+        const hot = item.level === 'warn' || item.level === 'bad'
+        if (hot) urgent += 1
+        if (key !== '') {
+          bucketTotal[key] = (bucketTotal[key] || 0) + 1
+          if (hot) bucketUrgent[key] = (bucketUrgent[key] || 0) + 1
+        }
         out.push({ ...item, panel_id: panel.id, plugin_id: panel.plugin_id })
       }
     }
     const rank = { bad: 0, warn: 1, info: 2, ok: 3 }
-    return out.sort((left, right) => (rank[left.level] ?? 2) - (rank[right.level] ?? 2))
+    const items = out.sort((left, right) => (rank[left.level] ?? 2) - (rank[right.level] ?? 2))
+    return { items, total, urgent, bucketTotal, bucketUrgent, windowed }
   }
 
   function workbenchHtml() {
-    const items = todoItems()
+    const tally = todoItems()
+    const items = tally.items
     const last = lastRoute()
     const actions = state.surface.actions.filter((action) => !action.inline)
     const groups = [...new Set(actions.map((action) => action.group || '通用'))]
@@ -1586,25 +1830,28 @@
     const buckets = bucketsOf({}, items)
     const current = filterOf('workbench')
     const shown = byBucket(items, current)
-    const wanted = shown.filter((item) => item.level === 'warn' || item.level === 'bad')
+    // 计数用的是**全集上的数字**（服务端窗口开路时由服务端给；本地路径就是 rows.length）
+    const shownTotal = current === '' ? tally.total : (tally.bucketTotal[current] ?? shown.length)
+    const wantedCount = current === '' ? tally.urgent
+      : (tally.bucketUrgent[current] ?? shown.filter((item) => item.level === 'warn' || item.level === 'bad').length)
     const headline = current !== ''
-      ? `按「${esc(String(buckets.find((b) => b.key === current)?.label ?? current))}」筛选：${shown.length} 条`
-        + `（全部 ${items.length} 条；不带分类的待办只在「全部」里出现）`
-      : (wanted.length
-        ? `有 ${wanted.length} 件需要你处理${items.length > wanted.length ? `，另有 ${items.length - wanted.length} 条信息` : ''}`
-        : (items.length ? `眼下没有卡住你的事（${items.length} 条信息）` : '还没有插件报告待办'))
+      ? `按「${esc(String(buckets.find((b) => b.key === current)?.label ?? current))}」筛选：${shownTotal} 条`
+        + `（全部 ${tally.total} 条；不带分类的待办只在「全部」里出现）`
+      : (wantedCount
+        ? `有 ${wantedCount} 件需要你处理${tally.total > wantedCount ? `，另有 ${tally.total - wantedCount} 条信息` : ''}`
+        : (tally.total ? `眼下没有卡住你的事（${tally.total} 条信息）` : '还没有插件报告待办'))
     // 急的排前面，但**信息类也要摆出来**：只显示急的会让"收到几条报价登记"这种线索消失
     const list = shown.slice(0, 8)
-    const rest = shown.length - list.length
-    return `<section class="q-todo" data-workbench="1" data-todo-count="${items.length}"
-      data-todo-urgent="${wanted.length}">
+    const rest = Math.max(0, shownTotal - list.length)
+    return `<section class="q-todo" data-workbench="1" data-todo-count="${tally.total}"
+      data-todo-urgent="${wantedCount}" data-todo-windowed="${tally.windowed ? 1 : 0}">
   <div class="q-todo-head">
     <h2>你现在该做什么</h2>
-    <p>${esc(headline)}${current === '' && items.length && wanted.length
-      ? `（另有 ${items.length - wanted.length} 条信息）` : ''}</p>
+    <p>${esc(headline)}${current === '' && tally.total && wantedCount
+      ? `（另有 ${tally.total - wantedCount} 条信息）` : ''}</p>
     <button class="q-link" data-open="palette">搜全部动作（点这里；键盘 <kbd>Ctrl/⌘+K</kbd>）</button>
   </div>
-  ${bucketBar('workbench', buckets, current, items)}
+  ${bucketBar('workbench', buckets, current, items, { '': tally.total, ...tally.bucketTotal })}
   ${list.length ? `<ul class="q-todo-list">${list.map(todoRow).join('')}</ul>`
     : stateBlock({ kind: 'empty', title: '没有待办（不是坏了）', reason: 'no-todo',
       hint: '工作台上的待办由插件注册；一个插件都没报待办时这里是空的。',
@@ -2201,11 +2448,15 @@
     root.querySelectorAll('[data-export-columns]').forEach((node) =>
       node.addEventListener('click', () => openColumnsPicker(node.dataset.exportColumns)))
     root.querySelectorAll('[data-open="palette"]').forEach((node) => node.addEventListener('click', openPalette))
-    // 桶筛选片（「我的 / 我指派的 / 全部」）：只改"看到哪些"，不改任何事实；选择存本浏览器
+    // 桶筛选片（「我的 / 我指派的 / 全部」）：只改"看到哪些"，不改任何事实；选择存本浏览器 + 服务端（按身份）
     root.querySelectorAll('[data-bucket-filter]').forEach((node) => {
       const pick = () => {
         setFilter(node.dataset.bucketFilter, node.dataset.bucketKey)
-        renderMain()
+        const scope = String(node.dataset.bucketFilter ?? '')
+        // 面板自己的桶筛选片要**把这一块重取一遍**（服务端窗口：新桶的行在服务端，不在本页）
+        const panel = state.panels.find((item) => item.id === scope)
+        if (panel && panel.data && panel.data.query?.server === true) refreshPanel(scope)
+        else renderMain()
       }
       node.addEventListener('click', pick)
       node.addEventListener('keydown', (ev) => {
@@ -2382,8 +2633,12 @@
     const panel = state.panels.find((item) => item.id === panelId)
     const source = panel?.data?.rows || []
     const firstKey = panel?.data?.columns?.[0]?.key
+    // 行键与表格/编辑用的那一套一致（服务端窗口下由服务端给 `row_keys`；否则按原始下标）
+    const viewForKeys = panelViews[panelId]
     const original = new Map()
-    source.forEach((row, index) => original.set(String(row.id ?? row[firstKey] ?? index), row))
+    source.forEach((row, index) => original.set(viewForKeys
+      ? viewForKeys.rowKeyOf(row, index)
+      : String(row.id ?? row[firstKey] ?? index), row))
     const table = panelNode.querySelector('table[data-panel-table]')
     const dom = new Map()
     for (const tr of [...(table?.querySelectorAll('tbody tr[data-row-key]') ?? [])]) {
@@ -2407,17 +2662,32 @@
     // **小计按命中行集算**（与首屏渲染同一口径）：分页后本页只有几十行，若按 DOM 算，
     // 合计会随翻页变小 —— 那是错的数字。命中行集来自面板视图缓存（全量→筛选后的那批）。
     const view = panelViews[panelId]
-    const rowsForTotals = view ? view.matched : [...dom.keys()].map((key) => original.get(key) ?? {})
-    const keyOfRow = view ? (row) => view.rowKeyOf(row) : (row, index) => String(row.id ?? index)
-    const live = totalsOf(panel?.data ?? {}, rowsForTotals, keyOfRow, valueOf)
-    panelNode.querySelectorAll('[data-total]').forEach((node, index) => {
-      const rule = live[index]
-      const holder = node.querySelector('b')
-      if (holder && rule) holder.textContent = String(rule.value)
-    })
+    if (view && view.server) {
+      // **服务端窗口**：小计在服务端按命中行集算（客户端手里只有一页，自己算必然少算别的页）。
+      // 改了格子 ⇒ 把这一块带着改动（`pq.edits`）重取一次，小计由服务端重算；期间**如实标成"重算中"**，
+      // 不拿本页的数字冒充全集（那正是"错数字"）。行内合计（×数量 = …）与"已改 N 行"仍然即时。
+      const bar = panelNode.querySelector(`[data-editbar="${panelId}"]`)
+      if (bar) bar.dataset.totalPending = '1'
+      scheduleTotalsRefresh(panelId)
+    } else {
+      const rowsForTotals = view ? view.matched : [...dom.keys()].map((key) => original.get(key) ?? {})
+      const keyOfRow = view ? (row) => view.rowKeyOf(row) : (row, index) => String(row.id ?? index)
+      const live = totalsOf(panel?.data ?? {}, rowsForTotals, keyOfRow, valueOf)
+      panelNode.querySelectorAll('[data-total]').forEach((node, index) => {
+        const rule = live[index]
+        const holder = node.querySelector('b')
+        if (holder && rule) holder.textContent = String(rule.value)
+      })
+    }
     const changed = editRowsOf(panelId).length
     el('q-view').querySelectorAll(`[data-edit-count="${panelId}"]`)
       .forEach((node) => { node.textContent = String(changed) })
+  }
+  /** 改动之后的小计重算（服务端窗口）：去抖一次，读回的是服务端在命中行集上算好的那个数。 */
+  const totalsTimers = {}
+  function scheduleTotalsRefresh(panelId) {
+    clearTimeout(totalsTimers[panelId])
+    totalsTimers[panelId] = setTimeout(() => { refreshPanel(panelId) }, 260)
   }
   /**
    * ③ 键盘流转：`Enter` 同列下一行 / `Shift+Enter` 上一行 / `Tab` 下一格 / `Shift+Tab` 上一格 /
@@ -3586,9 +3856,10 @@
     state.loading = { at: new Date().toISOString(), view: route.view, kind: route.kind, id: route.id }
     renderMain(); renderBanners()
     const [panels, notifications, status] = await Promise.all([
-      object ? getJson(`/api/ui/object?view=${encodeURIComponent(route.view)}&kind=${encodeURIComponent(route.kind)}`
-        + `&id=${encodeURIComponent(route.id)}`)
-        : getJson(`/api/ui/panels?view=${encodeURIComponent(route.view)}`),
+      // **首屏也走服务端窗口**（`w=1` + 每块已存的查询状态 `pq`）：首屏只下发"这一页要看的那些行"，
+      // 计数/排序/筛选由服务端在全集上算（口径见 `/api/ui/surface` 的 `io.window`）。
+      // 没带 `pq` 的面板用服务端默认每页行数（25）—— 与界面默认一致。
+      getJson(panelsUrl(null)),
       getJson('/api/ui/notifications'),
       getJson('/api/ui/status'),
     ])

@@ -583,7 +583,7 @@ export async function register(surface, host) {
       const waiting = typeRows(sRows, 'change/proposed').filter((row) => !typeRows(sRows, 'change/responded')
         .some((other) => asText(bodyOf(other).change_id) === asText(bodyOf(row).change_id)))
       if (waiting.length) {
-        items.push({ level: 'warn', title: `${waiting.length} 份变更单待我回应`,
+        items.push({ level: 'warn', title: `供应商侧：${waiting.length} 份变更单待供应商回应`,
           body: waiting.map((row) => `${asText(bodyOf(row).change_id)}（${asText(bodyOf(row).package_id)}）`).join('；'),
           next_action: '看逐行差异 → 接受或异议（`change.respond`）' })
       }
@@ -595,7 +595,7 @@ export async function register(surface, host) {
         return latest !== null && basedOnRev(list, quote.submitted_at) < latest.rev
       })
       if (stale.length) {
-        items.push({ level: 'warn', title: `${stale.length} 份报价已被新版作废，需要重报`,
+        items.push({ level: 'warn', title: `供应商侧：${stale.length} 份报价已被新版作废，需要重报`,
           body: stale.map((quote) => `${quote.quote_id}（基于 rev${basedOnRev(history.get(quote.package_id), quote.submitted_at)}）`).join('；'),
           next_action: '在「报价状态轨」里点「按最新 rev 重报」（预填旧价 → 生成新草稿 → 人签提交）' })
       }

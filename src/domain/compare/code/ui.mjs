@@ -143,11 +143,11 @@ export async function register(surface, host) {
       if (!json?.ok || json.degraded || !ranking.length) {
         return { ok: true, kind: 'list', degraded: true, reason: json?.reason ?? 'no-ranking',
           next_action: json?.next_action ?? '等供应商提交报价（人签）后再排',
-          items: [{ level: 'info', title: '暂无可比价的报价', body: '本侧账本里还没有已送达的报价事实',
+          items: [{ level: 'info', title: '承包商侧：暂无可比价的报价', body: '本侧账本里还没有已送达的报价事实',
             next_action: '等供应商在 APP 里人签提交报价' }] }
       }
       return { ok: true, kind: 'list', items: ranking.slice(0, 3).map((row) => ({ level: row.rank === 1 ? 'ok' : 'info',
-        title: `第 ${row.rank} 名 ${row.quote_id}（得分 ${row.score}）`,
+        title: `承包商侧：第 ${row.rank} 名 ${row.quote_id}（得分 ${row.score}）`,
         body: Object.entries(row.components ?? {}).map(([key, comp]) => `${LABELS[key] ?? key}=${comp.value}`).join(' · '),
         next_action: row.rank === 1 ? '授标链：提意向 → 等供应商确认 → 人签承诺 → 人签发 PO' : '调权重看名次是否变' })) }
     } }))

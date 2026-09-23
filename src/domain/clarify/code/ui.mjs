@@ -643,19 +643,19 @@ export async function register(surface, host) {
       const acked = new Set(typeRows(supplierRows, 'rfq/acknowledged').map((row) => asText(bodyOf(row).package_id)))
       const tokens = packages.filter((entry) => !acked.has(entry.package_id))
       if (tokens.length) {
-        items.push({ level: 'warn', title: `${tokens.length} 个包还没认收`,
+        items.push({ level: 'warn', title: `供应商侧：${tokens.length} 个包还没认收`,
           body: tokens.map((entry) => entry.package_id).join(' '),
           next_action: '在「我收到的包」里点「我已收到 @revN」（对方据此知道你不是没看见）' })
       }
       const openTickets = ticketsOf(host, 'supplier').filter((ticket) => ticket.status === 'open')
       if (openTickets.length) {
-        items.push({ level: 'warn', title: `${openTickets.length} 个澄清工单还没有答复`,
+        items.push({ level: 'warn', title: `供应商侧：${openTickets.length} 个澄清工单还没有答复`,
           body: openTickets.map((ticket) => `${ticket.ticket_id}（${ticket.question.slice(0, 40)}）`).join('；'),
           next_action: '看「我的澄清工单」；答复由承包商侧作答后镜像回来' })
       }
       const lost = outcomesOf(host).mine.filter((item) => asText(item.kind) === 'lost')
       if (lost.length) {
-        items.push({ level: 'info', title: `有 ${lost.length} 条落标告知（本次未中选）`,
+        items.push({ level: 'info', title: `供应商侧：有 ${lost.length} 条落标告知（本次未中选）`,
           body: lost.map((item) => `${item.package_id}：${item.reason_category} — ${item.notice}`).join('；'),
           next_action: '在「落标告知」里点「我知道了」（回执让对方知道已送达）' })
       }

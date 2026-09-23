@@ -287,15 +287,15 @@ export async function register(surface, host) {
       const state = stateOf(host, 'supplier')
       const items = []
       if (!state.calendar.size) {
-        items.push({ level: 'warn', title: '还没有产能日历',
+        items.push({ level: 'warn', title: '供应商侧：还没有产能日历',
           body: '没有日历就没有可行性试算（承诺交期时给不出"够不够"的结论）',
           next_action: '用「设置产能日历」填几天的可用产量（私域，不外发）' })
       } else {
-        items.push({ level: 'ok', title: `产能日历已设置 ${state.calendar.size} 天`,
+        items.push({ level: 'ok', title: `供应商侧：产能日历已设置 ${state.calendar.size} 天`,
           body: '承诺交期时会按窗口实时试算（需要量 vs 日历可用）', next_action: '去承诺交期' })
       }
       for (const conflict of state.conflicts) {
-        items.push({ level: 'warn', title: `冲突：承诺 ${asText(conflict.commitment_id)} 不可行`,
+        items.push({ level: 'warn', title: `供应商侧：承诺 ${asText(conflict.commitment_id)} 不可行（产能冲突）`,
           body: `需要 ${conflict.required}，日历可用 ${conflict.available}（缺口 ${conflict.shortfall}）`,
           next_action: '去「冲突提醒」点进那个承诺：或缩量、或改期（firm 只能由人改期留痕）' })
       }

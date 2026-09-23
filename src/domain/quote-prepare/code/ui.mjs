@@ -670,15 +670,16 @@ export async function register(surface, host) {
       const mine = myPackage(host, realmOf('supplier'))
       const items = []
       items.push({ level: pending.length ? 'warn' : 'info',
-        title: pending.length ? `${pending.length} 份草稿待你人签提交` : '没有待签署的草稿',
-        body: '提交报价是对外承诺：要人签（human:<你的名字>）；**一份草稿签一次就提交整份**',
+        title: pending.length ? `供应商侧：${pending.length} 份草稿待供应商人签提交` : '供应商侧：没有待签署的草稿',
+        body: '提交报价是对外承诺：要人签（human:<你的名字>）；**一份草稿签一次就提交整份**。'
+          + '（这一条属于**供应商侧**：工作台把两侧的待办并在一张卡上，只有登录供应商侧的那个人能签。）',
         action: pending.length ? 'quote.submit' : 'quote.draft',
         label: pending.length ? '人签提交报价' : '备一份草稿',
         next_action: pending.length ? '点按钮直接开签名弹层（一次签完整份）；也可以在「我的草稿」里逐条签'
           : '先把表里的单价与交期填完，再「备这份草稿」（整张表一次提交）' })
       items.push({ level: mine.ok ? 'info' : 'warn',
-        title: mine.ok ? `发给我的包：${(mine.envelope.spec?.items ?? []).length} 条行项目（rev${mine.envelope.rev}）`
-          : '还没有发给我的 RFQ 包',
+        title: mine.ok ? `供应商侧：发给供应商的包（${(mine.envelope.spec?.items ?? []).length} 条行项目，rev${mine.envelope.rev}）`
+          : '供应商侧：还没有发给供应商的 RFQ 包',
         body: mine.ok ? `报价截止 ${(mine.envelope.spec?.deadlines ?? {}).quote_by ?? '—'}` : mine.reason,
         action: mine.ok ? 'quote.draft' : '', label: '备这份草稿',
         next_action: mine.ok ? '去填单价与交期 → 备草稿' : (mine.next_action ?? ''),

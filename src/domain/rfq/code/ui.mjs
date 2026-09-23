@@ -154,13 +154,13 @@ export async function register(surface, host) {
       const quotes = rowsOfType(rows, 'quote/submitted').map((row) => bodyOf(row))
       const items = []
       items.push({ level: packages.length ? 'info' : 'warn',
-        title: packages.length ? `已发布 ${packages.length} 个包` : '还没有发布任何 RFQ',
+        title: packages.length ? `承包商侧：已发布 ${packages.length} 个包` : '承包商侧：还没有发布任何 RFQ',
         body: packages.slice(-1).map((row) => `${row.package_id} rev${row.rev}（截止 ${row.quote_by ?? '—'}）`).join(''),
         next_action: packages.length ? '点按钮看最新那一包的对象页（可复制分享）' : '用「发布 RFQ」发一包（不产生对外义务）',
         action: 'rfq.publish', label: packages.length ? '再发一包' : '发布 RFQ',
         ref: packages.length ? { kind: 'package', id: asText(packages[packages.length - 1].package_id) } : null })
       items.push({ level: quotes.length ? 'ok' : 'warn',
-        title: quotes.length ? `收到 ${quotes.length} 条报价登记` : '还没有收到报价',
+        title: quotes.length ? `承包商侧：收到 ${quotes.length} 条报价登记` : '承包商侧：还没有收到报价',
         body: quotes.slice(0, 3).map((row) => `${row.quote_id}：${row.item_id} @ ${row.unit_price_cents} 分`).join('；'),
         next_action: quotes.length ? '去比价（可调权重，贡献可解释）→ 授标（人签）' : '等供应商人签提交',
         action: quotes.length ? 'compare.rank' : '', label: '用当前权重排一次' })

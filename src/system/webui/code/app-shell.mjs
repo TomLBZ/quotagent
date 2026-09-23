@@ -352,6 +352,401 @@ function readBody(req, done) {
   req.on('error', () => done(null))
 }
 
+// ============================================================================================
+// **服务端窗口（分页 / 筛选 / 排序 / 计数）** —— 机制（0 业务语义）。
+//
+// 为什么搬到服务端：面板把**全量行**发给客户端、由客户端"筛选→排序→分页"时，首屏要等一整份载荷
+// （实测 5395 行 / 3.4 MB / 1825 ms）。而客户端真正需要的是**这一页的行** + **在全集上算出来的数字**。
+// 于是这几件事在服务端做，客户端**照抄**：
+//   ① 筛选（关键字 ∧ 每列条件 ∧ list 的桶筛选）、② 稳定全序排序、③ 分页窗口（本页那几行）；
+//   ④ 计数（`共 N` = 面板给的行数、`命中 M` = 筛选后剩下的、`第 P/PP 页`）；
+//   ⑤ 命中行集的**派生物**（小计 `totals`、`best_when:'min'` 的最小值、枚举候选、桶计数、级别计数、
+//      跨页全选用的行键）—— 客户端只拿一页时这些自己算必错，所以必须一起给。
+//
+// 语义不变量（每条都有对账脚本顶着；口径与实测数字见 `src/system/webui/docs/scale-and-performance.md`）：
+//   1. 窗口里的行**逐行等于**"全量 → 筛选 → 排序"后的第 `start..end` 行（**不是**前端把全量截一段）；
+//   2. `total` 恒等于面板给的行数（与不分页时看到的同一个数字）；`matched` 恒等于独立实现对**全量行**
+//      算出的筛选结果（JS 与 Python 两份实现逐项对拍）；
+//   3. 排序是全序且稳定（同值按原始行序）⇒ "排序后第 k 行"与全量排序的第 k 行逐行相同；
+//   4. 只读投影：不写账本、不落文件、不改任何事实（拒绝/筛选都不产生副作用）。
+//
+// 默认**不开窗口**（请求里没有 `w`/`pq` ⇒ 原样返回全量行）：既有调用方（`src/system/webui/tools/`、
+// `tmp/` 脚本、旧客户端）行为一字不变；界面（`code/assets/app.js`）每次都带 `w=1`，所以首屏走窗口这条路。
+// ============================================================================================
+/** 每页行数（`0` = 全部：**明确选择**的全量渲染，界面会写明"这一页会全量渲染"）。与客户端同一套取值。 */
+export const WINDOW_SIZES = [10, 25, 50, 100, 250, 0]
+export const WINDOW_DEFAULT_SIZE = 25
+/** 窗口能作用的形状 → 行数组字段名（其余形状没有行数组，原样返回）。 */
+export const WINDOW_FIELDS = { table: 'rows', list: 'items', files: 'files', kv: 'items' }
+/** 有界（超出的**丢掉并如实计数**在 `dropped` 里，不静默截断成另一份查询）。 */
+export const WINDOW_LIMITS = { kw: 120, cols: 40, col_value: 80, page: 100000, edits: 200, fields: 40,
+  keys: 5000, head: 8, options: 24, option_chars: 24, key_chars: 60, bucket: 120 }
+/** 待办级别 → 名次（**工作台**按它排序；`level` 是外壳自己的状态词汇，不是业务字段）。 */
+export const WINDOW_LEVEL_RANK = { bad: 0, warn: 1, info: 2, ok: 3 }
+
+const windowText = (value) => (value === null || value === undefined ? '' : String(value))
+/** 列筛型：插件显式声明优先，其余按列 `type` 自动判型（与客户端 `columnFilterKind` 同一判据）。 */
+export const windowFilterKind = (column) => {
+  const declared = String(column?.filter ?? '')
+  if (['enum', 'text', 'number', 'date'].includes(declared)) return declared
+  if (column?.type === 'number') return 'number'
+  if (column?.type === 'date' || column?.type === 'datetime') return 'date'
+  return 'text'
+}
+/** 一行的"可搜文本"：**所有标量字段**（含没显示的列、id、时刻）—— 与客户端 `rowHaystack` 逐字节同口径。 */
+export const windowHaystack = (row, columns) => {
+  const parts = []
+  for (const column of columns) parts.push(windowText(row?.[column.key]))
+  for (const [key, value] of Object.entries(row || {})) {
+    if (key === 'ref' || key === 'row_actions' || key === 'preset') continue
+    if (value === null || typeof value === 'object') continue
+    parts.push(String(value))
+  }
+  return parts.join(' \u0000 ').toLowerCase()
+}
+/** 单列条件：`数值/时间` 用 `min~max`、枚举用全等、文本用包含（都忽略大小写）—— 同客户端 `matchColumn`。 */
+export const windowMatchColumn = (row, column, raw) => {
+  const value = String(raw ?? '').trim()
+  if (value === '') return true
+  const kind = windowFilterKind(column)
+  const cell = windowText(row?.[column.key])
+  if (kind === 'number') {
+    const [min, max] = value.split('~')
+    const n = Number(cell)
+    if (!Number.isFinite(n) || cell.trim() === '') return false
+    if (min !== undefined && min.trim() !== '' && n < Number(min)) return false
+    if (max !== undefined && max.trim() !== '' && n > Number(max)) return false
+    return true
+  }
+  if (kind === 'date') {
+    const [from, to] = value.split('~')
+    const day = cell.slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false
+    if (from !== undefined && from.trim() !== '' && day < from.trim()) return false
+    if (to !== undefined && to.trim() !== '' && day > to.trim()) return false
+    return true
+  }
+  if (kind === 'enum') return cell === value
+  return cell.toLowerCase().includes(value.toLowerCase())
+}
+/** **全量行集 → 命中行集**（关键字 ∧ 每个列条件）；`total` 是面板给的全部行（计数口径的基准）。 */
+export const windowFiltered = (columns, rows, spec) => {
+  const conditions = Object.entries(spec.cols).map(([key]) => [columns.find((column) => column.key === key)
+    || { key, type: 'text' }, spec.cols[key]])
+  const needle = spec.kw.trim().toLowerCase()
+  let matched = rows
+  if (conditions.length) {
+    matched = matched.filter((row) => conditions.every(([column, raw]) => windowMatchColumn(row, column, raw)))
+  }
+  if (needle !== '') matched = matched.filter((row) => windowHaystack(row, columns).includes(needle))
+  return { total: rows.length, matched }
+}
+/** **稳定全序排序**（同值按原始行序）⇒ 与客户端 `sortRows` 输出逐行相同；不认的排序列 = 不排。 */
+export const windowSorted = (indexed, columns, sort) => {
+  const at = String(sort).indexOf(':')
+  const key = at < 0 ? '' : sort.slice(0, at)
+  const dir = at < 0 ? '' : sort.slice(at + 1)
+  if (key === '' || (dir !== 'asc' && dir !== 'desc')) return indexed
+  const column = columns.find((item) => item.key === key)
+  if (!column) return indexed
+  const numeric = windowFilterKind(column) === 'number'
+  const factor = dir === 'desc' ? -1 : 1
+  return indexed.slice().sort((left, right) => {
+    const a = left.row?.[key]
+    const b = right.row?.[key]
+    let cmp = 0
+    if (numeric) {
+      const x = Number(a); const y = Number(b)
+      const xf = Number.isFinite(x) && String(windowText(a)).trim() !== ''
+      const yf = Number.isFinite(y) && String(windowText(b)).trim() !== ''
+      cmp = xf && yf ? (x - y) : (xf === yf ? 0 : (xf ? -1 : 1))
+    } else {
+      cmp = windowText(a).localeCompare(windowText(b), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' })
+    }
+    return cmp !== 0 ? cmp * factor : (left.index - right.index)
+  })
+}
+/** 分页窗口（`size === 0` ⇒ 全部；页号越界一律夹回合法范围，绝不返回空页）。 */
+export const windowPageOf = (items, size, page) => {
+  if (!size) return { page: 0, pages: 1, start: 0, end: items.length, window: items }
+  const pages = Math.max(1, Math.ceil(items.length / size))
+  const at = Math.min(Math.max(0, Number(page) || 0), pages - 1)
+  const start = at * size
+  return { page: at, pages, start, end: Math.min(items.length, start + size),
+    window: items.slice(start, start + size) }
+}
+/**
+ * 行键（**按全量行集算一次**）：与客户端 `rowKeyOf` 同口径 —— table 用 `id ?? 第一列的键`，
+ * list/kv/files 用 `id ?? 原始下标`；下标来自**全量行集**，所以翻页/换筛选后行键不跟着页变
+ * （编辑与跨页选择因此不会串行）。
+ */
+export const windowRowKeyOf = (field, columns, row, index) => (field === 'rows'
+  ? String(row?.id ?? row?.[(columns || [])[0]?.key] ?? index)
+  : String(row?.id ?? index))
+
+/** 请求里的查询说明：**洗净 + 有界**（坏值丢掉并计数；`size`/`page` 回落到合法值）。 */
+export function normalizeWindowSpec(raw = {}, columns = []) {
+  const dropped = []
+  const source = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {}
+  // 空串/缺省 = **没给**（回落默认每页行数），不是"0 = 全部"：`size=0`（全部）必须是**明确写的**
+  const blank = (value) => value === '' || value === undefined || value === null
+  const sizeRaw = blank(source.size) ? NaN : Number(source.size)
+  const size = WINDOW_SIZES.includes(sizeRaw) ? sizeRaw : WINDOW_DEFAULT_SIZE
+  const pageRaw = blank(source.page) ? NaN : Math.trunc(Number(source.page))
+  const page = Number.isFinite(pageRaw) ? Math.max(0, Math.min(WINDOW_LIMITS.page, pageRaw)) : 0
+  const kw = String(source.kw ?? '').slice(0, WINDOW_LIMITS.kw)
+  const bucket = String(source.bucket ?? '').slice(0, WINDOW_LIMITS.bucket)
+  const cols = {}
+  if (source.cols && typeof source.cols === 'object' && !Array.isArray(source.cols)) {
+    for (const [key, value] of Object.entries(source.cols)) {
+      if (Object.keys(cols).length >= WINDOW_LIMITS.cols) { dropped.push(`cols:${String(key).slice(0, 32)}`); continue }
+      if (typeof key !== 'string' || key.length > WINDOW_LIMITS.key_chars) { dropped.push('cols:bad-key'); continue }
+      if (value === null || typeof value === 'object') { dropped.push(`cols:${key}`); continue }
+      const text = String(value).slice(0, WINDOW_LIMITS.col_value)
+      if (text.trim() === '') continue
+      cols[key] = text
+    }
+  }
+  const edits = {}
+  if (source.edits && typeof source.edits === 'object' && !Array.isArray(source.edits)) {
+    for (const [rowKey, fields] of Object.entries(source.edits)) {
+      if (Object.keys(edits).length >= WINDOW_LIMITS.edits) { dropped.push(`edits:${String(rowKey).slice(0, 32)}`); continue }
+      if (typeof rowKey !== 'string' || rowKey.length > 160 || !fields || typeof fields !== 'object'
+        || Array.isArray(fields)) { dropped.push('edits:bad-row'); continue }
+      const clean = {}
+      for (const [field, value] of Object.entries(fields)) {
+        if (Object.keys(clean).length >= WINDOW_LIMITS.fields) { dropped.push(`edits:${rowKey}:fields`); break }
+        if (typeof field !== 'string' || field.length > WINDOW_LIMITS.key_chars) continue
+        if (value === null || value === undefined) { clean[field] = ''; continue }
+        if (typeof value === 'object') { dropped.push(`edits:${rowKey}:${field}`); continue }
+        clean[field] = typeof value === 'number' ? value : String(value).slice(0, WINDOW_LIMITS.col_value)
+      }
+      if (Object.keys(clean).length) edits[rowKey] = clean
+    }
+  }
+  const sortRaw = String(source.sort ?? '')
+  const sort = /^[A-Za-z0-9_.:-]{1,60}:(asc|desc)$/.test(sortRaw) ? sortRaw : ''
+  if (sortRaw !== '' && sort === '') dropped.push(`sort:${sortRaw.slice(0, 32)}`)
+  return { size, page, kw, cols, sort, bucket, edits, dropped }
+}
+
+/** 小计规则（`data.totals`）在**命中行集**上算：与客户端 `totalsOf` 同口径（`valueOf` 里编辑优先）。 */
+function windowTotals(declared, rows, keyOf, valueOf) {
+  return (Array.isArray(declared) ? declared : []).map((rule) => {
+    let sum = 0
+    let counted = 0
+    rows.forEach((row, index) => {
+      const key = keyOf(row, index)
+      const read = (field) => (valueOf ? valueOf(key, field) : (row ? row[field] : undefined))
+      if (rule.skip_empty === true && String(read(rule.key) ?? '').trim() === '') return
+      if (rule.count === true) { counted += 1; return }
+      const factor = rule.factor === undefined || rule.factor === null ? 1 : Number(read(rule.factor))
+      sum += Number(read(rule.key)) * (Number.isFinite(factor) ? factor : 0)
+      counted += 1
+    })
+    return { label: String(rule.label ?? rule.key), value: rule.count === true ? counted : sum,
+      unit: String(rule.unit ?? ''), counted, key: String(rule.key), factor: rule.factor ?? null,
+      count: rule.count === true }
+  })
+}
+
+/**
+ * 一块面板的**服务端窗口**：把面板给的行数组换成窗口，并把"在全集上算出来的数字"一起给出。
+ *
+ * @param {string} field 行数组字段名（`rows` / `items` / `files`）
+ * @param {object[]} columns 列声明（插件给；没有列时按调用方合成的列判型）
+ * @param {object[]} rows **面板给的全量行**
+ * @param {object} spec `normalizeWindowSpec` 的结果
+ * @param {object} [options] `{groupTotals: {…}, groups: [{id,label}], filesCounts: true, levels: true}`
+ */
+export function windowPanelData({ field, columns = [], rows = [], spec, options = {} }) {
+  const keyOf = (row, index) => windowRowKeyOf(field, columns, row, index)
+  const keysAll = rows.map(keyOf)
+  const byKey = new Map(keysAll.map((key, index) => [key, rows[index]]))
+  const valueOf = (rowKey, name) => {
+    const typed = spec.edits[rowKey]?.[name]
+    if (typed !== undefined) return typed
+    return byKey.get(rowKey)?.[name]
+  }
+  const levels = options.levels === true
+  const rankOf = (item) => WINDOW_LEVEL_RANK[String(item?.level ?? 'info')] ?? WINDOW_LEVEL_RANK.info
+  // 桶筛选只对声明了桶的面板生效（`list` 的筛选片）；它是"看到哪些"的一部分，与关键字/列条件同级。
+  const scoped = spec.bucket === '' ? rows : rows.filter((row) => String(row?.bucket ?? '') === spec.bucket)
+  const filtered = windowFiltered(columns, scoped, spec)
+  const sorted = windowSorted(filtered.matched.map((row, index) => ({ row, index })), columns, spec.sort)
+  const paged = windowPageOf(sorted, spec.size, spec.page)
+  const windowRows = paged.window.map((item) => item.row)
+  const windowKeys = paged.window.map((item) => keyOf(item.row, item.index))
+  const matchedKeys = filtered.matched.map((row, index) => keyOf(row, index))
+  const capped = matchedKeys.length > WINDOW_LIMITS.keys
+  // 命中行键（跨页"选中全部命中行"要用）**按需给**：它能有几十 KB（1800 行 ≈ 50 KB），
+  // 而只有用户真去点那颗按钮时才需要 ⇒ 默认不发，`spec.keys=true` 时才发（界面点按钮时补一次请求）。
+  const wantKeys = options.wantKeys === true
+  // 枚举候选（列筛选下拉）：在**全量行集**上算（值不多且短时才给，与客户端 `enumOptions` 同一判据）
+  const enumOptions = {}
+  for (const column of columns) {
+    if (windowFilterKind(column) !== 'enum') continue
+    const seen = new Map()
+    let over = false
+    for (const row of scoped) {
+      const value = windowText(row?.[column.key]).trim()
+      if (value === '' || value.length > WINDOW_LIMITS.option_chars) continue
+      seen.set(value, (seen.get(value) || 0) + 1)
+      if (seen.size > WINDOW_LIMITS.options + 2) { over = true; break }
+    }
+    if (over || !seen.size || seen.size > WINDOW_LIMITS.options) continue
+    enumOptions[column.key] = [...seen.entries()].sort((left, right) => right[1] - left[1]
+      || left[0].localeCompare(right[0], 'zh-Hans-CN')).map(([value, count]) => ({ value, count }))
+  }
+  // `best_when:'min'`：最小值是**命中行集**的性质（不是本页的性质），所以在服务端算
+  const mins = {}
+  for (const column of columns) {
+    if (column.best_when !== 'min') continue
+    let best = Infinity
+    for (const row of filtered.matched) {
+      const raw = row[column.key]
+      if (raw === '' || raw === undefined) continue
+      const n = Number(deltaNumber(raw))
+      if (Number.isFinite(n)) best = Math.min(best, n)
+    }
+    if (best !== Infinity) mins[column.key] = best
+  }
+  const bucketCounts = {}
+  for (const row of rows) {
+    const key = String(row?.bucket ?? '')
+    if (key === '') continue
+    bucketCounts[key] = (bucketCounts[key] || 0) + 1
+  }
+  const levelCounts = {}
+  const levelByBucket = {}
+  if (levels) {
+    for (const row of rows) {
+      const level = String(row?.level ?? 'info')
+      levelCounts[level] = (levelCounts[level] || 0) + 1
+      const key = String(row?.bucket ?? '')
+      if (key === '') continue
+      levelByBucket[key] = levelByBucket[key] || {}
+      levelByBucket[key][level] = (levelByBucket[key][level] || 0) + 1
+    }
+  }
+  const head = levels ? rows.map((row, index) => ({ row, index }))
+    .slice().sort((left, right) => (rankOf(left.row) - rankOf(right.row)) || (left.index - right.index))
+    .slice(0, WINDOW_LIMITS.head).map((item) => item.row) : []
+  const groupTotals = (options.groupTotals && Array.isArray(options.groups) && options.groups.length >= 2)
+    ? options.groups.map((group) => {
+      let sum = 0
+      for (const row of filtered.matched) {
+        for (const column of options.allColumns || columns) {
+          if (String(column.group) !== group.id) continue
+          const wanted = options.groupTotals.key === undefined ? null : String(options.groupTotals.key)
+          const prefix = options.groupTotals.key_prefix === undefined ? null : String(options.groupTotals.key_prefix)
+          if (wanted !== null && column.key !== wanted) continue
+          if (prefix !== null && !String(column.key).startsWith(prefix)) continue
+          sum += Number(row[column.key]) || 0
+        }
+      }
+      return { label: `${group.label}${options.groupTotals.label_suffix || '合计'}`, value: sum,
+        unit: String(options.groupTotals.unit || '') }
+    }) : []
+  const filesCounts = options.filesCounts === true
+    ? { live: filtered.matched.filter((row) => row?.deleted !== true).length,
+      dead: filtered.matched.filter((row) => row?.deleted === true).length }
+    : null
+  const query = {
+    server: true, field, shape_kind: options.kind ?? '',
+    applied: { kw: spec.kw, cols: spec.cols, sort: spec.sort, bucket: spec.bucket, ...spec.dropped.length ? { dropped: spec.dropped } : {} },
+    size: spec.size, page: paged.page, pages: paged.pages, start: paged.start, end: paged.end,
+    window: windowRows.length,
+    total: filtered.total, total_full: rows.length, matched: filtered.matched.length,
+    active: spec.kw.trim() !== '' || spec.sort !== '' || Object.keys(spec.cols).length > 0,
+    row_keys: windowKeys, matched_keys: (wantKeys && !capped) ? matchedKeys : [],
+    matched_keys_capped: capped, matched_keys_cap: WINDOW_LIMITS.keys,
+    matched_keys_available: matchedKeys.length, matched_keys_on_demand: !wantKeys, keys_all: keysAll.length,
+    mins, totals: windowTotals(options.totals, filtered.matched, keyOf, valueOf),
+    group_totals: groupTotals, enum_options: enumOptions, bucket_counts: bucketCounts,
+    level_counts: levelCounts, level_by_bucket: levelByBucket, head,
+  }
+  if (filesCounts) query.files_counts = filesCounts
+  if (keyOf !== null && options.rowKeyShape) query.row_key_shape = options.rowKeyShape
+  return { rows: windowRows, query }
+}
+
+const deltaNumber = (value) => { const n = Number(value); return Number.isFinite(n) ? n : 0 }
+
+/** 请求里"要我开窗口"的判据与上限（解析失败一律**如实记 note**，绝不抛错：读数据的路由不该被坏参数打崩）。 */
+export const WINDOW_REQUEST_LIMITS = { pq_panels: 60, only: 40, id_chars: 60 }
+/**
+ * 解析请求里的分页/筛选/排序意图（**机制**；路由只做参数搬运，语义全在这一节里）：
+ *   · `w=1`（或带了非空 `pq`）⇒ 开窗口；**都没有 ⇒ 整份下发**（既有调用方一字不变）；
+ *   · 扁平参数 `size/page/kw/sort/bucket` = 这一页的默认查询（单面板刷新时用得上）；
+ *   · `pq` = JSON `{<面板 id>: {kw, cols, sort, page, size, bucket, edits}}` —— 每块面板自己的查询；
+ *   · `only` = 逗号分隔的面板 id（≤ 40）：**只回这几块**（界面改一页只重取那一块）。
+ * 未知/坏值不猜：坏 JSON、坏 id 一律丢掉并记在 `notes` 里（调用方可以原样回执）。
+ */
+export function parseWindowRequest(params) {
+  const notes = []
+  const get = (name) => String(params?.get?.(name) ?? '')
+  const enabled = ['1', 'true', 'yes', 'on'].includes(get('w').toLowerCase())
+  const defaults = { size: get('size'), page: get('page'), kw: get('kw'), sort: get('sort'), bucket: get('bucket') }
+  // 扁平参数也可以直接给列条件（`cols` = JSON `{列: 条件}`）—— 单面板对账/脚本用得上
+  const rawCols = get('cols').trim()
+  if (rawCols !== '') {
+    try {
+      const parsed = JSON.parse(rawCols)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) defaults.cols = parsed
+      else notes.push('cols-not-an-object')
+    } catch (err) { notes.push(`cols-invalid-json:${flat(err, 80)}`) }
+  }
+  const perPanel = {}
+  let pqPanels = 0
+  const rawPq = get('pq').trim()
+  if (rawPq !== '') {
+    let parsed = null
+    try { parsed = JSON.parse(rawPq) } catch (err) { notes.push(`pq-invalid-json:${flat(err, 80)}`) }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      for (const [panelId, spec] of Object.entries(parsed)) {
+        if (typeof panelId !== 'string' || panelId === '' || panelId.length > WINDOW_REQUEST_LIMITS.id_chars) {
+          notes.push(`pq-bad-panel:${String(panelId).slice(0, 32)}`); continue
+        }
+        if (pqPanels >= WINDOW_REQUEST_LIMITS.pq_panels) { notes.push(`pq-over-cap:${panelId}`); continue }
+        if (!spec || typeof spec !== 'object' || Array.isArray(spec)) { notes.push(`pq-bad-spec:${panelId}`); continue }
+        perPanel[panelId] = spec
+        pqPanels += 1
+      }
+    } else if (parsed !== null) {
+      notes.push('pq-not-an-object')
+    }
+  }
+  const only = []
+  for (const raw of get('only').split(',')) {
+    const id = raw.trim()
+    if (id === '') continue
+    if (!/^[A-Za-z0-9._-]{1,60}$/.test(id)) { notes.push(`only-bad-id:${id.slice(0, 32)}`); continue }
+    if (only.length >= WINDOW_REQUEST_LIMITS.only) { notes.push(`only-over-cap:${id}`); continue }
+    if (!only.includes(id)) only.push(id)
+  }
+  return { enabled: enabled || pqPanels > 0 || only.length > 0, defaults, perPanel, only, notes,
+    source: { w: enabled, pq_panels: pqPanels, only: only.length } }
+}
+
+/** 机制自述（进 `/api/ui/surface`）：口径、默认值、上限、以及"没带参数就整份下发"这条兼容规则。 */
+export const windowDescribe = () => ({
+  schema: 'quotagent/webui-window/v1',
+  shapes: Object.keys(WINDOW_FIELDS), fields: { ...WINDOW_FIELDS },
+  sizes: [...WINDOW_SIZES], default_size: WINDOW_DEFAULT_SIZE, limits: { ...WINDOW_LIMITS },
+  request: { window_flag: 'w=1', per_panel: 'pq=<JSON {panel_id: {kw, cols, sort, page, size, bucket, edits}}>',
+    only: 'only=<面板 id 逗号分隔>', flat_defaults: 'size/page/kw/sort/bucket' },
+  semantics: '窗口里的行 = 全量行 → 筛选（关键字 ∧ 每列条件 ∧ list 的桶筛选）→ 稳定全序排序 → 第 start..end 行；'
+    + '`data.query.total` = 面板给的行数（`共 N`），`matched` = 筛选后的行数（`命中 M`），'
+    + '`size=0` = **明确选择**的全量渲染',
+  derived: '命中行集上的派生物一并给出（小计 totals / group_totals / best_when 的 mins / 枚举候选 '
+    + 'enum_options / 桶计数 bucket_counts / 级别计数 level_counts / 工作台用的 head / 跨页全选 matched_keys）',
+  default_full: '请求里没有 `w`/`pq`/`only` ⇒ **整份下发**（既有工具与旧客户端行为不变；界面每次都带 `w=1`）',
+  why_not_client: '客户端只拿一页时自己算计数必错（`共 N`/`命中 M`/小计都在全集上），所以这些数字由服务端给、'
+    + '客户端照抄；界面不再"先拿全量再截断"',
+  readonly: '只读投影：不写账本、不落文件；筛选/翻页不产生任何副作用',
+})
+
 /**
  * 建外壳。
  * @param {object} options
@@ -1397,20 +1792,78 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   }
 
   /**
+   * 面板声明的列（服务端窗口按它判筛型）。面板自己给了 `columns` 就用它；没给就按**客户端同一套**合成：
+   * `list` ⇒ title/body/next_action，`kv` ⇒ key/value，`files` ⇒ 客户端 `renderFiles` 那六列（**必须逐字对齐**，
+   * 否则"数值列给区间、枚举列给下拉"在服务端会判成文本包含 —— 同一份数据两边算出的命中数就不一样了）。
+   */
+  const windowColumns = (data, kind) => {
+    if (Array.isArray(data.columns) && data.columns.length) return data.columns
+    if (kind === 'list') return [{ key: 'title', label: '标题' }, { key: 'body', label: '详情' },
+      { key: 'next_action', label: '下一步' }]
+    if (kind === 'kv') return [{ key: 'key', label: '键' }, { key: 'value', label: '值' }]
+    if (kind === 'files') return [{ key: 'name', label: '文件名' }, { key: 'uploader', label: '上传人' },
+      { key: 'at', label: '时间' }, { key: 'sha256', label: 'sha256', filter: 'text' },
+      { key: 'visibility_label', label: '给谁看', filter: 'enum' }, { key: 'bytes', label: '大小', filter: 'number' }]
+    return []
+  }
+  /**
+   * 把一块面板的**全量行**换成**服务端窗口**（机制）：窗口里的行 + `data.query`（全集上的数字）。
+   * 形状没有行数组（`metrics`/`form`/`html`）⇒ 返回 `null`（调用方原样下发，**不假装**分页）。
+   */
+  const windowize = (data, kind, panel, spec, tally) => {
+    const field = WINDOW_FIELDS[kind]
+    if (!field) return null
+    const rows = Array.isArray(data[field]) ? data[field] : null
+    if (!rows) return null
+    const columns = windowColumns(data, kind)
+    const per = (spec.perPanel && spec.perPanel[panel.id]) || {}
+    const clean = normalizeWindowSpec({ ...spec.defaults, ...per }, columns)
+    // 对比模式（`data.compare`）：每组一列的合计也在**命中行集**上算（同一节理由）
+    const groups = []
+    if (data.compare && Array.isArray(data.columns)) {
+      for (const column of data.columns) {
+        if (!column.group) continue
+        const id = String(column.group)
+        if (groups.some((item) => item.id === id)) continue
+        groups.push({ id, label: String(column.group_label || id) })
+      }
+    }
+    const out = windowPanelData({ field, columns, rows, spec: clean, options: { kind,
+      totals: data.totals, groupTotals: data.group_totals, allColumns: data.columns || columns, groups,
+      levels: kind === 'list' || kind === 'kv', filesCounts: kind === 'files',
+      wantKeys: per.keys === true || per.keys === '1' } })
+    tally.full += rows.length
+    tally.sent += out.rows.length
+    tally.windowed += 1
+    tally.shapes[kind] = (tally.shapes[kind] || 0) + 1
+    return { ...data, [field]: out.rows, rows_total: rows.length, query: out.query,
+      query_note: '这一页的行由**服务端**按窗口给（筛选/排序/分页都在全集上算，数字在 `data.query` 里）：'
+        + '客户端**照抄**这些计数与行序，不再自己截断。形状没有行数组的面板原样下发。' }
+  }
+
+  /**
    * 某视图上面板的数据。
    * `route.kind` 非空 ⇒ **对象页**：只渲染声明了该 `object_kind` 的面板（其余面板在这一页上不出现），
    * 且 `ctx.route` 带上 `kind/id` 供插件渲染那一个对象；没声明过该对象类 ⇒ 返回空数组（调用方报未命中）。
    * `who` = 本次请求的会话（可选；插件从 `ctx.identity` 拿"同侧人类之间"的协作身份与侧）。
+   * `windowSpec`（可选；**服务端窗口**，见本文件顶部那一节）= `{ enabled, defaults, perPanel, only }`：
+   *   · `enabled` 由请求里的 `w`/`pq` 给（**没有就整份下发**，既有调用方一字不变）；
+   *   · 每块面板的有效查询 = `{...defaults, ...perPanel[面板 id]}`；`only` 非空 ⇒ 只回这些面板
+   *     （界面改一页/改一次筛选只重取那一块，别的面板不重复下发）。
    */
-  const panelsOf = (view, route = {}, who = null) => withSandbox(who, () => {
+  const panelsOf = (view, route = {}, who = null, windowSpec = null) => withSandbox(who, () => {
     const normalized = normRoute({ ...route, view })
-    const picked = normalized.kind === '' ? surface.panelsFor(view, '')
+    const requested = normalized.kind === '' ? surface.panelsFor(view, '')
       : surface.panelsFor(view, normalized.kind)
+    const only = Array.isArray(windowSpec?.only) && windowSpec.only.length ? new Set(windowSpec.only) : null
+    const picked = only ? requested.filter((panel) => only.has(panel.id)) : requested
     const ctx = panelCtx(view, normalized, who)
     // **这一次渲染付出了多少代价**（机制读数，供"前后可对账"）：Python 进程数只看**这一次请求**的增量。
     // 为什么放在这里：`/api/ui/panels` 是一次渲染的唯一起点（webui.mjs 里那一行只调这一个函数），
     // 所以在这里量到的增量就是"打开这一页起了几个进程"，不必改任何路由代码。
     const before = { spawns: ioStats.spawns, read: ioStats.read_spawns, hits: ioStats.read_hits, at: Date.now() }
+    // 这一次渲染的**载荷口径**（前后对比用的就是这几个数：面板给了多少行 vs 真下发多少行）
+    const tally = { full: 0, sent: 0, windowed: 0, shapes: {} }
     // 一次渲染的作用域：这一页上的多块面板读同一个只读工具时**只起一个进程**（缓存见 `runPython`）。
     const rows = withRenderScope(() => picked.map((panel) => {
       const base = { id: panel.id, title: panel.title, plugin_id: panel.plugin_id, order: panel.order,
@@ -1431,25 +1884,29 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         if (!PANEL_KINDS.includes(kind)) {
           return { ...base, visible: true, error: { code: 'unknown-panel-kind', reason: `kind=${kind}` } }
         }
+        // **服务端窗口**（机制）：只换"这一页看到的行"，并把在**全集**上算出来的数字一起给
+        //（`data.query`）；形状没有行数组（metrics/form/html）⇒ 原样返回，不假装分页。
+        const windowed = windowSpec?.enabled === true ? windowize(data, kind, panel, windowSpec, tally) : null
+        const out = windowed || data
         // `files` 面板的**地址纪律**（机制，与 `suggest_url` 同一口径）：下载地址与上传地址只允许**本服务
         // 前缀相对路径**（`/` 开头）—— 外站地址一律丢掉并如实计数（界面不会被引去第三方取/传文件）。
         if (kind === 'files') {
           const bad = []
-          const files = (Array.isArray(data.files) ? data.files : []).filter((row) => {
+          const files = (Array.isArray(out.files) ? out.files : []).filter((row) => {
             const keep = Boolean(row) && typeof row === 'object' && String(row.url ?? '').startsWith('/')
             if (!keep) bad.push(String(row?.url ?? row?.name ?? '(无地址)'))
             return keep
           })
-          const upload = data.upload && typeof data.upload === 'object' && String(data.upload.url ?? '').startsWith('/')
-            ? data.upload : null
-          if (!upload && data.upload) bad.push(String(data.upload.url ?? '(无上传地址)'))
-          return { ...base, visible: true, degraded: data.degraded === true || bad.length > 0,
-            reason: bad.length ? `absolute-url-refused:${bad.length}` : (data.reason ?? null),
-            data: { ...data, kind, files, upload, refused_urls: bad.length,
+          const upload = out.upload && typeof out.upload === 'object' && String(out.upload.url ?? '').startsWith('/')
+            ? out.upload : null
+          if (!upload && out.upload) bad.push(String(out.upload.url ?? '(无上传地址)'))
+          return { ...base, visible: true, degraded: out.degraded === true || bad.length > 0,
+            reason: bad.length ? `absolute-url-refused:${bad.length}` : (out.reason ?? null),
+            data: { ...out, kind, files, upload, refused_urls: bad.length,
               plugin_id: panel.plugin_id, panel_id: panel.id } }
         }
-        return { ...base, visible: true, degraded: data.degraded === true, reason: data.reason ?? null,
-          data: { ...data, kind, plugin_id: panel.plugin_id, panel_id: panel.id } }
+        return { ...base, visible: true, degraded: out.degraded === true, reason: out.reason ?? null,
+          data: { ...out, kind, plugin_id: panel.plugin_id, panel_id: panel.id } }
       } catch (err) {
         return { ...base, visible: true, error: { code: 'data-failed', reason: flat(err) },
           next_action: '修面板的 data()（抛错不静默吞：这块不渲染，页面其余部分照常）' }
@@ -1458,7 +1915,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     // 收口这次渲染的代价读数（`/api/ui/surface` 的 `io.last_render` 与状态栏都读它；只为可对账，不影响结果）
     ioStats.last_render = { at: host.now(), view, kind: normalized.kind, panels: rows.length,
       spawns: ioStats.spawns - before.spawns, read_spawns: ioStats.read_spawns - before.read,
-      read_cache_hits: ioStats.read_hits - before.hits, ms: Date.now() - before.at }
+      read_cache_hits: ioStats.read_hits - before.hits, ms: Date.now() - before.at,
+      rows_full: tally.full, rows_sent: tally.sent, windowed_panels: tally.windowed,
+      only: only ? [...only] : [], shapes: tally.shapes }
     return rows
   })
 
@@ -1467,10 +1926,10 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    * 把它声明的 `data.object` 页头（标题/摘要/事实/链接）按通用形状摊平、附上该对象类的动作与可用对象类清单。
    * 没有任何插件声明这个对象类 ⇒ `found:false` + 有名 reason + 下一步（**不编内容**）。
    */
-  const objectOf = (view, kind, id, who = null) => {
+  const objectOf = (view, kind, id, who = null, windowSpec = null) => {
     const kinds = surface.objectKindsFor(view)
     const claimed = kinds.includes(kind)
-    const panels = claimed ? panelsOf(view, { view, kind, id }, who) : []
+    const panels = claimed ? panelsOf(view, { view, kind, id }, who, windowSpec) : []
     const header = panels.map((panel) => (panel.data ?? {}).object).find((item) => item && typeof item === 'object')
       ?? null
     const found = claimed && panels.length > 0 && (header ? header.found !== false : true)
@@ -2374,6 +2833,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       last_render: ioStats.last_render ?? null,
       // **通知名额分配**（本批新增）：产出 / 返回 / 上限 —— 截断不静默。
       notify: ioStats.notify ?? null,
+      // **服务端窗口（分页/筛选/排序）**：口径、默认值、上限、请求参数 —— 界面与对账脚本都读它。
+      window: windowDescribe(),
       note: '只读工具调用（插件声明 read:true）按「工具+参数」缓存 TTL；任何一次动作/落待办件都会清空缓存；'
         + '`last_render`/`notify` 是"上一次渲染"的读数（只为可对账，不影响结果）' },
     registries: surface.snapshot(),
@@ -2453,6 +2914,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 
   return { surface, host, loadContributions, unload, loadPlugin, reloadPlugin, pluginsJson, runAction,
     panelsOf, objectOf, notifications, statusItems, normalizeRoute: normRoute, ioStats, clearReadCache,
+    // **服务端窗口**（分页/筛选/排序/计数）：路由只调 `windowSpec`（解析请求）与 `windowDescribe`（自述）。
+    windowSpec: parseWindowRequest, windowDescribe,
     surfaceJson, shellHtml, asset, scanContributions, runPython, stage,
     // **同侧协作**（机制）：HTTP 路由（`webui.mjs`）按会话身份拿侧与 actor，再调这里的四件事。
     collab, collabSurface, syncCollab, configureCollab, collabPluginId: COLLAB_PLUGIN_ID,

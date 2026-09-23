@@ -2750,6 +2750,10 @@ ${sortForm('events', '筛查事件')}
     // 面板/对象/通知/状态都要**会话身份**（`identity.whoOf`）：协作类贡献从 `ctx.identity` 才知道"同侧是谁"；
     // 不按身份过滤数据（业务投影仍按视角隔离），但**侧的判定只认会话**，不认请求体/表单。
     const whom = identity.whoOf(req)
+    // **服务端窗口**（分页/筛选/排序/计数；本批）：请求里的 `w`/`pq`/`only`/`size/page/kw/sort/bucket` 由
+    // 外壳的机制层解析（`app-shell.mjs#parseWindowRequest`）——**没带参数就整份下发**（兼容既有调用方），
+    // 带了就只回窗口 + 在全集上算出来的数字。参数解析失败不抛错：坏值丢掉并如实记在回执的 `window.notes` 里。
+    const windowSpec = shell.windowSpec(url.searchParams)
     if (path === '/api/ui/panels') {
       const view = String(url.searchParams.get('view') ?? 'home')
       if (!['home', ...config.views].includes(view)) {
@@ -2759,10 +2763,18 @@ ${sortForm('events', '筛查事件')}
       // `kind`/`id` 非空 ⇒ **对象页**的面板（只出声明了该 object_kind 的面板；插件从 ctx.route 读对象身份）
       const kind = String(url.searchParams.get('kind') ?? '')
       const id = String(url.searchParams.get('id') ?? '')
-      return json(200, { ok: true, view, kind, id, panels: shell.panelsOf(view, { view, kind, id }, whom),
+      const panels = shell.panelsOf(view, { view, kind, id }, whom, windowSpec)
+      if (windowSpec.only.length && panels.length === 0) {
+        return json(404, { ok: false, code: 'panel-not-in-this-view', view, kind, id, asked: windowSpec.only,
+          next_action: `\`only\` 里的面板 id 不在这个视图上（本视图的面板见 ${prefix}/api/ui/surface 的 panels）；`
+            + '不带 `only` 就回这一页的全部面板' })
+      }
+      return json(200, { ok: true, view, kind, id, panels,
+        window: { ...windowSpec.source, notes: windowSpec.notes, only: windowSpec.only },
         identity: whom.ok ? { human: whom.human, side: whom.side } : null,
         mechanism: '面板数据由插件自己的 data() 产出（通用形状：table/form/list/kv/metrics/html）；'
-          + '外壳只按形状渲染，不解读语义' })
+          + '外壳只按形状渲染，不解读语义。**行由服务端按窗口给**（`w=1`）：筛选/排序/分页与计数都在'
+          + '服务端全量行集上算，客户端照抄（口径见 /api/ui/surface 的 io.window）' })
     }
     if (path === '/api/ui/object') {
       const view = String(url.searchParams.get('view') ?? 'home')
@@ -2776,7 +2788,7 @@ ${sortForm('events', '筛查事件')}
         return json(400, { ok: false, code: 'object-address-incomplete', view, kind, id,
           next_action: `对象地址要写全：${prefix}/app/<view>/<kind>/<id>/；JSON 侧同样要 kind 与 id` })
       }
-      return json(200, shell.objectOf(view, kind, id, whom))
+      return json(200, shell.objectOf(view, kind, id, whom, windowSpec))
     }
     if (path === '/api/ui/plugins') return json(200, shell.pluginsJson())
     if (path === '/api/ui/notifications') return json(200, { ok: true, items: shell.notifications(whom) })
