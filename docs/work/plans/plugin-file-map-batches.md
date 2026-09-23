@@ -292,3 +292,31 @@ rc/passed-total 对拍」原始行见 `docs/work/evidence/EV-175b-tools-relocati
 剩下**唯一**的非薄入口（**逐条登记在** `plugin-file-map.md` §A 的 `插件·待搬` 行）：`manual-check.py` ——
 PA6 断言「已搬资产仍被**契约面**引用」，它在 `verify.sh` / `qa` / 各插件 `tests/` / `tools/` 里都没有调用者
 ⇒ 搬走就等于制造一个孤儿。**本批不搬**，如实登记（不假装它也能搬）。
+
+---
+
+### 退役登记（**非搬迁**）：两个旧 SSR 页 303 → GUI（P16 批）
+
+本批**没有搬任何文件**（主文件 §分类 三节表与 `plugin-assets` 的 PA3/PA4 判据一字未动），
+所以登记只写在这里：**删掉的是旧页的渲染与路由实现**（不是资产搬家）。
+
+- **退役**：`/<view>/advice/`（决策建议）与 `/<view>/deadlines/`（回文时限）—— **两侧 4 条页面路由 + 4 条 JSON**
+  （`/<view>/api/advice`、`/<view>/api/deadlines`）⇒ **303 → `/app/<view>/`**（不 404）；实现与 nav 入口
+  （`data-advice-link` / `data-deadlines-link`、`DEADLINE_EXTRAS`、`anchorNav` 的两个入口参数）在
+  `src/system/webui/code/webui.mjs` 里一并删除（净删 ~400 行：两个 SSR 渲染器 + 建议层的派生族）。
+- **保留**：两页的**写面**（`POST /<view>/deadlines/promise`、`/<view>/gates/nudge`）与两个插件的
+  `inject` 条目（`advicePanel` / `rfqDeadline`）——`inject` 表在 `host/webui.mjs`（门）里有镜像，
+  收口要连门一起改，见 `docs/work/plans/webui-ui-defects.md` §P16。
+- **未拆**：`/<view>/gates/`（等 `system/approval` 的批准/驳回）、`/<view>/authority/`
+  （等 `domain/authority-band` 的面板）—— 两页的 GUI 承接方仍在另一批手里。
+- **连带（按规则 12 / 29 §2 应删的旧断言；本批硬约束不改 `src/domain/**`，登记不删）**：
+  `src/domain/advice/tests/{t281-advice-gate.mjs,check-advice-route.py}`（旧页/JSON 200、`data-advice-link`、
+  建议的 `next_action` **必须是** `python3 -m quotagent.g1side …`）、
+  `src/domain/rfq-deadline/tests/{t285-rfq-deadline-gate.mjs,check-rfq-deadline-route.py}`（三条路由 + 四道 nav 入口）、
+  `src/domain/gate-timeline/tests/{t282-gate-timeline-gate.mjs,checks_gate.py,check-gate-timeline-route.py}`
+  （把「`next_action` 必须含 `quotagent.g1side`」钉成判据 = `DEF-032` 的反面）。
+  ⇒ 门 `advice` **19/20**、`rfq-deadline` **22/23** 由绿转红（纯「旧页必须存在」类）；`gates` 34/34、
+  `authority` 23/23、`change-detail` 23/23、`quote-draft` 17/17 仍全绿；`docs`/`webui`(47/47)/`plugin-assets`(20/20) 全绿。
+- **证据**：`tmp/retire-verify-out.txt`（旧路径 303 + Location、匿名/跨侧/405、关键词 0 命中、产品面残余）、
+  `tmp/retire-shots/s1-contractor-deadlines-to-gui.png`、`s2-supplier-deadlines-to-gui.png`、
+  复跑 `sh tmp/retire-start.sh 8477 && tools/run.sh tmp/retire-verify.py 8477`。

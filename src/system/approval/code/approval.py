@@ -109,7 +109,9 @@ class ApprovalService:
                 approvers: list[str] | None = None, reason: str = "",
                 timeout_policy: str = DEFAULT_TIMEOUT_POLICY, timeout_s: float = DEFAULT_TIMEOUT_S,
                 escalate_to: str | None = None, summary: str | None = None,
-                confidence: float | None = None, flags: list[str] | None = None) -> dict:
+                confidence: float | None = None, flags: list[str] | None = None,
+                at: str | None = None) -> dict:
+        """开一个待批门。`at` = 落账时刻（**唯一写者传 `--now` 进来**；不给则沿用 `utc_now()`）。"""
         if not scope:
             raise ApprovalError("批准请求必须声明 scope（批准范围）")
         if timeout_policy not in TIMEOUT_POLICIES:
@@ -119,6 +121,7 @@ class ApprovalService:
             raise ApprovalError("escalate 必须给一个人类上级（escalate_to 需以 'human:' 开头）")
         self._counter += 1
         approval_id = f"ap-{self._counter:04d}"
+        stamp = at or utc_now()
         record = {
             "approval_id": approval_id,
             "scope": scope,
@@ -133,13 +136,13 @@ class ApprovalService:
             "timeout_policy": timeout_policy,
             "timeout_s": float(timeout_s),
             "escalate_to": escalate_to,
-            "last_action_at": utc_now(),
+            "last_action_at": stamp,
             "remind_count": 0,
             "escalated_at": None,
             "aborted_at": None,
             "timeout_log": [],
             "requested_by": self.actor,
-            "requested_at": utc_now(),
+            "requested_at": stamp,
             "status": "pending",
             "decided_by": None,
             "decided_at": None,
@@ -147,11 +150,17 @@ class ApprovalService:
         }
         self._records[approval_id] = record
         self._order.append(approval_id)
-        self._append(REQUESTED_EVENT, record, correlation_id=ref or approval_id)
+        self._append(REQUESTED_EVENT, record, correlation_id=ref or approval_id, ts=at)
         return dict(record)
 
     # --- 决定（只能由人） -------------------------------------------------
-    def decide(self, approval_id: str, *, by: str, decision: str, comment: str = "") -> dict:
+    def decide(self, approval_id: str, *, by: str, decision: str, comment: str = "",
+               at: str | None = None) -> dict:
+        """决定一个门（**只能由人**）：`granted`/`denied`。
+
+        `at` = 落账时刻（**唯一写者传 `--now` 进来**）：宿主/写者不读墙钟这一条不许因为界面而放宽，
+        所以这里给一个显式的口子；不传则沿用既有行为（`utc_now()`），旧调用方逐字节不变。
+        """
         record = self._records.get(approval_id)
         if record is None:
             raise UnknownApproval(f"不存在的批准记录: {approval_id}")
@@ -165,10 +174,10 @@ class ApprovalService:
             raise ApprovalError(f"批准 {approval_id} 已处理（状态 {record['status']}），不可重复决定")
         record["status"] = decision
         record["decided_by"] = by
-        record["decided_at"] = utc_now()
+        record["decided_at"] = at or utc_now()
         record["comment"] = comment
         self._append(GRANTED_EVENT if decision == "granted" else DENIED_EVENT, record,
-                     correlation_id=record["ref"] or approval_id)
+                     correlation_id=record["ref"] or approval_id, ts=at)
         return dict(record)
 
     # --- 人工门队列视图（FR-UX-001） ---------------------------------------
@@ -294,7 +303,8 @@ class ApprovalService:
                 f"承诺类动作必须先经 ctx.approval 并由人批准（INV-005 / AGENTS.md 规则 3）")
         return found
 
-    def _append(self, event: str, record: dict, *, correlation_id: str | None) -> None:
+    def _append(self, event: str, record: dict, *, correlation_id: str | None,
+                ts: str | None = None) -> None:
         if self.ledger is None:
             return
         body = {"approval_id": record["approval_id"], "scope": record["scope"],
@@ -309,7 +319,8 @@ class ApprovalService:
                 body[key] = record[key]
         self.ledger.append(event, body,
                            correlation_id=correlation_id, actor=record["decided_by"] or self.actor,
-                           refs={"approval_id": record["approval_id"], "scope": record["scope"]})
+                           refs={"approval_id": record["approval_id"], "scope": record["scope"]},
+                           ts=ts)
         if self.events is not None:
             self.events.emit(event, {"approval_id": record["approval_id"], "scope": record["scope"],
                                      "status": record["status"]})

@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """src/system/approval/tools/gate-actions.py —— 「审批队列」写动作的**唯一落账本者**
-（DEF-023：可等 / 可催 / 可升级 / 可终止 / 可委托；催办走既有唯一写者 `gate-nudge.py`）。
+（DEF-023：可等 / 可催 / 可升级 / 可终止 / 可委托；DEF-008：**可批准 / 可驳回**；
+催办走既有唯一写者 `gate-nudge.py`）。
 
-四个步（都只落**已登记**的事件类型；新增事件类型属账本格式变更，须先有 ADR ⇒ 本轮不新造）：
+六个步（都只落**已登记**的事件类型；新增事件类型属账本格式变更，须先有 ADR ⇒ 本轮不新造）：
 
   · `--step request`   开一个**待批门**：`approval/requested`（`ApprovalService.request`）。
     用途：把某件事提给人批（越界金额、要变更、加轮次……）。超时策略只能是
     `remind` / `escalate` / `abort` —— **不存在"超时自动批准"**（服务的门）。
+  · `--step grant`     **批准**：`approval/granted`（`ApprovalService.decide(decision='granted')`）——
+    这是审批队列存在的理由（DEF-008）。判定顺序：门必须真的在**本账本**里、**还没被决定**、
+    署名的人**就是这条门点名的审批人**（`approvers`，ADR-0022 的开单派分事实）⇒ 才落账。
+  · `--step deny`      **驳回**：`approval/denied`（同一条判定顺序）；**必须留理由**
+    （逐字落 `approval/denied.comment`，好让被拒的人知道为什么）。
   · `--step escalate`  升级：`approval/escalated`（与 `ApprovalService.sweep` 的 escalate 分支**同形**），
     `approvers` 改为目标人，`escalated_to` 记名。
   · `--step delegate`  委托：同上，`action='delegate'`（把门委托给另一个人继续等，不是批准）。
@@ -15,14 +21,19 @@
 为什么不用 `ApprovalService.sweep()` 做升级/终止：`sweep()` 只处理**已超时**的门，而这里的动作是
 "人现在就决定这么做"，且落账时间必须由 `--now` 给（本脚本不读墙钟）。落账 body 与 sweep 的分支**同形**，
 状态由 `ApprovalService.replay()` 从账本重放得到 ⇒ 页面上看到的状态与账本一致。
+批准/驳回走的是**同一个** `ApprovalService.decide`（语义只有一份），只是把 `at=--now` 显式传进去，
+好让"写者不读墙钟"这条在 UI 路径上也成立。
 
 纪律：权限门（恰 0600 + 普通文件）→ 形状门（schema/kind/action）→ 重算校验（`payload_sha256`/`bytes`/
 `submitted_at`）→ 业务前置（门必须真的在本账本里、且**还没被决定** —— 已 granted/denied/aborted 的门
-不允许再催/再升级/再终止：`gate-already-decided`）→ 落账 → 待办件移入 `applied/`。
+不允许再催/再升级/再终止/再批准：`gate-already-decided`；批准/驳回还要**署名的人就是点名的审批人**：
+`approver-not-named`）→ 落账 → 待办件移入 `applied/`。
 拒绝路径**账本零新增**，逐条给 `code` + `next_action`；stdout 恰一行 JSON；退出码 0/1/2。
 
+幂等：同一份待办件（逐字节一致）已经归档过 ⇒ `already-applied`、账本零新增（见下面 `archived_before`）。
+
 用法：
-  python3 src/system/approval/tools/gate-actions.py --step escalate --request <pending.json> \\
+  python3 src/system/approval/tools/gate-actions.py --step grant --request <pending.json> \\
       --ledger-contractor .../contractor/ledger.jsonl --now 2026-09-22T16:00:00Z
 """
 from __future__ import annotations
@@ -50,7 +61,7 @@ SCOPE_RE = re.compile(r"^[a-z][a-z0-9._-]{2,63}$")
 
 SCHEMA = "quotagent/pending/v1"
 KIND = "gate-actions"
-STEPS = ("request", "escalate", "delegate", "abort")
+STEPS = ("request", "grant", "deny", "escalate", "delegate", "abort")
 RESOLVED = ("approval/granted", "approval/denied", "approval/aborted")
 MAX_FILE_BYTES = 262144
 IGNORED_KEYS = ("payload_sha256", "bytes", "submitted_at")
@@ -320,7 +331,42 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                         f"门 {gate_id} 已经被决定过（状态 {last_body.get('status')}）："
                         "催办/升级/终止都不能绕过判定",
                         "已决定的门不再出现在队列里；要重新发起就再开一个门（--step request）", step, str(request))
-        if step in ("escalate", "delegate"):
+        if step in ("grant", "deny"):
+            # ---- **批准 / 驳回**（DEF-008）：审批队列存在的唯一理由 ------------------------------
+            # 判定顺序（全部在写之前；任一不通过 ⇒ 账本零新增）：
+            #   ① 门真的在**本账本**里（上面 `gate-not-found`）② 还没被决定（上面 `gate-already-decided`）
+            #   ③ 署名的人**就是这条门点名的审批人**（`approvers`；开单时随 `approval/requested` 落进账本，
+            #      ADR-0022）。没点名审批人的旧门（`approvers` 为空）按缺省放行 —— 不知道给谁就是谁都能决定，
+            #      不凭空编一个审批人，也不因此把旧门锁死。
+            if step == "deny" and reason.strip() == "":
+                return deny("reason-required", "驳回必须留理由（要把\"为什么不行\"逐字落进账本给被拒的人看）",
+                            "在「驳回理由」里写清楚；理由会进 `approval/denied.comment`", step, str(request))
+            named = [str(who).strip() for who in (last_body.get("approvers") or []) if str(who).strip()]
+            if named and actor not in named:
+                return deny("approver-not-named",
+                            f"{actor} 不是门 {gate_id} 点名的审批人（点名：{'、'.join(named)}）："
+                            "审批权在开单时就定了，别的人批不了这一条",
+                            "让点名的审批人本人签（署名==会话身份）；要换人先把门升级/委托给他"
+                            "（--step escalate / --step delegate），或重新开一个门", step, str(request))
+            approvals = ApprovalService(ledger=ledger, actor=actor)
+            try:
+                decided = approvals.decide(gate_id, by=actor,
+                                           decision="granted" if step == "grant" else "denied",
+                                           comment=reason, at=args.now)
+            except Exception as exc:  # noqa: BLE001  服务的判定就是判定：原样报出来（不吞、不假设成功）
+                return deny("decide-refused", f"{type(exc).__name__}: {exc}",
+                            "看这条门在账本里的状态（队列卡片上「卡在谁/已决定」）；本动作账本零新增",
+                            step, str(request))
+            applied.append({"event": "approval/granted" if step == "grant" else "approval/denied",
+                            "approval_id": gate_id, "scope": decided.get("scope"),
+                            "ref": decided.get("ref"), "by": actor,
+                            "decided_at": decided.get("decided_at"),
+                            "comment_sha256": digest_of(reason)})
+            ledger_added += 1
+            out_extra = {"approval_id": gate_id, "scope": decided.get("scope"), "ref": decided.get("ref"),
+                         "status": decided.get("status"), "decided_by": actor,
+                         "comment": reason, "decided_at": decided.get("decided_at")}
+        elif step in ("escalate", "delegate"):
             target = str(record.get("escalate_to") or "").strip()
             if not target.startswith("human:"):
                 return deny("escalate-to-required", f"{step} 必须给目标人（escalate_to 以 human: 开头）：{target!r}",
@@ -353,6 +399,10 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     archived = archive(inbox, request) if request.resolve().parent == inbox.resolve() else ""
     hint = {
         "request": "门已开：它会出现在审批队列里（可等）；等待时长与超时策略由队列页按事实时刻算。",
+        "grant": "已批准：落 `approval/granted`（带署名与意见）；这条门不再出现在待批里，"
+                 "下游承诺动作现在能过 INV-005 的批准门了。",
+        "deny": "已驳回：落 `approval/denied`（理由逐字进账本 `comment`）；要重来就再开一个门"
+                "（原门不会被\"再批一次\"翻案）。",
         "escalate": "已升级：队列里的「卡在谁」与已催/已升级历史都会跟着变；升级**不是批准**。",
         "delegate": "已委托：门转给目标人继续等（仍不批准）。",
         "abort": "已终止：本次意图作废（需重新发起）；终止留了理由哈希，正文只在待办件里。",
@@ -361,7 +411,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                  "applied": applied, "duplicates": [], "ledger_added": ledger_added, "refusal": None,
                  "request": str(request), "archived": archived, "view": args.view,
                  "by": actor, "at": args.now, "next_action_runtime": hint,
-                 "note": "四个步都只落已登记的事件：approval/requested | approval/escalated | approval/aborted；"
+                 "note": "六个步都只落已登记的事件：approval/requested | approval/granted | approval/denied | "
+                         "approval/escalated | approval/aborted；"
                          "催办（gate/nudged）走既有唯一写者 src/domain/gate-timeline/tools/gate-nudge.py",
                  **out_extra}, 0)
 

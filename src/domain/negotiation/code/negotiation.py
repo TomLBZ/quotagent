@@ -346,6 +346,12 @@ class NegotiationService:
     #: 最后一次账本追加的 `{seq, entry_hash, duplicate}`（只读观测量，不进任何视图）
     last_append: dict | None = field(default=None, init=False)
     replayed: int = field(default=0, init=False)
+    #: **落账时刻的显式覆盖**（缺省 `None` = 既有行为：内核 `utc_now()`）。
+    #: 为什么有这一个字段：本服务是"服务直调"的主语（`ctx.negotiate` 由宿主装配），而 UI 路径上的
+    #: 落账一律由**唯一写者**发起，写者不许读墙钟（`usage.md` §7.3：`--now` 必填）。
+    #: 写者构造本服务后设一次 `service.write_ts = --now`，此后本服务**所有**追加都用它；
+    #: 不给（既有调用方：宿主装配、单测、走查脚本）⇒ 逐字节与改前一致（内核给 `utc_now()`）。
+    write_ts: str | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         if self.approval is None:
@@ -468,7 +474,8 @@ class NegotiationService:
         }
         return dict(self.approval.request(
             CONCESSION_SCOPE, payload, ref=self._gate_ref(thread_id, attempt_no), reason=reason,
-            timeout_policy=timeout_policy, timeout_s=timeout_s, escalate_to=escalate_to))
+            timeout_policy=timeout_policy, timeout_s=timeout_s, escalate_to=escalate_to,
+            at=self.write_ts))
 
     # --- 轮次 -------------------------------------------------------------
     def submit_round(self, thread_id: str, *, move: dict, rationale: str = "",
@@ -963,7 +970,8 @@ class NegotiationService:
         ref = None
         if self.ledger is not None:
             ref = self.ledger.append(event, body, correlation_id=correlation_id,
-                                     event_class=event_class, actor=authority, refs=refs)
+                                     event_class=event_class, actor=authority, refs=refs,
+                                     ts=self.write_ts)
             self.last_append = ref.as_dict()
         self._dispatch(event, dict(body))
         return ref

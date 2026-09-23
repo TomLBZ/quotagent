@@ -59,6 +59,14 @@
 - **存疑（不计入缺陷）**：顶栏「通知 0」与通知中心「共 0 条（后台产出）…（本页 600 条）」自相矛盾（同时 `items:600`、`produced:6329`）——
   但同一天 02:00 首次加载时徽标是 573/600，且 `src/system/webui/code/**` 当时正被其它 agent 未提交地改着 ⇒ 留在干净 HEAD 上复验。
 
+**P16 批已做 · 旧 SSR 页退役（旧地址 303 → GUI；证据 `tmp/retire-verify-out.txt` + `tmp/retire-shots/`）**：
+
+- **拆了两页**（两侧共 4 条页面路由 + 4 条 JSON）：`/<view>/advice/`、`/<view>/deadlines/`（含 `/api/` 同形）⇒ **303 → `/app/<view>/`**（不 404；匿名仍 303→登录、JSON 401、跨侧 403、POST 仍 405）。承接：`rfq.remind-board` / `rfq.remind` / `exchange.promise` / `exchange.inbox`；旧页渲染体与 nav 入口一并删干净（`RETIRED_SUBVIEWS`）。
+- **两页未拆（GUI 未补齐）**：`/<view>/gates/` 等 **`system/approval` 的批准/驳回**、`/<view>/authority/` 等 **`domain/authority-band` 的面板**（同一批，另一 agent 在补）。
+- **产品面残余（本批允许面之外）**：`/contractor/gates/` 20「终端」+40 `g1side`、`/supplier/gates/` 20 `g1side`（`gate-timeline.mjs` 载荷）；`quote-prepare` 的「下一步（签署）」区（`quote-prepare.mjs:74` + handoff 命令）⇒ `/supplier/`、`/supplier/quotes/`、`/supplier/quotes/prepare/` 各 1+2 处。
+- **按规则 12 / 29 §2 应删、本批未删（不改 `src/domain/**`）**：`domain/{advice,rfq-deadline}/tests/`（旧页 200 / `data-advice-link` / `data-deadlines-link` / advice 的 `next_action` 必须是 `g1side` 命令）、`domain/gate-timeline/tests/`（把 `next_action` 含 `g1side` 钉成判据 = DEF-032 反面）⇒ 详见 `plugin-file-map-batches.md` 的批次台账。
+- **写面未拆**：`POST /<view>/{deadlines/promise,gates/nudge}` 保留（GUI 孪生动作 `exchange.promise`/`gate.nudge`）；`inject` 仍列 `advicePanel`/`rfqDeadline`。
+
 ---
 
 ## 1. P0 —— 阻断一条真实闭环

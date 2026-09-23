@@ -90,6 +90,28 @@ export const SUBVIEWS = {
 /** 子视图中文名（导航与标题用；键必须与 SUBVIEWS 完全对应）。 */
 const SUB_TITLE = { events: '事件', quotes: '报价', approvals: '待批', evidence: '证据面', clarifications: '澄清' }
 
+/**
+ * **退役的旧 SSR 页**（`docs/design/29-webui-gui-app.md` §2「旧口径一律删除，不得保留副本」）。
+ *
+ * 这两页（`/<view>/advice/` 决策建议、`/<view>/deadlines/` 回文时限）是「说明书式只读页」：
+ * 页面把**终端命令**准备好让用户复制（`python3 -m quotagent.g1side …`、`tools/rfq-promise.py …`、
+ * 「五件事永远在终端做人签」），与用户要求「双方仅通过 GUI 走完全部业务流程」正面冲突，
+ * 且它们的功能已由 GUI 面板 + 动作承接：
+ *   · `advice` → `rfq.remind-board`（谁没回 / 已催几次）/`compare.ranking`（贡献与提升方式）/
+ *     `gate.queue`（等多久、卡在谁）/`mail.channel`（为什么发不出去），动作 `rfq.remind`、
+ *     `gate.escalate`、`exchange.rev-amend`；
+ *   · `deadlines` → `rfq.remind-board`（回文时限与催报，双方）+ 动作 `rfq.remind`、
+ *     `exchange.promise`（供应商「我要晚点回」）、`exchange.inbox`（认收）。
+ *
+ * **旧地址不 404**：`303 → ${prefix}/app/<view>/`（GUI 视图页；该侧的面板就在那一页上）。
+ * 未登录 / 跨侧语义**一字未改**（仍走 `identity.gateBusinessRoute`：401 或 303 → `/identity/?next=…`）。
+ * 写面（`POST /<view>/deadlines/promise`、`POST /<view>/gates/nudge`）本批**不拆**（它们是动作，不是旧页）。
+ */
+const RETIRED_SUBVIEWS = {
+  advice: '决策建议（确定性规则派生的「下一步」已并入 GUI 面板：回文时限与催报 / 比价名次与贡献 / 审批队列 / 邮件通道）',
+  deadlines: '回文时限（谁没回、已催几次、还剩多久）—— 面板 `rfq.remind-board`，动作 `rfq.remind` / `exchange.promise`',
+}
+
 /** 分页/筛选的**夹取口径**（写死一处；回显的 applied 即真值，请求值一并报出便于人工核对）。 */
 const LIMIT_DEFAULT = 20
 const LIMIT_MAX = 200
@@ -212,43 +234,35 @@ const subNav = (prefix, view, current) => {
   }
   // 比价 heuristics（T-279）：业务方看得见、点得到（新页面本身零内联脚本）
   links.push(`<a href="${prefix}/${view}/heuristics/" data-heuristics-link="1"${current === 'heuristics' ? ' aria-current="page"' : ''}>比价口径</a>`)
-  // 决策建议层（本批）：确定性规则派生的下一步（`engine=rules`，同样零内联脚本）
-  links.push(`<a href="${prefix}/${view}/advice/" data-advice-link="1"${current === 'advice' ? ' aria-current="page"' : ''}>决策建议</a>`)
   // 审批等多久 / 变更单谁卡着（本批）：等待时长有口径、卡点有名字、下一步可复制（同样零内联脚本）
   links.push(`<a href="${prefix}/${view}/gates/" data-gates-link="1"${current === 'gates' ? ' aria-current="page"' : ''}>审批与变更</a>`)
   // 授权区间（authority-band 插件）：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁（零内联脚本）
   links.push(`<a href="${prefix}/${view}/authority/" data-authority-link="1"${current === 'authority' ? ' aria-current="page"' : ''}>授权区间</a>`)
-  // RFQ 回文时限（rfq-deadline 插件）：谁还没回 / 还差多久 / 为什么发不出去（零内联脚本）
-  links.push(`<a href="${prefix}/${view}/deadlines/" data-deadlines-link="1"${current === 'deadlines' ? ' aria-current="page"' : ''}>回文时限</a>`)
+  // 退役的旧页**不再出现在导航里**：`/<view>/advice/`（决策建议）与 `/<view>/deadlines/`（回文时限）
+  // 已按 `docs/design/29-webui-gui-app.md` §2 退役 —— 旧地址 303 → GUI（`/app/<view>/`），见 RETIRED_SUBVIEWS。
   return `<nav data-subnav="${view}">${links.join(' ')}</nav>`
 }
 
 /** 页内锚点导航（ops / admin 两道；同样带 `data-subnav` 抓手）。
- *  `extras` 是比价口径入口（带 `data-heuristics-link`），`adviceExtras` 是决策建议入口
- *  （带 `data-advice-link`），`gateExtras` 是审批与变更入口（带 `data-gates-link`），
- *  `authorityExtras` 是授权区间入口（带 `data-authority-link`），`deadlineExtras` 是回文时限入口
- *  （带 `data-deadlines-link`）——五种入口的抓手分开，免得门把其中一个当成另一个的证据。 */
-const anchorNav = (view, home, sections, extras = [], adviceExtras = [], gateExtras = [], authorityExtras = [],
-  deadlineExtras = []) => `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
+ *  `extras` 是比价口径入口（带 `data-heuristics-link`），`gateExtras` 是审批与变更入口
+ *  （带 `data-gates-link`），`authorityExtras` 是授权区间入口（带 `data-authority-link`）
+ *  —— 三种入口的抓手分开，免得门把其中一个当成另一个的证据。
+ *  （`advice` / `deadlines` 两个入口已随旧页退役：见 `RETIRED_SUBVIEWS`。） */
+const anchorNav = (view, home, sections, extras = [], gateExtras = [], authorityExtras = []) =>
+  `<nav data-subnav="${view}">${[`<a href="${home}">首页</a>`]
   .concat(sections.map(([id, label]) => `<a href="${home}#${id}">${label}</a>`))
   .concat(extras.map(([href, label]) => `<a href="${href}" data-heuristics-link="1">${label}</a>`))
-  .concat(adviceExtras.map(([href, label]) => `<a href="${href}" data-advice-link="1">${label}</a>`))
   .concat(gateExtras.map(([href, label]) => `<a href="${href}" data-gates-link="1">${label}</a>`))
   .concat(authorityExtras.map(([href, label]) => `<a href="${href}" data-authority-link="1">${label}</a>`))
-  .concat(deadlineExtras.map(([href, label]) => `<a href="${href}" data-deadlines-link="1">${label}</a>`))
   .join(' ')}</nav>`
-
-/** ops / admin 两道共用的「回文时限」入口（两道各传自己那一份；抓手是 `data-deadlines-link`）。 */
-const DEADLINE_EXTRAS = (prefix) => [[`${prefix}/contractor/deadlines/`, '回文时限（承包商）'],
-  [`${prefix}/supplier/deadlines/`, '回文时限（供应商）']]
 
 
 /** 上手页（**未提权也能看**）：三步上手 + 提权 token 放哪里 + 配置/凭据放哪里 + 四个视图能做什么。
  *  只讲机制与命令，**不显示任何状态位/凭据值**（宿主零写面、零凭据）。 */
 function onboardingHtml(prefix, views) {
   const rows = views.map((v) => {
-    const can = { contractor: '看本侧待办/事件/报价/待批摘要；准备批准材料（**批准本身在终端做人签**）',
-      supplier: '看本侧待办/事件/自己的报价；提交澄清与报价草稿（**提交与定标在终端做人签**）',
+    const can = { contractor: '看本侧待办/事件/报价/待批摘要；批准与变更在 GUI 里人签（`/app/contractor/` 的审批队列 / 变更列表）',
+      supplier: '看本侧待办/事件/自己的报价；提交澄清与报价草稿；人签提交在 GUI 的签名对话框里',
       ops: '运行期中间件、邮件域、留存计划、自进化日志、证据索引（只读）',
       admin: '提权后：插件市场、用户空间插件装卸/迭代、阻塞提交、跨道切换（**写操作只落待处理项，由 Python 侧消费**）' }
     return `<tr><td><code>${prefix}/${v}/</code></td><td>${can[v] ?? '（未登记）'}</td></tr>`
@@ -296,13 +310,15 @@ authority.escalation_note ← 越界升级时给办理人看的一句话（空 =
   authority.bands.lead: 2000000
   authority.bands.director: 10000000
   authority.fallback_role: director
-  authority.escalation_note: 越界请找业主代表走终端人工门</pre>
+  authority.escalation_note: 越界请找业主代表（越界时页面给出下一角色；批准在 GUI 里人签）</pre>
 <p><b>配完在哪看</b>：<a href="${prefix}/contractor/authority/">授权区间</a>（承包商道）与
 <a href="${prefix}/supplier/authority/">授权区间</a>（供应商道）—— 填一个金额（**整数分**）与角色，
-页面会告诉你「落在谁的区间里 / 越界多少 / 下一个能批的人是谁 / 升级命令怎么复制」。</p>
+页面会告诉你「落在谁的区间里 / 越界多少 / 下一个能批的人是谁 / 越界该找谁升级」（升级走 GUI 的
+审批队列动作 <code>gate.escalate</code>，本页只算、不批）。</p>
 <p><b>没配会怎样（诚实默认）</b>：页面**不会**给你编一个限额 —— 它报 <code>unconfigured</code> 并把
 <code>required_role</code>/<code>next_role</code> 留空，同时告诉你到哪一行去登记。另外：<b>越界一律走人工门</b>，
-该页**不能批准任何东西**（批准只在终端由 <code>human:*</code> 签）。</p>
+该页**不能批准任何东西**（批准在 GUI 里由登录身份人签：动作带 <code>permission=human-signature</code>，
+服务端校验署名 == 会话身份）。</p>
 <p>需要凭据才能工作的功能（**在接上之前一律如实报未连接，不会假装健康**）：</p>
 <pre>· 邮件收发（SMTP/IMAP）：未配置 → mail 传输 available:false / reason=mail-transport-unavailable / next_action=配置凭据后接入
 · Jev 建议层：未配置 key → 面板里作为一条阻塞项出现（不是在日志里悄悄失败）</pre>
@@ -311,8 +327,9 @@ authority.escalation_note ← 越界升级时给办理人看的一句话（空 =
 <h2>四个视图各能做什么</h2>
 <table><tr><th>路由</th><th>能做什么</th></tr>${rows}</table>
 <p><small>机器可读的路由表：<a href="${prefix}/api/routes">${prefix}/api/routes</a>。
-需要人签的动作（批准、提交报价、定标、发 PO、变更批准）**永远只在终端**完成 —— 浏览器只帮你准备好材料，
-不会替你签。</small></p>`
+需要人签的动作（批准、提交报价、定标、发 PO、变更批准）在 GUI 里由**本人签名对话框**完成
+（动作声明 <code>permission=human-signature</code>，服务端校验署名 == 会话身份）；界面只**发起**，
+落账本的仍是既有唯一写者 —— 界面不代签、不写账本。</small></p>`
 }
 
 
@@ -733,7 +750,8 @@ export function apply(ctx, config) {
   const configView = ctx.configView          // 配置与凭据的可视面 + 干跑 + 待处理项（本批新增模块）
   const mailView = ctx.mailView              // 邮件域（SMTP/IMAP）的只读运维视图（**本批新增模块**）
   const bid = ctx.bidHeuristics              // 比价 heuristics（domain 插件，T-279）：只做算术，不读账本
-  const advice = ctx.advicePanel             // 决策建议层（domain 插件，本批）：确定性规则派生，不读账本、不联网、不调模型
+  // `ctx.advicePanel`（决策建议）仍在 `inject` 里，但**本文件已不再调用它**：它的旧 SSR 页
+  // （`/<view>/advice/`）本批按 29 §2 退役（见 `RETIRED_SUBVIEWS`），GUI 面板承接同一件事。
   const gates = ctx.gateTimeline             // 审批等多久 / 变更单谁卡着（domain 插件）：只吃白名单载荷，不读账本、不取墙钟
   const authority = ctx.authorityBand        // 授权区间（domain 插件，本批）：只读配置快照（authority.* 键），不读账本、不取墙钟、**不能批准**
   const deadline = ctx.rfqDeadline           // RFQ 回文时限（domain 插件，本批）：只吃白名单事实载荷，不读账本、不发信、不取墙钟、**不能代发**
@@ -1054,54 +1072,17 @@ export function apply(ctx, config) {
         + '不出任何绝对量级与私域键' }
   }
 
-  // ==========================================================================================
-  // 决策建议层：**确定性规则**从本视角自己的投影/快照派生"下一步"。
-  //   · 派生全在 `host/modules/advice-panel.mjs`（domain 插件：不读账本、不写文件、不联网、不调模型）；
-  //   · 本文件只做一件事：把**本视角自己的行/快照**过滤成白名单结构（带私域键的行整行跳过并报数，
-  //     与比价候选同一道防线），再把插件给的建议原样渲染（页面 **0 行脚本**，下一步是可复制的命令/路由）；
-  //   · `as_of` = 本视角行里最大的 `ts`（**事实时刻**，不是墙钟）—— 没有它就不派生截止类建议（不猜）。
-  // ==========================================================================================
-  const ADVICE_CAP = 8          // 喂给建议层的每段条目上限（有界；每段各自截断，互不影响）
+  // 决策建议层（`advice-panel` 插件）：**旧 SSR 页已退役**（`RETIRED_SUBVIEWS`：`/<view>/advice/` 与
+  // `/<view>/api/advice` 现为 303 → `/app/<view>/`）。本文件只留下**一处仍在用的读法**：`adviceChannels`
+  // （邮件通道声明，被 `deadlineChannelOf` 复用）；插件仍在 `inject` 里（与 `host/webui.mjs` 的 inject
+  // 镜像同源，收口要连门一起改 —— 已登记在 `docs/work/plans/webui-ui-defects.md`）。
+  /** 事实时刻：本视角投影里最大的 `ts`（没有可解析的 `ts` 就是 null ⇒ 调用方不给时间类结论，不猜时钟）。 */
   const lastTsOf = (rows) => rows.map((row) => (typeof row?.ts === 'string' && row.ts.trim() !== '' ? row.ts.trim() : null))
     .filter((ts) => ts !== null).sort().pop() ?? null
 
-  /** 截止：本视角自己的 `rfq/*` 行（`package_id` + `quote_by` / `clarify_by`）。 */
-  const adviceDeadlines = (view) => {
-    const out = []
-    for (const row of ledgerOf(view).rows()) {
-      const body = row && typeof row.body === 'object' && row.body !== null ? row.body : {}
-      if (hasPrivateKey(body, view)) continue
-      if (!String(row?.type ?? '').startsWith('rfq/')) continue
-      const ref = [body.package_id, row?.correlation_id]
-        .map((value) => (typeof value === 'string' ? value.trim() : '')).find((text) => text !== '')
-      if (!ref) continue
-      for (const [kind, value] of [['quote_by', body.quote_by], ['clarify_by', body.clarify_by]]) {
-        if (typeof value !== 'string' || value.trim() === '') continue
-        out.push({ ref, due_at: value.trim(), kind })
-      }
-    }
-    return out
-  }
-  /** 等待人工门：按 `approval_id` 取最后一条 `approval/*`，不是 granted/aborted 就算仍待批。 */
-  const adviceGates = (view) => {
-    const last = new Map()
-    for (const row of ledgerOf(view).rows()) {
-      const type = String(row?.type ?? '')
-      if (!type.startsWith('approval/')) continue
-      const body = row && typeof row.body === 'object' && row.body !== null ? row.body : {}
-      if (hasPrivateKey(body, view)) continue
-      const id = typeof body.approval_id === 'string' ? body.approval_id.trim() : ''
-      if (!id) continue
-      last.set(id, { type, scope: typeof body.scope === 'string' ? body.scope.trim() : '',
-        ref: typeof body.ref === 'string' ? body.ref.trim() : '' })
-    }
-    return [...last.entries()].sort((left, right) => (left[0] < right[0] ? -1 : (left[0] > right[0] ? 1 : 0)))
-      .filter(([, item]) => item.type !== 'approval/granted' && item.type !== 'approval/aborted')
-      .map(([approval_id, item]) => ({ approval_id, scope: item.scope, ref: item.ref }))
-  }
   /** 通道声明：**邮件域快照**（与 `/api/mail` 同一个来源 —— `mail-view` 的只读投影）里 SMTP（发信链）那一档。
    *  来源与判定都没变（`services/mail_transport`），只是不再经过已退役的三域流水快照（29 §2）；
-   *  IMAP 是收信链，与「这份建议能不能发出去」无关，故不在这条声明里。 */
+   *  IMAP 是收信链，与「这份约定能不能发出去」无关，故不在这条声明里。 */
   const adviceChannels = (view) => {
     const snap = mailSnapshot() || {}
     const out = []
@@ -1116,82 +1097,6 @@ export function apply(ctx, config) {
         next_action: typeof decl.next_action === 'string' ? decl.next_action : '' })
     }
     return out
-  }
-  /**
-   * 比价口径（**复用 heuristics 的候选映射与同口径打分**）：不截断候选 —— 截断会改变极差归一的
-   * 基数（等于换了一套口径），展示行数由 `bid-heuristics` 自己的 `max_candidates` 兜。
-   */
-  const adviceRanking = (view) => {
-    const payload = bid.rank({ candidates: heuristicsCandidates(view).list })
-    return { rows: payload.rows.map((row) => ({ code: row.code, item: row.item, score: row.score,
-      focus: row.focus, potential: row.potential, hint: row.hint })) }
-  }
-  const advicePayload = (view) => ({
-    view,
-    as_of: lastTsOf(ledgerOf(view).rows()),
-    deadlines: adviceDeadlines(view).slice(0, ADVICE_CAP),
-    gates: adviceGates(view).slice(0, ADVICE_CAP),
-    ranking: adviceRanking(view),
-    channels: adviceChannels(view).slice(0, ADVICE_CAP),
-  })
-  const adviceRun = (view) => advice.advise(advicePayload(view))
-  /** JSON（机器可读；与页面同数据、同口径；引擎自述一起给）。 */
-  const adviceJson = (view) => {
-    const run = adviceRun(view)
-    const meta = advice.meta()
-    return { view, source: 'advice-panel（domain 插件：确定性规则；不读账本、不写账本、不联网、不调模型）',
-      engine: run.engine, engine_note: run.engine_note, as_of: run.as_of, items: run.items,
-      counts: run.counts, absent: run.absent, notes: run.notes, rules: run.rules, bounds: run.bounds,
-      truncated: run.truncated, omitted: run.omitted, bounded: run.bounded, degraded: run.degraded,
-      reason: run.reason, privacy: run.privacy,
-      meta: { engine: meta.engine, severities: meta.severities, sections: meta.sections,
-        degraded_reasons: meta.degraded_reasons },
-      note: 'engine=rules：本接口给的是**确定性规则**从投影/快照派生的一组"下一步"，不含模型推测；'
-        + '每条建议的 `basis` 指向本视角投影里的真键；没有可分的数据时 `degraded:true` + 有名 `reason` 且'
-        + ' `items` 为 0（不编建议）；`next_action` 是可直接复制的命令或本前缀下的路由（凭据缺口时照抄声明里的真值，'
-        + '不假装能发）' }
-  }
-  /** 建议页（SSR，**零内联脚本**：下一步是 `<pre><code>` 里的命令/路由，点的是链接）。 */
-  const adviceHtml = (view) => {
-    const run = adviceRun(view)
-    const SEVERITY_LABEL = { high: '高', medium: '中', low: '低' }
-    const rows = run.items.map((item) => `<tr data-advice-id="${esc(item.id)}" data-rule="${esc(item.rule)}"`
-      + ` data-severity="${esc(item.severity)}"><td>${esc(SEVERITY_LABEL[item.severity] ?? item.severity)}</td>`
-      + `<td><code>${esc(item.rule)}</code><br><small><code>${esc(item.id)}</code></small></td>`
-      + `<td>${esc(item.title)}<br><small>${esc(item.why)}</small></td>`
-      + `<td>${item.basis.map((token) => `<code>${esc(token)}</code>`).join(' ')}</td>`
-      + `<td><pre>${esc(item.next_action)}</pre>`
-      + `${item.blocked_by === '' ? '' : `<small>阻塞：${esc(item.blocked_by)}</small>`}</td></tr>`).join('')
-    const header = '<tr><th>严重度</th><th>规则</th><th>建议与依据</th><th>溯源（投影真键）</th><th>下一步（可复制）</th></tr>'
-    const chips = run.rules.map((entry) => `<code>${esc(entry.rule)}</code> ${esc(entry.label)}`).join(' · ')
-    return subNav(prefix, view, 'advice')
-      + `<p><a href="${prefix}/${view}/">← 回 ${rules[view].title}</a> · JSON：<code>${prefix}/${view}/api/advice</code>`
-      + ` · <a href="${prefix}/${view}/advice/">重新派生</a>（本页每次都是现算的，没有缓存）</p>`
-      + `<p data-engine="${esc(run.engine)}"><b>引擎：<code>engine=${esc(run.engine)}</code></b> —— `
-      + `${esc(run.engine_note)}（本层是**确定性规则**：五条规则写在 <code>host/modules/advice-panel.mjs</code>，`
-      + `每条建议都带 <b>basis</b> 指回本视角投影里的真键；宿主不读账本、不写账本、不联网、不调模型，页面 0 行脚本）。</p>`
-      + `<p>规则表：${chips}</p>`
-      + `<p data-advice="inputs">参照时刻 <code>as_of=${esc(run.as_of ?? '（无）')}</code>`
-      + `（= 本视角账本事实里最大的 <code>ts</code>，**不是墙钟**）；本页读到的输入：`
-      + `截止 <b>${run.counts.inputs?.deadlines ?? 0}</b> · 待批 <b>${run.counts.inputs?.gates ?? 0}</b> ·`
-      + ` 比价行 <b>${run.counts.inputs?.ranking_rows ?? 0}</b> · 通道 <b>${run.counts.inputs?.channels ?? 0}</b>；`
-      + `本视角**没有**的输入段：<code>${esc(run.absent.join(', ') || '（无）')}</code></p>`
-      + (run.degraded
-        ? `<p class="degraded" data-degraded="1">降级（**不冒充健康、也不给你编建议**）：`
-          + `<code>${esc(run.reason)}</code> —— 建议数 <b>${run.counts.shown}</b> 条。`
-          + `${run.reason === 'no-usable-inputs' ? '本视角投影里还没有可供派生的数据（不是页面坏了）。' : ''}`
-          + `${run.reason === 'no-signal' ? '数据齐了但没有触发任何规则 —— 这本身就是结论，不编一条兜底建议。' : ''}</p>`
-        : `<table data-advice="items">${header}${rows}</table>`)
-      + `<p data-advice="counts">生成 <b>${run.counts.generated}</b> 条 / 展示 <b>${run.counts.shown}</b> 条；`
-      + `严重度分布（生成口径）：高 <b>${run.counts.by_severity.high}</b> / 中 <b>${run.counts.by_severity.medium}</b> /`
-      + ` 低 <b>${run.counts.by_severity.low}</b>；有界：上限 <code>max_items=${run.bounds.max_items}</code> →`
-      + ` 截断 <b>${run.truncated}</b>（被丢 <b>${run.omitted}</b> 条，照实报）；阈值：`
-      + ` 截止临近 <code>${run.bounds.expiry_soon_hours}h</code> / 得分极差 <code>${run.bounds.spread_points}</code> 分</p>`
-      + (run.notes.length
-        ? `<ul data-advice="notes">${run.notes.map((text) => `<li>${esc(text)}</li>`).join('')}</ul>`
-        : '<p data-advice="notes">说明：无（本次每条输入都进了派生）</p>')
-      + `<p><small>**浏览器的极限**：本页只把命令准备好给你复制 —— 批准 / 提交报价 / 定标 / 发 PO / 变更批准`
-      + `五件事**永远在终端做人签**（<code>ADR-0013 §3</code>），宿主不能代签。</small></p>`
   }
 
   // ==========================================================================================
@@ -1335,10 +1240,11 @@ export function apply(ctx, config) {
       + `<p><label>目标门 id：<input name="id" size="18" placeholder="ap-0007"></label></p>`
       + `<p><textarea name="reason" rows="3" cols="72" placeholder="例如：这批料已经到场了，等您签字才能开工"></textarea></p>`
       + `<p><button type="submit">提交催办（只落待办件）</button></p></form>`
-      + `<p>等价命令行：<pre>curl -s -X POST ${prefix}/${esc(view)}/gates/nudge -d 'id=ap-0007' -d 'reason=现场催一下'</pre></p>`
-      + `<p><small>**浏览器的极限**：批准 / 提交报价 / 定标 / 发 PO / 变更批准五件事**永远在终端做人签**`
-      + `（<code>ADR-0013 §3</code>）：本插件**没有**批准/签收/提交这类方法（<code>can_approve=false</code>），`
-      + `它只能告知与转交催办。本页 **0 行脚本、0 内联事件**。</small></p>`
+      + `<p>等价命令行（与界面同一条写路由）：<pre>curl -s -X POST ${prefix}/${esc(view)}/gates/nudge -d 'id=ap-0007' -d 'reason=现场催一下'</pre></p>`
+      + `<p><small>**批准不在这里**：批准 / 提交报价 / 定标 / 发 PO / 变更批准五件事在 **GUI 里由本人签名**`
+      + `（动作声明 <code>permission=human-signature</code>，服务端校验署名 == 会话身份；界面只发起、不写账本）；`
+      + `本插件**没有**批准/签收/提交这类方法（<code>can_approve=false</code>），它只能告知与转交催办。`
+      + `本页 **0 行脚本、0 内联事件**。</small></p>`
   }
 
   /** 催办提交：插件只产载荷，**宿主只落一条 0600 待办件**（账本零新增；唯一落账本者是 Python 侧）。 */
@@ -1565,8 +1471,8 @@ export function apply(ctx, config) {
         : '<p data-detail="notes">说明：无（本次每一行都进了派生）</p>')
       + `<h3 id="next">下一步（可复制）</h3><pre>${esc(run.next_action)}</pre>`
       + `<p><small>**本页 0 行脚本、0 内联事件**：明细全部是服务端算好的数字与依据；`
-      + `看这张单**不需要**任何审批动作 —— 变更生效只能由 <code>human:*</code> 在**终端**过人工门` 
-      + `（<code>ADR-0013 §3</code>），浏览器不会替你签。</small></p>`
+      + `看这张单**不需要**任何审批动作 —— 变更生效要由**本人**在 GUI 里人签（<code>change.approve</code>，`
+      + `署名 == 会话身份、服务端校验），界面不会替你签。</small></p>`
   }
 
   // ==========================================================================================
@@ -1682,110 +1588,6 @@ export function apply(ctx, config) {
       promises: deadlinePromiseRows(view).slice(0, DEADLINE_CAP),
     }
   }
-  const deadlinesRun = (view) => deadline.status(deadlinePayload(view))
-  /** JSON（机器可读；与页面同数据、同口径；时限口径与\"发不出去\"的事实一起给）。 */
-  const deadlinesJson = (view) => {
-    const run = deadlinesRun(view)
-    const meta = deadline.meta()
-    return { view, service: 'rfq-deadline',
-      source: 'rfq-deadline（domain 插件：确定性规则；不读账本、不写账本、不取墙钟、不发信、不调模型）',
-      engine: run.engine, engine_note: run.engine_note, as_of: run.as_of,
-      as_of_basis: '本视角投影里最大的 ts（事实时刻，不是墙钟）',
-      due_clock: run.due_clock, due_basis_note: run.due_basis_note,
-      ignored_now_inputs: run.ignored_now_inputs, rfq_keys: run.rfq_keys,
-      rfqs: run.rfqs, counts: run.counts, bounds: run.bounds,
-      truncated: run.truncated, omitted: run.omitted, degraded: run.degraded, reason: run.reason,
-      channel: run.channel, can_send: run.can_send, no_send_note: run.no_send_note,
-      private_lists_visible: run.private_lists_visible, private_lists_note: run.private_lists_note,
-      roster_note: run.roster_note, notes: run.notes, privacy: run.privacy,
-      meta: { engine: meta.engine, due_clock: meta.due_clock, sections: meta.sections,
-        degraded_reasons: meta.degraded_reasons, severities: meta.severities, rfq_keys: meta.rfq_keys,
-        private_list_views: meta.private_list_views, promise_codes: meta.promise_codes,
-        promise_action: meta.promise_action, kind: meta.kind, schema: meta.schema, event: meta.event,
-        bounds: meta.bounds, can_send: meta.can_send, can_approve: meta.can_approve },
-      note: 'engine=rules：`due_ts` 来自**事实行**（`rfq/published.quote_by` 或 `rfq/promised.due_at`），'
-        + '`remaining_seconds = due_ts − as_of`（**不取墙钟**，同一份快照在任何时刻返回同一组数字）；'
-        + '`responded`/`silent` 只统计**本视角投影**里的 `quote/submitted` 事实，且只有业主侧（'
-        + `${[...meta.private_list_views].join('/')}）看得见名单（其余视角读都不读）；`
-        + '**本插件发不出任何东西**（`can_send=false`）：通道不可用时如实报「无法代发」，'
-        + '输出的任何字段里都不会出现任何"发过了"的事实表述；'
-        + '登记承诺只落 0600 待办件（宿主不写账本），落账本的是 `tools/rfq-promise.py`' }
-  }
-  /** 页面（SSR，**零内联脚本**：下一步是 `<pre><code>` 里的命令/路由，登记承诺用 `<form method=post>`）。 */
-  const deadlinesHtml = (view) => {
-    const run = deadlinesRun(view)
-    const rowOf = (item) => `<tr data-rfq-id="${esc(item.rfq_id)}" data-severity="${esc(item.severity)}"`
-      + ` data-remaining-seconds="${esc(String(item.remaining_seconds))}"`
-      + ` data-responded-count="${esc(String(item.responded.length))}"`
-      + ` data-silent-count="${esc(String(item.silent.length))}"`
-      + ` data-deadline-due-ts="${esc(String(item.due_ts))}">`
-      + `<td><b>${esc(item.subject)}</b><br><small>${esc(item.rfq_id)}</small></td>`
-      + `<td><code>${esc(String(item.due_ts))}</code><br><small>${esc(item.due_basis)}</small></td>`
-      + `<td>${esc(item.severity)}<br><small>剩余 <b>${esc(String(item.remaining_seconds))}</b> 秒</small></td>`
-      + `<td>已回 <b>${esc(String(item.responded.length))}</b>：<code>${esc(item.responded.join(' ') || '—')}</code><br>`
-      + `未回 <b>${esc(String(item.silent.length))}</b>：<code>${esc(item.silent.join(' ') || '—')}</code></td>`
-      + `<td>${esc(item.blocked_by)}</td>`
-      + `<td data-deadline-next-action="${esc(item.rfq_id)}"><pre>${esc(item.next_action)}</pre></td></tr>`
-    const header = '<tr><th>RFQ</th><th>回文时限（口径写在下面）</th><th>严重度 / 还剩多久</th>'
-      + '<th>名单（业主侧才看得见）</th><th>为什么发不出去</th><th>下一步（可复制）</th></tr>'
-    return subNav(prefix, view, 'deadlines')
-      + `<p><a href="${prefix}/${view}/">← 回 ${rules[view].title}</a> · JSON：<code>${prefix}/${view}/api/deadlines</code>`
-      + ` · <a href="${prefix}/${view}/deadlines/">重新派生</a>（本页每次都是现算的，没有缓存）</p>`
-      + `<p data-deadlines-engine="${esc(run.engine)}"><b>引擎：<code>engine=${esc(run.engine)}</code></b> —— `
-      + `${esc(run.engine_note)}（规则写在 <code>host/modules/rfq-deadline.mjs</code>；宿主不读账本、不写账本、不取墙钟）。</p>`
-      + `<p data-due-clock="${esc(run.due_clock)}" data-deadlines="due-basis"><b>「还剩多久」的口径</b>：`
-      + `${esc(run.due_basis_note)}；参照事实时刻 <code>as_of=${esc(run.as_of ?? '（本视角还没有可解析的事件 ts）')}</code>`
-      + `（= 本视角投影里最大的 <code>ts</code>，**不是墙钟**）；被忽略的墙钟入口：`
-      + `<code>${esc(run.ignored_now_inputs.join(', '))}</code>（给它们任何值，本页数字都不变）。</p>`
-      + `<p data-cannot-send="${run.can_send ? '0' : '1'}"><b>发不出去这件事也写在页面上</b>：`
-      + `邮件通道 <code>available=${esc(String(run.channel.available))}</code>`
-      + `${run.channel.reason ? `（<code>${esc(run.channel.reason)}</code>）` : ''} —— `
-      + `${run.channel.available
-        ? '凭据就位，但本插件**不发送任何东西**（只读投影）：要发信只能走已登记的邮件路由，且由 Python 侧的唯一发信者做'
-        : '**无法代发**任何催报/通知：本页只列名单与时限，不声称任何"发过了"的事实'}；`
-      + `通道事实来源：<code>${esc(run.channel.source)}</code>。</p>`
-      + (run.degraded
-        ? `<p class="degraded" data-deadlines-degraded="1"><b>降级（**不冒充健康、也不给你编条目**）</b>：`
-          + `<code>${esc(run.reason)}</code> —— RFQ 条目 <b>0</b> 条。`
-          + `${run.reason === 'no-usable-inputs' ? '本视角投影里还没有可供派生的 `rfq/*`、`quote/submitted` 事实行（不是页面坏了）。' : ''}`
-          + `${run.reason === 'no-signal' ? '数据齐了，但没有发布过的包 —— 这本身就是结论，不编一条兜底项。' : ''}`
-          + `</p>`
-        : '')
-      + `<h3 id="rfqs">还在收报价的 RFQ（<b data-deadline-count="${run.counts.rfq.shown}">${run.counts.rfq.shown}</b> 条）</h3>`
-      + `<p data-deadlines-roster-note="1">${esc(run.roster_note)}</p>`
-      + (run.rfqs.length
-        ? `<table data-deadlines="table">${header}${run.rfqs.map(rowOf).join('')}</table>`
-        : '<p data-deadlines="table-none">本视角投影里没有发布过的 RFQ（`rfq/published` 一行都没有）'
-          + `；生成口径下共有 <b>${run.counts.rfq.found}</b> 条。</p>`)
-      + `<p data-deadlines="counts">生成 <b>${run.counts.rfq.found}</b> 条 / 展示 <b>${run.counts.rfq.shown}</b> 条`
-      + `（上限 <code>max_items=${run.bounds.max_items}</code>）；截断 <b>${run.truncated}</b>`
-      + `（被丢 <b>${run.omitted}</b> 条，照实报）；严重度分布（生成口径）：`
-      + `已过 <b>${run.counts.by_severity.overdue}</b> / 不到 1 小时 <b>${run.counts.by_severity.critical}</b> / `
-      + `不到 24 小时 <b>${run.counts.by_severity.soon}</b> / 还早 <b>${run.counts.by_severity.scheduled}</b> / `
-      + `认不出时限 <b>${run.counts.by_severity['unknown-deadline']}</b>；`
-      + `名单合计：已邀请 <b>${run.counts.invited}</b> / 已回 <b>${run.counts.responded}</b> / 未回 <b>${run.counts.silent}</b>；`
-      + `归不到包的报价事实 <b>${run.counts.unattributed_quotes}</b> 条（照实报）</p>`
-      + `<p data-deadlines-private-note="1">${esc(run.private_lists_note)}</p>`
-      + (run.notes.length
-        ? `<ul data-deadlines="notes">${run.notes.map((text) => `<li>${esc(text)}</li>`).join('')}</ul>`
-        : '<p data-deadlines="notes">说明：无（本次每条输入都进了派生）</p>')
-      + `<h3 id="promise">登记承诺回文时限（**只落待办件、账本零新增**）</h3>`
-      + `<p>登记只做两件事：把**发言人**、**承诺回文时限**、**RFQ id** 与你写的原话（只留 sha256）`
-      + `落成一条 <b>0600 待办件</b>（宿主**不写账本、不发信**），由 <code>tools/rfq-promise.py</code> `
-      + `落一条 <code>${esc(deadline.meta().event)}</code>（只记"谁在什么时候为哪个包承诺了什么时限"）。`
-      + `登记**不是发信**、**不是批准**：账本里不会因此多出一条报价。</p>`
-      + `<form method="post" action="${prefix}/${esc(view)}/deadlines/promise">`
-      + `<p><label>RFQ id：<input name="id" size="18" placeholder="pkg-g1"></label> `
-      + `<label>发言人：<input name="by" size="20" placeholder="human:liangzi"></label> `
-      + `<label>承诺回文时限：<input name="due_at" size="22" placeholder="2026-09-26T00:00:00Z"></label></p>`
-      + `<p><textarea name="note" rows="3" cols="72" placeholder="例如：周五下班前一定把这版的报价回过去"></textarea></p>`
-      + `<p><button type="submit">登记承诺（只落待办件）</button></p></form>`
-      + `<p>等价命令行：<pre>curl -s -X POST ${prefix}/${esc(view)}/deadlines/promise -d 'id=pkg-g1' -d 'by=human:liangzi' -d 'due_at=2026-09-26T00:00:00Z' -d 'note=周五前回'</pre></p>`
-      + `<p><small>**浏览器的极限**：本插件**没有**发信 / 提醒 / 批准 / 提交这类方法（<code>can_send=false</code>、`
-      + `<code>can_approve=false</code>）：它只能告知\"还差谁回、还剩多久、为什么发不出去\"，`
-      + `并把你的承诺转交成一条待办件。本页 **0 行脚本、0 内联事件**。</small></p>`
-  }
-  /** 登记提交：插件只产载荷，**宿主只落一条 0600 待办件**（账本零新增；唯一落账本者是 Python 侧）。 */
   const submitPromise = (view, form) => {
     const out = deadline.promise(deadlinePayload(view), {
       view,
@@ -1827,8 +1629,9 @@ export function apply(ctx, config) {
   //   · 金额一律**整数分**（`unit=cents`）：负数 / 非整数 / 超上限 ⇒ 具体 `code` + `next_action`（不折算、不四舍五入）。
   //   · **未配置不得编限额**：`authority.bands.<角色>` 为 null 或没登记 ⇒ `unconfigured=true` +
   //     `required_role`/`next_role` 都为空（不知道就是不知道，不落回默认值）。
-  //   · **越界必须走人工门**：越界时给**可直接复制**的升级命令；页面 **0 内联脚本**、
-  //     **本插件不能批准**（`can_approve=false`，批准只在终端由 `human:*` 签）。
+  //   · **越界必须走人工门**：越界时给**下一个能批的角色**与升级入口（GUI 动作 `gate.escalate`）；
+  //     页面 **0 内联脚本**、**本插件不能批准**（`can_approve=false`；批准在 GUI 里由本人签名，
+  //     动作声明 `permission=human-signature`）。
   // ==========================================================================================
   /** 只读配置快照：只取 `authority.*` 键（其余键连值都不读）。读不到 → null（插件据此报 `config-missing`）。 */
   const authorityConfigSnapshot = () => {
@@ -1958,7 +1761,8 @@ export function apply(ctx, config) {
       + `<p><small>**本页 0 行脚本、0 内联事件**；金额一律整数分（<code>unit=${esc(run.unit)}</code>）；`
       + `被忽略的墙钟入口：<code>${esc(run.ignored_now_inputs.join(', '))}</code>；`
       + `有界：角色表 ≤ ${esc(String(run.bounds.max_roles))} 条、金额 ≤ ${esc(String(run.bounds.amount_max))} 分。`
-      + `**本页不能批准、不能放行**（<code>can_approve=false</code>）—— 越界只出命令，签字在终端。</small></p>`
+      + `**本页不能批准、不能放行**（<code>can_approve=false</code>）—— 越界只出读数与「找谁升级」；`
+      + `批准在 GUI 里由本人签名（动作声明 <code>permission=human-signature</code>）。</small></p>`
   }
 
   // ==========================================================================================
@@ -2274,8 +2078,8 @@ export function apply(ctx, config) {
       if (existsSync(file)) {
         return { ...out, duplicate: true, id: record.quote_draft_id, file: rel, record,
           payload_sha256: record.lines_sha256,
-          next_action: `待办件已存在（同一份草稿，幂等）：跑 tools/quote-draft.py --now <ISO8601> 消费它`
-            + `（唯一落账本者），然后按本页「下一步（签署）」在终端签名` }
+          next_action: `待办件已存在（同一份草稿，幂等）：由宿主消费者 tools/quote-draft.py 落 quote/drafted（唯一落账本者）；`
+            + `之后在 GUI 里点「提交报价（人签）」提交（动作 quote.submit，署名 == 会话身份；等价命令 tools/quote-sign.py）` }
       }
       const tmp = join(dir, `.${record.quote_draft_id}.${process.pid}.tmp`)
       writeFileSync(tmp, JSON.stringify(record, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
@@ -2283,9 +2087,9 @@ export function apply(ctx, config) {
       renameSync(tmp, file)
       return { ...out, duplicate: false, id: record.quote_draft_id, file: rel, record,
         payload_sha256: record.lines_sha256,
-        next_action: `跑 tools/quote-draft.py --now <ISO8601> 落 quote/drafted（唯一落账本者）；`
-          + `签名是**人的动作**：用页面上「下一步（签署）」里的可复制命令 tools/quote-sign.py`
-          + `（--actor human:<你的名字>）在终端签（本 APP 不代签）` }
+        next_action: `宿主消费者 tools/quote-draft.py --now <ISO8601> 落 quote/drafted（唯一落账本者）；`
+          + `签名是**人的动作**：在 GUI 里点「提交报价（人签）」（动作 quote.submit）—— `
+          + `等价命令是 tools/quote-sign.py --actor human:<你的名字>（本 APP 不代签）` }
     } catch (err) {
       return { ...out, ok: false, code: 'pending-write-failed', file: '',
         next_action: `待办件写失败（${String(err && err.code ? err.code : err).slice(0, 40)}）：先修目录权限再重提` }
@@ -2642,9 +2446,8 @@ ${sortForm('events', '筛查事件')}
       + `<td>${esc(String(row.old_digest ?? '—').slice(0, 18))}</td><td>${esc(String(row.new_digest ?? '—').slice(0, 18))}</td>`
       + `<td>${esc(row.approval_ref ?? '—')}</td><td>${esc(row.fingerprint_first8 ?? '—')}</td></tr>`).join('')
     const degraded = data.degraded || creds.snapshot.available === false
-    return anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS, [], [], [],
-      [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']],
-      DEADLINE_EXTRAS(prefix))
+    return anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS, [], [],
+      [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])
       + `<p><a href="${prefix}/admin/">← 回系统管理</a> · <a href="${prefix}/start/">上手（token/配置放哪里？）</a> · `
       + `JSON：<code>${prefix}/admin/api/config</code> · <code>${prefix}/admin/api/credentials</code> · `
       + `<code>${prefix}/admin/api/config/audit</code></p>`
@@ -2817,6 +2620,40 @@ ${sortForm('events', '筛查事件')}
         }
         return json(verdict.status, verdict)
       }
+    }
+
+    // ---- 退役的旧 SSR 页（本批）：旧地址**不 404**，303 到对应 GUI 视图 ------------------------------
+    //   位置：身份门槛**之后**（未登录 ⇒ 401 / 303→登录；跨侧 ⇒ 403，语义与退役前逐字一致）、
+    //   静态业务路由**之前** ⇒ 旧的 `/<view>/<sub>/` 与 `/<view>/api/<sub>/` 不再渲染任何内容。
+    //   判据：sub ∈ RETIRED_SUBVIEWS（`advice` / `deadlines`）；其余子视图（events/quotes/approvals/
+    //   evidence/clarifications/heuristics/gates/authority/changes）**一行未改**。
+    //   为什么是 303 而不是 404：用户从旧书签/搜索/别人发来的链接打开时，必须落到**能做同一件事的
+    //   GUI 位置**（`/app/<view>/`，该侧承接这两个功能的插件面板就在那一页上），而不是失联。
+    const retiredMatch = /^\/([a-z]+)\/(?:api\/)?(advice|deadlines)\/?$/.exec(path)
+    if (retiredMatch !== null && rules[retiredMatch[1]] !== undefined) {
+      const view = retiredMatch[1]
+      const sub = retiredMatch[2]
+      const target = `${prefix}/app/${view}/`
+      const why = RETIRED_SUBVIEWS[sub]
+      if (String(req.headers.accept ?? '').includes('application/json')) {
+        // JSON 客户端同样**不丢联系人**：303 + `Location`（正文里给出替代位置与下一步）
+        return send(303, 'application/json; charset=utf-8',
+          JSON.stringify({ ok: false, view, code: 'retired-page', subview: sub,
+            reason: `旧 SSR 页 \`/${view}/${sub}/\` 已按 docs/design/29-webui-gui-app.md §2 退役（不留副本）`,
+            replacement: why, next: target,
+            next_action: `去 ${target} 用 GUI 做同一件事（本页不再返回内容）` }, null, 2) + '\n',
+          { location: target })
+      }
+      return send(303, 'text/html; charset=utf-8',
+        '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
+        + `<title>已退役 · ${esc(view)}/${esc(sub)}</title></head>`
+        + `<body data-retired-subview="${esc(sub)}" data-retired-view="${esc(view)}">`
+        + `<h1>这一页已退役（303 → GUI）</h1>`
+        + `<p>旧页 <code>${esc(prefix)}/${esc(view)}/${esc(sub)}/</code> 不提供内容了 —— 它只是把可复制的指令准备好，`
+        + '而同一件事现在在图形界面里点得到。</p>'
+        + `<p>它现在等于：<b>${esc(why)}</b></p>`
+        + `<p>下一步：<a href="${esc(target)}">${esc(target)}</a>（本应自动跳转；若浏览器没跳，点这个链接）。</p>`
+        + '</body></html>', { location: target })
     }
 
     // ---- GUI 应用外壳（**机制**；`docs/design/29-webui-gui-app.md`）--------------------------------
@@ -3151,12 +2988,14 @@ ${sortForm('events', '筛查事件')}
             { path: `${prefix}/${v}/api/heuristics`, method: 'GET', auth: 'none',
               what: `${v} 道的比价 heuristics JSON（参数同页面；只出白名单字段，不出绝对量级与私域键）` },
           ]),
-          // 决策建议层：确定性规则派生的"下一步"（engine=rules；页面零内联脚本）
+          // 决策建议层：**旧 SSR 页已退役**（`RETIRED_SUBVIEWS`；29 §2「不留副本」）——
+          //   旧地址不 404：303 → `/app/<view>/`（承接面板 rfq.remind-board / compare.ranking /
+          //   gate.queue / mail.channel，动作 rfq.remind / gate.escalate / exchange.rev-amend）
           ...config.views.filter((v) => rules[v]).flatMap((v) => [
             { path: `${prefix}/${v}/advice/`, method: 'GET', auth: 'none',
-              what: `${v} 道的决策建议页（严重度 / 依据 / 溯源键 / 可复制的命令或路由；engine=rules，不含模型推测）` },
+              what: `**已退役**（旧口径：页面只把命令准备好让用户复制，与 29 §4「仅通过 GUI」冲突）：303 → ${prefix}/app/${v}/；决策建议的读数与动作在 GUI 面板里` },
             { path: `${prefix}/${v}/api/advice`, method: 'GET', auth: 'none',
-              what: `${v} 道的决策建议 JSON（同页同口径；无可分数据时 degraded+reason 且 items 为空）` },
+              what: `**已退役**（同上，JSON 形态一并收口）：303 → ${prefix}/app/${v}/` },
           ]),
           // 审批等多久 / 变更单谁卡着（`gate-timeline` 插件）：等待时长有口径（不取墙钟）、催办只落 0600 待办件
           ...config.views.filter((v) => rules[v]).flatMap((v) => [
@@ -3179,14 +3018,16 @@ ${sortForm('events', '筛查事件')}
             { path: `${prefix}/${v}/api/authority`, method: 'GET', auth: 'none',
               what: `${v} 道的授权区间 JSON（同参同口径；未配置 ⇒ unconfigured=true 且 required_role/next_role 为空，不编限额）` },
           ]),
-          // RFQ 回文时限（`rfq-deadline` 插件）：谁还没回 / 还差多久 / 为什么发不出去（只读 + 登记承诺只落 0600 待办件）
+          // RFQ 回文时限（`rfq-deadline` 插件）：**旧 SSR 页已退役**（`RETIRED_SUBVIEWS`）——
+          //   旧地址不 404：303 → `/app/<view>/`（承接面板 rfq.remind-board，动作 rfq.remind /
+          //   exchange.promise / exchange.inbox 认收）；**写面保留**（登记承诺只落 0600 待办件）
           ...config.views.filter((v) => rules[v]).flatMap((v) => [
             { path: `${prefix}/${v}/deadlines/`, method: 'GET', auth: 'none',
-              what: `${v} 道的 RFQ 回文时限页（due_ts 的口径 / 还剩多久 / 已回与未回名单（业主侧才看得见）/ 为什么发不出去 + 每条一行 next_action）` },
+              what: `**已退役**（旧口径：页面只把命令准备好让用户复制，与 29 §4「仅通过 GUI」冲突）：303 → ${prefix}/app/${v}/；回文时限读数在 GUI 面板 rfq.remind-board` },
             { path: `${prefix}/${v}/api/deadlines`, method: 'GET', auth: 'none',
-              what: `${v} 道的回文时限 JSON（同页同口径；empty ⇒ degraded+reason 且列表为空；can_send=false）` },
+              what: `**已退役**（同上，JSON 形态一并收口）：303 → ${prefix}/app/${v}/` },
             { path: `${prefix}/${v}/deadlines/promise`, method: 'POST', auth: 'none',
-              what: `${v} 道的登记承诺（承诺回文时限）：**只落 0600 待办件**、账本零新增；202 + next_action；登记不是发信` },
+              what: `${v} 道的登记承诺（承诺回文时限）：**只落 0600 待办件**、账本零新增；202 + next_action；登记不是发信；GUI 孪生动作 = exchange.promise` },
           ]),
           // 报价草稿（`quote-prepare` 插件，本批）：**不需要人类签名的写动作**必须在 APP 里真做成 ——
           //   准备（GET 表单 + 字段级校验规则）→ 落 0600 待办件（202）→ Python 侧落 `quote/drafted`
@@ -3440,10 +3281,8 @@ ${sortForm('events', '筛查事件')}
           `<p>本视角**不属于任何一方**：只看系统整体（运行期中间件状态 + 各视角账本的证据面聚合），不显示条目正文与私域键。</p>`
           + anchorNav('ops', `${prefix}/ops/`, OPS_SECTIONS,
             [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
-            [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']],
             [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']],
-            [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']],
-            DEADLINE_EXTRAS(prefix))
+            [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])
           + `<p>JSON：<code>${prefix}/api/ops</code></p>`
           + `<h3 id="runtime">运行期</h3><p>${ops.summary({ rows: [] })}</p>`
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
@@ -3522,18 +3361,6 @@ ${sortForm('events', '筛查事件')}
       // 比价 heuristics（只读）：候选与权重进插件，名次与贡献解释出响应；宿主不写任何东西
       return json(200, heuristicsJson(viewHeuristics[1], url))
     }
-    const viewAdvice = path.match(/^\/([a-z]+)\/api\/advice\/?$/)
-    if (viewAdvice && rules[viewAdvice[1]]) {
-      // 决策建议（只读）：规则层只吃白名单载荷，响应里给 engine=rules 与每条建议的溯源键
-      return json(200, adviceJson(viewAdvice[1]))
-    }
-    const viewAdvicePage = path.match(/^\/([a-z]+)\/advice\/?$/)
-    if (viewAdvicePage && rules[viewAdvicePage[1]]) {
-      // 页面：SSR + 可复制的命令/路由（零内联脚本；看建议这件事本身不产生任何写入）
-      return send(200, 'text/html; charset=utf-8',
-        html(`${config.page_title} · ${rules[viewAdvicePage[1]].title} · 决策建议`,
-          adviceHtml(viewAdvicePage[1]), prefix))
-    }
     // 审批等多久 / 变更单谁卡着（gate-timeline 插件）：催办 POST **只落 0600 待办件**（账本零新增）
     const viewGatesNudge = path.match(/^\/([a-z]+)\/gates\/nudge\/?$/)
     if (viewGatesNudge && rules[viewGatesNudge[1]]) {
@@ -3595,16 +3422,16 @@ ${sortForm('events', '筛查事件')}
         html(`${config.page_title} · ${rules[viewAuthorityPage[1]].title} · 授权区间`,
           authorityHtml(viewAuthorityPage[1], url), prefix))
     }
-    // RFQ 回文时限（rfq-deadline 插件，本批）：登记承诺 POST **只落 0600 待办件**（账本零新增、不发信）
-    //   · `/<view>/deadlines/promise`：登记\"承诺回文时限\"（发言人 + 时限 + RFQ id + 原话只留 sha256）
-    //   · `/<view>/deadlines/`：SSR 页面（每条一行 next_action，零内联脚本）
-    //   · `/<view>/api/deadlines`：同页同口径的 JSON
+    // RFQ 回文时限（rfq-deadline 插件）：**旧 SSR 页已退役**（见 RETIRED_SUBVIEWS：`/<view>/deadlines/`
+    // 与 `/<view>/api/deadlines` 现为 303 → `/app/<view>/`，页面面板 `rfq.remind-board` 承接同一件事）。
+    //   本批只保留**写面**：`/<view>/deadlines/promise` 登记「承诺回文时限」（发言人 + 时限 + RFQ id +
+    //   原话只留 sha256）—— 它只落 0600 待办件（账本零新增、不发信），唯一落账本者是 Python 侧。
     const viewDeadlinesPromise = path.match(/^\/([a-z]+)\/deadlines\/promise\/?$/)
     if (viewDeadlinesPromise && rules[viewDeadlinesPromise[1]]) {
       const view = viewDeadlinesPromise[1]
       if (String(req.method) !== 'POST') {
         return json(405, { service: 'rfq-deadline', view, ok: false, code: 'method-not-allowed',
-          next_action: '登记承诺用 POST（页面上的表单就是 POST；本路由没有 GET 形态）' })
+          next_action: '登记承诺用 POST（GUI 里的孪生动作是 exchange.promise；本路由没有 GET 形态）' })
       }
       return readBody((body) => {
         const out = submitPromise(view, new URLSearchParams(body))
@@ -3612,17 +3439,6 @@ ${sortForm('events', '筛查事件')}
           : (out.code === 'pending-write-failed' ? 500 : (out.code === 'rfq-not-found' ? 404 : 400))
         return json(code, { service: 'rfq-deadline', view, ...out })
       })
-    }
-    const viewDeadlinesApi = path.match(/^\/([a-z]+)\/api\/deadlines\/?$/)
-    if (viewDeadlinesApi && rules[viewDeadlinesApi[1]]) {
-      // JSON（只读）：回文时限的口径 / 还剩多久 / 名单（业主侧）/ 为什么发不出去；宿主不写任何东西
-      return json(200, deadlinesJson(viewDeadlinesApi[1]))
-    }
-    const viewDeadlinesPage = path.match(/^\/([a-z]+)\/deadlines\/?$/)
-    if (viewDeadlinesPage && rules[viewDeadlinesPage[1]]) {
-      return send(200, 'text/html; charset=utf-8',
-        html(`${config.page_title} · ${rules[viewDeadlinesPage[1]].title} · 回文时限`,
-          deadlinesHtml(viewDeadlinesPage[1]), prefix))
     }
     const viewApprovals = path.match(/^\/([a-z]+)\/api\/approvals\/?$/)
     if (viewApprovals && rules[viewApprovals[1]]) {
@@ -3668,10 +3484,8 @@ ${sortForm('events', '筛查事件')}
       const switchLinks = Object.keys(rules).map((v) => `<a href="${prefix}/admin/api/switch?to=${v}">${v}</a>`).join(' · ')
       return `${anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS,
         [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
-        [[`${prefix}/contractor/advice/`, '决策建议（承包商）'], [`${prefix}/supplier/advice/`, '决策建议（供应商）']],
         [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']],
-        [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']],
-        DEADLINE_EXTRAS(prefix))}`
+        [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])}`
         + `${data.degraded ? `<p>降级：<code>${data.reason ?? ''}</code> —— ${data.next_action ?? ''}</p>` : ''}`
         + `<h3 id="progress">进度与口径来源</h3>`
         + `<p>进度：阶段 <b>${data.progress?.phase ?? '—'}</b> · 下一步 <b>${data.progress?.next_task ?? '—'}</b>`
@@ -3876,7 +3690,7 @@ ${sortForm('events', '筛查事件')}
       if (!Object.prototype.hasOwnProperty.call(rules, to)) return json(400, { error: 'unknown-view', hint: Object.keys(rules).join(' / ') })
       return send(302, 'text/plain; charset=utf-8', '', { location: `${prefix}/${to}/` })
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/mail / ${prefix}/api/ui/blocks / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/advice/ / ${prefix}/<view>/api/advice / ${prefix}/<view>/gates/ / ${prefix}/<view>/api/gates / ${prefix}/<view>/changes/<id>/ / ${prefix}/<view>/api/changes/<id> / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/app/<view>/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/mail / ${prefix}/api/ui/blocks / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/gates/ / ${prefix}/<view>/api/gates / ${prefix}/<view>/changes/<id>/ / ${prefix}/<view>/api/changes/<id> / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>（已退役的 ${prefix}/<view>/advice/ 与 ${prefix}/<view>/deadlines/ 会 303 到 ${prefix}/app/<view>/）` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）
