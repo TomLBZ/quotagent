@@ -6,6 +6,10 @@
  * **在对象上说话**（评论 + `@同事`）、**分清这是不是我的事**（我的 / 我指派的 / 全部）。本文件提供这层的
  * **机制**：只存"谁在哪个对象上做过什么协同动作"，不认识任何业务名词（对象类由插件声明，见 `collab-ui.mjs`）。
  *
+ * 本批新增的**跨对象活动流**（「我的今日」，`feed()`）：把「我关注的对象 + 我参的流程」上的事件聚成
+ * 一条时间线（协作事件 + 由外壳**只读**给进来的**本侧**账本事实），可按类型/对象/人/时间筛、标已读、
+ * 跳对象页、导出文本（`feedExport()`）。它**不新建任何存储**：读的还是这两个来源，写只写"我的已读水位"。
+ *
  * ============================ 为什么这些数据**不能进账本**（硬约束，别搬） ============================
  * 账本是**合同事实**的 append-only 记录：每一行都要能被审计包/哈希链/模型输入重建，且必须表示对外承诺或
  * 业务状态变化（`AGENTS.md` 规则 2「模型可见 ⟺ 账本可见」、规则 3「承诺需人工批准」）。而本文件存的是
@@ -26,10 +30,16 @@
  *   · 有界：单对象评论 200 条 / 活动 300 条 / 关注者 64 人；对象数 500（超出按"最久没动过"淘汰并如实报数）。
  */
 import { readFileSync, writeFileSync, mkdirSync, chmodSync, renameSync, existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join, relative, resolve } from 'node:path'
 
 export const COLLAB_SCHEMA = 'quotagent/collab/v1'
 export const COLLAB_DIR = 'collab'
+/** 账本行扫描上限（有界）：活动流只在这个窗口里聚合，超出的行不参与（如实计数在回执里）。 */
+export const MAX_LEDGER_ROWS = 20000
+/** 「我的今日」一条时间线的**单次产出上限**（界面上还有服务端窗口分页；这里是硬顶，不静默）。 */
+export const FEED_MAX = 400
+const sha256Hex = (value) => createHash('sha256').update(String(value), 'utf8').digest('hex')
 /** 协作数据的**存储口径自述**（进 `/api/ui/surface`，用来对账"它没进账本"）。 */
 export const COLLAB_WHY_NOT_LEDGER = '协作（指派/关注/评论/已读）是**人对界面的协同痕迹**，不是合同事实：'
   + '进账本会改变事件类型目录、证据包哈希与审计取证语义，并会把人的私下意见变成模型可见输入。'
@@ -43,7 +53,7 @@ export const MAX_REASON = 500
 export const REFUSAL_CODES = ['identity-required', 'unknown-side', 'kind-malformed', 'id-malformed',
   'colleague-malformed', 'unknown-colleague', 'reason-required', 'reason-too-long', 'due-invalid',
   'body-required', 'body-too-long', 'cross-side-mentioned', 'not-assigned-to-you', 'transfer-not-yours',
-  'collab-write-failed']
+  'collab-write-failed', 'object-required', 'feed-nothing-to-export']
 
 const NAME_RE = /^[a-z][a-z0-9._-]{0,31}$/
 const KIND_RE = /^[a-z][a-z0-9-]{0,31}$/
@@ -58,6 +68,20 @@ const text = (value) => (typeof value === 'string' ? value.trim() : '')
 const flat = (value, limit = 200) => String(value ?? '').replace(/\s+/g, ' ').slice(0, limit)
 const refusal = (code, reason, next_action, extra = {}) => ({ ok: false, code, reason, next_action, ...extra })
 const keyOf = (kind, id) => `${kind}/${id}`
+/**
+ * `a` 是不是**晚于** `b`（时刻比较，**不是字符串比较**）。
+ *
+ * 为什么不能比字符串：账本行的 `ts` 是**秒精度**（`…T05:08:56Z`），而界面给的 `at`（`host.now()`）是
+ * **毫秒精度**（`…T05:08:56.123Z`）—— 两者逐字符比时 `'…56Z' > '…56.123Z'`（`Z` > `.`），
+ * 于是"同一秒里刚写下的事实"会被判成晚于我刚刚的已读水位 ⇒ 标完已读仍显示未读（实测就是这么错的）。
+ * 解析不出来的（坏时刻）回落到字符串比较：**不假装知道先后**，但也不因此报错。
+ */
+const laterThan = (a, b) => {
+  const left = Date.parse(text(a))
+  const right = Date.parse(text(b))
+  if (Number.isFinite(left) && Number.isFinite(right)) return left > right
+  return text(a) > text(b)
+}
 
 // ------------------------------------------------------------------ 显示口径（**只影响给人看的文案**）
 /**
@@ -538,7 +562,8 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
   const readAtOf = (obj, actor) => text(obj?.reads?.[actor])
   /** 某对象上"给我的"未读活动（别人做的、且晚于我上次标已读）。 */
   const unreadOf = (obj, actor) => (Array.isArray(obj?.events) ? obj.events : [])
-    .filter((event) => text(event.by) !== actor && (!readAtOf(obj, actor) || text(event.at) > readAtOf(obj, actor)))
+    .filter((event) => text(event.by) !== actor
+      && (!readAtOf(obj, actor) || laterThan(event.at, readAtOf(obj, actor))))
 
   /**
    * 对象级协作视图（对象页的两块面板 + `/api/collab/object` 都用它）。
@@ -778,6 +803,301 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
       next_action: '已读是你自己的标记（同侧别人不受影响，也不进账本）' }
   }
 
+  // ================================================================ 「我的今日」：**跨对象活动流**
+  /**
+   * 把「我关注的对象 + 我参的流程」上的事件聚成一条时间线（本批新增的能力）。
+   *
+   * 两条来源（都不进账本）：
+   *   ① **协作事件**（本文件的 `objects[].events`：指派/转交/关注/评论）—— 同侧、按会话身份；
+   *   ② **本侧账本的事实行**（`ledgerRows`，由外壳的 `host.rows(view)` **只读**给进来）——
+   *      本文件**自己不读账本、不 import 任何账本 API**（纪律见文件头），只做聚合与显示。
+   *
+   * 「我参的」判据（两条都算，**不猜**）：我关注 / 指派给我 / 我指派的 / 我评论或 @ 过 / 我留下过事件；
+   * 或者这一条账本行的 `actor` 就是我。其余算「本侧」（同侧可见，但不冒充"我的"）。
+   *
+   * **对象类来自插件声明**（`kinds`：`[{kind, id_keys}]`，由外壳按注册面给），本文件不写任何对象类字面量：
+   * 账本行里的对象 id 按它自己声明的键（如 `<对象类>_id`）+ `correlation_id`/`ref` 命中已见过的 id 取值。
+   * 解析不出对象行 ⇒ 这一条**如实说"没解析出对象"**（不给假深链），仍留在时间线里。
+   *
+   * 已读：与协作面**同一份**每对象水位（`reads[me]`）—— `at` 晚于水位的算未读（标已读只影响我自己）。
+   */
+  const FEED_WINDOWS = [{ key: 'today', label: '今天' }, { key: 'week', label: '近 7 天' },
+    { key: 'older', label: '更早' }]
+  const FEED_COLLAB_WORDS = { assigned: '指派', reassigned: '转交', watched: '开始关注',
+    unwatched: '取消关注', commented: '评论', read: '标为已读' }
+  const DAY_MS = 24 * 60 * 60 * 1000
+
+  /** 这一条属于哪一档时间（`now` 由调用方给：协作不是事实，不取墙钟 —— 与 `at` 同源）。 */
+  const feedWindowOf = (iso, nowMs) => {
+    const at = Date.parse(text(iso))
+    if (!Number.isFinite(at)) return 'older'
+    const start = new Date(nowMs)
+    start.setHours(0, 0, 0, 0)
+    if (at >= start.getTime()) return 'today'
+    return at >= nowMs - 7 * DAY_MS ? 'week' : 'older'
+  }
+  /** 账本行的 `body`（坏形状 ⇒ 空对象：不编）。 */
+  const rowBody = (row) => (plain(row?.body) ? row.body : {})
+  /** 按**声明的**对象类收集 id（`id_keys` 由外壳给；本文件不认识任何对象类）。 */
+  const feedObjectIndex = (rows, kinds) => {
+    const byId = new Map()
+    for (const row of rows) {
+      const body = rowBody(row)
+      for (const spec of kinds) {
+        for (const key of (spec.id_keys ?? [])) {
+          const value = text(body[key]) || text(row[key])
+          if (value === '') continue
+          const set = byId.get(value) ?? new Set()
+          set.add(spec.kind)
+          byId.set(value, set)
+        }
+      }
+    }
+    return byId
+  }
+  /** 这一行讲的是哪个对象：先按 id 键，再用 `correlation_id` / `ref` 命中已见过的 id（都不中就**不给**）。 */
+  const feedObjectOfRow = (row, kinds, byId) => {
+    const body = rowBody(row)
+    for (const spec of kinds) {
+      for (const key of (spec.id_keys ?? [])) {
+        const value = text(body[key]) || text(row[key])
+        if (value !== '') return { kind: spec.kind, id: value }
+      }
+    }
+    for (const candidate of [text(body.ref), text(row.correlation_id)]) {
+      if (candidate === '') continue
+      const hits = byId.get(candidate)
+      if (hits && hits.size) return { kind: [...hits][0], id: candidate }
+    }
+    return null
+  }
+  /** 人话的键值摘要（账本行的**原文**键值，最多 4 个短标量：不替它编一句话）。 */
+  const feedRowDetail = (row) => {
+    const body = rowBody(row)
+    const parts = []
+    for (const [key, value] of Object.entries(body)) {
+      if (parts.length >= 4) break
+      if (value === null || value === undefined) continue
+      if (typeof value === 'object') continue
+      const shown = flat(String(value), 32)
+      if (shown === '' || shown.length > 32) continue
+      parts.push(`${key}=${shown}`)
+    }
+    return parts.join(' · ')
+  }
+
+  /**
+   * 跨对象活动流（「我的今日」）。`window` 非空 ⇒ 只回那一档时间（`home` 面板用 `today`）。
+   * 返回 `{ok, items, counts, buckets, windows, storage, ...}` —— 每一条都能跳对象页 / 标已读。
+   */
+  const feed = ({ side, actor = '', ledgerRows = [], kinds = [], now = '', window = '', limit = FEED_MAX } = {}) => {
+    const bad = guard(side, actor)
+    if (bad) {
+      return { ok: false, code: bad.code, reason: bad.reason, next_action: bad.next_action,
+        items: [], buckets: [], counts: { total: 0, mine: 0, side: 0, unread: 0, facts: 0, collab: 0 } }
+    }
+    const me = text(actor)
+    const nowText = text(now)
+    const nowMs = Number.isFinite(Date.parse(nowText)) ? Date.parse(nowText) : Date.now()
+    const doc = load(side)
+    const specs = (Array.isArray(kinds) ? kinds : []).filter((spec) => spec && text(spec.kind) !== '')
+    const rows = (Array.isArray(ledgerRows) ? ledgerRows : []).slice(0, MAX_LEDGER_ROWS)
+    const byId = feedObjectIndex(rows, specs)
+
+    // ---- ① 协作侧：哪些对象与我有关 + 我的每对象已读水位 --------------------------------
+    const myKeys = new Set()
+    const involved = new Map()          // key → {obj, label, unread, watchers, assignment}
+    for (const obj of Object.values(doc.objects)) {
+      if (!plain(obj)) continue
+      const key = keyOf(text(obj.kind), text(obj.id))
+      const assignment = plain(obj.assignment) ? obj.assignment : null
+      const events = Array.isArray(obj.events) ? obj.events : []
+      const comments = Array.isArray(obj.comments) ? obj.comments : []
+      const mine = (Array.isArray(obj.watchers) && obj.watchers.includes(me))
+        || (assignment && (text(assignment.to) === me || text(assignment.by) === me))
+        || events.some((event) => text(event.by) === me)
+        || comments.some((comment) => text(comment.by) === me
+          || (comment.mentions ?? []).includes(me))
+      if (mine) myKeys.add(key)
+      involved.set(key, { obj, label: labelOf(obj), mine, reads: readAtOf(obj, me) })
+    }
+    // ---- ② 事实侧：行里的 actor 就是我 ⇒ 这一条当然算「我参的」（它也会把对象带进 myKeys） ----
+    const rowObjects = rows.map((row) => feedObjectOfRow(row, specs, byId))
+    rows.forEach((row, at) => {
+      if (text(row?.actor) !== me) return
+      const object = rowObjects[at]
+      if (object) myKeys.add(keyOf(object.kind, object.id))
+    })
+
+    const items = []
+    for (const [key, info] of involved.entries()) {
+      const watermark = info.reads
+      for (const event of (Array.isArray(info.obj.events) ? info.obj.events : [])) {
+        const at = text(event.at)
+        const kind = text(event.type)
+        const by = text(event.by)
+        if (at === '' || kind === '') continue
+        // 未读 = 晚于我这一条上的已读水位（**按时刻比**：秒精度的事实与毫秒精度的水位混着写）
+        const unread = watermark === '' || laterThan(at, watermark)
+        items.push({ id: `feed-collab-${side}-${key}-${text(event.eid) || at}`,
+          source: 'collab', feed_kind: 'collab', feed_kind_label: '协作',
+          type: kind, type_label: FEED_COLLAB_WORDS[kind] ?? kind,
+          at, at_day: at.slice(0, 10), at_label: atLabel(at),
+          object_key: key, object: { kind: text(info.obj.kind), id: text(info.obj.id) },
+          object_label: info.label, object_unresolved: false,
+          who: by, who_label: by === '' ? '' : `@${nameOf(by)}`,
+          summary: pretty(flat(event.summary, 240)),
+          body: pretty(flat(event.summary, 240)),
+          next_action: '', unread, mine: info.mine, watermark,
+          ref: { kind: text(info.obj.kind), id: text(info.obj.id), view: side, title: info.label },
+          action: unread ? 'collab.read' : '', label: '标为已读', dedupe_key: '' })
+      }
+    }
+    rows.forEach((row, at) => {
+      const object = rowObjects[at]
+      const key = object ? keyOf(object.kind, object.id) : ''
+      const who = text(row?.actor)
+      const label = key !== '' && involved.has(key) ? involved.get(key).label : (object
+        ? `${object.kind} ${object.id}` : '（未解析出对象）')
+      const mine = who === me || (key !== '' && myKeys.has(key))
+      const watermark = key !== '' && involved.has(key) ? involved.get(key).reads : ''
+      const when = text(row?.ts)
+      const type = text(row?.type)
+      if (when === '' || type === '') return
+      const unread = watermark !== '' && laterThan(when, watermark)
+      items.push({ id: `feed-fact-${side}-${text(row?.seq) || at}`,
+        source: 'ledger', feed_kind: 'fact', feed_kind_label: '事实',
+        type, type_label: type, at: when, at_day: when.slice(0, 10), at_label: atLabel(when),
+        seq: Number(row?.seq) || null,
+        object_key: key, object: object ?? null, object_label: label,
+        object_unresolved: object === null,
+        who, who_label: who === '' ? '' : pretty(who),
+        summary: `${type}${object ? `（${label}）` : ''}`,
+        body: [feedRowDetail(row), text(row?.class) === 'fact' ? '账本事实' : ''].filter(Boolean).join(' · '),
+        next_action: object ? '' : '这一行里没有本侧声明的对象类能认出的 id：只有本侧账本行号，没有深链',
+        unread, mine, watermark, ledger_seq: Number(row?.seq) || null,
+        ref: object ? { kind: object.kind, id: object.id, view: side, title: label } : null,
+        action: unread && object ? 'collab.read' : '', label: '标为已读', dedupe_key: '' })
+    })
+
+    // ---- ③ 排序（时间倒序；同一时刻按账本行号/来源稳定） + 时间档 + 计数 -------------------
+    // 排序也**按时刻**（账本行秒精度 / 协作事件毫秒精度混在一起；比字符串会在同一秒里排错）
+    const timeMs = (value) => {
+      const ms = Date.parse(text(value))
+      return Number.isFinite(ms) ? ms : 0
+    }
+    const sorted = items.slice().sort((left, right) => (timeMs(left.at) === timeMs(right.at)
+      ? ((right.ledger_seq ?? 0) - (left.ledger_seq ?? 0)) || (left.id < right.id ? -1 : 1)
+      : (timeMs(left.at) < timeMs(right.at) ? 1 : -1)))
+    const stamped = sorted.map((item) => ({ ...item, window: feedWindowOf(item.at, nowMs),
+      window_label: (FEED_WINDOWS.find((entry) => entry.key === feedWindowOf(item.at, nowMs)) ?? {}).label ?? '' }))
+    const buckets = FEED_WINDOWS.map((entry) => ({ key: entry.key, label: entry.label,
+      count: stamped.filter((item) => item.window === entry.key).length }))
+    const picked = window === '' ? stamped : stamped.filter((item) => item.window === text(window))
+    const shown = picked.slice(0, Math.max(1, Number(limit) || FEED_MAX))
+    const countOf = (list, test) => list.filter(test).length
+    return { ok: true, side, me, items: shown, buckets, windows: FEED_WINDOWS,
+      counts: { total: shown.length, all: stamped.length, mine: countOf(shown, (item) => item.mine),
+        side: countOf(shown, (item) => !item.mine), facts: countOf(shown, (item) => item.feed_kind === 'fact'),
+        collab: countOf(shown, (item) => item.feed_kind === 'collab'),
+        today: countOf(shown, (item) => item.window === 'today'),
+        unread: countOf(shown, (item) => item.unread === true),
+        unread_mine: countOf(shown, (item) => item.unread === true && item.mine),
+        objects: new Set(shown.map((item) => item.object_key).filter((key) => key !== '')).size,
+        unresolved: countOf(shown, (item) => item.object_unresolved === true),
+        dropped: Math.max(0, stamped.length - shown.length) },
+      filter: window, objects_kinds: specs.map((spec) => spec.kind),
+      my_objects: [...myKeys].sort(),
+      shape: shapeOf(doc, side),
+      storage: { file: relative(resolve(String(root ?? '.')), fileOf(side)), mode: '0600',
+        why_not_ledger: COLLAB_WHY_NOT_LEDGER },
+      ledger_read: `事实来自**本侧**账本（${rows.length} 行，由外壳只读给进来）：另一侧的账本不在这里，`
+        + '所以这条时间线上永远看不到对面私域' }
+  }
+
+  /**
+   * 「我的今日」的**已读**：把我参的那些对象上的活动标成我读过了（与 `markRead` 同一份水位）。
+   * `keys` 由界面/脚本从 `feed()` 的条目里取（`object_key`）；只认本侧自己的水位，别人不受影响。
+   */
+  const markFeedRead = ({ side, actor, at = '', keys = [] } = {}) => {
+    const bad = guard(side, actor)
+    if (bad) return bad
+    const me = text(actor)
+    const doc = load(side)
+    const wanted = [...new Set((Array.isArray(keys) ? keys : []).map((key) => text(key))
+      .filter((key) => /^[a-z][a-z0-9-]{0,31}\/[^\u0000-\u001f<>{}\"'/]{1,96}$/.test(key)))]
+    if (wanted.length === 0) {
+      return refusal('object-required', '没有给要标已读的对象（keys 空或在形状上不合法）',
+        '从活动流每条的 `object_key` 取值：形如 `<对象类>/<对象 id>`')
+    }
+    let marked = 0
+    let unreadBefore = 0
+    for (const key of wanted) {
+      const sep = key.indexOf('/')
+      const kind = key.slice(0, sep)
+      const id = key.slice(sep + 1)
+      const obj = ensureObject(doc, kind, id, '', at)
+      unreadBefore += unreadOf(obj, me).length
+      obj.reads = plain(obj.reads) ? obj.reads : {}
+      obj.reads[me] = at
+      marked += 1
+    }
+    touchPerson(doc, me, at)
+    const saved = save(side, doc)
+    if (!saved.ok) return saved
+    return { ok: true, code: 'feed-read', objects: marked, keys: wanted, unread_before: unreadBefore,
+      file: saved.file, mode: saved.mode, shape: shapeOf(doc, side), shape_note: saved.shape_note || null,
+      next_action: `已把「我的今日」里这 ${marked} 个对象的活动标成你读过了（只影响你自己；`
+        + '每条事实本身一字未改，账本零新增）' }
+  }
+
+  /**
+   * 「我的今日」导出成**文本**（发给同事 / 写周报）：纯函数，内容**逐条来自 `feed()` 的条目**
+   * （谁的事实谁导出：这里不重读任何东西、不生成新事实），行尾带账本行号 ⇒ 可与账面逐行对。
+   */
+  const FEED_COLUMNS = ['no', 'at_label', 'feed_kind_label', 'type_label', 'object_label', 'who_label',
+    'unread_label', 'ledger_seq', 'body']
+  const feedText = ({ items = [], meta = {} } = {}) => {
+    const lines = []
+    lines.push('quotagent · 我的今日（跨对象活动流）')
+    lines.push(`侧：${text(meta.side) || '（未登录）'} · 身份：${text(meta.me) || '（未登录）'}`
+      + `${meta.generated_at ? ` · 生成时刻：${atLabel(meta.generated_at)}` : ''}`)
+    lines.push(`范围：${text(meta.scope_label) || '我参的 + 本侧'} · 事件 ${items.length} 条`
+      + `（事实 ${items.filter((item) => item.feed_kind === 'fact').length} / 协作 ${items.filter((item) => item.feed_kind === 'collab').length}）`
+      + ` · 未读 ${items.filter((item) => item.unread === true).length}`
+      + ` · 跨 ${new Set(items.map((item) => item.object_key).filter(Boolean)).size} 个对象`)
+    if (meta.filters) lines.push(`筛选：${text(meta.filters)}`)
+    lines.push(`来源：本侧账本事实（只读）+ 同侧协作活动（不进账本）`
+      + `${meta.file ? `｜协作文件 ${text(meta.file)}（0600）` : ''}`)
+    lines.push('─'.repeat(60))
+    items.forEach((item, at) => {
+      lines.push(`${at + 1}. ${item.at_label} · ${item.feed_kind_label} · ${item.type_label}`
+        + ` · ${item.object_label} · ${item.who_label || '（无署名）'}`
+        + `${item.unread ? ' · 未读' : ''}${item.ledger_seq ? ` · 账本 #${item.ledger_seq}` : ''}`)
+      if (item.body) lines.push(`   ${item.body}`)
+      if (item.ref) lines.push(`   打开：${prefixPath(meta.prefix, meta.side, item.ref.kind, item.ref.id)}`)
+    })
+    lines.push('─'.repeat(60))
+    lines.push('说明：时间线是**读**（不写账本、不改任何事实）；「标为已读」只影响你自己的未读水位。')
+    return lines.join('\n')
+  }
+  /** 对象页深链（拼路径，不认识对象类；`prefix` 由调用方给）。 */
+  const prefixPath = (prefix, side, kind, id) => `${text(prefix) || ''}/app/${text(side)}/${kind}/${id}/`
+  /** 导出件的**标准形状**（与外壳 `buildReport` 的 `result.export` 同一套字段：客户端直接落文件）。 */
+  const feedExport = ({ items = [], meta = {} } = {}) => {
+    const content = `${feedText({ items, meta })}\n`
+    const day = (text(meta.generated_at) || '').slice(0, 10) || 'today'
+    const rows = items.map((item, at) => ({ no: at + 1, at_label: item.at_label,
+      feed_kind_label: item.feed_kind_label, type_label: item.type_label, object_label: item.object_label,
+      who_label: item.who_label, unread_label: item.unread ? '未读' : '已读',
+      ledger_seq: item.ledger_seq ?? '', body: item.body ?? '' }))
+    return { ok: true, filename: `我的今日_${text(meta.side) || 'no-side'}_${day}.txt`, format: 'txt',
+      content_type: 'text/plain; charset=utf-8', content, rows: rows.length, items: items.length,
+      columns: FEED_COLUMNS.slice(), digest: `sha256:${sha256Hex(content)}`,
+      source: '同侧协作活动（0600，不进账本）+ 本侧账本事实（只读，逐行带账本行号）',
+      generated_at: text(meta.generated_at), ledger_added: 0 }
+  }
+
   // ------------------------------------------------------------------ 工作台 / 通知：我的 · 我指派的 · 全部
   /** 桶（过滤维度）：`mine` = 我的（指派给我 / @我 / 我关注的）；`assigned` = 我指派的（别人在办）。 */
   const bucketLabels = [{ key: 'mine', label: '我的' }, { key: 'assigned', label: '我指派的' }]
@@ -953,5 +1273,8 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
   }
 
   return { sides: () => allowedSides, dir, fileOf, load, save, configure, colleagues, view, assign, toggleWatch,
-    comment, markRead, hub, inbox, summary, describe, refused: REFUSAL_CODES }
+    comment, markRead, hub, inbox, summary, describe, refused: REFUSAL_CODES,
+    // **跨对象活动流**（「我的今日」）：聚合（只读）+ 标已读 + 导出文本
+    feed, markFeedRead, feedText, feedExport, feedWindows: () => FEED_WINDOWS.map((item) => ({ ...item })),
+    feedColumns: () => FEED_COLUMNS.slice() }
 }

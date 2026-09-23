@@ -4,14 +4,19 @@
  *
  * 为什么走注册面（`docs/design/27-plugin-architecture.md` §6.1 + `docs/design/29-webui-gui-app.md` §3）：
  * 插件要加 HTTP 路由就该往注册面注册；注册面只认"谁在哪条路径上注册了什么"，不懂业务。
- * 本插件注册六条（前四条是真入口，后两条是**同路径的方法围栏**，与 webui 的"只读路由不接受写"同口径）：
+ * 本插件注册十条（前六条是真入口，后四条是**同路径的方法围栏**，与 webui 的"只读路由不接受写"同口径）：
  *
  *   POST /api/attachments/upload    上传（原始字节；或 JSON + base64）—— 会话身份 + 侧校验 + 上限/类型/名字
- *   GET  /api/attachments/list      某个对象上**本侧能看到的**附件（元数据：名字/大小/sha256/上传人/时间）
+ *   GET  /api/attachments/list      某个对象上**本侧能看到的**附件（元数据：名字/大小/sha256/上传人/时间/版本）
+ *   POST /api/attachments/list      ⇒ 405 + `Allow: GET`（只读路径不接受写：免得"POST 了却像成功"）
  *   GET  /api/attachments/file      取件（**下载的唯一入口**；Content-Disposition + X-Attachment-Sha256）
- *   POST /api/attachments/file      ⇒ 405 + `Allow: GET`（只读路径不接受写：免得"POST 了却像成功"）
+ *   POST /api/attachments/file      ⇒ 405 + `Allow: GET`
+ *   GET  /api/attachments/versions  同名附件的**版本链**（谁在何时换了哪一版；旧版仍可下载）
+ *   POST /api/attachments/versions  ⇒ 405 + `Allow: GET`
+ *   GET  /api/attachments/preview   **界内预览**（图片 / PDF / 文本；inline + nosniff；其余类型 415 如实说）
+ *   POST /api/attachments/preview   ⇒ 405 + `Allow: GET`
  *   POST /api/attachments/delete    删除（**留痕**：墓碑 + trash/ + journal.jsonl）
- *   GET|POST /api/attachments/store 自述读数（落点/权限/上限/为什么不是账本）
+ *   GET|POST /api/attachments/store 自述读数（落点/权限/上限/版本与预览口径/为什么不是账本）
  *
  * **身份由会话给**（`identity.mjs` 的 `whoOf` 是"这次请求是谁"的唯一判据，本文件不重抄一遍 cookie/会话解析）：
  * 侧**不由**查询串决定 ⇒ 一侧的身份读不到/下不了另一侧的件（结构性隔离，不是过滤）。
@@ -20,7 +25,8 @@
  * 只 spawn 无、只读自己的索引。请求体由本文件**自己**有界读取（不经过 webui 的 16 KiB 读体夹取——
  * 那里会**静默截断**，而截断等于把一份被切掉的文件当完整件存下来）。
  */
-import { attachmentStore, REFUSAL_CODES, STATUS_FOR, LIMITS, VISIBILITIES, OBJECT_POLICY } from './attachments.mjs'
+import { attachmentStore, REFUSAL_CODES, STATUS_FOR, LIMITS, VISIBILITIES, OBJECT_POLICY,
+  PREVIEW_KINDS } from './attachments.mjs'
 // **身份的唯一判据来自身份面自己**（读 `code/identity.mjs` 的 `whoOf`；只读，不重抄一遍 cookie/会话解析）：
 // 重抄一份解析会在"会话格式/过期语义"上漂移，而"这次请求是谁"必须是同一处判据。
 // 这是**只读依赖**：本插件不登录、不写会话、不改它的任何语义（`createIdentity` 的构造过程零写面）。
@@ -65,6 +71,16 @@ export const ROUTES = [
     what: '取件（下载的唯一入口）：交付件要对侧是该对象当事方；本侧内部件永不出本侧；正文 sha256 自校验' },
   { method: 'POST', path: '/api/attachments/file', auth: 'none',
     what: '方法围栏：只读路径（GET）收到 POST ⇒ 405 + Allow: GET（不把写当读处理）' },
+  { method: 'GET', path: '/api/attachments/versions', auth: 'identity-session',
+    what: '同一对象上**同名附件的版本链**（谁在何时换了哪一版；每条版本都有 id/sha256/上传人/时刻，'
+      + '旧版仍可下载；只回本侧可见的条目）' },
+  { method: 'POST', path: '/api/attachments/versions', auth: 'none',
+    what: '方法围栏：只读路径（GET）收到 POST ⇒ 405 + Allow: GET' },
+  { method: 'GET', path: '/api/attachments/preview', auth: 'identity-session',
+    what: '**界内预览**（不下载也能看）：只做图片 / PDF / 文本（浏览器自带渲染器，同源、不引外网依赖）；'
+      + '身份与侧判据与下载**同一套**；其余类型 ⇒ 415 preview-type-not-allowed + 下载入口；不写账本' },
+  { method: 'POST', path: '/api/attachments/preview', auth: 'none',
+    what: '方法围栏：只读路径（GET）收到 POST ⇒ 405 + Allow: GET' },
   { method: 'POST', path: '/api/attachments/delete', auth: 'identity-session',
     what: '删除附件（**留痕**：索引墓碑 + trash/ 原件 + journal.jsonl 一行；只能删自己上传的）' },
   { method: 'GET', path: '/api/attachments/store', auth: 'none',
@@ -217,11 +233,23 @@ export const HANDLERS = {
             if (!out.ok) return resolve(refuse(request, out, { side: who.side }))
             const entry = out.entry
             const downloadUrl = `${prefix}/api/attachments/file?id=${encodeURIComponent(entry.id)}`
+            // **多版本**的读数原样回执（`version` = 这一份是第几版、`supersedes` = 取代了谁、
+            // `unchanged` = 同一份字节再传 ⇒ 就是同一条、`attachment-unchanged`）；界面/脚本都不必自己推。
             return resolve(request.json(201, { ok: true, service: 'quotagent-attachments', action: 'upload',
-              attachment: entry, sha256_verified: entry.sha256, ledger_added: 0,
-              download_url: downloadUrl, delete_url: `${prefix}/api/attachments/delete`,
-              next_action: `对方（若是交付件）在该对象的附件面板里就能看到并下载：${downloadUrl}`,
-              note: '正文不进账本：只落 0600 存储（index.json 记 sha256/大小/文件名/上传人/对象关联）' }))
+              code: out.code ?? 'uploaded', attachment: entry,
+              version: out.version ?? (Number(entry.version) || 1),
+              supersedes: out.supersedes ?? '', superseded_by: entry.superseded_by ?? '',
+              unchanged: out.unchanged === true, preview_kind: out.preview_kind ?? entry.preview_kind ?? null,
+              previewable: entry.previewable === true, sha256_verified: entry.sha256, ledger_added: 0,
+              download_url: downloadUrl, preview_url: entry.previewable
+                ? `${prefix}/api/attachments/preview?id=${encodeURIComponent(entry.id)}` : '',
+              versions_url: `${prefix}/api/attachments/versions?kind=${encodeURIComponent(entry.object?.kind ?? '')}`
+                + `&id=${encodeURIComponent(entry.object?.id ?? '')}`,
+              delete_url: `${prefix}/api/attachments/delete`,
+              next_action: out.next_action
+                ?? `对方（若是交付件）在该对象的附件面板里就能看到并下载：${downloadUrl}`,
+              note: out.note ?? '正文不进账本：只落 0600 存储'
+                + '（index.json 记 sha256/大小/文件名/上传人/对象关联/版本）' }))
           } catch (err) {
             return resolve(crash(request, err))
           }
@@ -258,7 +286,67 @@ export const HANDLERS = {
         'content-length': String(out.body.length),
         'x-attachment-id': entry.id, 'x-attachment-sha256': entry.sha256,
         'x-attachment-bytes': String(entry.bytes), 'x-attachment-uploader': entry.uploader,
-        'x-attachment-visibility': entry.visibility, 'x-content-type-options': 'nosniff',
+        'x-attachment-visibility': entry.visibility,
+        // **多版本**：下载哪一版、是不是最新（旧版也能下 ⇒ 这里如实说是第几版）
+        'x-attachment-version': String(entry.version ?? 1),
+        'x-content-type-options': 'nosniff',
+        'cache-control': 'private, no-store',
+      })
+    },
+    POST: ({ methodsNotAllowed }) => (request) => methodsNotAllowed(request, 'GET'),
+  },
+  '/api/attachments/versions': {
+    GET: ({ store, whoOf, refuse, prefix }) => (request) => {
+      const who = whoOf(request)
+      if (!who.ok) return request.json(who.status, who.payload)
+      const query = request.url.searchParams
+      const out = store.versions({ side: who.side, kind: String(query.get('kind') ?? ''),
+        id: String(query.get('id') ?? '') })
+      if (!out.ok) return refuse(request, out, { side: who.side })
+      const fileUrl = (id) => `${prefix}/api/attachments/file?id=${encodeURIComponent(id)}`
+      const groups = out.groups.map((group) => ({ ...group,
+        versions: group.versions.map((version) => ({ ...version, download_url: fileUrl(version.id),
+          preview_url: version.previewable && !version.deleted
+            ? `${prefix}/api/attachments/preview?id=${encodeURIComponent(version.id)}` : '' })) }))
+      return request.json(200, { ok: true, service: 'quotagent-attachments', side: who.side,
+        object: { kind: out.kind, id: out.id }, groups, counts: out.counts, rule: out.rule,
+        ledger_added: 0,
+        next_action: out.counts.versioned_groups
+          ? '同名附件里有多版：逐条版本都有一个下载地址（旧版**不覆盖**、仍可下）'
+          : '这个对象上还没有「同名多版」：同名文件再传一次就会多出一版（旧版保留）' })
+    },
+    POST: ({ methodsNotAllowed }) => (request) => methodsNotAllowed(request, 'GET'),
+  },
+  '/api/attachments/preview': {
+    GET: ({ store, whoOf, prefix }) => (request) => {
+      const who = whoOf(request)
+      if (!who.ok) return request.json(who.status, who.payload)
+      const query = request.url.searchParams
+      const maxBytes = Number(query.get('max_bytes') ?? '')
+      const out = store.preview({ side: who.side, id: String(query.get('id') ?? ''),
+        maxBytes: Number.isFinite(maxBytes) && maxBytes > 0 ? Math.floor(maxBytes) : 0 })
+      if (!out.ok) {
+        const entry = out.attachment ?? null
+        return request.json(STATUS_FOR[out.code] ?? 400, { ok: false, service: 'quotagent-attachments',
+          code: out.code, reason: out.reason, next_action: out.next_action,
+          side: who.side, preview_kinds: out.preview_kinds ?? PREVIEW_KINDS,
+          attachment: entry ? { id: entry.id, name: entry.name, preview_kind: null } : null,
+          download_url: entry ? `${prefix}/api/attachments/file?id=${encodeURIComponent(entry.id)}` : '',
+          note: '界内预览**不下载也能看**，但它只做图片 / PDF / 文本：其余类型如实说不预览（不假装加载中）' })
+      }
+      const entry = out.entry
+      const safeName = String(entry.name).replace(/[^\x20-\x7e\u00a0-\uffff]/g, '_').replace(/["\\]/g, '_')
+      // 一律 `inline`（**要的就是在界内看**）；`nosniff` + CSP 挡住"把纯文本当 HTML 渲染"
+      return request.send(200, out.inline_content_type, out.body, {
+        'content-disposition': `inline; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(entry.name)}`,
+        'content-length': String(out.body.length),
+        'x-attachment-id': entry.id, 'x-attachment-sha256': entry.sha256,
+        'x-attachment-bytes': String(entry.bytes), 'x-attachment-uploader': entry.uploader,
+        'x-attachment-visibility': entry.visibility, 'x-attachment-version': String(entry.version),
+        'x-preview-kind': out.kind, 'x-preview-truncated': out.truncated ? '1' : '0',
+        'x-preview-bytes': String(out.previewed_bytes), 'x-preview-total-bytes': String(out.total_bytes),
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'",
         'cache-control': 'private, no-store',
       })
     },
@@ -303,7 +391,9 @@ export const HANDLERS = {
   '/api/attachments/store': {
     GET: ({ store, prefix }) => (request) => request.json(200, { ...store.describe(), prefix,
       http: { upload: `${prefix}/api/attachments/upload`, list: `${prefix}/api/attachments/list`,
-        file: `${prefix}/api/attachments/file?id=<id>`, delete: `${prefix}/api/attachments/delete` },
+        file: `${prefix}/api/attachments/file?id=<id>`, preview: `${prefix}/api/attachments/preview?id=<id>`,
+        versions: `${prefix}/api/attachments/versions?kind=<对象类>&id=<对象 id>`,
+        delete: `${prefix}/api/attachments/delete` },
       refusal_codes: REFUSAL_CODES, visibilities: VISIBILITIES,
       object_kinds: Object.keys(OBJECT_POLICY),
       routes: ROUTES.map((route) => ({ method: route.method, path: `${prefix}${route.path}`, auth: route.auth })),

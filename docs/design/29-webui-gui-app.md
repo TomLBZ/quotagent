@@ -158,31 +158,31 @@
 
 ## 19. 批量人签（**一次署名 · 逐份/逐条落账**）
 
-**能力**：表格多选后**一次署名**办一整批 —— 供应商道「我的草稿（待签署）」的 `quote.submit-batch`、两侧「审批队列」的 `gate.decide-batch`（`grant`|`deny`）。
+**能力**：表格多选后**一次署名**办一整批 —— `quote.submit-batch`（供应商「我的草稿（待签署）」）与 `gate.decide-batch`（两侧「审批队列」）。
 
-**判据**：① 写者**逐条各跑一次**（`quote-sign.py --draft-id` / `gate-actions.py --request`），**没有"一个动作落多条"的旁路**；每条**各自判定**（`draft-not-found`/`gate-not-found`/`gate-already-decided`/`approver-not-named`）⇒ **一条被拒不影响其余条** ② **人签门一字未改**（§7.4：401 / 403 `signer-mismatch` / `agent:*` 拒 / 越侧 `cross-side-action`），负控**零新增** ③ 回执**逐条如实**在 `result.results[]`（`{where,code,ledger_added,reason,next_action}`），**不是全成/全败**（有落账 ⇒ `ok=true`；部分被拒 ⇒ `batch-partial`）④ 幂等（`already-signed`/`already-applied`，账本零新增）+ 一次上限 **50**（`batch-too-large`）+ 批量驳回必留理由（`empty-reason`）⑤ 变更单**逐行明细入口**（DEF-037 已闭合）：两侧各一块 `html` 面板给出 `/<view>/changes/<id>/` 入口；列表行内「打开 →」仍指**对象页**。
+**判据**：① 写者**逐条各跑一次**，**没有"一个动作落多条"的旁路**；每条**各自判定**、逐条具名拒（归档 §19.1）⇒ **一条被拒不影响其余条** ② **人签门一字未改**（§7.4），负控**零新增** ③ 回执**逐条如实**、**不是全成/全败**（有落账 ⇒ `ok=true`；部分被拒 ⇒ `batch-partial`）④ 幂等（`already-signed`/`already-applied`，零新增）+ 一次上限 **50**（`batch-too-large`）+ 批量驳回必留理由（`empty-reason`）⑤ 变更单**逐行明细入口**（DEF-037 已闭合，归档 §19.4）⑥ **批量动作的服务端一半跑在动作运行时里**（worker 线程 `ACTION_RUNTIME_ENTRY`；归档 §19.2）：插件照旧同步跑、只走唯一写者，**主线程不被占住**；`job_concurrency`（默认 1）**只排队、不拒动作** ⑦ **不丢工作**（归档 §19.3）：进度与逐条结果落 `<ui_shared>/webui/jobs.json`，只读 `GET /api/ui/jobs`（POST 405 + `Allow: GET`、按身份隔离）给 `running`+`recent`；**上一个进程**留下的 `running/queued` 在下次读时改判 `interrupted` 并推出 `pending_ids`/`refused_ids` ⇒ 界面给「只重试被拒/未完成的 N 份」，**只重试这些幂等**（已落账的报 `duplicates`、账本零新增）。
 
-**禁止**：不得为批量新造写路径、新事件类型或"批批准"门；不得把部分被拒报成全成/全败。
-**真源**：`src/system/webui/docs/approval-decisions-and-evidence.md` §1.5/§1.6（复跑 `python3 tmp/p18-shots/verify.py` A–D）。
+**禁止**：不得为批量新造写路径、新事件类型或"批批准"门；不得把部分被拒报成全成/全败；不得让批量占住主线程、不得关掉中断恢复。
+**真源**：`approval-decisions-and-evidence.md` §1.5/§1.6（复跑 `python3 tmp/p18-shots/verify.py` A–D）；运行时与 jobs：`action-runtime-and-jobs.md`、归档 §19。
 
 ## 20. 服务端窗口、性能与并发纪律
 
-**能力**：长列表在"干一天活"的规模下可用（服务端窗口）；并发下不卡死（只读备忘 / 短 TTL / 渲染背压）—— 三件都**不动内核、不改语义、不关功能**。
+**能力**：长列表在"干一天活"的规模下可用（服务端窗口）；并发下不卡死（只读备忘 / 短 TTL / 渲染背压）；**写者之间显式互斥** —— 都**不动内核、不改语义、不关功能**。
 
-**判据**：① **窗口协议**：`GET /api/ui/panels?view=&w=1&only=<面板 id>&pq={…{kw,cols,sort,page,size,keys,edits,bucket}}`（`/api/ui/object` 同构）；**没有 `w`/`pq`/`only` 就整份下发**（既有脚本一字不变）；插件**照旧只实现 `data(ctx)`** ② **窗口的判据**：窗口里的行 = **全量 → 筛选 → 稳定全序排序 → 第 start..end 行**，与全量**逐行相同**；`共 N`/命中/小计/最小值/枚举候选/桶计数/跨页选中行键**都在全集上算**（客户端只有一页 ⇒ 派生物必须服务端给）；`matched_keys` **按需给**，命中超 5000 行**如实拒发** ③ **状态四态互不冒充**：加载 / **取新页**（`data-q-fetching`，数字仍是上一次的）/ **错误**（`data-state="error"`，**绝不显示成空列表**）/ **空**（与「筛选后 0 行」分开）④ **并发纪律**：账本**只读备忘**按 `(路径, mtimeMs, size)`（append-only ⇒ 落账必失效 ⇒ **不读旧值**）；通知聚合**短 TTL**（默认 5 s，动作/落待办件/清缓存**立刻失效**）；**渲染准入（背压）** 按事件循环**真实滞后**（`monitorEventLoopDelay` ≥ `shed_ms`，默认 3000ms）对新到的**重读**请求回 `429 + Retry-After`（`ui-busy`），**动作/身份/偏好/健康/静态一律不拒** ⑤ **测量面**：`/api/ui/surface` 的 `io.ledger`/`io.notify`/`io.admission`/`io.window`/`io.last_render`；页面只读 `window.__Q_GUI_METRICS.last`（`rows_api` vs `rows_full_server` vs `rows_dom`）。
+**判据**：① **窗口协议**：`/api/ui/panels`（`/api/ui/object` 同构）带 `w`/`pq`/`only` 走窗口，**没有就整份下发**（既有脚本一字不变）；插件**照旧只实现 `data(ctx)`** ② **窗口的判据**：窗口里的行 = **全量 → 筛选 → 稳定全序排序 → 第 start..end 行**，与全量**逐行相同**；**全部派生计数在全集上算**（客户端只有一页 ⇒ 派生物必须服务端给）③ **状态四态互不冒充**：加载 / **取新页**（数字仍是上一次的）/ **错误**（**绝不显示成空列表**）/ **空** ④ **并发纪律**：账本**只读备忘**按 `(路径, mtimeMs, size)`（append-only ⇒ 落账必失效 ⇒ **不读旧值**）；通知聚合**短 TTL**（默认 5 s，动作/落待办件/清缓存**立刻失效**）；**渲染准入（背压）** 按事件循环**真实滞后**对新到的**重读**回 `429 + Retry-After`，**动作/身份/偏好/健康/静态一律不拒** ⑤ **唯一写者必须互斥**（P21 的 must，归档 §20.2）：写者之间 FIFO 票据 + 原子锁 ⇒ **同刻只有一个写者在写同一份账本**；批量进行中别人的**单条写排队**（不排队会撞坏链 ⇒ 写者冻结账本），**只读完全不排队**；动作**不被拒**、只是排队 ⑥ **测量面**见归档 §20.3。
 
-**禁止**：性能**不得**换来错的数字（客户端不许自己算全集派生物）；不得把"取新页中"的旧数字冒充已更新；不得把"读不到"显示成"空"；不得把背压扩成拒动作/拒身份；不得用关功能换性能。
-**真源**：`src/system/webui/docs/scale-and-performance.md`（P11/P12）与 `performance-under-concurrency.md`（P13）；实测：首屏 3,571,683→267,576 B、11.5 s→951 ms、`notifications` 8.89→0.094 s、6 客户端 0 stall。
+**禁止**：性能**不得**换来错的数字（客户端不许自己算全集派生物）；不得把"取新页中"的旧数字冒充已更新；不得把"读不到"显示成"空"；不得把背压扩成拒动作/拒身份；不得用关功能换性能；**不得绕过写者闸门**（并发写同一份账本会毁链）。
+**真源**：`src/system/webui/docs/{scale-and-performance,performance-under-concurrency,action-runtime-and-jobs}.md`（P11–P13 / P21）；实测读数见归档 §20.4。
 
 ## 21. 已删旧东西清单（**已删，不得复活**）
 
 按 §2 与 AGENTS.md 规则 12 删掉的东西逐条登记；判据 = 旧抓手/旧路由/旧词在**产品面 0 命中**。
 
-1. **旧只读页（SSR"说明书页"）**：`/<view>/{advice,deadlines,gates,authority}/` + 对应 JSON，两侧共 **16 条旧路由 ⇒ 303 → `/app/<view>/`**（**不 404**；匿名仍 303 → 登录 / JSON 401 / 跨侧 403 / POST 仍 405）；渲染器与 nav 入口在 `code/webui.mjs` 里删净（`RETIRED_SUBVIEWS` + 旧地址正则；advice/deadlines 批净删 ~400 行；gates 96 + authority 143 行）。**保留**：写面 `POST /<view>/{gates/nudge,deadlines/promise}`、明细面 `/<view>/changes/<id>/`；nav 入口**接新位置**。
-2. **旧 UI 形态判据（门与实体一起删）**：UI 快照门（`refresh-ui-snapshots.py`）、seed 门（`ui-seed-pipeline.py`）、`ui-mutate` 变异门、`AC-UXWEB-001` 的旧判据（「三块第一屏锚点 + 0 内联脚本」+ 快照 hash）⇒ AC 资产 47→46；`AC-UXWEB-001` 已按 §1/§4 重建。
-3. **旧运维面**：三域的**只读运维可见性**整体退役 —— `/ops/` 三域面板、`/api/pipeline`、`pipeline-view` 插件（ap-0110 记录**保留**并标 `retired`）、快照写入器与两道门；`FR-UX-005`/`AC-PIPELINE-001` 同批删除；邮件域**快照写入器**搬进 `system/mail/tools/`。三域业务入口按 §3 注册面**重建**（不是把旧快照装回来）。
+1. **旧只读页（SSR"说明书页"）**：`/<view>/{advice,deadlines,gates,authority}/` + 对应 JSON，两侧共 **16 条旧路由 ⇒ 303 → `/app/<view>/`**（**不 404**；匿名仍 303 → 登录 / JSON 401 / 跨侧 403 / POST 仍 405）；渲染器与 nav 入口在 `code/webui.mjs` 里删净（旧符号与删行数见归档 §21）。**保留**：写面 `POST /<view>/{gates/nudge,deadlines/promise}`、明细面 `/<view>/changes/<id>/`；nav 入口**接新位置**。
+2. **旧 UI 形态判据（门与实体一起删）**：UI 快照门、seed 门、`ui-mutate` 变异门与 `AC-UXWEB-001` 的旧判据（文件名/断言原文见归档 §21）⇒ AC 资产 47→46；`AC-UXWEB-001` 已按 §1/§4 重建。
+3. **旧运维面**：三域的**只读运维可见性**整体退役 —— `/ops/` 三域面板、`/api/pipeline`、`pipeline-view` 插件、快照写入器与两道门（记录标记见归档 §21）；`FR-UX-005`/`AC-PIPELINE-001` 同批删除；邮件域**快照写入器**搬进 `system/mail/tools/`。三域业务入口按 §3 注册面**重建**（不是把旧快照装回来）。
 4. **旧"教用户回终端"文案（产品面 0 命中）**：路由响应体 + 面板/动作载荷里 `g1side`/`PYTHONPATH`/「终端」/`python3` **0 命中**；载体改人话 + GUI 动作（`GATE_COMMANDS`→`GATE_ACTIONS`）。
-5. **四个门按同一口径改判据（不放松）**：`advice`、`rfq-deadline`、`gates`、`authority`（旧页存在类断言删除、等价或更强的判据接到 GUI）；插件层围栏判据**一条没松**。
+5. **四个门按同一口径改判据（不放松）**：`advice`、`rfq-deadline`、`gates`、`authority`（判据接到 GUI、一条没松，逐条见归档 §21）。
 
 **禁止**：不得复活上述任何一项（含"把旧快照/旧只读页装回来"）；不得新增只冻旧形态的门（§2.3）。
 **真源**：`docs/work/plans/plugin-file-map-batches.md` §退役登记（P16/P17）、`docs/work/plans/webui-ui-defects.md`（DEF-xxx）、`docs/work/evidence/EV-190`、`EV-191`；旧门删除口径见 `docs/work/deployment-manual.md` §门清单。

@@ -1,6 +1,7 @@
 /**
  * collab-ui —— 把 `collab.mjs` 的**同侧协作**搬上界面（对象级指派/转交、关注、评论与 `@同事`、活动流、
- * 工作台的「我的 / 我指派的 / 全部」、通知中心的「指派给我 / @我 / 我关注的 / 我指派的」）。
+ * 工作台的「我的 / 我指派的 / 全部」、通知中心的「指派给我 / @我 / 我关注的 / 我指派的」、
+ * **「我的今日」跨对象活动流**）。
  *
  * 它为什么在**外壳这一层**而不是某个业务插件里（这不是"把业务写进外壳"）：
  *   · 本文件**不出现任何业务名词、插件 id、对象类字面量**：对象类来自 `surface.objectKindsFor(view)` ——
@@ -34,6 +35,31 @@ const asText = (value) => (typeof value === 'string' ? value.trim() : '')
 const show = (value) => pretty(value)
 const at = (iso) => atLabel(iso)
 const who = (human) => `@${nameOf(human)}`
+
+/**
+ * 「我的今日」（跨对象活动流）面板的**列声明**：前三个是给人看/给关键字搜的正文列，
+ * 后面是**筛选维度**（`filter` 只影响界面上的筛选控件；判据仍在服务端，见 `windowFiltered`）：
+ *   · `scope`/`feed_kind` = 枚举（取值稳定且少 ⇒ 一定是下拉）；`type_label`/`object_label`/`who_label`
+ *     用"包含"筛选（对象/人名可能很多，枚举给不全就别说成枚举 —— 免得用户选了却 0 命中）；
+ *   · `at_day` = 日期区间（时间维度的筛查入口）。
+ * **筛选只改"看到哪些"**：它不改任何事实、不写账本、也不动你的已读水位。
+ */
+const FEED_COLUMNS = [
+  { key: 'title', label: '事件' }, { key: 'body', label: '详情' }, { key: 'next_action', label: '下一步' },
+  { key: 'scope', label: '范围（我参的 / 本侧）', filter: 'enum' },
+  { key: 'feed_kind', label: '类型（事实 / 协作）', filter: 'enum' },
+  { key: 'type_label', label: '事件类型', filter: 'text' },
+  { key: 'object_label', label: '对象', filter: 'text' },
+  { key: 'who_label', label: '人', filter: 'text' },
+  { key: 'at_day', label: '日期', filter: 'date' },
+]
+/** 导出成文本/表格时的列（与 `collab.mjs#feedExport` 的行字段一一对应）。 */
+const FEED_REPORT_COLUMNS = [
+  { key: 'no', label: '#' }, { key: 'at_label', label: '时刻' }, { key: 'feed_kind_label', label: '类型' },
+  { key: 'type_label', label: '事件' }, { key: 'object_label', label: '对象' },
+  { key: 'who_label', label: '人' }, { key: 'unread_label', label: '已读' },
+  { key: 'ledger_seq', label: '账本行号' }, { key: 'body', label: '详情' },
+]
 
 /**
  * 面板上"这块读得不完整"的**如实降级行** —— 不是静默空着。
@@ -84,6 +110,7 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
   /** 按视图/对象类注册的贡献（`sync()` 对账用）：新类目出现就挂上，消失就撤掉。 */
   const hubPanels = new Map()       // view → [disposer…]
   const objectPanels = new Map()    // `<view>\0<kind>` → [disposer…]
+  const feedPanels = new Map()      // view → [disposer…]（「我的今日」：跨对象活动流）
 
   const businessViews = () => viewList.filter((view) => view !== 'home')
   const push = (bucket, out) => {
@@ -249,6 +276,229 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
         .filter(Boolean).join('｜') }
   }
 
+  // ------------------------------------------------------------------ ④ 「我的今日」：跨对象活动流
+  /**
+   * 对象类 → **账本里的 id 键**（完全从注册面读，本文件不写任何对象类字面量）：
+   * 某个对象类 K 的 id 键 = 「声明了 `object_kind: K` 的动作里 `from_route` 的字段名」∪ `K_id`。
+   * 为什么要这一条：时间线要把账本行**指回对象页**（跳转），而"这一行讲的是哪个对象"只有插件自己知道
+   * （它声明了对象类与那个 id 字段）；外壳只搬运，不替它猜（猜错会给出一条点不动的假深链）。
+   */
+  const feedKinds = (viewId) => surface.objectKindsFor(viewId).map((kind) => {
+    const keys = new Set([`${kind}_id`, `${kind.replace(/-/g, '_')}_id`])
+    for (const action of surface.actionsFor(viewId, kind)) {
+      for (const field of (action.input?.fields ?? [])) {
+        if (field.from_route === true && asText(field.name) !== '') keys.add(asText(field.name))
+      }
+    }
+    return { kind, id_keys: [...keys].filter((key) => key !== '') }
+  })
+
+  /** 跑一次「我的今日」：侧与身份只取**会话**，事实行只读**本侧**账本（`host.rows(side)`）。 */
+  const feedOf = (ctx, { window = '' } = {}) => {
+    const store = collaborators()
+    const me = meOf(ctx)
+    const side = asText(me?.side)
+    if (!store || side === '') return null
+    const rows = (host && typeof host.rows === 'function') ? host.rows(side) : []
+    return { store, me, side, kinds: feedKinds(side),
+      out: store.feed({ side, actor: asText(me.human), ledgerRows: rows, kinds: feedKinds(side),
+        now: host.now(), window }) }
+  }
+
+  /**
+   * 「我的今日」面板的数据（形状 `list`）。
+   *
+   * 它是**跨对象**的：把「我关注的对象 + 我参的流程」上的事实行与协作事件聚成一条时间线；
+   * 每一条都能**跳对象页**（`ref`）与**标已读**（未读行给 `collab.read` 入口，按行预填 kind/id）。
+   * 时间线是**信息不是待办**：`level` 只用来分档，工作台上这条面板不冒充「有 N 件需要你处理」。
+   */
+  const feedPanelData = (viewId, { window = '', infoOnly = false } = {}) => (ctx) => {
+    const store = collaborators()
+    if (!store) {
+      return { ok: true, kind: 'list', degraded: true, reason: 'collab-mechanism-missing',
+        columns: FEED_COLUMNS, items: [{ level: 'warn', title: '外壳没有装上协作机制（装配问题）' }] }
+    }
+    const me = meOf(ctx)
+    if (!me) {
+      return { ok: true, kind: 'list', degraded: true, reason: 'identity-required', columns: FEED_COLUMNS,
+        next_action: '顶栏「身份」→ 去登录：时间线按**侧**与身份算（未登录读不到任何一侧的事件）',
+        items: [{ level: 'warn', title: '未登录：先登录才知道哪些是「我的今日」（按会话侧隔离，不是"今天没有事"）',
+          body: `当前地址：${asText(ctx?.view) || viewId}；登录后这里会按「我参的 / 本侧」聚出跨对象时间线`,
+          next_action: '顶栏「身份」→ 去登录（human:<名字> + 属于哪一侧）' }] }
+    }
+    const made = feedOf(ctx, { window })
+    if (!made) {
+      return { ok: true, kind: 'list', degraded: true, reason: 'side-unknown', columns: FEED_COLUMNS,
+        next_action: '会话里没有"哪一侧"：重新登录后重试', items: [] }
+    }
+    const out = made.out
+    if (!out.ok) {
+      return { ok: true, kind: 'list', degraded: true, reason: out.code, columns: FEED_COLUMNS,
+        next_action: out.next_action, items: [] }
+    }
+    const shape = out.shape ?? null
+    const items = out.items.map((item) => ({
+      id: item.id,
+      // 时间线是**信息**：未读用正文里的「未读」+ 标已读入口表达，不冒充待办。
+      // 工作台那一块（`infoOnly`）**一律 info** —— 它要计入「另有 N 条信息」，但不能改
+      // 「有 N 件需要你处理」（那一栏只该是人工门/待签/待回这类真待办）。
+      level: infoOnly ? 'info' : (item.unread === true && item.mine ? 'warn' : 'info'),
+      title: `${at(item.at)} · ${show(item.type_label)} · ${show(item.object_label)}`
+        + `${item.unread ? '（未读）' : ''}`,
+      body: `${item.feed_kind_label} · ${item.who_label ? show(item.who_label) : '（无署名）'}`
+        + `${item.body ? `：${show(item.body)}` : ''}`
+        + `${item.ledger_seq ? ` · 账本 #${item.ledger_seq}` : ''}`,
+      at: item.at, ref: item.ref, action: item.action, label: item.label,
+      next_action: item.next_action,
+      // **筛选片**（今天 / 近 7 天 / 更早）：桶键与时间档同源 —— 片上的数字与筛出来的行必须对得上
+      bucket: item.window, bucket_label: item.window_label,
+      // 机读键（脚本/对账用；界面上显示的是上面那两个中文取值）：
+      window_key: item.window, feed_kind_key: item.feed_kind, source: item.source,
+      mine: item.mine === true, unread_flag: item.unread === true, ledger_seq: item.ledger_seq ?? null,
+      // 筛选维度的**原始取值**（列筛选按这些字段筛；值与判据同源，不另算一份）
+      scope: item.mine ? '我参的' : '本侧', feed_kind: item.feed_kind === 'fact' ? '事实' : '协作',
+      type_label: item.type_label, object_label: item.object_label, who_label: item.who_label,
+      at_day: item.at_day, object_key: item.object_key, unread: item.unread === true,
+      // 时间线**不参与跨面板去重**：同一个对象在本面板里本来就会出现多次（每件事一条）
+      dedupe_key: '',
+    }))
+    if (shape?.broken) {
+      items.unshift({ id: `${viewId}-feed-shape-broken`, level: 'bad',
+        title: `协作记录读不出来（${shape.broken.code}）：协作类事件现在读不到任何一条`,
+        body: `${show(shape.broken.reason)}｜文件 ${shape.broken.file}`,
+        next_action: shape.broken.next_action })
+    } else if (shape) {
+      items.unshift({ id: `${viewId}-feed-shape-warn`, level: 'warn',
+        title: `有 ${shape.dropped_total} 处协作记录的形状读不出来（已跳过，不是"没有"）`,
+        body: (shape.problems ?? []).slice(0, 5).map((problem) =>
+          `${problem.object} 的 ${problem.field}（${show(problem.why)}）`).join('；'),
+        next_action: shape.next_action })
+    }
+    const counts = out.counts
+    // 面板被**限定在某一档时间**上（工作台那一块只讲"今天"）时，筛选片也只留那一档 ——
+    // 否则片上的数字会与这张列表里能看到的条数对不上（数字与它筛的东西必须同源）。
+    const buckets = window === '' ? out.buckets
+      : out.buckets.filter((bucket) => bucket.key === asText(window))
+    return { ok: true, kind: 'list', items, buckets, columns: FEED_COLUMNS,
+      degraded: Boolean(shape), reason: items.length ? (shape ? 'collab-shape-degraded' : null) : 'no-feed-yet',
+      counts,
+      note: ['这条时间线跨**所有对象**：我关注的、指派给我的、我评论过的，加上我参的流程上的账本事实',
+        infoOnly ? '这块只作**信息**计入工作台（不改「有 N 件需要你处理」的数量）' : '',
+        `事件 ${counts.all} 条（这条窗口 ${counts.total}）：事实 ${counts.facts} / 协作 ${counts.collab}`
+          + ` · 我参的 ${counts.mine} · 未读 ${counts.unread}（其中我的 ${counts.unread_mine}）`
+          + ` · 跨 ${counts.objects} 个对象`,
+        counts.unresolved ? `有 ${counts.unresolved} 条没解析出对象（只给账本行号，没有深链 —— 不编地址）` : '',
+        counts.dropped ? `超出上限的 ${counts.dropped} 条没有下发（有界，如实报数）` : '',
+        shapeNote(shape)].filter(Boolean).join('｜'),
+      ledger_added: 0,
+      next_action: shape ? `${shape.broken ? show(shape.how_to_fix) : shapeExplain(shape)}｜${shape.next_action}`
+        : (items.length
+          ? '每一行：「打开 …」进对象页；未读行给「标为已读」；要发给同事/写周报就用工具栏的「导出：我的今日（文本）」'
+          : `今天还没有你的活动：关注一个对象（对象页工具栏「关注 / 取消关注」）或做一件业务动作，`
+            + '之后这里会按时间线聚出来') }
+  }
+
+  /**
+   * 「我的今日」的**动作**（都走同一个动作总线；侧与 actor 一律取会话）：
+   *   · `collab.feed-read`：把我参的那些对象的活动标成我读过了（同一份每对象水位）；
+   *   · `collab.feed-export`：导出成文本 / CSV / 可打印 HTML（内容 = 这条时间线，逐行带账本行号）。
+   */
+  const registerFeed = (viewId, { window = '', todayOnly = false } = {}) => {
+    const made = []
+    push(made, surface.panel({ plugin_id: me, id: `collab.feed-${viewId}`,
+      title: todayOnly
+        ? '我的今日：今天的跨对象活动流（我参的 + 我关注的 + 本侧）'
+        : '我的今日：我参的流程 + 我关注的对象（跨对象时间线）',
+      view: viewId, order: viewId === 'home' ? 14 : 886, kind: 'list',
+      actions: ['collab.read', 'collab.feed-read', 'collab.feed-export', 'collab.comment'],
+      hint: '一屏看完今天所有事：我关注的对象 + 我参的包/报价/门/变更/PO 上的事件按时间排；'
+        + '可按类型/对象/人/日期筛，漏看的能标已读，每条能跳对象页；要发给同事就用「导出：我的今日」'
+        + `${viewId === 'home' ? '（工作台这块只讲**今天**、只作信息）' : ''}`,
+      data: feedPanelData(viewId, { window, infoOnly: viewId === 'home' }) }))
+    return made
+  }
+
+  /** 动作的**服务端一半**：算一遍时间线（与面板同一份实现）或把它导出成文本/表格。 */
+  const runFeed = async (ctx, verb, input) => {
+    const store = collaborators()
+    const me = meOf(ctx)
+    if (!store) {
+      return { ok: false, code: 'collab-mechanism-missing', reason: '外壳没有装上协作机制',
+        next_action: '这是外壳装配问题：看服务日志里 [collab] 的报错' }
+    }
+    if (!me) {
+      return { ok: false, code: 'identity-required',
+        reason: '「我的今日」按**会话侧**算：当前请求没有会话身份', ledger_added: 0,
+        next_action: '顶栏「身份」→ 去登录，再用同一个动作；这一次什么都没写' }
+    }
+    const side = asText(me.side)
+    const window = asText(input.window)
+    const rows = (host && typeof host.rows === 'function') ? host.rows(side) : []
+    const kinds = feedKinds(side)
+    const out = store.feed({ side, actor: asText(me.human), ledgerRows: rows, kinds, now: host.now(),
+      window })
+    if (!out.ok) return { ...out, ledger_added: 0 }
+    // ---- ① 标已读：只动**我自己的**每对象已读水位 ----------------------------------------
+    if (verb === 'read') {
+      const scope = asText(input.scope) || 'mine'
+      const keys = out.items.filter((item) => item.object_key !== ''
+        && (scope === 'all' || item.mine)).map((item) => item.object_key)
+      const wrote = store.markFeedRead({ side, actor: asText(me.human), at: host.now(),
+        keys: [...new Set(keys)] })
+      if (!wrote.ok) return { ...wrote, ledger_added: 0 }
+      return { ok: true, code: 'feed-read', ledger_added: 0,
+        note: `已把${scope === 'all' ? '这一侧' : '「我参的」'}活动流里 ${wrote.objects} 个对象标成你读过了`
+          + `（标之前这些对象上共有 ${wrote.unread_before} 条未读）`,
+        next_action: '已读是你自己的水位（同侧别人不受影响、也不进账本）；漏看的筛「未读」看…用「范围/类型」列筛选',
+        result: { side, actor: asText(me.human), objects: wrote.objects, keys: wrote.keys,
+          unread_before: wrote.unread_before, filter: window || '（不限时间）',
+          file: wrote.file, mode: wrote.mode, ledger: 'zero-management' } }
+    }
+    // ---- ② 导出：内容 = 这条时间线（逐条来自 feed 的条目，带账本行号） --------------------
+    const format = asText(input.format) || 'txt'
+    const scope = asText(input.scope) || 'mine'
+    const picked = scope === 'mine' ? out.items.filter((item) => item.mine) : out.items
+    if (picked.length === 0) {
+      return { ok: false, code: 'feed-nothing-to-export', ledger_added: 0,
+        reason: `这个范围里没有可导出的事件（范围=${scope === 'mine' ? '我参的' : '这一侧'}`
+          + `${window ? `；时间=${window}` : ''}）`,
+        next_action: '把范围放宽到「我参的 + 本侧」或清掉时间档再导出（导出不编内容：没有就说没有）' }
+    }
+    const meta = { side, me: asText(me.human), generated_at: host.now(), prefix: asText(host.prefix),
+      file: out.storage.file, scope_label: scope === 'mine' ? '我参的' : '我参的 + 本侧',
+      filters: [window ? `时间=${window}` : '', scope === 'mine' ? '范围=我参的' : '范围=我参的 + 本侧']
+        .filter(Boolean).join('；') }
+    if (['txt', 'text', 'plain'].includes(format)) {
+      const built = store.feedExport({ items: picked, meta })
+      return { ok: true, code: 'feed-exported', ledger_added: 0,
+        note: `导出已生成（${built.items} 条，文本；内容 = 这条时间线的条目本身，逐行带账本行号）`,
+        next_action: '文件已在浏览器里落盘（可直接贴进邮件/周报）；'
+          + '同样的内容也能导 CSV / 可打印 HTML（report 声明里的另外两个按钮）',
+        result: { export: built, side, actor: asText(me.human),
+          scope: scope, window: window || '（不限时间）', ledger: 'zero-management' } }
+    }
+    // CSV / 可打印 HTML 走外壳的**序列化**（外壳不生成内容：行还是这一批）
+    const rowsOut = picked.map((item, index) => ({ no: index + 1, at_label: item.at_label,
+      feed_kind_label: item.feed_kind_label, type_label: item.type_label, object_label: item.object_label,
+      who_label: item.who_label, unread_label: item.unread ? '未读' : '已读',
+      ledger_seq: item.ledger_seq ?? '', body: item.body ?? '' }))
+    const reported = host.report({ format, filename: `我的今日_${side}`, title: '我的今日（跨对象活动流）',
+      subtitle: `侧 ${side} · 身份 ${asText(me.human)} · ${meta.scope_label}`
+        + `${window ? ` · 时间 ${window}` : ''}`,
+      facts: [{ key: '事件', value: `${picked.length} 条（事实 ${picked.filter((item) =>
+        item.feed_kind === 'fact').length} / 协作 ${picked.filter((item) => item.feed_kind === 'collab').length}）` },
+      { key: '未读', value: `${picked.filter((item) => item.unread).length} 条` },
+      { key: '跨对象', value: `${new Set(picked.map((item) => item.object_key).filter(Boolean)).size} 个` },
+      { key: '来源', value: '同侧协作活动（0600，不进账本）+ 本侧账本事实（只读）' }],
+      columns: FEED_REPORT_COLUMNS, rows: rowsOut, report_id: 'collab.feed',
+      source: 'quotagent · 我的今日', generated_at: host.now(),
+      notes: ['每一行都带账本行号（事实行）⇒ 可与账面逐行核；时间线是读，不写账本'] })
+    if (!reported.ok) return { ...reported, ledger_added: 0 }
+    return { ok: true, code: 'feed-exported', ledger_added: 0, note: reported.note,
+      next_action: 'HTML 那一档可以直接打印；文本那一档（format=txt）适合贴进邮件/周报',
+      result: { ...reported.result, side, actor: asText(me.human), scope, window: window || '（不限时间）' } }
+  }
+
   // ------------------------------------------------------------------ 注册（可撤销 / 可对账）
   const registerObjectPanels = (view, kind) => {
     const made = []
@@ -317,6 +567,38 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
       hint: '已读是**你自己的**标记（同侧别人的未读不受影响，也不进账本）',
       input: { fields: [...objectFields] },
       server: async (ctx, input) => runCollab(ctx, 'read', input) }))
+    // ---- 「我的今日」（跨对象活动流）：一条时间线 + 标已读 + 导出（**视图级**动作，任何对象页都成立） ----
+    push(onceDisposers, surface.action({ plugin_id: me, id: 'collab.feed-read', title: '标已读：我的今日',
+      views: sides, group: '我的今日', order: -4, icon: '✓', placement: ['toolbar', 'inline', 'command'],
+      confirm: { required: false },
+      hint: '把我**参的**那些对象的活动标成我读过了（时间线上的「未读」按这份水位算）；'
+        + '只影响我自己，不改任何事实、不写账本',
+      input: { fields: [
+        { name: 'window', label: '只标哪一档（可空）', type: 'text',
+          help: '留空 = 不限时间；写 today / week / older 只标那一档（与面板上的筛选片同一套取值）' },
+        { name: 'scope', label: '范围（可空）', type: 'text',
+          help: '留空 = 只标「我参的」；写 all = 连本侧（同侧别人的活动）一起标 —— 想清空整个时间线时用' }] },
+      server: async (ctx, input) => runFeed(ctx, 'read', input) }))
+    push(onceDisposers, surface.action({ plugin_id: me, id: 'collab.feed-export',
+      title: '导出：我的今日（文本/CSV/HTML）',
+      views: sides, group: '我的今日', order: -3, icon: '⇩', placement: ['toolbar', 'inline', 'command'],
+      confirm: { required: false },
+      hint: '把这条跨对象时间线导出成**文本**（发同事 / 写周报最好用）、CSV（贴进表格）或可打印 HTML；'
+        + '内容 = 时间线本身（事实行带账本行号，可逐行对账），不写账本、不编内容',
+      input: { fields: [
+        { name: 'format', label: '格式（txt / csv / html）', type: 'text',
+          help: '默认 txt（纯文本，适合贴进邮件/周报）；csv 适合贴表格；html 是自带样式的可打印文档' },
+        { name: 'scope', label: '范围（可空）', type: 'text',
+          help: '留空 = 只导「我参的」；写 all = 连本侧一起导' },
+        { name: 'window', label: '时间档（可空）', type: 'text',
+          help: '留空 = 不限时间；today / week / older 只导那一档' }] },
+      server: async (ctx, input) => runFeed(ctx, 'export', input) }))
+    // **导出声明**（`report`）：视图级（不带 object_kind）⇒ 视角页的「导出 / 打印」区三个按钮，
+    // 内容由 `collab.feed-export` 这个动作生成（谁的事实谁导出；外壳只做序列化）。
+    push(onceDisposers, surface.report({ plugin_id: me, id: 'collab.feed', title: '我的今日（跨对象活动流）',
+      views: sides, formats: ['txt', 'csv', 'html'], action: 'collab.feed-export',
+      columns: FEED_REPORT_COLUMNS, order: 30,
+      hint: '导出的就是这条时间线：我关注的对象 + 我参的流程上的事件（事实行带账本行号；协作事件不进账本）' }))
     // 通知中心：指派给我 / @我 / 我关注的 / 我指派的进展（每条都带对象深链 ⇒ 一键跳进对象页）
     push(onceDisposers, surface.notificationSource({ plugin_id: me, id: 'collab.notify',
       title: '协作（指派 / @我 / 我关注的）', order: 10,
@@ -334,7 +616,17 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
         if (!who) return { text: '未登录（指派/评论只在同侧登录的人之间）', level: 'warn',
           next_action: '顶栏「身份」→ 去登录' }
         const out = store.summary({ side: who.side, actor: who.human })
-        return out.ok ? { text: out.text, level: out.level, next_action: out.next_action } : out
+        if (!out.ok) return out
+        // 状态栏也要"一眼看完全局"：把**今天的跨对象活动流**条数贴在协作读数后面（未登录就不算）
+        const rows = (host && typeof host.rows === 'function') ? host.rows(who.side) : []
+        const feed = store.feed({ side: who.side, actor: who.human, ledgerRows: rows,
+          kinds: feedKinds(who.side), now: host.now(), window: 'today' })
+        const today = feed.ok
+          ? ` · 今日 ${feed.counts.total} 条（未读 ${feed.counts.unread}，跨 ${feed.counts.objects} 个对象）`
+          : ''
+        return { text: `${out.text}${today}`, level: out.level, counts: { ...(out.counts ?? {}),
+            feed_today: feed.ok ? feed.counts.total : null, feed_unread: feed.ok ? feed.counts.unread : null },
+          next_action: out.next_action }
       } }))
     onceViews = viewList.join(',')
   }
@@ -383,8 +675,9 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
 
   /**
    * 对账：注册面会随插件装载/卸载与装配参数变 ⇒ 每次变动都同步一次。
-   * 三条不变式：① 与视图无关的贡献只在视图列表变化时重建；② 每个"要协作的视图"必备一块工作台面板；
-   * ③ 每个被声明的对象类必备两块对象面板（对象类消失 ⇒ 撤掉）。
+   * 四条不变式：① 与视图无关的贡献只在视图列表变化时重建；② 每个"要协作的视图"必备一块工作台面板；
+   * ③ 每个被声明的对象类必备两块对象面板（对象类消失 ⇒ 撤掉）；④ 每个视图必备一块「我的今日」
+   * （工作台那一块只讲**今天**：它不该把整条历史时间线塞进首屏）。
    */
   const sync = () => {
     if (onceViews === null || onceViews !== viewList.join(',')) registerOnce()
@@ -394,6 +687,18 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
       if (wantedViews.has(view)) continue
       for (const dispose of list) dispose()
       hubPanels.delete(view)
+    }
+    // 「我的今日」：工作台 = 今天那一档（首屏是"今天要看什么"）；业务视角 = 全时间线（可筛/可导）
+    for (const view of wantedViews) {
+      if (feedPanels.has(view)) continue
+      feedPanels.set(view, view === 'home'
+        ? registerFeed(view, { window: 'today', todayOnly: true })
+        : registerFeed(view, { window: '', todayOnly: false }))
+    }
+    for (const [view, list] of [...feedPanels.entries()]) {
+      if (wantedViews.has(view)) continue
+      for (const dispose of list) dispose()
+      feedPanels.delete(view)
     }
     const wanted = new Map()
     for (const view of businessViews()) {
@@ -408,7 +713,7 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
       objectPanels.delete(key)
     }
     return { ok: true, plugin_id: me, views: businessViews(), hubs: hubPanels.size,
-      object_panels: objectPanels.size,
+      feeds: feedPanels.size, object_panels: objectPanels.size,
       kinds: [...new Set([...objectPanels.keys()].map((key) => key.split('\u0000')[1]))].sort() }
   }
 
@@ -426,10 +731,13 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
     onceViews = null
     for (const list of hubPanels.values()) for (const disposeOne of list) disposeOne()
     hubPanels.clear()
+    for (const list of feedPanels.values()) for (const disposeOne of list) disposeOne()
+    feedPanels.clear()
     for (const list of objectPanels.values()) for (const disposeOne of list) disposeOne()
     objectPanels.clear()
   }
 
   return { sync, configure, dispose, plugin_id: me, viewsOf: () => [...viewList],
-    get objectPanels() { return objectPanels.size }, get contributions() { return onceDisposers.length } }
+    get objectPanels() { return objectPanels.size }, get contributions() { return onceDisposers.length },
+    get feedPanels() { return feedPanels.size } }
 }

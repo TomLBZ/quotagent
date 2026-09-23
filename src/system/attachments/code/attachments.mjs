@@ -35,7 +35,7 @@ export const SCHEMA = 'quotagent/attachments/v1'
 export const LIMITS = {
   max_bytes: 8 * 1024 * 1024,        // 单个文件 ≤ 8 MiB（默认；配置可调）
   max_name_bytes: 160,               // 文件名 ≤ 160 字节
-  max_per_object: 32,                // 一个对象最多 32 个附件（活的）
+  max_per_object: 32,                // 一个对象最多 32 个附件（活的；同一文件名的多版各占一个）
   max_attachments: 2000,             // 全库最多 2000 条索引
   max_id_bytes: 64,                  // 对象 id ≤ 64 字节
   max_index_bytes: 4 * 1024 * 1024,  // 索引文件读入上限（超过即如实报索引过大）
@@ -43,10 +43,46 @@ export const LIMITS = {
   max_envelope_files: 60,            // 交换信封扫描文件数上限
   max_ledger_rows: 20000,            // 账本行扫描上限（有界）
   visibility_cache_ms: 2000,         // "本侧可见对象"的缓存窗口（同一屏里的多个请求只读一遍）
+  max_preview_text_bytes: 256 * 1024, // 文本预览读入上限（超过 ⇒ 只预览前一段并**如实标注**）
+  max_preview_render: 4,             // 界面上一屏最多内联渲染几个预览（其余给入口，不把页撑爆）
 }
 
 /** 可见性：`both` = 交付件（对方是该对象当事方就能下）；`side` = **只有上传方本侧**能下。 */
 export const VISIBILITIES = ['both', 'side']
+
+/**
+ * **界内预览**（不下载也能看）的闭合集合：只做三类 —— 图片 / PDF / 文本。
+ *
+ * 为什么只做这三类（口径与理由）：图片与 PDF 浏览器**自带**渲染器（`<img>` / `<iframe>`，
+ * 同源、不引 CDN 与外部字体）；文本按 UTF-8 解码后以**转义过的纯文本**进 `<pre>`。
+ * Office / 压缩包 / 图纸（dwg、step）/ 邮件（eml）**一律不预览**：把它们塞进浏览器要么需要
+ * 第三方解析器（引外网依赖），要么等于把不可信二进制交给浏览器渲染 —— 这两条都违反本批的硬约束；
+ * 这一类**如实说"不预览"并给下载入口**（`preview-type-not-allowed`），不假装"加载中"。
+ */
+export const PREVIEW_TYPES = {
+  png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image',
+  pdf: 'pdf',
+  txt: 'text', csv: 'text', md: 'text', json: 'text', xml: 'text', yaml: 'text',
+}
+export const PREVIEW_KINDS = ['image', 'pdf', 'text']
+/** 文本预览的响应类型：哪怕原文件是 csv/json，**预览就是纯文本**（浏览器不解析、不执行）。 */
+export const PREVIEW_INLINE_TYPES = { image: '', pdf: '', text: 'text/plain; charset=utf-8' }
+
+/** 一个文件名能预览成哪一类（`null` = 这一类界内不预览；判据与上传白名单同一处：按扩展名）。 */
+export function previewKindOf(name) {
+  const value = typeof name === 'string' ? name.trim() : ''
+  const ext = value.split('.').pop()?.toLowerCase() ?? ''
+  if (value === ext || ext === '') return null
+  return PREVIEW_TYPES[ext] ?? null
+}
+/** 预览不了时的**人话原因**（如实说明，不猜内容）。 */
+export function previewRefusalReason(name) {
+  const value = typeof name === 'string' ? name.trim() : ''
+  const ext = (value.split('.').pop() ?? '').toLowerCase()
+  const known = Object.keys(ALLOWED_TYPES).includes(ext)
+  return `这一类界内不预览：${ext ? `.${ext}` : '（没有扩展名）'}`
+    + (known ? '（它是允许上传的类型，只是没有浏览器自带渲染器）' : '（这个扩展名也不在上传白名单里）')
+}
 
 /** 对象类策略（**本插件自己的声明**：哪类对象能挂附件、谁可以挂、默认给谁看）。 */
 export const OBJECT_POLICY = {
@@ -81,7 +117,7 @@ export const REFUSAL_CODES = ['identity-required', 'attachment-too-large', 'atta
   'attachment-deleted', 'attachment-index-full', 'attachment-limit-reached', 'object-kind-not-allowed',
   'object-side-not-allowed', 'object-id-invalid', 'object-not-in-your-view', 'cross-side-attachment',
   'not-your-attachment', 'visibility-invalid', 'blob-missing', 'blob-tampered', 'storage-unavailable',
-  'journal-unwritable']
+  'journal-unwritable', 'preview-type-not-allowed']
 
 /** HTTP 状态码（回执语义：能区分的必须区分，不许一律 200）。 */
 export const STATUS_FOR = {
@@ -91,7 +127,7 @@ export const STATUS_FOR = {
   'attachment-limit-reached': 409, 'object-kind-not-allowed': 400, 'object-side-not-allowed': 403,
   'object-id-invalid': 400, 'object-not-in-your-view': 403, 'cross-side-attachment': 403,
   'not-your-attachment': 403, 'visibility-invalid': 400, 'blob-missing': 500, 'blob-tampered': 500,
-  'storage-unavailable': 500, 'journal-unwritable': 500,
+  'storage-unavailable': 500, 'journal-unwritable': 500, 'preview-type-not-allowed': 415,
 }
 
 export const ATTACHMENT_ID_RE = /^att-[0-9a-f]{12}$/
@@ -361,10 +397,43 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
     if (entry.visibility !== 'both') return false
     return objectVisible(side, entry.object?.kind, entry.object?.id)
   }
+  /** 文件名的**归一键**（同一对象上「同名」判据：去空白 + 大小写不敏感；原始文件名只用于展示与下载）。 */
+  const nameKeyOf = (name) => text(name).toLowerCase()
+  /** 一个文件名在**同对象上的版本链**（活的在前、版本号降序）：`{name_key, latest, versions[], holders[]}`。 */
+  const chainsOf = (entries) => {
+    const chains = new Map()
+    for (const entry of entries) {
+      if (!plain(entry)) continue
+      const key = `${text(entry.object?.kind)}\u0000${text(entry.object?.id)}\u0000${nameKeyOf(entry.name_key ?? entry.name)}`
+      const chain = chains.get(key) ?? { key, object: entry.object, name: text(entry.name),
+        name_key: nameKeyOf(entry.name_key ?? entry.name), versions: [] }
+      chain.versions.push(entry)
+      chains.set(key, chain)
+    }
+    for (const chain of chains.values()) {
+      chain.versions.sort((left, right) => (Number(right.version) || 1) - (Number(left.version) || 1)
+        || String(right.uploaded_at).localeCompare(String(left.uploaded_at)))
+      chain.latest = chain.versions.find((item) => item.deleted !== true) ?? null
+      chain.latest_id = chain.latest ? chain.latest.id : ''
+      for (let at = 0; at < chain.versions.length; at += 1) {
+        const item = chain.versions[at]
+        const above = chain.versions.slice(0, at).find((other) => other.deleted !== true) ?? null
+        item.superseded_by = above ? above.id : ''
+      }
+      chain.version_count = chain.versions.length
+      chain.deleted_count = chain.versions.filter((item) => item.deleted === true).length
+      chain.holders = [...new Set(chain.versions.map((item) => text(item.uploader)))]
+    }
+    return chains
+  }
   const publicEntry = (entry) => ({ id: entry.id, name: entry.name, bytes: entry.bytes, sha256: entry.sha256,
     content_type: entry.content_type, uploader: entry.uploader, at: entry.uploaded_at, visibility: entry.visibility,
     owner_side: entry.side, object: entry.object, deleted: entry.deleted === true,
     deleted_at: entry.deleted_at ?? null, deleted_by: entry.deleted_by ?? null,
+    // ---- **多版本**与**预览**（同一条索引就带着这两个口径，界面/脚本不必自己推） ----
+    version: Number(entry.version) || 1, name_key: nameKeyOf(entry.name_key ?? entry.name),
+    supersedes: text(entry.supersedes), superseded_by: text(entry.superseded_by),
+    preview_kind: previewKindOf(entry.name), previewable: previewKindOf(entry.name) !== null,
     mine: null })
 
   /**
@@ -438,12 +507,42 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
     const sameObject = live.filter((item) => item.object?.kind === text(kind) && item.object?.id === objectId)
     if (sameObject.length >= bounds.max_per_object) {
       return refusal('attachment-limit-reached',
-        `对象 ${objectId} 上已有 ${sameObject.length} 个附件（上限 ${bounds.max_per_object}）`,
-        '先合并/删除旧件，或把它挂到别的对象上')
+        `对象 ${objectId} 上已有 ${sameObject.length} 个附件（上限 ${bounds.max_per_object}；`
+          + '同一文件名的每个版本各占一个）',
+        '先合并/删除不再需要的版本（删除会留痕：原件进 trash/、journal 记一行），或把它挂到别的对象上')
     }
     const sha = sha256Of(buffer)
-    const id6 = sha.slice(0, 12)
-    const attachmentId = `att-${id6}`
+    const key = nameKeyOf(name)
+    // ---- **多版本**（同对象 + 同名 = 一条版本链；每次上传是一个新版本，**不覆盖**历史） ------------
+    const sameName = live.filter((item) => item.object?.kind === text(kind) && item.object?.id === objectId
+      && nameKeyOf(item.name_key ?? item.name) === key)
+    const prev = sameName.slice().sort((left, right) => (Number(right.version) || 1) - (Number(left.version) || 1)
+      || String(right.uploaded_at).localeCompare(String(left.uploaded_at)))[0] ?? null
+    const version = prev ? Math.max(1, Number(prev.version) || 1) + 1 : 1
+    // 附件 id 仍以**内容**为锚（`att-<sha256 前 12 位>`）：同一份字节只存一份正文。
+    // 只有当这个 id 已经被**别的对象/别的文件名**占着时，才按「这一条是谁的」派生一个稳定的 id
+    //（否则同名不同内容不会撞车，但**同一份字节挂到两个名字下**会互相覆盖 —— 那是修前的真 bug）。
+    const occupant = doc.attachments[`att-${sha.slice(0, 12)}`]
+    const occupantSame = plain(occupant) && occupant.object?.kind === text(kind)
+      && occupant.object?.id === objectId && nameKeyOf(occupant.name_key ?? occupant.name) === key
+    // 同一份字节（sha256 相同）+ 同一个对象 + 同一个文件名 + 还在（没被删） ⇒ 就是**同一条**附件：
+    // 不新建版本、不改索引、不写 journal（如实说清"这不是新版本"）。比 sha 而不是比版本号：
+    // 用户把 v1 的内容又传一次时，sha256 会命中 v1 那条 —— 那也说清"就是这一条"。
+    const sameContent = sameName.find((item) => String(item.sha256).replace(/^sha256:/, '') === sha) ?? null
+    if (sameContent !== null) {
+      return { ok: true, code: 'attachment-unchanged', entry: { ...publicEntry(sameContent),
+        mine: sameContent.side === side }, unchanged: true, dedup: true, ledger_added: 0,
+        note: '同一份字节（sha256 相同）、同一个对象、同一个文件名：这就是**同一条**附件（不是新版本）；'
+          + `它现在是 v${Number(sameContent.version) || 1}`,
+        next_action: '要记成新版本：把改过的文件传上来（同名 = v' + (Number(sameContent.version) + 1)
+          + '，旧版仍然可下）' }
+    }
+    let attachmentId = `att-${sha.slice(0, 12)}`
+    if (occupant !== undefined || occupantSame) {
+      // 撞了 id（同一份字节挂在别处/同一个文件名的旧版本上）⇒ 按「谁 + 哪个对象 + 哪个文件名 + 第几版」派生
+      attachmentId = `att-${sha256Of(Buffer.from(`${side}|${text(kind)}|${objectId}|${key}|${sha}|v${version}`))
+        .slice(0, 12)}`
+    }
     const blobPath = join(blobsDir, `${sha}.bin`)
     try {
       ensureDir(dir, 0o700)
@@ -470,7 +569,9 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
     const entry = { id: attachmentId, side, object: { kind: text(kind), id: objectId }, name: text(name),
       bytes: buffer.length, sha256: `sha256:${sha}`, content_type: typed.content_type,
       uploader: who.startsWith('human:') ? who : `human:${who}`, uploaded_at: new Date().toISOString(),
-      visibility: want, deleted: false }
+      visibility: want, deleted: false,
+      // **多版本**（同一对象 + 同名 = 一条链；这一条是第几版、取代了谁）
+      version, supersedes: prev ? prev.id : '', name_key: key }
     const next = readIndex()
     next.attachments[attachmentId] = entry
     next.seq = Math.max(Number(next.seq) || 0, Object.keys(next.attachments).length)
@@ -481,11 +582,20 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
         '先修 <ui_shared>/attachments/index.json 的写权限（0600）')
     }
     const trace = journal({ at: entry.uploaded_at, event: 'uploaded', id: entry.id, side, actor: entry.uploader,
-      object: entry.object, name: entry.name, bytes: entry.bytes, sha256: entry.sha256, visibility: want })
+      object: entry.object, name: entry.name, bytes: entry.bytes, sha256: entry.sha256, visibility: want,
+      extra: { version, supersedes: entry.supersedes, replaces_name: prev ? prev.name : '' } })
     visibilityCache.delete(side)
-    say(`上传 ${entry.id}（${entry.name}，${entry.bytes} B）→ ${entry.object.kind} ${entry.object.id} @ ${side}`)
-    return { ok: true, entry: { ...publicEntry(entry), mine: true }, ledger_added: 0,
-      journal_trace: trace.ok === true, dedup: existsSync(blobPath) }
+    say(`上传 ${entry.id}（${entry.name} v${version}，${entry.bytes} B）→ ${entry.object.kind} ${entry.object.id} @ ${side}`
+      + `${prev ? `（取代 v${Number(prev.version) || 1} ${prev.id}）` : ''}`)
+    return { ok: true, entry: { ...publicEntry(entry), mine: true }, version, supersedes: entry.supersedes,
+      preview_kind: previewKindOf(entry.name), journal_trace: trace.ok === true, dedup: existsSync(blobPath),
+      ledger_added: 0,
+      note: prev
+        ? `同名附件的新版本（v${version}）：第 ${Number(prev.version) || 1} 版没有被覆盖 —— 它还在这条索引里，仍可下载`
+        : '这是这个文件名的第 1 版（同一对象上再传同名文件会记成 v2，旧版不覆盖）',
+      next_action: previewKindOf(entry.name)
+        ? '界内可直接预览（图片 / PDF / 文本）：对象页的「附件：预览与版本」里不下载也能看'
+        : `${previewRefusalReason(entry.name)}：需要时下载来看（预览只做图片/PDF/文本，不引外网依赖）` }
   }
 
   /** **列表**：某个对象上"本侧能看到的"附件（含已删除的墓碑 —— 删除要留痕，痕迹看得见）。 */
@@ -494,17 +604,103 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
       return refusal('identity-required', '未登录：读不到任何一侧的附件', '先在 /identity/ 登录')
     }
     const doc = readIndex()
-    const rows = Object.values(doc.attachments).filter((entry) => plain(entry)
+    const picked = Object.values(doc.attachments).filter((entry) => plain(entry)
       && (kind === undefined || text(kind) === '' || entry.object?.kind === text(kind))
       && (id === undefined || text(id) === '' || entry.object?.id === text(id)))
       .filter((entry) => canSee(entry, side))
+    // 版本链（同对象 + 同名）：列表里每条都带上「第几版 / 最新一版是谁 / 被谁取代」
+    const chains = chainsOf(picked)
+    const latestOf = new Map()
+    for (const chain of chains.values()) {
+      for (const item of chain.versions) latestOf.set(item.id, chain.latest_id)
+    }
+    const rows = picked
       .sort((left, right) => String(left.uploaded_at).localeCompare(String(right.uploaded_at)))
       .map((entry) => ({ ...publicEntry(entry), mine: entry.side === side,
+        latest: latestOf.get(entry.id) === entry.id,
+        is_latest: latestOf.get(entry.id) === entry.id,
+        superseded_by: text(entry.superseded_by),
         deletable: entry.deleted !== true && entry.side === side }))
+    const names = new Set(rows.map((row) => `${row.object?.kind}/${row.object?.id}/${row.name_key}`))
+    const versioned = [...names].filter((name) => rows.filter((row) =>
+      `${row.object?.kind}/${row.object?.id}/${row.name_key}` === name).length > 1).length
     return { ok: true, side, kind: text(kind), id: text(id), files: rows,
       counts: { total: rows.length, live: rows.filter((row) => !row.deleted).length,
-        deleted: rows.filter((row) => row.deleted).length, mine: rows.filter((row) => row.mine).length } }
+        deleted: rows.filter((row) => row.deleted).length, mine: rows.filter((row) => row.mine).length,
+        names: names.size, versioned_names: versioned,
+        previewable: rows.filter((row) => !row.deleted && row.previewable).length,
+        versions: rows.reduce((sum, row) => sum + (Number(row.version) || 1), 0) },
+      version_rule: '同一对象上**同名**文件每传一次就是新的一版（v1、v2…）：旧版**不覆盖**、仍可下载；'
+        + '同一份字节只存一份正文（内容寻址）',
+      preview_rule: '界内预览只做图片 / PDF / 文本（浏览器自带渲染器，不引外网依赖）；其余类型如实说"不预览"并给下载' }
   }
+
+  /**
+   * **版本链**（同对象 + 同名 = 一条链）：谁在什么时候换了哪一版，逐条可下（旧版也在）。
+   * 只回**本侧能看到的**条目（与下载/列表同一判据）；`kind/id` 省略 ⇒ 本侧全部对象的链。
+   */
+  const versions = ({ side, kind, id }) => {
+    if (!SIDES.includes(side)) {
+      return refusal('identity-required', '未登录：读不到任何一侧的附件版本', '先在 /identity/ 登录')
+    }
+    const doc = readIndex()
+    const picked = Object.values(doc.attachments).filter((entry) => plain(entry)
+      && (kind === undefined || text(kind) === '' || entry.object?.kind === text(kind))
+      && (id === undefined || text(id) === '' || entry.object?.id === text(id)))
+      .filter((entry) => canSee(entry, side))
+    const chains = chainsOf(picked)
+    const groups = [...chains.values()]
+      .sort((left, right) => `${left.object?.kind}/${left.object?.id}/${left.name_key}`
+        .localeCompare(`${right.object?.kind}/${right.object?.id}/${right.name_key}`))
+      .map((chain) => ({ name: chain.name, name_key: chain.name_key, object: chain.object,
+        version_count: chain.version_count, deleted_count: chain.deleted_count, holders: chain.holders,
+        latest_id: chain.latest_id, latest_version: chain.latest ? Number(chain.latest.version) || 1 : 0,
+        versions: chain.versions.map((entry) => ({ ...publicEntry(entry), mine: entry.side === side,
+          latest: chain.latest_id === entry.id, is_latest: chain.latest_id === entry.id })) }))
+    return { ok: true, side, kind: text(kind), id: text(id), groups,
+      counts: { groups: groups.length, versions: groups.reduce((sum, group) => sum + group.version_count, 0),
+        versioned_groups: groups.filter((group) => group.version_count > 1).length,
+        deleted: groups.reduce((sum, group) => sum + group.deleted_count, 0) },
+      rule: '同一对象上同名文件 = 一条版本链；每条版本都有自己的 id、sha256、上传人与时刻，'
+        + '旧版**不覆盖**、仍可下载（删除的版本留墓碑）' }
+  }
+
+  /**
+   * **取件（界内预览）**：与下载**同一条**身份/侧/完整性判据，只是把内容按"能不能在浏览器里看"分流。
+   *
+   * 三类（`PREVIEW_TYPES`）：image / pdf 原样给字节（客户端 `<img>` / `<iframe>`，浏览器自带渲染器）；
+   * text 按 UTF-8 解码、超上限只给前一段并**如实标注** `truncated`（不假装是全文）。
+   * 其余类型 ⇒ `preview-type-not-allowed`（415）+ 人话原因 + 下载入口（不静默、不把二进制塞给浏览器）。
+   * 正文仍不进账本（`ledger_added: 0`）——预览是**读**，不是第二条事实写路径。
+   */
+  const preview = ({ side, id, maxBytes = 0 }) => {
+    const got = get({ side, id })
+    if (!got.ok) return got
+    const entry = got.entry
+    const kind = previewKindOf(entry.name)
+    if (kind === null) {
+      return refusal('preview-type-not-allowed', previewRefusalReason(entry.name),
+        `下载来看（${prefixHint()}）；界内预览只做图片 / PDF / 文本 —— 这一段不引任何外网依赖`,
+        { preview_kinds: PREVIEW_KINDS, attachment: entry })
+    }
+    const cap = Math.max(1024, Number(maxBytes) > 0 ? Number(maxBytes) : bounds.max_preview_text_bytes)
+    if (kind !== 'text') {
+      return { ok: true, kind, entry, body: got.body, truncated: false, previewed_bytes: got.body.length,
+        total_bytes: got.body.length, inline_content_type: entry.content_type,
+        sha256_verified: true, ledger_added: 0 }
+    }
+    const truncated = got.body.length > cap
+    const slice = truncated ? got.body.subarray(0, cap) : got.body
+    const textBody = slice.toString('utf8')
+    return { ok: true, kind, entry, body: slice, text: textBody, truncated, previewed_bytes: slice.length,
+      total_bytes: got.body.length, inline_content_type: PREVIEW_INLINE_TYPES.text,
+      sha256_verified: true, ledger_added: 0,
+      note: truncated
+        ? `文本超过预览上限（${cap} 字节）：这里只给了前 ${slice.length} 字节（**没有假装是全文**）——完整内容请下载`
+        : '文本预览按 UTF-8 解码后以纯文本显示（不解析 JSON/CSV、更不执行任何东西）' }
+  }
+  /** 预览回执里给用户可复制的下载入口（机制：路径由插件自述，界面/脚本照抄）。 */
+  const prefixHint = () => '同一对象的「附件」面板里点文件名下载（按侧与身份校验）'
 
   /** **取件**（下载的唯一入口）：身份 → 身份形状 → 存在 → 未删 → 侧权限 → 正文 sha256 自校验。 */
   const get = ({ side, id }) => {
@@ -636,11 +832,28 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
         + '第二条事实写路径；写进账本会改事件类型目录、证据包哈希与审计取证语义（与名册/协作面同一口径）',
       visibility_rule: '下载/列表/删除都要会话身份；跨侧只在「交付件（visibility=both）**且**本侧是该对象当事方」'
         + '时放行，否则 403 cross-side-attachment',
+      // **多版本**（不覆盖历史）与**界内预览**（不下载也能看）的机读口径：界面/脚本/对账都读它
+      versions: { rule: '同一对象上同名文件 = 一条版本链：每传一次是新的一版（v1、v2…），'
+        + '每条版本都有自己的 id / sha256 / 上传人 / 时刻，旧版**不覆盖**、仍可下载；'
+        + '同一份字节只存一份正文（内容寻址：`blobs/<sha256>.bin`）',
+        fields: ['version', 'supersedes', 'superseded_by', 'name_key', 'is_latest'],
+        same_content: '同一份字节 + 同一个对象 + 同一个文件名 ⇒ 判为**同一条**（回执 `attachment-unchanged`），'
+          + '不新建版本、不写 journal',
+        bounded: { per_object: bounds.max_per_object, note: '同一文件名的每个版本各占一个名额' } },
+      preview: { kinds: PREVIEW_KINDS, types: PREVIEW_TYPES,
+        inline_types: PREVIEW_INLINE_TYPES,
+        max_text_bytes: bounds.max_preview_text_bytes, render_max: bounds.max_preview_render,
+        rule: '界内预览只做图片 / PDF / 文本：图片与 PDF 交给**浏览器自带**渲染器（同源 `<img>` / `<iframe>`，'
+          + '不引 CDN / 外部字体 / 第三方解析器），文本按 UTF-8 解码后以**转义纯文本**显示；'
+          + '其余类型如实说"不预览"（415 preview-type-not-allowed）并给下载入口',
+        identity_rule: '预览与下载**同一条**判据：会话身份 + 交付件当事方；未登录 401，跨侧 403；'
+          + '预览也是读，**不写账本**（ledger_added 恒 0）',
+        truncated: '文本预览超上限只给前一段并如实标 `truncated: true`（不假装是全文）' },
       ledger_added: 0,
     }
   }
 
-  return { dir, describe, put, get, list, remove, visibleObjects, objectVisible, journalLines,
+  return { dir, describe, put, get, list, versions, preview, remove, visibleObjects, objectVisible, journalLines,
     currentLimits: () => ({ ...bounds }), invalidate: () => { visibilityCache.clear(); return true } }
 }
 

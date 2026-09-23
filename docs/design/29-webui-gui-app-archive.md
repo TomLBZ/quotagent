@@ -214,3 +214,38 @@
 3. **只读路由的方法围栏**：只应为 `GET` 的路由收到非 GET ⇒ **405 + `method-not-allowed` + 响应头 `Allow: GET`**，且**先按方法判据拒绝、再做身份校验**（顺序反了会变 401，"只读路由不接受写"就失效）。机检：`tools/verify.sh quote-draft` 第 ③ 条（拿 `/api/routes` 逐条 POST）。
 
 **真源**：`src/system/webui/docs/people-and-roles.md`、`collab-and-roster-resilience.md` §4。
+
+## 19 批量人签的形状（主文件 §19 的细节面）
+
+**逐条与回执**：每份各跑一次写者（`quote-sign.py --draft-id` / `gate-actions.py --request`）；回执 `result.results[] = [{where ∈ applied|duplicates|refused, code, ledger_added, reason, next_action}]` + 整体 `result.batch`（`decided/already/refused/ledger_added`）—— 机制**照抄、不判定**（`jobItemsOf()`/`jobCountsOf()`）；具名拒 `draft-not-found`/`gate-not-found`/`gate-already-decided`/`approver-not-named`。
+
+**动作运行时**：`ACTION_RUNTIME_ENTRY`（`app-shell.mjs` 的函数源码，`toString()` 后当 worker 入口执行）里跑的就是**磁盘上那份** `code/ui.mjs`；host 只给机制面（`config`/`sharedDir`/`now`/`runPython`/`stage`/`writerReceipt`/`rows`），`digest`/`report`/`collab`/`people`/`service` **拿不到 ⇒ 抛错 ⇒ 主线程回退原样执行**（仅 `wrote:false` 才回退，动过手的绝不重跑），`io.jobs.inline_fallback` +1 并记一行日志；认批量只靠注册面 `action.input.bulk === 'ids'` 且 `input.ids` 非空；`job_concurrency`（默认 1，`QUOTAGENT_UI_JOB_CONCURRENCY`）**只排队、不拒动作**。
+
+**jobs.json 与恢复语义**：`<ui_shared>/webui/jobs.json`（0600、原子写、有界：keep 12 / items 200 / progress 24 / target 80 字符，150 ms 节流）；只读 `GET /api/ui/jobs`（POST 孪生 405 + `Allow: GET`、按会话身份隔离、未登录 401）给 `running` + `recent` + `io.jobs` + `concurrency`，`recent` 里那条 `interrupted` 带 `pending_ids`/`refused_ids`/`runtime_note`；`jobsLoad()` 首次读把 `liveJobIds` 之外（**上一个进程**）的 `running/queued` 改判 `interrupted`，按进度里 `writer-done` 行推"哪些跑过" ⇒ `pending_ids` = 从没跑到的、`refused_ids` = 跑过被拒的，改判**立刻落盘**。字段清单/复跑命令/原始读数在 `src/system/webui/docs/action-runtime-and-jobs.md`。
+
+**如实面（本批登记，未改）**：重试是新的一批（新 `job.id`），旧中断记录保留 `pending_ids` ⇒ 提示条每次加载重现（可点「知道了」关掉）；重试幂等（已落账报 `duplicates`、零新增）⇒ 那是**噪音**不是错误。
+
+## 20 窗口 / 并发纪律的形状与读数（主文件 §20 的细节面）
+
+**窗口**：`/api/ui/panels?view=&w=1&only=<面板 id>&pq={kw,cols,sort,page,size,keys,edits,bucket}`（`/api/ui/object` 同构）；不带 `w`/`pq`/`only` ⇒ 整份下发；窗口里的行 = 全量 → 筛选 → 稳定全序排序 → 第 start..end 行；`共 N`/命中/小计/枚举候选/桶计数/跨页选中行键都在**全集**上算；`matched_keys` 按需给、超 5000 行**如实拒发**。
+
+**唯一写者闸门**（`app-shell.mjs` 的 `WRITER_GATE`/`writerGateTicket`/`writerGateTry`/`writerGateTakeSync`）：`writer.queue/` 的 **FIFO 票据** + `writer.lock` 的 **`wx` 原子争锁**，协议只有一处，主线程（动作级 `await` 轮询、不阻塞事件循环）与 worker（每次写者调用 `Atomics.wait` 同步等）共用；批量动作**不取动作级闸门**（防与 worker 互等死锁），退回主线程时才现取；等待阈值 `QUOTAGENT_UI_WRITER_WAIT_MS`（默认 120000）超时 ⇒ `writer-gate-timeout`（说清持有者与"本动作没有开始、账本零新增"）；免排队只在连续两次观察到"零写者"时给，未知一律按"要写"处理。**反证**：去掉闸门，50 份批量与另一客户端 `rfq.publish` 并发写 ⇒ 供应商账本重复 `seq 309`/断链 ⇒ 写者冻结账本（`ledger-frozen`，49/50 被拒），读数 `tmp/p21-shots/concurrent-broken-chain.json`。
+
+**测量面与配置**：`/api/ui/surface` 的 `io.ledger`/`io.notify`/`io.admission`/`io.window`/`io.jobs`（字段清单见 `performance-under-concurrency.md` §3 与 `action-runtime-and-jobs.md`）；页面只读 `window.__Q_GUI_METRICS.last`。
+
+**P21/P23 读数**（真跑，`tmp/p21-shots/`、`tmp/p23-shots/`）：
+
+| 场景 | P20（同步串行） | P21（动作运行时 + 闸门） |
+|---|---|---|
+| 批量期间**另一客户端翻页** | **11 703 ms**（0 条完成） | **p50 6 / p95 199 / max 213 ms**（121 条全完成） |
+| 批量期间**另一客户端写** | **11 704 ms**（0 条完成） | **p50 303 / p95 354 / max 407 ms**（51 条全完成） |
+| 50 份 / 40 份端到端 | 11.65 s / 4.27 s | **6.69 s（134 ms 每份）/ 4.28 s（107 ms 每份）**，`runtime=worker` |
+
+**中断恢复（P23 复跑，`tmp/p23-shots/fixed-run.txt`）**：30 份跑到第 4 份时 SIGKILL ⇒ 重启 ⇒ `GET /api/ui/jobs` 读回 `interrupted total=30 done=4 pending=26` ⇒ **只重试这 26 份**：`applied 25 / duplicates 1 / refused 0`、账本 **supplier +75（=25×3）/ contractor +25（=25×1）**、`quote/submitted` 155 条 / 155 个不同草稿（**0 重复**）、两侧链 `ok:true`（595/402）；只重试被拒项（5 真 3 假 ⇒ `batch-partial`）⇒ 再提那 3 份仍 3 条具名拒、**两侧 +0**。
+
+## 21 §21 的实现细节（判据与禁止仍在主文件）
+
+* 旧只读页删除实现：`code/webui.mjs` 删净渲染器与 nav 入口（`RETIRED_SUBVIEWS` + 旧地址正则；advice/deadlines ~400 行、gates 96、authority 143）。
+* 旧 UI 形态判据抓手：`refresh-ui-snapshots.py`、`ui-seed-pipeline.py`、`ui-mutate` 变异门、`AC-UXWEB-001` 旧判据（「三块第一屏锚点 + 0 内联脚本」+ 快照 hash）⇒ AC 资产 47→46。
+* 旧运维面登记标记：ap-0110 记录**保留**并标 `retired`（`pipeline-view`）；邮件域快照写入器搬进 `system/mail/tools/`。
+* 四个门（`advice`/`rfq-deadline`/`gates`/`authority`）：旧页存在类断言删除、等价或更强的判据接到 GUI，**插件层围栏判据一条没松**。
