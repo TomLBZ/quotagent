@@ -31,7 +31,7 @@
  *   7  **确定性**：同一载荷两次**逐字节一致**；键序打乱一致；跨实例一致；冻结输入不抛错；
  *      `payload.now` / `config.now` 两个墙钟入口**读都不读**（给任何值输出都不变）
  *   8  **私域哨兵零泄漏**：事实行里塞进私域键与哨兵 ⇒ 输出**逐字节一致**且哨兵 0 命中（非空转对照）
- *   9  **有界**：草稿数夹取到 `max_drafts` 且如实报；`handoff` 的命令里含 `tools/quote-sign.py`、
+ *   9  **有界**：草稿数夹取到 `max_drafts` 且如实报；`handoff` 给的是**在 GUI 里怎么签**（`quote.submit`）、
  *      `human:`、`ap-NNNN` 三个真实参数（**可复制**）
  *   10 **零写面 / 不读账本 / 不取墙钟**：静态扫描（fs / 写文件 / 账本 / `Date.now` / 随机 / 网络 /
  *      子进程 / 定时器）+ 扫描器非空转对照；`privacy` 五项如实申报
@@ -426,16 +426,26 @@ check('8 **私域哨兵零泄漏**：同一键集、不同私域值 ⇒ 输出**
 const many = handle.prepare(factsFor({ drafts: 40 }))
 const draft = { rfq_id: 'pkg-g1', item_id: 'L-001', unit_price_cents: 8600, quote_draft_id: 'qd-supplier-0123456789ab' }
 const hand = handle.handoff({ view: 'supplier', draft })
-const command = String((hand.commands || [])[0] || '')
-check('9 **有界**：草稿数夹取到 `max_drafts`（40 ⇒ 32）且如实报条数；`handoff` 的命令里含 '
-  + '`tools/quote-sign.py` / `human:` / `--now` / 草稿 id 四个**真实参数**（可直接复制，且**不含**'
-  + '本工具不认识的参数），并明说 `can_sign=false`、`data-signature-required=1`',
+// ★ 本批改判据（`docs/design/29-webui-gui-app.md` §2 + AGENTS.md 规则 12）：`handoff` 的
+//   「可复制的终端命令」已删（产品面不许教用户回终端），改成**接新位置**：
+//   `in_app` = GUI 里那一个真动作（`quote.submit`，`permission: human-signature`）+ **这份草稿的真实入参**。
+//   判据不弱于原来：动作 id / 权限 / 草稿 id / 署名 全都要对得上，且**0 命中**任何回终端的痕迹。
+const inApp = hand.in_app || {}
+const handText = JSON.stringify(hand)
+const HAND_NOISE = ['g1side', 'PYTHONPATH', '终端', '命令行', 'python3', 'quote-sign.py']
+const handNoise = HAND_NOISE.filter((token) => handText.includes(token))
+check('9 **有界**：草稿数夹取到 `max_drafts`（40 ⇒ 32）且如实报条数；`handoff` 里给出**在 GUI 里怎么签**'
+  + '（`in_app.action=quote.submit` + `permission=human-signature` + **这份草稿的真实入参**：草稿 id 与署名）'
+  + '，并明说 `can_sign=false`、`data-signature-required=1`、**0 命中**回终端的痕迹'
+  + '（`g1side` / `PYTHONPATH` / `终端` / `命令行` / `python3` / `quote-sign.py`）',
   many.drafts.length === 32 && hand.can_sign === false && hand.required === true
-  && hand.data_signature_required === '1' && command.includes('tools/quote-sign.py')
-  && command.includes('human:') && command.includes('--now') && !command.includes('--approval-ref')
-  && command.includes(draft.quote_draft_id) && String(hand.why).includes('不代签')
+  && hand.data_signature_required === '1' && inApp.action === 'quote.submit'
+  && inApp.permission === 'human-signature'
+  && inApp.input && inApp.input.draft_id === draft.quote_draft_id
+  && String(inApp.input.signature).startsWith('human:') && Boolean(inApp.where)
+  && handNoise.length === 0 && String(hand.why).includes('不代签')
   && hand.rfq_id === 'pkg-g1' && hand.item_id === 'L-001' && hand.unit_price_cents === 8600,
-  `草稿夹取=${many.drafts.length}；命令=${command.replace(/\n/g, ' ⏎ ')}`)
+  `草稿夹取=${many.drafts.length}；in_app=${JSON.stringify(inApp).slice(0, 240)}；命中回终端痕迹=${handNoise.join(',') || '无'}`)
 
 // ===========================================================================
 // 10 零写面 / 不读账本 / 不取墙钟（静态）
@@ -463,8 +473,12 @@ const hostNeedles = ['/^\\/([a-z]+)\\/quotes\\/prepare\\/?$/', METHOD_CODE, 'all
   'GET_ONLY_PATTERNS', 'WRITE_PATTERNS']
 const hostMissing = hostNeedles.filter((needle) => !webuiSource.includes(needle))
 // 签署命令由**插件**产出（不在宿主里硬编码路径）：两个工具名必须在插件源码里
-const toolMissing = ['tools/quote-draft.py', 'tools/quote-sign.py']
-  .filter((needle) => !originalSource.includes(needle))
+// 插件源码里**必须**留着的工具名：`tools/quote-draft.py`（非签名动作的唯一落账本者，回执的 next_action 指向它）。
+// `tools/quote-sign.py` 是**人工签名入口**（Python 侧工具，本门 ⑦/⑪ 真跑）；插件**不再**把它写进产品面文案
+//（29 §2：产品面不许教用户回终端）⇒ 反过来断言它 **0 命中**。
+const toolMissing = ['tools/quote-draft.py'].filter((needle) => !originalSource.includes(needle))
+// 说明：`tools/quote-sign.py` 这个名字在**源码注释**里还会出现一次（说明「旧口径已删」），所以这里
+// 不对整个源码判「0 命中」；真正该 0 命中的是**产品面载荷**（`handoff` 的返回值）—— 那一条在 check 9 里。
 const prepSliceStart = webuiSource.indexOf('报价草稿（`quote-prepare` domain 插件')
 const prepSliceEnd = webuiSource.indexOf('const PREP_FACT_KEYS')
 const prepSlice = prepSliceStart >= 0 && prepSliceEnd > prepSliceStart
@@ -475,14 +489,16 @@ const pageSlice = pageSliceStart >= 0 && pageSliceEnd > pageSliceStart
   ? webuiSource.slice(pageSliceStart, pageSliceEnd) : ''
 check('11 **宿主侧契约（静态）**：`webui` 里两条 `GET|POST /<prepare-view>/quotes/prepare/` 路由、'
   + '405 围栏（`method-not-allowed` + `Allow: GET`）、`data-signature-required` 页面标记、'
-  + '两个 Python 侧工具名都在；**本批新增的页面模板段**里 **0 行脚本 / 0 内联事件**'
-  + '（切片非空转：段长度 > 500 且扫描器对探针能命中）',
+  + '非签名动作的唯一落账本者 `tools/quote-draft.py` 在插件源码里（该 CLI 仍在跑，产品面**不再**把签名命令'
+  + '发给用户：`handoff` 载荷 0 命中回终端痕迹，见 check 9）；'
+  + '**本批新增的页面模板段**里 **0 行脚本 / 0 内联事件**（切片非空转：段长度 > 500）',
   hostMissing.length === 0 && toolMissing.length === 0
   && prepSlice.length > 500 && pageSlice.length > 500
   && !pageSlice.includes(scriptNeedle) && !inlineEvent.test(pageSlice)
   && !prepSlice.includes(scriptNeedle) && !inlineEvent.test(prepSlice)
   && pageSlice.includes('method="post"') && pageSlice.includes('</form>'),
-  `缺抓手=${JSON.stringify(hostMissing)}；插件里缺工具名=${JSON.stringify(toolMissing)}；页切片长度=${pageSlice.length}；`
+  `缺抓手=${JSON.stringify(hostMissing)}；插件里缺工具名=${JSON.stringify(toolMissing)}；`
+  + `页切片长度=${pageSlice.length}；`
   + `页里含脚本=${pageSlice.includes(scriptNeedle)} 含内联事件=${inlineEvent.test(pageSlice)} `
   + `含 post 表单=${pageSlice.includes('method="post"')} 含 </form>=${pageSlice.includes('</form>')}；`
   + `准备段长度=${prepSlice.length} 含脚本=${prepSlice.includes(scriptNeedle)} 含内联事件=${inlineEvent.test(prepSlice)}`)

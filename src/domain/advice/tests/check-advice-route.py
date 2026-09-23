@@ -5,7 +5,9 @@
   ① 写两份**夹具账本**（承包商侧 / 供应商侧各自的账本文件，与部署形状一致：每个视角读自己的账本）
      + 一份**夹具邮件域快照**（只放通道声明：SMTP `available:false` + 真实 next_action）；
   ② 起一个真 `cli.mjs webui` 进程（随机空闲端口、私有前缀 `/qaadv`）；
-  ③ 双方视角的 `GET <prefix>/<view>/advice/` 与 `<prefix>/<view>/api/advice` 都 200、是**真页面/真契约**
+  ③ **旧 SSR 页已退役**（`RETIRED_SUBVIEWS`）：四条旧路由一律 303 → `<前缀>/app/<view>/`；
+     承接这件事的 GUI 面板真的注册在那一页上；退役响应体与承接面板载荷里
+     `终端` / `g1side` / `PYTHONPATH` / `命令行` **0 命中**
      （`data-engine="rules"` + "不含模型推测"那句 + 建议表 + 逐条 `basis`），且 **0 行 `<script>` / 0 内联事件**；
   ④ **两视角建议确实不同**（页面体、建议 id 列表、JSON items 都比）：承包商侧出 4 条（截止/比价极差/人工门/通道），
      供应商侧出 2 条（人工门/通道）——同一份代码、同一套规则，**输入不同则建议不同**；
@@ -289,7 +291,8 @@ def main() -> int:  # noqa: C901
             f"{base}/supplier/advice/", headers={"Accept": "text/html"}, follow_redirects=False)
         cookie_contractor = cookie_of(f"{base}/contractor/advice/")
         cookie_supplier = cookie_of(f"{base}/supplier/advice/")     # noqa: F841（两侧各登录一次）
-        same_side = _fetch_full(f"{base}/contractor/advice/", headers=cookie_contractor)
+        # 旧页已退役（`RETIRED_SUBVIEWS`）：同侧登录后拿到的也是 **303 → GUI**（不 404、不再是旧页 200）。
+        same_side = _fetch_full(f"{base}/contractor/advice/", headers=cookie_contractor, follow_redirects=False)
         cross_side = _fetch_full(f"{base}/supplier/advice/", headers=cookie_contractor)
         cross_json = _fetch_full(f"{base}/supplier/api/advice", headers=cookie_contractor)
         check("②b 身份门槛负控：**未登录**取业务路由一律拒 —— API/JSON ⇒ 401 `identity-required` + `next`；"
@@ -298,12 +301,14 @@ def main() -> int:  # noqa: C901
               and anon_html_code == 303 and "/identity/?next=" in header_of(anon_html_headers, "location"),
               f"JSON={anon_json_code} 含 identity-required={'identity-required' in anon_json_body}；"
               f"HTML={anon_html_code} location={header_of(anon_html_headers, 'location')[:80]}")
-        check("②b' 身份门槛正控：**登录后按侧放行** —— 同侧页面 200；拿承包商 cookie 去 `/supplier/`"
+        check("②b' 身份门槛正控：**登录后按侧放行** —— 同侧 ⇒ **303 → `<前缀>/app/contractor/`**"
+              "（旧页退役后不再返回内容）；拿承包商 cookie 去 `/supplier/`"
               "（页面与 JSON 两条形状）都 ⇒ **403 `side-mismatch`**（不许回落成「能看」）",
-              same_side[0] == 200 and cross_side[0] == 403 and "side-mismatch" in cross_side[1]
+              same_side[0] == 303 and str(header_of(same_side[2], "location")).endswith("/app/contractor/")
+              and cross_side[0] == 403 and "side-mismatch" in cross_side[1]
               and cross_json[0] == 403 and "side-mismatch" in cross_json[1],
-              f"同侧={same_side[0]} 越侧页面={cross_side[0]} 越侧 JSON={cross_json[0]} "
-              f"含 side-mismatch={'side-mismatch' in cross_side[1]}")
+              f"同侧={same_side[0]} → {header_of(same_side[2], 'location')}；越侧页面={cross_side[0]} "
+              f"越侧 JSON={cross_json[0]} 含 side-mismatch={'side-mismatch' in cross_side[1]}")
 
         # ---- ③ 路由登记 ----
         code, routes_body = get(f"{base}/api/routes")
@@ -317,124 +322,121 @@ def main() -> int:  # noqa: C901
               and any(str(item["path"]).endswith("/api/advice") for item in advice_routes),
               f"status={code} 命中={json.dumps([i.get('path') for i in advice_routes], ensure_ascii=False)}")
 
-        pages = {view: get(f"{base}/{view}/advice/") for view in ("contractor", "supplier")}
-        jsons = {view: get(f"{base}/{view}/api/advice") for view in ("contractor", "supplier")}
-        parsed = {view: parse_json(jsons[view][1]) for view in jsons}
-        page_ok = all(status == 200 for status, _ in pages.values())
-        nav_ok = all(f'data-subnav="{view}"' in pages[view][1] and 'data-advice-link="1"' in pages[view][1]
-                     for view in pages)
-        engine_ok = all('data-engine="rules"' in pages[view][1] and "engine=rules" in pages[view][1]
-                        and "不含模型推测" in pages[view][1] for view in pages)
-        table_ok = all('data-advice="items"' in pages[view][1] for view in pages)
-        check("③ 两视角 advice 页各自 **200 且是真页面**（道内子导航含「决策建议」入口、"
-              "`data-engine=\"rules\"` + 「不含模型推测」那句、建议表 `data-advice=\"items\"`）",
-              page_ok and nav_ok and engine_ok and table_ok
-              and ids_of_page(pages["contractor"][1]) == CONTRACTOR_ADVICE
-              and ids_of_page(pages["supplier"][1]) == SUPPLIER_ADVICE,
-              f"status={ {v: pages[v][0] for v in pages} }；子导航/入口={nav_ok} 分层文案={engine_ok} 建议表={table_ok}；"
-              f"承包商页建议={ids_of_page(pages['contractor'][1])}；供应商页建议={ids_of_page(pages['supplier'][1])}")
+        # ==========================================================================================
+        # ★ 本段已按 `docs/design/29-webui-gui-app.md` §2 + AGENTS.md 规则 12 **改判据**（旧页退役）：
+        #   旧断言「两视角 `/advice/` 页与 `/api/advice` 都 200、页面上有建议表与 `data-advice-link` 子导航、
+        #   JSON 契约 items/counts/bounds…、每条 next_action 必须含 `python3 -m quotagent.g1side …`」
+        #   冻结的是**已经删掉的旧形态**，与「双方仅通过 GUI 走完全部业务流程」直接冲突 ⇒ 逐条改判据：
+        #     · 路由/身份类 ⇒ **接新位置**（303 + Location + 承接面板注册在 GUI 上）；
+        #     · 只在旧页上成立的内容类（建议表、JSON 契约、g1side 命令、空投影降级页）⇒ **删除**，
+        #       其等价判据在插件层（`t281-advice-gate.mjs`，本批 31/31，含 5 处单点变异）**一条没松**。
+        #   逐条登记（文件 + 原行 + 理由）见 `docs/work/plans/webui-ui-defects.md` §P17。
+        # ==========================================================================================
+        NOISE = ("终端", "g1side", "PYTHONPATH", "命令行")
 
-        contract_ok = all(
-            parsed[view].get("engine") == "rules" and isinstance(parsed[view].get("engine_note"), str)
-            and "不含模型推测" in str(parsed[view].get("engine_note"))
-            and isinstance(parsed[view].get("items"), list) and isinstance(parsed[view].get("counts"), dict)
-            and isinstance(parsed[view].get("bounds"), dict) and isinstance(parsed[view].get("absent"), list)
-            and isinstance(parsed[view].get("notes"), list)
-            and isinstance(parsed[view].get("truncated"), bool) and isinstance(parsed[view].get("omitted"), int)
-            and isinstance(parsed[view].get("degraded"), bool)
-            and parsed[view].get("degraded") is False and parsed[view].get("reason") is None
-            for view in ("contractor", "supplier"))
-        check("③ `/<view>/api/advice` 双方各自 200 且契约齐备（engine/engine_note/items/counts/bounds/absent/notes/"
-              "truncated/omitted/degraded/reason/privacy），且**有真数据**（`degraded:false`）",
-              all(status == 200 for status, _ in jsons.values()) and contract_ok,
-              f"status={ {v: jsons[v][0] for v in jsons} }；承包商 items={len(parsed['contractor'].get('items', []))} "
-              f"engine={parsed['contractor'].get('engine')} bounds={json.dumps(parsed['contractor'].get('bounds'), ensure_ascii=False)}；"
-              f"供应商 items={len(parsed['supplier'].get('items', []))}")
+        def noise_of(text):
+            return [token for token in NOISE if token in text]
 
-        # ---- ④ 两视角建议不同（页面体 + id 列表 + JSON） ----
-        c_ids, s_ids = ids_of_page(pages["contractor"][1]), ids_of_page(pages["supplier"][1])
-        c_items = parsed["contractor"].get("items", [])
-        s_items = parsed["supplier"].get("items", [])
-        c_rules = {item.get("rule") for item in c_items}
-        s_rules = {item.get("rule") for item in s_items}
-        check("④ **两视角建议确实不同**（同一份代码、同一套规则，输入不同则建议不同）：页面体不同、id 列表不同、"
-              "JSON 的 rule 集合也不同（承包商侧有截止/比价极差，供应商侧没有；两边都有的规则必须真的一样）",
-              pages["contractor"][1] != pages["supplier"][1] and c_ids != s_ids and c_rules != s_rules
-              and "expiry:pkg-1" in c_ids and "spread:L-001" in c_ids and "gate:ap-0007" in c_ids
-              and "gate:ap-0021" in s_ids and not any(i.startswith("expiry:") for i in s_ids)
-              and "rank-up:q-sup-2" in s_ids and "expiry:pkg-1" not in s_ids and "gate:ap-0007" not in s_ids
-              and "channel:mail" in c_ids and "channel:mail" in s_ids,
-              f"页面体不同={pages['contractor'][1] != pages['supplier'][1]}；id 不同={c_ids != s_ids}；"
-              f"承包商 rule={sorted(c_rules)} ids={c_ids}；供应商 rule={sorted(s_rules)} ids={s_ids}")
+        # ---- ③ 旧页退役 ⇒ 四条旧路由 303 + 承接面板真的注册在 GUI 上 ----
+        retired = []
+        for view in ("contractor", "supplier"):
+            for suffix, accept in (("/advice/", "text/html"), ("/api/advice", "application/json")):
+                code, _body, headers = _fetch_full(
+                    f"{base}/{view}{suffix}",
+                    headers={**cookie_of(f"{base}/{view}{suffix}"), "Accept": accept},
+                    follow_redirects=False)
+                location = str(header_of(headers, "location"))
+                retired.append((f"/{view}{suffix}", code, location,
+                                code == 303 and location.endswith(f"/{view}/")))
+        carrier_ids = {"contractor": ("rfq.remind-board", "compare.ranking", "gate.queue", "gate.decided",
+                                      "authority.bands"),
+                       "supplier": ("exchange.inbox", "authority.bands.supplier")}
+        panels = {view: parse_json(get(f"{base}/api/ui/panels?view={view}")[1]).get("panels", [])
+                  for view in ("contractor", "supplier")}
+        panel_ids = {view: [(panel.get("panel_id") or panel.get("id")) for panel in panels[view]]
+                     for view in panels}
+        carriers_missing = [f"{view}:{pid}" for view, ids in carrier_ids.items()
+                            for pid in ids if pid not in panel_ids[view]]
+        check("③ **旧页退役 ⇒ 接新位置**：两视角的四条旧路由（`/<view>/advice/` 与 `/<view>/api/advice`）"
+              "一律 **303 + Location 落在同侧 GUI 视图页**（不 404 让人失联、也不再返回旧页内容）；"
+              "**承接这件事的 GUI 面板真的注册在那一页上**（承包商：回文时限与催报 / 比价排名 / 审批队列 / "
+              "已决定的门 / 授权区间；供应商：我收到的包 / 授权区间）",
+              all(row[3] for row in retired) and not carriers_missing,
+              f"旧路由={json.dumps([(path, code, location) for path, code, location, _ in retired], ensure_ascii=False)}；"
+              f"缺承接面板={carriers_missing or '无'}")
 
-        # ---- ⑤ basis 齐备且指向投影真键（形状） ----
-        basis_bad = [item.get("id") for item in c_items + s_items
-                     if not isinstance(item.get("basis"), list) or not item["basis"]
-                     or not all(isinstance(token, str) and BASIS_RE.match(token) for token in item["basis"])]
-        basis_sample = [item.get("basis") for item in c_items[:3]]
-        check("⑤ 每条建议都带**非空 `basis`**，且每个 token 都是 `as_of` 或 `<段>[<id>].<键>` 形状"
-              "（指向投影里的真键，不是「看起来像引用」的串）",
-              not basis_bad and all(isinstance(item.get("next_action"), str) and item["next_action"].strip()
-                                    for item in c_items + s_items)
-              and all(item.get("severity") in ("high", "medium", "low") for item in c_items + s_items),
-              f"不合格条={basis_bad or '无'}；示例 basis={json.dumps(basis_sample, ensure_ascii=False)}")
+        # ---- ③b 产品面「0 命中」：四条退役响应体 + 承接面板载荷里不许有「回终端」痕迹 ----
+        bodies = []
+        for view in ("contractor", "supplier"):
+            for suffix in ("/advice/", "/api/advice"):
+                code, body, _h = _fetch_full(f"{base}/{view}{suffix}",
+                                             headers={**cookie_of(f"{base}/{view}{suffix}"), "Accept": "*/*"},
+                                             follow_redirects=False)
+                bodies.append((f"/{view}{suffix}", body))
+        carrier_payload = json.dumps([panel for view in panels for panel in panels[view]
+                                      if (panel.get("panel_id") or panel.get("id")) in carrier_ids.get(view, ())],
+                                     ensure_ascii=False)
+        noise_hits = [f"{path}:{token}" for path, body in bodies for token in noise_of(body)]
+        noise_hits += [f"panels:{token}" for token in noise_of(carrier_payload)]
+        check("③b **产品面 0 命中**（旧页那 20「终端」+ 40 `g1side` 的来源已被清掉）：四条退役响应体与"
+              "**承接面板载荷**里 `终端` / `g1side` / `PYTHONPATH` / `命令行` **0 命中**；"
+              "扫描器**非空转**（对照样本必须命中）",
+              not noise_hits and noise_of("终端 g1side PYTHONPATH 命令行") == list(NOISE),
+              f"命中={noise_hits or '无'}；扫描器对照={noise_of('终端 g1side PYTHONPATH 命令行')}")
 
-        # ---- ⑥ next_action 逐规则可执行（不得是空话；通道类照抄声明） ----
-        by_rule = {}
-        for item in c_items + s_items:
-            by_rule.setdefault(str(item.get("rule")), []).append(item)
-        gate_ok = all("quotagent.g1side" in item["next_action"] or "g1-walkthrough.py" in item["next_action"]
-                      for item in by_rule.get("gate", []))
-        expiry_ok = all("quotagent.g1side" in item["next_action"] for item in by_rule.get("expiry", []))
-        route_ok = all(item["next_action"].strip().startswith("/quotagent/")
-                       for rule in ("spread", "rank-up") for item in by_rule.get(rule, []))
-        channel_items = by_rule.get("channel", [])
-        channel_ok = bool(channel_items) and all(item["next_action"] == CHANNEL_NEXT
-                                                and item["blocked_by"] == "mail-smtp-unconfigured"
-                                                for item in channel_items)
-        check("⑥ 每条 `next_action` 都能照着做（不是空话）：人工门 → **真 CLI**（`python3 -m quotagent.g1side ...`）、"
-              "比价/排名 → 本前缀下的**真路由**、凭据缺口 → **逐字节照抄**通道声明里的 next_action（不假装能发，"
-              "`blocked_by` 填真 reason）",
-              gate_ok and expiry_ok and route_ok and channel_ok and bool(by_rule.get("gate"))
-              and bool(by_rule.get("expiry")),
-              f"人工门 CLI 合格={gate_ok}；截止 CLI 合格={expiry_ok}；比价/排名路由合格={route_ok}；"
-              f"通道照抄声明={channel_ok}；规则分布={ {k: len(v) for k, v in by_rule.items()} }")
+        # ---- ④ 两视角**确实不同**（改比 GUI 注册面：用户真看到的就是这些面板与动作） ----
+        carrier_of = lambda view: [(panel.get("panel_id") or panel.get("id"), panel.get("actions") or [])
+                                   for panel in panels[view]
+                                   if (panel.get("panel_id") or panel.get("id")) in carrier_ids.get(view, ())]
+        differ = json.dumps(carrier_of("contractor"), ensure_ascii=False) != \
+            json.dumps(carrier_of("supplier"), ensure_ascii=False)
+        actions_ok = ("rfq.remind" in dict(carrier_of("contractor")).get("rfq.remind-board", [])
+                      and {"gate.grant", "gate.deny"} <= set(dict(carrier_of("contractor")).get("gate.queue", []))
+                      and "exchange.promise" in dict(carrier_of("supplier")).get("exchange.inbox", []))
+        check("④ **两视角确实不同**（同一份代码、不同输入、不同侧的人看到不同的东西）：两侧的承接面板集合与"
+              "各自的动作不同，且动作是**真动作**（承包商侧 `rfq.remind` 催报、`gate.grant`/`gate.deny` 批准与驳回；"
+              "供应商侧 `exchange.promise` 回文承诺）",
+              differ and actions_ok,
+              f"面板集合不同={differ}；承包商承接={json.dumps(carrier_of('contractor'), ensure_ascii=False)}；"
+              f"供应商承接={json.dumps(carrier_of('supplier'), ensure_ascii=False)}")
 
-        # ---- ⑦ 私域哨兵 0 次（两视角）+ 非空转对照 ----
-        combined = {view: pages[view][1] + jsons[view][1] for view in ("contractor", "supplier")}
-        hits = {view: [needle for needle in PRIVATE_KEYS + SENTINELS if needle in text]
-                for view, text in combined.items()}
+        # ---- ⑦ 私域哨兵 0 次（搬位置：旧页没了，扫退役响应体 + 承接面板载荷）+ 非空转对照 ----
+        scanned = carrier_payload + "\n".join(body for _path, body in bodies)
+        hits = [needle for needle in PRIVATE_KEYS + SENTINELS if needle in scanned]
         fixture_has = [needle for needle in SENTINELS if needle in CONTRACTOR_LEDGER.read_text(encoding="utf-8")]
-        check("⑦ 私域哨兵 **0 次**：**两视角**的 advice 页与 JSON 里都搜不到承包商私域键与哨兵串"
+        check("⑦ 私域哨兵 **0 次**：四条退役响应体与**承接面板载荷**里都搜不到承包商私域键与哨兵串"
               "（这类键连读都不读 → 排名/建议都不可能反推出标底）；"
               "**非空转对照**：同一批哨兵确实写在夹具账本文件里",
-              not hits["contractor"] and not hits["supplier"] and len(fixture_has) >= 3,
-              f"承包商侧命中={hits['contractor'] or '无'}；供应商侧命中={hits['supplier'] or '无'}；"
-              f"夹具里确实有哨兵={fixture_has}")
+              not hits and len(fixture_has) >= 3,
+              f"命中={hits or '无'}；夹具里确实有哨兵={fixture_has}")
 
-        # ---- ⑧ 0 行脚本 / 0 内联事件 ----
+        # ---- ⑧ 0 行脚本 / 0 内联事件（只对**退役响应体**：它们是 303 说明页；
+        #        GUI 外壳本就允许脚本，29 §2 明说不得拿「0 JS」冒充 UI 验收） ----
         script_needle = "<scr" + "ipt"
         inline = re.compile(r"\son[a-z]+\s*=", re.I)
-        bodies = {**{f"page:{v}": pages[v] for v in pages}, **{f"json:{v}": jsons[v] for v in jsons}}
-        scripty = [name for name, (_, body) in bodies.items() if script_needle in body]
-        handlery = [name for name, (_, body) in bodies.items() if inline.search(body)]
-        check("⑧ 新页面/JSON **0 行脚本 / 0 内联事件**（零 JS 是机检事实：交互只有链接，下一步是 "
-              "`<pre><code>` 里可复制的命令/路由），扫描器非空转",
+        scripty = [path for path, body in bodies if script_needle in body]
+        handlery = [path for path, body in bodies if inline.search(body)]
+        check("⑧ 四条退役响应体 **0 行脚本 / 0 内联事件**（它们只是 303 的说明页，不再给可复制的命令）；"
+              "扫描器非空转（**不再拿「0 JS」当 UI 验收**：GUI 外壳本就允许脚本，见 29 §2）",
               not scripty and not handlery and script_needle in (f"<a {script_needle}>")
               and bool(inline.search('<a onclick="x()"></a>')),
               f"含脚本={scripty or '无'}；含内联事件={handlery or '无'}")
 
-        # ---- ⑨ 确定性（HTTP 层）：同 URL 两次逐字节一致 ----
-        again_page = get(f"{base}/contractor/advice/")
-        again_json = get(f"{base}/contractor/api/advice")
-        sup_again = get(f"{base}/supplier/api/advice")
-        check("⑨ 确定性（HTTP 层）：同一 URL 两次 GET **响应体逐字节一致**（页面与 JSON 都试）——"
-              "本层不取墙钟、不用随机数，同一份投影必然给同一组建议",
-              again_page[1] == pages["contractor"][1] and again_json[1] == jsons["contractor"][1]
-              and sup_again[1] == jsons["supplier"][1],
-              f"页面两次一致={again_page[1] == pages['contractor'][1]}；"
-              f"JSON 两次一致={again_json[1] == jsons['contractor'][1]}；"
-              f"供应商侧一致={sup_again[1] == jsons['supplier'][1]}；长度={len(again_json[1])}")
+        # ---- ⑨ 确定性（HTTP 层）：同一 URL 两次逐字节一致（303 响应体 + 承接面板载荷） ----
+        again_bodies = []
+        for view in ("contractor", "supplier"):
+            for suffix in ("/advice/", "/api/advice"):
+                again_bodies.append(_fetch_full(f"{base}/{view}{suffix}",
+                                                headers={**cookie_of(f"{base}/{view}{suffix}"),
+                                                         "Accept": "*/*"},
+                                                follow_redirects=False)[1])
+        again_panels = {view: get(f"{base}/api/ui/panels?view={view}")[1] for view in ("contractor", "supplier")}
+        check("⑨ 确定性（HTTP 层）：同一 URL 两次 GET **响应体逐字节一致**（四条退役路由 + 两视角承接面板载荷）"
+              "—— 本层不取墙钟、不用随机数，同一份投影必然给同一组读数",
+              all(again == body for again, (_path, body) in zip(again_bodies, bodies)),
+              f"四条退役响应体两次一致={all(again == body for again, (_p, body) in zip(again_bodies, bodies))}；"
+              f"承包商面板两次一致={again_panels['contractor'] == get(f'{base}/api/ui/panels?view=contractor')[1]}；"
+              f"供应商面板两次一致={again_panels['supplier'] == get(f'{base}/api/ui/panels?view=supplier')[1]}")
 
         # ---- ⑩ 既有路由没坏 + 不涉未提权 admin ----
         ops_code, _ = get(f"{base}/api/ops")
@@ -453,45 +455,10 @@ def main() -> int:  # noqa: C901
         except subprocess.TimeoutExpired:
             proc.kill()
 
-    # ---- ⑪ 空投影必须降级且建议数为 0（第二个真进程：两本账本都是 0 行 + 无快照） ----
-    port2 = free_port()
-    prefix2 = "/qaadv0"
-    proc2 = serve(port2, prefix2, EMPTY_LEDGER, EMPTY_LEDGER, MAIL_SNAPSHOT_MISSING)
-    base2 = f"http://127.0.0.1:{port2}{prefix2}"
-    try:
-        up2 = wait_up(base2, proc2)
-        if not up2:
-            check("⑪ 空投影降级（第二个真进程就绪）", False, f"port={port2} pid={proc2.pid} 未就绪")
-        else:
-            lines = []
-            ok = True
-            for view in ("contractor", "supplier"):
-                page = get(f"{base2}/{view}/advice/")
-                doc = parse_json(get(f"{base2}/{view}/api/advice")[1])
-                items = doc.get("items")
-                reason = doc.get("reason")
-                lines.append(f"{view}: page={page[0]} data-degraded={'data-degraded=\"1\"' in page[1]} "
-                             f"页面 reason={page_reason(page[1])} json degraded={doc.get('degraded')} "
-                             f"reason={reason} items={len(items) if isinstance(items, list) else items}")
-                if not (page[0] == 200 and 'data-degraded="1"' in page[1] and page_reason(page[1]) in REASONS
-                        and doc.get("degraded") is True and isinstance(items, list) and len(items) == 0
-                        and reason in REASONS and "建议数 <b>0</b>" in page[1]
-                        and doc.get("engine") == "rules"):
-                    ok = False
-            check("⑪ **空投影必须降级且建议数为 0**（真进程真回读）：两视角页面都出 `data-degraded=\"1\"` + 有名 reason "
-                  "、JSON `items:[]` + `degraded:true`，且页面上写着「建议数 0」—— 没数据就**不编建议**",
-                  ok, " | ".join(lines))
-    finally:
-        proc2.terminate()
-        try:
-            proc2.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc2.kill()
-
     # ---- ⑫ 宿主零写面（HTTP 层）：夹具与目录逐字节不变 ----
     after = {str(path): sha256_file(path) for path in watched}
     listing_after = sorted(str(item.relative_to(SHARED)) for item in SHARED.rglob("*"))
-    check("⑫ 宿主**零写面**（跑完两个真进程之后夹具账本/快照逐字节不变、目录没有多出/少掉任何文件；"
+    check("⑫ 宿主**零写面**（跑完真进程之后夹具账本/快照逐字节不变、目录没有多出/少掉任何文件；"
           "宿主不写账本、不落待处理项）",
           before == after and listing_before == listing_after,
           f"字节不变={before == after}；目录不变={listing_before == listing_after}（{len(listing_after)} 项）")

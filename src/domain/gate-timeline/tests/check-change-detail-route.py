@@ -338,12 +338,17 @@ def main() -> int:  # noqa: C901
         pages = {view: get(f"{base}/{view}/changes/{CHANGE_ID}/") for view in ("contractor", "supplier")}
         jsons = {view: get(f"{base}/{view}/api/changes/{CHANGE_ID}") for view in ("contractor", "supplier")}
         parsed = {view: parse_json(jsons[view][1]) for view in jsons}
-        list_page = get(f"{base}/contractor/gates/")[1]
+        # 旧列表路由已退役 ⇒ 不跟 303 取回（旧页不再返回内容、也不 404）
+        list_code, _lb, list_headers = _fetch_full(f"{base}/contractor/gates/",
+                                                   headers=cookie_of(f"{base}/contractor/gates/"),
+                                                   follow_redirects=False)
+        list_page = ""          # 旧列表内容已随页删除（29 §2 不留副本）；303 的响应体在下面单独扫
         cpage, spage = pages["contractor"][1], pages["supplier"][1]
         check("③ 两视角明细页/JSON 各自 **200**；`/api/routes` 登记了 4 条新路由且 `auth` 全是**真实值**"
               "`identity-session`（业务路由要身份会话——台账不再写 `none` 撒谎）；"
               "页面是真页面（`data-money-unit=\\\"cents\\\"` + `data-rounding=\\\"half-up-to-cent\\\"` + 口径人话 + "
-              "道内子导航 + 回列表链接）；变更单列表**每一行链到自己的明细页**",
+              "道内子导航 + 回跳抓手 `data-detail-back`（已接到 GUI））；旧列表路由已退役为 "
+              "**303 → `/app/contractor/`**（不 404，也不留旧列表副本）",
               len(change_routes) == 4 and all(item.get("auth") == "identity-session" for item in change_routes)
               and len([i for i in change_routes if i.get("method") == "GET"]) == 4
               and pages["contractor"][0] == 200 and jsons["contractor"][0] == 200
@@ -351,10 +356,11 @@ def main() -> int:  # noqa: C901
               and all(text in cpage for text in ('data-money-unit="cents"', 'data-rounding="half-up-to-cent"',
                                                  "整数分", "half-up-to-cent", 'data-subnav="contractor"',
                                                  'data-gates-link="1"', 'data-detail-back="1"'))
-              and f'data-change-detail-link="{CHANGE_ID}"' in list_page,
+              and list_code == 303
+              and str(header_of(list_headers, "location")).endswith("/app/contractor/"),
               f"路由={json.dumps([f'{i.get('method')} {i.get('path')}' for i in change_routes], ensure_ascii=False)}；"
               f"status={pages['contractor'][0]}/{jsons['contractor'][0]}/{pages['supplier'][0]}/{jsons['supplier'][0]}；"
-              f"列表链接={'data-change-detail-link' in list_page}")
+              f"旧列表路由={list_code} → {header_of(list_headers, 'location')}")
 
         # ---- ④ 逐行手算对账（本脚本自己算，不拿输出当期望）----
         def reconcile(payload: dict) -> tuple[bool, list[str]]:

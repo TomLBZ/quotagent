@@ -93,23 +93,33 @@ const SUB_TITLE = { events: '事件', quotes: '报价', approvals: '待批', evi
 /**
  * **退役的旧 SSR 页**（`docs/design/29-webui-gui-app.md` §2「旧口径一律删除，不得保留副本」）。
  *
- * 这两页（`/<view>/advice/` 决策建议、`/<view>/deadlines/` 回文时限）是「说明书式只读页」：
- * 页面把**终端命令**准备好让用户复制（`python3 -m quotagent.g1side …`、`tools/rfq-promise.py …`、
- * 「五件事永远在终端做人签」），与用户要求「双方仅通过 GUI 走完全部业务流程」正面冲突，
- * 且它们的功能已由 GUI 面板 + 动作承接：
+ * 这四页（`/<view>/advice/` 决策建议、`/<view>/deadlines/` 回文时限、`/<view>/gates/` 审批与变更时间线、
+ * `/<view>/authority/` 授权区间）都是「说明书式只读页」：页面把**终端命令**准备好让用户复制
+ * （`python3 -m quotagent.g1side …`、`PYTHONPATH=src …`、「五件事永远在终端做人签」、「批准只走终端人工门」），
+ * 与用户要求「双方仅通过 GUI 走完全部业务流程」正面冲突，且它们的功能已由 GUI 面板 + 动作承接：
  *   · `advice` → `rfq.remind-board`（谁没回 / 已催几次）/`compare.ranking`（贡献与提升方式）/
  *     `gate.queue`（等多久、卡在谁）/`mail.channel`（为什么发不出去），动作 `rfq.remind`、
  *     `gate.escalate`、`exchange.rev-amend`；
  *   · `deadlines` → `rfq.remind-board`（回文时限与催报，双方）+ 动作 `rfq.remind`、
- *     `exchange.promise`（供应商「我要晚点回」）、`exchange.inbox`（认收）。
+ *     `exchange.promise`（供应商「我要晚点回」）、`exchange.inbox`（认收）；
+ *   · `gates` → 面板 `gate.queue`（**行内「批准 / 驳回」，人签**）/ `gate.decided`（已决定的门留痕）/
+ *     `gate.todo`（工作台「要人决定的事」），动作 `gate.grant` / `gate.deny` / `gate.nudge` /
+ *     `gate.escalate` / `gate.delegate` / `gate.abort`；变更单**逐行明细**仍在 `/<view>/changes/<id>/`；
+ *   · `authority` → 面板 `authority.bands`，动作 `authority.check`（只读：谁能批到多少 / 越界多少 /
+ *     下一个能批的人是谁）与 `authority.escalate`（人签：越界**一键开人工门**，门开出来后去审批队列批准/驳回）。
  *
- * **旧地址不 404**：`303 → ${prefix}/app/<view>/`（GUI 视图页；该侧的面板就在那一页上）。
+ * **旧地址不 404**：`303 → ${prefix}/app/<view>/`（GUI 视图页；该侧承接这些功能的插件面板就在那一页上）。
  * 未登录 / 跨侧语义**一字未改**（仍走 `identity.gateBusinessRoute`：401 或 303 → `/identity/?next=…`）。
- * 写面（`POST /<view>/deadlines/promise`、`POST /<view>/gates/nudge`）本批**不拆**（它们是动作，不是旧页）。
+ * 写面（`POST /<view>/deadlines/promise`、`POST /<view>/gates/nudge`）**不拆**（它们是动作，不是旧页）。
  */
 const RETIRED_SUBVIEWS = {
   advice: '决策建议（确定性规则派生的「下一步」已并入 GUI 面板：回文时限与催报 / 比价名次与贡献 / 审批队列 / 邮件通道）',
   deadlines: '回文时限（谁没回、已催几次、还剩多久）—— 面板 `rfq.remind-board`，动作 `rfq.remind` / `exchange.promise`',
+  gates: '审批与变更时间线（人工门等了多久 / 卡在谁手里 / 变更单谁欠一个动作）—— '
+    + '面板 `gate.queue`（行内「批准 / 驳回」，人签）与 `gate.decided`（已决定的门留痕），'
+    + '动作 `gate.grant` / `gate.deny` / `gate.nudge` / `gate.escalate`',
+  authority: '授权区间（谁能批到多少 / 越界找谁）—— 面板 `authority.bands`，动作 `authority.check`（只读）'
+    + '与 `authority.escalate`（人签：越界一键开人工门）',
 }
 
 /** 分页/筛选的**夹取口径**（写死一处；回显的 applied 即真值，请求值一并报出便于人工核对）。 */
@@ -234,12 +244,15 @@ const subNav = (prefix, view, current) => {
   }
   // 比价 heuristics（T-279）：业务方看得见、点得到（新页面本身零内联脚本）
   links.push(`<a href="${prefix}/${view}/heuristics/" data-heuristics-link="1"${current === 'heuristics' ? ' aria-current="page"' : ''}>比价口径</a>`)
-  // 审批等多久 / 变更单谁卡着（本批）：等待时长有口径、卡点有名字、下一步可复制（同样零内联脚本）
-  links.push(`<a href="${prefix}/${view}/gates/" data-gates-link="1"${current === 'gates' ? ' aria-current="page"' : ''}>审批与变更</a>`)
-  // 授权区间（authority-band 插件）：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁（零内联脚本）
-  links.push(`<a href="${prefix}/${view}/authority/" data-authority-link="1"${current === 'authority' ? ' aria-current="page"' : ''}>授权区间</a>`)
-  // 退役的旧页**不再出现在导航里**：`/<view>/advice/`（决策建议）与 `/<view>/deadlines/`（回文时限）
-  // 已按 `docs/design/29-webui-gui-app.md` §2 退役 —— 旧地址 303 → GUI（`/app/<view>/`），见 RETIRED_SUBVIEWS。
+  // 审批与变更 / 授权区间：**旧 SSR 页已退役**（`RETIRED_SUBVIEWS`）—— 入口**接新位置**：
+  // 指向 GUI 视图页（`${prefix}/app/<view>/`），该侧承接这些功能的插件面板就在那一页上。
+  // 抓手（`data-gates-link` / `data-authority-link`）保留：门的判据仍是「入口存在且指向真位置」，
+  // 只是目标从旧页换成了 GUI（旧页现在 303 到同一个地方）。
+  links.push(`<a href="${prefix}/app/${view}/" data-gates-link="1"${current === 'gates' ? ' aria-current="page"' : ''}>审批队列（GUI）</a>`)
+  links.push(`<a href="${prefix}/app/${view}/" data-authority-link="1"${current === 'authority' ? ' aria-current="page"' : ''}>授权区间（GUI）</a>`)
+  // 退役的旧页**不再出现在导航里**：`/<view>/advice/`（决策建议）、`/<view>/deadlines/`（回文时限）、
+  // `/<view>/gates/`（审批与变更）、`/<view>/authority/`（授权区间）已按 `docs/design/29-webui-gui-app.md` §2
+  // 退役 —— 旧地址 303 → GUI（`/app/<view>/`），见 RETIRED_SUBVIEWS。
   return `<nav data-subnav="${view}">${links.join(' ')}</nav>`
 }
 
@@ -311,13 +324,14 @@ authority.escalation_note ← 越界升级时给办理人看的一句话（空 =
   authority.bands.director: 10000000
   authority.fallback_role: director
   authority.escalation_note: 越界请找业主代表（越界时页面给出下一角色；批准在 GUI 里人签）</pre>
-<p><b>配完在哪看</b>：<a href="${prefix}/contractor/authority/">授权区间</a>（承包商道）与
-<a href="${prefix}/supplier/authority/">授权区间</a>（供应商道）—— 填一个金额（**整数分**）与角色，
-页面会告诉你「落在谁的区间里 / 越界多少 / 下一个能批的人是谁 / 越界该找谁升级」（升级走 GUI 的
-审批队列动作 <code>gate.escalate</code>，本页只算、不批）。</p>
-<p><b>没配会怎样（诚实默认）</b>：页面**不会**给你编一个限额 —— 它报 <code>unconfigured</code> 并把
+<p><b>配完在哪看</b>：<a href="${prefix}/app/contractor/">承包商的工作台（GUI）</a>与
+<a href="${prefix}/app/supplier/">供应商的工作台（GUI）</a>里的<b>「授权区间」面板</b>—— 填一个金额（**整数分**）与角色，
+面板会告诉你「落在谁的区间里 / 越界多少 / 下一个能批的人是谁」；越界就点面板里的
+「提交给下一角色审批」（动作 <code>authority.escalate</code>）一键开人工门，批准 / 驳回在上面的
+<b>审批队列</b>里由点名的人签（本插件只算、不批）。</p>
+<p><b>没配会怎样（诚实默认）</b>：面板**不会**给你编一个限额 —— 它报 <code>unconfigured</code> 并把
 <code>required_role</code>/<code>next_role</code> 留空，同时告诉你到哪一行去登记。另外：<b>越界一律走人工门</b>，
-该页**不能批准任何东西**（批准在 GUI 里由登录身份人签：动作带 <code>permission=human-signature</code>，
+该面板**不能批准任何东西**（批准在 GUI 里由登录身份人签：动作带 <code>permission=human-signature</code>，
 服务端校验署名 == 会话身份）。</p>
 <p>需要凭据才能工作的功能（**在接上之前一律如实报未连接，不会假装健康**）：</p>
 <pre>· 邮件收发（SMTP/IMAP）：未配置 → mail 传输 available:false / reason=mail-transport-unavailable / next_action=配置凭据后接入
@@ -1151,102 +1165,6 @@ export function apply(ctx, config) {
       changes: changes.rows.slice(0, GATES_CAP),
     }
   }
-  const gatesRun = (view) => gates.timeline(gatesPayload(view))
-  /** JSON（机器可读；与页面同数据、同口径；引擎自述与时间口径一起给）。 */
-  const gatesJson = (view) => {
-    const run = gatesRun(view)
-    const meta = gates.meta()
-    return { view, source: 'gate-timeline（domain 插件：确定性规则；不读账本、不写账本、不取墙钟、不调模型）',
-      engine: run.engine, engine_note: run.engine_note, as_of: run.as_of, age_clock: run.age_clock,
-      age_basis_note: run.age_basis_note, ignored_now_inputs: run.ignored_now_inputs,
-      gates: run.gates, changes: run.changes, counts: run.counts, bounds: run.bounds,
-      truncated: run.truncated, omitted: run.omitted, degraded: run.degraded, reason: run.reason,
-      notes: run.notes, privacy: run.privacy,
-      meta: { engine: meta.engine, age_clock: meta.age_clock, sections: meta.sections,
-        degraded_reasons: meta.degraded_reasons, nudge_codes: meta.nudge_codes, nudge_action: meta.nudge_action,
-        timeout_policies: meta.timeout_policies, can_approve: meta.can_approve },
-      note: 'engine=rules：本接口给的是**确定性规则**从投影派生的"谁在等、等了多久、谁欠谁一个动作"，'
-        + '不含模型推测；`age_seconds` 的口径是 `as_of − 该门 requested 事件的事实 ts`（**不取墙钟**，'
-        + '所以同一份快照在任何时刻返回同一组数字）；`next_action` 是可直接复制的命令或本前缀下的路由；'
-        + '本插件**没有**批准/提交/签收这类方法（`meta.can_approve=false`），催办只落待办件、不改门的判定' }
-  }
-  /** 页面（SSR，**零内联脚本**：下一步是 `<pre><code>` 里的命令/路由，催办用 `<form method=post>`）。 */
-  const gatesHtml = (view) => {
-    const run = gatesRun(view)
-    const gateRows = run.gates.map((item) => `<tr data-gate-id="${esc(item.id)}" data-gate-owner="${esc(item.owner)}"`
-      + ` data-gate-age-seconds="${esc(String(item.age_seconds))}">`
-      + `<td><b>${esc(String(item.age_seconds))}</b> 秒<br><small>${esc(item.age_basis)}</small></td>`
-      + `<td><code>${esc(item.id)}</code><br><small>${esc(item.kind)}</small></td>`
-      + `<td>${esc(item.subject)}</td>`
-      + `<td><code>${esc(item.owner)}</code></td>`
-      + `<td>${esc(item.consequence)}<br><small>阻塞：${esc(item.blocked_by)}</small></td>`
-      + `<td data-gate-next-action="${esc(item.id)}"><pre>${esc(item.next_action)}</pre></td></tr>`).join('')
-    const changeRows = run.changes.map((item) => `<tr data-change-id="${esc(item.id)}" data-change-state="${esc(item.state)}"`
-      + ` data-owed-by="${esc(item.owed_by)}">`
-      + `<td><code>${esc(item.id)}</code></td>`
-      // 每一行都链到**自己的逐行明细页**（"变更单到底改了什么、多花多少钱"要能一行一行核）
-      + `<td><a href="${prefix}/${esc(view)}/changes/${esc(item.id)}/" data-change-detail-link="${esc(item.id)}">逐行明细</a></td>`
-      + `<td>${esc(item.state)}</td><td><code>${esc(item.owed_by)}</code></td>`
-      + `<td>${esc(item.waiting_since)}</td>`
-      + `<td data-change-basis="${esc(item.basis.join(' '))}">${item.basis.map((token) => `<code>${esc(token)}</code>`).join(' ')}</td>`
-      + `<td><pre>${esc(item.next_action)}</pre></td></tr>`).join('')
-    const gateHeader = '<tr><th>等了多久（口径写在下面）</th><th>门</th><th>对象</th><th>卡在谁手里</th>'
-      + '<th>再等下去会发生什么</th><th>下一步（可复制）</th></tr>'
-    const changeHeader = '<tr><th>变更单</th><th>明细</th><th>状态</th><th>谁欠一个动作</th><th>从哪条事件起在等</th>'
-      + '<th>凭据（账本事件/计数引用）</th><th>下一步（可复制）</th></tr>'
-    return subNav(prefix, view, 'gates')
-      + `<p><a href="${prefix}/${view}/">← 回 ${rules[view].title}</a> · JSON：<code>${prefix}/${view}/api/gates</code>`
-      + ` · <a href="${prefix}/${view}/gates/">重新派生</a>（本页每次都是现算的，没有缓存）</p>`
-      + `<p data-gates-engine="${esc(run.engine)}"><b>引擎：<code>engine=${esc(run.engine)}</code></b> —— `
-      + `${esc(run.engine_note)}（规则写在 <code>host/modules/gate-timeline.mjs</code>；宿主不读账本、不写账本、不取墙钟）。</p>`
-      + `<p data-age-clock="${esc(run.age_clock)}" data-gates="age-basis"><b>「等了多久」的口径</b>：`
-      + `${esc(run.age_basis_note)}；参照事实时刻 <code>as_of=${esc(run.as_of ?? '（本视角还没有可解析的事件 ts）')}</code>`
-      + `（= 本视角投影里最大的 <code>ts</code>，**不是墙钟**）；被忽略的墙钟入口：`
-      + `<code>${esc(run.ignored_now_inputs.join(', '))}</code>（给它们任何值，本页数字都不变）。</p>`
-      + (run.degraded
-        ? `<p class="degraded" data-gates-degraded="1"><b>降级（**不冒充健康、也不给你编条目**）</b>：`
-          + `<code>${esc(run.reason)}</code> —— 待办人工门 <b>0</b> 条、变更单 <b>0</b> 条。`
-          + `${run.reason === 'no-usable-inputs' ? '本视角投影里还没有可供派生的 approval/*、change/* 事实行（不是页面坏了）。' : ''}`
-          + `${run.reason === 'no-signal' ? '数据齐了，但既没有"还在等"的门、也没有变更单 —— 这本身就是结论，不编一条兜底项。' : ''}`
-          + `</p>`
-        : '')
-      + `<h3 id="gates">还在等的人工门（<b data-gates-gate-count="${run.counts.gates.shown}">${run.counts.gates.shown}</b> 条）</h3>`
-      + (run.gates.length
-        ? `<table data-gates="table">${gateHeader}${gateRows}</table>`
-        : `<p data-gates="table-none">当前没有"还在等"的人工门（口径：本视角投影里最后一条 approval/* 不是 granted/denied/aborted）`
-          + `；生成口径下共有 <b>${run.counts.gates.found}</b> 条。</p>`)
-      + `<h3 id="changes">变更单时间线（<b data-gates-change-count="${run.counts.changes.shown}">${run.counts.changes.shown}</b> 张）</h3>`
-      + (run.changes.length
-        ? `<table data-gates="changes">${changeHeader}${changeRows}</table>`
-        : `<p data-gates="changes-none">当前没有变更单（本视角投影里没有 change/* 行）`
-          + `；生成口径下共有 <b>${run.counts.changes.found}</b> 张。</p>`)
-      + `<p data-gates="counts">生成 <b>${run.counts.gates.found}</b> 门 / <b>${run.counts.changes.found}</b> 变更单；`
-      + `展示 <b>${run.counts.shown}</b> 条（上限 <code>max_items=${run.bounds.max_items}</code>，两段各自截断）；`
-      + `截断 <b>${run.truncated}</b>（被丢 <b>${run.omitted}</b> 条，照实报）；`
-      + `超时策略分布（生成口径）：remind <b>${run.counts.by_policy.remind}</b> / `
-      + `escalate <b>${run.counts.by_policy.escalate}</b> / abort <b>${run.counts.by_policy.abort}</b> / `
-      + `未声明或认不出 <b>${run.counts.by_policy.unknown}</b>；变更状态分布：`
-      + `等签（priced）<b>${run.counts.by_state.priced}</b> / 等定价（proposed）<b>${run.counts.by_state.proposed}</b> / `
-      + `待补引用（rejected）<b>${run.counts.by_state.rejected}</b> / 已生效（approved）<b>${run.counts.by_state.approved}</b> / `
-      + `认不出 <b>${run.counts.by_state.unknown}</b></p>`
-      + (run.notes.length
-        ? `<ul data-gates="notes">${run.notes.map((text) => `<li>${esc(text)}</li>`).join('')}</ul>`
-        : '<p data-gates="notes">说明：无（本次每条输入都进了派生）</p>')
-      + `<h3 id="nudge">催办 / 转交（**不改任何门的判定状态**）</h3>`
-      + `<p>催办只做两件事：把**你的原话**与**目标门 id** 落成一条 <b>0600 待办件</b>（宿主**不写账本**），`
-      + `由 <code>tools/gate-nudge.py</code> 落一条 <code>gate/nudged</code>（只记"谁在什么时候催过哪个门"）。`
-      + `催办**不是批准**：账本里不会因此多出一条 granted。</p>`
-      + `<form method="post" action="${prefix}/${esc(view)}/gates/nudge">`
-      + `<p><label>目标门 id：<input name="id" size="18" placeholder="ap-0007"></label></p>`
-      + `<p><textarea name="reason" rows="3" cols="72" placeholder="例如：这批料已经到场了，等您签字才能开工"></textarea></p>`
-      + `<p><button type="submit">提交催办（只落待办件）</button></p></form>`
-      + `<p>等价命令行（与界面同一条写路由）：<pre>curl -s -X POST ${prefix}/${esc(view)}/gates/nudge -d 'id=ap-0007' -d 'reason=现场催一下'</pre></p>`
-      + `<p><small>**批准不在这里**：批准 / 提交报价 / 定标 / 发 PO / 变更批准五件事在 **GUI 里由本人签名**`
-      + `（动作声明 <code>permission=human-signature</code>，服务端校验署名 == 会话身份；界面只发起、不写账本）；`
-      + `本插件**没有**批准/签收/提交这类方法（<code>can_approve=false</code>），它只能告知与转交催办。`
-      + `本页 **0 行脚本、0 内联事件**。</small></p>`
-  }
-
   /** 催办提交：插件只产载荷，**宿主只落一条 0600 待办件**（账本零新增；唯一落账本者是 Python 侧）。 */
   const submitNudge = (view, form) => {
     const out = gates.nudge(gatesPayload(view), { view, gate_id: String(form.get('id') ?? form.get('gate_id') ?? '').trim(),
@@ -1432,7 +1350,8 @@ export function apply(ctx, config) {
           + `<td>${esc(String(item.value))}</td></tr>`).join('')}</table>`
       : ''
     return subNav(prefix, view, 'gates')
-      + `<p><a href="${prefix}/${view}/gates/" data-detail-back="1">← 回变更单列表</a>`
+      // 「回列表」不再指向已退役的旧页（`/<view>/gates/` 现在 303）：直接去 GUI 视图页
+      + `<p><a href="${prefix}/app/${view}/" data-detail-back="1">← 回 GUI 工作台（审批队列 / 变更）</a>`
       + ` · JSON：<code>${prefix}/${view}/api/changes/${esc(id)}</code></p>`
       + `<p data-change-detail="${esc(id)}" data-money-unit="${esc(run.money_unit)}"`
       + ` data-rounding="${esc(run.rounding)}"><b>金额口径</b>：${esc(run.money_note)}</p>`
@@ -1620,149 +1539,6 @@ export function apply(ctx, config) {
       return { ...out, ok: false, code: 'pending-write-failed', file: '',
         next_action: `待办件写失败（${String(err && err.code ? err.code : err).slice(0, 40)}）：先修目录权限再重提` }
     }
-  }
-
-  // ==========================================================================================
-  // 授权区间（`authority-band` domain 插件，本批）：**谁能批到多少 / 越界怎么办 / 下一个能批的人是谁**
-  //   · 配置快照 = `config-view` 的**只读**总览里 `authority.*` 那些行（受管 YAML + env + runtime 合层；
-  //     宿主只读、不写文件、不写账本；快照里**别的键一个都不读**）。
-  //   · 金额一律**整数分**（`unit=cents`）：负数 / 非整数 / 超上限 ⇒ 具体 `code` + `next_action`（不折算、不四舍五入）。
-  //   · **未配置不得编限额**：`authority.bands.<角色>` 为 null 或没登记 ⇒ `unconfigured=true` +
-  //     `required_role`/`next_role` 都为空（不知道就是不知道，不落回默认值）。
-  //   · **越界必须走人工门**：越界时给**下一个能批的角色**与升级入口（GUI 动作 `gate.escalate`）；
-  //     页面 **0 内联脚本**、**本插件不能批准**（`can_approve=false`；批准在 GUI 里由本人签名，
-  //     动作声明 `permission=human-signature`）。
-  // ==========================================================================================
-  /** 只读配置快照：只取 `authority.*` 键（其余键连值都不读）。读不到 → null（插件据此报 `config-missing`）。 */
-  const authorityConfigSnapshot = () => {
-    try {
-      const overview = configView.overview()
-      const out = {}
-      for (const row of overview.project || []) {
-        const key = String(row?.key ?? '')
-        if (!key.startsWith('authority.')) continue
-        out[key] = row?.value === undefined ? null : row.value
-      }
-      return out
-    } catch (err) {
-      return null            // 降级而不是猜：插件会报 config-missing
-    }
-  }
-  /** 驱动插件（纯函数）：参数只有金额（原样字符串，由插件判"是不是整数分"）+ 角色 + 只读配置快照。 */
-  const authorityRun = (view, url) => authority.check({
-    view,
-    role: url.searchParams.get('role') ?? '',
-    amount: url.searchParams.get('amount') ?? '',
-    config: authorityConfigSnapshot(),
-  })
-  /** JSON（机器可读；与页面同数据、同口径）。 */
-  const authorityJson = (view, url) => {
-    const run = authorityRun(view, url)
-    const meta = authority.meta()
-    return { service: 'authority-band', view,
-      source: 'authority-band（domain 插件：确定性规则；只读配置快照，不读账本、不写账本、不取墙钟、不调模型）',
-      route: `${prefix}/${view}/authority/?amount=<整数分>&role=<角色>`,
-      ...run,
-      meta: { engine: meta.engine, unit: meta.unit, registered_roles: meta.registered_roles,
-        statuses: meta.statuses, reasons: meta.reasons, refusal_codes: meta.refusal_codes,
-        band_prefix: meta.band_prefix, config_where: meta.config_where,
-        escalate_cmd: meta.escalate_cmd, escalate_human_cmd: meta.escalate_human_cmd,
-        bounds: meta.bounds, can_approve: meta.can_approve },
-      note: '`engine=rules`：本接口只把「这笔金额落在谁的区间里 / 越界多少 / 下一个能批的人是谁」算出来 —— '
-        + '**未配置时报 `unconfigured`（不编限额）**、**越界时给人工门命令（本插件不能批准、不能放行）**；'
-        + '配置来源：`authority.bands.<角色>` 等 `authority.*` 键（人工专属：改它们要带 `ap-NNNN` 引用）' }
-  }
-  /** 页面（SSR，**零内联脚本**：表单是 `<form method=get>`，命令在 `<pre>` 里可复制）。 */
-  const authorityHtml = (view, url) => {
-    const run = authorityRun(view, url)
-    const meta = authority.meta()
-    const amountText = run.amount === null ? '(不可用)' : String(run.amount)
-    const bandRows = run.bands.map((item) => {
-      const relation = run.amount === null ? '—'
-        : (item.limit_cents === run.amount ? '恰等于本次金额'
-          : (item.limit_cents > run.amount ? `还能批 ${item.limit_cents - run.amount} 分`
-            : `差 ${run.amount - item.limit_cents} 分`))
-      return `<tr data-authority-band="${esc(item.role)}" data-authority-band-limit="${esc(String(item.limit_cents))}">`
-        + `<td><code>${esc(item.role)}</code></td><td><b>${esc(String(item.limit_cents))}</b> 分</td>`
-        + `<td>${esc(relation)}</td></tr>`
-    }).join('')
-    const withinRows = run.within.map((item) => `<tr data-authority-within="${esc(item.role)}">`
-      + `<td><code>${esc(item.role)}</code></td><td>${esc(String(item.limit_cents))} 分</td>`
-      + `<td>${esc(String(item.remaining_cents))} 分</td></tr>`).join('')
-    const roleOptions = meta.registered_roles.map((role) => `<option value="${esc(role)}"></option>`).join('')
-    const headline = { 'inside-band': '在区间内（这笔落在你的限额里）',
-      'over-band': '越界（必须走人工门）', unconfigured: '未配置授权区间（不编限额）',
-      'input-rejected': '输入不可用（不给区间结论）' }[run.status] ?? run.status
-    return subNav(prefix, view, 'authority')
-      + `<p><a href="${prefix}/${view}/" data-authority-back="1">← 回本视角首页</a> · JSON：`
-      + `<code>${prefix}/${view}/api/authority</code></p>`
-      + `<p data-authority-engine="${esc(run.engine)}"><b>引擎：<code>engine=${esc(run.engine)}</code></b> —— `
-      + `${esc(run.engine_note)}。` + `配置快照只读 <code>authority.*</code> 键（宿主不读账本、不写任何东西、不取墙钟）。</p>`
-      + `<p data-authority-unit="cents"><b>金额口径</b>：${esc(run.money_note)}</p>`
-      + `<h3 id="check">填一个金额与角色（<b>金额是整数分</b>）</h3>`
-      + `<form method="get" action="${prefix}/${view}/authority/" data-authority-form="1">`
-      + `<label>金额（整数分）<input name="amount" size="14" inputmode="numeric" value="${esc(url.searchParams.get('amount') ?? '')}"></label> `
-      + `<label>角色 <input name="role" size="12" list="authority-role-options" value="${esc(url.searchParams.get('role') ?? '')}">`
-      + `<datalist id="authority-role-options">${roleOptions}</datalist></label> `
-      + `<button type="submit">算区间</button></form>`
-      + `<div data-authority="result" data-authority-status="${esc(run.status)}"`
-      + ` data-authority-inside="${run.inside_band === null ? 'null' : String(run.inside_band)}"`
-      + ` data-authority-amount="${esc(run.amount === null ? '' : String(run.amount))}"`
-      + ` data-authority-role="${esc(run.role)}"`
-      + ` data-authority-over-by="${run.over_by === null ? '' : esc(String(run.over_by))}"`
-      + ` data-authority-required-role="${esc(run.required_role)}" data-authority-next-role="${esc(run.next_role)}"`
-      + ` data-authority-unconfigured="${String(run.unconfigured)}" data-authority-can-approve="false"`
-      + ` data-authority-code="${esc(run.code)}" data-authority-reason="${esc(run.reason)}">`
-      + `<p><b>结论</b>：<code>${esc(run.status)}</code> —— ${esc(headline)}`
-      + `（金额 <b data-authority-amount-text="${esc(amountText)}">${esc(amountText)}</b> 分、角色 `
-      + `<code>${esc(run.role || '（未给）')}</code>）</p>`
-      + `<p><b>谁能批到多少</b>：覆盖本金额的角色列表见下面「覆盖本金额的角色」；`
-      + `<b>覆盖本金额的最低权限角色</b>（least privilege）：<code data-authority-required-role-text="1">${esc(run.required_role || '（没有：谁都不能批这笔）')}</code></p>`
-      + `<p><b>下一个能批的人是谁</b>：<code data-authority-next-role-text="1">${esc(run.next_role || '（没有更高的角色能批这笔）')}</code>`
-      + `（= 比当前角色限额更高、且**真的批得到**本金额的最小限额角色）</p>`
-      + (run.over_by === null ? '' : `<p><b>越界多少</b>：<code data-authority-over-by-text="1">${esc(String(run.over_by))}</code> 分`
-        + `（0 = 没越界；正数 = 超过你限额的分数）</p>`)
-      + `<p><b>被谁挡住</b>：<code>${esc(run.blocked_by || '（没被挡住）')}</code></p>`
-      + `</div>`
-      + (run.unconfigured
-        ? `<div class="degraded" data-authority-unconfigured-note="1"><b>${esc(run.reason)}</b> —— `
-          + `${esc(run.unconfigured_note)}</div>`
-        : '')
-      + (run.degraded
-        ? `<p class="degraded" data-authority-degraded="1"><b>没给出「在区间内」的结论</b>：`
-          + `<code>${esc(run.reason)}</code> —— ${esc(run.next_action)}</p>`
-        : '')
-      + (run.escalate_cmd === ''
-        ? `<p data-authority-escalate="none">不越界 ⇒ 不产生升级命令（本页不制造无用的动作）。</p>`
-        : `<div data-authority-escalate="1"><h3 id="escalate">越界 ⇒ 走人工门（复制下面两条命令）</h3>`
-          + `<pre data-authority-escalate-cmd="1">${esc(run.escalate_cmd)}</pre>`
-          + `<pre data-authority-escalate-human-cmd="1">${esc(run.escalate_human_cmd)}</pre>`
-          + `<p data-authority-approval-note="1">${esc(run.approval_note)}</p>`
-          + (run.escalation_note === '' ? ''
-            : `<p data-authority-escalation-note="1">配置里的升级说明（<code>authority.escalation_note</code>，`
-              + `来源 ${esc(run.escalation_note_source)}）：${esc(run.escalation_note)}</p>`) + `</div>`)
-      + `<h3 id="bands">已登记的授权区间（<b data-authority-band-count="${run.bands.length}">${run.bands.length}</b> 条）</h3>`
-      + (run.bands.length
-        ? `<table data-authority-bands="1"><tr><th>角色</th><th>限额（整数分）</th><th>相对本次金额</th></tr>${bandRows}</table>`
-        : '<p data-authority-bands="none">**一条都没有登记**（`authority.bands.*` 全是 null 或缺省）—— '
-          + '所以页面不会给任何「可以批」的结论。</p>')
-      + `<h3 id="within">覆盖本金额的角色（<b data-authority-within-count="${run.within.length}">${run.within.length}</b> 条）</h3>`
-      + (run.within.length
-        ? `<table data-authority-within-table="1"><tr><th>角色</th><th>限额（整数分）</th><th>还剩多少（分）</th></tr>${withinRows}</table>`
-        : '<p data-authority-within="none">没有任何角色的限额覆盖这笔金额 ⇒ 只能走人工门（或先改区间登记）。</p>')
-      + `<h3 id="where">这套区间在哪里配</h3><p data-authority-config-where="1">${run.config_where}；`
-      + `上手页也有一段说明：<a href="${prefix}/start/">${prefix}/start/</a></p>`
-      + (run.basis.length
-        ? `<ul data-authority="basis">${run.basis.map((token) => `<li><code>${esc(token)}</code></li>`).join('')}</ul>`
-        : '')
-      + (run.notes.length
-        ? `<ul data-authority="notes">${run.notes.map((text) => `<li>${esc(text)}</li>`).join('')}</ul>`
-        : '<p data-authority="notes">说明：无。</p>')
-      + `<p><small>**本页 0 行脚本、0 内联事件**；金额一律整数分（<code>unit=${esc(run.unit)}</code>）；`
-      + `被忽略的墙钟入口：<code>${esc(run.ignored_now_inputs.join(', '))}</code>；`
-      + `有界：角色表 ≤ ${esc(String(run.bounds.max_roles))} 条、金额 ≤ ${esc(String(run.bounds.amount_max))} 分。`
-      + `**本页不能批准、不能放行**（<code>can_approve=false</code>）—— 越界只出读数与「找谁升级」；`
-      + `批准在 GUI 里由本人签名（动作声明 <code>permission=human-signature</code>）。</small></p>`
   }
 
   // ==========================================================================================
@@ -2008,7 +1784,8 @@ export function apply(ctx, config) {
         + `签署前它们**还不是报价**；承包商侧看到的是「已准备报价（待签署）」。</p>`
   }
 
-  /** 「下一步（签署）」区域：可复制的 CLI 命令 + **本 APP 不代签**（`data-signature-required="1"`）。 */
+  /** 「下一步（签署）」区域：**指到 GUI 里那一个动作**（旧口径的「可复制的终端命令」已按 29 §2 删除）
+   *  + **本 APP 不代签**（`data-signature-required="1"`）。 */
   const prepSignatureHtml = (view, run) => {
     const draft = run.drafts[0] ?? null
     const out = prepare.handoff({ view, draft })
@@ -2016,12 +1793,16 @@ export function apply(ctx, config) {
       ? `<p data-signature-params="1">这份草稿的真实参数：RFQ <code>${esc(out.rfq_id)}</code> / `
         + `行项目 <code>${esc(out.item_id)}</code> / 金额 <b>${esc(String(out.unit_price_cents ?? '—'))}</b> `
         + `<code>${esc(out.money_unit)}</code> / 草稿 <code>${esc(out.draft_id)}</code></p>`
-      : '<p data-signature-params="0">还没有草稿：先在上面提交一份，命令里的草稿 id 会换成真值。</p>'
+      : '<p data-signature-params="0">还没有草稿：先在上面提交一份，下面那块里的草稿 id 会换成真值。</p>'
+    const inApp = out.in_app
+    const fill = Object.entries(inApp.input).map(([key, value]) =>
+      `<code>${esc(key)}=${esc(String(value))}</code>`).join(' · ')
     return `<section id="sign" data-signature-required="${esc(out.data_signature_required)}"`
       + ` data-can-sign="${out.can_sign ? '1' : '0'}"><h3>下一步（签署）—— 本 APP 不代签</h3>`
       + `<p data-signature-why="1">${esc(out.why)}</p>${params}`
-      + `<pre data-signature-command="1">${esc(out.commands[0])}</pre>`
-      + `<pre data-signature-command-dry-run="1">${esc(out.commands[1])}</pre>`
+      + `<p data-signature-in-app="${esc(inApp.action)}" data-signature-permission="${esc(inApp.permission)}">`
+      + `去点：${esc(inApp.where)}</p>`
+      + `<p data-signature-input="1">填这几格即可：${fill}</p>`
       + `<p><small>${esc(out.page_note)}</small></p></section>`
   }
 
@@ -2079,7 +1860,7 @@ export function apply(ctx, config) {
         return { ...out, duplicate: true, id: record.quote_draft_id, file: rel, record,
           payload_sha256: record.lines_sha256,
           next_action: `待办件已存在（同一份草稿，幂等）：由宿主消费者 tools/quote-draft.py 落 quote/drafted（唯一落账本者）；`
-            + `之后在 GUI 里点「提交报价（人签）」提交（动作 quote.submit，署名 == 会话身份；等价命令 tools/quote-sign.py）` }
+            + `之后在 GUI 的「我的草稿」那一行点「人签提交报价」提交（动作 quote.submit，署名 == 会话身份）` }
       }
       const tmp = join(dir, `.${record.quote_draft_id}.${process.pid}.tmp`)
       writeFileSync(tmp, JSON.stringify(record, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
@@ -2088,8 +1869,8 @@ export function apply(ctx, config) {
       return { ...out, duplicate: false, id: record.quote_draft_id, file: rel, record,
         payload_sha256: record.lines_sha256,
         next_action: `宿主消费者 tools/quote-draft.py --now <ISO8601> 落 quote/drafted（唯一落账本者）；`
-          + `签名是**人的动作**：在 GUI 里点「提交报价（人签）」（动作 quote.submit）—— `
-          + `等价命令是 tools/quote-sign.py --actor human:<你的名字>（本 APP 不代签）` }
+          + `签名是**人的动作**：在 GUI 的「我的草稿」那一行点「人签提交报价」（动作 quote.submit，`
+          + `署名 == 会话身份；本 APP 不代签、不写账本）` }
     } catch (err) {
       return { ...out, ok: false, code: 'pending-write-failed', file: '',
         next_action: `待办件写失败（${String(err && err.code ? err.code : err).slice(0, 40)}）：先修目录权限再重提` }
@@ -2447,7 +2228,7 @@ ${sortForm('events', '筛查事件')}
       + `<td>${esc(row.approval_ref ?? '—')}</td><td>${esc(row.fingerprint_first8 ?? '—')}</td></tr>`).join('')
     const degraded = data.degraded || creds.snapshot.available === false
     return anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS, [], [],
-      [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])
+      [[`${prefix}/app/contractor/`, '授权区间（承包商 · GUI）'], [`${prefix}/app/supplier/`, '授权区间（供应商 · GUI）']])
       + `<p><a href="${prefix}/admin/">← 回系统管理</a> · <a href="${prefix}/start/">上手（token/配置放哪里？）</a> · `
       + `JSON：<code>${prefix}/admin/api/config</code> · <code>${prefix}/admin/api/credentials</code> · `
       + `<code>${prefix}/admin/api/config/audit</code></p>`
@@ -2622,14 +2403,18 @@ ${sortForm('events', '筛查事件')}
       }
     }
 
-    // ---- 退役的旧 SSR 页（本批）：旧地址**不 404**，303 到对应 GUI 视图 ------------------------------
+    // ---- 退役的旧 SSR 页：旧地址**不 404**，303 到对应 GUI 视图 ------------------------------
     //   位置：身份门槛**之后**（未登录 ⇒ 401 / 303→登录；跨侧 ⇒ 403，语义与退役前逐字一致）、
     //   静态业务路由**之前** ⇒ 旧的 `/<view>/<sub>/` 与 `/<view>/api/<sub>/` 不再渲染任何内容。
-    //   判据：sub ∈ RETIRED_SUBVIEWS（`advice` / `deadlines`）；其余子视图（events/quotes/approvals/
-    //   evidence/clarifications/heuristics/gates/authority/changes）**一行未改**。
-    //   为什么是 303 而不是 404：用户从旧书签/搜索/别人发来的链接打开时，必须落到**能做同一件事的
-    //   GUI 位置**（`/app/<view>/`，该侧承接这两个功能的插件面板就在那一页上），而不是失联。
-    const retiredMatch = /^\/([a-z]+)\/(?:api\/)?(advice|deadlines)\/?$/.exec(path)
+    //   判据：sub ∈ RETIRED_SUBVIEWS（`advice` / `deadlines` / `gates` / `authority`）；其余子视图
+    //   （events/quotes/approvals/evidence/clarifications/heuristics/changes）**一行未改**；
+    //   只读方法围栏（POST ⇒ 405 + `Allow: GET`）在这一段**之前**，所以语义不变。
+    //   目标位置的选择：四个功能都注册在**同一侧视图页** `${prefix}/app/<view>/` 上
+    //   （`advice`/`deadlines` → `rfq.remind-board`；`gates` → `gate.queue`/`gate.decided`；
+    //   `authority` → `authority.bands`），所以四个旧地址都 303 到那一页 —— 落到**能做同一件事**的
+    //   GUI 位置，而不是失联。写面（`/<view>/gates/nudge`、`/<view>/deadlines/promise`）多一段路径，
+    //   **不**匹配本正则，一行未改。
+    const retiredMatch = /^\/([a-z]+)\/(?:api\/)?(advice|deadlines|gates|authority)\/?$/.exec(path)
     if (retiredMatch !== null && rules[retiredMatch[1]] !== undefined) {
       const view = retiredMatch[1]
       const sub = retiredMatch[2]
@@ -2997,12 +2782,14 @@ ${sortForm('events', '筛查事件')}
             { path: `${prefix}/${v}/api/advice`, method: 'GET', auth: 'none',
               what: `**已退役**（同上，JSON 形态一并收口）：303 → ${prefix}/app/${v}/` },
           ]),
-          // 审批等多久 / 变更单谁卡着（`gate-timeline` 插件）：等待时长有口径（不取墙钟）、催办只落 0600 待办件
+          // 审批与变更 / 变更单明细（`gate-timeline` 插件）：**旧 SSR 页/JSON 已退役**（`RETIRED_SUBVIEWS`）
+          //   旧地址不 404：303 → `${prefix}/app/<view>/`（承接面板 gate.queue / gate.decided /
+          //   gate.todo，动作 gate.grant / gate.deny / gate.nudge / gate.escalate）；**写面与明细面保留**
           ...config.views.filter((v) => rules[v]).flatMap((v) => [
             { path: `${prefix}/${v}/gates/`, method: 'GET', auth: 'none',
-              what: `${v} 道的审批与变更页（人工门等了多久 / 卡在谁手里 / 再等下去会怎样 / 下一步；变更单状态与谁欠动作）` },
+              what: `**已退役**（旧口径：页面只把可复制的命令准备好让用户自己拿去跑，与 29 §4「仅通过 GUI」冲突）：303 → ${prefix}/app/${v}/；审批队列读数与「批准 / 驳回」在 GUI 面板 gate.queue / gate.decided 里` },
             { path: `${prefix}/${v}/api/gates`, method: 'GET', auth: 'none',
-              what: `${v} 道的审批与变更 JSON（同页同口径；age 口径写在 age_basis；空投影 degraded+reason 且两列表为空）` },
+              what: `**已退役**（同上，JSON 形态一并收口）：303 → ${prefix}/app/${v}/` },
             // 变更单**逐行明细**（同一插件的规则 ⑤）：原量×原价 → 新量×新价 → 差额，金额整数分
             { path: `${prefix}/${v}/changes/<id>/`, method: 'GET', auth: 'none',
               what: `${v} 道的变更单逐行明细页（money_unit=cents / rounding 口径写在页面上；缺依据的行明示「未纳入小计」；未知 id → 404 + next_action）` },
@@ -3011,12 +2798,14 @@ ${sortForm('events', '筛查事件')}
             { path: `${prefix}/${v}/gates/nudge`, method: 'POST', auth: 'none',
               what: `${v} 道的催办提交（**只落 0600 待办件**、账本零新增；202 + next_action；不改任何门的判定）` },
           ]),
-          // 授权区间（`authority-band` 插件）：谁能批到多少 / 越界怎么办 / 下一个能批的人是谁（只读）
+          // 授权区间（`authority-band` 插件）：**旧 SSR 页/JSON 已退役**（`RETIRED_SUBVIEWS`）——
+          //   旧地址不 404：303 → `${prefix}/app/<view>/`（承接面板 authority.bands，动作
+          //   authority.check（只读）/ authority.escalate（人签，越界一键开人工门））
           ...config.views.filter((v) => rules[v]).flatMap((v) => [
             { path: `${prefix}/${v}/authority/`, method: 'GET', auth: 'none',
-              what: `${v} 道的授权区间页（金额=整数分 + 角色 → 在不在区间 / 越界多少 / 下一个能批的人是谁；越界给可复制的人工门命令）` },
+              what: `**已退役**（旧口径：页面只把可复制的命令准备好让用户自己拿去跑，与 29 §4「仅通过 GUI」冲突）：303 → ${prefix}/app/${v}/；「谁能批到多少 / 越界找谁」在 GUI 面板 authority.bands + 动作 authority.check` },
             { path: `${prefix}/${v}/api/authority`, method: 'GET', auth: 'none',
-              what: `${v} 道的授权区间 JSON（同参同口径；未配置 ⇒ unconfigured=true 且 required_role/next_role 为空，不编限额）` },
+              what: `**已退役**（同上，JSON 形态一并收口）：303 → ${prefix}/app/${v}/` },
           ]),
           // RFQ 回文时限（`rfq-deadline` 插件）：**旧 SSR 页已退役**（`RETIRED_SUBVIEWS`）——
           //   旧地址不 404：303 → `/app/<view>/`（承接面板 rfq.remind-board，动作 rfq.remind /
@@ -3281,8 +3070,8 @@ ${sortForm('events', '筛查事件')}
           `<p>本视角**不属于任何一方**：只看系统整体（运行期中间件状态 + 各视角账本的证据面聚合），不显示条目正文与私域键。</p>`
           + anchorNav('ops', `${prefix}/ops/`, OPS_SECTIONS,
             [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
-            [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']],
-            [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])
+            [[`${prefix}/app/contractor/`, '审批队列（承包商 · GUI）'], [`${prefix}/app/supplier/`, '审批队列（供应商 · GUI）']],
+            [[`${prefix}/app/contractor/`, '授权区间（承包商 · GUI）'], [`${prefix}/app/supplier/`, '授权区间（供应商 · GUI）']])
           + `<p>JSON：<code>${prefix}/api/ops</code></p>`
           + `<h3 id="runtime">运行期</h3><p>${ops.summary({ rows: [] })}</p>`
           + `<table><tr><th>governor</th><th>breaker</th></tr>`
@@ -3376,16 +3165,11 @@ ${sortForm('events', '筛查事件')}
         return json(code, { service: 'gate-timeline', view, ...out })
       })
     }
-    const viewGatesApi = path.match(/^\/([a-z]+)\/api\/gates\/?$/)
-    if (viewGatesApi && rules[viewGatesApi[1]]) {
-      // JSON（只读）：等待时长/口径/卡点/后果 + 变更单时间线；宿主不写任何东西
-      return json(200, gatesJson(viewGatesApi[1]))
-    }
-    const viewGatesPage = path.match(/^\/([a-z]+)\/gates\/?$/)
-    if (viewGatesPage && rules[viewGatesPage[1]]) {
-      return send(200, 'text/html; charset=utf-8',
-        html(`${config.page_title} · ${rules[viewGatesPage[1]].title} · 审批与变更`, gatesHtml(viewGatesPage[1]), prefix))
-    }
+    // 审批与变更（`gate-timeline` 插件）的**旧 SSR 页 / JSON 已退役**（`RETIRED_SUBVIEWS`）：
+    //   `/<view>/gates/` 与 `/<view>/api/gates` 现为 **303 → `${prefix}/app/<view>/`**（不 404 让人失联），
+    //   承接者 = GUI 面板 `gate.queue`（**行内「批准 / 驳回」，人签**：`gate.grant` / `gate.deny`）、
+    //   `gate.decided`（已决定的门留痕）、`gate.todo`（工作台「要人决定的事」）。
+    //   这里**只留写面**：`POST /<view>/gates/nudge`（催办，只落一条 0600 待办件，上面那段）。
     // 变更单**逐行明细**（gate-timeline 插件规则 ⑤）：两条只读路由（**账本零新增**、不取墙钟）；
     // 未知 id ⇒ 404 + `next_action`（页面与 JSON 都是 404，不静默返回空页）。
     const viewChangeDetailApi = path.match(/^\/([a-z]+)\/api\/changes\/([A-Za-z0-9_.:-]+)\/?$/)
@@ -3408,20 +3192,12 @@ ${sortForm('events', '筛查事件')}
         html(`${config.page_title} · ${rules[viewHeuristicsPage[1]].title} · 比价口径`,
           heuristicsHtml(viewHeuristicsPage[1], url), prefix))
     }
-    // 授权区间（authority-band 插件，本批）：两条**只读** GET 路由
-    //   · `/<view>/authority/`：SSR 表单（金额整数分 + 角色）→ 结论（谁能批到多少 / 越界多少 / 下一个能批的人是谁）
-    //   · `/<view>/api/authority`：同参同口径的 JSON
-    //   两条都**不读账本、不写任何东西、不取墙钟**；越界时只给可复制的升级命令（**不能批准**）。
-    const viewAuthorityApi = path.match(/^\/([a-z]+)\/api\/authority\/?$/)
-    if (viewAuthorityApi && rules[viewAuthorityApi[1]]) {
-      return json(200, authorityJson(viewAuthorityApi[1], url))
-    }
-    const viewAuthorityPage = path.match(/^\/([a-z]+)\/authority\/?$/)
-    if (viewAuthorityPage && rules[viewAuthorityPage[1]]) {
-      return send(200, 'text/html; charset=utf-8',
-        html(`${config.page_title} · ${rules[viewAuthorityPage[1]].title} · 授权区间`,
-          authorityHtml(viewAuthorityPage[1], url), prefix))
-    }
+    // 授权区间（`authority-band` 插件）的**旧 SSR 页 / JSON 已退役**（`RETIRED_SUBVIEWS`）：
+    //   `/<view>/authority/` 与 `/<view>/api/authority` 现为 **303 → `${prefix}/app/<view>/`**（不 404），
+    //   承接者 = GUI 面板 `authority.bands`（同侧视图页上）与两个动作：
+    //   `authority.check`（只读：这笔金额落在谁的区间里 / 越界多少 / 下一个能批的人是谁，**账本零新增**）
+    //   与 `authority.escalate`（人签：越界**一键把这件事提成人工门**，门开出来后去审批队列批准/驳回）。
+    //   两条旧路由此前只做「把命令准备好让用户复制」，正是 29 §2 要删的旧口径。
     // RFQ 回文时限（rfq-deadline 插件）：**旧 SSR 页已退役**（见 RETIRED_SUBVIEWS：`/<view>/deadlines/`
     // 与 `/<view>/api/deadlines` 现为 303 → `/app/<view>/`，页面面板 `rfq.remind-board` 承接同一件事）。
     //   本批只保留**写面**：`/<view>/deadlines/promise` 登记「承诺回文时限」（发言人 + 时限 + RFQ id +
@@ -3484,8 +3260,8 @@ ${sortForm('events', '筛查事件')}
       const switchLinks = Object.keys(rules).map((v) => `<a href="${prefix}/admin/api/switch?to=${v}">${v}</a>`).join(' · ')
       return `${anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS,
         [[`${prefix}/contractor/heuristics/`, '比价口径（承包商）'], [`${prefix}/supplier/heuristics/`, '比价口径（供应商）']],
-        [[`${prefix}/contractor/gates/`, '审批与变更（承包商）'], [`${prefix}/supplier/gates/`, '审批与变更（供应商）']],
-        [[`${prefix}/contractor/authority/`, '授权区间（承包商）'], [`${prefix}/supplier/authority/`, '授权区间（供应商）']])}`
+        [[`${prefix}/app/contractor/`, '审批队列（承包商 · GUI）'], [`${prefix}/app/supplier/`, '审批队列（供应商 · GUI）']],
+        [[`${prefix}/app/contractor/`, '授权区间（承包商 · GUI）'], [`${prefix}/app/supplier/`, '授权区间（供应商 · GUI）']])}`
         + `${data.degraded ? `<p>降级：<code>${data.reason ?? ''}</code> —— ${data.next_action ?? ''}</p>` : ''}`
         + `<h3 id="progress">进度与口径来源</h3>`
         + `<p>进度：阶段 <b>${data.progress?.phase ?? '—'}</b> · 下一步 <b>${data.progress?.next_task ?? '—'}</b>`
@@ -3690,7 +3466,7 @@ ${sortForm('events', '筛查事件')}
       if (!Object.prototype.hasOwnProperty.call(rules, to)) return json(400, { error: 'unknown-view', hint: Object.keys(rules).join(' / ') })
       return send(302, 'text/plain; charset=utf-8', '', { location: `${prefix}/${to}/` })
     }
-    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/app/<view>/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/mail / ${prefix}/api/ui/blocks / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/gates/ / ${prefix}/<view>/api/gates / ${prefix}/<view>/changes/<id>/ / ${prefix}/<view>/api/changes/<id> / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>（已退役的 ${prefix}/<view>/advice/ 与 ${prefix}/<view>/deadlines/ 会 303 到 ${prefix}/app/<view>/）` })
+    return json(404, { error: 'not-found', path, hint: `可用：${prefix}/ / ${prefix}/contractor/ / ${prefix}/supplier/ / ${prefix}/ops/ / ${prefix}/ops/mail/ / ${prefix}/app/<view>/ / ${prefix}/api/status / ${prefix}/api/obs / ${prefix}/api/ops / ${prefix}/api/retention / ${prefix}/api/mail / ${prefix}/api/ui/blocks / ${prefix}/<view>/api/history / ${prefix}/<view>/api/evidence / ${prefix}/<view>/api/scorecard / ${prefix}/<view>/api/approvals / / ${prefix}/<view>/heuristics/ / ${prefix}/<view>/api/heuristics / ${prefix}/<view>/changes/<id>/ / ${prefix}/<view>/api/changes/<id> / ${prefix}/admin/ / ${prefix}/admin/api/blocks / ${prefix}/admin/api/elevate / ${prefix}/admin/api/switch?to=<view>（**已退役**的 ${prefix}/<view>/{advice,deadlines,gates,authority}/ 与对应 /api/ 会 303 到 ${prefix}/app/<view>/；催办 / 登记承诺两条写面仍在）` })
   }
 
   // 零残留：server 是 fiber 的 effect，dispose 即关闭（端口释放）

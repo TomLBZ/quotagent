@@ -323,7 +323,9 @@ def main() -> int:  # noqa: C901
             f"{base}/supplier/gates/", headers={"Accept": "text/html"}, follow_redirects=False)
         cookie_contractor = cookie_of(f"{base}/contractor/gates/")
         cookie_supplier = cookie_of(f"{base}/supplier/gates/")     # noqa: F841（两侧各登录一次）
-        same_side = raw_request_full(f"{base}/contractor/gates/", headers=cookie_contractor)
+        # 旧页已退役（`RETIRED_SUBVIEWS`）：同侧登录后拿到的也是 **303 → GUI**（不 404、不再是旧页 200）。
+        same_side = raw_request_full(f"{base}/contractor/gates/", headers=cookie_contractor,
+                                     follow_redirects=False)
         cross_side = raw_request_full(f"{base}/supplier/gates/", headers=cookie_contractor)
         cross_json = raw_request_full(f"{base}/supplier/api/gates", headers=cookie_contractor)
         check("②b 身份门槛负控：**未登录**取业务路由一律拒 —— API/JSON ⇒ 401 `identity-required` + `next`；"
@@ -332,76 +334,85 @@ def main() -> int:  # noqa: C901
               and anon_html_code == 303 and "/identity/?next=" in header_of(anon_html_headers, "location"),
               f"JSON={anon_json_code} 含 identity-required={'identity-required' in anon_json_body}；"
               f"HTML={anon_html_code} location={header_of(anon_html_headers, 'location')[:80]}")
-        check("②b' 身份门槛正控：**登录后按侧放行** —— 同侧页面 200；拿承包商 cookie 去 `/supplier/`"
+        check("②b' 身份门槛正控：**登录后按侧放行** —— 同侧 ⇒ **303 → `<前缀>/app/contractor/`**"
+              "（旧页退役后不再返回内容）；拿承包商 cookie 去 `/supplier/`"
               "（页面与 JSON 两条形状）都 ⇒ **403 `side-mismatch`**（不许回落成「能看」）",
-              same_side[0] == 200 and cross_side[0] == 403 and "side-mismatch" in cross_side[1]
+              same_side[0] == 303 and str(header_of(same_side[2], "location")).endswith("/app/contractor/")
+              and cross_side[0] == 403 and "side-mismatch" in cross_side[1]
               and cross_json[0] == 403 and "side-mismatch" in cross_json[1],
-              f"同侧={same_side[0]} 越侧页面={cross_side[0]} 越侧 JSON={cross_json[0]} "
+              f"同侧={same_side[0]} → {header_of(same_side[2], 'location')}；越侧页面={cross_side[0]} 越侧 JSON={cross_json[0]} "
               f"含 side-mismatch={'side-mismatch' in cross_side[1]}")
 
-        # ---- ③ 路由登记 + 页面/JSON ----
+        # ==========================================================================================
+        # ★ 本段已按 `docs/design/29-webui-gui-app.md` §2 + AGENTS.md 规则 12 **改判据**（旧页退役）：
+        #   旧断言「两视角 `/gates/` 页与 `/api/gates` 都 200、页面有 `data-age-clock`/逐条
+        #   `data-gate-next-action`/两张表、供应商侧 `data-gates-degraded` 计数 0、JSON 的年龄手算对账」
+        #   冻结的是**已经删掉的旧形态**（而且旧页正是「把终端命令准备好让用户复制」的那种页），
+        #   与「双方仅通过 GUI 走完全部业务流程」直接冲突 ⇒ 逐条改判据：
+        #     · 路由/身份/0 命中类 ⇒ **接新位置**（303 + Location + 承接面板注册在 GUI 上 + 产品面 0 痕迹）；
+        #     · 只在旧页上成立的内容类（age 手算对账、空投影降级页、逐条 next_action 行）⇒ **删除**，
+        #       其等价判据在插件层（`t282-gate-timeline-gate.mjs` 34/34 与 AC-GATE-001，含 4 处单点变异）**一条没松**。
+        #   逐条登记（文件 + 原行 + 理由）见 `docs/work/plans/webui-ui-defects.md` §P17。
+        # ==========================================================================================
+        NOISE = ("终端", "g1side", "PYTHONPATH", "命令行")
+
+        # ---- ③ 路由登记（六条）+ 旧页退役 ⇒ 303 + 承接面板在 GUI 上 ----
         routes = parse_json(get(f"{base}/api/routes")[1]).get("routes", [])
         gate_routes = [item for item in routes if "/gates" in str(item.get("path", ""))]
-        pages = {view: get(f"{base}/{view}/gates/") for view in ("contractor", "supplier")}
-        jsons = {view: get(f"{base}/{view}/api/gates") for view in ("contractor", "supplier")}
-        parsed = {view: parse_json(jsons[view][1]) for view in jsons}
+        retired_rows = []
+        for view in ("contractor", "supplier"):
+            for suffix, accept in (("/gates/", "text/html"), ("/api/gates", "application/json")):
+                code, _body, headers = raw_request_full(
+                    f"{base}/{view}{suffix}",
+                    headers={**cookie_of(f"{base}/{view}{suffix}"), "Accept": accept},
+                    follow_redirects=False)
+                location = str(header_of(headers, "location"))
+                retired_rows.append((f"/{view}{suffix}", code, location,
+                                     code == 303 and location.endswith(f"/{view}/")))
+        carriers = {"contractor": ("gate.queue", "gate.decided"), "supplier": ("gate.queue.supplier",)}
+        panels = {view: parse_json(get(f"{base}/api/ui/panels?view={view}")[1]).get("panels", [])
+                  for view in ("contractor", "supplier")}
+        home_panels = parse_json(get(f"{base}/api/ui/panels?view=home")[1]).get("panels", [])
+        panel_ids = {view: [(panel.get("panel_id") or panel.get("id")) for panel in panels[view]]
+                     for view in panels}
+        carriers_missing = [f"{view}:{pid}" for view, ids in carriers.items()
+                            for pid in ids if pid not in panel_ids[view]]
+        if "gate.todo" not in [(panel.get("panel_id") or panel.get("id")) for panel in home_panels]:
+            carriers_missing.append("home:gate.todo")
         check("③ `/api/routes` 登记了两视角 ×（页面 + JSON + 催办 POST）**六条路由**，`auth` 是**真实值**"
-              "`identity-session`（业务路由要身份会话——台账不再写 `none` 撒谎）",
+              "`identity-session`（业务路由要身份会话——台账不再写 `none` 撒谎）；"
+              "**旧页退役 ⇒ 接新位置**：四条旧路由（`/<view>/gates/` 与 `/<view>/api/gates`）一律 "
+              "**303 + Location 落在同侧 GUI**；**承接这件事的 GUI 面板真的注册在那一页上**"
+              "（承包商：`gate.queue` / `gate.decided`；供应商：`gate.queue.supplier`；工作台：`gate.todo`）",
               len(gate_routes) == 6 and all(item.get("auth") == "identity-session" for item in gate_routes)
               and len([i for i in gate_routes if i.get("method") == "GET"]) == 4
-              and len([i for i in gate_routes if i.get("method") == "POST"]) == 2,
-              f"命中={json.dumps([f'{i.get('method')} {i.get('path')}' for i in gate_routes], ensure_ascii=False)}")
+              and len([i for i in gate_routes if i.get("method") == "POST"]) == 2
+              and all(row[3] for row in retired_rows) and not carriers_missing,
+              f"登记={json.dumps([f'{i.get('method')} {i.get('path')}' for i in gate_routes], ensure_ascii=False)}；"
+              f"旧路由={json.dumps([(p, c, l) for p, c, l, _ in retired_rows], ensure_ascii=False)}；"
+              f"缺承接面板={carriers_missing or '无'}")
 
-        cpage, spage = pages["contractor"][1], pages["supplier"][1]
-        cjson, sjson = parsed["contractor"], parsed["supplier"]
-        next_actions = re.findall(r'data-gate-next-action="([^"]+)"', cpage)
-        nav_ok = 'data-subnav="contractor"' in cpage and 'data-gates-link="1"' in cpage
-        clock_ok = 'data-age-clock="facts-only"' in cpage and "不取墙钟" in cpage
-        check("③ 承包商侧 gates 页/JSON 200 且是**真页面/真契约**：道内子导航含「审批与变更」入口、"
-              "`data-age-clock=\"facts-only\"` + 口径文案、**逐条 `data-gate-next-action`**、"
-              "JSON 契约齐备（engine/age_clock/age_basis_note/gates/changes/counts/degraded）",
-              pages["contractor"][0] == 200 and jsons["contractor"][0] == 200
-              and nav_ok and clock_ok and len(next_actions) == 2
-              and 'data-gates="table"' in cpage and 'data-gates="changes"' in cpage
-              and cjson.get("engine") == "rules" and cjson.get("age_clock") == "facts-only"
-              and isinstance(cjson.get("age_basis_note"), str) and "不取墙钟" in str(cjson.get("age_basis_note"))
-              and len(cjson.get("gates", [])) == 2 and len(cjson.get("changes", [])) == 1
-              and cjson.get("degraded") is False and cjson.get("reason") is None,
-              f"status={pages['contractor'][0]}/{jsons['contractor'][0]}；入口={nav_ok}；时钟口径={clock_ok}；"
-              f"next_action 行={next_actions}；门={len(cjson.get('gates', []))} 变更={len(cjson.get('changes', []))}")
-
-        # ---- ④ 等待时长有口径（手算 + 逐字节稳定） ----
-        ages = [item.get("age_seconds") for item in cjson.get("gates", [])]
-        ids = [item.get("id") for item in cjson.get("gates", [])]
-        basis_ok = all(isinstance(item.get("age_basis"), str) and "as_of" in str(item.get("age_basis"))
-                       and "不取墙钟" in str(item.get("age_basis")) for item in cjson.get("gates", []))
-        again_page = get(f"{base}/contractor/gates/")
-        again_json = get(f"{base}/contractor/api/gates")
-        check("④ **等待时长有口径且可复算**：JSON 的 `age_seconds` == 手算 `as_of(11:30) − requested 事实 ts`"
-              "（[12600, 9000]，且已 granted 的 ap-0001 **不进**等待列表）；每条都带 `age_basis`（含 `as_of` 与"
-              "「不取墙钟」）；同一 URL 两次 GET **逐字节一致**（不随刷新漂移）",
-              ids == ["ap-0007", "ap-0009"] and ages == HAND_AGES and basis_ok
-              and cjson.get("as_of") == AS_OF
-              and cjson.get("ignored_now_inputs") == ["payload.now", "config.now"]
-              and again_page[1] == cpage and again_json[1] == jsons["contractor"][1]
-              and "12600" in cpage and "9000" in cpage,
-              f"id={ids} age={ages}（期望 {HAND_AGES}）；as_of={cjson.get('as_of')}；"
-              f"每条 basis 合格={basis_ok}；页面两次一致={again_page[1] == cpage}；"
-              f"JSON 两次一致={again_json[1] == jsons['contractor'][1]}")
-
-        # ---- ⑤ 空投影不编 ----
-        check("⑤ **空投影不编**（真进程真回读）：供应商侧（空账本）页面 `data-gates-degraded=\"1\"` + 有名 reason + "
-              "**两个列表计数都为 0**，JSON `gates:[]`/`changes:[]` + `degraded:true`（没数据就不编，也不冒充健康）",
-              pages["supplier"][0] == 200 and jsons["supplier"][0] == 200
-              and 'data-gates-degraded="1"' in spage and page_reason(spage) in REASONS
-              and count_attr(spage, "gate-count") == 0 and count_attr(spage, "change-count") == 0
-              and sjson.get("gates") == [] and sjson.get("changes") == []
-              and sjson.get("degraded") is True and sjson.get("reason") in REASONS
-              and "待办人工门 <b>0</b> 条、变更单 <b>0</b> 条" in spage,
-              f"page={pages['supplier'][0]} degraded={'data-gates-degraded=\"1\"' in spage} "
-              f"reason={page_reason(spage)}；JSON degraded={sjson.get('degraded')}/{sjson.get('reason')} "
-              f"门={sjson.get('gates')} 变更={sjson.get('changes')}；"
-              f"页面计数={count_attr(spage, 'gate-count')}/{count_attr(spage, 'change-count')}")
+        # ---- ③b 产品面 0 命中（旧页 20「终端」+40 `g1side` 的来源已被清掉）+ 退役响应体 0 脚本 ----
+        retired_bodies = []
+        for view in ("contractor", "supplier"):
+            for suffix in ("/gates/", "/api/gates"):
+                retired_bodies.append((f"/{view}{suffix}",
+                                       raw_request_full(f"{base}/{view}{suffix}",
+                                                        headers={**cookie_of(f"{base}/{view}{suffix}"),
+                                                                 "Accept": "*/*"},
+                                                        follow_redirects=False)[1]))
+        noise_hits = [f"{path}:{token}" for path, body in retired_bodies
+                      for token in NOISE if token in body]
+        script_needle = "scr" + "ipt"
+        scripty = [path for path, body in retired_bodies
+                   if script_needle in body or INLINE_EVENT.search(body)]
+        check("③b **产品面 0 命中**：四条退役响应体里 `终端` / `g1side` / `PYTHONPATH` / `命令行` "
+              "**0 命中**，且 **0 行脚本 / 0 内联事件**（它们只是 303 的说明页）；两个扫描器都**非空转**",
+              not noise_hits and not scripty
+              and len([t for t in NOISE if t in "终端 g1side PYTHONPATH 命令行"]) == 4
+              and (script_needle in f"<{script_needle}>" or bool(INLINE_EVENT.search('<a onclick="x()">'))),
+              f"关键词命中={noise_hits or '无'}；含脚本={scripty or '无'}；"
+              f"扫描器对照={[t for t in NOISE if t in '终端 g1side PYTHONPATH 命令行']}")
 
         # ---- ⑥ 催办 POST（宿主只落 0600 待办件、账本零新增） ----
         counts_before = ledger_count(base)
@@ -488,24 +499,27 @@ def main() -> int:  # noqa: C901
               f"POST={bad_post[0]} code={bad_json.get('code')}；脚本 rc={code_t} code={refused.get('code')}；"
               f"账本行 {lines_before} → {len(ledger_rows(CONTRACTOR_LEDGER))}")
 
-        # ---- ⑩ 私域哨兵 0 命中 + 0 脚本 + 既有路由 ----
-        combined = {"contractor": cpage + jsons["contractor"][1], "supplier": spage + jsons["supplier"][1]}
-        hits = {view: [needle for needle in PRIVATE_KEYS + SENTINELS if needle in text]
-                for view, text in combined.items()}
-        scripty = [name for name, text in (("page:c", cpage), ("page:s", spage),
-                                          ("json:c", jsons["contractor"][1]), ("json:s", jsons["supplier"][1]))
-                   if SCRIPT_NEEDLE in text or INLINE_EVENT.search(text)]
+        # ---- ⑩ 私域哨兵 0 命中（**搬位置**：旧页退役 ⇒ 扫四条退役响应体 + 承接面板载荷）+ 0 脚本 + 既有路由 ----
+        carrier_panels = [panel for view in panels for panel in panels[view]
+                          if (panel.get("panel_id") or panel.get("id")) in carriers.get(view, ())]
+        carrier_panels += [panel for panel in home_panels
+                           if (panel.get("panel_id") or panel.get("id")) == "gate.todo"]
+        scanned = json.dumps(carrier_panels, ensure_ascii=False) + "\n".join(body for _p, body in retired_bodies)
+        hits = {"scanned": [needle for needle in PRIVATE_KEYS + SENTINELS if needle in scanned]}
+        scripty = [path for path, body in retired_bodies
+                   if SCRIPT_NEEDLE in body or INLINE_EVENT.search(body)]
         admin_code, admin_body = get(f"{base}/admin/")
         home_code, _ = get(f"{base}/contractor/")
         ops_code, _ = get(f"{base}/api/ops")
-        check("⑩ 两视角 gates 页/JSON 里私域键名与哨兵 **0 命中**（这类键连读都不读）+ **非空转对照**"
-              "（同一批哨兵确实写在夹具账本文件里）；四份响应 **0 行脚本 / 0 内联事件**（扫描器非空转）；"
+        check("⑩ 四条退役响应体与**承接面板载荷**（`gate.queue` / `gate.decided` / `gate.todo` / "
+              "`gate.queue.supplier`）里私域键名与哨兵 **0 命中**（这类键连读都不读）+ **非空转对照**"
+              "（同一批哨兵确实写在夹具账本文件里）；退役响应 **0 行脚本 / 0 内联事件**（扫描器非空转）；"
               "既有路由没坏、未提权 `/admin/` 仍 401 固定体",
-              not hits["contractor"] and not hits["supplier"] and len(fixture_has) >= 3
+              not hits["scanned"] and len(fixture_has) >= 3
               and not scripty and (SCRIPT_NEEDLE in f"<a {SCRIPT_NEEDLE}>" or INLINE_EVENT.search('<a onclick="x()">'))
               and home_code == 200 and ops_code == 200 and admin_code == 401
               and admin_body.strip() == '{"error":"unauthorized"}',
-              f"承包商命中={hits['contractor'] or '无'}；供应商命中={hits['supplier'] or '无'}；"
+              f"扫描命中={hits['scanned'] or '无'}；"
               f"夹具里确实有哨兵={fixture_has}；含脚本={scripty or '无'}；"
               f"home={home_code} ops={ops_code} admin={admin_code}")
     finally:

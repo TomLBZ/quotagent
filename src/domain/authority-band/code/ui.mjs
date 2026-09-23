@@ -2,7 +2,9 @@
  * `domain/authority-band` 的 **GUI 贡献** —— 「授权区间（谁能批到多少）」搬进 APP 外壳（DEF-036 / DEF-023）。
  *
  * 修的是哪一条：`gate.escalate` 的字段帮助让你「去看授权区间那一页」，而那一页是旧 SSR 页
- * （`/<view>/authority/`，它还教用户回终端）；APP 外壳里**一个面板都没有** ⇒ 越界了不知道该找谁。
+ * （`/<view>/authority/`，**它教用户回终端** —— 该页已按 `docs/design/29-webui-gui-app.md` §2
+ * 退役为 **303 → `/app/<view>/`**，见 `RETIRED_SUBVIEWS`）；APP 外壳里当时**一个面板都没有**
+ * ⇒ 越界了不知道该找谁。
  * 现在：本视图上就有一块面板，读的是**同一份口径**（`authority-band` 插件自己的 `checkOf`，
  * 确定性规则，不读账本、不取墙钟、不能批准），并且**越界时一键真的开一条人工门**（`authority.escalate`
  * → 既有唯一写者 `system/approval/tools/gate-actions.py --step request` 落 `approval/requested`）。

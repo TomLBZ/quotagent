@@ -320,3 +320,94 @@ PA6 断言「已搬资产仍被**契约面**引用」，它在 `verify.sh` / `qa
 - **证据**：`tmp/retire-verify-out.txt`（旧路径 303 + Location、匿名/跨侧/405、关键词 0 命中、产品面残余）、
   `tmp/retire-shots/s1-contractor-deadlines-to-gui.png`、`s2-supplier-deadlines-to-gui.png`、
   复跑 `sh tmp/retire-start.sh 8477 && tools/run.sh tmp/retire-verify.py 8477`。
+
+---
+
+### 退役登记（**非搬迁**）：`gates` / `authority` 两页退役 + 产品面「回终端」文案清零 + 四个门改判据（P17 批）
+
+本批**没有搬任何文件**（主文件 §分类 三节表与 `plugin-assets` 的 PA3/PA4 判据一字未动），
+登记只写在这里与 `docs/work/plans/webui-ui-defects.md`（后者只留一行指针，预算只剩 ~200 B）。
+
+**一、退役（承接 P16 未拆的两页；两侧共 4 条页面路由 + 4 条 JSON ⇒ 8 条路由 303）**
+
+| 旧路径 | 现状 | 承接的 GUI 位置 |
+|---|---|---|
+| `/<view>/gates/`、`/<view>/api/gates` | **303 → `/app/<view>/`** | 面板 `gate.queue`（行内**「批准 / 驳回」**，动作 `gate.grant` / `gate.deny`，人签）、`gate.decided`（已决定的门留痕）、`gate.todo`（工作台「要人决定的事」） |
+| `/<view>/authority/`、`/<view>/api/authority` | **303 → `/app/<view>/`** | 面板 `authority.bands` / `.supplier`，动作 `authority.check`（只读）/ `authority.escalate`（人签，越界一键开人工门） |
+
+- 判据真源 = `docs/design/29-webui-gui-app.md` §2 + `AGENTS.md` 规则 12（「与需求冲突或只冻旧形态的测试/门直接删除」）。
+- **保留**（不是旧页）：写面 `POST /<view>/gates/nudge`、`POST /<view>/deadlines/promise`；明细面
+  `/<view>/changes/<id>/` 与 `/<view>/api/changes/<id>`；两个插件的 `inject` 条目（`gateTimeline` / `authorityBand`）。
+- 实现删除（`src/system/webui/code/webui.mjs`）：gates 的三个渲染器（`gatesRun` / `gatesJson` / `gatesHtml`，96 行）
+  与 authority 的四个（`authorityConfigSnapshot` / `authorityRun` / `authorityJson` / `authorityHtml`，143 行），
+  共 **239 行**；`RETIRED_SUBVIEWS` 增加 `gates` / `authority` 两条（各自写明承接位置）；旧地址匹配正则扩为
+  `(advice|deadlines|gates|authority)`；两页的 `/api/routes` 条目改写成「**已退役** … 303 → `/app/<view>/`」。
+- nav 入口**接新位置**而不是删掉：`data-gates-link` / `data-authority-link` 保留，但 href 从旧页改成
+  `${prefix}/app/<view>/`（承包商 / 供应商 / 运维 / 系统管理四道 + `subNav`）；`subNav` 与 `anchorNav` 的标签
+  改成人话「审批队列（… · GUI）」/「授权区间（… · GUI）」；`/start/` 上手页与 `change-detail` 页的「回列表」
+  链接同时改指 GUI。
+
+**二、产品面「回终端」文案清零（判据：路由响应体 + 面板/动作文案 + 插件载荷里 `g1side` / `PYTHONPATH` /
+「命令行」/「终端」**0 命中**；append-only 历史证据/归档不算）**
+
+| 文件 | 改了什么 | 为什么 |
+|---|---|---|
+| `src/domain/gate-timeline/code/gate-timeline.mjs` | `GATE_COMMANDS` → **`GATE_ACTIONS`**（4 条：`PYTHONPATH=src python3 -m quotagent.g1side …` ⇒ 审批队列的「批准 / 驳回」+ 动作 id）；`GATE_COMMAND_FALLBACK` → `GATE_ACTION_FALLBACK`；`CHANGE_COMMANDS` → **`CHANGE_NEXT_STEPS`**（5 条，含 `approved` 从「跑 AC 命令」改成「看本张单的逐行明细」）；`blocked_by` 与变更单 `link` 里的人话 | 旧值就是「把命令准备好让用户复制」——29 §2 要删的旧口径；实测 gates 页那 20「终端」+40 `g1side` 全来自这里 |
+| `src/domain/advice/code/advice-panel.mjs` | 同上一套（`GATE_COMMANDS` / `DEADLINE_COMMANDS` → `GATE_ACTIONS` / `DEADLINE_NEXT_STEPS`）、规则 ③ 的说明、`blocked_by` 人话 | 同一插件族、同一旧口径 |
+| `src/domain/quote-prepare/code/quote-prepare.mjs` | `SIGNATURE_NOTE`（`:74` 那句「只能在终端由 `--actor human:<人名>` 执行」）改成「在 APP 的『我的草稿』那一行点**人签提交报价**（动作 `quote.submit`）」；`handoff()` 的 **`commands` 两条 CLI 命令整段删除**，改成 **`in_app`**（`action` / `title` / `permission` / `input`（这份草稿的真实入参）/ `where`）；头部注释同步 | 那是 `/supplier/`、`/supplier/quotes/`、`/supplier/quotes/prepare/` 各 1「终端」+2 `python3` 的来源 |
+| `src/system/webui/code/webui.mjs` | `prepSignatureHtml` 从「两条可复制命令」改成「去点：… + 填这几格即可：…」（新抓手 `data-signature-in-app` / `data-signature-permission` / `data-signature-input`）；待办件回执的 `next_action` 去掉「等价命令 `tools/quote-sign.py`」 | 同上；宿主不许把 CLI 命令摆给业务用户 |
+| `src/domain/authority-band/code/authority-band.mjs` | `ESCALATE_COMMAND`（`tools/verify.sh gates`）与 `ESCALATE_HUMAN_COMMAND`（`PYTHONPATH=src python3 -m quotagent.g1side …`）改成 GUI 动作路径；`APPROVAL_NOTE`（「批准只走终端人工门」）、`NEXT_ACTIONS['over-band']`、inside-band 的 `next_action`、越界 `notes` 同步；`README.md` 一行 | 这两条**确实在 GUI 载荷里**（`authority.check` 动作回执的 `notes` / `approval_note`），不是死代码 —— 见下面「允许面偏差」 |
+| `src/domain/rfq-deadline/code/rfq-deadline.mjs` | `CALL_TO_ACTION.overdue` 的「或在终端决定延期/放弃」→「或决定延期/放弃（在 GUI 里改包升版再分发）」 | 同一批旧口径残余 |
+
+**三、按规则 12 / 29 §2 改判据（四个门：advice / rfq-deadline / gates / authority）**
+
+> 口径：**能接新位置的一律接**（等价或更强），**只在旧页上成立的内容类断言删除**（逐条写在下面）。
+> 插件层的围栏判据（引擎/形状/手算/确定性/私域哨兵/单点变异）**一条没松**。
+
+| 门 | 文件 | 改了什么（原行 → 新判据） | 理由 |
+|---|---|---|---|
+| `advice` | `src/domain/advice/tests/t281-advice-gate.mjs` | ① 第 9 条：`next_action` **必须含** `quotagent.g1side` / `g1-walkthrough.py` ⇒ 必须指到 `gate.grant` / `gate.deny` **且 0 命中**回终端痕迹（＋非空转负控：把动作 id 抠掉判据必须判假）。② 身份门槛那句「同侧 200」⇒ **同侧 303 → `/t281/app/contractor/`**。③ 第 19/19b/20/21 条整段重写：四条旧路由 303+Location / `/api/routes` 四条仍登记 / **承接面板真的注册在那一页上**（`rfq.remind-board`、`compare.ranking`、`gate.queue`、`gate.decided`、`authority.bands`、`exchange.inbox`、`authority.bands.supplier`）/ 面板与响应体 0 命中关键词 / 四道页面不再有指向旧页的入口 / 私域哨兵 0 命中（搬位置：承接面板载荷 + 退役响应体） | 旧断言冻结的是已删掉的旧页形态（两视角 `/advice/` 页与 `/api/advice` 200、`data-advice-link`、建议表、`next_action` 必须是终端命令） |
+| `advice` | `src/domain/advice/tests/check-advice-route.py` | ②b′ 同侧 200 ⇒ 303；③/④/⑤/⑥/⑦/⑧/⑨ 各条改判据（新增 ③b 产品面 0 命中；④ 改比 GUI 两侧承接面板与动作；⑦ 哨兵扫描搬位置；⑧ 只对退役响应体；⑨ 确定性改扫 303 响应体 + 面板载荷）；**删除**：③ 页/JSON 200 + 页面契约 + `ids_of_page` 建议 id 对账、③ `/api/advice` JSON 契约、⑤ basis 形状、⑥ `next_action` 逐规则 CLI、⑪ 第二个真进程的空投影降级页（**等价判据在 node 半 t281 的 1-31 条与 4 处变异里，一条没松**） | 旧页没有 HTTP 面了：advice 的载荷现在只在插件层（t281）可测；路由/身份类改判据，内容类删除 |
+| `rfq-deadline` | `src/domain/rfq-deadline/tests/t285-rfq-deadline-gate.mjs` | 第 14 条：`data-deadlines-link` / `DEADLINE_EXTRAS` / `subNav(… 'deadlines')` 入口齐备 ⇒ **退役登记齐 + 旧抓手 0 命中 + 路由条目写明 303 + 写面切片仍是真写面** | 四道 nav 入口与旧页渲染器在 P16 批已删，旧断言冻结已删形态 |
+| `rfq-deadline` | `src/domain/rfq-deadline/tests/check-rfq-deadline-route.py` | ②b′ ⇒ 303；③ 整段重写（六条登记 + 四条旧路由 303 + 承接面板在 GUI + ③b 0 命中 / 0 脚本）；**删除**：④ remaining/severity 手算对账与页面抓手、⑤ 无凭据不得假装能发（页面/JSON 面）、⑥ 空投影降级页 + 名册白名单（供应商侧）、⑨「承诺改变页面口径」；⑪ 哨兵扫描改扫退役响应体 | 同上：rfq-deadline 的 HTTP 面已退役；④⑤⑥ 的等价判据在 t285 的 4 条场景与 4 处变异里 |
+| `gates` | `src/domain/gate-timeline/code/gate-timeline.mjs` + `tests/t282-gate-timeline-gate.mjs` | 常量契约：`GATE_COMMANDS[scope].includes('python3' && 'quotagent.g1side')` ⇒ `GATE_ACTIONS[scope]` 含 `gate.grant`/`gate.deny` 且 0 命中痕迹（＋`CHANGE_NEXT_STEPS` 同口径）；第 6 条条目形状的 `next_action.includes('quotagent.g1side')` ⇒ 指到两键且 0 命中；第 22/23/24/25 条重写：四条旧路由 303 + 六条登记 + 承接面板（`gate.queue`/`gate.decided`/`gate.todo`/`gate.queue.supplier`）+ 面板载荷 0 命中 + 催办 POST 仍在（写面没跟着旧页消失）+ 四道页面 nav 入口仍在（目标已接 GUI）且**不再有指向旧页的链接**；**删除**：第 23 条供应商侧空投影降级页（页面）、第 22 条页面契约（`data-age-clock` / 逐条 `data-gate-next-action` / 两张表） | 旧页/JSON 退役；等待时长与空投影的等价判据在插件层（本门 1-21 + AC-GATE-001） |
+| `gates` | `src/domain/gate-timeline/tests/check-gate-timeline-route.py` | ②b′ ⇒ 303；③ 整段重写（六条登记 + 四条旧路由 303 + 承接面板在 GUI + ③b 0 命中/0 脚本）；**删除**：④ age 手算对账（页面与 JSON）、⑤ 空投影降级页；⑩ 哨兵扫描搬位置到退役响应体 + 承接面板 | 同上；age 手算的等价判据在 t282 第 4 条与 AC-GATE-001 |
+| `gates` | `src/domain/gate-timeline/tests/checks_gate.py`（`AC-GATE-001`） | 探针 `next_actions_cli`（须含 `quotagent.g1side`）⇒ `next_actions_app`（须含 `gate.grant`/`gate.deny` + 催办路由 + 0 命中痕迹）＋新增 `noise_free`（整份输出 0 命中）；`GATE_COMMANDS` → `GATE_ACTIONS` + `action_fallback_ok`；两条 AC 断言的文案同步 | 同上（AC 与围栏门同一判据） |
+| `gates` | `src/domain/gate-timeline/tests/t283-change-detail-gate.mjs` + `check-change-detail-route.py`（`change-detail` 门） | 第 11 条：`data-change-detail-link` 在 webui 里 ⇒ **旧列表随旧页退役（登记齐、旧抓手 0 命中、`data-detail-back` 指向 GUI）**；第 12 条 / ③ 段：`listPage` 从旧列表页 ⇒ **不跟 303 取回（303 + Location）**；nav 标签同步 | 变更单列表长在旧 `/gates/` 页上，随页退役 |
+| `authority` | `src/domain/authority-band/tests/t284-authority-gate.mjs` | ① 常量契约 `escalate`（`tools/verify.sh` + `python3 -m quotagent.g1side`）⇒ 三个动作 id（`authority.escalate` / `gate.grant` / `gate.deny`）+ 0 命中痕迹。② 第 7 条重写：`escalate_cmd` 以 `tools/verify.sh` 开头且门名在 `verify.sh help` 里 / `g1side.py` 存在 ⇒ **两条入口都指到 GUI 动作、动作 id 真的声明在两份 `ui.mjs` 里**（非空转、「入口真存在」不弱于「命令真存在」）。③ 第 13/14/15 条重写：静态宿主契约（两条旧路由仍登记为已退役 303 + `data-authority-link` 目标接到 GUI + 入口指到的动作真声明 + `/start/` 段 + 0 内联脚本）；HTTP 正控改成**在真动作总线上跑 `authority.check`**（三例边界值与手算逐项对账、承接面板在两侧视图上、四条旧路由 303）；负控（改夹具 ⇒ 结论翻转 / 移走夹具 ⇒ `unconfigured` 不编限额 / 还原 ⇒ 回到原位 / 哨兵 0 命中 / 0 脚本）**全部保留**，只把载体从 `/api/authority` 换成同一条 action。④ 门把 `QUOTAGENT_UI_CONFIG` 指向自己的临时夹具（插件自己的只读快照也读它） | 旧页退役后 `authority.check` 是同一口径的新位置，而且多一层「动作真注册/真可调用」；原断言冻结的 SSR 页面抓手（`data-authority-*` 一串）删除 |
+| `authority` | `src/domain/authority-band/tests/check-authority-route.py` | ②b′ ⇒ 303；③ 段重写（四条旧路由 303 + 承接面板 + ③b 0 命中）；④/⑤/⑥/⑦/⑧/⑨/⑩/⑪ 全段改走 `authority.check`（三条不规则金额的具名拒绝：插件 code 或主机字段级 `below-min`/`above-max`，同一条判据「具名 + 不给结论」）；⑧ 的「升级命令真存在」⇒ **两个动作 id 真的注册在证据文件里**；`serve()` 给子进程加 `QUOTAGENT_UI_CONFIG` 指向临时夹具 | 同上 |
+| `quote-draft` | `src/domain/quote-prepare/tests/t286-quote-draft-gate.mjs` | 第 9 条：`hand.commands[0]` 含 `tools/quote-sign.py`/`--now` ⇒ **`hand.in_app`**（动作 `quote.submit` + `permission=human-signature` + 草稿 id + 署名）且整份 `handoff` 载荷 **0 命中** `g1side`/`PYTHONPATH`/`终端`/`命令行`/`python3`/`quote-sign.py`；第 11 条：两个工具名都要在插件源码里 ⇒ 只保留 `tools/quote-draft.py`（签名 CLI 的名字**只在注释里**出现一次，说明旧口径已删） | `handoff` 的命令整段删除，断言接新位置 |
+| `quote-draft` | `src/domain/quote-prepare/tests/check-quote-draft-route.py` | ④：页面「含可复制的 `tools/quote-sign.py` 命令」⇒ `data-signature-in-app="quote.submit"` + `permission=human-signature` + 0 命中关键词；⑥：回执 `next_action` 含 `tools/quote-sign.py` ⇒ 含 GUI 动作 `quote.submit`；⑪ 的 CLI 负控（`quote-sign.py` 拒 `agent:*`）**原样保留** | 同上 |
+
+**四、允许面偏差（如实登记）**
+
+任务书的「只改」清单里没有 `src/domain/authority-band/**`，但 **② 的判据（产品面 0 命中）在它身上必然命中**：
+`authority.check` 动作回执的 `notes` / `approval_note` 直接来自 `authority-band.mjs` 的
+`ESCALATE_COMMAND` / `ESCALATE_HUMAN_COMMAND` / `APPROVAL_NOTE`（实测越界回执里就有
+`PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4`）。不清它就达不到「0 命中」，
+所以本批**一并改了它的 `code/` 与 `tests/`**（逐条见上表）。除此之外的改动面与任务书一致。
+
+**五、已知缺口（本批不修，登记给下一批）**
+
+- **DEF-037 · P2 · GUI 的变更面板还没有指向明细页的链接**：旧的变更单列表长在 `/gates/` 页上（每行
+  `data-change-detail-link` → `/<view>/changes/<id>/`），那页退役后 GUI 的 `change.list`（`domain/commitments`）
+  与 `domain/change` 的面板都没有这个链接 —— 明细页仍在（`change-detail` 门真跑），但列表里点不过去。
+  修法：在 `src/domain/commitments/code/ui.mjs`（或 `src/domain/change/code/ui.mjs`）给行加
+  「逐行明细」列/动作，指到 `/<view>/changes/<id>/`。**不在本批可改面**（那两个插件目录不在允许清单里）。
+
+**五之二、本批实测到的偶发（已修）**：`authority` 门的「改配置前后同一金额结论不同」曾偶发判红 ——
+根因是插件自己那份只读配置快照按 **`mtimeMs + size`** 备忘，而夹具 `500000` 与 `500001` 两份**字节长度相同**，
+文件系统时间戳粒度粗时第二次写会命中旧快照。修法：两个半门写夹具后**显式把 mtime 往前推**（Python 侧 `os.utime`、
+node 侧 `utimesSync`），让这条判据测的是「配置是真读的」而不是时间戳分辨率（判据本身一条没松；
+连跑 3 次 23/23 + 14/14 稳定）。
+
+**六、验证证据（本批）**
+
+- `tmp/closeout-verify.py` → `tmp/closeout-verify-out.txt`：① 16 条旧路径 303 + Location；② 匿名/跨侧/POST 语义；
+  ③ **99 条 GET 路径 + 承接面板 + 动作回执**关键词 0 命中（附非空转对照）；④ 两条写面仍在。**失败 0**。
+- 门：`docs` / `webui`(47/47) / `advice`(node 31/31 + py 13/13) / `rfq-deadline`(23/23 + 10/10) /
+  `gates`(34/34 + 11/11) / `authority`(23/23 + 14/14) / `change-detail`(23/23) / `quote-draft`(17/17) /
+  `plugin-assets`(20/20) / `ac-registry` / `modules` / `wiring` / `plugin-requirements` / `invariants` **全部 rc=0**
+  （原始行 `tmp/closeout3-*.log`）。`AC-GATE-001` 单独真跑：PASS。
+- 截图 `tmp/p17-shots/`：`p17-01`…`p17-06`（审批队列行内「批准 / 驳回」、`gate.grant` 预填表单、
+  `gate.deny` 必填理由、授权区间面板、`authority.escalate` 表单、供应商侧授权区间）。

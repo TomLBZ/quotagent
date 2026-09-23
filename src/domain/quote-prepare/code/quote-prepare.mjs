@@ -16,8 +16,11 @@
  *      「报价已准备好」，body 不含备注正文、只含哈希与结构化字段），待办件移入 `applied/`。
  *
  * 最后一步（把草稿**签成**真正的报价 `quote/submitted`）**本 APP 不代签**：页面上的
- * 「下一步（签署）」区域给的是**可复制的 CLI 命令**（真实 RFQ / 行项目 / 金额参数），由人在终端
- * 跑 `tools/quote-sign.py --actor human:<人名> …`。本插件 `meta.can_sign=false`、
+ * 「下一步（签署）」区域**接新位置**—— 指到 GUI 里那一个动作（`quote.submit`「人签提交报价」，
+ * `permission: human-signature`：服务端校验署名 == 会话身份），并给出这份草稿的**真实参数**
+ * （RFQ / 行项目 / 金额整数分 / 草稿 id）直接可填。旧口径的「可复制的终端命令」
+ * （`tools/quote-sign.py --actor human:<人名> …`）已按 `docs/design/29-webui-gui-app.md` §2 +
+ * `AGENTS.md` 规则 12 **删除**：产品面不许教用户回终端。本插件 `meta.can_sign=false`、
  * `meta.signature_required=true`，服务面里**没有** `sign`/`approve`/`decide`/`submit`/`send` 这类方法。
  *
  * 分工（与 `gate-timeline` / `rfq-deadline` / `advice-panel` 同一套纪律）：
@@ -70,9 +73,10 @@ export const ENGINE_NOTE = '本页由确定性规则从本视角投影派生（�
   + '不含模型推测、不取墙钟；本页**不能替你签名、不能替你提交报价**'
 
 /** 「下一步（签署）」的说明（页面照抄；这是铁律的人话版本）。 */
-export const SIGNATURE_NOTE = '浏览器**不代签**：把这份草稿签成真正的报价（`quote.submitted`）是'
-  + '**人工动作**，只能在终端由 `--actor human:<人名>` 执行（ADR-0013 §3）。'
-  + '下面给的是**可直接复制**的命令（参数取自上表：RFQ / 行项目 / 金额整数分）。'
+export const SIGNATURE_NOTE = '浏览器**不代签**：把这份草稿签成真正的报价（`quote/submitted`）是'
+  + '**人工动作** —— 在 APP 的「我的草稿」那一行点**「人签提交报价」**（动作 `quote.submit`，'
+  + '`permission: human-signature`：服务端校验署名 == 会话身份；ADR-0013 §3）。'
+  + '下面给的是这份草稿的**真实参数**（RFQ / 行项目 / 金额整数分 / 草稿 id），直接填进那个动作即可。'
 
 /** 金额单位（全仓一致：整数分）。 */
 export const MONEY_UNIT = 'cents'
@@ -408,7 +412,7 @@ export function validate(input, config) {
   return { ok: true, code: 'accepted', errors: [], record }
 }
 
-/** 签署入口：**可复制的** CLI 命令（真实参数）+ 「本 APP 不代签」的说明。 */
+/** 签署入口：**在 APP 里怎么签**（真动作 id + 真实参数）+ 「本 APP 不代签」的说明。 */
 export function handoff(input) {
   const view = text(input && input.view)
   const draft = isObject(input && input.draft) ? input.draft : {}
@@ -417,21 +421,23 @@ export function handoff(input) {
   const cents = Number.isFinite(Number(draft.unit_price_cents ?? (input && input.unit_price_cents)))
     ? Number(draft.unit_price_cents ?? input.unit_price_cents) : null
   const draftId = text(draft.quote_draft_id || (input && input.draft_id)) || `<draft-id>`
-  const shared = '<ui-shared>'    // 宿主不在页面上编路径：真实路径由运维手册给出（见 deployment-manual）
   return {
     required: true, can_sign: false, view,
     why: SIGNATURE_NOTE,
     draft_id: draftId, rfq_id: rfqId, item_id: itemId, unit_price_cents: cents, money_unit: MONEY_UNIT,
-    commands: [
-      `python3 tools/quote-sign.py --ui-shared ${shared} --draft-id ${draftId} \\\n`
-      + `    --actor human:<你的名字> --now <ISO8601> --comment "同意提交"`,
-      `python3 tools/quote-sign.py --ui-shared ${shared} --draft-id ${draftId} --dry-run \\\n`
-      + `    --actor human:<你的名字> --now <ISO8601>`,
-      `# 参数取自上表：RFQ=${rfqId || '—'} 行项目=${itemId || '—'} `
-      + `金额=${cents === null ? '—' : cents} 分（${MONEY_UNIT}）`,
-    ],
+    // **在 APP 里怎么签**（旧口径的两条「可复制的终端命令」已按 29 §2 删除）：
+    //   action      = GUI 动作 id（真正会落账的那一个，人签）
+    //   input       = **这份草稿的真实入参**（直接可填，不必手抄 id）
+    //   where       = 在界面上哪里点（不看文档也找得到）
+    //   门的判据同步改成「动作 id 与入参字段真的存在」——见 `t286-quote-draft-gate.mjs` 第 9 条。
+    in_app: {
+      action: 'quote.submit', title: '人签提交报价', permission: 'human-signature',
+      input: { draft_id: draftId, signature: 'human:<你的名字>' },
+      where: '「我的草稿」一行 → 行内「人签提交报价」（命令面板 ⌘K 里也能找到同一个动作）',
+      params: { rfq_id: rfqId, item_id: itemId, unit_price_cents: cents, money_unit: MONEY_UNIT },
+    },
     data_signature_required: '1',
-    page_note: '本 APP 不代签：签的是**人**（`approval.decide` 的 actor 必须 `human:*`），'
+    page_note: '本 APP 不代签：签的是**人**（`quote.submit` 的署名必须 == 会话身份），'
       + '浏览器连一个「提交报价」的口子都没有',
   }
 }

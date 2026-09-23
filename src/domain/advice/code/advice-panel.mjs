@@ -29,8 +29,9 @@
  *   ② `spread`  比价区间异常 —— 吃 `ranking.rows`（**`bid-heuristics` 的输出**，同口径的无量纲
  *      得分）；**按行项目分组**（不同行项目的单价不可比，混在一起算极差会把"哪家报价好"变成
  *      "哪个行项目贵"）；组内得分极差 ≥ `spread_points` → medium，≥ 2× 阈值 → high；
- *   ③ `gate`    等待人工门的项 —— 每条给**真实可复制的 CLI**（`src/quotagent/g1side.py`
- *      的分阶段命令或 `tools/g1-walkthrough.py`）；明确写着**浏览器不能代签**；
+ *   ③ `gate`    等待人工门的项 —— 每条给**在 GUI 里怎么把它走完**（审批队列的「批准 / 驳回」，
+ *      动作 `gate.grant` / `gate.deny`；旧口径的「可复制的 CLI」已按 29 §2 删除）；
+ *      明确写着**浏览器不能代签**；
  *   ④ `channel` 凭据缺口导致的阻塞 —— 通道 `available:false` → high，`next_action` **照抄**
  *      声明里的真值（**不得假装能发**），`blocked_by` 填真原因；
  *   ⑤ `rank-up` 供应商侧"如何提升排名" —— 复用 `bid-heuristics` 的**贡献分解**（`focus`/
@@ -98,24 +99,29 @@ export const SECTIONS = ['deadlines', 'gates', 'ranking', 'channels']
 export const COMMIT_SCOPES = ['quote.submit', 'award.commit', 'po.issue', 'change.approve']
 
 /**
- * 人工门 → **真实 CLI**（逐条来自 `docs/work/deployment-manual.md` §2 与 `src/quotagent/g1side.py`
- * 的阶段表；门里会断言这些路径在仓库里真的存在）。
+ * 人工门 → **在 GUI 里怎么把它走完**（审批队列的「批准 / 驳回」，人签）。
+ *
+ * 旧口径（`PYTHONPATH=src python3 -m quotagent.g1side …` / `python3 tools/g1-walkthrough.py`，逐条来自
+ * `docs/work/deployment-manual.md` §2 与 `src/quotagent/g1side.py` 的阶段表）已按
+ * `docs/design/29-webui-gui-app.md` §2 + `AGENTS.md` 规则 12 删除：产品面不许教用户回终端。
+ * 门里断言的判据同步改成「**动作 id 真的注册在注册面里**」——不弱于原来（id 打错一样判红）。
  */
-export const GATE_COMMANDS = {
-  'quote.submit': 'PYTHONPATH=src python3 -m quotagent.g1side supplier tmp/manual 2   # 报价提交（过人工门，人工签署）',
-  'award.commit': 'PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   # 授标承诺（人工签署）',
-  'po.issue': 'PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   # 发 PO（人工签署）',
-  'change.approve': 'PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   # 变更批准生效',
+export const GATE_ACTIONS = {
+  'quote.submit': '在「审批队列」里由点名的审批人**批准**（动作 `gate.grant`）或**驳回**（`gate.deny`，必留理由）—— 批准即提交这份报价',
+  'award.commit': '在「审批队列」里由点名的审批人**批准**（动作 `gate.grant`）或**驳回**（`gate.deny`，必留理由）—— 批准即授标承诺（人签）',
+  'po.issue': '在「审批队列」里由点名的审批人**批准**（动作 `gate.grant`）或**驳回**（`gate.deny`，必留理由）—— 批准即发 PO（人签）',
+  'change.approve': '在「审批队列」里由点名的审批人**批准**（动作 `gate.grant`）或**驳回**（`gate.deny`，必留理由）—— 批准即变更生效',
 }
-export const GATE_COMMAND_FALLBACK = 'python3 tools/g1-walkthrough.py   # 双人流程走查（人工门只在终端；'
-  + '单侧分阶段：PYTHONPATH=src python3 -m quotagent.g1side <side> <dir> <阶段>）'
+export const GATE_ACTION_FALLBACK = '在「审批队列（可批 / 可驳 / 可等 / 可催 / 可升级 / 可终止 / 可委托）」里'
+  + '由点名的审批人**批准**（动作 `gate.grant`）/**驳回**（`gate.deny`）；'
+  + '本插件只告知与转交催办，**永远不能代签 / 批准 / 提交**'
 
-/** 截止 → 真实 CLI（改包 = 承包商升版再分发；按新版本报价 = 供应商侧）。 */
-const DEADLINE_COMMANDS = {
-  contractor: 'PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 2   # 升版 + 再分发（deadlines 随新版本写入）',
-  supplier: 'PYTHONPATH=src python3 -m quotagent.g1side supplier tmp/manual 2   # 按最新版本报价（过人工门）',
+/** 截止 → **在 APP 里真能做的下一步**（改包 = 承包商升版再分发；按新版本报价 = 供应商侧）。 */
+const DEADLINE_NEXT_STEPS = {
+  contractor: '在 GUI 的「回文时限与催报（谁没回 / 已催几次）」面板里点「催报」（真落账、不改任何判定）；要改包就先升版再分发',
+  supplier: '在 GUI 的「我收到的包（认收 · 回文承诺）」面板里认收（动作 `exchange.ack`）/ 登记回文承诺（`exchange.promise`），再按最新版本备报价',
 }
-const DEADLINE_COMMAND_DEFAULT = GATE_COMMAND_FALLBACK
+const DEADLINE_NEXT_STEP_DEFAULT = GATE_ACTION_FALLBACK
 
 /** 建议条数上限的夹取区间与回落值（非有限数 → 默认；越界 → 夹取）。 */
 const ITEM_FLOOR = 1
@@ -293,7 +299,7 @@ const expiryItems = (deadlines, asOfMs, asOf, options, view, notes) => {
         : `截止时刻 ${entry.due_at} 距系统已知的最新事实时刻 ${asOf} 只剩约 ${hoursLeft} 小时`
           + `（≤ 阈值 ${options.expiry_soon_hours} 小时）`,
       ['as_of', `deadlines[${entry.ref}].due_at`, `deadlines[${entry.ref}].kind`],
-      DEADLINE_COMMANDS[view] ?? DEADLINE_COMMAND_DEFAULT,
+      DEADLINE_NEXT_STEPS[view] ?? DEADLINE_NEXT_STEP_DEFAULT,
       view === 'supplier'
         ? '供应商侧不能改包截止时间：只能等承包商升版后按新版本报价（本页只读这个事实）'
         : (expired ? '过期包的报价不得再被比较（services/quotes.py：superseded 报价不进排序）' : ''),
@@ -345,8 +351,9 @@ const gateItems = (gates) => gates.map((entry) => {
     `投影里 ${entry.approval_id} 的最后一条 approval/* 不是 granted/aborted，`
       + `即该 ${scope} 仍待批（ref=${entry.ref === '' ? '—' : entry.ref}）`,
     [`gates[${entry.approval_id}].scope`, `gates[${entry.approval_id}].ref`],
-    GATE_COMMANDS[entry.scope] ?? GATE_COMMAND_FALLBACK,
-    'commit 面不暴露给浏览器：宿主不能代签（ADR-0013 §3），批准只能由 human:* 在终端完成',
+    GATE_ACTIONS[entry.scope] ?? GATE_ACTION_FALLBACK,
+    'commit 面不暴露给浏览器：宿主不能代签（ADR-0013 §3），批准只能由点名的人在**审批队列里人签**'
+      + '（动作 `gate.grant` / `gate.deny`）',
   )
 })
 

@@ -98,18 +98,25 @@ export const REFUSAL_CODES = ['payload-not-an-object', 'config-missing', 'unit-u
 export const BLOCKED_BY_VALUES = ['', 'human-gate-required', 'authority-unconfigured', 'input-rejected']
 
 /**
- * 升级命令（**可直接复制**，两条各管一件事）：
- *   · `ESCALATE_COMMAND`：升级第一步 —— 看这条人工门卡在谁手里（`tools/verify.sh` 的**真门名**，门 t284
- *     会在真跑 `tools/verify.sh help` 的输出里找它：命令必须真的存在，不许写一句空话）；
- *   · `ESCALATE_HUMAN_COMMAND`：人工签署的命令（终端；`src/quotagent/g1side.py` 的阶段表）。
+ * 升级 / 决定路径（**两条各管一件事**，都是**在 APP 里点得到**的真动作）：
+ *   · `ESCALATE_COMMAND`：越界后的第一步 —— 在「授权区间」面板点「提交给下一角色审批」
+ *     （动作 `authority.escalate`，人签）把这件事**提成一条人工门**；
+ *   · `ESCALATE_HUMAN_COMMAND`：门开出来以后**谁在哪批** —— 去「审批队列」由点名的审批人
+ *     点「批准」/「驳回」（动作 `gate.grant` / `gate.deny`）。
+ *
+ * 旧口径（`tools/verify.sh gates` 的升级自述 + `PYTHONPATH=src python3 -m quotagent.g1side …` 的
+ * 「人工签署命令」）已按 `docs/design/29-webui-gui-app.md` §2 + `AGENTS.md` 规则 12 **删除** ——
+ * 产品面不许教用户回终端。门 t284 的判据同步改成「**这两条指到的动作 id 真的注册在注册面里**」：
+ * 不弱于原来（命令名打错与动作 id 打错一样判红）。
  */
-export const ESCALATE_COMMAND = 'tools/verify.sh gates   # 升级第一步：看这条人工门卡在谁手里（只读，不改任何判定）'
-export const ESCALATE_HUMAN_COMMAND = 'PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   '
-  + '# 人工签署（只在终端；宿主与插件都不能代签）'
+export const ESCALATE_COMMAND = '在「授权区间」面板点「提交给下一角色审批」（动作 `authority.escalate`，人签）'
+  + '把这件事提成一条人工门；门开出来后去「审批队列」批准 / 驳回'
+export const ESCALATE_HUMAN_COMMAND = '批准 / 驳回在 GUI 的「审批队列」里由点名的审批人**人签**'
+  + '（动作 `gate.grant` / `gate.deny`；署名必须 == 会话身份）'
 
 /** 「不能批准」的**人话**（越界与未配置两种结论都会带上它，别让人误会页面能放行）。 */
 export const APPROVAL_NOTE = '本插件**不能**批准、不能放行、不能改任何判定：它只算"这笔金额落在谁的区间里、'
-  + '越界多少、下一个能批的人是谁"；批准只走终端人工门（actor 必须是 `human:*`）'
+  + '越界多少、下一个能批的人是谁"；**真正改判定的是审批队列里的「批准 / 驳回」**（人签，动作 `gate.grant` / `gate.deny`）'
 
 /** 配置在哪（页面与 next_action 引用这一处真源）。 */
 export const CONFIG_WHERE = '`/quotagent/admin/config/`（提权后）—— `authority.bands.<角色>` 是**人工专属键**'
@@ -236,8 +243,9 @@ const NEXT_ACTIONS = {
   'amount-negative': '金额必须 ≥ 0（负数没有任何授权区间含义：它不是一笔金额，也不该落进任何比较）',
   'amount-out-of-range': `金额超过本插件的**有界上限** ${AMOUNT_MAX} 分（= 100 亿元）：请拆单，`
     + '或先确认是不是把「元」写成了「分」（有界：不猜天文数字）',
-  'over-band': '走人工门（见 `escalate_cmd`）：**本插件不能批准**；或者让 `next_role` / 有权限的角色来批，'
-    + `也可以由人调 \`authority.bands.<角色>\`（${CONFIG_WHERE}）`,
+  'over-band': '越界 ⇒ 走人工门（面板上的「提交给下一角色审批」，动作 `authority.escalate`）：**本插件不能批准**；'
+    + '门开出来后由点名的审批人在「审批队列」里批准 / 驳回，'
+    + `或者由人调 \`authority.bands.<角色>\`（${CONFIG_WHERE}）`,
 }
 
 // ---------------------------------------------------------------------------
@@ -406,8 +414,8 @@ export const checkOf = (payload, config) => {
     return shape(reflect(view, role, amount), { status: 'inside-band', within, bands: cfg.bands,
       required_role: requiredRole, next_role: nextRole, over_by: 0, escalate_cmd: '', inside_band: true,
       blocked_by: '', unconfigured: false, basis,
-      reason: '', code: '', next_action: `在区间内：可以继续既有流程；**真正的提交/批准仍在终端由人签**`
-        + `（本插件不能代签）${nextRole === '' ? '' : `；要批更大的金额就得找 ${nextRole}`}`,
+      reason: '', code: '', next_action: `在区间内：可以继续既有流程；**真正的批准在审批队列里由人签**`
+        + `（动作 \`gate.grant\` / \`gate.deny\`；本插件不能代签）${nextRole === '' ? '' : `；要批更大的金额就得找 ${nextRole}`}`,
       escalation_note: cfg.escalation_note ?? '', escalation_note_source: escalationNoteSource,
       counts: counts(cfg, { within: within.length }), notes: noteList })
   }
@@ -417,8 +425,8 @@ export const checkOf = (payload, config) => {
     reason: 'over-band', code: '', next_action: NEXT_ACTIONS['over-band'],
     escalation_note: cfg.escalation_note ?? '', escalation_note_source: escalationNoteSource,
     counts: counts(cfg, { within: within.length }),
-    notes: [...noteList, `越界 ⇒ **人工门**：复制 ${ESCALATE_COMMAND.split('   #')[0]} 与 `
-      + `${ESCALATE_HUMAN_COMMAND.split('   #')[0]}；本插件**不能批准**（can_approve=false）`] })
+    notes: [...noteList, `越界 ⇒ **人工门**：${ESCALATE_COMMAND}；${ESCALATE_HUMAN_COMMAND}；`
+      + '本插件**不能批准**（can_approve=false）'] })
 }
 
 export function apply(ctx, config) {

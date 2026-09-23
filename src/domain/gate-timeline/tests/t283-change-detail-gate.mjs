@@ -27,7 +27,7 @@
  *   9  **私域哨兵零泄漏（两面都扫）**：供应商侧带哨兵与不带哨兵输出**逐字节一致**、哨兵与键名 0 命中；
  *      同一份载荷在**承包商侧**确实看得到自己的私域列（非空转对照）
  *   10 零写面 / 不读账本 / 不取墙钟（静态扫描 + **扫描器非空转对照**）；`privacy` 四项如实申报
- *   11 契约正控（宿主侧）：两条新路由 + 变更单列表**每一行链到自己的明细页**（`data-change-detail-link`）
+ *   11 契约正控（宿主侧）：两条新路由 + 旧列表随 `/gates/` 页退役（登记在 `RETIRED_SUBVIEWS`、旧抓手 0 命中）
  *      + 四道页面子导航仍带 `data-gates-link`；页面模板 0 内联脚本 / 0 内联事件（静态扫描）
  *   12 **真 HTTP**：两视角明细页/JSON 200（合约商侧还带自己的私域列）、**页面上的数字与手算一致**、
  *      未知 id 页面与 JSON 都 **404 + `next_action`**、供应商侧明细页/JSON 哨兵 0 命中（夹具文件里
@@ -542,22 +542,34 @@ try {
   // ---------- 11. 宿主侧契约（静态） ----------
   const routeOk = /\/api\/changes\//.test(webuiSource) && /\/changes\//.test(webuiSource)
     && webuiSource.includes('change_detail')
-  const linkOk = webuiSource.includes('data-change-detail-link')
+  // ★ 本批改判据（29 §2 / AGENTS.md 规则 12）：**变更单列表原来长在旧 `/gates/` 页上**，那页已退役为
+  //   303 → `/app/<view>/`。旧断言「`data-change-detail-link` 在 webui 里」冻结的是已删掉的旧列表；
+  //   改成**接新位置**的等价判据：旧列表的退役登记在 `RETIRED_SUBVIEWS` 里、旧抓手 **0 命中**
+  //   （29 §2「不得保留副本」）、明细页自己的回跳抓手 `data-detail-back` **指向 GUI**。
+  //   **已知缺口（如实登记，不在本批可改面）**：GUI 的变更面板（`src/domain/commitments/code/ui.mjs`
+  //   的 `change.list` / `src/domain/change/code/ui.mjs`）此刻**还没有**指向 `/<view>/changes/<id>/`
+  //   的链接 —— 明细页仍可直达（本门 12 段真跑），但列表里点不过去。登记见
+  //   `docs/work/plans/webui-ui-defects.md` §P17（DEF-037）。
+  const linkOk = !webuiSource.includes('data-change-detail-link')
+    && /gates: '[^']*审批与变更时间线/.test(webuiSource) && webuiSource.includes('RETIRED_SUBVIEWS')
+    && webuiSource.includes('href="${prefix}/app/${view}/" data-detail-back="1"')
   // 四道页面的子导航入口：`subNav`（双方视角）与 `anchorNav`（运维/系统管理两道）各一处声明，
-  // 两道页面各传入「审批与变更（承包商）」「审批与变更（供应商）」两个入口。
+  // 两道页面各传入两个入口标签（目标已按 29 §2 **接到 GUI**：`/app/<view>/`）。
   const navDecls = webuiSource.split('data-gates-link').length - 1
-  const navLabels = ['审批与变更（承包商）', '审批与变更（供应商）']
+  const navLabels = ['审批队列（承包商 · GUI）', '审批队列（供应商 · GUI）']
     .every((label) => webuiSource.includes(label))
   const fourRoutes = navDecls >= 2 && navLabels
   const webuiCode = webuiSource.split('\n').filter((line) => !line.trim().startsWith('//')
     && !line.trim().startsWith('*') && !line.trim().startsWith('/*')).join('\n')
   const inlineEvent = /\son[a-z]+\s*=/i
-  check('11 宿主侧契约（静态）：两条新路由（`/<view>/api/changes/<id>` 与 `/<view>/changes/<id>/`）都在 '
-    + 'webui 里；变更单列表**每一行链到自己的明细页**（`data-change-detail-link`）；四道页面子导航仍带 '
-    + '`data-gates-link`；页面模板 **0 内联脚本 / 0 内联事件**（扫描器非空转）',
+  check('11 宿主侧契约（静态，**旧列表随旧页退役 ⇒ 接新位置**）：两条明细路由（`/<view>/api/changes/<id>` 与 '
+    + '`/<view>/changes/<id>/`）都在 webui 里；旧的变更单列表随 `/gates/` 页退役（登记在 `RETIRED_SUBVIEWS`、'
+    + '旧抓手 `data-change-detail-link` **0 命中** —— 29 §2 不留副本），明细页自己的回跳抓手 '
+    + '`data-detail-back` **指向 GUI**；四道页面子导航仍带 `data-gates-link`（目标已接到 GUI）；'
+    + '页面模板 **0 内联脚本 / 0 内联事件**（扫描器非空转）',
   routeOk && linkOk && fourRoutes && !webuiCode.includes(scriptNeedle) && !inlineEvent.test(webuiCode)
   && (scriptNeedle === '<scr' + 'ipt' && inlineEvent.test('<a onclick="x()">')),
-  `路由=${routeOk} 明细链接=${linkOk} 四道入口=${fourRoutes}；`
+  `路由=${routeOk} 退役登记/旧抓手 0 命中/回跳指向 GUI=${linkOk} 四道入口=${fourRoutes}；`
   + `webui 含脚本字面量=${webuiCode.includes(scriptNeedle)} 含内联事件=${inlineEvent.test(webuiCode)}`)
 
   // ---------- 12. 真 HTTP ----------
@@ -721,7 +733,13 @@ try {
   const sJson = await get('/supplier/api/changes/CO-0001')
   const cPageMissing = await get('/contractor/changes/CO-9999/')
   const cJsonMissing = await get('/contractor/api/changes/CO-9999')
-  const listPage = await get('/contractor/gates/')
+  // 旧列表路由已退役 ⇒ 用**不跟 303** 的取法核实（旧页不再返回内容，且不 404）
+  const rawNoRedirect = async (path) => {
+    const res = await fetch(`${base}${path}`, { headers: await cookieFor(path), redirect: 'manual' })
+    return { status: res.status, location: String(res.headers.get('location') ?? ''), text: await res.text() }
+  }
+  const listPage = await rawNoRedirect('/contractor/gates/')
+  const listJson = await rawNoRedirect('/contractor/api/gates')
   const cj = json(cJson.text)
   const sj = json(sJson.text)
   const linesOk = (payload) => Array.isArray(payload.lines) && payload.lines.length === 4
@@ -740,7 +758,7 @@ try {
     && text.includes('data-gates-link="1"') && text.includes('data-detail-back="1"')
     && !text.includes(scriptNeedle) && !inlineEvent2.test(text))
   check('12 真 HTTP 正控：两视角明细页/JSON 各自 **200**、`/api/routes` 登记四条新路由且 `auth=identity-session`（业务路由要身份会话）、'
-    + '变更单列表每一行有 `data-change-detail-link="CO-0001"`；页面/JSON 的数字与**手算一致**'
+    + '**旧列表路由已退役为 303 → `/app/contractor/`**（不 404、也不再返回旧列表）；页面/JSON 的数字与**手算一致**'
     + '（账本里的**元**由宿主按 half-up 折算成整数分：60 元 → 6000 分、10.01 元 → 1001 分；4 行、'
     + 'L-003 在「未纳入小计的行」里、小计 66000→82501 差 16501）；**明细真源是带行清单的那条事件**'
     + '（夹具里它**之后**还有一条不带行的 `change/approved`，明细不得因此变空）；'
@@ -753,11 +771,14 @@ try {
   && cj.subtotal.delta_amount === 16501 && sj.subtotal.delta_amount === HAND_SUBTOTAL.delta
   && cj.lines[0].unit_price_before === 6000
   && sj.basis_missing.length === 1 && sj.basis_missing[0].line_id === 'L-003'
-  && listPage.text.includes('data-change-detail-link="CO-0001"'),
+  && listPage.status === 303 && listPage.location.endsWith('/t283/app/contractor/')
+  && listJson.status === 303 && listJson.location.endsWith('/t283/app/contractor/')
+  && !listPage.text.includes('data-change-detail-link'),
   `status=${cPage.status}/${cJson.status}/${sPage.status}/${sJson.status}；路由=`
   + `${JSON.stringify(changeRoutes.map((row) => `${row.method} ${row.path}`))}；`
   + `页面契约=${pagesOk}；JSON 逐行对账=${linesOk(cj)}/${linesOk(sj)}；`
-  + `小计 ${cj.subtotal.amount_before}→${cj.subtotal.amount_after}（差 ${cj.subtotal.delta_amount}）`)
+  + `小计 ${cj.subtotal.amount_before}→${cj.subtotal.amount_after}（差 ${cj.subtotal.delta_amount}）；`
+  + `旧列表路由=${listPage.status}/${listJson.status} → ${listPage.location}`)
 
   check('12b 真 HTTP 负控（未知 id）：页面与 JSON **都是 404** 且都带非空 `next_action`'
     + '（不静默返回空页、不编行）；未提权 `/admin/` 仍 401 固定体（既有路由没被弄坏）',

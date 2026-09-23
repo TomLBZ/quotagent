@@ -4,8 +4,8 @@
  * 正面回答两条 human problem（原始出处：`docs/work/plans/ux-双方痛点与交互需求.md.txt`）：
  *   （a）**审批人等不到**（P-02/P-03：批准动作结构性不在 GUI、队列积压、"等审批"成为最大延迟）：
  *       每个**还在等**的人工门给出 —— 挂了多久（`age_seconds`）、**口径**（`age_basis`）、
- *       卡在谁手里（`owner`）、再等下去会发生什么（`consequence`）、`next_action`（可复制的终端命令 +
- *       催办请求路由）；
+ *       卡在谁手里（`owner`）、再等下去会发生什么（`consequence`）、`next_action`（**在 GUI 里怎么把它
+ *       走完**：审批队列的「批准 / 驳回」+ 催办请求路由）；
  *   （b）**变更单扯皮**（P-14：页面上只有一行 `delta_amount`、对账靠回忆）：每张变更单现在什么状态
  *       （`state`）、**谁欠谁一个动作**（`owed_by`）、从哪个**账本事件**起就在等（`waiting_since`）、
  *       以 `basis`（账本事件/计数引用）为凭；**再加规则 ⑤**：`change_detail` **逐行明细**
@@ -97,26 +97,35 @@ export const POLICY_UNKNOWN = '未知超时策略：按"绝不自动批准"处�
 export const COMMIT_SCOPES = ['quote.submit', 'award.commit', 'po.issue', 'change.approve']
 
 /**
- * 人工门 → **真实可复制的终端命令**（逐条来自 `docs/work/deployment-manual.md` §2 与
- * `src/quotagent/g1side.py` 顶部的阶段表；门 `t282` 断言这些路径在仓库里真的存在）。
- * 阶段表：contractor 4 = 承诺（人工签署）+ 变更批准生效 + 审计包；supplier 2 = 报价；supplier 3 = 确认 + 提出变更。
+ * 人工门 → **在 GUI 里怎么把它走完**（每个 commit 面的门都收口在同一处：**审批队列**）。
+ *
+ * 旧口径（`PYTHONPATH=src python3 -m quotagent.g1side …`、`python3 tools/g1-walkthrough.py` 这类
+ * 「复制到终端去跑」的命令，逐条来自 `docs/work/deployment-manual.md` §2 与 `src/quotagent/g1side.py`
+ * 的阶段表）已按 `docs/design/29-webui-gui-app.md` §2 + `AGENTS.md` 规则 12 **删除** ——
+ * 产品面不许教用户回终端。现在唯一的走法是**在 APP 里点**：点名的审批人在审批队列卡片上点
+ * 「批准」（动作 `gate.grant`）或「驳回」（`gate.deny`，必留理由）；两者都是
+ * `permission: human-signature` 动作（服务端校验署名 == 会话身份），界面只发起，落账本的仍是唯一写者
+ * `src/system/approval/tools/gate-actions.py`（`approval/granted` / `approval/denied`）。
+ * 门 `t282` 断言这些**动作 id 真的注册在注册面里**（判据从「某条终端命令存在」改成「这条动作存在」——
+ * 不弱于原来：动作 id 打错一样判红）。
  */
-export const GATE_COMMANDS = {
-  'quote.submit': 'PYTHONPATH=src python3 -m quotagent.g1side supplier tmp/manual 2   # 报价提交（过人工门，人工签署）',
-  'award.commit': 'PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   # 授标承诺（人工签署）',
-  'po.issue': 'PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   # 发 PO（人工签署）',
-  'change.approve': 'PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   # 变更批准生效（人工签署）',
+export const GATE_ACTIONS = {
+  'quote.submit': '在「审批队列」里由点名的审批人**批准**（动作 `gate.grant`）或**驳回**（`gate.deny`，必留理由）—— 批准即提交这份报价',
+  'award.commit': '在「审批队列」里由点名的审批人**批准**（动作 `gate.grant`）或**驳回**（`gate.deny`，必留理由）—— 批准即授标承诺（人签）',
+  'po.issue': '在「审批队列」里由点名的审批人**批准**（动作 `gate.grant`）或**驳回**（`gate.deny`，必留理由）—— 批准即发 PO（人签）',
+  'change.approve': '在「审批队列」里由点名的审批人**批准**（动作 `gate.grant`）或**驳回**（`gate.deny`，必留理由）—— 批准即变更生效',
 }
-export const GATE_COMMAND_FALLBACK = 'python3 tools/g1-walkthrough.py   # 双人流程走查（人工门只在终端；'
-  + '单侧分阶段：PYTHONPATH=src python3 -m quotagent.g1side <side> <dir> <阶段>）'
+export const GATE_ACTION_FALLBACK = '在「审批队列（可批 / 可驳 / 可等 / 可催 / 可升级 / 可终止 / 可委托）」里'
+  + '由点名的审批人**批准**（动作 `gate.grant`）/**驳回**（`gate.deny`）；'
+  + '本插件只告知与转交催办，**永远不能代签 / 批准 / 提交**'
 
-/** 变更单各状态的下一步（同样是真命令 / 真 AC，不是空话）。 */
-export const CHANGE_COMMANDS = {
-  proposed: 'PYTHONPATH=src python3 -m quotagent.g1side supplier tmp/manual 3   # 提出变更请求（同阶段落 change/proposed + change/priced）',
-  priced: 'PYTHONPATH=src python3 -m quotagent.g1side contractor tmp/manual 4   # 变更批准生效（人工签署；未批准前不影响任何金额）',
-  rejected: 'PYTHONPATH=src python3 -m quotagent.g1side supplier tmp/manual 3   # 补齐 basis_unit_price_ref 后重新发起（引用必须指向原报价条目的 unit_price）',
-  approved: 'tools/verify.sh ac AC-CHANGE-002   # 已生效（计入金额）：对账走这条 AC（逐行按原报价单价复算）',
-  unknown: GATE_COMMAND_FALLBACK,
+/** 变更单各状态的下一步（同样是**在 APP 里真能做的下一步**，不是空话）。 */
+export const CHANGE_NEXT_STEPS = {
+  proposed: '等定价：由承包商侧补齐逐行依据（落 `change/priced`）；定价后这张单进「审批队列」由点名的审批人批准 / 驳回',
+  priced: '在「审批队列」里由点名的审批人**批准**（动作 `gate.grant`）或**驳回**（`gate.deny`，必留理由）—— 批准即变更生效（未批准前不影响任何金额）',
+  rejected: '补齐 `basis_unit_price_ref` 的引用（必须指向原报价条目的 unit_price）后重新发起',
+  approved: '已生效（计入金额）：对账看本张单的**逐行明细**（原量×原价 → 新量×新价 → 差额，逐行给出依据）',
+  unknown: GATE_ACTION_FALLBACK,
 }
 
 /** 变更单状态的**排序权重**（欠动作的先看：等签 > 等定价 > 待补引用 > 已结 > 认不出）。 */
@@ -450,11 +459,12 @@ const gateRows = (approvals, asOfMs, asOf, options, view, notes) => {
       age_basis: `${AGE_BASIS_NOTE}（本次 as_of=${asOf}，该门最后一次 requested=${entry.requested.ts}，`
         + `approvals[${id}] 共 ${entry.count} 条 approval/* 事件）`,
       consequence: consequenceOf(last, ageSeconds),
-      next_action: `${GATE_COMMANDS[last.scope] ?? GATE_COMMAND_FALLBACK}\n`
-        + `催办（宿主只落 0600 待办件、账本零新增）：POST ${options.route_prefix}/${view}/gates/nudge`
-        + ` -d id=${id} -d reason=<你的理由>`,
-      blocked_by: `${commit ? 'commit 面不暴露给浏览器（ADR-0013 §3 / INV-005）：批准只能由 human:* 在**终端**完成。'
-        : '等待人类决定。'}` + '本页只告知与转交催办请求，**永远不能代签/批准/提交**',
+      next_action: `${GATE_ACTIONS[last.scope] ?? GATE_ACTION_FALLBACK}\n`
+        + `催办（在 APP 里点，或走同一条路由；宿主只落 0600 待办件、账本零新增）：POST `
+        + `${options.route_prefix}/${view}/gates/nudge -d id=${id} -d reason=<你的理由>`,
+      blocked_by: `${commit ? 'commit 面不暴露给浏览器（ADR-0013 §3 / INV-005）：批准只能由点名的人在**审批队列里人签**'
+        + '（动作 `gate.grant` / `gate.deny`）。' : '等待人类决定。'}`
+        + '本插件只告知与转交催办请求，**永远不能代签/批准/提交**',
     })
   }
   return { items, byPolicy }
@@ -506,7 +516,7 @@ const changeRows = (changes, approvals, options, view, notes) => {
         : state === 'rejected' ? 'proposer' : 'none'
     const delta = last.delta_amount === null ? '' : `；对账依据：差额 ${last.delta_amount}（按原报价单价基准复算）`
     const link = state === 'priced'
-      ? `（对应人工门 ${gate === null ? '尚未登记（不猜）' : gate.approval_id}：批准只能在终端由 human:* 完成）`
+      ? `（对应人工门 ${gate === null ? '尚未登记（不猜）' : gate.approval_id}：在「审批队列」里由点名的审批人批准 / 驳回）`
       : ''
     items.push({
       id,
@@ -514,8 +524,9 @@ const changeRows = (changes, approvals, options, view, notes) => {
       owed_by: owedBy,
       waiting_since: last.ts ?? '(该条事件没有可解析的 ts)',
       basis,
-      next_action: `${CHANGE_COMMANDS[state] ?? GATE_COMMAND_FALLBACK}${link}${delta}\n`
-        + `催办/转交（只落待办件，账本零新增）：POST ${options.route_prefix}/${view}/gates/nudge`,
+      next_action: `${CHANGE_NEXT_STEPS[state] ?? GATE_ACTION_FALLBACK}${link}${delta}\n`
+        + `催办/转交（在 APP 里点，或走同一条路由；只落待办件、账本零新增）：POST `
+        + `${options.route_prefix}/${view}/gates/nudge`,
     })
   }
   return items

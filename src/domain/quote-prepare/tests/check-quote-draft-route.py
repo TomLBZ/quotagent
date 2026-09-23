@@ -457,7 +457,8 @@ def main() -> int:  # noqa: C901
         check("④ 准备页 `GET /quotagent/supplier/quotes/prepare/`：**200 且是真页面**"
               "（行项目目录 `data-prep-item` + RFQ 引用 + 字段与校验规则表 `data-prep-field` + "
               "`data-prep-limits` + `GET|POST` 同路径表单 + 「下一步（签署）」`data-signature-required=\"1\"` "
-              "+ 可复制的 `tools/quote-sign.py` 命令）；路由表登记两条、`auth` 是**真实值** "
+              "+ **在 GUI 里怎么签**（`data-signature-in-app=\"quote.submit\"` + `permission=human-signature`）；"
+              "路由表登记两条、`auth` 是**真实值** "
               "`identity-session`（业务路由要身份会话：台账不再写 `none` 撒谎）、`write_surface` 含该路径；"
               "**0 行脚本 / 0 内联事件**（扫描器非空转）",
               prepare_page[0] == 200 and len(prepare_json_routes) == 2
@@ -470,10 +471,16 @@ def main() -> int:  # noqa: C901
               and 'data-prep-limits="1"' in text and '8600' in text
               and '<form method="post" action="/qdr/supplier/quotes/prepare/">' in text
               and 'data-signature-required="1"' in text and "本 APP 不代签" in text
-              and "tools/quote-sign.py" in text and "data-can-sign=\"0\"" in text
+              and 'data-signature-in-app="quote.submit"' in text
+              and 'data-signature-permission="human-signature"' in text
+              and 'data-can-sign="0"' in text
+              # 产品面不许教用户回终端（29 §2）：四个关键词 0 命中
+              and not [token for token in ("终端", "g1side", "PYTHONPATH", "命令行") if token in text]
               and not scripty and (SCRIPT_NEEDLE in f"<a {SCRIPT_NEEDLE}>" or INLINE_EVENT.search('<a onclick="x()">')),
               f"status={prepare_page[0]}；路由={[(i.get('method'), i.get('path')) for i in prepare_json_routes]}；"
-              f"含签署命令={'tools/quote-sign.py' in text} 含 0 内联脚本={not scripty}")
+              f"含 GUI 签署入口={'data-signature-in-app=\"quote.submit\"' in text} "
+              f"回终端痕迹={[t for t in ('终端', 'g1side', 'PYTHONPATH', '命令行') if t in text] or '无'} "
+              f"含 0 内联脚本={not scripty}")
 
         # ---- ⑤ 字段级校验失败 ----
         bad_cases = [
@@ -523,7 +530,8 @@ def main() -> int:  # noqa: C901
               accepted[0] == 202 and accepted_json.get("ok") is True
               and re.match(r"^qd-supplier-[0-9a-f]{12}$", str(accepted_json.get("id"))) is not None
               and "tools/quote-draft.py" in str(accepted_json.get("next_action"))
-              and "tools/quote-sign.py" in str(accepted_json.get("next_action"))
+              # 回执的 next_action 指到 **GUI 的动作**（旧口径的「等价命令 tools/quote-sign.py」已删）
+              and "quote.submit" in str(accepted_json.get("next_action"))
               and len(files) == 1 and mode_of(files[0]) == 0o600 and mode_of(INBOX) == 0o700
               and digests_ok and record.get("note") == NOTE_TEXT
               and record.get("submitted_at") == "" and record.get("prepared_by") == PREPARED_BY
@@ -532,9 +540,8 @@ def main() -> int:  # noqa: C901
               and sha256_file(CONTRACTOR_LEDGER) == contractor_before,
               f"status={accepted[0]} id={accepted_json.get('id')}；文件={[p.name for p in files]} "
               f"mode={[oct(mode_of(p)) for p in files]} 目录={oct(mode_of(INBOX))}；摘要重算一致={digests_ok}；"
-              f"next_action 含两个工具名="
-              f"{'tools/quote-draft.py' in str(accepted_json.get('next_action'))}/"
-              f"{'tools/quote-sign.py' in str(accepted_json.get('next_action'))}；"
+              f"next_action 含落账本者={'tools/quote-draft.py' in str(accepted_json.get('next_action'))}/"
+              f"含 GUI 动作 quote.submit={'quote.submit' in str(accepted_json.get('next_action'))}；"
               f"prepared_by={record.get('prepared_by')} supplier={record.get('supplier')} "
               f"submitted_at={record.get('submitted_at')!r} 原话逐字={record.get('note') == NOTE_TEXT}；"
               f"账本未变={sha256_file(SUPPLIER_LEDGER) == supplier_before}")

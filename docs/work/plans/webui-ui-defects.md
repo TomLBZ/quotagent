@@ -67,6 +67,8 @@
 - **按规则 12 / 29 §2 应删、本批未删（不改 `src/domain/**`）**：`domain/{advice,rfq-deadline}/tests/`（旧页 200 / `data-advice-link` / `data-deadlines-link` / advice 的 `next_action` 必须是 `g1side` 命令）、`domain/gate-timeline/tests/`（把 `next_action` 含 `g1side` 钉成判据 = DEF-032 反面）⇒ 详见 `plugin-file-map-batches.md` 的批次台账。
 - **写面未拆**：`POST /<view>/{deadlines/promise,gates/nudge}` 保留（GUI 孪生动作 `exchange.promise`/`gate.nudge`）；`inject` 仍列 `advicePanel`/`rfqDeadline`。
 
+**P17 批已做 · 收口：`gates`/`authority` 退役 + 产品面 0「回终端」+ 四门改判据**（见 `plugin-file-map-batches.md` §P17）。
+
 ---
 
 ## 1. P0 —— 阻断一条真实闭环

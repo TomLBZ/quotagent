@@ -28,7 +28,7 @@ NUDGE = ROOT / 'src' / 'domain' / 'gate-timeline' / 'tools' / 'gate-nudge.py'   
 #: 一次真执行探针：口径（不取墙钟）/ 空投影不编 / basis 可溯源 / 催办只产 nudge 载荷。
 PROBE = r"""
 import { timelineOf, nudgeOf, AGE_CLOCK, IGNORED_NOW_INPUTS, DEGRADED_REASONS, ENGINE_NOTE, ENGINE,
-  GATE_COMMANDS, NUDGE_ACTION } from './host/modules/gate-timeline.mjs'
+  GATE_ACTIONS, GATE_ACTION_FALLBACK, NUDGE_ACTION } from './host/modules/gate-timeline.mjs'
 const P = {
   view: 'contractor', as_of: '2026-09-25T12:00:00Z',
   approvals: [
@@ -78,11 +78,20 @@ console.log(JSON.stringify({
   gate_basis_nonempty: out.gates.every((g) => typeof g.age_basis === 'string' && g.age_basis.length > 40),
   change_basis_nonempty: out.changes.length === 1 && Array.isArray(out.changes[0].basis)
     && out.changes[0].basis.length >= 3,
-  next_actions_cli: out.gates.every((g) => typeof g.next_action === 'string'
-    && g.next_action.includes('quotagent.g1side') && g.next_action.includes('gates/nudge')),
+  // ★ 本批改判据（29 §2 / AGENTS.md 规则 12）：旧的「next_action 必须含 `quotagent.g1side`」是
+  //   「教用户回终端」的旧口径 —— 改成**接新位置**：每条 next_action 必须指到审批队列那两键
+  //   （`gate.grant` / `gate.deny`）+ 催办路由，且 **0 命中**回终端痕迹（不弱于原来：动作 id 打错也判红）。
+  next_actions_app: out.gates.every((g) => typeof g.next_action === 'string'
+    && ['gate.grant', 'gate.deny'].every((token) => g.next_action.includes(token))
+    && g.next_action.includes('gates/nudge')
+    && ['g1side', 'PYTHONPATH', '终端', '命令行'].every((token) => !g.next_action.includes(token))),
+  noise_free: ['g1side', 'PYTHONPATH', '终端', '命令行'].every((token) =>
+    !JSON.stringify(out).includes(token)),
   no_auto_grant: out.gates.every((g) => /不批准|不是批准|不自动批准/.test(g.consequence))
     && !out.gates.some((g) => /会自动批准|将自动批准/.test(g.consequence)),
-  commands: Object.keys(GATE_COMMANDS).sort(),
+  actions: Object.keys(GATE_ACTIONS).sort(),
+  action_fallback_ok: typeof GATE_ACTION_FALLBACK === 'string'
+    && GATE_ACTION_FALLBACK.includes('gate.grant') && GATE_ACTION_FALLBACK.includes('gate.deny'),
   empty_degraded: empty.degraded, empty_reason: empty.reason,
   empty_lists: empty.gates.length + empty.changes.length,
   no_signal_reason: noSignal.reason, no_signal_lists: noSignal.gates.length + noSignal.changes.length,
@@ -198,14 +207,18 @@ def check() -> list[Assertion]:
         except Exception:  # noqa: BLE001
             facts = {}
         out.append(Assertion('③ 真执行探针：`engine="rules"` + `age_clock="facts-only"` + 每条门/变更单形状固定 + '
-                             '确定性（两次逐字节一致）',
+                             '确定性（两次逐字节一致）+ **四个 commit scope 的人工门下一步都指到 GUI 的批准/驳回动作**'
+                             '（`GATE_ACTIONS` 逐条含 `gate.grant` 与 `gate.deny`）',
                              bool(facts.get('engine') == 'rules' and facts.get('note_ok')
                                   and facts.get('clock_ok') and facts.get('deterministic')
                                   and facts.get('gate_keys_fixed') and facts.get('change_keys_fixed')
-                                  and facts.get('bounded')),
+                                  and facts.get('bounded') and facts.get('action_fallback_ok')
+                                  and (facts.get('actions') or [])
+                                  == ['award.commit', 'change.approve', 'po.issue', 'quote.submit']),
                              f"engine={facts.get('engine')} clock={facts.get('age_clock')} "
                              f"deterministic={facts.get('deterministic')} "
-                             f"keys={facts.get('gate_keys_fixed')}/{facts.get('change_keys_fixed')}"))
+                             f"keys={facts.get('gate_keys_fixed')}/{facts.get('change_keys_fixed')} "
+                             f"actions={facts.get('actions')} fallback={facts.get('action_fallback_ok')}"))
         out.append(Assertion('③ 真执行探针：**等待时长不来自墙钟** —— 两个墙钟入口（`payload.now`/`config.now`）'
                              '各给两个不同值，输出**逐字节不变**，且 `age_seconds` 等于手算 '
                              '`as_of(12:00) − requested ts`（[7200, 3600]；已 granted 的门不进列表）',
@@ -226,9 +239,11 @@ def check() -> list[Assertion]:
                              f"empty={facts.get('empty_reason')}/{facts.get('empty_lists')} "
                              f"no_signal={facts.get('no_signal_reason')}/{facts.get('no_signal_lists')}"))
         out.append(Assertion('③ 真执行探针：每条都带依据（门的 `age_basis` + 变更单的非空 `basis`）、'
-                             '`next_action` 是可照做的真命令/路由、且催办只产 `nudge` 载荷（**不含任何审批动作**）',
+                             '`next_action` 指到**在 GUI 里真能点的动作**（`gate.grant` / `gate.deny` + 催办路由，'
+                             '且整份输出 **0 命中** g1side / PYTHONPATH / 终端 / 命令行）、'
+                             '且催办只产 `nudge` 载荷（**不含任何审批动作**）',
                              bool(facts.get('gate_basis_nonempty') and facts.get('change_basis_nonempty')
-                                  and facts.get('next_actions_cli')
+                                  and facts.get('next_actions_app') and facts.get('noise_free')
                                   and facts.get('nudge_requested') == 'nudge'
                                   and facts.get('nudge_reason_verbatim')
                                   and facts.get('nudge_record_keys')

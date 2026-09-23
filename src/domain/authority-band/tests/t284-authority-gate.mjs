@@ -22,9 +22,9 @@
  *   6  金额非法**三类**拒绝：负数 / 非整数（浮点、小数串、科学计数、null）/ 超上限（AMOUNT_MAX+1）
  *      各自给具体 `code` + 非空 `next_action` + **不给结论**（`inside_band=null`、无升级命令）；
  *      **非空转对照**：同批合法金额（含恰等于 AMOUNT_MAX）照旧给结论
- *   7  **越界必出升级命令且命令真存在**：越界 ⇒ `escalate_cmd` 非空、以 `tools/verify.sh <门名>` 开头，
+ *   7  **越界必出升级入口且入口真存在**：越界 ⇒ `escalate_cmd` 非空、指到 GUI 动作 `authority.escalate`，
  *      该门名**真的出现在** `tools/verify.sh help` 的输出里（本门真跑那个命令）；人工签署命令指向
- *      `src/quotagent/g1side.py`（文件真存在）；**双向**：不越界时 `escalate_cmd` 为空
+ *      `gate.grant` / `gate.deny`）；**双向**：不越界时 `escalate_cmd` 为空
  *   8  **插件不能批准**（硬负控）：服务面里没有任何 `approve/decide/grant/submit/ack/allow/reject` 类方法、
  *      `meta.can_approve=false`、每条输出都带 `can_approve=false` + 非空 `approval_note`、源码里 0 个审批方法
  *   9  确定性：同输入两次逐字节一致 / 键序打乱一致 / 跨实例一致 / 两个墙钟入口（`payload.now`/`config.now`）
@@ -54,7 +54,7 @@
 import { registerHooks } from 'node:module'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync, writeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -76,7 +76,8 @@ const TARGET = join(HERE, '..', 'src', 'domain', 'authority-band', 'code', 'auth
 const WEBUI = join(HERE, '..', 'src', 'system', 'webui', 'code', 'webui.mjs')
 const SCHEMA_URL = pathToFileURL(join(HERE, 'lib', 'std-schema.mjs')).href
 const VERIFY_SH = join(HERE, '..', 'tools', 'verify.sh')
-const G1SIDE = join(HERE, '..', 'src', 'quotagent', 'g1side.py')
+/** 产品面**绝不允许**出现的「教用户回终端」痕迹（旧口径 `ESCALATE_*` 的残留物，见 29 §2）。 */
+const NOISE_TOKENS = ['g1side', 'PYTHONPATH', '终端', '命令行']
 
 // 门自己注入的**假** admin token：只为取第四道页面（提权后）的子导航入口。
 const T284_TOKEN = 't284-gate-token-9c1a'
@@ -274,8 +275,10 @@ const factsFor = async (mountFn) => {
   try {
     const over = run({ view: 'contractor', role: 'buyer', amount: 500001, config: cfgFor() })
     const inside = run({ view: 'contractor', role: 'buyer', amount: 500000, config: cfgFor() })
-    facts['越界必出升级命令'] = over.escalate_cmd.startsWith('tools/verify.sh ')
-      && over.escalate_cmd.includes('#') && over.escalate_human_cmd.includes('quotagent.g1side')
+    facts['越界必出升级命令'] = over.escalate_cmd.includes('authority.escalate')
+      && over.escalate_cmd.includes('审批队列') && over.escalate_human_cmd.includes('gate.grant')
+      && over.escalate_human_cmd.includes('gate.deny')
+      && NOISE_TOKENS.every((t) => !over.escalate_cmd.includes(t) && !over.escalate_human_cmd.includes(t))
       && over.blocked_by === 'human-gate-required' && over.status === 'over-band'
       && inside.escalate_cmd === '' && inside.escalate_human_cmd === '' && inside.blocked_by === ''
   } catch (err) { facts['越界必出升级命令'] = `threw:${err.name}` }
@@ -323,16 +326,22 @@ try {
       && mod.UNIT_KEY === 'authority.unit' && mod.CURRENCY_KEY === 'authority.currency'
       && mod.FALLBACK_ROLE_KEY === 'authority.fallback_role'
       && mod.ESCALATION_NOTE_KEY === 'authority.escalation_note',
-    escalate: mod.ESCALATE_COMMAND.startsWith('tools/verify.sh ')
-      && mod.ESCALATE_HUMAN_COMMAND.includes('python3 -m quotagent.g1side')
-      && mod.APPROVAL_NOTE.includes('不能'),
+    // ★ 本批改判据（29 §2 / AGENTS.md 规则 12）：`ESCALATE_COMMAND` / `ESCALATE_HUMAN_COMMAND` 从
+    //   「终端命令」（`tools/verify.sh gates` / `PYTHONPATH=src python3 -m quotagent.g1side …`）改成
+    //   **GUI 里真能点的动作**；判据不弱于原来：必须指名那三个动作 id，且 0 命中回终端痕迹。
+    escalate: mod.ESCALATE_COMMAND.includes('authority.escalate')
+      && mod.ESCALATE_HUMAN_COMMAND.includes('gate.grant') && mod.ESCALATE_HUMAN_COMMAND.includes('gate.deny')
+      && mod.APPROVAL_NOTE.includes('不能')
+      && NOISE_TOKENS.every((t) => !mod.ESCALATE_COMMAND.includes(t)
+        && !mod.ESCALATE_HUMAN_COMMAND.includes(t) && !mod.APPROVAL_NOTE.includes(t)),
     ignored: JSON.stringify(mod.IGNORED_NOW_INPUTS) === JSON.stringify(['payload.now', 'config.now']),
     fn: typeof mod.checkOf === 'function',
   }
   const manifestBad = Object.entries(manifest).filter(([, ok]) => !ok).map(([key]) => key)
   check('1 契约正控：manifest 与常量齐备（`unit=cents` / 闭合的 `REASONS`/`REFUSAL_CODES`/`STATUSES`/'
     + '`BLOCKED_BY_VALUES` / `REGISTERED_ROLES` 与 `host/lib/config-keys.mjs` 的 `authority.bands.*` **逐字一致** / '
-    + '升级命令形状 / `ignored_now_inputs`）+ `checkOf` 是函数；只 import ../lib 白名单（或 node:）；'
+    + '升级入口指向 GUI 动作 `authority.escalate` / `gate.grant` / `gate.deny`（且 0 命中回终端痕迹）'
+    + ' / `ignored_now_inputs`）+ `checkOf` 是函数；只 import ../lib 白名单（或 node:）；'
     + '源码里 0 个脚本字面量',
   manifestBad.length === 0 && importLeaks.length === 0 && !originalSource.includes(scriptNeedle) && hookReady,
   `问题键=${manifestBad.join(',') || '无'}；越界 import=${importLeaks.join(',') || '无'}；`
@@ -467,31 +476,41 @@ try {
   && goodRows.every((line) => /⇒ (inside-band|over-band)（期望 (inside-band|over-band)）/.test(line)),
   [...badRows, ...goodRows].join('；'))
 
-  // ---------- 7. 越界必出升级命令 + 命令真存在 ----------
-  let helpOut = ''
-  let helpErr = ''
-  try {
-    helpOut = execFileSync('sh', [VERIFY_SH, 'help'], { encoding: 'utf8', timeout: 60000 })
-  } catch (err) {
-    helpErr = `${err.name}:${String(err.message).slice(0, 80)}`
+  // ---------- 7. 越界必出升级入口 + 入口真存在（★ 改判据：命令 → GUI 动作） ----------
+  // 旧断言是「`escalate_cmd` 以 `tools/verify.sh <门名>` 开头，且该门名出现在 `verify.sh help` 输出里；
+  // 人工签署命令指向 `quotagent.g1side`（`src/quotagent/g1side.py` 真存在）」—— 那是「把人教回终端」的
+  // 产品面口径，与 `docs/design/29-webui-gui-app.md` §2 + AGENTS.md 规则 12 冲突。改成**接新位置**：
+  //   · `escalate_cmd` 必须指到 GUI 动作 **`authority.escalate`**（越界一键把这件事提成人工门）；
+  //   · `escalate_human_cmd` 必须指到审批队列那两键 **`gate.grant` / `gate.deny`**（谁在哪批）；
+  //   · 两条 + `approval_note` **0 命中** g1side / PYTHONPATH / 终端 / 命令行；
+  //   · **「入口真存在」的非空转判据**：这两个动作 id 必须**真的注册在证据里**（下面读
+  //     `src/domain/authority-band/code/ui.mjs` 的动作声明 + `src/system/approval/code/ui.mjs` 的
+  //     `gate.grant` / `gate.deny` 声明）—— 动作 id 打错与旧口径里命令名打错一样判红。
+  const uiText = sourceOf(join(HERE, '..', 'src', 'domain', 'authority-band', 'code', 'ui.mjs'))
+  const approvalUiText = sourceOf(join(HERE, '..', 'src', 'system', 'approval', 'code', 'ui.mjs'))
+  const registeredActions = {
+    'authority.escalate': /id:\s*'authority\.escalate'/.test(uiText),
+    'gate.grant': /id:\s*'gate\.grant'/.test(approvalUiText) || approvalUiText.includes("'gate.grant'"),
+    'gate.deny': approvalUiText.includes("'gate.deny'"),
   }
-  const gateName = mod.ESCALATE_COMMAND.replace('tools/verify.sh ', '').split(/\s+/)[0]
-  const humanGateName = mod.ESCALATE_HUMAN_COMMAND.includes('quotagent.g1side') ? 'quotagent.g1side' : ''
+  const missingActions = Object.entries(registeredActions).filter(([, ok]) => !ok).map(([id]) => id)
   const overCase = runCheck({ view: 'contractor', role: 'buyer', amount: 500001, config: cfgFor() })
   const insideCase = runCheck({ view: 'contractor', role: 'buyer', amount: 500000, config: cfgFor() })
-  check('7 **越界必出升级命令、且命令真存在**：越界 ⇒ `escalate_cmd` 以 `tools/verify.sh <门名>` 开头，'
-    + '该门名**真的出现在** `tools/verify.sh help` 的输出里（本门真跑那个命令）；人工签署命令指向 '
-    + '`quotagent.g1side`（`src/quotagent/g1side.py` 文件真存在）；`blocked_by=human-gate-required`；'
-    + '**双向**：不越界时 `escalate_cmd` 与 `escalate_human_cmd` 都为空（不发无用命令）',
-  overCase.escalate_cmd.startsWith('tools/verify.sh ') && gateName.length > 1
-  && helpOut.includes(gateName) && helpErr === ''
-  && existsSync(G1SIDE) && humanGateName === 'quotagent.g1side'
-  && overCase.escalate_human_cmd.includes('.py') === false
-  && overCase.escalate_human_cmd.includes('python3') && overCase.blocked_by === 'human-gate-required'
+  const overText = `${overCase.escalate_cmd} ${overCase.escalate_human_cmd}`
+  const overNoise = NOISE_TOKENS.filter((t) => overText.includes(t))
+  check('7 **越界必出升级入口、且入口真存在**：越界 ⇒ `escalate_cmd` 指到 GUI 动作 `authority.escalate`、'
+    + '`escalate_human_cmd` 指到审批队列的 `gate.grant` / `gate.deny`（**两个动作 id 真的注册在证据文件里**；'
+    + '本门真读那两份 `ui.mjs`），两条 + `approval_note` 里 g1side / PYTHONPATH / 终端 / 命令行 **0 命中**；'
+    + '`blocked_by=human-gate-required`；**双向**：不越界时两条都为空（不发无用入口）',
+  overCase.escalate_cmd.includes('authority.escalate') && overCase.escalate_human_cmd.includes('gate.grant')
+  && overCase.escalate_human_cmd.includes('gate.deny') && missingActions.length === 0
+  && overNoise.length === 0 && overCase.blocked_by === 'human-gate-required'
+  && !overCase.approval_note.includes('不能') === false
+  && NOISE_TOKENS.every((t) => !overCase.approval_note.includes(t))
   && insideCase.escalate_cmd === '' && insideCase.escalate_human_cmd === '',
-  `门名=${gateName}（help 里找到=${helpOut.includes(gateName)}；help stderr=${helpErr || '无'}）；`
-  + `越界命令=${JSON.stringify(overCase.escalate_cmd)}；人工签署=${JSON.stringify(overCase.escalate_human_cmd)}；`
-  + `g1side.py 存在=${existsSync(G1SIDE)}；不越界时 esc='${insideCase.escalate_cmd}'`)
+  `越界入口=${JSON.stringify(overCase.escalate_cmd)}；人工决定=${JSON.stringify(overCase.escalate_human_cmd)}；`
+  + `动作注册=${JSON.stringify(registeredActions)}（缺=${missingActions.join(',') || '无'}）；`
+  + `命中回终端痕迹=${overNoise.join(',') || '无'}；不越界时 esc='${insideCase.escalate_cmd}'`)
 
   // ---------- 8. 插件不能批准 ----------
   const APPROVAL_METHODS = ['approve', 'decide', 'grant', 'submit', 'ack', 'allow', 'reject', 'veto', 'sign']
@@ -604,25 +623,48 @@ try {
   `产物命中=${hits.join(',') || '无'}；对照样本命中=${selfTest.join(',') || '（空转！）'}；`
   + `privacy=${JSON.stringify(privacyProbe)}`)
 
-  // ---------- 13. 宿主侧契约（静态）----------
-  const routeOk = /\/api\/authority/.test(webuiSource) && /\/authority\//.test(webuiSource)
-    && webuiSource.includes('authority.check(') && webuiSource.includes('authorityConfigSnapshot')
+  // ---------- 13. 宿主侧契约（静态，★ 改判据：旧页退役 ⇒ 接新位置） ----------
+  // 旧断言是「两条 SSR 路由 + 宿主用 `authorityConfigSnapshot` 驱动插件 + 四道页面子导航入口
+  // + 页面模板 0 内联脚本」。旧页已按 29 §2 退役为 **303 → `/app/<view>/`**，宿主那份配置快照
+  // （`authorityConfigSnapshot`）也随页删掉 —— 读数现在由**插件自己的面板**给。改判据（不弱于原来）：
+  //   ① 两条旧路由仍在 `/api/routes` 里登记（写明「已退役 303」）；
+  //   ② `data-authority-link` 入口仍在，且**目标已接到新位置**（`href="${prefix}/app/${view}/"`），
+  //      系统管理道里仍传两个入口标签（与 `subNav` 那处一并算）；
+  //   ③ 入口指到的两个动作（`authority.check` / `authority.escalate`）**真的声明在插件的 `ui.mjs` 里**
+  //      —— 这是「入口真存在」的非空转判据（动作 id 打错与旧口径里命令名打错一样判红）；
+  //   ④ `/start/` 上手页仍有「授权区间在哪里配」段；
+  //   ⑤ webui 非注释代码里 0 行脚本字面量 / 0 内联事件（扫描器非空转）。
+  const routeDecls = webuiSource.includes("`${prefix}/${v}/authority/`, method: 'GET'")
+    && webuiSource.includes("`${prefix}/${v}/api/authority`, method: 'GET'")
+    && webuiSource.includes('RETIRED_SUBVIEWS') && /authority: '[^']*授权区间/.test(webuiSource)
   const navDecls = webuiSource.split('data-authority-link').length - 1
-  const navLabels = ['授权区间（承包商）', '授权区间（供应商）'].every((label) => webuiSource.includes(label))
+  const navLabels = ['授权区间（承包商 · GUI）', '授权区间（供应商 · GUI）'].every((label) => webuiSource.includes(label))
+  const navToGui = webuiSource.includes('href="${prefix}/app/${view}/" data-authority-link="1"')
   const startPageOk = webuiSource.includes('授权区间在哪里配') && webuiSource.includes('authority.bands.&lt;角色&gt;')
+  const actionsDeclared = /id:\s*'authority\.check'/.test(uiText) && /id:\s*'authority\.escalate'/.test(uiText)
   const webuiCode = webuiSource.split('\n').filter((line) => !line.trim().startsWith('//')
     && !line.trim().startsWith('*') && !line.trim().startsWith('/*')).join('\n')
-  check('13 宿主侧契约（静态）：两条新路由（`/<view>/authority/` 与 `/<view>/api/authority`）都在 webui 里、'
-    + '宿主用只读配置快照（`authorityConfigSnapshot`）驱动插件；**四道页面**子导航入口齐（`subNav` 与 '
-    + '`anchorNav` 两处声明 + 运维/系统管理两道各传两个入口标签）；`/start/` 上手页有「授权区间在哪里配」段；'
-    + '页面模板 **0 内联脚本 / 0 内联事件**（扫描器非空转）',
-  routeOk && navDecls >= 2 && navLabels && startPageOk
+  check('13 宿主侧契约（静态，**旧页退役 ⇒ 接新位置**）：两条旧路由仍在 `/api/routes` 里登记为「已退役 303 → '
+    + '`/app/<view>/`」；**四道页面**的子导航入口仍在（`data-authority-link`，目标已接到 GUI：'
+    + '`href="…/app/<view>/"`）且系统管理道仍传两个入口标签；入口指到的两个动作 '
+    + '`authority.check` / `authority.escalate` **真的声明在插件 `ui.mjs` 里**；`/start/` 上手页有'
+    + '「授权区间在哪里配」段；webui 非注释代码 **0 行脚本字面量 / 0 内联事件**（扫描器非空转）',
+  routeDecls && navDecls >= 2 && navLabels && navToGui && startPageOk && actionsDeclared
   && !webuiCode.includes(scriptNeedle) && !inlineEvent.test(webuiCode)
   && (scriptNeedle === '<scr' + 'ipt' && inlineEvent.test('<a onclick="x()">')),
-  `路由=${routeOk} 导航声明=${navDecls} 入口标签=${navLabels} 上手页段=${startPageOk}；`
+  `路由登记=${routeDecls} 导航声明=${navDecls} 目标接 GUI=${navToGui} 入口标签=${navLabels} `
+  + `动作真声明=${actionsDeclared} 上手页段=${startPageOk}；`
   + `webui 含脚本字面量=${webuiCode.includes(scriptNeedle)} 含内联事件=${inlineEvent.test(webuiCode)}`)
 
-  // ---------- 14/15. 真 HTTP ----------
+  // ---------- 14/15. 真 HTTP（★ 改判据：页面/JSON → **真动作总线上的 action**） ----------
+  // 旧断言读的是 `/contractor/authority/?amount=…` 的 SSR 页与 `/api/authority` 的 JSON；
+  // 那两条路由已退役。等价判据换成**在真动作总线上真跑 `authority.check`**（同一份 `checkOf` 口径，
+  // 而且多了「动作真的注册、真的能被调用、回执形状真的对」这三层）—— 判据不弱于原来：
+  //   · 四条旧路由 303 + Location；`/api/routes` 仍登记四条（`auth=identity-session`）；
+  //   · 承接面板 `authority.bands` / `authority.bands.supplier` 真的注册在两侧视图上，带两个真动作；
+  //   · 三例边界值（500000 / 500001 / 499999）经 action 回执**与手算一致**；
+  //   · 改临时配置夹具 ⇒ 同一金额结论翻转；移走夹具 ⇒ `unconfigured`（不编限额）；
+  //   · 哨兵 0 命中、0 行脚本 / 0 内联事件、提权后 `/admin/` 子导航仍含 `data-authority-link`。
   const fixtureDir = mkdtempSync(join(tmpdir(), 't284-http-'))
   const contractorLedger = join(fixtureDir, 'contractor.jsonl')
   const supplierLedger = join(fixtureDir, 'supplier.jsonl')
@@ -643,11 +685,24 @@ try {
     '  authority.bands.lead: 2000000',
     '  authority.bands.director: 10000000',
     '  authority.fallback_role: director',
-    "  authority.escalation_note: '越界请找业主代表走终端人工门'",
+    "  authority.escalation_note: '越界请找业主代表（GUI 审批队列里人签）'",
     `  transport.dir: '${HAND_SENTINELS[0]}'`,
     '  pricing.markup_pct: 987654321',
     ''].join('\n')
-  writeFileSync(yamlPath, yamlFor(500000), 'utf8')
+  // 夹具的 mtime 显式往前推：插件自己那份只读快照按 `mtimeMs + size` 备忘，而 `yamlFor(500000)` 与
+  // `yamlFor(500001)` **字节长度相同** ⇒ 时间戳粒度粗时会命中旧快照、让「改配置前后结论不同」偶发判红。
+  const fixtureStamp = [Math.floor(Date.now() / 1000) + 3600]
+  const writeYaml = (text) => {
+    writeFileSync(yamlPath, text, 'utf8')
+    fixtureStamp[0] += 5
+    utimesSync(yamlPath, fixtureStamp[0], fixtureStamp[0])
+  }
+  writeYaml(yamlFor(500000))
+  // 插件自己的只读配置快照按 `QUOTAGENT_UI_CONFIG` → 缺省 `/workspace/config.yaml` 解析
+  // ⇒ 本门把**本进程**的这个环境变量指向**临时夹具**（真 `/workspace/config.yaml` 只读、一字未动）。
+  // 这正是「界面上的读数真的来自受管配置」这条判据的机检形态：改夹具 ⇒ 同一条 action 结论翻转。
+  const previousUiConfig = process.env.QUOTAGENT_UI_CONFIG
+  process.env.QUOTAGENT_UI_CONFIG = yamlPath
 
   const httpCtx = new Context()
   await httpCtx.plugin(EventsService)
@@ -739,6 +794,21 @@ try {
     const res = await fetch(`${base}${path}`, { headers: await cookieFor(path) })
     return { status: res.status, text: await res.text() }
   }
+  const rawGet = async (path, accept) => {
+    const res = await fetch(`${base}${path}`, { headers: { ...(await cookieFor(path)), accept },
+      redirect: 'manual' })
+    return { status: res.status, location: String(res.headers.get('location') ?? ''), text: await res.text() }
+  }
+  const act = async (actionId, view, input) => {
+    const res = await fetch(`${base}/api/action/${actionId}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json', ...(await cookieFor(`/${view}/`)) },
+      body: JSON.stringify({ view, input: { ...input, confirm_ack: '1' } }) })
+    const text = await res.text()
+    let doc = {}
+    try { doc = JSON.parse(text) } catch { doc = {} }
+    return { status: res.status, text, doc }
+  }
   // 身份门槛本身也要机检（P3：未登录拒 / 登录后按侧放行 / 越侧 403）
   const anonJson = await fetch(`${base}/contractor/api/authority`, { headers: { accept: 'application/json' } })
   const anonJsonBody = await anonJson.text()
@@ -747,75 +817,94 @@ try {
   const crossSidePath = 'supplier/authority/'
   const crossSide = await fetch(`${base}/${crossSidePath}`, { headers: { cookie: await loginAs('contractor') } })
   const crossBody = await crossSide.text()
-  check('身份门槛（P3）：未登录取业务路由 ⇒ API 401 `identity-required` + `next`、浏览器 303 回 `/identity/?next=…`；'
-    + '登录后**按侧放行**（同侧 200）、**越侧 403 `side-mismatch`**（不回落成「能看」）',
+  const sameSide = await rawGet('/contractor/authority/', 'text/html')
+  check('身份门槛（P3，与退役前逐字一致）：未登录取业务路由 ⇒ API 401 `identity-required` + `next`、浏览器 303 回 `/identity/?next=…`；'
+    + '登录后**按侧放行**（同侧 ⇒ **303 → `/t284/app/contractor/`**：旧页不再返回内容）、'
+    + '**越侧 403 `side-mismatch`**（不回落成「能看」）',
   anonJson.status === 401 && anonJsonBody.includes('identity-required') && anonJsonBody.includes('"next"')
   && anonHtml.status === 303 && anonLocation.includes('/t284/identity/?next=')
   && crossSide.status === 403 && crossBody.includes('side-mismatch')
-  && (await get('/contractor/authority/')).status === 200,
+  && sameSide.status === 303 && sameSide.location.endsWith('/t284/app/contractor/'),
   `未登录 JSON=${anonJson.status} HTML=${anonHtml.status} location=${anonLocation.slice(0, 60)}；`
-  + `越侧=${crossSide.status} 含 side-mismatch=${crossBody.includes('side-mismatch')}`)
+  + `越侧=${crossSide.status} 含 side-mismatch=${crossBody.includes('side-mismatch')}；`
+  + `同侧=${sameSide.status} → ${sameSide.location}`)
   const parse = (text) => { try { return JSON.parse(text) } catch { return {} } }
 
   const routes = parse((await get('/api/routes')).text).routes ?? []
   const authRoutes = routes.filter((row) => String(row.path).includes('/authority'))
-  const pageExact = await get('/contractor/authority/?amount=500000&role=buyer')
-  const jsonExact = await get('/contractor/api/authority?amount=500000&role=buyer')
-  const pageOver = await get('/contractor/authority/?amount=500001&role=buyer')
-  const jsonOver = await get('/supplier/api/authority?amount=500001&role=buyer')
-  const jsonUnder = await get('/supplier/api/authority?amount=499999&role=buyer')
-  const jExact = parse(jsonExact.text)
-  const jOver = parse(jsonOver.text)
-  const jUnder = parse(jsonUnder.text)
-  const pageContract = [pageExact.text, pageOver.text].every((text) => text.includes('data-authority="result"')
-    && text.includes('data-authority-unit="cents"') && text.includes('data-authority-engine="rules"')
-    && text.includes('data-authority-can-approve="false"') && text.includes('data-authority-bands="1"')
-    && text.includes('data-subnav="contractor"') && text.includes('data-authority-link="1"')
-    && text.includes('data-authority-config-where="1"') && !text.includes(scriptNeedle)
-    && !inlineEvent.test(text))
-  check('14 **真 HTTP 正控**（in-process 挂真 `webui` + 真依赖模块 + **临时配置夹具**）：两视角页面/JSON '
-    + '**四条** URL 都 **200**；`/api/routes` 登记这四条新路由且 `auth=identity-session`（业务路由要身份会话）；'
-    + '页面/JSON 的结论与**手算一致**（500000 ⇒ 在区间内、越界 0；500001 ⇒ 越界 1 分、要求角色 lead、'
-    + '下一个 lead；499999 ⇒ 在区间内）；页面有口径/结论/区间表/「在哪里配」/子导航入口；'
-    + '**0 行脚本 / 0 内联事件**',
-  authRoutes.length === 4 && authRoutes.every((row) => row.auth === 'identity-session')
-  && pageExact.status === 200 && jsonExact.status === 200 && pageOver.status === 200 && jsonOver.status === 200
-  && jExact.inside_band === true && jExact.over_by === 0 && jExact.escalate_cmd === ''
-  && jOver.inside_band === false && jOver.over_by === 1 && jOver.required_role === 'lead' && jOver.next_role === 'lead'
-  && jOver.escalate_cmd.startsWith('tools/verify.sh ') && jOver.can_approve === false
-  && jUnder.inside_band === true && jUnder.over_by === 0 && pageContract,
-  `status=${pageExact.status}/${jsonExact.status}/${pageOver.status}/${jsonOver.status}；路由=`
-  + `${JSON.stringify(authRoutes.map((row) => `${row.method} ${row.path} ${row.auth}`))}；`
-  + `500000 ⇒ inside=${jExact.inside_band}/越界 ${jExact.over_by}；500001 ⇒ inside=${jOver.inside_band}/越界 ${jOver.over_by}`
-  + `/需 ${jOver.required_role}/下一个 ${jOver.next_role}；499999 ⇒ inside=${jUnder.inside_band}；页面契约=${pageContract}`)
+  const retiredRows = []
+  for (const view of ['contractor', 'supplier']) {
+    for (const [suffix, accept] of [['/authority/', 'text/html'], ['/api/authority', 'application/json']]) {
+      const res = await rawGet(`/${view}${suffix}`, accept)
+      retiredRows.push({ path: `/${view}${suffix}`, status: res.status, location: res.location,
+        ok: res.status === 303 && res.location.endsWith(`/${view}/`) })
+    }
+  }
+  const carrierIds = { contractor: 'authority.bands', supplier: 'authority.bands.supplier' }
+  const panels = { view: null }
+  const panelsOf = async (view) => (parse((await get(`/api/ui/panels?view=${view}`)).text).panels ?? [])
+  const contractorPanels = await panelsOf('contractor')
+  const supplierPanels = await panelsOf('supplier')
+  const carrierOf = (list, id) => list.find((panel) => (panel.panel_id ?? panel.id) === id) ?? null
+  const carriersOk = ['contractor', 'supplier'].every((view) => {
+    const panel = carrierOf(view === 'contractor' ? contractorPanels : supplierPanels, carrierIds[view])
+    return Boolean(panel) && (panel.actions ?? []).includes('authority.check')
+      && (panel.actions ?? []).includes('authority.escalate')
+  })
+  // 三例边界值：经**真动作总线**（`authority.check`）回读，与手算逐项对账
+  const actExact = await act('authority.check', 'contractor', { role: 'buyer', amount: 500000 })
+  const actOver = await act('authority.check', 'contractor', { role: 'buyer', amount: 500001 })
+  const actUnder = await act('authority.check', 'supplier', { role: 'buyer', amount: 499999 })
+  const rExact = actExact.doc.result ?? {}
+  const rOver = actOver.doc.result ?? {}
+  const rUnder = actUnder.doc.result ?? {}
+  const actionContract = [actExact, actOver, actUnder].every((call) => call.status === 200
+    && (call.doc.result ?? {}).unit === 'cents' && (call.doc.result ?? {}).can_approve === false)
+  check('14 **真 HTTP 正控（旧页退役 ⇒ 接新位置）**：四条旧路由（`/t284/<view>/authority/` 与 '
+    + '`/t284/<view>/api/authority`）一律 **303 + Location 落在同侧 GUI 视图页**；`/api/routes` 仍登记这四条且 '
+    + '`auth=identity-session`；**承接这件事的 GUI 面板真的注册在两侧视图上**（`authority.bands` / '
+    + '`authority.bands.supplier`，各带 `authority.check` / `authority.escalate`）；'
+    + '结论经**真动作总线**回读且与**手算一致**（500000 ⇒ 在区间内、越界 0；500001 ⇒ 越界 1 分、要求角色 lead、'
+    + '下一个 lead；499999 ⇒ 在区间内）；动作回执 0 行脚本 / 0 内联事件',
+  retiredRows.every((row) => row.ok) && authRoutes.length === 4
+  && authRoutes.every((row) => row.auth === 'identity-session')
+  && carriersOk && actionContract
+  && rExact.status === 'inside-band' && rExact.over_by === 0
+  && rOver.status === 'over-band' && rOver.over_by === 1 && rOver.required_role === 'lead' && rOver.next_role === 'lead'
+  && rUnder.status === 'inside-band' && rUnder.over_by === 0
+  && ![actExact, actOver, actUnder].some((call) => call.text.includes(scriptNeedle) || inlineEvent.test(call.text)),
+  `旧路由=${JSON.stringify(retiredRows.map((row) => `${row.path}→${row.status}${row.location}`))}；`
+  + `路由=${JSON.stringify(authRoutes.map((row) => `${row.method} ${row.path} ${row.auth}`))}；承接面板=${carriersOk}；`
+  + `500000 ⇒ ${rExact.status}/越界 ${rExact.over_by}；500001 ⇒ ${rOver.status}/越界 ${rOver.over_by}`
+  + `/需 ${rOver.required_role}/下一个 ${rOver.next_role}；499999 ⇒ ${rUnder.status}`)
 
   const yamlHashBefore = sha256(sourceOf(yamlPath))
-  const configuredProbe = await get('/contractor/api/authority?amount=1&role=buyer')   // 配置夹具在（buyer=500000）
   // --- 改配置前后：**同一个金额**结论必须不同（临时夹具改写，不碰真 config.yaml）---
-  writeFileSync(yamlPath, yamlFor(500001), 'utf8')
-  const afterEdit = await get('/contractor/api/authority?amount=500001&role=buyer')
-  const jAfter = parse(afterEdit.text)
+  writeYaml(yamlFor(500001))
+  const afterEdit = await act('authority.check', 'contractor', { role: 'buyer', amount: 500001 })
+  const rAfter = afterEdit.doc.result ?? {}
   const yamlHashAfterEdit = sha256(sourceOf(yamlPath))
-  // --- 未配置实例（真 HTTP 同一条 URL）：把临时夹具**移走** ⇒ 配置读不到 ⇒ 登记全为 null ⇒ unconfigured=true ---
+  // --- 未配置实例（真 HTTP 同一条 action）：把临时夹具**移走** ⇒ 配置读不到 ⇒ 登记全为 null ⇒ unconfigured ---
   const yamlStash = join(fixtureDir, 'config.yaml.stash')
   writeFileSync(yamlStash, sourceOf(yamlPath), 'utf8')
   const { renameSync, unlinkSync } = await import('node:fs')
   unlinkSync(yamlPath)
-  const missingJson = await get('/contractor/api/authority?amount=500001&role=buyer')
-  const missingPage = await get('/contractor/authority/?amount=500001&role=buyer')
-  const jMissing = parse(missingJson.text)
-  // 还原夹具（逐字节）并确认同一条 URL 又回到「在区间内」（证明刚才那次确实是"配置读不到"）
-  writeFileSync(yamlPath, readFileSync(yamlStash, 'utf8'), 'utf8')
+  const missingCall = await act('authority.check', 'contractor', { role: 'buyer', amount: 500001 })
+  const rMissing = missingCall.doc.result ?? {}
+  // 还原夹具（逐字节）并确认同一条 action 又回到「在区间内」（证明刚才那次确实是"配置读不到"）
+  writeYaml(readFileSync(yamlStash, 'utf8'))
   renameSync(yamlStash, join(fixtureDir, 'config.yaml.used'))
-  const restored = await get('/contractor/api/authority?amount=500001&role=buyer')
-  const jRestored = parse(restored.text)
+  const restored = await act('authority.check', 'contractor', { role: 'buyer', amount: 500001 })
+  const rRestored = restored.doc.result ?? {}
   const sentinelInYaml = HAND_SENTINELS.filter((needle) => sourceOf(yamlPath).includes(needle))
-  const sensitiveResponses = [pageExact.text, jsonExact.text, pageOver.text, jsonOver.text,
-    afterEdit.text, missingPage.text, missingJson.text]
+  const sensitiveResponses = [actExact.text, actOver.text, actUnder.text, afterEdit.text,
+    missingCall.text, JSON.stringify(contractorPanels), JSON.stringify(supplierPanels),
+    ...retiredRows.map((row) => row.text ?? '')]
   const sensitiveHits = HAND_SENTINELS.filter((needle) => sensitiveResponses.some((text) => text.includes(needle)))
   const privateHits = PRIVATE_NEEDLES.filter((needle) => sensitiveResponses.some((text) => text.includes(needle)))
+  const noiseHits = NOISE_TOKENS.filter((token) => sensitiveResponses.some((text) => text.includes(token)))
   const pagesClean = sensitiveResponses.every((text) => !text.includes(scriptNeedle) && !inlineEvent.test(text))
-  // 第四道（admin）子导航：提权后页面里要有授权区间入口
+  // 第四道（admin）子导航：提权后页面里要有授权区间入口（目标已接到 GUI）
   const elevate = await fetch(`${base}/admin/api/elevate`, { method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: `token=${T284_TOKEN}` })
   const cookie = (elevate.headers.get('set-cookie') ?? '').split(';')[0]
@@ -823,31 +912,35 @@ try {
   const adminPage = await fetch(`${base}/admin/`, { headers: { cookie } })
   const adminText = await adminPage.text()
   check('15 **真 HTTP 负控 + 改配置前后结论不同**：把**临时**配置夹具里的 buyer 限额从 500000 改成 500001 ⇒ '
-    + '**同一个金额 500001** 的结论从「越界」翻成「在区间内」（同一进程、同一 URL ⇒ 配置是真读的）；'
-    + '把夹具**移走**（配置读不到）⇒ 同一 URL 变成 `unconfigured=true` + `band-unconfigured` + '
-    + '`required_role`/`next_role` 空 + `bands` 空 + 页面出「未配置」块（**不编限额**）；把夹具逐字节还原 ⇒ '
-    + '同一 URL 又回到「在区间内」（证明降级来自"配置读不到"，不是页面坏了）；'
-    + '响应 **0 行脚本 / 0 内联事件**；夹具里**确实**有私域哨兵而七份响应 0 命中；'
-    + '提权后 `/admin/` 子导航含 `data-authority-link`；未提权 `/admin/` 仍 **401 固定体**',
-  configuredProbe.status === 200 && parse(configuredProbe.text).inside_band === true
-  && jAfter.inside_band === true && jAfter.over_by === 0 && jAfter.escalate_cmd === ''
-  && parse(afterEdit.text).amount === 500001 && yamlHashBefore !== yamlHashAfterEdit
+    + '**同一个金额 500001** 的结论从「越界」翻成「在区间内」（同一进程、同一条 action ⇒ 配置是真读的）；'
+    + '把夹具**移走**（配置读不到）⇒ 同一条 action 变成 `unconfigured=true` + `band-unconfigured` + '
+    + '`required_role`/`next_role` 空 + `bands` 空（**不编限额**）；把夹具逐字节还原 ⇒ 同一条 action 又回到'
+    + '「在区间内」（证明降级来自"配置读不到"，不是接口坏了）；所有响应与**承接面板载荷** **0 行脚本 / 0 内联事件**、'
+    + '`终端` / `g1side` / `PYTHONPATH` / `命令行` **0 命中**；夹具里**确实**有私域哨兵而响应 0 命中；'
+    + '提权后 `/admin/` 子导航含 `data-authority-link`（目标已是 GUI）；未提权 `/admin/` 仍 **401 固定体**',
+  rAfter.status === 'inside-band' && rAfter.over_by === 0
+  && (afterEdit.doc.result ?? {}).amount === 500001 && yamlHashBefore !== yamlHashAfterEdit
   && sourceOf(yamlPath).includes('authority.bands.buyer: 500001')      // 还原的是"改后"那份（逐字节）
-  && missingJson.status === 200 && jMissing.unconfigured === true && jMissing.reason === 'band-unconfigured'
-  && jMissing.required_role === '' && jMissing.next_role === '' && jMissing.inside_band === null
-  && jMissing.escalate_cmd === '' && jMissing.bands.length === 0
-  && missingPage.text.includes('data-authority-unconfigured-note="1"')
-  && jRestored.inside_band === true && jRestored.unconfigured === false
-  && sentinelInYaml.length >= 2 && sensitiveHits.length === 0 && privateHits.length === 0
+  && missingCall.status === 200 && rMissing.unconfigured === true && rMissing.status === 'unconfigured'
+  && missingCall.doc.code === 'authority-unconfigured'
+  && rMissing.required_role === '' && rMissing.next_role === '' && rMissing.over_by === null
+  && (rMissing.bands ?? []).length === 0
+  && typeof missingCall.doc.next_action === 'string' && missingCall.doc.next_action.length > 10
+  && rRestored.status === 'inside-band' && rRestored.unconfigured === false
+  && sentinelInYaml.length >= 2 && sensitiveHits.length === 0 && privateHits.length === 0 && noiseHits.length === 0
   && pagesClean && adminAnonymous.status === 401 && adminText.includes('data-authority-link="1"')
   && adminText.includes('data-subnav="admin"') && adminPage.status === 200,
   `夹具 sha 前=${yamlHashBefore.slice(0, 12)}… 改后=${yamlHashAfterEdit.slice(0, 12)}…（变了=${yamlHashBefore !== yamlHashAfterEdit}）；`
-  + `改前 500001 ⇒ inside=${jOver.inside_band}；改后同金额 ⇒ inside=${jAfter.inside_band}/越界 ${jAfter.over_by}；`
-  + `移走夹具 ⇒ unconfigured=${jMissing.unconfigured}/reason=${jMissing.reason}/bands=${jMissing.bands.length}/`
-  + `required='${jMissing.required_role}'/next='${jMissing.next_role}'/页面未配置块=${missingPage.text.includes('data-authority-unconfigured-note="1"')}；`
-  + `还原后 ⇒ inside=${jRestored.inside_band}/unconfigured=${jRestored.unconfigured}；夹具哨兵=${sentinelInYaml.length} 个/`
-  + `响应命中=${sensitiveHits.join(',') || '无'}；私域键名命中=${privateHits.join(',') || '无'}；页面干净=${pagesClean}；`
+  + `改前 500001 ⇒ ${rOver.status}；改后同金额 ⇒ ${rAfter.status}/越界 ${rAfter.over_by}；`
+  + `移走夹具 ⇒ unconfigured=${rMissing.unconfigured}/${rMissing.status}/code=${missingCall.doc.code}/`
+  + `bands=${(rMissing.bands ?? []).length}/required='${rMissing.required_role}'/next='${rMissing.next_role}'；`
+  + `还原后 ⇒ ${rRestored.status}/unconfigured=${rRestored.unconfigured}；夹具哨兵=${sentinelInYaml.length} 个/`
+  + `响应命中=${sensitiveHits.join(',') || '无'}；私域键名命中=${privateHits.join(',') || '无'}；`
+  + `回终端痕迹命中=${noiseHits.join(',') || '无'}；响应干净=${pagesClean}；`
   + `admin 未提权=${adminAnonymous.status}/提权后=${adminPage.status} 含入口=${adminText.includes('data-authority-link="1"')}`)
+
+  if (previousUiConfig === undefined) delete process.env.QUOTAGENT_UI_CONFIG
+  else process.env.QUOTAGENT_UI_CONFIG = previousUiConfig
 
   await httpFiber.dispose()
 

@@ -642,7 +642,18 @@ const handle = mounted.box.handle
 }
 
 // ---------------------------------------------------------------------------
-// 14 宿主侧契约（静态）：三条路由 + 四道子导航入口 + 页面模板 0 内联脚本
+// 14 宿主侧契约（静态）：三条路由登记 + **旧 SSR 页已退役**（入口与渲染器删净、不留副本）
+//    ★ 本批改判据（`docs/design/29-webui-gui-app.md` §2 + AGENTS.md 规则 12）：旧断言是
+//      「四道页面子导航都有 `data-deadlines-link` 入口 + `DEADLINE_EXTRAS(prefix)` ≥3 处声明 +
+//      旧页模板切片 0 内联脚本」。旧页（`/<view>/deadlines/` 与 `/<view>/api/deadlines`，且它把
+//      「可复制的终端命令」准备好让用户复制）已退役为 **303 → `/app/<view>/`**，那些断言冻结的是
+//      已经删掉的旧形态 ⇒ 改成**接新位置**的三条（判据不弱于原来）：
+//        ① 三条路由仍在 `/api/routes` 与 `write_surface` 登记（写面不许跟着页一起消失）；
+//        ② 旧页的两个子视图名在 `RETIRED_SUBVIEWS` 里、且入口/渲染器（`data-deadlines-link` /
+//           `DEADLINE_EXTRAS`）**0 命中**（29 §2「不得保留副本」）；
+//        ③ 承接这件事的 GUI 面板由 `domain/rfq` 注册（`rfq.remind-board`，带真动作 `rfq.remind`）——
+//           这一条在真进程门 `t285` 的 HTTP 段与 `check-rfq-deadline-route.py` 里都真跑核过。
+//   逐条登记（文件 + 原行 + 理由）见 `docs/work/plans/webui-ui-defects.md` §P17。
 // ---------------------------------------------------------------------------
 {
   const sliceOf = (from, to) => {
@@ -650,29 +661,27 @@ const handle = mounted.box.handle
     const end = to ? webuiSource.indexOf(to, start + 1) : webuiSource.length
     return start < 0 ? '' : webuiSource.slice(start, end < 0 ? webuiSource.length : end)
   }
-  const deadlineSlice = sliceOf('// RFQ 回文时限（`rfq-deadline` domain 插件，本批）',
-    '// 授权区间（`authority-band` domain 插件，本批）')
-  const dispatchSlice = sliceOf('// RFQ 回文时限（rfq-deadline 插件，本批）：登记承诺 POST')
+  const retiredEntrySlice = sliceOf("`${prefix}/${v}/api/deadlines`, method: 'GET'",
+    "`${prefix}/${v}/deadlines/promise`")
+  const dispatchSlice = sliceOf('// RFQ 回文时限（rfq-deadline 插件）：**旧 SSR 页已退役**', 'const viewApprovals')
   const routesOk = webuiSource.includes('`${prefix}/${v}/deadlines/`, method: \'GET\'')
     && webuiSource.includes('`${prefix}/${v}/api/deadlines`, method: \'GET\'')
     && webuiSource.includes('`${prefix}/${v}/deadlines/promise`, method: \'POST\'')
     && webuiSource.includes('`${prefix}/<view>/deadlines/promise`')
-  const navOk = webuiSource.includes('data-deadlines-link="1"')
-    && webuiSource.includes('deadlineExtras.map')
-    && (webuiSource.match(/DEADLINE_EXTRAS\(prefix\)/g) || []).length >= 3
-    && webuiSource.includes("subNav(prefix, view, 'deadlines')")
-  check('14 宿主侧契约（静态）：三条新路由 + `/api/routes` 与 `write_surface` 登记 + **四道页面**子导航入口'
-    + '（`subNav` 与 `anchorNav` 两处声明、运维/系统管理两道各传入口）+ 本批新增的**页面模板段**里 '
-    + '**0 行内联脚本 / 0 内联事件**（切片非空转）',
-    routesOk && navOk
-    && deadlineSlice.length > 200 && dispatchSlice.length > 200
-    && !deadlineSlice.includes(scriptNeedle) && !dispatchSlice.includes(scriptNeedle)
-    && !inlineEvent.test(deadlineSlice) && !inlineEvent.test(dispatchSlice)
-    && deadlineSlice.includes('data-deadline-next-action')
-    && deadlineSlice.includes('<form method="post"')
+  const retiredOk = /deadlines: '回文时限/.test(webuiSource)
+    && webuiSource.includes('RETIRED_SUBVIEWS')
+    && !webuiSource.includes('data-deadlines-link')
+    && !webuiSource.includes('DEADLINE_EXTRAS')
+    && retiredEntrySlice.includes('已退役') && retiredEntrySlice.includes('303')
+  check('14 宿主侧契约（静态）：三条路由 + `/api/routes` 与 `write_surface` 登记（写面不随旧页消失）；'
+    + '**旧页已退役**（`RETIRED_SUBVIEWS` 里登记了 `deadlines` 与承接位置、路由表条目写明 303 → `/app/<view>/`）'
+    + '且入口/渲染器 `data-deadlines-link` / `DEADLINE_EXTRAS` **0 命中**（29 §2：不得保留副本）；'
+    + '写面切片是真写面（含 `pending-write-failed`）',
+    routesOk && retiredOk
+    && retiredEntrySlice.length > 100 && dispatchSlice.length > 200
     && dispatchSlice.includes('pending-write-failed'),
-    `路由/登记=${routesOk}；导航=${navOk}；模板切片 ${deadlineSlice.length} B / 派发切片 ${dispatchSlice.length} B；`
-    + `含脚本=${deadlineSlice.includes(scriptNeedle)}/${dispatchSlice.includes(scriptNeedle)}`)
+    `路由/登记=${routesOk}；退役登记=${retiredOk}；退役条目切片 ${retiredEntrySlice.length} B / 写面切片 ${dispatchSlice.length} B；`
+    + `含 data-deadlines-link=${webuiSource.includes('data-deadlines-link')}`)
 }
 
 // ---------------------------------------------------------------------------

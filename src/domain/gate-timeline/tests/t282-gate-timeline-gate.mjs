@@ -218,10 +218,12 @@ const HAND_CHANGES = ['chg-0001', 'chg-0002', 'chg-0003', 'chg-0004']
 const HAND_STATES = ['priced', 'priced', 'rejected', 'approved']
 const HAND_OWED = ['human:caiwu', 'human:unassigned', 'proposer', 'none']
 const GATE_KEYS = 'age_basis|age_seconds|blocked_by|consequence|id|kind|next_action|owner|subject'
+/** 产品面**绝不允许**出现的「教用户回终端」痕迹（旧口径 `GATE_COMMANDS` 的残留物，见 29 §2）。 */
+const NOISE_TOKENS = ['g1side', 'PYTHONPATH', '终端', '命令行']
 const CHANGE_KEYS = 'basis|id|next_action|owed_by|state|waiting_since'
 /** 审批动作词（**词首锚定**）：句柄上出现一个以它们开头的方法/键 ⇒ 本插件"能批准"，必须变红。
  *  为什么锚定词首：`commit_scopes` / `submitted_at` 这些**描述性字段名**里出现动作词是正常的
- *  （它们说的正是"这些动作只能在终端做人签"），只有**可调用/可触发的动作面**才是纪律问题。 */
+ *  （它们说的正是"这些动作只能在**审批队列里**由人签"），只有**可调用/可触发的动作面**才是纪律问题。 */
 const APPROVE_WORDS = /^(approve|decide|grant|submit|sign|ack|commit|accept)/i
 /** 催办载荷里**绝不允许**出现的审批类字段（催办 ≠ 批准）。 */
 const APPROVAL_FIELDS = ['approval_id', 'status', 'granted', 'decision', 'decided_by', 'approved_by', 'approve']
@@ -341,9 +343,20 @@ try {
     resolved: JSON.stringify(mod.RESOLVED_APPROVAL_EVENTS)
       === JSON.stringify(['approval/granted', 'approval/denied', 'approval/aborted']),
     states: JSON.stringify(mod.CHANGE_STATES) === JSON.stringify(['proposed', 'priced', 'approved', 'rejected', 'unknown']),
-    commands: ['quote.submit', 'award.commit', 'po.issue', 'change.approve'].every((scope) =>
-      typeof mod.GATE_COMMANDS[scope] === 'string' && mod.GATE_COMMANDS[scope].includes('python3')
-      && mod.GATE_COMMANDS[scope].includes('quotagent.g1side')),
+    // ★ 本批改判据（29 §2 / AGENTS.md 规则 12）：`GATE_COMMANDS`（终端命令）→ `GATE_ACTIONS`（GUI 动作）。
+    //   旧断言「每个 scope 的文案里含 `python3` 与 `quotagent.g1side`」冻结的是「教用户回终端」的旧口径；
+    //   新断言（不弱于原来）：每个 scope 都要指到审批队列那两键（`gate.grant` / `gate.deny`），
+    //   且**0 命中**回终端痕迹（g1side / PYTHONPATH / 终端 / 命令行）——id 打错或文案回退一样判红。
+    actions: ['quote.submit', 'award.commit', 'po.issue', 'change.approve'].every((scope) =>
+      typeof mod.GATE_ACTIONS[scope] === 'string'
+      && mod.GATE_ACTIONS[scope].includes('gate.grant') && mod.GATE_ACTIONS[scope].includes('gate.deny')
+      && NOISE_TOKENS.every((token) => !mod.GATE_ACTIONS[scope].includes(token))),
+    actionFallback: typeof mod.GATE_ACTION_FALLBACK === 'string'
+      && mod.GATE_ACTION_FALLBACK.includes('gate.grant') && mod.GATE_ACTION_FALLBACK.includes('gate.deny')
+      && NOISE_TOKENS.every((token) => !mod.GATE_ACTION_FALLBACK.includes(token)),
+    changeSteps: ['proposed', 'priced', 'approved', 'rejected', 'unknown'].every((state) =>
+      typeof mod.CHANGE_NEXT_STEPS[state] === 'string'
+      && NOISE_TOKENS.every((token) => !mod.CHANGE_NEXT_STEPS[state].includes(token))),
     // 本批（规则 ⑤ 逐行明细）：金额口径 / 闭合的明细降级原因 / 11 键 / 私域视图白名单（围栏变宽=变红）
     detailMoney: mod.MONEY_UNIT === 'cents' && mod.ROUNDING === 'half-up-to-cent'
       && typeof mod.MONEY_NOTE === 'string' && mod.MONEY_NOTE.includes('整数分'),
@@ -359,7 +372,9 @@ try {
   const scriptNeedle = '<scr' + 'ipt'
   check('1 契约正控：manifest 齐备（name/inject/builtin/usedServices/provides=[gateTimeline]/Config/apply/fixture/'
     + 'ENGINE/ENGINE_NOTE/AGE_CLOCK/AGE_BASIS_NOTE/IGNORED_NOW_INPUTS/两段/闭合的降级原因与催办 code/'
-    + '三条超时策略/已决事件/五个变更状态/四条真 CLI/**逐行明细口径：`MONEY_UNIT="cents"`（整数分）与 '
+    + '三条超时策略/已决事件/五个变更状态/**四个 commit scope 的人工门下一步都指到 GUI 的批准/驳回动作**'
+    + '（`GATE_ACTIONS` 逐条含 `gate.grant` 与 `gate.deny`，且 0 命中 g1side / PYTHONPATH / 终端 / 命令行）'
+    + '/**逐行明细口径：`MONEY_UNIT="cents"`（整数分）与 '
     + 'half-up-to-cent / 闭合的 DETAIL_REASONS / 11 键 / 私域视图白名单**），且只 import ../lib 白名单'
     + '（或 node:），源码里 0 个脚本字面量',
   manifestBad.length === 0 && importLeaks.length === 0 && !originalSource.includes(scriptNeedle) && hookReady,
@@ -434,14 +449,17 @@ try {
     && typeof item.kind === 'string' && item.kind.length > 2
     && typeof item.subject === 'string' && item.subject.length > 3
     && typeof item.consequence === 'string' && item.consequence.length > 8
-    && typeof item.next_action === 'string' && item.next_action.includes('quotagent.g1side')
+    && typeof item.next_action === 'string'
+    && ['gate.grant', 'gate.deny'].every((token) => item.next_action.includes(token))
+    && NOISE_TOKENS.every((token) => !item.next_action.includes(token))
     && typeof item.blocked_by === 'string' && item.blocked_by.includes('不能代签')
     && Number.isFinite(item.age_seconds) && item.age_seconds >= 0))
   const changeKeysFixed = full.changes.every((item) => Object.keys(item).sort().join('|') === CHANGE_KEYS)
   const idUnique = new Set(full.gates.map((item) => item.id)).size === full.gates.length
     && new Set(full.changes.map((item) => item.id)).size === full.changes.length
   check('6 门条目形状正控：键集**恰 9 键**（id/kind/subject/owner/age_seconds/age_basis/consequence/'
-    + 'next_action/blocked_by）、owner/subject/consequence 非空、next_action 指向**真 CLI**、'
+    + 'next_action/blocked_by）、owner/subject/consequence 非空、next_action 指向**在 GUI 里真能点的动作**'
+    + '（`gate.grant` / `gate.deny`，且 0 命中回终端痕迹）、'
     + '`blocked_by` 必须写明"不能代签"、age_seconds 是 ≥0 的有限数；变更单键集恰 6 键；两类 id 各自唯一',
   keysFixed && changeKeysFixed && shapeBad.length === 0 && idUnique
   && full.gates.length === HAND_GATES.length && full.changes.length === HAND_CHANGES.length,
@@ -865,70 +883,93 @@ try {
   const crossSidePath = 'supplier/gates/'
   const crossSide = await fetch(`${base}/${crossSidePath}`, { headers: { cookie: await loginAs('contractor') } })
   const crossBody = await crossSide.text()
-  check('身份门槛（P3）：未登录取业务路由 ⇒ API 401 `identity-required` + `next`、浏览器 303 回 `/identity/?next=…`；'
-    + '登录后**按侧放行**（同侧 200）、**越侧 403 `side-mismatch`**（不回落成「能看」）',
+  // 旧页已退役（`RETIRED_SUBVIEWS`）：同侧登录后拿到的也是 **303 → GUI**（不 404、不再是旧页 200）。
+  const sameSide = await fetch(`${base}/contractor/gates/`, { headers: await cookieFor('/contractor/gates/'), redirect: 'manual' })
+  const sameSideLocation = String(sameSide.headers.get('location') ?? '')
+  check('身份门槛（P3，与退役前逐字一致）：未登录取业务路由 ⇒ API 401 `identity-required` + `next`、浏览器 303 回 `/t282/identity/?next=…`；'
+    + '登录后**按侧放行**（同侧 ⇒ **303 → `/t282/app/contractor/`**：旧页不再返回内容）、'
+    + '**越侧 403 `side-mismatch`**（不回落成「能看」）',
   anonJson.status === 401 && anonJsonBody.includes('identity-required') && anonJsonBody.includes('"next"')
   && anonHtml.status === 303 && anonLocation.includes('/t282/identity/?next=')
   && crossSide.status === 403 && crossBody.includes('side-mismatch')
-  && (await get('/contractor/gates/')).status === 200,
+  && sameSide.status === 303 && sameSideLocation.endsWith('/t282/app/contractor/'),
   `未登录 JSON=${anonJson.status} HTML=${anonHtml.status} location=${anonLocation.slice(0, 60)}；`
-  + `越侧=${crossSide.status} 含 side-mismatch=${crossBody.includes('side-mismatch')}`)
+  + `越侧=${crossSide.status} 含 side-mismatch=${crossBody.includes('side-mismatch')}；`
+  + `同侧=${sameSide.status} → ${sameSideLocation}`)
   const INLINE_EVENT = /\son[a-z]+\s*=/i
-  const countOf = (text, attr) => {
-    const found = new RegExp(`data-gates-${attr}="(\\d+)"`).exec(String(text))
-    return found ? Number(found[1]) : null
-  }
-  const reasonOfPage = (text) => (/data-gates-degraded="1"[\s\S]{0,400}?<code>([^<]*)<\/code>/.exec(text) ?? [])[1] ?? ''
+  const NOISE = ['g1side', 'PYTHONPATH', '终端', '命令行']    // 产品面不许出现的「教用户回终端」痕迹
+  const noiseOf = (text) => NOISE.filter((token) => String(text).includes(token))
 
+  // ==========================================================================================
+  // 22-25：**旧页退役 ⇒ 接新位置**（`docs/design/29-webui-gui-app.md` §2 / AGENTS.md 规则 12）
+  //   旧断言是「两视角 `/gates/` 页与 `/api/gates` 都 200 + 页面上有 `data-age-clock`/逐条
+  //   `data-gate-next-action`/两张表 + 供应商侧 `data-gates-degraded` 计数 0 + 0 行脚本」；
+  //   那两条路由现在**已退役为 303 → `/t282/app/<view>/`**（旧页正是「把终端命令准备好让用户复制」的那种页）。
+  //   改判据（不弱于原来）：
+  //     ① 四条旧路由（两侧 × 页面/JSON）**303 + 正确 Location**；`/api/routes` 仍登记六条；
+  //     ② **承接这件事的 GUI 面板真的注册在那一页上**（`gate.queue` 带 `gate.grant`/`gate.deny`、
+  //        `gate.decided`、`gate.todo`），且面板载荷 **0 命中**「回终端」痕迹；
+  //     ③ 写面（催办 POST）与**变更单逐行明细**两条路由一行未改（下面 24 与 25 段真跑）。
+  //   「空投影不编 / age 不取墙钟 / 每条都有 basis」的等价判据在插件层（本门 1-21 与 AC-GATE-001），
+  //   本批**一条没松**（4 处单点变异仍必须全红）。逐条登记见 `docs/work/plans/webui-ui-defects.md` §P17。
+  // ==========================================================================================
   const routes = JSON.parse((await get('/api/routes')).text)
   const gateRoutes = (routes.routes ?? []).filter((item) => String(item.path).includes('/gates'))
-  const contractorPage = await get('/contractor/gates/')
-  const supplierPage = await get('/supplier/gates/')
-  const contractorJson = await get('/contractor/api/gates')
-  const supplierJson = await get('/supplier/api/gates')
-  const cj = JSON.parse(contractorJson.text)
-  const sj = JSON.parse(supplierJson.text)
-  const navOk = contractorPage.text.includes('data-subnav="contractor"')
-    && contractorPage.text.includes('data-gates-link="1"')
-  check('22 真 HTTP 正控：`/t282/<view>/gates/` 与 `/<view>/api/gates` 两视角各自 200；`/api/routes` 登记了'
-    + '页面/JSON/催办 POST **三条路由且 `auth=identity-session`**（业务路由要身份会话）；页面含道内子导航与「审批与变更」入口、'
-    + '`data-age-clock="facts-only"` 与口径那句话、逐条 `data-gate-next-action`；JSON 契约齐备'
-    + '（engine/age_clock/age_basis_note/ignored_now_inputs/gates/changes/counts/bounds/degraded/reason）',
-  contractorPage.status === 200 && supplierPage.status === 200 && contractorJson.status === 200
-  && supplierJson.status === 200 && gateRoutes.length === 6
-  && gateRoutes.every((item) => item.auth === 'identity-session')
-  && gateRoutes.filter((item) => item.method === 'GET').length === 4
-  && gateRoutes.filter((item) => item.method === 'POST').length === 2
-  && navOk && contractorPage.text.includes('data-age-clock="facts-only"')
-  && contractorPage.text.includes(mod.AGE_BASIS_NOTE)
-  && contractorPage.text.includes('data-gate-next-action="ap-0007"')
-  && cj.engine === 'rules' && cj.age_clock === 'facts-only'
-  && cj.ignored_now_inputs.join(',') === 'payload.now,config.now'
-  && Array.isArray(cj.gates) && cj.gates.length === 2 && Array.isArray(cj.changes) && cj.changes.length === 1
-  && cj.degraded === false && typeof cj.omitted === 'number' && typeof cj.truncated === 'boolean',
-  `status=${contractorPage.status}/${supplierPage.status}/${contractorJson.status}/${supplierJson.status}；`
-  + `路由=${JSON.stringify(gateRoutes.map((item) => `${item.method} ${item.path}`))}；入口=${navOk}；`
-  + `承包商门=${cj.gates?.length}（ap-0007 已决的 ap-0001 不进列表）变更=${cj.changes?.length}；`
-  + `age=${JSON.stringify(cj.gates?.map((item) => item.age_seconds))}`)
+  const retiredHits = []
+  for (const view of ['contractor', 'supplier']) {
+    for (const [suffix, accept] of [['/gates/', 'text/html'], ['/api/gates', 'application/json']]) {
+      const res = await fetch(`${base}/${view}${suffix}`, {
+        headers: { ...(await cookieFor(`/${view}${suffix}`)), accept }, redirect: 'manual' })
+      const loc = String(res.headers.get('location') ?? '')
+      retiredHits.push({ path: `/${view}${suffix}`, status: res.status, loc,
+        ok: res.status === 303 && loc.endsWith(`/${view}/`) })
+    }
+  }
+  const retiredOk = retiredHits.every((row) => row.ok)
+  const routesOk = gateRoutes.length === 6 && gateRoutes.every((item) => item.auth === 'identity-session')
+    && gateRoutes.filter((item) => item.method === 'GET').length === 4
+    && gateRoutes.filter((item) => item.method === 'POST').length === 2
+  const contractorPanels = JSON.parse((await get('/api/ui/panels?view=contractor')).text).panels ?? []
+  const supplierPanels = JSON.parse((await get('/api/ui/panels?view=supplier')).text).panels ?? []
+  const homePanels = JSON.parse((await get('/api/ui/panels?view=home')).text).panels ?? []
+  const supplierSurface = JSON.parse((await get('/api/ui/surface')).text)
+  const panelOf = (list, id) => list.find((panel) => (panel.panel_id ?? panel.id) === id)
+  const panelActions = (list, id) => (panelOf(list, id) ?? {}).actions ?? []
+  const carriersOk = panelActions(contractorPanels, 'gate.queue').includes('gate.grant')
+    && panelActions(contractorPanels, 'gate.queue').includes('gate.deny')
+    && Boolean(panelOf(contractorPanels, 'gate.decided'))
+    && Boolean(panelOf(homePanels, 'gate.todo'))       // 工作台首屏「要人决定的事」也在那一页上（view=home）
+    && panelActions(supplierPanels, 'gate.queue.supplier').includes('gate.grant')
+    && (supplierSurface.actions ?? []).some((row) => row.id === 'gate.nudge')
+  const panelNoise = noiseOf(JSON.stringify(contractorPanels) + JSON.stringify(supplierPanels))
+  check('22 真 HTTP 正控（**旧页退役 ⇒ 新位置**）：四条旧路由（`/t282/<view>/gates/` 与 `/t282/<view>/api/gates`）'
+    + '一律 **303 + Location 落在同侧 GUI 视图页**；`/api/routes` 仍登记六条（四条已退役 GET + 两条催办 POST）'
+    + '且 `auth=identity-session`；**承接这件事的 GUI 面板真的注册在那一页上**'
+    + '（`gate.queue` 带 `gate.grant`/`gate.deny`、`gate.decided` 留痕、`gate.todo` 工作台待办），'
+    + '且面板载荷 **0 命中**「回终端」痕迹（g1side / PYTHONPATH / 终端 / 命令行）',
+  retiredOk && routesOk && carriersOk && panelNoise.length === 0,
+  `旧路由=${JSON.stringify(retiredHits.map((row) => `${row.path}→${row.status}${row.loc}`))}；`
+  + `路由=${JSON.stringify(gateRoutes.map((item) => `${item.method} ${item.path} ${item.auth}`))}；`
+  + `承接面板=${carriersOk}；面板载荷命中=${panelNoise.join(',') || '无'}`)
 
-  const scripty = [contractorPage, supplierPage].filter((page) => page.text.includes(scriptNeedle)
-    || INLINE_EVENT.test(page.text))
-  const jsonScripty = [contractorJson, supplierJson].filter((page) => page.text.includes(scriptNeedle))
-  const scriptSelfTest = (`<a onclick="x()"></a>`).includes(scriptNeedle) || INLINE_EVENT.test('<a onclick="x()"></a>')
-  const supplierEmpty = countOf(supplierPage.text, 'gate-count') === 0
-    && countOf(supplierPage.text, 'change-count') === 0
-  check('23 真 HTTP 正控 + 负控：承包商侧真数据（2 条待批门 + 1 张变更单，`degraded:false`）；'
-    + '**供应商侧空投影** → 页面 `data-gates-degraded="1"` + 有名 reason + **两个列表计数都为 0**、'
-    + 'JSON `gates:[]`/`changes:[]`；两视角的**页面与 JSON 都 0 行脚本 / 0 内联事件**（扫描器非空转）',
-  scripty.length === 0 && jsonScripty.length === 0 && scriptSelfTest
-  && sj.degraded === true && sj.reason === 'no-usable-inputs' && sj.gates.length === 0 && sj.changes.length === 0
-  && supplierPage.text.includes('data-gates-degraded="1"')
-  && reasonOfPage(supplierPage.text) === 'no-usable-inputs' && supplierEmpty
-  && countOf(contractorPage.text, 'gate-count') === 2 && countOf(contractorPage.text, 'change-count') === 1,
-  `含脚本=${scripty.length}；JSON 含脚本=${jsonScripty.length}；对照=${scriptSelfTest}；`
-  + `供应商 degraded=${sj.degraded}/${sj.reason} 门=${sj.gates.length} 变更=${sj.changes.length}；`
-  + `页面计数（承包商 门=${countOf(contractorPage.text, 'gate-count')} 变更=${countOf(contractorPage.text, 'change-count')}｜`
-  + `供应商 门=${countOf(supplierPage.text, 'gate-count')} 变更=${countOf(supplierPage.text, 'change-count')}）`)
+  // 22b：四条退役响应的**响应体**里也不许有「回终端」痕迹（旧页 20「终端」+40 `g1side` 全来自这里）
+  const retiredBodies = []
+  for (const view of ['contractor', 'supplier']) {
+    for (const suffix of ['/gates/', '/api/gates']) {
+      const res = await fetch(`${base}/${view}${suffix}`, {
+        headers: { ...(await cookieFor(`/${view}${suffix}`)), accept: '*/*' }, redirect: 'manual' })
+      retiredBodies.push({ path: `/${view}${suffix}`, text: await res.text() })
+    }
+  }
+  const bodyNoise = retiredBodies.flatMap((row) => noiseOf(row.text).map((token) => `${row.path}:${token}`))
+  const bodyScripty = retiredBodies.filter((row) => row.text.includes('<scr' + 'ipt') || INLINE_EVENT.test(row.text))
+  check('22b 真 HTTP 负控：四条退役响应的响应体里 **0 命中**「回终端」痕迹、**0 行脚本 / 0 内联事件**'
+    + '（它们只是 303 的说明页，不再给任何可复制的命令）；扫描器**非空转**（对照样本必须命中）',
+  bodyNoise.length === 0 && bodyScripty.length === 0
+  && noiseOf('终端 g1side PYTHONPATH 命令行').length === 4
+  && INLINE_EVENT.test('<a onclick="x()">'),
+  `响应体命中=${bodyNoise.join(',') || '无'}；含脚本=${bodyScripty.length}；`
+  + `扫描器对照=${noiseOf('终端 g1side PYTHONPATH 命令行')}`)
 
   const REASON_HTTP = '这批料已经到场了，等您签字才能开工'
   const posted = await fetch(`${base}/contractor/gates/nudge`, { method: 'POST',
@@ -945,11 +986,17 @@ try {
     nudgeRecord = JSON.parse(readFileSync(nudgeFile, 'utf8'))
   } catch { nudgeMode = -1 }
   const ledgerAfterPost = sha256(readFileSync(contractorLedger, 'utf8'))
-  const againPage = await get('/contractor/gates/')
-  const againJson = await get('/contractor/api/gates')
-  check('24 真 HTTP 催办 POST：202 + 待办件 id + `next_action`；待办件**恰 0600**、**原话逐字**、'
-    + 'sha256 由门独立重算一致、`submitted_at` 为空；**账本零新增**（夹具逐字节不变）；'
-    + '同一 URL 两次 GET **逐字节一致**（HTTP 层的"不随窗口变"）',
+  const againRetired = []
+  for (const view of ['contractor', 'supplier']) {
+    for (const suffix of ['/gates/', '/api/gates']) {
+      const res = await fetch(`${base}/${view}${suffix}`, {
+        headers: { ...(await cookieFor(`/${view}${suffix}`)), accept: '*/*' }, redirect: 'manual' })
+      againRetired.push(await res.text())
+    }
+  }
+  check('24 真 HTTP 催办 POST（**写面没跟着旧页一起消失**）：202 + 待办件 id + `next_action`；待办件**恰 0600**、'
+    + '**原话逐字**、sha256 由门独立重算一致、`submitted_at` 为空；**账本零新增**（夹具逐字节不变）；'
+    + '同一 URL 两次 GET **逐字节一致**（四条退役路由的响应体，HTTP 层的「不随窗口变」）',
   posted.status === 202 && postedJson.ok === true && postedJson.code === 'accepted'
   && /^gn-contractor-[0-9a-f]{12}$/.test(String(postedJson.id))
   && typeof postedJson.next_action === 'string' && postedJson.next_action.includes('tools/gate-nudge.py')
@@ -957,37 +1004,45 @@ try {
   && nudgeRecord.view === 'contractor' && nudgeRecord.requested_action === 'nudge'
   && nudgeRecord.reason_sha256 === 'sha256:' + sha256(REASON_HTTP)
   && nudgeRecord.submitted_at === '' && ledgerAfterPost === ledgerHash
-  && againPage.text === contractorPage.text && againJson.text === contractorJson.text,
+  && JSON.stringify(againRetired) === JSON.stringify(retiredBodies.map((row) => row.text)),
   `POST=${posted.status} id=${postedJson.id} code=${postedJson.code}；mode=${'0' + nudgeMode.toString(8)}；`
   + `原话逐字=${nudgeRecord.reason === REASON_HTTP}；账本未变=${ledgerAfterPost === ledgerHash}；`
-  + `页面两次一致=${againPage.text === contractorPage.text}；next_action=${String(postedJson.next_action).slice(0, 60)}…`)
+  + `退役路由两次一致=${JSON.stringify(againRetired) === JSON.stringify(retiredBodies.map((row) => row.text))}；`
+  + `next_action=${String(postedJson.next_action).slice(0, 60)}…`)
 
   const elevate = await fetch(`${base}/admin/api/elevate`, { method: 'POST', body: `token=${T282_TOKEN}` })
   const adminCookie = String(elevate.headers.get('set-cookie') ?? '').split(';')[0]
   const adminPage = await fetch(`${base}/admin/`, { headers: { cookie: adminCookie } })
   const adminText = await adminPage.text()
-  const navPages = { contractor: contractorPage.text, supplier: supplierPage.text, ops: (await get('/ops/')).text,
-    admin: adminText }
+  // 四道页面（承包商/供应商/运维/系统管理）的子导航里都要有「审批队列」入口 —— 抓手仍是 `data-gates-link`，
+  // 只是目标已按 29 §2 **接到新位置**（`/app/<view>/`），不再指向旧页。
+  const navPages = { contractor: (await get('/contractor/')).text, supplier: (await get('/supplier/')).text,
+    ops: (await get('/ops/')).text, admin: adminText }
   const navMissing = Object.entries(navPages).filter(([, text]) => !text.includes('data-gates-link="1"'))
     .map(([name]) => name)
+  // 「不再指向旧页」= 四道页面里没有**指向 `/<view>/gates/` 的链接/表单**（`/gates/nudge` 写面不算）
+  const STALE_LINK = /(?:href|action)="[^"]*\/gates\/"/g
+  const staleEntries = Object.entries(navPages).filter(([, text]) => STALE_LINK.test(text)).map(([name]) => name)
   const NEEDLES = ['cost_floor', 'markup_pct', 'reserve_price', 'cost_model', 'private:', 'bidders_private',
     'internal_notes', 'authorized_band', ...SENTINELS]
-  const supplierGates = supplierPage.text + supplierJson.text
-  const contractorGates = contractorPage.text + contractorJson.text
-  const hitsSupplier = NEEDLES.filter((needle) => supplierGates.includes(needle))
-  const hitsContractor = NEEDLES.filter((needle) => contractorGates.includes(needle))
+  // 私域扫描搬位置：四条退役响应体 + **承接面板**载荷（不扫全部面板：搜索面里会出现用户自己起的 id）
+  const carrierPayloads = [panelOf(contractorPanels, 'gate.queue'), panelOf(contractorPanels, 'gate.decided'),
+    panelOf(homePanels, 'gate.todo'), panelOf(supplierPanels, 'gate.queue.supplier')].filter(Boolean)
+  const scanned = JSON.stringify(carrierPayloads) + retiredBodies.map((row) => row.text).join('\n')
+  const hitsScanned = NEEDLES.filter((needle) => scanned.includes(needle))
   const fixtureHas = SENTINELS.filter((needle) => readFileSync(contractorLedger, 'utf8').includes(needle))
   const homeCode = await get('/contractor/')
   const adminCode = await get('/admin/')
-  check('25 真 HTTP 正控 + 负控：**四道页面**（承包商/供应商/运维/系统管理）的子导航里都有「审批与变更」入口，'
-    + '第四道是提权后的真面板；两视角 gates 页/JSON 里私域键名与哨兵 **0 命中**（这类键连读都不读），'
+  check('25 真 HTTP 正控 + 负控：**四道页面**（承包商/供应商/运维/系统管理）的子导航里都有「审批队列」入口，'
+    + '且四道页面里都**不再有指向旧 `/<view>/gates/` 的链接**（写面 `/gates/nudge` 不算）；第四道是提权后的真面板；'
+    + '四条退役响应体与**承接面板载荷**里私域键名与哨兵 **0 命中**（这类键连读都不读），'
     + '**非空转对照**：同一批哨兵确实写在夹具账本文件里；既有路由没被弄坏，且未带 cookie 的 `/admin/` 仍 401 固定体',
-  navMissing.length === 0 && elevate.status === 200 && adminPage.status === 200
-  && adminText.includes('审批与变更（承包商）') && hitsSupplier.length === 0 && hitsContractor.length === 0
+  navMissing.length === 0 && staleEntries.length === 0 && elevate.status === 200 && adminPage.status === 200
+  && adminText.includes('审批队列（承包商 · GUI）') && hitsScanned.length === 0
   && fixtureHas.length >= 3 && homeCode.status === 200 && adminCode.status === 401
   && adminCode.text.trim() === '{"error":"unauthorized"}',
-  `缺入口的道=${navMissing.join(',') || '无'}；提权=${elevate.status}；admin 页=${adminPage.status}；`
-  + `供应商命中=${hitsSupplier.join(',') || '无'}；承包商命中=${hitsContractor.join(',') || '无'}；`
+  `缺入口的道=${navMissing.join(',') || '无'}；仍有旧页链接的道=${staleEntries.join(',') || '无'}；`
+  + `提权=${elevate.status}；admin 页=${adminPage.status}；扫描命中=${hitsScanned.join(',') || '无'}；`
   + `夹具里确实有哨兵=${fixtureHas.join(',')}；admin 未提权=${adminCode.status}`)
 
   await httpFiber.dispose()

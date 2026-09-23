@@ -340,7 +340,9 @@ def main() -> int:  # noqa: C901
             f"{base}/supplier/deadlines/", headers={"Accept": "text/html"}, follow_redirects=False)
         cookie_contractor = cookie_of(f"{base}/contractor/deadlines/")
         cookie_supplier = cookie_of(f"{base}/supplier/deadlines/")     # noqa: F841（两侧各登录一次）
-        same_side = raw_request_full(f"{base}/contractor/deadlines/", headers=cookie_contractor)
+        # 旧页已退役（`RETIRED_SUBVIEWS`）：同侧登录后拿到的也是 **303 → GUI**（不 404、不再是旧页 200）。
+        same_side = raw_request_full(f"{base}/contractor/deadlines/", headers=cookie_contractor,
+                                     follow_redirects=False)
         cross_side = raw_request_full(f"{base}/supplier/deadlines/", headers=cookie_contractor)
         cross_json = raw_request_full(f"{base}/supplier/api/deadlines", headers=cookie_contractor)
         check("②b 身份门槛负控：**未登录**取业务路由一律拒 —— API/JSON ⇒ 401 `identity-required` + `next`；"
@@ -349,103 +351,91 @@ def main() -> int:  # noqa: C901
               and anon_html_code == 303 and "/identity/?next=" in header_of(anon_html_headers, "location"),
               f"JSON={anon_json_code} 含 identity-required={'identity-required' in anon_json_body}；"
               f"HTML={anon_html_code} location={header_of(anon_html_headers, 'location')[:80]}")
-        check("②b' 身份门槛正控：**登录后按侧放行** —— 同侧页面 200；拿承包商 cookie 去 `/supplier/`"
+        check("②b' 身份门槛正控：**登录后按侧放行** —— 同侧 ⇒ **303 → `<前缀>/app/contractor/`**"
+              "（旧页退役后不再返回内容）；拿承包商 cookie 去 `/supplier/`"
               "（页面与 JSON 两条形状）都 ⇒ **403 `side-mismatch`**（不许回落成「能看」）",
-              same_side[0] == 200 and cross_side[0] == 403 and "side-mismatch" in cross_side[1]
+              same_side[0] == 303 and str(header_of(same_side[2], "location")).endswith("/app/contractor/")
+              and cross_side[0] == 403 and "side-mismatch" in cross_side[1]
               and cross_json[0] == 403 and "side-mismatch" in cross_json[1],
-              f"同侧={same_side[0]} 越侧页面={cross_side[0]} 越侧 JSON={cross_json[0]} "
+              f"同侧={same_side[0]} → {header_of(same_side[2], 'location')}；越侧页面={cross_side[0]} 越侧 JSON={cross_json[0]} "
               f"含 side-mismatch={'side-mismatch' in cross_side[1]}")
 
-        # ---- ③ 路由登记 + 页面/JSON + 0 内联脚本 ----
-        routes = parse_json(get(f"{base}/api/routes")[1]).get("routes", [])
+        # ==========================================================================================
+        # ★ 本段已按 `docs/design/29-webui-gui-app.md` §2 + AGENTS.md 规则 12 **改判据**（旧页退役）：
+        #   旧断言「两视角 `/deadlines/` 页与 `/api/deadlines` 都 200、页面上有逐条 next_action 与
+        #   `data-deadlines-link` 子导航、JSON 的 remaining/severity/名册手算对账、空投影降级页」
+        #   冻结的是**已经删掉的旧形态**（而且旧页正是「把可复制的终端命令准备好让用户复制」的那种页），
+        #   与「双方仅通过 GUI 走完全部业务流程」直接冲突 ⇒ 逐条改判据：
+        #     · 路由/身份/0 命中类 ⇒ **接新位置**（303 + Location + 承接面板注册在 GUI 上 + 产品面 0 痕迹）；
+        #     · 只在旧页上成立的内容类（remaining/severity 手算、名册白名单、空投影降级页、承诺改变页面口径）
+        #       ⇒ **删除**，其等价判据在插件层（`t285-rfq-deadline-gate.mjs`，本批 23/23，含 4 处单点变异）**一条没松**。
+        #   逐条登记（文件 + 原行 + 理由）见 `docs/work/plans/webui-ui-defects.md` §P17。
+        # ==========================================================================================
+        NOISE = ("终端", "g1side", "PYTHONPATH", "命令行")
+
+        def noise_of(text):
+            return [token for token in NOISE if token in text]
+
+        # ---- ③ 路由登记（三条 × 两视角）+ 旧页退役 ⇒ 303 ----
+        routes_doc = parse_json(get(f"{base}/api/routes")[1])
+        routes = routes_doc.get("routes", [])
         deadline_routes = [item for item in routes if "/deadlines" in str(item.get("path", ""))]
-        pages = {view: get(f"{base}/{view}/deadlines/") for view in ("contractor", "supplier")}
-        jsons = {view: get(f"{base}/{view}/api/deadlines") for view in ("contractor", "supplier")}
-        parsed = {view: parse_json(jsons[view][1]) for view in jsons}
-        write_surface = (parse_json(get(f"{base}/api/routes")[1]).get("write_surface") or {})
-        cpage, spage = pages["contractor"][1], pages["supplier"][1]
-        next_actions = re.findall(r'data-deadline-next-action="([^"]+)"', cpage)
-        scripty = [name for name, text in (("page:c", cpage), ("page:s", spage),
-                                           ("json:c", jsons["contractor"][1]), ("json:s", jsons["supplier"][1]))
-                   if SCRIPT_NEEDLE in text or INLINE_EVENT.search(text)]
-        check("③ 三条新路由登记（两视角 ×「页面 GET / JSON GET / 登记承诺 POST」六条），`auth` 是**真实值**"
-              "`identity-session`（业务路由要身份会话——台账不再写 `none` 撒谎）；"
-              "`write_surface` 含登记承诺路由；承包商页 200 且是**真页面**"
-              "（`data-due-clock=\"facts-only\"` + 口径文案 + 逐条 `data-deadline-next-action`）；"
-              "四份响应 **0 行脚本 / 0 内联事件**（扫描器非空转）",
+        write_surface = (routes_doc.get("write_surface") or {})
+        retired_rows = []
+        for view in ("contractor", "supplier"):
+            for suffix, accept in (("/deadlines/", "text/html"), ("/api/deadlines", "application/json")):
+                code, _body, headers = raw_request_full(
+                    f"{base}/{view}{suffix}",
+                    headers={**cookie_of(f"{base}/{view}{suffix}"), "Accept": accept},
+                    follow_redirects=False)
+                location = str(header_of(headers, "location"))
+                retired_rows.append((f"/{view}{suffix}", code, location,
+                                     code == 303 and location.endswith(f"/{view}/")))
+        carriers = {"contractor": ("rfq.remind-board", "authority.bands"),
+                    "supplier": ("exchange.inbox", "authority.bands.supplier")}
+        panels = {view: parse_json(get(f"{base}/api/ui/panels?view={view}")[1]).get("panels", [])
+                  for view in ("contractor", "supplier")}
+        panel_ids = {view: [(panel.get("panel_id") or panel.get("id")) for panel in panels[view]]
+                     for view in panels}
+        carriers_missing = [f"{view}:{pid}" for view, ids in carriers.items()
+                            for pid in ids if pid not in panel_ids[view]]
+        check("③ 三条路由 × 两视角六条登记（页面 GET / JSON GET / 登记承诺 POST），`auth` 是**真实值**"
+              "`identity-session`；`write_surface` 含登记承诺路由；**旧页退役 ⇒ 接新位置**："
+              "四条旧路由（`/<view>/deadlines/` 与 `/<view>/api/deadlines`）一律 **303 + Location 落在同侧 GUI**；"
+              "**承接这件事的 GUI 面板真的注册在那一页上**（承包商：回文时限与催报 / 授权区间；供应商：我收到的包 / 授权区间）",
               len(deadline_routes) == 6 and all(item.get("auth") == "identity-session" for item in deadline_routes)
               and len([i for i in deadline_routes if i.get("method") == "GET"]) == 4
               and len([i for i in deadline_routes if i.get("method") == "POST"]) == 2
               and f"{prefix}/<view>/deadlines/promise" in (write_surface.get("browser_writable") or [])
-              and pages["contractor"][0] == 200 and jsons["contractor"][0] == 200
-              and 'data-due-clock="facts-only"' in cpage and "不取墙钟" in cpage
-              and 'data-subnav="contractor"' in cpage and 'data-deadlines-link="1"' in cpage
-              and 'data-deadlines="table"' in cpage and next_actions == ["pkg-g2", "pkg-g1"]
-              and 'data-cannot-send="1"' in cpage
-              and not scripty and (SCRIPT_NEEDLE in f"<a {SCRIPT_NEEDLE}>" or INLINE_EVENT.search('<a onclick="x()">')),
-              f"命中={json.dumps([f'{i.get('method')} {i.get('path')}' for i in deadline_routes], ensure_ascii=False)}；"
-              f"status={pages['contractor'][0]}/{jsons['contractor'][0]}；next_action 行={next_actions}；"
-              f"含脚本={scripty or '无'}")
+              and all(row[3] for row in retired_rows) and not carriers_missing,
+              f"登记={json.dumps([f'{i.get('method')} {i.get('path')}' for i in deadline_routes], ensure_ascii=False)}；"
+              f"旧路由={json.dumps([(p, c, l) for p, c, l, _ in retired_rows], ensure_ascii=False)}；"
+              f"缺承接面板={carriers_missing or '无'}")
 
-        # ---- ④ 剩余时长有口径（手算 + 逐字节稳定） ----
-        cjson = parsed["contractor"]
-        remaining = {item.get("rfq_id"): item.get("remaining_seconds") for item in cjson.get("rfqs", [])}
-        severity = {item.get("rfq_id"): item.get("severity") for item in cjson.get("rfqs", [])}
-        basis_ok = all(isinstance(item.get("due_basis"), str) and "不取墙钟" in item["due_basis"]
-                       for item in cjson.get("rfqs", []))
-        names = {item.get("rfq_id"): [item.get("responded"), item.get("silent")]
-                 for item in cjson.get("rfqs", [])}
-        again_page = get(f"{base}/contractor/deadlines/")
-        again_json = get(f"{base}/contractor/api/deadlines")
-        check("④ **剩余时长有口径且可复算**：`remaining_seconds` == 手算 `due_ts − as_of`"
-              "（pkg-g1 302400 / pkg-g2 -1800，过期那条 `overdue=true` 且 severity=overdue）；"
-              "`due_basis` 指名事实来源并写清「不取墙钟」；名册与手算一致（邀请 2 / 已回 1 / 未回 1）；"
-              "同一 URL 两次 GET **逐字节一致**（不随刷新漂移）",
-              remaining == HAND_REMAINING and severity == {"pkg-g2": "overdue", "pkg-g1": "scheduled"}
-              and basis_ok and cjson.get("as_of") == AS_OF
-              and cjson.get("due_clock") == "facts-only"
-              and cjson.get("ignored_now_inputs") == ["payload.now", "config.now"]
-              and names.get("pkg-g1") == [["supplier:g2"], ["supplier:g1"]]
-              and names.get("pkg-g2") == [[], []]
-              and cjson.get("counts", {}).get("invited") == 2
-              and cjson.get("counts", {}).get("silent") == 1
-              and again_page[1] == cpage and again_json[1] == jsons["contractor"][1]
-              and "302400" in cpage,
-              f"remaining={json.dumps(remaining, ensure_ascii=False)}（期望 {json.dumps(HAND_REMAINING)}）；"
-              f"severity={json.dumps(severity, ensure_ascii=False)}；as_of={cjson.get('as_of')}；"
-              f"名册={json.dumps(names, ensure_ascii=False)}；页面两次一致={again_page[1] == cpage}")
-
-        # ---- ⑤ 没凭据不得假装能发 ----
-        combined_doc = cpage + jsons["contractor"][1]
-        hits = [word for word in CLAIM_WORDS if word in combined_doc]
-        check("⑤ **没凭据不得假装能发**：通道 `available=false` ⇒ 页面与 JSON 都写「无法代发」+ 通道 reason，"
-              "`can_send=false`；**整个响应里**「已通知/已提醒/已发送/已发出/已催」**0 命中**"
-              "（非空转对照：把这些词塞进探针串能命中）",
-              "无法代发" in cpage and "无法代发" in jsons["contractor"][1]
-              and "mail-transport-unavailable" in combined_doc
-              and cjson.get("can_send") is False
-              and cjson.get("channel", {}).get("available") is False
-              and not hits
-              and all(word in "探针：已通知/已提醒/已发送/已发出/已催" for word in CLAIM_WORDS),
-              f"命中={json.dumps(hits, ensure_ascii=False)}；can_send={cjson.get('can_send')}；"
-              f"channel={json.dumps(cjson.get('channel'), ensure_ascii=False)[:160]}")
-
-        # ---- ⑥ 空投影不编 + 名册白名单 ----
-        sjson = parsed["supplier"]
-        supp_names = {item.get("rfq_id"): [item.get("responded"), item.get("silent")]
-                      for item in sjson.get("rfqs", [])}
-        check("⑥ **空投影不编**（真进程真回读）：供应商侧（空账本）页面 `data-deadlines-degraded=\"1\"` + "
-              "有名 reason + 条目计数 **0**，JSON `rfqs:[]` + `degraded:true`；"
-              "供应商侧名册三列**恒空**（名册是业主私域，读都不读）",
-              pages["supplier"][0] == 200 and jsons["supplier"][0] == 200
-              and 'data-deadlines-degraded="1"' in spage and page_reason(spage) in REASONS
-              and count_attr(spage, "count") == 0 and sjson.get("rfqs") == []
-              and sjson.get("degraded") is True and sjson.get("reason") in REASONS
-              and sjson.get("private_lists_visible") is False
-              and all(value == [[], []] for value in supp_names.values()),
-              f"page={pages['supplier'][0]} degraded={'data-deadlines-degraded=\"1\"' in spage} "
-              f"reason={page_reason(spage)}；JSON degraded={sjson.get('degraded')}/{sjson.get('reason')} "
-              f"rfqs={sjson.get('rfqs')}；页面计数={count_attr(spage, 'count')}")
+        # ---- ③b 产品面 0 命中（旧页那 20「终端」+40 `g1side` 的来源已被清掉）+ 退役响应体 0 脚本 ----
+        script_needle = "scr" + "ipt"
+        retired_bodies = []
+        for view in ("contractor", "supplier"):
+            for suffix in ("/deadlines/", "/api/deadlines"):
+                retired_bodies.append((f"/{view}{suffix}",
+                                       raw_request_full(f"{base}/{view}{suffix}",
+                                                        headers={**cookie_of(f"{base}/{view}{suffix}"),
+                                                                 "Accept": "*/*"},
+                                                        follow_redirects=False)[1]))
+        carrier_payload = json.dumps([panel for view in panels for panel in panels[view]
+                                      if (panel.get("panel_id") or panel.get("id")) in carriers.get(view, ())],
+                                     ensure_ascii=False)
+        noise_hits = [f"{path}:{token}" for path, body in retired_bodies for token in noise_of(body)]
+        noise_hits += [f"panels:{token}" for token in noise_of(carrier_payload)]
+        scripty = [path for path, body in retired_bodies
+                   if script_needle in body or INLINE_EVENT.search(body)]
+        check("③b **产品面 0 命中**：四条退役响应体与**承接面板载荷**里 `终端` / `g1side` / `PYTHONPATH` / "
+              "`命令行` **0 命中**；退役响应体 **0 行脚本 / 0 内联事件**；两个扫描器都**非空转**",
+              not noise_hits and not scripty
+              and noise_of("终端 g1side PYTHONPATH 命令行") == list(NOISE)
+              and (script_needle in f"<{script_needle}>" or bool(INLINE_EVENT.search('<a onclick="x()">'))),
+              f"关键词命中={noise_hits or '无'}；含脚本={scripty or '无'}；"
+              f"扫描器对照={noise_of('终端 g1side PYTHONPATH 命令行')}")
 
         # ---- ⑦ 登记承诺 POST（宿主只落 0600 待办件、账本零新增） ----
         counts_before = ledger_count(base)
@@ -497,24 +487,6 @@ def main() -> int:  # noqa: C901
               f"applied={[p.name for p in applied_files()]}；计数 {counts_before} → {after_count}；"
               f"账本里有原话={PROMISE_NOTE in CONTRACTOR_LEDGER.read_text(encoding='utf-8')}")
 
-        # ---- ⑨ 承诺改变了页面上的口径（承诺回文时限真的生效） ----
-        after = parse_json(get(f"{base}/contractor/api/deadlines")[1])
-        after_rows = {item.get("rfq_id"): item for item in after.get("rfqs", [])}
-        g1 = after_rows.get("pkg-g1") or {}
-        g2 = after_rows.get("pkg-g2") or {}
-        after_page = get(f"{base}/contractor/deadlines/")[1]
-        check("⑨ **承诺真的改变了口径**：`/api/deadlines` 的 pkg-g1 时限从 `rfq/published.quote_by` "
-              "变成 `rfq/promised.due_at`（手算剩余 352800 秒、`due_basis` 指名 `rfq/promised`），"
-              "`as_of` 推进到承诺事实的 ts（事实时刻，不是墙钟）",
-              g1.get("due_ts") == PROMISE_DUE and "rfq/promised" in str(g1.get("due_basis"))
-              and g1.get("remaining_seconds") == HAND_AFTER["pkg-g1_remaining"]
-              and g2.get("remaining_seconds") == HAND_AFTER["pkg-g2_remaining"]
-              and after.get("as_of") == HAND_AFTER["as_of"]
-              and "352800" in after_page and PROMISE_DUE in after_page,
-              f"pkg-g1 due={g1.get('due_ts')} remaining={g1.get('remaining_seconds')}"
-              f"（期望 {HAND_AFTER['pkg-g1_remaining']}）；pkg-g2 remaining={g2.get('remaining_seconds')}"
-              f"（期望 {HAND_AFTER['pkg-g2_remaining']}）；as_of={after.get('as_of')}")
-
         # ---- ⑩ 幂等 ----
         dup_post = post_form(f"{base}/contractor/deadlines/promise",
                              {"id": "pkg-g1", "by": PROMISE_BY, "due_at": PROMISE_DUE, "note": PROMISE_NOTE})
@@ -555,21 +527,24 @@ def main() -> int:  # noqa: C901
         code_t, payload_t, _ = run_promise("--now", NOW)
         tampered.unlink(missing_ok=True)
         refused = (payload_t.get("refused") or [{}])[0]
-        hits_doc = {view: [needle for needle in PRIVATE_KEYS + SENTINELS
-                           if needle in (pages[view][1] + jsons[view][1])] for view in pages}
+        # 私域哨兵：**与旧断言同一范围**（两视角的页面/JSON），只是那两条路由已退役为 303 ⇒ 扫它们的响应体。
+        # 不扫承接面板载荷：`rfq.remind-board` / `exchange.inbox` 本来就要显示**供应商名字**
+        # （夹具里那家就叫 `SUPPLIER-SENTINEL-1a2b`），把它算成「私域泄漏」是假阳性。
+        hits_doc = {"retired-bodies": [needle for needle in PRIVATE_KEYS + SENTINELS
+                                       if needle in "\n".join(body for _path, body in retired_bodies)]}
         home_code, _ = get(f"{base}/contractor/")
         ops_code, _ = get(f"{base}/api/ops")
         admin_code, admin_body = get(f"{base}/admin/")
         check("⑪ **拒绝路径**各自给具体 `code` + `next_action`，且**拒绝时账本零新增**：不存在的包 → POST "
               "**404 `rfq-not-found`**；被改过的待办件 → `pending-tampered`；"
-              "两视角页面/JSON 里私域键名与哨兵 **0 命中**（**非空转对照**：哨兵确实在夹具账本里）；"
+              "四条退役响应体里私域键名与哨兵 **0 命中**（**非空转对照**：哨兵确实在夹具账本里）；"
               "既有路由没坏、未提权 `/admin/` 仍 401 固定体",
               bad_post[0] == 404 and bad_json.get("code") == "rfq-not-found"
               and bad_json.get("next_action") and "账本零新增" in str(bad_json.get("next_action"))
               and code_t == 1 and refused.get("code") == "pending-tampered" and refused.get("next_action")
               and payload_t.get("ledger_added") == 0
               and len(ledger_rows(CONTRACTOR_LEDGER)) == lines_before
-              and not hits_doc["contractor"] and not hits_doc["supplier"] and len(fixture_has) >= 4
+              and not any(hits_doc.values()) and len(fixture_has) >= 4
               and home_code == 200 and ops_code == 200 and admin_code == 401
               and admin_body.strip() == '{"error":"unauthorized"}',
               f"POST={bad_post[0]} code={bad_json.get('code')}；脚本 rc={code_t} code={refused.get('code')}；"
