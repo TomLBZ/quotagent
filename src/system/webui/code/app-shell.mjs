@@ -2984,6 +2984,44 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       .map((row) => row.item).filter((item) => item !== ''))
     return ids.filter((id) => !settled.has(id))
   }
+  /** 一批里"谁已经有结论了"（applied / duplicates / refused 都算**有结论**）—— 只照抄回执，机制不判定业务。
+   *  已完成/失败的批次有 `items`（逐条回执照抄）；中断的那些只有 `progress`（每行 = 一次写者回执）。 */
+  const jobVerdictsOf = (job) => {
+    const out = new Map()
+    for (const row of (job.items || [])) {
+      const id = String(row?.item ?? '')
+      if (id !== '') out.set(id, String(row?.where ?? ''))
+    }
+    for (const row of (job.progress || [])) {
+      if (row?.phase !== 'writer-done') continue
+      const id = String(row?.target ?? '')
+      if (id !== '' && !out.has(id)) out.set(id, String(row?.code ?? '') === '' ? 'applied' : 'refused')
+    }
+    return out
+  }
+  /**
+   * **收尾对账**（P25 ③；只做减法，不编数字）：一条没跑完的记录（`interrupted`/`failed`）里剩下的那些，
+   * 如果**后来的某一批**已经给出结论（applied / duplicates / refused 任一），它就不再是"还没做" ——
+   * 否则界面会拿一条**过期的清单**反复说"还没做 N 份"（幂等重试之后尤其明显：账本零新增，数字却停在中断那一刻）。
+   * 入参顺序 = **新在前**（`jobLog` 就是这么排的：新批次 unshift 到前面）⇒ 先用后来的批次盖掉更旧的记录。
+   * 减完若为空 ⇒ `pending_ids`/`refused_ids` 都是空数组 ⇒ 界面不再摆那条提示（记录本身**不删**）。
+   */
+  const jobReconcile = (rows) => {
+    const settled = new Map()                 // id -> 最后一次结论（越新的批次覆盖越旧的）
+    return rows.map((job) => {
+      const pending = (job.pending_ids || []).filter((id) => !settled.has(id))
+      const refused = (job.refused_ids || []).filter((id) => !settled.has(id))
+      const superseded = (job.pending_ids || []).length - pending.length
+        + (job.refused_ids || []).length - refused.length
+      for (const [id, where] of jobVerdictsOf(job)) settled.set(id, where)
+      if (!['interrupted', 'failed'].includes(job.status) || superseded === 0) return job
+      return { ...job, pending_ids: pending, refused_ids: refused, superseded,
+        unfinished: pending.length + refused.length,
+        runtime_note: `${job.runtime_note ? `${job.runtime_note} ` : ''}其中 ${superseded} 份**已被后来的批次给出结论**`
+          + '（applied/duplicates/refused 任一都算有结论）⇒ 不再算"还没做"；'
+          + `剩下 ${pending.length + refused.length} 份真没做过（记录不删，读数在 /api/ui/jobs）` }
+    })
+  }
   const jobDescribe = (job) => ({
     id: job.id, action: job.action, title: job.title, plugin_id: job.plugin_id,
     actor: job.actor, side: job.side, view: job.view, status: job.status,
@@ -2993,15 +3031,19 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     done: job.done ?? (job.items || []).length, applied: job.applied ?? 0, duplicates: job.duplicates ?? 0,
     refused: job.refused ?? 0, ledger_added: job.ledger_added ?? 0,
     pending_ids: job.pending_ids || [], refused_ids: job.refused_ids || [],
+    // **收尾对账的读数**（③）：`superseded` = 已被后来的批次给出结论、不再算"还没做"的份数；
+    // `unfinished` = 真还没做的份数（= pending + refused 的条数）。界面按它决定摆不摆那条提示条。
+    superseded: job.superseded ?? 0,
+    unfinished: (job.pending_ids || []).length + (job.refused_ids || []).length,
     runtime: job.runtime || 'worker', runtime_note: job.runtime_note || '',
   })
   /**
    * 一页界面上要的两样东西（**按会话身份隔离**）：`running`（正在跑的那一批，界面拿来显示实时进度）与
-   * `recent`（最近几批，含\"上一个进程留下的没跑完\"那种）。
+   * `recent`（最近几批，含\"上一个进程留下的没跑完\"那种）。**收尾对账在按身份过滤之前做**：谁重试的都能算数。
    */
   const jobsOf = (who) => {
     const human = String(who?.human ?? '')
-    const rows = jobsLoad().filter((job) => human === '' || job.actor === human).map(jobDescribe)
+    const rows = jobReconcile(jobsLoad()).filter((job) => human === '' || job.actor === human).map(jobDescribe)
     return { schema: JOB_SCHEMA, file: jobFile(), concurrency: jobConcurrency,
       running: rows.filter((job) => job.status === 'running' || job.status === 'queued'),
       recent: rows.filter((job) => job.status !== 'running' && job.status !== 'queued')
@@ -3012,6 +3054,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     schema: JOB_SCHEMA, file: jobFile(), concurrency: jobConcurrency, limits: JOB_LIMITS,
     mechanism: '批量动作（注册面声明 `input.bulk=\'ids\'`）的服务端一半在 **worker 线程**里跑：主线程不被 '
       + '`spawnSync` 占住（别人的翻页/写照常），进度与逐条结果落 0600 的 jobs.json（刷新/崩溃后仍知道\"到哪了\"）',
+    reconcile: '没跑完的记录（`interrupted`/`failed`）的 `pending_ids`/`refused_ids` 会与**后来的批次**对账：'
+      + '某一份已经拿到结论（applied / duplicates / refused 任一）⇒ 不再算"还没做"，记在 `superseded`；'
+      + '`unfinished` = 真还没做的份数。**只做减法**（拿真回执减），记录本身不删',
     route: `${prefix}/api/ui/jobs`,
     io: ioJobs,
   })

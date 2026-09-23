@@ -2621,7 +2621,8 @@ ${sortForm('events', '筛查事件')}
       return json(200, { ok: true, ...shell.jobsOf(whom),
         identity: { human: whom.human, side: whom.side },
         next_action: '正在跑的那一批在 `running`（逐条进度在 `progress`/`last`）；没跑完的在 `recent` 里'
-          + '（`status:"interrupted"` + `pending_ids`）—— 只重试 `pending_ids`/`refused_ids` 是安全的（幂等）' })
+          + '（`status:"interrupted"` + `pending_ids`）—— 只重试 `pending_ids`/`refused_ids` 是安全的（幂等）；'
+          + '`unfinished` = 与**后来的批次对账后**真还没做的份数（`superseded` = 已被后来的批次给出结论的那些）' })
     }
     // ---- **同侧协作**（指派/转交、关注、评论与 @同事、活动流、已读）-------------------------------------
     // 三条只读自述/查询路由：**侧一律取会话**（请求体/查询串改不动它）⇒ 一侧的身份读不到另一侧的协作数据

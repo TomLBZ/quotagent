@@ -14,11 +14,18 @@
  *     `--actor human:<署名>` → 落 `approval/requested` → `approval/granted` → `quote/submitted`，
  *     并在承包商账本登记一条「供应商已提交报价」）；
  *   · 快捷键 `d`、通知源（待签署草稿）、状态栏项。
+ *   · **已读回执（本批新增）**：供应商**打开包**（列表面板 `quote.package` / 对象页 `package.mine`）时，
+ *     按会话身份记一条**已读回执**给发包方（`<ui_shared>/receipts/deliveries.json`，0600，**不进账本**；
+ *     理由见 `src/system/attachments/code/delivery-receipts.mjs` 文件头）。发包方那一侧在
+ *     `domain/rfq` 的「投递与已读回执」面板里看到「谁 / 何时 / 看过几次」。回执里**没有**本侧的
+ *     报价、成本或任何私域字段 —— 只有对象 id + 人 + 时刻 + 计数。
  *
  * 纪律：本文件不写账本（只 spawn Python 侧唯一写者）；单价一律**整数分**；备注正文只进 0600 待办件。
+ * 已读回执也只写它自己那个 0600 文件（`ledger_added` 恒 0），不是第二条事实写路径。
  */
 import { createHash } from 'node:crypto'
 import { buildCatalogue, validate, LIMITS, FIELDS, MONEY_UNIT } from './quote-prepare.mjs'
+import { createReceiptStore } from '../../../system/attachments/code/delivery-receipts.mjs'
 
 /** 与唯一写者 `tools/quote-draft.py` 的 `canonical_lines()` **逐字节一致**的行项目规范化 JSON。
  *
@@ -184,6 +191,38 @@ export async function register(surface, host) {
   const BATCH_SIGN_MAX = 50
   const supplierLedger = () => asText(host.config?.ledger_supplier)
   const contractorLedger = () => asText(host.config?.ledger_contractor)
+  /** 已读回执存储（0600；**不进账本**，理由见模块文件头）。沙盘里 `host.sharedDir` 会指向沙盘目录 ⇒ 演示不脏真实面。 */
+  const receipts = createReceiptStore({ root: host.root, sharedDir: host.sharedDir,
+    log: (msg) => host.note.set(me, 'receipt-log', msg) })
+  /**
+   * **打开包的一方留一条已读回执**（发包方据此回答「对方收到了吗 / 看了吗」）。
+   *
+   * 三条纪律（逐条都是硬约束）：
+   *   · **侧与人都只认会话**（`ctx.identity`）：没有身份、或身份不是供应商侧 ⇒ **不记**、也不报错；
+   *   · 只记「对象 id + 人 + 时刻 + 从哪看的」，**不记**报价/成本/评分（回执不是数据出口）；
+   *   · 失败不影响这一页渲染（回执是痕迹，读不到回执不该把「看包」这件事弄坏）：如实塞进面板的 note。
+   */
+  const receiptNote = (out) => {
+    if (!out) return ''
+    if (out.ok === true) {
+      // 注意：这句话会被渲染成**纯文本**（对象页事实 / kv 条目 / 面板 note 都过 HTML 转义）
+      // ⇒ 不要写 markdown 记号，否则用户看到的是星号本身。
+      return out.unchanged
+        ? '已读回执：这一次查看（60 s 内重复查看不重复记）'
+        : `已读回执：已记下你打开了这个包（${out.first_at} 起）—— 对方（发包方）能看到「谁 / 何时 / 看过几次」，`
+          + '看不到你的报价、成本或任何本侧私有数据'
+    }
+    return `已读回执没记上（${out.code}）：${out.reason}`
+  }
+  const recordPackageReceipt = (ctx, packageId, source) => {
+    const who = ctx?.identity
+    const human = asText(who?.human)
+    const side = asText(who?.side)
+    if (packageId === '' || human === '' || side !== 'supplier') return null
+    const out = receipts.record({ kind: 'package', id: packageId, human, side, at: host.now(), source })
+    return out
+  }
+
   const realmOf = (view) => {
     const rows = host.rows(view)
     const found = rows.find((row) => asText(row?.realm) !== '')
@@ -200,7 +239,9 @@ export async function register(surface, host) {
     // 注意：`hint` 会被外壳 HTML 转义 ⇒ 这里写**纯文本**（不要 markdown 记号，否则用户看到的是 `**`）。
     hint: '预填只给本侧事实里真的认得的包：包 id 目录有上限（最多 64 个包），超过上限后最新那个包读不到'
       + ' ⇒ 这块不预填它、也不给备报价入口（免得你按下去必然被拒 rfq-not-found），只在顶上如实说明。'
-      + '能备报价时：表里填几行就交几行 —— 一次「提交编辑」= 一条草稿（多行），随后在「我的草稿」里一次人签提交整份。',
+      + '能备报价时：表里填几行就交几行 —— 一次「提交编辑」= 一条草稿（多行），随后在「我的草稿」里一次人签提交整份。'
+      + '打开这一页会给发包方留一条已读回执（谁 / 何时 / 看过几次，0600 文件、不进账本）——'
+      + '对方看不到你的报价、成本或任何本侧私有数据。',
     data: (ctx) => {
       const realm = realmOf('supplier')
       const mine = myPackage(host, realm)
@@ -214,6 +255,8 @@ export async function register(surface, host) {
       const drafts = new Map(typeRows(host.rows('supplier'), 'quote/drafted')
         .map((row) => [asText(bodyOf(row).item_id), bodyOf(row)]))
       const packageId = String(spec.package_id ?? '')
+      // **已读回执**：你打开这一页 = 发包方那边多一条「谁在何时看过这个包」（0600 痕迹，不进账本）
+      const receipt = recordPackageReceipt(ctx, packageId, 'quote.package')
       const known = referenceablePackages(host)
       // **预填的判据**：本侧事实真的认得这个包才预填（目录为空时无从判断，按旧行为预填）
       const referenceable = packageId === '' || known.ids.length === 0 || known.ids.includes(packageId)
@@ -267,6 +310,7 @@ export async function register(surface, host) {
           + ` · 键盘：Tab 走格 / Enter 走同列下一行 / Esc 还原 / Ctrl+Enter 提交 —— 备多行报价不用鼠标`
           + ` · **表里填几行就交几行**：一次「备这份草稿」= 一条草稿（多行），随后**一次人签**提交整份`
           + ` · 标题旁的「打开对象 →」是这个包的深链（可复制分享、刷新不丢）`
+          + `${receiptNote(receipt) ? ` · ${receiptNote(receipt)}` : ''}`
           + (referenceable ? '' : ` · 这一份包（${packageId}）现在备不了报价：它不在本侧事实的包目录里`
             + `（目录上限 ${LIMITS.max_items} 个）⇒ 提交必被拒，界面故意不预填它。`) }
     } }))
@@ -275,7 +319,9 @@ export async function register(surface, host) {
   out.push(surface.panel({ plugin_id: me, id: 'package.mine', title: '我收到的包（对象页）', view: 'supplier',
     order: 11, kind: 'table', object_kind: 'package',
     hint: '这一页是那个包的深链（刷新不丢、可复制）：改单价/交期 → 「提交编辑」备草稿 → 再去「我的草稿」人签提交。'
-      + '包不在本侧事实的包目录里（目录上限 64 个）时，这一页只读并说明原因（提交必被拒，界面不预填）。',
+      + '包不在本侧事实的包目录里（目录上限 64 个）时，这一页只读并说明原因（提交必被拒，界面不预填）。'
+      + '打开这一页会给发包方留一条已读回执（谁 / 何时 / 看过几次，0600 文件、不进账本）——'
+      + '对方看不到你的报价、成本或任何本侧私有数据。',
     data: (ctx) => {
       const wanted = asText(ctx.route?.id)
       const realm = realmOf('supplier')
@@ -292,6 +338,8 @@ export async function register(surface, host) {
           columns: [{ key: 'item_id', label: '行项目' }], rows: [] }
       }
       const items = Array.isArray(spec.items) ? spec.items : []
+      // **已读回执**（对象页 = 真正「打开了这个包」）：给发包方留一条「谁在何时看过这个包」
+      const receipt = recordPackageReceipt(ctx, packageId, 'package.mine')
       const drafts = new Map(typeRows(host.rows('supplier'), 'quote/drafted')
         .map((row) => [asText(bodyOf(row).item_id), bodyOf(row)]))
       // **乐观并发**：这一页上保存动作要带的"你看到的那一版"（与 `quote.draft` 的 concurrency 同一口径）
@@ -319,6 +367,10 @@ export async function register(surface, host) {
             { key: '我方草稿的版本', code: true, value: myDraftVersion
               ? `rev ${myDraftVersion.rev} · ${myDraftVersion.at} · ${myDraftVersion.by || '（未记名）'}`
               : '还没有人保存过这份包的这一版报价草稿（第一次保存按"首次"记下来）' },
+            // **当次留痕如实可见**（表格式面板的 `note` 只在空态渲染 ⇒ 回执这件事写进对象页事实里，
+            // 用户真的看得到"我这一眼已经被记下了"）
+            { key: '已读回执（发包方能看到）', value: receiptNote(receipt)
+              || '这次没记（没有会话身份 → 不记回执；回执是读取痕迹，不进账本）' },
           ],
           links: [],
           // 分享：这个包的可见性由插件声明（机制据此写"对方需要什么身份/侧"）
@@ -356,7 +408,8 @@ export async function register(surface, host) {
                 + `${known.ids.length > 3 ? ` …（共 ${known.ids.length} 个）` : ''}。`
                 + '要让最新那个包也备得了，得先让它的事实进本侧账本。' }),
         counts: { items: items.length, rev: mine.envelope.rev },
-        note: '这一页是那个包的**对象地址**（刷新不丢、可复制）：改单价/交期 → 「备这份草稿」→ 再去「我的草稿」人签提交' }
+        note: '这一页是那个包的**对象地址**（刷新不丢、可复制）：改单价/交期 → 「备这份草稿」→ 再去「我的草稿」人签提交'
+          + `${receiptNote(receipt) ? ` · ${receiptNote(receipt)}` : ''}` }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'quote.object', title: '报价逐行明细（承包商收到的）',
@@ -402,13 +455,16 @@ export async function register(surface, host) {
     order: 20, kind: 'table', actions: ['quote.submit'],
     // **勾选语义写在这句里**（`hint` 是**真的渲染出来**的那一句；P20 把这段话写在 `data.note` 里 ——
     // 而 table 面板的 `data.note` 只在"没有行"时当 next_action 用，用户**看不到**）。
-    // 措辞与界面上的实际字符串逐字对齐：「已选 N 行」在提交按钮上、「已跨页选中 M 行」在计数行上、
-    // 「选中全部命中行（命中数）」是计数行上那颗按钮（P22 用 390px 真点过一遍）。
-    hint: '勾选语义（说清，免得少签）：表格左侧的勾只算这一页 —— 翻页后上一页的勾不跟着走。要跨页签，'
-      + '先把命中行筛到 50 行以内，再点计数行上那颗「选中全部命中行（N）」：它把命中全集选上，'
-      + '并在计数行写「已跨页选中 M 行」（M = 全命中已选）。'
-      + '提交按钮上那个数字就是这一次真会送出的行数：本页勾的 + 跨页选中的（只跨页选、本页没勾时写成'
-      + '「已选 0（含跨页共 M）行」）。换筛选条件会自动作废跨页选择。'
+    // 措辞与界面上的实际字符串逐字对齐：提交按钮写「已选 X 行」/「已选 0（含不在本页共 M） 行」、
+    // 计数行写「已勾选 M 行」「取消勾选」「选中全部命中行（N）」。
+    // **P25 按事实改口**：P21 之后手工勾选**跨页保留**（真跑：勾 2 行 → 翻到第 2 页 → 再翻回来，
+    // 那 2 行还是勾着的、按钮写「已选 2 行」），原先那句"勾只算这一页 / 翻页后不跟着走"与事实不符。
+    hint: '勾选语义（说清，免得少签）：表格左侧的勾**按这一块记、跨页保留** —— 翻到下一页时，'
+      + '上一页勾着的行不会丢（翻回来还是勾着的，勾过的行有底色）。'
+      + '提交按钮上那个数字就是这一次真会送出的行数（手工勾过的 + 「选中全部命中行」选上的）：'
+      + '本页没勾、只有别页勾着时它写成「已选 0（含不在本页共 M） 行」，计数行同时写「已勾选 M 行」。'
+      + '要**按命中行**签，先把命中行筛到 50 行以内，再点计数行上那颗「选中全部命中行（N）」：'
+      + '它把命中全集选上（换筛选条件会自动作废这次跨页选择）。'
       + '本块含「已签署提交」的历史行（按「状态」列筛「待签署」只看待办的）；一次最多签 50 份。',
     data: () => {
       const drafts = new Map()
@@ -448,8 +504,8 @@ export async function register(surface, host) {
           + '一天几十份时用表格左侧勾选框多选后点「批量人签提交」（一次署名、逐份落账、逐份可拒）。'
           + '**这一块含「已签署提交」的历史行**（按「状态」列筛「待签署」只看待办的）；'
           + `**一次最多签 ${BATCH_SIGN_MAX} 份**，超过会被具名拒（batch-too-large）；`
-          + '**勾选不跨页**（翻页后上一页的勾不跟着走）—— 要跨页按「命中行」签，先筛到 ≤ '
-          + `${BATCH_SIGN_MAX} 行、再点计数行上那颗「选中全部命中行（N）」` }
+          + '**勾选跨页保留**（翻到下一页时上一页的勾不丢，翻回来还是勾着的）—— 要按「命中行」签，'
+          + `先筛到 ≤ ${BATCH_SIGN_MAX} 行、再点计数行上那颗「选中全部命中行（N）」` }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'quote.submitted', title: '已提交的报价（提交结果回读）',
@@ -788,8 +844,9 @@ export async function register(surface, host) {
         return { ok: false, code: 'batch-too-large',
           reason: `一次最多签 ${BATCH_SIGN_MAX} 份，收到 ${ids.length} 份`,
           next_action: `先用「搜这块 / 按列筛选 / 状态=待签署」把命中行缩到 ≤ ${BATCH_SIGN_MAX} 行`
-            + `（计数行会跟着变），再点计数行上那颗「选中全部命中行（N）」重来 —— 不要靠手工勾行：`
-            + `勾选**不跨页**（第 1 页勾的在翻页后不跟着走）。本动作账本零新增` }
+            + `（计数行会跟着变），再点计数行上那颗「选中全部命中行（N）」重来。手工勾的也能用：`
+            + `勾选**跨页保留**（第 1 页勾的在翻页后不跟着丢），提交按钮上的数字就是真会送出的行数。`
+            + `本动作账本零新增` }
       }
       const comment = String(input.comment ?? '')
       const policy = asText(input.timeout_policy) || 'remind'

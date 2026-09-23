@@ -21,11 +21,15 @@
  *     承包商账本一条同名登记）；
  *   · 导出 `po.export-received` + 声明 `report.po-received`：把**收到的那张 PO** 导出/打印
  *     （行与价只用本侧事实，行内带 `basis` 与追溯链）。
+ *   · **已读回执（本批新增）**：供应商**打开采购单**（`po.inbox` / 对象页 `po.object-received`）时
+ *     按会话身份记一条已读回执给签发方；承包商侧在 `po.receipts` 面板看到「投递给谁 / 何时投的
+ *     （账本事实）+ 谁何时看过（0600 痕迹，**不进账本**）」。回执里没有对方的报价/成本/评分。
  *
  * 纪律：本文件不写账本（只 spawn 唯一写者）；**承诺与 PO 都必须人签**，且必须带人工批准记录（INV-005）；
- * 回签同样是**人签**（署名 = 会话身份，服务端在动作总线上校验）。
+ * 回签同样是**人签**（署名 = 会话身份，服务端在动作总线上校验）。已读回执只写它自己那个 0600 文件。
  */
 export const plugin_id = 'domain/commitments'
+import { createReceiptStore } from '../../../system/attachments/code/delivery-receipts.mjs'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
 
@@ -85,6 +89,36 @@ export async function register(surface, host) {
       .find((item) => item !== '') ?? ''
   }
   const poDeliveries = (view) => typeRows(host.rows(view), 'po/distributed').map((row) => bodyOf(row))
+  /** 已读回执存储（0600；**不进账本**，理由见模块文件头）。沙盘里 `host.sharedDir` 指向沙盘目录。 */
+  const receipts = createReceiptStore({ root: host.root, sharedDir: host.sharedDir,
+    log: (msg) => host.note.set(me, 'receipt-log', msg) })
+  /** 显示口径：只去掉 `human:` 前缀（与协作面同一套）；**逻辑判据仍用原始值**。 */
+  const humanName = (value) => String(value ?? '').replace(/^human:/, '')
+  /**
+   * **打开采购单的一方留一条已读回执**（签发方据此回答「对方收到了吗 / 看了吗」）。
+   * 侧与人**只认会话**：没有身份、或身份不是供应商侧 ⇒ 不记（也不报错）。
+   * 回执里只有对象 id + 人 + 时刻 + 从哪看的；**没有**对方的报价/成本。
+   */
+  const receiptNote = (out) => {
+    if (!out) return ''
+    if (out.ok === true) {
+      // 注意：这句话会被渲染成**纯文本**（对象页 kv 条目 / 面板 note 都过 HTML 转义）
+      // ⇒ 不要写 markdown 记号，否则用户看到的是星号本身。
+      return out.unchanged
+        ? '已读回执：这一次查看（60 s 内重复查看不重复记）'
+        : `已读回执：已记下你打开了这张采购单（首次 ${out.first_at}）—— 签发方能看到「谁 / 何时 / 看过几次」，`
+          + '看不到你的报价、成本或任何本侧私有数据'
+    }
+    return `已读回执没记上（${out.code}）：${out.reason}`
+  }
+  const recordPoReceipt = (ctx, poId, source) => {
+    const who = ctx?.identity
+    const human = asText(who?.human)
+    const side = asText(who?.side)
+    if (poId === '' || human === '' || side !== 'supplier') return null
+    return receipts.record({ kind: 'po', id: poId, human, side, at: host.now(), source })
+  }
+
   /** 投递信封里**投给本侧**的那几条（`delivered_to` 不含我 ⇒ 根本不进输出，不是"藏起来"）。 */
   const myDeliveryEnvelopes = (realm) => {
     const all = host.readJson(deliveryFile())
@@ -369,8 +403,10 @@ export async function register(surface, host) {
 
   out.push(surface.panel({ plugin_id: me, id: 'po.inbox', title: '发给我的采购单（只出自己那份）',
     view: 'supplier', order: 55, kind: 'table', actions: ['po.acknowledge', 'po.export-received'],
-    hint: '逐行 + 追溯链 + 回签状态；打开行内「打开 →」进这张 PO 的对象页（附件、导出、回签都在那里）',
-    data: () => {
+    hint: '逐行 + 追溯链 + 回签状态；打开行内「打开 →」进这张 PO 的对象页（附件、导出、回签都在那里）。'
+      + '打开这一页会给签发方留一条已读回执（谁 / 何时 / 看过几次，0600 文件、不进账本）——'
+      + '回执里没有你的报价、成本或任何本侧私有数据；已读 ≠ 回签（回签是人签、有义务语义）。',
+    data: (ctx) => {
       const realm = realmOf('supplier')
       const delivered = poDeliveries('supplier')
       const acks = acksOf('supplier')
@@ -385,6 +421,12 @@ export async function register(surface, host) {
           columns: [{ key: 'po_id', label: 'PO' }], rows: [],
           next_action: '等承包商在 APP 里「发 PO（人签）」——发出即投递，本侧账本会多一条 po/distributed 登记' }
       }
+      // **已读回执**：这一页列出的每一张（投递给本侧的）PO 都记一条「谁在何时看过」——
+      // 这是**签发方**回答「对方收到了吗 / 看了吗」的那一半；不写账本（读取痕迹，见回执模块文件头）。
+      const receiptOut = delivered.map((item) => recordPoReceipt(ctx, asText(item.po_id), 'po.inbox'))
+        .filter((item) => item !== null)
+      const receiptLine = receiptOut.map((item) => receiptNote(item)).filter((item) => item !== '')
+        .slice(0, 1).join('')
       return { ok: true, kind: 'table',
         columns: [{ key: 'po_id', label: 'PO', type: 'code' }, { key: 'lines', label: '行数', filter: 'number' },
           { key: 'total_amount', label: '金额', filter: 'number' }, { key: 'approved_by', label: '签发人', type: 'code' },
@@ -404,12 +446,15 @@ export async function register(surface, host) {
         }),
         row_actions: ['po.acknowledge', 'po.export-received'], counts: { po: delivered.length },
         note: '行来自**本侧账本**的投递登记（`po/distributed`，签发方写的那条）；投递信封里 `delivered_to` '
-          + '不含我这侧的条目**根本不出现在这里**（不是藏起来）' }
+          + '不含我这侧的条目**根本不出现在这里**（不是藏起来）'
+          + `${receiptLine ? ` · ${receiptLine}` : ''}` }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'po.object-received', title: '采购单（对象页：我先看到的那份）',
     view: 'supplier', order: 50, kind: 'kv', object_kind: 'po',
-    hint: '事实全部来自本侧账本的投递登记；回签状态来自本侧 po/acknowledged',
+    hint: '事实全部来自本侧账本的投递登记；回签状态来自本侧 po/acknowledged。'
+      + '打开这一页会给签发方留一条已读回执（谁 / 何时 / 看过几次，0600 文件、不进账本）——'
+      + '回执里没有你的报价、成本或任何本侧私有数据；已读 ≠ 回签（回签是人签、有义务语义）。',
     data: (ctx) => {
       const poId = asText(ctx.route?.id)
       const item = poReceivedOf(poId)
@@ -420,6 +465,8 @@ export async function register(surface, host) {
             + '点行内「打开 →」用真实存在的深链' }, items: [] }
       }
       const ack = acksOf('supplier').get(poId)
+      // **已读回执**（对象页 = 真正「打开了这张采购单」）：签发方在承包商道 `po.receipts` 里看到「谁 / 何时 / 几次」
+      const receipt = recordPoReceipt(ctx, poId, 'po.object-received')
       const myQuote = typeRows(host.rows('supplier'), 'quote/submitted')
         .some((row) => asText(bodyOf(row).quote_id) === asText(item.quote_id))
       const links = myQuote
@@ -448,9 +495,13 @@ export async function register(surface, host) {
           { key: '我回签了吗', value: ack ? `已回签：${asText(ack.acknowledged_by)} @ ${asText(ack.acknowledged_at)}`
             + (asText(ack.note) ? ` · 备注 ${asText(ack.note)}` : '') : '还没有（人签动作「确认收到采购单」）' },
           { key: '投递时刻', value: asText(item.sent_at) },
+          // **当次留痕如实可见**（kv 面板的 `note` 也不在正常态渲染 ⇒ 回执写进条目里）
+          { key: '已读回执（签发方能看到）', value: receiptNote(receipt)
+            || '这次没记（没有会话身份 → 不记回执；回执是读取痕迹，不进账本）' },
         ],
         note: '这一页**只看**本侧账本的事实：PO 的行与价由承包商从承诺派生，本侧不提供任何改价入口；'
-          + '回签（po/acknowledged）也不改 PO 的任何行与价' }
+          + '回签（po/acknowledged）也不改 PO 的任何行与价'
+          + `${receiptNote(receipt) ? ` · ${receiptNote(receipt)}` : ''}` }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'po.object-lines-received', title: '采购单逐行明细（单价基准可核）',
@@ -865,6 +916,98 @@ export async function register(surface, host) {
           + '「追溯这条 PO」把链路摊到下方，两者同一份计算；'
           + '「投递/对方回签」两列读的是 `po/distributed` 与 `po/acknowledged` 事实（没投递就是"未投递"——不假装已送）'
       }
+    } }))
+
+  /**
+   * **投递与已读回执（采购单）**（本批新增）：一屏回答「PO 发出去了吗 / 对方看了吗 / 回签了吗」。
+   *
+   *   · 「投递」半边是**账本事实**（`po/distributed`，本侧账本的投递登记：投给哪个 realm、何时投的）；
+   *   · 「已读」半边是**协作面痕迹**（`<ui_shared>/receipts/deliveries.json`，0600，**不进账本**）——
+   *     由**收件方打开这张 PO** 时按会话身份记下（记录方：本文件的 `po.inbox` / `po.object-received`）；
+   *   · 「回签」半边仍是账本事实（`po/acknowledged`）—— 三样摆在一起，谁也不需要去群里追问。
+   *   · **越侧拿不到**：这一块只给**承包商侧**（签发方）看；供应商身份（或未登录）读它被明确拒。
+   */
+  out.push(surface.panel({ plugin_id: me, id: 'po.receipts', title: '投递与已读回执（对方收到了吗 · 看了吗）',
+    view: 'contractor', order: 52, kind: 'table',
+    hint: '「投递 / 回签」= 账本事实（po/distributed / po/acknowledged）；「已读」= 协作面痕迹'
+      + '（对方打开这张 PO 时记的「谁 / 何时 / 看过几次」，0600 文件，不进账本）—— 回执里没有对方的报价、'
+      + '成本或任何私域字段。已读 ≠ 回签：回签是对方的人签（有义务语义），已读只是「他打开过这一页」。'
+      + '这一块只对承包商侧（签发方）显示。',
+    data: (ctx) => {
+      const side = asText(ctx?.identity?.side)
+      if (side !== 'contractor') {
+        return { ok: true, kind: 'table', degraded: true,
+          reason: side === '' ? 'identity-required' : 'side-mismatch',
+          columns: [{ key: 'po_id', label: 'PO' }], rows: [],
+          next_action: side === ''
+            ? '先登录**承包商侧**身份：投递与已读回执是签发方（发送侧）的视图'
+            : '这一块只给承包商侧（签发方）看：它是「对方看过你签发的 PO」的痕迹，供应商侧身份读不到' }
+      }
+      const rows = host.rows('contractor')
+      const issued = new Map(posOf(rows).map((po) => [asText(po.po_id), po]))
+      const delivered = new Map()
+      for (const body of poDeliveries('contractor')) {
+        const id = asText(body.po_id)
+        if (id === '' || delivered.has(id)) continue
+        delivered.set(id, body)
+      }
+      const acks = acksOf('contractor')
+      const ids = [...new Set([...issued.keys(), ...delivered.keys()])].sort()
+      if (!ids.length) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'no-po',
+          columns: [{ key: 'po_id', label: 'PO' }], rows: [],
+          next_action: 'PO 只能由承诺派生：先在「授标链」里提意向 → 对方确认 → 人签承诺 → 人签发 PO'
+            + '（发 PO 即投递，投递之后这里才会有回执行）' }
+      }
+      const reads = receipts.forObjects('po', ids)
+      const table = ids.map((id) => {
+        const did = delivered.get(id)
+        const po = issued.get(id)
+        const ack = acks.get(id)
+        const readers = reads.readers.get(id) ?? []
+        const first = readers.length ? readers[0] : null
+        const last = readers.reduce((acc, item) => (!acc || item.last_at > acc.last_at ? item : acc), null)
+        const status = !did ? '未投递（账本里没有 po/distributed）'
+          : (readers.length ? `已读（${readers.length} 人看过）` : '已投递 · 还没人看过')
+        return { id, po_id: id,
+          award_id: asText(did?.award_id) || asText(po?.award_id),
+          recipients: did ? (did.recipients ?? []).map(String).sort().join(' / ') : '',
+          delivered_at: did ? (asText(did.sent_at) || asText(did.delivered_at)) : '',
+          readers: readers.map((item) => `${humanName(item.human)}${item.side ? `（${item.side}侧）` : ''}`)
+            .join(' · '),
+          first_seen: first ? first.first_at : '',
+          last_seen: last ? last.last_at : '',
+          seen_count: readers.reduce((sum, item) => sum + item.count, 0),
+          ack: ack ? `${humanName(ack.acknowledged_by)} @ ${asText(ack.acknowledged_at)}` : '还没有',
+          status,
+          ref: { kind: 'po', id, title: `采购单 ${id}` } }
+      })
+      const broken = reads.broken
+      const problems = reads.problems ?? []
+      return { ok: true, kind: 'table',
+        columns: [
+          { key: 'po_id', label: 'PO', type: 'code', pin: 'left' },
+          { key: 'award_id', label: '承诺', type: 'code' },
+          { key: 'recipients', label: '投给谁（账本）', type: 'code' },
+          { key: 'delivered_at', label: '投递时刻（账本）', filter: 'date' },
+          { key: 'readers', label: '看过的人（回执）' },
+          { key: 'first_seen', label: '首次看过', filter: 'date' },
+          { key: 'last_seen', label: '最近看过', filter: 'date' },
+          { key: 'seen_count', label: '看过次数', filter: 'number' },
+          { key: 'ack', label: '回签（账本）' },
+          { key: 'status', label: '状态' },
+        ],
+        rows: table,
+        row_actions: ['po.trace'],
+        counts: { po: table.length, delivered: delivered.size,
+          read: table.filter((row) => asText(row.readers) !== '').length,
+          acked: table.filter((row) => asText(row.ack) !== '还没有').length },
+        note: '「投给谁 / 何时投的」逐行来自本侧账本的 `po/distributed`；「回签」来自 `po/acknowledged`'
+          + '（两者都是账本事实，可逐行核）；「看过的人 / 首次 / 最近 / 次数」来自回执文件'
+          + `（0600，${reads.file}，**不进账本** —— 读取痕迹不是合同事实）。`
+          + '**看过 ≠ 回签**：回签是对方的人签（有义务语义），已读只是「他打开过这一页」。'
+          + (broken ? ` ⚠ 回执文件读不出来（${broken.code}）：${broken.reason} —— 不是"还没有人看过"，${broken.how_to_fix}` : '')
+          + (problems.length ? ` ⚠ 有 ${problems.length} 处坏形状已跳过（原样留在文件里）` : '') }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'po.trace', title: '追溯这条 PO（四段可点）',

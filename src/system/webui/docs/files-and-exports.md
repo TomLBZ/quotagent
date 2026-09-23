@@ -81,6 +81,9 @@
 复跑验证：`python3 tmp/p6-verify.py`（附件/导出，截图 `tmp/p6-shots/`）、`python3 tmp/p8-verify.py`
 （PO 投递/回签，39 条，截图 `tmp/p8-shots/`）。
 
+**本批新增**：**投递与已读回执** + **本周汇报**（TXT/CSV/可打印 HTML，逐行带账本行号）→
+`delivery-receipts-and-weekly.md`（复跑 `python3 tmp/p26-verify.py`）。
+
 ## 5. 界面上看不到、"必须回终端才能做"的事（诚实清单）
 
 | 事项 | 现状 | 为什么 |

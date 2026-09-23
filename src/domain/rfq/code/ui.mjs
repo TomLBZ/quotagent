@@ -9,11 +9,17 @@
  *   · 动作 `rfq.publish`（**服务端一半**：落 0600 待办件 → 跑 `src/domain/rfq/tools/rfq-publish.py`
  *     这个唯一写者去落 `rfq/published` + `rfq/distributed`，并把投递信封写给被邀供应商）；
  *   · 快捷键 `p`、通知源、状态栏项。
+ *   · 面板 `rfq.receipts`（**投递与已读回执**）：把「投给谁、何时投的」（账本事实 `rfq/distributed`）与
+ *     「谁在何时看过这个包」（协作面痕迹 `<ui_shared>/receipts/deliveries.json`，0600，**不进账本**）
+ *     摆在一起，回答采购员每天问的那句「对方收到了吗？看了吗？」。回执由**收件方打开包**时记下
+ *     （记录方在 `domain/quote-prepare` 的 `quote.package` / `package.mine`），本文件**只读**它。
  *
  * 纪律：本文件**不写账本**（`host.runPython` 只是 spawn；写账本的是 Python 侧唯一写者），
  * 也不读别人的账本（只读 `host.rows(...)` 给的本视角公开投影行）。
  */
 export const plugin_id = 'domain/rfq'
+import { createHash } from 'node:crypto'
+import { createReceiptStore } from '../../../system/attachments/code/delivery-receipts.mjs'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
 
@@ -68,6 +74,11 @@ export async function register(surface, host) {
   const out = []
   const ledger = () => asText(host.config?.ledger_contractor)
   const shared = () => asText(host.sharedDir)
+  /** 已读回执存储（**只读**：记回执的是**收件方**那一侧的插件，见 `domain/quote-prepare`）。 */
+  const receipts = createReceiptStore({ root: host.root, sharedDir: host.sharedDir,
+    log: (msg) => host.note.set(me, 'receipt-log', msg) })
+  /** 显示口径：只去掉 `human:` 前缀（与协作面同一套显示口径）；**逻辑判据仍用原始值**。 */
+  const humanName = (value) => String(value ?? '').replace(/^human:/, '')
 
   out.push(surface.view({ plugin_id: me, id: 'rfq.workspace', title: '发包工作区', order: 10,
     view: 'contractor', hint: '发布 RFQ / 看谁收到了 / 看回应' }))
@@ -109,6 +120,444 @@ export async function register(surface, host) {
         rows: table, counts: { published: table.length },
         note: '收件人来自 rfq/distributed 的 recipients 字段（「谁在何时收到哪个版本」按版本锚定）' }
     } }))
+
+  /**
+   * **投递与已读回执**（本批新增）：一屏回答采购员每天问的两句 ——「发出去了吗」与「对方看了吗」。
+   *
+   *   · 「投递」半边是**账本事实**（`rfq/distributed`：投给哪个 realm、何时投的、哪个 rev）；
+   *   · 「已读」半边是**协作面痕迹**（`<ui_shared>/receipts/deliveries.json`，0600，**不进账本**）——
+   *     由**收件方打开包**时按会话身份记下（记录方：`domain/quote-prepare` 的 `quote.package` /
+   *     `package.mine`），本面板只读。
+   *   · 回执按**包**聚合（对象页看到的是「这个包（最新一版）」；投递按 rev 记在账本上，两者都如实列出来，
+   *     不把「看过 rev1」冒充成「看过 rev2」）；回执里没有对方的报价/成本/评分。
+   *   · **越侧拿不到**：这一块只给**承包商侧**（发送侧）看；供应商身份（或未登录）读这一块被明确拒
+   *     （`side-mismatch` / `identity-required`），不返回任何回执行。
+   */
+  out.push(surface.panel({ plugin_id: me, id: 'rfq.receipts',
+    title: '投递与已读回执（对方收到了吗 · 看了吗）',
+    view: 'contractor', order: 16, kind: 'table',
+    // 注意：`hint` 会被外壳 HTML 转义 ⇒ 这里写**纯文本**（不要 markdown 记号，否则用户看到的是 `**`）。
+    hint: '「投递」= 账本事实（rfq/distributed：投给谁、何时、哪个版本）；「已读」= 协作面痕迹'
+      + '（对方打开这个包时记的「谁 / 何时 / 看过几次」，0600 文件，不进账本）—— 回执里没有对方的报价、'
+      + '成本或任何私域字段。回执按包聚合、投递按版本记账：看到「已读」不等于「看了最新的那一版」，'
+      + '要按版本确认请让对方认收（rfq/acknowledged，那是账本事实）。这一块只对承包商侧（发送侧）显示。',
+    data: (ctx) => {
+      const side = asText(ctx?.identity?.side)
+      if (side !== 'contractor') {
+        return { ok: true, kind: 'table', degraded: true,
+          reason: side === '' ? 'identity-required' : 'side-mismatch',
+          columns: [{ key: 'package_id', label: '包' }], rows: [],
+          next_action: side === ''
+            ? '先登录**承包商侧**身份：投递与已读回执是发包方（发送侧）的视图'
+            : '这一块只给承包商侧（发包方）看：它是「对方看过你发的包」的痕迹，供应商侧身份读不到' }
+      }
+      const rows = host.rows('contractor')
+      /** 每个包**最新一版**的发布事实（rev 与报价截止）。 */
+      const published = new Map()
+      for (const row of rowsOfType(rows, 'rfq/published')) {
+        const body = bodyOf(row)
+        const id = asText(body.package_id)
+        if (id === '') continue
+        const rev = Number(body.rev ?? 0)
+        const known = published.get(id)
+        if (!known || rev >= known.rev) {
+          published.set(id, { rev, quote_by: asText(body.quote_by), at: asText(row.ts) })
+        }
+      }
+      /** 每个包的**投递登记**（`rfq/distributed`）：投过哪几版、投给谁、最近一次何时投的。 */
+      const deliveries = new Map()
+      for (const row of rowsOfType(rows, 'rfq/distributed')) {
+        const body = bodyOf(row)
+        const id = asText(body.package_id)
+        if (id === '') continue
+        const item = deliveries.get(id) ?? { revs: new Set(), recipients: new Set(), sent_at: '', count: 0 }
+        item.revs.add(Number(body.rev ?? 0))
+        for (const who of body.recipients ?? []) item.recipients.add(String(who))
+        const sentAt = asText(body.sent_at) || asText(row.ts)
+        if (sentAt > item.sent_at) item.sent_at = sentAt
+        item.count += 1
+        deliveries.set(id, item)
+      }
+      const ids = [...new Set([...published.keys(), ...deliveries.keys()])].sort()
+      if (!ids.length) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'no-published-rfq',
+          columns: [{ key: 'package_id', label: '包' }], rows: [],
+          next_action: '用「发布 RFQ」发布第一个包（发布即分发）：之后这里会同时给出投递与已读两半边' }
+      }
+      const reads = receipts.forObjects('package', ids)
+      const rowsOut = ids.map((id) => {
+        const rec = deliveries.get(id)
+        const readers = reads.readers.get(id) ?? []
+        const first = readers.length ? readers[0] : null
+        const last = readers.reduce((acc, item) => (!acc || item.last_at > acc.last_at ? item : acc), null)
+        const status = !rec ? '未投递（账本里没有 rfq/distributed）'
+          : (readers.length ? `已读（${readers.length} 人看过）` : '已投递 · 还没人看过')
+        return { id, package_id: id,
+          rev: rec ? [...rec.revs].sort((left, right) => left - right).join(' / ') : '—',
+          quote_by: published.get(id)?.quote_by ?? '',
+          recipients: rec ? [...rec.recipients].sort().join(' / ') : '',
+          delivered_at: rec ? rec.sent_at : '',
+          deliver_count: rec ? rec.count : 0,
+          readers: readers.map((item) => `${humanName(item.human)}${item.side ? `（${item.side}侧）` : ''}`)
+            .join(' · '),
+          first_seen: first ? first.first_at : '',
+          last_seen: last ? last.last_at : '',
+          seen_count: readers.reduce((sum, item) => sum + item.count, 0),
+          status,
+          // **诚实**：把「从哪看的」也带上（列表面板 vs 对象页），不把「列表里刷到过」说成「打开了包」
+          read_source: readers.map((item) => item.source).filter((item) => item !== '').join(' / ') }
+      })
+      const broken = reads.broken
+      const problems = reads.problems ?? []
+      return { ok: true, kind: 'table',
+        columns: [
+          { key: 'package_id', label: '包', type: 'code', pin: 'left' },
+          { key: 'rev', label: '已投递版本（账本）' },
+          { key: 'recipients', label: '投给谁（账本）', type: 'code' },
+          { key: 'delivered_at', label: '投递时刻（账本）', filter: 'date' },
+          { key: 'readers', label: '看过的人（回执）' },
+          { key: 'first_seen', label: '首次看过', filter: 'date' },
+          { key: 'last_seen', label: '最近看过', filter: 'date' },
+          { key: 'seen_count', label: '看过次数', filter: 'number' },
+          { key: 'status', label: '状态' },
+        ],
+        rows: rowsOut,
+        counts: { packages: rowsOut.length, delivered: deliveries.size,
+          read: rowsOut.filter((row) => asText(row.readers) !== '').length,
+          unread: rowsOut.filter((row) => asText(row.readers) === '').length },
+        note: '「投给谁 / 哪个版本 / 何时投的」逐行来自本侧账本的 `rfq/distributed`（可与账面逐行核）；'
+          + '「看过的人 / 首次 / 最近 / 次数」来自回执文件 `<ui-shared>/receipts/deliveries.json`'
+          + `（0600，${reads.file}，**不进账本** —— 读取痕迹不是合同事实）。`
+          + '回执按**包**聚合、投递按**版本**记账：看到「已读」不等于「看了最新的那一版」，'
+          + '要按版本确认请让对方认收（`exchange.ack` 落 `rfq/acknowledged`，那是账本事实）。'
+          + (broken ? ` ⚠ 回执文件读不出来（${broken.code}）：${broken.reason} —— 不是"还没有人看过"，${broken.how_to_fix}` : '')
+          + (problems.length ? ` ⚠ 有 ${problems.length} 处坏形状已跳过（原样留在文件里）` : '') }
+    } }))
+
+  // ================================================================== 本周汇报（只读汇总 · 可导出）
+  /**
+   * **本周汇报视图**：管理者/老板要的那五个数，全部由**只读汇总器**从**本侧账本**算出来。
+   *
+   *   · 数字的真源 = `src/domain/rfq/tools/weekly-report.py`（只读；**不取墙钟**：`as_of` 缺省 = 账本里
+   *     最大的 `ts`；算不出来的行进 `amount_missing`/`gate_unmatched`，**不当 0**）；
+   *   · 面板**只摆**工具给的数（外壳与插件都不自己算一遍 ⇒ 不会出现两个口径）；
+   *   · **逐行对账**：每一项都带账本行号（`evidence.*.seq`），界面第二块面板把它们摊成表；
+   *   · 导出（TXT / CSV / 可打印 HTML）由同一次只读结果生成 —— 文本与 CSV **就在报告里**
+   *     （`text`/`csv` 字段，工具自己渲染的那一份）⇒ 导出与屏幕上的数字逐字同源，界面侧不再抄一遍；
+   *   · 看哪一周：`rfq.weekly-week` 动作把「往前挪几周」记进机制便签（**内存**，不落盘、不进账本），
+   *     面板与导出都读它 —— 面板自己的 `data()` 是**只读**的。
+   *   · **越侧拿不到**：这一块只给**承包商侧**看（账本是承包商侧的那一份）；供应商身份或未登录 ⇒ 明确拒。
+   */
+  const WEEKLY_TOOL = 'src/domain/rfq/tools/weekly-report.py'
+  const WEEK_KEY = 'weekly-weeks-ago'
+  const weeksAgo = () => {
+    const raw = Number(host.note.get(me, WEEK_KEY, 0) ?? 0)
+    return Number.isFinite(raw) && raw > 0 ? Math.min(52, Math.floor(raw)) : 0
+  }
+  /** 跑只读汇总器（`{read:true}`：同一组参数一次渲染只 spawn 一次；**不写账本**）。 */
+  const runWeekly = () => {
+    const file = ledger()
+    if (file === '') {
+      return { json: { ok: false, code: 'ledger-unconfigured',
+        reason: '宿主未配置承包商账本（`ledger_contractor`）—— 没有账本就给不出周报，也不编一个',
+        next_action: '看 `./run status` 的开关，或换一个配了账本的数据目录' }, run: null }
+    }
+    const run = host.runPython(WEEKLY_TOOL,
+      ['--ledger', file, '--format', 'json', '--weeks-ago', String(weeksAgo())], { read: true })
+    if (run.json && typeof run.json === 'object') return { json: run.json, run }
+    return { run, json: { ok: false, code: run.code ?? 'weekly-tool-failed',
+      reason: run.reason || run.stderr || '只读汇总器没有输出 JSON',
+      next_action: `直接跑一次看原因：python3 ${WEEKLY_TOOL} --ledger <账本路径> --format text（账本零新增）` } }
+  }
+  const WEEKLY_LABELS = [['packages_published', '① 发布包数'], ['quotes_received', '② 收报价数'],
+    ['award_amount_cents', '③ 授标金额'], ['gate_avg_wait_seconds', '④ 人工门平均等待'],
+    ['overdue_no_reply', '⑤ 超时未回']]
+  /** 一项指标 → 人读的一句（单位与口径都摆出来；`null` 说成「没有」而不是 0）。 */
+  const metricText = (metric) => {
+    if (!metric) return '（报表里没有这一项）'
+    const value = metric.value
+    if (value === null || value === undefined) return '（这一周没有被决定的人工门）'
+    if (metric.unit === '分') return `${value} 分（${metric.display ?? ''}）`
+    if (metric.unit === '秒') return `${value} 秒 · ${metric.gates ?? 0} 门`
+    // 「包 / 份」这两个数按**账本行**算（同一包重复发布 = 多行）⇒ 一并给出**去重后**的个数，
+    // 免得读者把「4 行」读成「发了 4 个包」
+    if (metric.distinct_packages !== undefined) {
+      return `${value} 行（${metric.distinct_packages} 个不同的包 id）`
+    }
+    if (metric.distinct_quotes !== undefined) return `${value} 份（${metric.distinct_quotes} 个不同的报价 id）`
+    return `${value} ${metric.unit ?? ''}`.trim()
+  }
+  const weeklyBlocked = (ctx) => {
+    const side = asText(ctx?.identity?.side)
+    if (side === 'contractor') return null
+    return { ok: true, kind: 'kv', degraded: true,
+      reason: side === '' ? 'identity-required' : 'side-mismatch', items: [],
+      next_action: side === ''
+        ? '先登录**承包商侧**身份：周报读的是承包商侧账本（花出去的钱、发出去的包）'
+        : '这一块只给承包商侧看：它汇总的是承包商侧账本的事实（供应商侧身份读不到）' }
+  }
+
+  out.push(surface.panel({ plugin_id: me, id: 'rfq.weekly', title: '本周汇报（发布包 / 收报价 / 授标金额 / 门等待 / 超时未回）',
+    view: 'contractor', order: 18, kind: 'kv',
+    // 报表类面板**声明占满整行**（机制给的 `placement: 'wide'` ⇒ 客户端 `grid-column: 1 / -1`）：
+    // 默认的多列网格里一格只有 ~360-460px，口径长句与金额会挤成一条一条。
+    placement: 'wide',
+    hint: '数字由只读汇总器从本侧账本算出（不取墙钟：事实时刻 = 账本里最大的 ts，同一份账本任何时间跑都同一组数）；'
+      + '每一项都带账本行号，下方「逐行对账」面板可逐行核；导出 TXT / CSV / 打印 HTML 在「导出 / 打印」区。'
+      + '空档分得清：本周没有被决定的门 ⇒ 「平均等待」显示成「没有」而不是 0 秒；算不出来的行（缺量/缺价、'
+      + '审批配不上对）不进小计（在下方表里单列为「对不上」）。',
+    data: (ctx) => {
+      const blocked = weeklyBlocked(ctx)
+      if (blocked) return blocked
+      const { json } = runWeekly()
+      if (json.ok !== true) {
+        return { ok: true, kind: 'kv', degraded: true, reason: json.code ?? 'weekly-failed',
+          items: [], next_action: `${json.reason ?? ''}${json.next_action ? ` —— ${json.next_action}` : ''}` }
+      }
+      const metrics = json.metrics ?? {}
+      const items = [
+        { key: '周窗口（口径）', value: `${json.week?.iso ?? ''} · ${json.week?.start ?? ''} — ${json.week?.end ?? ''}`
+          + `（ISO 周，周一 00:00Z 起，左闭右开）` },
+        { key: '事实时刻 as_of', value: `${json.as_of}（${json.as_of_basis}，**不取墙钟**）`, code: true },
+        { key: '账本', value: String(json.ledger ?? ''), code: true },
+        ...WEEKLY_LABELS.map(([key, label]) => ({ key: label, value: metricText(metrics[key]) })),
+        { key: '（附加）本周发 PO', value: `${json.supporting?.po_issued?.value ?? 0} 张 · 原生金额合计 `
+          + `${json.supporting?.po_issued?.total_amount_native ?? '0'}` },
+      ]
+      if (weeksAgo() > 0) {
+        items.push({ key: '看的不是本周', value: `你把它往前挪了 ${weeksAgo()} 周（动作「看哪一周」设的；`
+          + '这是**内存便签**，重启服务后回到本周）' })
+      }
+      return { ok: true, kind: 'kv', items,
+        counts: { packages: metrics.packages_published?.value ?? 0, quotes: metrics.quotes_received?.value ?? 0,
+          award_amount_cents: metrics.award_amount_cents?.value ?? 0,
+          gates: metrics.gate_avg_wait_seconds?.gates ?? 0, overdue: metrics.overdue_no_reply?.value ?? 0 },
+        note: '这五个数**不是界面算的**：它们逐项由只读汇总器 `src/domain/rfq/tools/weekly-report.py` 从本侧账本'
+          + '按 ISO 周聚合（口径写在同一份报表的 `metrics.*.basis`）。'
+          + '⚠ 空档的两种含义分得清：`人工门平均等待` 为「没有门被决定」而不是 0 秒；'
+          + '算不出来的行（缺量/缺价、配不上对的审批）**不进小计**：见 `amount_missing` / `gate_unmatched`（下方对账表里列出）。'
+          + ` ${(json.notes ?? []).slice(-1)[0] ?? ''}` }
+    } }))
+
+  out.push(surface.panel({ plugin_id: me, id: 'rfq.weekly-lines', title: '本周汇报逐行对账（每一项 → 账本行号）',
+    view: 'contractor', order: 19, kind: 'table',
+    hint: '这一块是「报表凭什么」：每一行 = 一条支撑某个数字的账本事实（seq 就是账本行号 —— append-only '
+      + '账本里那一行的位置，拿它回账本逐行核）；金额一律整数分。表里「对不上」的行是算不出来的'
+      + '（缺量/缺价、审批配不上对）—— 它们被排除出小计、不冒充 0，单独列出来给你看。',
+    data: (ctx) => {
+      const blocked = weeklyBlocked(ctx)
+      if (blocked) {
+        return { ok: true, kind: 'table', degraded: true, reason: blocked.reason, rows: [],
+          columns: [{ key: 'metric', label: '指标' }], next_action: blocked.next_action }
+      }
+      const { json } = runWeekly()
+      if (json.ok !== true) {
+        return { ok: true, kind: 'table', degraded: true, reason: json.code ?? 'weekly-failed', rows: [],
+          columns: [{ key: 'metric', label: '指标' }],
+          next_action: `${json.reason ?? ''}${json.next_action ? ` —— ${json.next_action}` : ''}` }
+      }
+      const evidence = json.evidence ?? {}
+      const rows = []
+      for (const item of evidence.packages_published ?? []) {
+        rows.push({ id: `pk-${item.seq}`, metric: '① 发布包数', seq: item.seq, ts: item.ts, event: 'rfq/published',
+          object: item.package_id, amount_cents: '', detail: `rev${item.rev} · 截止 ${item.quote_by}` })
+      }
+      for (const item of evidence.quotes_received ?? []) {
+        rows.push({ id: `qt-${item.seq}`, metric: '② 收报价数', seq: item.seq, ts: item.ts, event: 'quote/submitted',
+          object: item.quote_id, amount_cents: '',
+          detail: `包 ${item.package_id} · ${item.line_count} 行 · ${item.supplier}` })
+      }
+      for (const item of evidence.award_amount_cents ?? []) {
+        for (const line of item.lines ?? []) {
+          rows.push({ id: `aw-${item.seq}-${line.item_id}`, metric: '③ 授标金额', seq: item.seq, ts: item.ts,
+            event: 'award/committed', object: `${item.award_id}:${line.item_id}`, amount_cents: line.amount_cents,
+            detail: line.basis })
+        }
+        if (!(item.lines ?? []).length) {
+          rows.push({ id: `aw-${item.seq}-none`, metric: '③ 授标金额', seq: item.seq, ts: item.ts,
+            event: 'award/committed', object: item.award_id, amount_cents: 0,
+            detail: '这份承诺没有可算的行（见下方「对不上」）' })
+        }
+      }
+      for (const item of evidence.gate_avg_wait_seconds ?? []) {
+        rows.push({ id: `gt-${item.decided_seq}`, metric: '④ 人工门平均等待', seq: item.decided_seq, ts: item.decided_ts,
+          event: item.decision, object: item.approval_id, amount_cents: '',
+          detail: `${item.scope} · 等 ${item.wait_seconds} 秒（请求行 ${item.request_seq} @ ${item.request_ts}）` })
+      }
+      for (const item of evidence.overdue_no_reply ?? []) {
+        rows.push({ id: `od-${item.seq}`, metric: '⑤ 超时未回', seq: item.seq, ts: item.ts, event: 'rfq/published',
+          object: item.package_id, amount_cents: '',
+          detail: `rev${item.rev} · 截止 ${item.quote_by} · 已超 ${item.overdue_days} 天` })
+      }
+      for (const item of json.amount_missing ?? []) {
+        rows.push({ id: `missing-${item.seq}-${item.item_id ?? ''}`, metric: '对不上（不计入小计）', seq: item.seq,
+          ts: '', event: 'award/committed', object: `${item.award_id}:${item.item_id ?? ''}`, amount_cents: '',
+          detail: `算不出金额：${item.why}` })
+      }
+      for (const item of json.gate_unmatched ?? []) {
+        rows.push({ id: `unmatched-${item.seq}`, metric: '对不上（不计入平均）', seq: item.seq, ts: item.ts,
+          event: item.type, object: item.approval_id, amount_cents: '', detail: item.why })
+      }
+      for (const item of evidence.po_issued ?? []) {
+        rows.push({ id: `po-${item.seq}`, metric: '（附加）本周发 PO', seq: item.seq, ts: item.ts,
+          event: 'po/issued', object: item.po_id, amount_cents: '',
+          detail: `${item.lines} 行 · 原生金额 ${item.total_amount}` })
+      }
+      if (!rows.length) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'this-week-is-empty', rows: [],
+          columns: [{ key: 'metric', label: '指标' }],
+          next_action: '这一周账本里没有任何相关事实（不是"界面坏了"）：换一周看（工具 `--weeks-ago 1`），'
+            + '或先用「发布 RFQ」等动作产生事实' }
+      }
+      return { ok: true, kind: 'table',
+        columns: [{ key: 'metric', label: '指标' }, { key: 'seq', label: '账本行号', filter: 'number' },
+          { key: 'ts', label: '事实时刻', filter: 'date' }, { key: 'event', label: '事件' },
+          { key: 'object', label: '对象', type: 'code' }, { key: 'amount_cents', label: '金额（分）', filter: 'number' },
+          { key: 'detail', label: '口径 / 明细' }],
+        rows, counts: { rows: rows.length, metrics: WEEKLY_LABELS.length },
+        note: '`seq` 就是**账本行号**（append-only 账本里那一行的位置）—— 拿它回账本逐行核即可；'
+          + '金额一律**整数分**；「对不上」的行走的是同一条口径说明，**没有被算进**任何小计。' }
+    } }))
+
+  out.push(surface.action({ plugin_id: me, id: 'rfq.weekly-week', title: '看哪一周（周报往前挪几周）',
+    views: ['contractor'], group: '发包', order: 45,
+    hint: '只读：只改"周报看哪一周"这个**内存便签**（0=本周）；不写账本、不落文件',
+    input: { fields: [
+      { name: 'weeks_ago', label: '往前挪几周（0 = 本周）', type: 'number', required: true, min: 0, max: 52,
+        help: '0 = 含事实时刻（账本最大 ts）的那一周；1 = 上一周' },
+    ] },
+    server: async (ctx, input) => {
+      if (asText(ctx?.identity?.side) !== 'contractor') {
+        return { ok: false, code: asText(ctx?.identity?.side) === '' ? 'identity-required' : 'side-mismatch',
+          reason: '周报只对承包商侧（本侧账本）显示', ledger_added: 0,
+          next_action: '用承包商侧身份登录后再看' }
+      }
+      const raw = Number(input.weeks_ago)
+      if (!Number.isFinite(raw) || raw < 0 || raw > 52) {
+        return { ok: false, code: 'weeks-out-of-range', reason: `往前挪的周数要在 0..52 之间（收到 ${input.weeks_ago}）`,
+          ledger_added: 0, next_action: '给一个 0..52 的整数（0 = 本周）' }
+      }
+      host.note.set(me, WEEK_KEY, Math.floor(raw))
+      const { json } = runWeekly()
+      const metrics = json.metrics ?? {}
+      return { ok: true, code: 'week-set', ledger_added: 0,
+        result_kind: 'view-preference',
+        note: `周报现在看：${json.week?.iso ?? '（算不出来）'} · ${json.week?.start ?? ''} — ${json.week?.end ?? ''}`
+          + `（as_of ${json.as_of ?? '—'}，${json.as_of_basis ?? '—'}）`
+          + ' —— 这一步只改**内存便签**（不是账本事实、不落文件）',
+        next_action: '上方的「本周汇报」已按这一周重算；要发给别人就用「导出 / 打印」区的 TXT / CSV / HTML',
+        result: { weeks_ago: Math.floor(raw), week: json.week ?? null, as_of: json.as_of ?? null,
+          metrics: Object.fromEntries(WEEKLY_LABELS.map(([key]) => [key, metrics[key]?.value ?? null])),
+          ledger: String(json.ledger ?? ''), ledger_added: 0 } }
+    } }))
+
+  out.push(surface.action({ plugin_id: me, id: 'rfq.weekly-export', title: '导出周报（TXT / CSV / 可打印 HTML）',
+    views: ['contractor'], group: '发包', order: 46,
+    hint: '只读导出：内容由只读汇总器给出（文本与 CSV 是它自己渲染的那一份）⇒ 与屏幕上的数字逐字同源；账本零新增',
+    input: { fields: [
+      { name: 'format', label: '格式', type: 'select', required: true, options: ['csv', 'txt', 'html'],
+        help: 'csv = 指标表（每行带证据账本行号）；txt = 人读周报正文（可直接贴邮件）；html = 自带样式的可打印文档' },
+    ] },
+    server: async (ctx, input) => {
+      if (asText(ctx?.identity?.side) !== 'contractor') {
+        return { ok: false, code: asText(ctx?.identity?.side) === '' ? 'identity-required' : 'side-mismatch',
+          reason: '周报只对承包商侧（本侧账本）显示', ledger_added: 0,
+          next_action: '用承包商侧身份登录后再导出' }
+      }
+      const format = asText(input.format)
+      if (!['csv', 'txt', 'html'].includes(format)) {
+        return { ok: false, code: 'unsupported-format', reason: `周报只导出 csv / txt / html（收到 ${format || '（空）'}）`,
+          ledger_added: 0, next_action: '选 csv（指标表）、txt（人读正文）或 html（可打印）' }
+      }
+      const { json } = runWeekly()
+      if (json.ok !== true) {
+        return { ok: false, code: json.code ?? 'weekly-failed', ledger_added: 0,
+          reason: json.reason ?? '只读汇总器没给出报表',
+          next_action: json.next_action ?? '先看「本周汇报」面板上的降级原因' }
+      }
+      const week = `${json.week?.iso ?? ''}_${json.week?.start ?? ''}`
+      const filename = `周报_${json.week?.iso ?? 'week'}_${(json.ledger || '').split('/').slice(-2, -1)[0] || 'ledger'}`
+      // ---- txt / csv：**用报告里那两个字段**（工具自己渲染的那一份；界面侧不再抄一遍口径）----
+      if (format === 'txt' || format === 'csv') {
+        const content = String((format === 'txt' ? json.text : json.csv) ?? '')
+        if (content === '') {
+          return { ok: false, code: 'report-render-missing', ledger_added: 0,
+            reason: `报表里没有 ${format} 渲染结果（工具版本可能比插件旧）`,
+            next_action: `用 CLI 复跑一次确认：python3 ${WEEKLY_TOOL} --ledger <账本> --format ${format}` }
+        }
+        return { ok: true, code: 'weekly-exported', ledger_added: 0,
+          note: `导出已生成（${format}，${json.week?.iso ?? ''}）：内容 = 只读汇总器对**本侧账本**的聚合结果`
+            + `（每一项都带账本行号）`,
+          next_action: format === 'txt'
+            ? '下载/复制这份正文即可发给管理者；要表格就改用 csv（或打印 HTML）'
+            : 'CSV 里「证据账本行号」那一列就是逐行对账的抓手；要给人看就用 txt 或打印 HTML',
+          result: { export: { filename: `${filename}.${format}`,
+            format,
+            content_type: format === 'csv' ? 'text/csv; charset=utf-8' : 'text/plain; charset=utf-8',
+            content, rows: (json.evidence?.packages_published?.length ?? 0)
+              + (json.evidence?.quotes_received?.length ?? 0) + (json.evidence?.award_amount_cents?.length ?? 0),
+            columns: WEEKLY_LABELS.map(([, label]) => label),
+            digest: `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`,
+            source: `只读汇总器 ${WEEKLY_TOOL}（本侧账本 ${json.ledger ?? ''}；as_of ${json.as_of ?? ''}）`,
+            ledger_refs: Object.values(json.evidence ?? {}).flat()
+              .map((item) => item?.seq).filter((seq) => typeof seq === 'number').slice(0, 200) },
+            week: json.week ?? null, as_of: json.as_of ?? null, ledger: String(json.ledger ?? ''),
+            ledger_added: 0 } }
+      }
+      // ---- html：走外壳的**序列化**（内容仍由本插件生成：行来自同一份报表）----
+      const metrics = json.metrics ?? {}
+      const reported = host.report({ format: 'html', filename,
+        title: '本周汇报', subtitle: `${json.week?.iso ?? ''} · ${json.week?.start ?? ''} — ${json.week?.end ?? ''}`
+          + ` · 事实时刻 ${json.as_of ?? ''}（${json.as_of_basis ?? ''}）`,
+        facts: WEEKLY_LABELS.map(([key, label]) => ({ key: label, value: metricText(metrics[key]) }))
+          .concat([{ key: '（附加）本周发 PO', value: `${json.supporting?.po_issued?.value ?? 0} 张 · 原生金额合计 `
+            + `${json.supporting?.po_issued?.total_amount_native ?? '0'}` },
+          { key: '账本', value: String(json.ledger ?? '') }]),
+        columns: [{ key: 'metric', label: '指标' }, { key: 'seq', label: '账本行号' }, { key: 'ts', label: '事实时刻' },
+          { key: 'event', label: '事件' }, { key: 'object', label: '对象' },
+          { key: 'amount_cents', label: '金额（分）' }, { key: 'detail', label: '口径 / 明细' }],
+        rows: [].concat(
+          (json.evidence?.packages_published ?? []).map((item) => ({ metric: '① 发布包数', seq: item.seq,
+            ts: item.ts, event: 'rfq/published', object: item.package_id, amount_cents: '',
+            detail: `rev${item.rev} · 截止 ${item.quote_by}` })),
+          (json.evidence?.quotes_received ?? []).map((item) => ({ metric: '② 收报价数', seq: item.seq,
+            ts: item.ts, event: 'quote/submitted', object: item.quote_id, amount_cents: '',
+            detail: `包 ${item.package_id} · ${item.line_count} 行` })),
+          (json.evidence?.award_amount_cents ?? []).flatMap((item) => (item.lines ?? []).map((line) =>
+            ({ metric: '③ 授标金额', seq: item.seq, ts: item.ts, event: 'award/committed',
+              object: `${item.award_id}:${line.item_id}`, amount_cents: line.amount_cents, detail: line.basis }))),
+          (json.evidence?.gate_avg_wait_seconds ?? []).map((item) => ({ metric: '④ 人工门平均等待',
+            seq: item.decided_seq, ts: item.decided_ts, event: item.decision, object: item.approval_id,
+            amount_cents: '', detail: `${item.scope} · 等 ${item.wait_seconds} 秒（请求行 ${item.request_seq}）` })),
+          (json.evidence?.overdue_no_reply ?? []).map((item) => ({ metric: '⑤ 超时未回', seq: item.seq,
+            ts: item.ts, event: 'rfq/published', object: item.package_id, amount_cents: '',
+            detail: `截止 ${item.quote_by} · 已超 ${item.overdue_days} 天` })),
+          (json.amount_missing ?? []).map((item) => ({ metric: '对不上（不计入小计）', seq: item.seq, ts: '',
+            event: 'award/committed', object: `${item.award_id}:${item.item_id ?? ''}`, amount_cents: '',
+            detail: `算不出金额：${item.why}` })),
+          (json.gate_unmatched ?? []).map((item) => ({ metric: '对不上（不计入平均）', seq: item.seq, ts: item.ts,
+            event: item.type, object: item.approval_id, amount_cents: '', detail: item.why })),
+          (json.evidence?.po_issued ?? []).map((item) => ({ metric: '（附加）本周发 PO', seq: item.seq, ts: item.ts,
+            event: 'po/issued', object: item.po_id, amount_cents: '',
+            detail: `${item.lines} 行 · 原生金额 ${item.total_amount}` }))),
+        notes: ['每一项的「账本行号」就是 append-only 账本里那一行的位置 ⇒ 可逐行回账本核。',
+          '算不出来的行（缺量/缺价、审批配不上对）**没有被算进**任何小计：它们单独列出来。',
+          '报表不取墙钟：事实时刻 = 账本里最大的 ts（同一份账本在任何时间跑都得到同一组数）。'],
+        report_id: 'rfq.weekly', source: `quotagent · 本周汇报（只读汇总器 ${WEEKLY_TOOL}）`,
+        generated_at: json.as_of ?? '' })
+      if (!reported.ok) return { ...reported, ledger_added: 0 }
+      return { ok: true, code: 'weekly-exported', ledger_added: 0, note: reported.note,
+        next_action: 'HTML 可以直接打印（浏览器打印对话框里可另存 PDF）——表里的行号可逐行回账本核',
+        result: { ...reported.result, week: json.week ?? null, as_of: json.as_of ?? null,
+          ledger: String(json.ledger ?? ''), ledger_added: 0 } }
+    } }))
+
+  out.push(surface.report({ plugin_id: me, id: 'report.weekly', title: '本周汇报（TXT / CSV / 打印）',
+    views: ['contractor'], order: 20, action: 'rfq.weekly-export', formats: ['csv', 'txt', 'html'],
+    hint: '导出的是**同一份只读报表**：csv = 指标表（带证据账本行号）、txt = 人读正文、html = 可打印文档；'
+      + '内容由 `domain/rfq` 的 `rfq.weekly-export` 生成（外壳只做序列化）',
+    columns: [{ key: 'metric', label: '指标' }, { key: 'value', label: '数值' }, { key: 'unit', label: '单位' },
+      { key: 'basis', label: '口径' }, { key: 'rows', label: '证据账本行号' }, { key: 'extra', label: '附加读数' }] }))
 
   out.push(surface.panel({ plugin_id: me, id: 'rfq.responses', title: '收到的报价（本侧登记行）',
     view: 'contractor', order: 20, kind: 'table',

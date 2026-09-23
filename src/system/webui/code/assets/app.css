@@ -732,4 +732,62 @@ tr.q-row-picked > td { background: color-mix(in srgb, var(--accent) 12%, transpa
   details.q-layoutbar-fold[open] > summary::before { content: '▾ '; }
   details.q-layoutbar-fold > .q-layoutbar-inner { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
     margin-top: 6px; }
+
+  /* ---- P25 / ④：矮视口下**纵向 chrome 也要收**（P23 只收了查询条与布局条，实测 844×390 首行仍 y=1134）
+     844×390 实测的账单：顶栏 130（折成两行）+ 标签条 39 + 视图动作条 **454**（按钮墙）+ 状态栏 **141**
+     ⇒ 中间那块可滚区域只剩 79px，数据行怎么都在折线以下。这里复用 ≤560px 那套**已验证**的做法
+     —— 单行 + 横滑（右侧渐变 + 「↔」提示"还能横滑"），**一个按钮都不删**，只是不再各占一行。 */
+  header.q-top { padding: 4px 10px; gap: 6px; flex-wrap: nowrap; }
+  .q-nav { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; }
+  .q-nav a { white-space: nowrap; }
+  .q-tools { flex: 0 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; }
+  .q-tools button { white-space: nowrap; }
+  .q-tabs { align-items: center; max-height: 34px; overflow-y: hidden; padding: 2px 10px 0; }
+  .q-tab, .q-tab-add { max-height: 30px; align-self: center; }
+  /* 视图动作条（`data-toolbar`）与「导出 / 打印」条（`data-reportbar`）：单行横滑 */
+  .q-actions[data-toolbar], .q-actions[data-reportbar] { flex-wrap: nowrap; overflow-x: auto;
+    margin-top: 4px; padding-bottom: 2px; }
+  .q-actions[data-toolbar] button, .q-actions[data-reportbar] button,
+  .q-actions[data-toolbar] .q-link, .q-actions[data-reportbar] .q-link { white-space: nowrap; }
+  .q-actions[data-toolbar]::after { content: '↔'; color: var(--fg-dim); align-self: center;
+    padding-left: 4px; }
+  .q-reportbar .q-report { flex-wrap: nowrap; }
+  /* 查询条：**宽但矮**（844×390 这种横屏）下一行就排得下 —— 上面那条"lead 占一整行"的规则是给
+     窄屏（≤560px）写的；这里按宽度还够用 ⇒ 改成一行，省下 ~70px。放不下的仍会自动换行（flex-wrap: wrap 还在）。 */
+  .q-qbar .q-qbar-lead { flex: 0 1 auto; }
+  .q-qbar .q-qcount .q-c-extra { flex: 0 1 auto; }
+  /* 「导出 / 打印」条里层的块**不收缩**（收缩了标题会被压成竖排），整条横滑 */
+  .q-actions[data-reportbar] > * { flex: 0 0 auto; }
+  /* 表格 `caption` 与查询条计数行**是同一组数字**（本页/共 N 行/命中都在计数行里）⇒ 矮视口只留计数行 */
+  .q-caption { display: none; }
+  /* 面板与网格的内边距收一档 */
+  .q-panels, .q-panels-home { gap: 6px; }
+  .q-panel { padding: 6px 8px; }
+  .q-panel-head { margin: 0; }
+  .q-actions[data-toolbar] button, .q-actions[data-reportbar] button,
+  header.q-top button { padding: 3px 8px; }
+  /* **行高也收一档**：上面每一块的高度基本都花在 14px/1.7（23.8px）这一行上 ——
+     只收内边距不动行高，按钮仍是 32px 高。矮视口下按紧凑一档排（字号 12.5、行高 1.35）。 */
+  body { font-size: 12.5px; line-height: 1.35; }
+  header.q-top, .q-tabs, .q-viewhead, .q-panel, .q-qbar, .q-actions, footer.q-status { font-size: 12.5px; }
+  .q-panel h3 { font-size: 14px; }
+  .q-viewhead h1 { font-size: 16px; }
+  button, .q-btn, .q-link { font-size: 12.5px; }
+  /* 视图头：标题小一号，说明跟着换行 */
+  .q-viewhead { margin-bottom: 2px; gap: 4px 8px; }
+  .q-viewhead h1 { font-size: 16px; }
+  .q-viewhead p, .q-viewhead .q-crumbs { font-size: 12px; }
+  .q-main { padding: 6px 10px; }
+  /* 竖向留白再收一档（块与块之间那几 px；矮视口下每一条都在抢首屏） */
+  .q-actions[data-toolbar], .q-actions[data-reportbar] { margin-top: 2px; }
+  .q-actions[data-reportbar] { padding: 6px 8px; }
+  .q-layoutbar { margin: 2px 0 4px; }
+  .q-qbar { padding: 3px 8px; margin: 4px 0 6px; }
+  /* 表格的「↔ 左右滑动看更多列」那行字：右侧的渐变条仍在，矮视口下省掉这一行 */
+  .q-scroll[data-scroll-x="1"]::before { content: none; }
+  /* 状态栏：单行横滑（141 → 34）—— 信息一个不删，>8 项那截仍在「更多 N 项」里 */
+  footer.q-status { flex-wrap: nowrap; overflow-x: auto; max-height: 34px; align-items: center;
+    gap: 10px; padding: 3px 10px; }
+  footer.q-status .q-st { white-space: nowrap; overflow: visible; text-overflow: clip; }
+  footer.q-status .q-spacer { display: none; }
 }

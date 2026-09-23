@@ -123,7 +123,8 @@
 - 键盘：`Ctrl+K` 命令面板、`Esc`（确认层先退回表单）、表格 `Tab/Enter` 流转、焦点陷阱与描边、省跳链接。
 - 标签页与最近访问：`Alt+1..9`、`Alt+W`、钉成标签页、「继续上次」。
 - 窄屏：查询条折叠、表格转卡片、弹层全屏＋吸底按钮；390×844 首屏可见数据行 1（面板头曾占满一屏，已收）。
-- 细节见 `scale-and-performance.md`、`notifications-and-dedupe.md`、`scale-batch-and-narrow-screen.md`、`row-action-prefill.md`、`my-today-feed.md`。
+  **矮视口**（高 ≤520px，含手机横屏 844×390）另收纵向 chrome（每块一行、横滑不删按钮）：首行 y 1135→350、可见行 0→2（`p25-truth-and-short-viewport.md` §4）。
+- 细节见 `scale-and-performance.md`、`notifications-and-dedupe.md`、`scale-batch-and-narrow-screen.md`、`row-action-prefill.md`、`my-today-feed.md`、`p25-truth-and-short-viewport.md`。
 
 ## 10. 多人协作（同侧人类之间；**不写账本**）
 
@@ -158,3 +159,13 @@
 ① 并发保存会**明确拒绝**（`object-changed` + 谁何时改了哪个字段 + 三个出口）；② 对象页页头「分享（含邮件
 正文）」给深链 + **对方需要什么身份/侧才能看**；③ 导出的「列（N/M）」是**个人偏好**（按身份落 0600，换浏览器仍在）。
 机制与判据见 **`docs/concurrency-and-sharing.md`**；复跑 `python3 tmp/p9-verify.py`。
+
+## 13. 投递与已读回执 + 本周汇报（本批新增）
+
+**「对方收到了吗？看了吗？」**：签约/发包之后，**发送侧**在 `rfq.receipts`（包）与 `po.receipts`（采购单）
+看到「投给谁 / 哪个版本 / 何时投的」（账本事实）与「谁在何时打开过、看过几次」（回执 —— **痕迹，不进账本**）；
+收件方**打开包/PO 就自动留痕**，面板上如实写着「对方能看到谁/何时/几次」。
+**「这周到底发生了什么？花了多少钱？」**：承包商道「本周汇报」给出 发布包数 / 收报价数 / 授标金额 /
+人工门平均等待 / 超时未回，每一项都带**账本行号**（下方「逐行对账」面板逐行可核），可导出 TXT / CSV /
+可打印 HTML（`report.weekly`）。口径、边界与复跑见 **`docs/delivery-receipts-and-weekly.md`**；
+复跑 `python3 tmp/p26-verify.py`（回执与周报共 30+ 条断言，截图 `tmp/p26-shots/`）。

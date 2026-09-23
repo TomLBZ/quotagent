@@ -23,7 +23,7 @@
   const LAST_KEY = 'quotagent.last-route'
   /** 客户端机制的**持久化便签**（localStorage；私密模式不可用时就退化成"本次会话内有效"）。 */
   const KEYS = { tabs: 'quotagent.tabs', recent: 'quotagent.recent', layout: 'quotagent.layout',
-    notif: 'quotagent.notif' }
+    notif: 'quotagent.notif', jobHints: 'quotagent.jobHints' }
   const store = {
     get(key, fallback) {
       try {
@@ -176,6 +176,9 @@
   }
   const countInBucket = (rows, key) => rows.filter((row) => String(row?.bucket ?? '') === key).length
   const byBucket = (rows, key) => (key === '' ? rows : rows.filter((row) => String(row?.bucket ?? '') === key))
+  /** 片上的数字**是不是真有一个**（`null`/`undefined`/`''` = 没有；**绝不**把它当 0 ——
+   *  `Number(null) === 0` 正是「全部 0」那个假数字的来历）。 */
+  const hasCount = (count) => count !== null && count !== undefined && count !== '' && Number.isFinite(Number(count))
   /** 筛选片：`全部 N` + 每个桶（`label N`）。点一下只改"看到哪些"，不改任何事实。
    *  `counts` = 服务端在全集上算好的桶计数（客户端只有一页时用它，免得片上的数字跟着这一页变小）。 */
   function bucketBar(scope, buckets, current, rows, counts) {
@@ -184,10 +187,13 @@
       : (key === '' ? rows.length : countInBucket(rows, key)))
     const chip = (key, label, count) => `<span class="q-chip${current === key ? ' on' : ''}"`
       + ` data-bucket-filter="${attr(scope)}" data-bucket-key="${attr(key)}" role="button" tabindex="0">`
-      + `${esc(label)} ${Number.isFinite(Number(count)) ? Number(count) : pick(key)}</span>`
+      + `${esc(label)} ${hasCount(count) ? Number(count) : pick(key)}</span>`
+    // 「全部」那颗片的数字 = **这一块真的有多少行**（真源：服务端窗口的 `query.total_full`；没开窗口就是
+    // 整份行集的行数）。它必须与同一块表头那句「共 N 行」**同源**，否则用户会以为筛掉了东西。
+    const total = pick('')
     return `<div class="q-bucketbar" data-bucket-bar="${attr(scope)}">`
       + `<span class="q-bucketbar-label">筛选</span>`
-      + chip('', '全部', null)
+      + chip('', '全部', total)
       + buckets.map((item) => chip(item.key, item.label, item.count)).join('')
       + `<span class="q-hint">只看你关心的那一类（按你的身份存在服务端：换浏览器/换设备仍是这套筛选；不改任何事实）</span></div>`
   }
@@ -1229,6 +1235,19 @@
     state.banners.push({ kind, title, detail, next_action: nextAction || '' })
     renderBanners()
   }
+  /**
+   * 「上一批没有跑完」那条提示的**忽略便签**（③）：`(批次 id, 还剩几份)` —— 你点过「忽略」就不再摆。
+   * **只收起提示，不删任何数据**（记录照旧在 `/api/ui/jobs`，账本一个字节没动）；而且它是**这一件事**的便签：
+   * 又做掉几份（数字变了）或来了新的一批（换了 id）⇒ 照常提示。便签有界（只留最近 20 条）。
+   */
+  const jobHintNote = (key) => store.get(KEYS.jobHints, {})[key] || null
+  const ignoreJobHint = (key) => {
+    const all = store.get(KEYS.jobHints, {})
+    if (!all || typeof all !== 'object') return
+    all[key] = new Date().toISOString()
+    const kept = Object.keys(all).slice(-20)
+    store.set(KEYS.jobHints, Object.fromEntries(kept.map((item) => [item, all[item]])))
+  }
   function renderBanners() {
     const box = el('q-banners')
     if (!box) return
@@ -1236,11 +1255,18 @@
       `<div class="q-banner ${item.kind}" data-banner="${index}"><b>${esc(item.title)}</b>`
       + `${item.detail ? ` <span>${esc(item.detail)}</span>` : ''}`
       + `${item.next_action ? ` <div class="q-hint">${esc(item.next_action)}</div>` : ''}`
-      // **提示条上的动作**（P21：上一批没跑完 ⇒ 一条「只重试剩下的 N 份」）；没有动作就只有「知道了」
+      // **提示条上的动作**（P21：上一批没跑完 ⇒ 一条「只重试剩下的 N 份」）；没有动作就只有「知道了」。
+      // 带 `dismiss` 的那种（没跑完的那一批）：收起这条**不再反复出现**（便签见 `ignoreJobHint`）。
       + `${item.retry ? `<button class="primary" data-banner-retry="${index}">`
         + `只重试剩下的 ${(item.retry.ids || []).length} 份</button>` : ''}`
-      + `<button data-banner-close="${index}" aria-label="关闭这条提示">知道了</button></div>`).join('')
+      + `<button data-banner-close="${index}"`
+      + ` aria-label="关闭这条提示${item.dismiss ? '（下次打开也不再提示；不删任何数据）' : ''}"`
+      + ` title="${attr(item.dismiss
+        ? '只收起这条提示，不删任何数据（/api/ui/jobs 里的记录照旧；剩下的份数变了或来了新的一批会照常提示）'
+        : '关闭这条提示')}">${esc(item.dismiss?.label || '知道了')}</button></div>`).join('')
     box.querySelectorAll('[data-banner-close]').forEach((node) => node.addEventListener('click', () => {
+      const item = state.banners[Number(node.dataset.bannerClose)]
+      if (item?.dismiss?.key) ignoreJobHint(item.dismiss.key)   // 便签：刷新/换页也不再摆这一条
       state.banners.splice(Number(node.dataset.bannerClose), 1); renderBanners()
     }))
     box.querySelectorAll('[data-banner-retry]').forEach((node) => node.addEventListener('click', () => {
@@ -3318,9 +3344,12 @@
       }
       const recent = (jobs.recent || [])[0]
       if (recent && recent.id) {
-        node.innerHTML = `<b>上一批：${recent.status === 'interrupted' ? '没有跑完（进程中断）' : '已结束'}</b>`
+        // 没跑完的记录：说清**还剩几份真没做**（服务端收尾对账之后的数）；对账完剩 0 ⇒ 如实说"已被后来的批次收尾"
+        const unfinished = (recent.pending_ids || []).length + (recent.refused_ids || []).length
+        const mid = recent.status === 'interrupted' || recent.status === 'failed'
+        node.innerHTML = `<b>上一批：${mid ? (unfinished ? '没有跑完（进程中断）' : '中断过，但没剩下要做的了') : '已结束'}</b>`
           + `<div class="q-hint">${esc(recent.title || '')} · 共 ${recent.total} · 已签 ${recent.applied} · `
-          + `已签过 ${recent.duplicates} · 被拒 ${recent.refused} · 待办 ${(recent.pending_ids || []).length}</div>`
+          + `已签过 ${recent.duplicates} · 被拒 ${recent.refused} · 待办 ${unfinished}</div>`
       } else {
         node.textContent = '正在提交这一批…（还没拿到逐条进度）'
       }
@@ -4430,8 +4459,12 @@
 
   // ---------------------------------------------------------------- 加载
   /**
-   * **没跑完的那一批**（P21 / D1）：`GET /api/ui/jobs` 里 `recent` 有 `interrupted`/`failed` 且还有
-   * `pending_ids` ⇒ 摆一条提示条：「到哪了」+ 一颗「只重试剩下的 N 份」（幂等：已完成的会报 duplicates）。
+   * **没跑完的那一批**（P21 / D1）：`GET /api/ui/jobs` 里 `recent` 有 `interrupted`/`failed` **且真还有**
+   * `pending_ids`/`refused_ids` ⇒ 摆一条提示条：「到哪了」+ 一颗「只重试剩下的 N 份」（幂等：已完成的会报 duplicates）。
+   *
+   * P25 ③ 的两条纪律：① 数字来自服务端**收尾对账后**的 `pending_ids`/`refused_ids`（后来的批次已经给出结论的
+   * 那些不再算"还没做"）⇒ 全做完了这条提示自然消失，不会拿一条过期清单反复说"还没做 N 份"；
+   * ② 可以**忽略**（「忽略这条（不再提示）」= 只收起提示，不删任何数据；便签按 (批次 id, 剩余份数) 记）。
    * 读不到进度时**不假装没有**（说清"读不到"），也不影响页面上别的东西。
    */
   async function noteUnfinishedJobs() {
@@ -4441,12 +4474,19 @@
       && ((job.pending_ids || []).length || (job.refused_ids || []).length))
     if (!stuck) return
     const left = [...new Set([...(stuck.pending_ids || []), ...(stuck.refused_ids || [])])]
+    if (!left.length) return                     // 真没有未完成的份数 ⇒ 一个字都不摆
+    const key = `${stuck.id}|${left.length}`     // 便签：同一件事（同一批、同样的剩余数）才收起
+    if (jobHintNote(key)) return
+    const settled = Number(stuck.superseded || 0)
     state.banners = state.banners.filter((item) => !String(item.title).startsWith('上一批没有跑完'))
     state.banners.push({ kind: 'warn', title: `上一批没有跑完：${stuck.title || stuck.action}（共 ${stuck.total}）`,
       detail: `已签 ${stuck.applied} · 已签过（幂等）${stuck.duplicates} · 被拒 ${stuck.refused} · `
-        + `**还没做的 ${left.length} 份**（${stuck.status === 'interrupted' ? '进程中断过' : '运行时失败'}）`,
-      next_action: `点下面那颗按钮：**只重试这 ${left.length} 份**（同一份署名；已完成的会如实报"已经签过"、`
-        + '账本零新增）。这一批的逐条记录在 `/api/ui/jobs`，刷新或换设备都读得回来。',
+        + `还没做的 ${left.length} 份（${stuck.status === 'interrupted' ? '进程中断过' : '运行时失败'}`
+        + `${settled ? `；另有 ${settled} 份已被后来的批次收尾，不再算"还没做"` : ''}）`,
+      next_action: `点下面那颗按钮：只重试这 ${left.length} 份（同一份署名；已完成的会如实报"已经签过"、`
+        + '账本零新增）。这一批的逐条记录在 `/api/ui/jobs`，刷新或换设备都读得回来。'
+        + '「忽略这条（不再提示）」只收起提示，不删任何数据。',
+      dismiss: { key, label: '忽略这条（不再提示）' },
       retry: { action: stuck.action, ids: left, title: stuck.title || stuck.action } })
     renderBanners()
   }
