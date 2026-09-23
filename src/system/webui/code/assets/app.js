@@ -1216,17 +1216,62 @@
     box.appendChild(node)
     setTimeout(() => node.remove(), kind === 'bad' ? 12000 : 6000)
   }
+  /**
+   * 这次动作**真往账本里落了几行**（`0` = 零新增、`null` = 回执里没有这个读数）。
+   *
+   * 三处都是**回执里现成的读数**，界面一个数都不自己算（自己算就是第二条判据）：
+   *   ① 批量动作：`job.ledger_added`（动作运行时逐份写者回执求和）；
+   *   ② 单条动作：`writer.rows_written`（机制把**本动作**那几条写者回执的 `ledger_added` 加起来；
+   *      没跑写者的动作恒 `0` —— 那是"这次确实没写"，不是"不知道"）；
+   *   ③ 插件自己在 `result.ledger_added` 里报的数（如 `quote.submit` 的幂等分支恒 0）。
+   * 三处都拿不到 ⇒ `null`：**不知道就说不知道**，绝不退化成 0（那会把"没读到"画成"零新增"）。
+   */
+  function ledgerAddedOf(out) {
+    const job = out && out.job
+    if (job && Number.isFinite(Number(job.ledger_added))) return Number(job.ledger_added)
+    const rows = out && out.writer ? out.writer.rows_written : undefined
+    if (Number.isFinite(Number(rows))) return Number(rows)
+    const declared = out && out.result ? out.result.ledger_added : undefined
+    if (Number.isFinite(Number(declared))) return Number(declared)
+    return null
+  }
+  /** "零新增"的那半句话：区分**幂等重放**（做过的事再交一次）与**本来就不写账本**（只读/只改偏好）。 */
+  function zeroAddedNote(out) {
+    const writer = (out && out.writer) || {}
+    const job = (out && out.job) || null
+    const jobDuplicates = job ? Number(job.duplicates ?? 0) : 0
+    const mineDuplicates = Array.isArray(writer.ours && writer.ours.duplicates)
+      ? writer.ours.duplicates.length : 0
+    if (writer.verdict === 'no-writer-run' && !job) {
+      return '这次动作没跑唯一写者（只读或只改偏好）⇒ 账本零新增，没有任何新事实'
+    }
+    if (jobDuplicates + mineDuplicates > 0) {
+      return `这一件（或这几件）**已经在账本/归档里**（幂等：写者按 id 认出来了，重签 ${jobDuplicates + mineDuplicates} 件）`
+        + '⇒ 本次账本零新增 —— 没有第二条事实被写出来'
+    }
+    return '写者回执 +0 行 ⇒ 本次账本零新增，没有任何新事实'
+  }
   function notifyAction(result, action) {
     if (!result) return
     if (result.ok) {
-      toast('ok', `${action ? action.title : '动作'}：已受理`,
-        [result.code ? `(${result.code})` : '', result.next_action || ''].filter(Boolean).join(' · '))
+      // **零新增必须一眼看出来**（P33 修的缺陷）：修前一律写「已受理」，而 `ledger_added=0`
+      // （幂等重放 / 只读动作）只有点开回执正文才看得到 ⇒ 用户会以为"又落了一份事实"。
+      const added = ledgerAddedOf(result)
+      const zero = added === 0
+      const reading = added === null
+        ? '回执里没有"账本新增行数"这个读数（界面不替它猜）'
+        : (zero ? zeroAddedNote(result) : `本次账本 +${added} 行`)
+      toast(zero ? 'warn' : 'ok', `${action ? action.title : '动作'}：${zero ? '零新增' : '已受理'}`,
+        [reading, result.code ? `(${result.code})` : '', result.next_action || ''].filter(Boolean).join(' · '))
     } else {
       toast('bad', `${action ? action.title : '动作'}：被拒（${result.code || 'refused'}）`,
         [result.reason, result.next_action].filter(Boolean).join(' · '))
     }
-    state.results.unshift({ id: `act-${Date.now()}-${action?.id || ''}`, plugin_id: action?.plugin_id || '', level: result.ok ? 'ok' : 'bad',
-      title: `${action ? action.title : '动作'} → ${result.ok ? 'ok' : result.code}`, body: result.reason || '',
+    const added = ledgerAddedOf(result)
+    state.results.unshift({ id: `act-${Date.now()}-${action?.id || ''}`, plugin_id: action?.plugin_id || '',
+      level: result.ok ? (added === 0 ? 'warn' : 'ok') : 'bad',
+      title: `${action ? action.title : '动作'} → ${result.ok ? (added === 0 ? '零新增' : 'ok') : result.code}`,
+      body: result.reason || '', ledger_added: added,
       next_action: result.next_action || '', at: new Date().toISOString(), ref: result.ref || null })
     state.results = state.results.slice(0, 20)
   }
@@ -3347,10 +3392,20 @@
     }
     return { ready, need }
   }
-  /** 这个动作"该在哪跑"的候选（机制，按字段名与既有约定取值；外壳不认识任何业务名词）：
+  /** 候选清单的**每类上限**（挑一条不是让你在几百行里翻）；超了要在清单里写明「只列前 N 条」。 */
+  const CANDIDATE_CAP = 12
+  /**
+   * 这个动作"该在哪跑"的候选（机制，按字段名与既有约定取值；外壳不认识任何业务名词）：
    *   · `rows`    = 这一页的面板里，**给得出它要的那些字段名**的行（挑一条就能预填带入）；
    *   · `objects` = 带对象深链（`row.ref`）的行 —— 需要"对象地址"的动作要站在那个对象的页面上才成立。
-   *  去重按（面板 + 标签），最多各 12 条（挑一条不是让你在几百行里翻）。 */
+   *
+   * **去重按"这一行会带进表单的值"，不按标签**（P33 修的缺陷）：修前去重键是 `${panel}:${标签}`，
+   * 而标签优先取 `package_id`/`quote_id` 这种**一份对象一个名字**的字段 ⇒ 一份多行报价的几行在清单里
+   * **塌成一条**：从引导入口只能挑到首行，要提第二行（如 `L-002`）得先回表格用查询条筛到那一行。
+   * 现在两条行**只有预填指纹完全一样**才算同一个候选 ⇒ 多行报价的每一行都是可挑的一条；并且把
+   * **能区分行的那几个字段值**补进按钮文字（否则清单上会并排出现几个一模一样的名字，等于没修）。
+   * 最多各 12 条（挑一条不是让你在几百行里翻）。
+   */
   function contextCandidates(action) {
     const needs = needsOf(action)
     const wanted = [...needs.route, ...needs.row, ...needs.selection]
@@ -3364,16 +3419,25 @@
         || row.po_id || row.gate_id || row.id || (first && first.key ? row[first.key] : '')
       return String(named === undefined || named === null || named === '' ? `第 ${index + 1} 行` : named)
     }
+    /** **预填指纹**：这一行会把哪几个字段、取什么值带进表单（逐字段 `名字=值`，顺序取自声明）。
+     *  它是去重的**唯一键** —— 名字一样不算同一条（同名不同行恰恰是多行报价的常态）。 */
+    const fingerprintOf = (row) => wanted
+      .map((name) => `${name}=${String(rowValueFor(action, name, row))}`).join('\u0001')
+    /** 按钮上**区分行**的那半句：指纹里"不等于标签"的那些值（多行报价靠它分辨第几行）。 */
+    const lineTagOf = (label, row) => wanted.map((name) => {
+      const value = String(rowValueFor(action, name, row))
+      return value !== '' && value !== label ? `${name}=${value}` : ''
+    }).filter(Boolean).join(' · ')
     for (const panel of state.panels) {
       const data = panel.data || {}
       const list = Array.isArray(data.rows) ? data.rows : []
       for (let index = 0; index < list.length; index += 1) {
         const row = list[index]
         if (!row || typeof row !== 'object') continue
-        const tag = String((row.ref && row.ref.title) || labelOf(panel, row, index))
+        const base = String((row.ref && row.ref.title) || labelOf(panel, row, index))
         if (row.ref && row.ref.kind && row.ref.id) {
           const key = `obj:${panel.id}:${row.ref.kind}:${row.ref.id}`
-          if (!seen.has(key)) { seen.add(key); objects.push({ panel, row, label: tag }) }
+          if (!seen.has(key)) { seen.add(key); objects.push({ panel, row, label: base }) }
         }
         if (!wanted.length) continue
         let complete = true
@@ -3381,13 +3445,18 @@
           if (rowValueFor(action, name, row) === '') { complete = false; break }
         }
         if (!complete) continue
-        const key = `row:${panel.id}:${tag}`
+        const key = `row:${panel.id}:${fingerprintOf(row)}`
         if (seen.has(key)) continue
         seen.add(key)
-        rows.push({ panel, row, label: tag })
+        const lineTag = lineTagOf(base, row)
+        rows.push({ panel, row, label: base, line_tag: lineTag,
+          label_full: lineTag ? `${base} — ${lineTag}` : base })
       }
     }
-    return { rows: rows.slice(0, 12), objects: objects.slice(0, 12) }
+    return { rows: rows.slice(0, CANDIDATE_CAP), objects: objects.slice(0, CANDIDATE_CAP),
+      // **上限要可见**（不是把多的悄悄藏掉）：命中多少、列了几条、余几条一起给出去
+      counts: { rows_hit: rows.length, rows_shown: Math.min(rows.length, CANDIDATE_CAP),
+        objects_hit: objects.length, objects_shown: Math.min(objects.length, CANDIDATE_CAP) } }
   }
   /** 从候选行/对象取这次要预填的入参（只填它真给得出的那些字段名 —— 不编值）。 */
   function rowPresetOf(action, row) {
@@ -3432,7 +3501,7 @@
     const ctx = { route: onObjectPage() }
     const missing = contextMissing(action, ctx)
     if (!missing.length) return openAction(id, presets)
-    const { rows, objects } = contextCandidates(action)
+    const { rows, objects, counts: found } = contextCandidates(action)
     const steps = (state.surface.guides || []).filter((guide) => guide.view === state.route.view)
       .flatMap((guide) => guide.steps || []).filter((step) => actionOf(step.action)).slice(0, 3)
     const item = (payload, text) => `<li>${payload} <span class="q-hint">${esc(text)}</span></li>`
@@ -3442,10 +3511,15 @@
       + ` —— 外壳不摆一个空表单让人撞「必填」，而是把你带到能填的地方。</p>`,
       action.hint ? `<p class="q-hint">${esc(action.hint)}</p>` : '',
       `<p class="q-hint">${esc(whereText(action, missing))}</p>`,
-      rows.length ? `<h3>从这一页的表里挑一条（会把那一行带入表单）</h3><ul class="q-entry-list">${
-        rows.map((item2, index) => item(`<button data-entry-row="${attr(index)}">${esc(item2.label)}</button>`,
-          `在「${esc(item2.panel.title)}」里`)).join('')}</ul>` : '',
-      objects.length ? `<h3>或打开一条对象，在它自己的页面上跑</h3><ul class="q-entry-list">${
+      rows.length ? `<h3>从这一页的表里挑一条（会把那一行带入表单）</h3>${found.rows_hit > found.rows_shown
+        ? `<p class="q-hint" data-entry-capped="rows">命中 ${found.rows_hit} 条，只列前 ${found.rows_shown} 条`
+          + `（余 ${found.rows_hit - found.rows_shown} 条没列出来 —— 不是没有）：要在别的行上跑，`
+          + `先在上面那块表里筛一下，候选会跟着变</p>` : ''}<ul class="q-entry-list">${
+        rows.map((item2, index) => item(`<button data-entry-row="${attr(index)}">${esc(item2.label_full)}</button>`,
+          `在「${esc(item2.panel.title)}」里${item2.line_tag ? ` — 带入：${esc(item2.line_tag)}` : ''}`)).join('')}</ul>` : '',
+      objects.length ? `<h3>或打开一条对象，在它自己的页面上跑</h3>${found.objects_hit > found.objects_shown
+        ? `<p class="q-hint" data-entry-capped="objects">命中 ${found.objects_hit} 条，只列前 ${found.objects_shown} 条</p>`
+        : ''}<ul class="q-entry-list">${
         objects.map((item2, index) => item(`<button data-entry-object="${attr(index)}">打开 ${esc(item2.label)} →</button>`,
           `对象类 ${esc(item2.row.ref.kind)}｜在那一页上这个动作会自动打开`)).join('')}</ul>` : '',
       !rows.length && !objects.length
@@ -3491,8 +3565,9 @@
       const action = actionOf(id)
       if (!action) return null
       const found = contextCandidates(action)
-      return { rows: found.rows.map((item) => `${item.panel.id}:${item.label}`),
-        objects: found.objects.map((item) => `${item.panel.id}:${item.label}`) }
+      return { rows: found.rows.map((item) => `${item.panel.id}:${item.label_full}`),
+        objects: found.objects.map((item) => `${item.panel.id}:${item.label}`),
+        counts: found.counts }
     },
     toolbar: () => partitionActions(viewActions(), {}).ready.map((action) => action.id),
     needsContext: () => partitionActions(viewActions(), {}).need.map((item) => ({
@@ -3778,6 +3853,9 @@
       where: row.where, code: row.code || '', added: Number(row.ledger_added ?? 0),
       reason: row.reason || '', next: row.next_action || '' }))
     const group = (kind) => rows.filter((row) => row.where === kind)
+    /** 这一批**真落了几行**（回执里现成：批量走 `job.ledger_added`，兜底逐条相加）。 */
+    const batchAdded = ledgerAddedOf(out) ?? rows.reduce((sum, row) => sum + row.added, 0)
+    const zeroBatch = batchAdded === 0
     const list = (kind, label) => {
       const picked = group(kind)
       if (!picked.length) return ''
@@ -3789,10 +3867,14 @@
     openModal(html([
       `<h2 id="q-action-title">回执：${esc(action.title)}</h2>`,
       '<div class="q-modal-body">',
-      `<p class="q-degraded" data-batch-summary="1">共 <b>${job.total ?? rows.length}</b> 份：`
+      `<p class="q-degraded" data-batch-summary="1" data-batch-ledger-added="${attr(batchAdded)}">`
+      + `${zeroBatch
+        ? `<b data-batch-zero="1">这一批零新增：账本 +0 行 —— 没有任何新事实被写出来</b>（下面对每一份说清它是"已经签过"还是"被拒"）<br>`
+        : ''}`
+      + `共 <b>${job.total ?? rows.length}</b> 份：`
       + `已签 <b>${job.applied ?? group('applied').length}</b> · 已经签过（幂等）`
       + `<b>${job.duplicates ?? group('duplicates').length}</b> · 被拒 <b>${job.refused ?? group('refused').length}</b>`
-      + `（本次账本 +${job.ledger_added ?? rows.reduce((sum, row) => sum + row.added, 0)} 行）`
+      + `（本次账本 +${batchAdded} 行${zeroBatch ? '：**没有新增任何事实**' : ''}）`
       + `<span class="q-hint">这份逐条回执也落服务端（<code>/api/ui/jobs</code>）：刷新或换设备都读得回来</span></p>`,
       list('applied', '已签'),
       list('duplicates', '已经签过（幂等，零新增）'),
@@ -4093,8 +4175,17 @@
 
   function resultHtml(out, action) {
     const result = out.result && typeof out.result === 'object' ? out.result : null
-    return `<div class="q-result ${out.ok ? 'ok' : 'bad'}" data-action-result="${attr(out.ok ? 'ok' : 'refused')}">`
-      + `<b>${out.ok ? '已受理' : `被拒（${esc(out.code || 'refused')}）`}</b>`
+    const added = ledgerAddedOf(out)
+    const zero = out.ok && added === 0
+    return `<div class="q-result ${out.ok ? 'ok' : 'bad'}" data-action-result="${attr(out.ok ? 'ok' : 'refused')}"`
+      + ` data-ledger-added="${attr(added === null ? '' : added)}">`
+      + `<b>${out.ok ? (zero ? '零新增' : '已受理') : `被拒（${esc(out.code || 'refused')}）`}</b>`
+      // 回执正文也把**账本新增行数**摆在第一行（不再埋在 `<details>` 的原始回执里）
+      + `${out.ok
+        ? `<div data-receipt-ledger="${attr(zero ? 'zero' : 'added')}">账本新增：`
+          + `${added === null ? '回执里没有这个读数（界面不替它猜）'
+            : (zero ? `+0 行 —— ${esc(zeroAddedNote(out))}` : `+${added} 行`)}</div>`
+        : ''}`
       + `${out.reason ? `<div>${esc(out.reason)}</div>` : ''}`
       + `${(out.errors || []).length ? `<ul>${(out.errors || []).map((error) =>
         `<li><code>${esc(error.field || '')}</code> ${esc(error.code || '')}：${esc(error.message || '')}`

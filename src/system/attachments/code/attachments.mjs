@@ -604,7 +604,10 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
       return refusal('identity-required', '未登录：读不到任何一侧的附件', '先在 /identity/ 登录')
     }
     const doc = readIndex()
-    const picked = Object.values(doc.attachments).filter((entry) => plain(entry)
+    // P34：坏条目（null / 字符串 / 数组）**逐条计数，不静默丢**（口径见 `row-action-prefill.md` §4）
+    const allEntries = Object.values(doc.attachments)
+    const unreadable = allEntries.filter((entry) => !plain(entry)).length
+    const picked = allEntries.filter((entry) => plain(entry)
       && (kind === undefined || text(kind) === '' || entry.object?.kind === text(kind))
       && (id === undefined || text(id) === '' || entry.object?.id === text(id)))
       .filter((entry) => canSee(entry, side))
@@ -625,9 +628,12 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
     const versioned = [...names].filter((name) => rows.filter((row) =>
       `${row.object?.kind}/${row.object?.id}/${row.name_key}` === name).length > 1).length
     return { ok: true, side, kind: text(kind), id: text(id), files: rows,
+      ...(unreadable > 0 ? { note: `附件索引里有 ${unreadable} 条读不出来（形状异常：不是对象）—— `
+        + '好条照列、坏条已跳过并计数（不静默丢）：先修 <ui_shared>/attachments/index.json 的那几条' } : {}),
       counts: { total: rows.length, live: rows.filter((row) => !row.deleted).length,
         deleted: rows.filter((row) => row.deleted).length, mine: rows.filter((row) => row.mine).length,
         names: names.size, versioned_names: versioned,
+        ...(unreadable > 0 ? { unreadable } : {}),
         previewable: rows.filter((row) => !row.deleted && row.previewable).length,
         versions: rows.reduce((sum, row) => sum + (Number(row.version) || 1), 0) },
       version_rule: '同一对象上**同名**文件每传一次就是新的一版（v1、v2…）：旧版**不覆盖**、仍可下载；'

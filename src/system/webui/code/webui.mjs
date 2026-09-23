@@ -621,7 +621,100 @@ export function apply(ctx, config) {
   // "投影后的行"，只有文件真的变了才重新读。账本是 append-only ⇒ 任何一次落账都会让 mtime/size 变，
   // 所以备忘**不会读到旧值**；`rows()` 每次返回**新数组**（只是元素对象共用，而调用方拿到的都是
   // 只读投影，仓库里没有任何一处就地改行对象或就地 sort 返回的数组）。字面量、字段、顺序与修前逐字节一致。
-  const ledgerMemo = new Map()            // 路径 → { stamp, rows, realms }
+  const ledgerMemo = new Map()            // 路径 → { stamp, rows, realms, degraded }
+  /**
+   * **P34：账本文件读数的加固层**（口径 = `src/system/webui/docs/retention-and-storage.md` §坏账本）。
+   *
+   * 上游 `lib/ledger-view.mjs#rows()` 是**裸读**（`split('\n').map(JSON.parse)`）：一行读不出来
+   * （半截 JSON / UTF-8 被截断 / 权限 0000）它**抛**，而面板侧对 `data()` 抛错的处理是整块 `data-failed`
+   * / SSR 侧是整页 500；路径若是 FIFO/字符设备则**永久阻塞**（事件循环被占死）。
+   * 这里只加一层**读数闸门 + 容错读**：好行走上游原路（逐字节一致），坏行**逐条计数、好行照列**，
+   * 读不出来**照实说**（具名 reason + 下一步）——不改账本、不改事件语义、不写任何文件。
+   */
+  const LEDGER_READ = { max_bytes: 64 * 1024 * 1024 }
+  /** 闸门：只读**普通文件**（不存在 ⇒ ledger-missing；FIFO/设备/目录 ⇒ 具名拒绝；超大 ⇒ 拒绝整份读）。 */
+  const ledgerFileGate = (path) => {
+    let info = null
+    try { info = statSync(path) } catch (err) {
+      const code = String(err?.code ?? 'unknown')
+      return { ok: false, code: code === 'ENOENT' ? 'ledger-missing' : 'ledger-stat-failed',
+        reason: `读不到账本文件（${code}）：${path}`,
+        next_action: code === 'ENOENT'
+          ? '确认这一侧的账本路径（--ledger-contractor / --ledger-supplier）指向真的要读的那份文件；'
+            + '文件还没生成时不编造任何事实，界面照实说"这一侧还没有账本"'
+          : '先修这个路径的可达性（权限/挂载），再重读这一页' }
+    }
+    if (!info.isFile()) {
+      return { ok: false, code: 'ledger-not-a-regular-file',
+        reason: `账本路径不是普通文件（是 ${info.isDirectory() ? '目录' : '设备/FIFO/套接字'}）：${path}`,
+        next_action: '账本必须是 NDJSON 普通文件：宿主拒绝从这里读（设备/FIFO 会一直读下去、把内存吃光；目录读不出行），'
+          + '也不猜它的内容 —— 先把它指回真的账本文件' }
+    }
+    if (info.size > LEDGER_READ.max_bytes) {
+      return { ok: false, code: 'ledger-too-large',
+        reason: `账本 ${info.size} B 超过宿主整份读入的上限 ${LEDGER_READ.max_bytes} B（${path}）`,
+        next_action: `宿主不把 ${Math.round(LEDGER_READ.max_bytes / 1048576)} MiB 以上的账本整份读进内存（会吃光内存）；`
+          + '先用 Python 侧工具按 seq 分页/归档这一份，或把上限调到与现场相符' }
+    }
+    return { ok: true, info }
+  }
+  /**
+   * 容错读：与 `lib/ledger-view.mjs#rows()` **同一投影形状**（seq/type/correlation_id/actor/ts/body），
+   * 差别只在坏行 —— 坏行跳过并**计数**（`dropped` + 第一处行号），`realm` 也照同一判据取（realms 用）。
+   */
+  const tolerantLedgerRead = (path) => {
+    // **只在普通文件上读**（FIFO/设备会一直读下去或永久阻塞：连容错读也不碰它们）
+    let info = null
+    try { info = statSync(path) } catch (err) {
+      return { ok: false, code: 'ledger-stat-failed', reason: `读不到账本文件（${err?.code ?? 'unknown'}）：${path}`,
+        next_action: '先修这个路径的可达性（权限/挂载），再重读这一页',
+        rows: [], realms: [], dropped: 0, first_bad_line: 0, lines: 0, bytes: 0 }
+    }
+    if (!info.isFile()) {
+      return { ok: false, code: 'ledger-not-a-regular-file',
+        reason: `账本路径不是普通文件：${path}`,
+        next_action: '账本必须是 NDJSON 普通文件；宿主既不读设备/FIFO，也不猜它的内容',
+        rows: [], realms: [], dropped: 0, first_bad_line: 0, lines: 0, bytes: 0 }
+    }
+    let text = ''
+    try { text = readFileSync(path, 'utf8') } catch (err) {
+      const code = String(err?.code ?? 'unknown')
+      return { ok: false, code: 'ledger-unreadable', reason: `账本读不出来（${code}）：${path}`,
+        next_action: code === 'EACCES' || code === 'EPERM'
+          ? '账本权限不足：请运维把它改成可读（账本写入方 0600 是纪律，但**读**这一侧的进程要能读）'
+          : '先修这一份账本的可读性（权限/挂载/文件系统），再重读这一页 —— 面板不拿空表顶替',
+        rows: [], realms: [], dropped: 0, first_bad_line: 0, lines: 0, bytes: 0 }
+    }
+    const rows = []
+    const realms = new Set()
+    let dropped = 0
+    let firstBad = 0
+    let lines = 0
+    const parts = text.split('\n')
+    for (let at = 0; at < parts.length; at += 1) {
+      const line = parts[at]
+      if (line.trim() === '') continue
+      lines += 1
+      let row = null
+      try { row = JSON.parse(line) } catch (err) { row = null }
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        dropped += 1
+        if (!firstBad) firstBad = at + 1
+        continue
+      }
+      rows.push({ seq: row.seq, type: row.type, correlation_id: row.correlation_id,
+        actor: row.actor, ts: row.ts, body: row.body })
+      if (typeof row.realm === 'string' && row.realm.trim() !== '') realms.add(row.realm.trim())
+    }
+    return { ok: true, code: '', reason: '', next_action: '', rows, realms: [...realms].sort(),
+      dropped, first_bad_line: firstBad, lines, bytes: Buffer.byteLength(text, 'utf8') }
+  }
+  /** 坏行的**屏幕说法**（不静默丢：好行照列、坏行报数 + 指到第一处行号）。 */
+  const ledgerDegradedOf = (path) => {
+    const memo = ledgerViews.get(resolve(path))
+    const health = typeof memo?.health === 'function' ? memo.health() : null
+    return health?.degraded ?? null
+  }
   const ledgerStampOf = (path) => {
     try {
       const stat = statSync(path)
@@ -641,11 +734,41 @@ export function apply(ctx, config) {
         return hit
       }
       const started = Date.now()
-      const rows = raw.rows()
+      // ---- P34：先过读数闸门（非普通文件/超大/不存在 ⇒ 具名降级，**不进**上游裸读）----
+      const gate = ledgerFileGate(path)
+      let rows = []
+      let degraded = null
+      let tolerant = null
+      if (gate.ok) {
+        try {
+          rows = raw.rows()               // 好数据走**上游原路**（逐字节一致，一个字都不改）
+        } catch (err) {
+          // 一行读不出来（半截 JSON / UTF-8 截断 / EACCES）⇒ 容错读：坏行计数、好行照列
+          tolerant = tolerantLedgerRead(path)
+          rows = tolerant.rows
+          degraded = tolerant.ok
+            ? { code: 'ledger-lines-unreadable', dropped: tolerant.dropped,
+              first_bad_line: tolerant.first_bad_line, lines: tolerant.lines, bytes: tolerant.bytes,
+              reason: `${path} 有 ${tolerant.dropped} 行读不出来（第一处在第 ${tolerant.first_bad_line} 行）`
+                + `：${String(err?.message ?? err).slice(0, 120)}`,
+              next_action: '好行照列（这一页的其它数字都来自它们）；坏行**不猜、不丢**：'
+                + '先按行号去修那一行（半截/编码截断的尾部常见于写入中断），或用 Python 侧账本工具核对链' }
+            : { code: tolerant.code, dropped: 0, first_bad_line: 0, lines: 0, bytes: 0,
+              reason: tolerant.reason, next_action: tolerant.next_action }
+        }
+      } else {
+        degraded = { code: gate.code, dropped: 0, first_bad_line: 0, lines: 0, bytes: 0,
+          reason: gate.reason, next_action: gate.next_action }
+      }
       ledgerStats.parses += 1
       ledgerStats.ms += Date.now() - started
       try { ledgerStats.bytes += statSync(path).size } catch (err) { /* 读不到就不记账 */ }
-      const entry = { stamp, rows, realms: null }
+      if (degraded) {                       // **不静默**：降级路径进读数面（`/api/ui/surface` 的 io.ledger）
+        ledgerStats.degraded = ledgerStats.degraded ?? []
+        ledgerStats.degraded.push({ view, path, code: degraded.code, dropped: degraded.dropped,
+          first_bad_line: degraded.first_bad_line })
+      }
+      const entry = { stamp, rows, realms: null, degraded, tolerant }
       ledgerMemo.set(path, entry)
       return entry
     }
@@ -654,12 +777,40 @@ export function apply(ctx, config) {
       rows: () => fresh().rows.slice(),
       realms: () => {
         const entry = fresh()
-        if (entry.realms === null) entry.realms = raw.realms()
+        if (entry.realms === null) {
+          if (entry.degraded) {
+            // 降级时**不碰**上游裸读（FIFO/设备会永久阻塞）：用同一份容错读的 realm
+            const read = entry.tolerant ?? tolerantLedgerRead(path)
+            entry.realms = Array.isArray(read.realms) ? read.realms : []
+          } else {
+            try { entry.realms = raw.realms() } catch (err) {
+              const read = tolerantLedgerRead(path)
+              entry.realms = Array.isArray(read.realms) ? read.realms : []
+            }
+          }
+        }
         return entry.realms.slice()
       },
-      count: () => raw.count(),
-      byType: (prefix) => raw.byType(prefix),
-      verify: () => raw.verify(),
+      count: () => {
+        const entry = fresh()
+        if (entry.degraded) return entry.rows.length       // 坏行时：好行的条数（不拿上游的抛顶替）
+        return raw.count()
+      },
+      byType: (prefix) => {
+        const entry = fresh()
+        if (entry.degraded) return entry.rows.filter((row) => String(row.type).startsWith(prefix))
+        return raw.byType(prefix)
+      },
+      /** 降级读数（`null` = 这一份账本读得干干净净）：坏行条数/第一处行号/人话原因与下一步。 */
+      health: () => ({ degraded: fresh().degraded }),
+      verify: () => {
+        const gate = ledgerFileGate(path)
+        if (!gate.ok) {
+          // 非普通文件/超大/不存在：**不**把路径喂给 Python 侧链校验（FIFO 会读不完、超大文件会打满内存）
+          return { ok: false, checked: 0, count: 0, reason: gate.code }
+        }
+        return raw.verify()
+      },
     }
   }
   const ledgerViews = new Map()
@@ -2056,6 +2207,9 @@ export function apply(ctx, config) {
     const suppressed = rows.filter((row) => row.suppressed).length
     let report = { ok: false, count: rows.length }
     try { report = ledgerOf(view).verify() } catch (err) { report = { ok: false, count: rows.length, reason: String(err).slice(0, 80) } }
+    // P34：这一侧账本的**读数降级**（坏行/非普通文件/超大/不存在）——**照实说**，不拿空表顶替
+    let ledgerHealth = null
+    try { ledgerHealth = ledgerOf(view).health().degraded } catch (err) { ledgerHealth = null }
     const summary = evidence.summarize(rows)
     const pending = pendingApprovals(view)
     const digest = approvals.digest(pending)
@@ -2157,6 +2311,15 @@ ${rfqInboxHtml}
 <b>${summary.correlations}</b> 个关联 / <b>${summary.rows_with_refs}</b> 行带引用；时间跨度
 <code>${esc(summary.span.first ?? '—')}</code> → <code>${esc(summary.span.last ?? '—')}</code>；
 链自洽 <b>${report.ok}</b>（${report.count} 条）</p>
+${ledgerHealth ? `<p class="degraded" data-ledger-degraded="1" data-ledger-code="${esc(ledgerHealth.code)}"`
+    + `${ledgerHealth.dropped ? ` data-ledger-dropped="${ledgerHealth.dropped}"` : ''}`
+    + `${ledgerHealth.first_bad_line ? ` data-ledger-first-bad-line="${ledgerHealth.first_bad_line}"` : ''}>`
+    + `<b>账本读数降级</b>（<code>${esc(ledgerHealth.code)}</code>）：${esc(ledgerHealth.reason)}`
+    + (ledgerHealth.dropped
+      ? `<br>好行照列（这一页的行都能用）、坏行**逐条计数不静默丢**：另有 <b>${ledgerHealth.dropped}</b> 行读不出来`
+        + `，第一处在第 ${ledgerHealth.first_bad_line} 行（共 ${ledgerHealth.lines} 行）。`
+      : '<br>这一侧的行**一条都没有**列出来 —— 这是"读不出来"，<b>不是</b>"没有数据"。')
+    + `<br>下一步：${esc(ledgerHealth.next_action)}</p>` : ''}
 <p>最后事件：${lastRow ? `<code>seq ${esc(lastRow.seq)} ${esc(lastRow.type)}</code>` : '—'} ·
 本视角被抑制行 <b>${suppressed}</b> 行（宿主不读墙钟）</p>
 ${sortForm('events', '筛查事件')}
@@ -3169,11 +3332,20 @@ ${sortForm('events', '筛查事件')}
       const ledgers = {}
       for (const view of config.views) {
         const ledger = ledgerOf(view)
+        // P34：读数降级**只在真的降级时**加键（健康账本的响应逐字节不变，门 E11 的基线不动）
+        const degraded = typeof ledger.health === 'function' ? ledger.health().degraded : null
         try {
           const report = ledger.verify()
           ledgers[view] = { path: ledger.path, count: report.count, healthy: report.ok, head: report.head }
         } catch (err) {
           ledgers[view] = { path: ledger.path, healthy: false, reason: String(err).slice(0, 80) }
+        }
+        if (degraded) {
+          // 降级时**人话原因优先**（Python 侧的 `Command failed: ...` 是给日志看的，不是给办理人看的）
+          ledgers[view] = { ...ledgers[view], healthy: false,
+            reason: degraded.reason ?? ledgers[view].reason,
+            degraded: { code: degraded.code, dropped: degraded.dropped, first_bad_line: degraded.first_bad_line,
+              lines: degraded.lines, reason: degraded.reason, next_action: degraded.next_action } }
         }
       }
       return json(200, { service: 'quotagent-webui', route_prefix: prefix, views: config.views,

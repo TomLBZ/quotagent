@@ -3088,7 +3088,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const ACTION_RUNTIME_ENTRY = (threads) => {
     const { parentPort, workerData } = threads
     const { spawnSync } = require('node:child_process')
-    const { existsSync, mkdirSync, chmodSync, renameSync, writeFileSync, readFileSync } = require('node:fs')
+    const { existsSync, mkdirSync, chmodSync, renameSync, writeFileSync, readFileSync, statSync } = require('node:fs')
     const { join, resolve, relative } = require('node:path')
     const { pathToFileURL } = require('node:url')
 
@@ -3116,14 +3116,31 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       }
       return ''
     }
+    /** 账本行（**只读**）：与 `lib/ledger-view.mjs#rows()` 同一投影形状；坏行**跳过并计数**（不静默丢：
+     *  条数落运行时日志 `webui/action-runtime.log`），这样一行坏数据不会让整批动作"运行时退出而没有结果"。 */
     const rowsOfFile = (path) => {
       if (!path || !existsSync(path)) return []
+      let text = ''
       try {
-        return readFileSync(path, 'utf-8').split('\n').filter((line) => line.trim())
-          .map((line) => JSON.parse(line))
-          .map((row) => ({ seq: row.seq, type: row.type, correlation_id: row.correlation_id,
-            actor: row.actor, ts: row.ts, body: row.body }))
-      } catch (err) { return [] }
+        const info = statSync(path)
+        if (!info.isFile()) { dump('ledger-not-a-regular-file', path); return [] }
+        text = readFileSync(path, 'utf-8')
+      } catch (err) {
+        dump('ledger-unreadable', `${path} ${flat(err, 120)}`)
+        return []
+      }
+      const rows = []
+      let dropped = 0
+      for (const line of text.split('\n')) {
+        if (!line.trim()) continue
+        let row = null
+        try { row = JSON.parse(line) } catch (err) { row = null }
+        if (!row || typeof row !== 'object' || Array.isArray(row)) { dropped += 1; continue }
+        rows.push({ seq: row.seq, type: row.type, correlation_id: row.correlation_id,
+          actor: row.actor, ts: row.ts, body: row.body })
+      }
+      if (dropped > 0) dump('ledger-lines-dropped', `${path} dropped=${dropped} kept=${rows.length}`)
+      return rows
     }
 
     let writes = 0

@@ -174,6 +174,25 @@ export const DELIVERY_REASONS = ['view-not-a-delivery-consumer', 'no-identity', 
   'identity-malformed', 'payload-not-an-object', 'no-deliveries', 'no-deliveries-visible']
 /** 服务端审计的抑制原因（**只在审计里**，不进对外视图）。 */
 export const DELIVERY_SUPPRESSED = ['delivery-other-recipient-suppressed', 'delivery-private-key-suppressed']
+/**
+ * **行项目层**降级的**闭合原因集合**（与信封层的 `DELIVERY_REASONS` 分开：这一层的判据只有一个 ——
+ * `spec.items[]` 里某一条**读不成一行**）。
+ *
+ * 为什么它必须存在（P33 修的缺陷）：修前这里是一句 `filter(isPlainDelivery)` —— 坏行**静默消失**，
+ * 下游（外壳/页面/面板）拿到的是一个**已经干净**的数组 ⇒ `data-rfq-items-dropped` 恒为 `0`，
+ * 屏幕上"这份包有 3 条行项目"与"信封里其实有 5 条、2 条读不出来"长得**一模一样**。
+ * 现在：坏行照样**不进视图**（白名单一个字不放宽），但**丢了几条、为什么、怎么修**逐条报出。
+ */
+export const ITEM_DROP_REASONS = ['item-not-an-object']
+/** 每个原因的**人话 + 修法**（读数要能直接照做；文案是常量，**不回显坏行的任何取值** —— 回显等于泄漏）。 */
+export const ITEM_DROP_NOTES = {
+  'item-not-an-object': {
+    what: '不是对象（`null` / 字符串 / 数字 / 嵌套数组都算）—— 行项目必须是像 '
+      + '`{item_id, code, qty, unit}` 这样的对象',
+    fix: '在投递信封的 `spec.items[]` 里逐条给对象行；坏的那几条按 id 补成对象或直接删掉 '
+      + '（不要把整段文本 / 一个大数组塞进 `items`）',
+  },
+}
 
 const isPlainDelivery = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const IDENTITY_SHAPE = /^[a-z][a-z0-9-]*:\S+$/
@@ -186,14 +205,24 @@ const byRfq = (left, right) => (left.package_id < right.package_id ? -1
  * `realms` = 本视角**自己那本账本**里出现过的 realm（身份来源；0 个 ⇒ `no-identity`，多于 1 个 ⇒
  * `ambiguous-identity`：都**不给**任何包，fail-closed）；`envelopes` = 投递信封（数组）。
  * 纯函数：不读文件、不读墙钟、不随机（信封由调用方读进来；身份由调用方从自己的账本里取）。
+ *
+ * **坏行不静默丢**（P33）：`spec.items[]` 里读不成行的条目（非对象）**照样不进视图**（白名单与私域
+ * 哨兵扫描一个字不放宽 —— 坏行不参与 `serialized`，不回显它的任何取值），但**丢了几条 / 为什么 /
+ * 怎么修**逐条报出：`counts.items_dropped`、`packages[].items_dropped{,_reason,_reasons,_note}`、
+ * 顶层 `item_degraded` / `item_dropped_note`。理由：修前一句 `filter(isPlainDelivery)` 让下游看到
+ * 一个**已经干净**的数组 ⇒ 屏幕上的"3 条行项目"既可能是"信封里就 3 条"也可能是"5 条里坏了 2 条"。
  */
 export function projectDeliveries(view, realms, envelopes, { maxPackages = 8, maxItems = 32 } = {}) {
   const rule = VIEW_RULES[view]
   const out = {
     view, identity: '', packages: [], rows: [],
-    counts: { envelopes: 0, read: 0, visible: 0, skipped: 0, items_omitted: 0 },
+    counts: { envelopes: 0, read: 0, visible: 0, skipped: 0, items_omitted: 0, items_dropped: 0 },
     bounds: { max_packages: maxPackages, max_items: maxItems },
     omitted: 0, bounded: false, truncated: false, degraded: false, reason: '',
+    // **行项目层的降级读数**（P33）：`item_degraded` = 有坏行被跳过；`item_dropped_note` = 人话读数
+    // （丢了几条 / 为什么 / 怎么修）。它**不是** `degraded` —— 整份视图没坏（好行照出），
+    // 所以不拿它去冒充"整个视角降级"（那会让下游把好条也当没读到）。
+    item_degraded: false, item_dropped_reason: '', item_dropped_note: '',
     whitelist: { envelope: ENVELOPE_KEYS_READ.slice(), spec: SPEC_KEYS_READ.slice(),
       item: ITEM_KEYS_READ.slice(), output: RFQ_KEYS.slice(), never_read: DELIVERY_NEVER_READ.slice() },
     privacy: { other_bidders_included: false, contractor_private_included: false,
@@ -230,7 +259,30 @@ export function projectDeliveries(view, realms, envelopes, { maxPackages = 8, ma
     counts.visible += 1
     const rev = Number.isInteger(raw.rev) ? raw.rev : null
     const deadlines = isPlainDelivery(spec.deadlines) ? spec.deadlines : {}
-    const items = (Array.isArray(spec.items) ? spec.items : []).filter(isPlainDelivery)
+    // ---- **行项目逐条读数**（P33，修前这里是一句静默的 `.filter(isPlainDelivery)`）------------------------
+    // 坏行照样**不进视图**（下面 `rfq.items` 只由 `items` 构造 ⇒ 白名单/私域纪律一个字没松），
+    // 但"丢了几条、为什么、怎么修"必须**当场读出来**：丢的是**条数**与**具名原因**，不是内容
+    // （不回显坏行的取值 —— 那是把白名单外的东西搬到屏幕上）。
+    const rawItems = Array.isArray(spec.items) ? spec.items : []
+    const items = []
+    const dropReasons = new Map()
+    for (const item of rawItems) {
+      if (isPlainDelivery(item)) { items.push(item); continue }
+      const why = ITEM_DROP_REASONS[0]
+      dropReasons.set(why, (dropReasons.get(why) ?? 0) + 1)
+    }
+    const itemsDropped = rawItems.length - items.length
+    // 逐原因读数（闭合集合；今天的集合只有一个原因，形状按"可能不止一个"给）
+    const dropBreakdown = [...dropReasons.entries()]
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((left, right) => (left.reason < right.reason ? -1 : 1))
+    const dropReason = dropBreakdown.length ? dropBreakdown[0].reason : ''
+    const dropNote = itemsDropped
+      ? `这份包的信封里 ${rawItems.length} 条行项目中有 ${itemsDropped} 条读不出来`
+        + `（原因：${dropReason} —— ${ITEM_DROP_NOTES[dropReason].what}）⇒ 整条跳过并计数（不静默丢、不猜内容）；`
+        + `视图里只出读得出来的 ${Math.min(items.length, maxItems)} 条。修法：${ITEM_DROP_NOTES[dropReason].fix}`
+      : ''
+    if (itemsDropped) counts.items_dropped += itemsDropped
     const text = (value) => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null)
     const rfq = {
       package_id: packageId,
@@ -263,7 +315,12 @@ export function projectDeliveries(view, realms, envelopes, { maxPackages = 8, ma
     }
     const itemsOmitted = Math.max(0, items.length - rfq.items.length)
     counts.items_omitted += itemsOmitted
-    const entry = { rfq, items_omitted: itemsOmitted }
+    const entry = { rfq, items_omitted: itemsOmitted, items_dropped: itemsDropped,
+      items_dropped_reasons: dropBreakdown.flatMap((row) => Array.from({ length: row.count }, () => row.reason)),
+      items_dropped_reason: dropReason, items_dropped_note: dropNote,
+      // 怎么修：**常量文案**（原因的闭合集合里那条），所以坏行的取值一个字都不进输出
+      items_dropped_fix: dropReason ? ITEM_DROP_NOTES[dropReason].fix : '',
+      items_declared: rawItems.length }
     const previous = picked.get(packageId)
     const better = previous === undefined
       || (rev ?? -1) > (previous.rfq.rev ?? -1)
@@ -274,20 +331,46 @@ export function projectDeliveries(view, realms, envelopes, { maxPackages = 8, ma
   const all = [...picked.values()].map((entry) => entry.rfq).sort(byRfq)
   const shown = all.slice(0, maxPackages)
   const omitted = all.length - shown.length
-  const packages = shown.map((rfq, index) => ({
-    rfq, index,
-    items_omitted: picked.get(rfq.package_id)?.items_omitted ?? 0,
-    summary: `RFQ 包 ${rfq.package_id}@rev${rfq.rev === null ? '—' : rfq.rev}（发给本视角）：`
-      + `报价截止 ${rfq.quote_by ?? '—'}、澄清截止 ${rfq.clarify_by ?? '—'}、行项目 ${rfq.items.length} 条`,
-  }))
+  const packages = shown.map((rfq, index) => {
+    const source = picked.get(rfq.package_id)
+    const dropped = source?.items_dropped ?? 0
+    return {
+      rfq, index,
+      items_omitted: source?.items_omitted ?? 0,
+      // **丢条读数**（P33）：丢了几条 / 为什么 / 怎么修 —— 与 `items_omitted`（"夹取掉的好行"）
+      // 是两件事，分开给（把"信封坏了"说成"行项目太多"是另一种不诚实）。
+      items_declared: source?.items_declared ?? rfq.items.length,
+      items_dropped: dropped,
+      items_dropped_reasons: source?.items_dropped_reasons ?? [],
+      items_dropped_reason: source?.items_dropped_reason ?? '',
+      items_dropped_note: source?.items_dropped_note ?? '',
+      items_dropped_fix: source?.items_dropped_fix ?? '',
+      summary: `RFQ 包 ${rfq.package_id}@rev${rfq.rev === null ? '—' : rfq.rev}（发给本视角）：`
+        + `报价截止 ${rfq.quote_by ?? '—'}、澄清截止 ${rfq.clarify_by ?? '—'}、行项目 ${rfq.items.length} 条`
+        + (dropped ? `（另有 ${dropped} 条读不出来，原因：${source?.items_dropped_reason}` : '')
+        + (dropped ? ' ⇒ 已跳过并计数，不静默丢）' : ''),
+    }
+  })
   // 派生行：`rfq` 恰 9 键（白名单），`body` 与 `rfq` 同物（`summary` 由同一条 `summarize` 派生）
   const rows = packages.map((pkg) => ({
     seq: null, type: DELIVERY_ROW_TYPE, correlation_id: pkg.rfq.package_id, ts: pkg.rfq.delivered_at,
     derived: true, body: pkg.rfq, rfq: pkg.rfq,
   }))
-  if (packages.length === 0) return degrade('no-deliveries-visible', { counts, identity: me, audit: out.audit })
+  const itemNote = counts.items_dropped
+    ? `投递信封里有 ${counts.items_dropped} 条行项目读不出来（原因：${ITEM_DROP_REASONS[0]} —— `
+      + `${ITEM_DROP_NOTES[ITEM_DROP_REASONS[0]].what}）⇒ 逐条跳过并计数（不静默丢、不猜内容）；`
+      + `读到的好行照常出。修法：${ITEM_DROP_NOTES[ITEM_DROP_REASONS[0]].fix}`
+    : ''
+  if (packages.length === 0) {
+    return degrade('no-deliveries-visible', { counts, identity: me, audit: out.audit,
+      item_degraded: counts.items_dropped > 0, item_dropped_reason: counts.items_dropped ? ITEM_DROP_REASONS[0] : '',
+      item_dropped_note: itemNote })
+  }
   return { ...out, identity: me, packages, rows, counts,
-    omitted, bounded: omitted > 0 || counts.items_omitted > 0, truncated: omitted > 0, audit: out.audit }
+    omitted, bounded: omitted > 0 || counts.items_omitted > 0, truncated: omitted > 0, audit: out.audit,
+    item_degraded: counts.items_dropped > 0,
+    item_dropped_reason: counts.items_dropped ? ITEM_DROP_REASONS[0] : '',
+    item_dropped_note: itemNote }
 }
 
 export function apply(ctx, config) {
