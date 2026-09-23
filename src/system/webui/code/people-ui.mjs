@@ -17,6 +17,21 @@
 // 显示口径（`@名字`）与协作面**同一份实现**（`collab.mjs` 导出）：`human:limin` 不上界面。
 import { nameOf } from './collab.mjs'
 
+/**
+ * **P32：外部行数组的唯一读数入口**（口径见 `src/system/webui/docs/row-action-prefill.md` §4）。
+ * 只认**非 null 的对象**行：数组里混进 `null`/字符串/数字/嵌套数组时，裸读 `item.label` 抛
+ * `TypeError` ⇒ 这块面板整块判 `data-failed`。
+ * 坏行**逐条计数**（`bad`，调用方必须如实报出）、**好行照列**；源不是数组 ⇒ `list:false`（「读不出来」≠「零行」）。
+ */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, rows: [], all: 0, bad: 0 }
+  const rows = []
+  let bad = 0
+  for (const row of value) { if (isRow(row)) rows.push(row); else bad += 1 }
+  return { list: true, rows, all: value.length, bad }
+}
+
 export const PEOPLE_PLUGIN_ID = 'system/people'
 /** 面板顺序：名册排在协作面之前（先看"有谁、谁是主管"，再谈把活交给谁）。 */
 const ROSTER_PANEL_ORDER = 880
@@ -92,6 +107,8 @@ export function createPeopleSurface({ surface, host, views = [], log } = {}) {
     const mine = list.find((item) => item.human === session.human) ?? null
     const reports = list.filter((item) => item.reports_to === session.name)
     const shape = people.describe().shape ?? null
+    // P32：`people.roles()` 是行数组 ⇒ 走唯一读数入口（坏行跳过 + 计数，不静默丢）
+    const rolesRead = readRows(people.roles())
     const items = [
       // 显示口径：与协作面同一套（`@limin`，不是 `human:limin`）；原始值仍在 `/api/people/*` 的回执里
       { key: '我是谁 / 我的角色', value: `@${nameOf(session.human)}（你） · ${role.label}（${role.id}）`
@@ -103,8 +120,9 @@ export function createPeopleSurface({ surface, host, views = [], log } = {}) {
       { key: `本侧在册成员（${list.length} 人）`, value: list.length
         ? list.map((item) => `@${item.name}（${item.role_label}${item.logged_in ? ' · 在线' : ''}）`).join(' ')
         : '名册是空的：用工具栏「名册：加人」加一个（对方登录一次也会自动登记为「待指派」）' },
-      { key: '角色表（角色 · 等级 · 审批额度）', value: people.roles().map((item) => `${item.label}(${item.id}) · r${item.rank} · `
-        + `${item.approval_limit_cents === null ? '不限' : `${(Number(item.approval_limit_cents) / 100).toFixed(2)} 元`}`).join(' ｜ '),
+      { key: '角色表（角色 · 等级 · 审批额度）', value: rolesRead.rows.map((item) => `${item?.label}(${item?.id}) · r${item?.rank} · `
+        + `${item?.approval_limit_cents === null ? '不限' : `${(Number(item?.approval_limit_cents) / 100).toFixed(2)} 元`}`).join(' ｜ ')
+        + (rolesRead.bad > 0 ? `（另有 ${rolesRead.bad} 条角色行读不出来：形状异常，不是对象）` : ''),
       code: true },
       { key: '名册文件', value: `${people.describe().file}（${people.describe().mode}；按侧隔离，不进账本；`
         + '它是**配置**：换角色、调额度立刻生效）', code: true },

@@ -24,6 +24,21 @@
  */
 import { number, object } from '../lib/std-schema.mjs'
 
+/**
+ * **P32：外部行数组的唯一读数入口**（口径见 `src/system/webui/docs/row-action-prefill.md` §4）。
+ * 只认**非 null 的对象**行：数组里混进 `null`/字符串/数字/嵌套数组时，裸读 `row.action` 抛
+ * `TypeError` ⇒ 这一页/这块面板整块崩掉（外壳判 `data-failed`、SSR 路由 500）。
+ * 坏行**逐条计数**（`bad`，调用方必须如实报出）、**好行照列**；源不是数组 ⇒ `list:false`（「读不出来」≠「零行」）。
+ */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, rows: [], all: 0, bad: 0 }
+  const rows = []
+  let bad = 0
+  for (const row of value) { if (isRow(row)) rows.push(row); else bad += 1 }
+  return { list: true, rows, all: value.length, bad }
+}
+
 export const name = 'retention-view'
 export const inject = []            // 纯函数插件：不依赖任何其他服务（计划由调用方给）
 export const builtin = []
@@ -113,7 +128,9 @@ export function apply(ctx, config) {
     }
     // 逐条只读白名单字段；缺 id/type/age_days/action 的行**整行跳过**（不猜、不当 0）
     const usable = []
-    for (const row of plan.items) {
+    // P32：`plan.items` 是外部给的行数组 ⇒ 走唯一读数入口（非对象行本来就被下面的 `isPlain` 挡掉，
+    // 这里把口径显式化：漏一条坏形状 = 这条读不出来，而不是整页崩）
+    for (const row of readRows(plan.items).rows) {
       if (!isPlain(row)) continue
       const action = scrub(row.action)
       const age = typeof row.age_days === 'number' && Number.isFinite(row.age_days) ? row.age_days : null

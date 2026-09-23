@@ -51,6 +51,21 @@
 import { createHash } from 'node:crypto'
 import { constant, number, object, string } from '../lib/std-schema.mjs'
 
+/**
+ * **P32：外部行数组的唯一读数入口**（口径见 `src/system/webui/docs/row-action-prefill.md` §4）。
+ * 只认**非 null 的对象**行：数组里混进 `null`/字符串/数字/嵌套数组时，裸读 `entry.line_id` 抛
+ * `TypeError` ⇒ 这一页/这块面板整块崩掉（外壳判 `data-failed`、SSR 路由 500）。
+ * 坏行**逐条计数**（`bad`，调用方必须如实报出）、**好行照列**；源不是数组 ⇒ `list:false`（「读不出来」≠「零行」）。
+ */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, rows: [], all: 0, bad: 0 }
+  const rows = []
+  let bad = 0
+  for (const row of value) { if (isRow(row)) rows.push(row); else bad += 1 }
+  return { list: true, rows, all: value.length, bad }
+}
+
 export const name = 'gate-timeline'
 
 export const inject = []                 // 纯函数插件：载荷由调用方给（宿主只读投影/快照）
@@ -666,7 +681,7 @@ export const changeDetailOf = (payload, config) => {
     + `${DETAIL_LINE_MAX} → 未读（有界，照实报 lines_not_read）`)
   // 同一 line_id 出现多行 ⇒ 口径不确定：**两行都不计入小计**（与入参顺序无关 ⇒ 确定性）
   const seen = new Map()
-  for (const entry of read.rows) {
+  for (const entry of readRows(read.rows).rows) {
     const id = textOrNull(entry.line_id, ID_LIMIT)
     if (id === null) continue
     seen.set(id, (seen.get(id) ?? 0) + 1)
@@ -676,7 +691,7 @@ export const changeDetailOf = (payload, config) => {
   const privateColumns = []
   let duplicates = 0
   let zeroDenominator = 0
-  for (const entry of read.rows) {
+  for (const entry of readRows(read.rows).rows) {
     const id = textOrNull(entry.line_id, ID_LIMIT)
     if (id !== null && (seen.get(id) ?? 0) > 1) {
       duplicates += 1

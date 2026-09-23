@@ -89,6 +89,10 @@ PY
 
 规矩：
 
+0. **这条规矩不止管面板**：SSR 路由（`/<view>/heuristics/`、`/<view>/changes/<id>/`、`/<view>/` 首页的
+   投递包表、`/admin/`、`/inbox/`、`/mail/config/`）与**服务面回的行**（configView 快照行、retention 计划
+   `items`、工具 JSON 的 `rows`）读的是**同一类外部数组** —— 同样走唯一入口、同样逐条计数；
+   SSR 侧的崩法不是 `data-failed` 而是**这一页 500**。
 1. 行数组一律走**唯一读数入口**（`readRows` 一类：只认**非 null 的对象**行）；
 2. 坏行**逐条计数**并如实报出来（`counts.dropped`，或正文里的「另有 N 条读不出来」）—— **不静默丢**；
 3. **好行照列**（一块面板不该因为一条坏行整块消失）；

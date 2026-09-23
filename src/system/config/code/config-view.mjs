@@ -28,6 +28,21 @@ import {
   pluginView, previewPatch, projectView, readConfigFile, submitReceipt, writePendingItem,
 } from '../lib/config-ui.mjs'
 
+/**
+ * **P32：外部行数组的唯一读数入口**（口径见 `src/system/webui/docs/row-action-prefill.md` §4）。
+ * 只认**非 null 的对象**行：数组里混进 `null`/字符串/数字/嵌套数组时，裸读 `row.key` 抛
+ * `TypeError` ⇒ 这一页/这块面板整块崩掉（外壳判 `data-failed`、SSR 路由 500）。
+ * 坏行**逐条计数**（`bad`，调用方必须如实报出）、**好行照列**；源不是数组 ⇒ `list:false`（「读不出来」≠「零行」）。
+ */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, rows: [], all: 0, bad: 0 }
+  const rows = []
+  let bad = 0
+  for (const row of value) { if (isRow(row)) rows.push(row); else bad += 1 }
+  return { list: true, rows, all: value.length, bad }
+}
+
 export const name = 'config-view'
 
 export const inject = []
@@ -274,10 +289,14 @@ export const fixture = {
     const overview = handle.overview()
     const credentials = handle.credentials()
     const audit = handle.audit()
+    // P32：`overview.project` 是行数组 ⇒ 走唯一读数入口（坏行跳过 + 计数；`dropped` 只在 >0 时
+    // 才进输出 ⇒ 正常样本逐字节不变，采样仍然是 A5 确定性的）
+    const projectRead = readRows(overview.project)
     return JSON.stringify({
       degraded: overview.degraded, reason: overview.reason, counts: overview.counts,
-      sources: overview.project.map((row) => row.source), layers: overview.layers,
-      shadowed: overview.project.map((row) => row.shadowed_by), editable: overview.project.map((row) => row.editable),
+      ...(projectRead.bad > 0 ? { project_rows_dropped: projectRead.bad } : {}),
+      sources: projectRead.rows.map((row) => row?.source), layers: overview.layers,
+      shadowed: projectRead.rows.map((row) => row?.shadowed_by), editable: projectRead.rows.map((row) => row?.editable),
       credentials: credentials.rows.map((row) => ({ name: row.name, configured: row.configured,
         source: row.source, required_mode: row.required_mode, fingerprint_first8: row.fingerprint_first8,
         next_action_nonempty: typeof row.next_action === 'string' && row.next_action.length > 0 })),

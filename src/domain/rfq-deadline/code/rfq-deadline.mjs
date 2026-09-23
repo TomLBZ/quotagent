@@ -52,6 +52,21 @@
 import { createHash } from 'node:crypto'
 import { constant, number, object, string } from '../lib/std-schema.mjs'
 
+/**
+ * **P32：外部行数组的唯一读数入口**（口径见 `src/system/webui/docs/row-action-prefill.md` §4）。
+ * 只认**非 null 的对象**行：数组里混进 `null`/字符串/数字/嵌套数组时，裸读 `row.rfq_id` 抛
+ * `TypeError` ⇒ 这一页/这块面板整块崩掉（外壳判 `data-failed`、SSR 路由 500）。
+ * 坏行**逐条计数**（`bad`，调用方必须如实报出）、**好行照列**；源不是数组 ⇒ `list:false`（「读不出来」≠「零行」）。
+ */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, rows: [], all: 0, bad: 0 }
+  const rows = []
+  let bad = 0
+  for (const row of value) { if (isRow(row)) rows.push(row); else bad += 1 }
+  return { list: true, rows, all: value.length, bad }
+}
+
 export const name = 'rfq-deadline'
 
 export const inject = []                 // 纯函数插件：载荷由调用方给（宿主只读投影/快照）
@@ -450,14 +465,18 @@ export const statusOf = (payload, config) => {
   }
 
   // 报价事实：能归到发布过的包才计入该包；归不到的不猜（照实报数）
-  const published = new Set(rfqs.rows.map((row) => row.rfq_id))
-  const attributed = quotes.rows.filter((row) => published.has(row.rfq_id))
-  const unattributed = quotes.rows.filter((row) => !published.has(row.rfq_id))
+  // P32：三段行数组（`rfqs`/`quotes`/`promises` 的 `rows`）走唯一读数入口，不再裸读元素属性 ——
+  // 坏行**不参与派生**，也不静默丢（段级跳过的条数已由上面 `section.skipped.shape` 如实报进 notes）。
+  const rfqRows = readRows(rfqs.rows).rows
+  const quoteRows = readRows(quotes.rows).rows
+  const published = new Set(rfqRows.map((row) => row.rfq_id))
+  const attributed = quoteRows.filter((row) => published.has(row.rfq_id))
+  const unattributed = quoteRows.filter((row) => !published.has(row.rfq_id))
   if (unattributed.length > 0) {
     notes.push(`quotes 有 ${unattributed.length} 条**归不到任何发布过的包**（package_id/correlation_id 都对不上）`
       + ' → 不计入任何 RFQ 的名单（不猜它属于哪一包），未回应名单因此可能**少算**了已回应者')
   }
-  if (owner && rfqs.rows.some((row) => row.invited.length === 0)) {
+  if (owner && rfqRows.some((row) => row.invited.length === 0)) {
     notes.push('有包**没有邀请名单事实**（`rfq/published.invited`/`suppliers` 与 `rfq/distributed.recipients` 都缺）'
       + ' → 该包的名册两列留空（不编一份名册）')
   }
@@ -475,7 +494,7 @@ export const statusOf = (payload, config) => {
   //   · `subject` 取**事实 ts 最晚的那条发布事实**（并列时比 rev、再比 due_ts —— 与入参顺序无关）；
   //   · 名册取该包全部发布事实的**并集**（谁被邀请过都在里面，不因为发了两次就漏一家）。
   const groups = new Map()
-  for (const row of rfqs.rows) {
+  for (const row of rfqRows) {
     if (!groups.has(row.rfq_id)) groups.set(row.rfq_id, { rows: [], invited: new Set() })
     const bucket = groups.get(row.rfq_id)
     bucket.rows.push(row)
@@ -501,7 +520,7 @@ export const statusOf = (payload, config) => {
     const latest = bucket.rows.reduce((acc, row) => (laterPublished(row, acc) ? row : acc), null)
     // 事实候选：**该包全部发布事实**上的 quote_by、以及该包上每一条 rfq/promised 的 due_at
     let winner = null
-    for (const row of bucket.rows) {
+    for (const row of readRows(bucket.rows).rows) {
       if (isoMs(row.due_ts) === null) continue
       const candidate = factOf('rfq/published', row.ts, row.due_ts)
       if (laterFact(candidate, winner)) winner = candidate

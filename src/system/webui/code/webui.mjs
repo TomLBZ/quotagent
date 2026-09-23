@@ -231,6 +231,31 @@ const ADMIN_SECTIONS = [['blocks', '阻塞清单'], ['progress', '进度'], ['co
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
+/**
+ * **P32：外部行数组的唯一读数入口**（口径见 `src/system/webui/docs/row-action-prefill.md` §4）。
+ *
+ * 为什么必须有它：对**外部给的行数组**（账本 `body.lines` / 投递信封 `spec.items` / 工具 JSON 的 `rows` /
+ * 服务面回的快照行）做 `map`/`for-of` 时**直接把元素当对象读属性**（`row.code`），数组里只要混进
+ * **一条** `null`/字符串/数字/嵌套数组，读属性就抛 `TypeError` —— 面板侧外壳把 `panel.data()` 抛错
+ * 判成**整块 `data-failed`**（这一块整体消失），SSR 路由侧则是**这一页 500**。
+ *
+ * 纪律：坏行**逐条计数**（`bad`，调用方必须把它显示出来）、**好行照列**；源本身**不是数组** ⇒
+ * `list:false`（那是「读不出来」，不是「零行」—— 两者不许长得一样）。
+ */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, rows: [], all: 0, bad: 0 }
+  const rows = []
+  let bad = 0
+  for (const row of value) { if (isRow(row)) rows.push(row); else bad += 1 }
+  return { list: true, rows, all: value.length, bad }
+}
+/** 坏行的屏幕说法：**不静默丢**（好行照列、坏行如实报数）。 */
+const droppedNote = (read, what = '行') => (read.bad > 0
+  ? `<p class="degraded" data-degraded="1" data-rows-dropped="${read.bad}">另有 <b>${read.bad}</b> 条${what}`
+    + `读不出来（形状异常：不是对象）—— 好行照列，坏条已跳过并计数（不静默丢）。</p>`
+  : '')
+
 /** 整数解析：只认十进制整数字面量（`-1` 认；`2.5` / `abc` / 空 → null = "不是整数"，不猜）。 */
 const intOrNull = (value) => {
   if (value === null || value === undefined) return null
@@ -1023,13 +1048,15 @@ export function apply(ctx, config) {
     const weightRow = HEURISTICS_FACTORS.map(([factor, label]) =>
       `<td data-weight="${factor}">${esc(label)}：${esc(payload.weights_applied[factor] ?? '—')}` +
       `<br><small>提交 ${esc(parsed.submitted[`w_${factor}`] === '' ? '（未提交）' : parsed.submitted[`w_${factor}`])}</small></td>`).join('')
-    const rows = payload.rows.map((row) => `<tr data-row="${esc(row.code)}" data-rank="${row.rank}">`
-      + `<td>${row.rank}</td><td><code>${esc(row.code)}</code></td><td data-score="${row.score}">${row.score}</td>`
-      + HEURISTICS_FACTORS.map(([factor]) => `<td data-contribution="${factor}">${row.contributions[factor]}</td>`).join('')
-      + `<td>${esc((row.coverage?.present ?? []).map(heuristicsLabel).join('/') || '—')}</td>`
-      + `<td>${esc((row.coverage?.missing ?? []).map(heuristicsLabel).join('/') || '无（五个因子都取得到）')}</td>`
-      + `<td>${esc(row.item ?? '—')}</td>`
-      + `<td>${esc(row.hint ?? '')}</td></tr>`).join('')
+    // P32：`payload.rows` 是**工具/插件服务面给的行数组**（不是本文件构造的）⇒ 走唯一读数入口
+    const ranked = readRows(payload.rows)
+    const rows = ranked.rows.map((row) => `<tr data-row="${esc(row?.code)}" data-rank="${row?.rank}">`
+      + `<td>${esc(row?.rank)}</td><td><code>${esc(row?.code)}</code></td><td data-score="${esc(row?.score)}">${esc(row?.score)}</td>`
+      + HEURISTICS_FACTORS.map(([factor]) => `<td data-contribution="${factor}">${esc(row?.contributions?.[factor])}</td>`).join('')
+      + `<td>${esc((row?.coverage?.present ?? []).map(heuristicsLabel).join('/') || '—')}</td>`
+      + `<td>${esc((row?.coverage?.missing ?? []).map(heuristicsLabel).join('/') || '无（五个因子都取得到）')}</td>`
+      + `<td>${esc(row?.item ?? '—')}</td>`
+      + `<td>${esc(row?.hint ?? '')}</td></tr>`).join('')
     const header = `<tr><th>名次</th><th>代号</th><th>得分<br><small>越高越前</small></th>`
       + HEURISTICS_FACTORS.map(([factor, label]) => `<th>${label}<br><small>贡献点</small></th>`).join('')
       + `<th>可用因子</th><th>缺失因子</th><th>行项目</th><th>如何提升排名</th></tr>`
@@ -1063,6 +1090,7 @@ export function apply(ctx, config) {
       + `带私域键、整行跳过的行 <b>${counts.skipped_private}</b> 条（跳过就要说出来，不悄悄少候选）；`
       + `行项目 <b>${counts.items}</b> 个（归一基数：<code>${esc(payload.baseline)}</code> —— `
       + `<code>per-item</code> 表示**同一行项目内的候选才互相比较**，不同行项目的单价不可比）。</p>`
+      + droppedNote(ranked, '候选')
       + (payload.degraded ? degradedText
         : (rows ? `<table data-heuristics="rows">${header}${rows}</table>`
           : `<p class="empty" data-empty="1" data-empty-reason="no-rows">本次没有可排名的候选：`
@@ -1259,10 +1287,14 @@ export function apply(ctx, config) {
   /** `body.lines` → 白名单行（字段名走别名表；**金额折算成整数分**、数量只认整数件；私域列按上一条规则
    *  带上或丢掉）——有界（同 `GATES_CAP`）。 */
   const changeLineRows = (raw, view) => {
-    if (!Array.isArray(raw)) return []
+    // P32：**跳过就要说出来**（不静默丢）—— 返回 `{rows, dropped, over}` 而不是只回数组；
+    // `dropped` = 坏形状（非对象）条数、`over` = 超出单张单读取上限 `GATES_CAP` 而没读的条数。
+    if (!Array.isArray(raw)) return { rows: [], dropped: 0, over: 0 }
     const out = []
+    let dropped = 0
+    const over = Math.max(0, raw.length - GATES_CAP)
     for (const line of raw.slice(0, GATES_CAP)) {
-      if (!line || typeof line !== 'object' || Array.isArray(line)) continue
+      if (!line || typeof line !== 'object' || Array.isArray(line)) { dropped += 1; continue }
       const pick = (names) => {
         for (const name of names) {
           if (line[name] !== undefined && line[name] !== null) return line[name]
@@ -1278,7 +1310,7 @@ export function apply(ctx, config) {
       if (extra !== null) for (const key of Object.keys(extra)) row[key] = extra[key]
       out.push(row)
     }
-    return out
+    return { rows: out, dropped, over }
   }
   /** 本视角的这一张变更单：**以最后一条带行清单的 `change/*` 事实行为真源**（账本只增不改 ⇒ 现行版本）；
    *  批准/拒绝这类事件**本身不带行清单**，所以不能拿"最后一条事件"当明细来源 —— 没有带行的行才退回最后一条
@@ -1292,17 +1324,30 @@ export function apply(ctx, config) {
       if (hasPrivateKey(body, view)) { skipped += 1; continue }
       if (!String(row?.type ?? '').startsWith('change/')) continue
       if (String(body.change_id ?? '').trim() !== id) continue
+      const lineRead = changeLineRows(body.lines, view)
       const entry = { type: row.type, ts: row?.ts, quote_id: body.quote_id,
-        lines: changeLineRows(body.lines, view) }
+        lines: lineRead.rows, dropped: lineRead.dropped, over: lineRead.over }
       last = entry
       if (Array.isArray(body.lines) && body.lines.length > 0) withLines = entry
     }
     const source = withLines === null ? last : withLines
     return { view, as_of: lastTsOf(ledgerOf(view).rows()), skipped_rows: skipped,
+      dropped_rows: source === null ? 0 : (source.dropped ?? 0),
+      over_rows: source === null ? 0 : (source.over ?? 0),
       change: source === null ? null
         : { change_id: id, quote_id: source.quote_id ?? '', ts: source.ts ?? '', lines: source.lines } }
   }
-  const changeDetailRun = (view, id) => gates.change_detail(changeDetailPayload(view, id))
+  const changeDetailRun = (view, id) => {
+    const payload = changeDetailPayload(view, id)
+    const run = gates.change_detail(payload)
+    // **不静默丢**（P32）：webui 侧 `changeLineRows` 也会跳过坏形状的行 / 超上限的行 —— 跳过就要说出来
+    const notes = [...(run.notes ?? [])]
+    if (payload.dropped_rows > 0) notes.push(`change.lines 有 ${payload.dropped_rows} 条形状不对（不是对象）`
+      + ' → 整条跳过（不猜）；好行照列')
+    if (payload.over_rows > 0) notes.push(`change.lines 有 ${payload.over_rows} 条超出本页单张单读取上限 `
+      + `${GATES_CAP} → 未读（有界，照实报）`)
+    return { ...run, notes: notes.sort(), dropped_lines: payload.dropped_rows, lines_not_read: payload.over_rows }
+  }
   /** JSON（机器可读；与页面同数据、同口径；金额单位与舍入口径一起给）。 */
   const changeDetailJson = (view, id) => {
     const run = changeDetailRun(view, id)
@@ -1328,20 +1373,22 @@ export function apply(ctx, config) {
   }
   /** 页面（SSR，**零内联脚本**：数字、口径、依据全在 `<table>`/`<code>` 里，没有一行 JS）。 */
   const changeDetailHtml = (view, id, run) => {
-    const lineRows = run.lines.map((line) => `<tr data-detail-line="${esc(line.line_id)}"`
-      + ` data-detail-usable="1" data-detail-delta="${esc(String(line.delta_amount))}"`
-      + ` data-detail-amount-before="${esc(String(line.amount_before))}"`
-      + ` data-detail-amount-after="${esc(String(line.amount_after))}">`
-      + `<td><code>${esc(line.line_id)}</code><br><small>${esc(line.desc)}</small></td>`
-      + `<td>${esc(String(line.qty_before))} × <b>${esc(String(line.unit_price_before))}</b>`
-      + ` = <b>${esc(String(line.amount_before))}</b></td>`
-      + `<td>${esc(String(line.qty_after))} × <b>${esc(String(line.unit_price_after))}</b>`
-      + ` = <b>${esc(String(line.amount_after))}</b></td>`
-      + `<td><b>${esc(String(line.delta_amount))}</b></td>`
-      + `<td>${line.delta_pct === null ? '<code>null</code>（原价为 0：分母 0 不猜百分比）'
-        : `${esc(String(line.delta_pct))}%`}</td>`
-      + `<td data-detail-basis="${esc(line.basis.join(' '))}">`
-      + `${line.basis.map((token) => `<code>${esc(token)}</code>`).join(' ')}</td></tr>`).join('')
+    // P32：`run.lines` 是**插件服务面给的行数组**（gate-timeline 的逐行明细）⇒ 走唯一读数入口
+    const linesRead = readRows(run.lines)
+    const lineRows = linesRead.rows.map((line) => `<tr data-detail-line="${esc(line?.line_id)}"`
+      + ` data-detail-usable="1" data-detail-delta="${esc(String(line?.delta_amount))}"`
+      + ` data-detail-amount-before="${esc(String(line?.amount_before))}"`
+      + ` data-detail-amount-after="${esc(String(line?.amount_after))}">`
+      + `<td><code>${esc(line?.line_id)}</code><br><small>${esc(line?.desc)}</small></td>`
+      + `<td>${esc(String(line?.qty_before))} × <b>${esc(String(line?.unit_price_before))}</b>`
+      + ` = <b>${esc(String(line?.amount_before))}</b></td>`
+      + `<td>${esc(String(line?.qty_after))} × <b>${esc(String(line?.unit_price_after))}</b>`
+      + ` = <b>${esc(String(line?.amount_after))}</b></td>`
+      + `<td><b>${esc(String(line?.delta_amount))}</b></td>`
+      + `<td>${line?.delta_pct === null ? '<code>null</code>（原价为 0：分母 0 不猜百分比）'
+        : `${esc(String(line?.delta_pct))}%`}</td>`
+      + `<td data-detail-basis="${esc((line?.basis ?? []).join(' '))}">`
+      + `${(line?.basis ?? []).map((token) => `<code>${esc(token)}</code>`).join(' ')}</td></tr>`).join('')
     const missingRows = run.basis_missing.map((item) => `<tr data-detail-missing="${esc(item.line_id)}"`
       + ` data-detail-missing-reason="${esc(item.reason)}">`
       + `<td><code>${esc(item.line_id)}</code></td>`
@@ -1365,6 +1412,11 @@ export function apply(ctx, config) {
       + (run.degraded
         ? `<p class="degraded" data-change-detail-degraded="1"><b>降级（不给你编行）</b>：`
           + `<code>${esc(run.reason)}</code> —— ${esc(run.next_action)}</p>`
+        : '')
+      + droppedNote(linesRead, '逐行明细')
+      + (run.dropped_lines > 0
+        ? `<p class="degraded" data-degraded="1" data-rows-dropped="${run.dropped_lines}">另有 `
+          + `<b>${run.dropped_lines}</b> 条逐行明细读不出来（形状异常：不是对象）—— 好行照列，坏条已跳过并计数（不静默丢）。</p>`
         : '')
       + `<h3 id="lines">逐行明细（<b data-detail-line-count="${run.counts.lines_shown}">${run.counts.lines_shown}</b> 行；`
       + `可用 <b data-detail-usable-count="${run.counts.lines_usable}">${run.counts.lines_usable}</b> 行）</h3>`
@@ -1680,7 +1732,11 @@ export function apply(ctx, config) {
   /** 白名单事实行：只读 `rfq/*` 与 `quote/*`；带私域键的行**整行跳过**（与其它道同一口径）。 */
   const prepFacts = (view) => {
     const out = []
-    for (const row of ledgerOf(view).rows()) {
+    // P32：账本行是**外部给的**（NDJSON 文件）⇒ 走唯一读数入口，不再裸读元素属性。
+    // 上游 `ledger-view#rows()` 只构造对象行 ⇒ 这里的 `bad` 结构性为 0（没有新增丢弃：非对象行
+    // 本来就被下面的 `PREP_ROW_TYPES` 判据挡掉）；显式化是为了「漏一条坏形状 = 这条事实读不出来」
+    // 而不是「整页崩」。
+    for (const row of readRows(ledgerOf(view).rows()).rows) {
       const type = String((row && row.type) ?? '')
       if (!PREP_ROW_TYPES.some((prefix) => type.startsWith(prefix))) continue
       const raw = row && row.body
@@ -2048,12 +2104,19 @@ data-rfq-identity="${esc(inbox.identity)}" data-rfq-visible="${inbox.counts.visi
 <h3>发往本视角的 RFQ 包（投递事实）</h3>
 ${inbox.packages.length
       ? `<table data-rfq="packages"><tr><th>包</th><th>版本</th><th>报价截止</th><th>澄清截止</th><th>行项目</th><th>收到于</th></tr>${
-        inbox.packages.map((pkg) => `<tr data-rfq-package="${esc(pkg.rfq.package_id)}" data-rfq-rev="${esc(pkg.rfq.rev ?? '')}">`
-          + `<td><code>${esc(pkg.rfq.package_id)}</code></td><td>@rev${esc(pkg.rfq.rev ?? '—')}</td>`
-          + `<td><code>${esc(pkg.rfq.quote_by ?? '—')}</code></td>`
-          + `<td><code>${esc(pkg.rfq.clarify_by ?? '—')}</code></td>`
-          + `<td>${pkg.rfq.items.length} 条（${esc(pkg.rfq.items.map((item) => `${item.item_id}×${item.qty ?? '—'}${item.unit}`).join('、') || '—')}）</td>`
-          + `<td><code>${esc(pkg.rfq.delivered_at ?? '—')}</code></td></tr>`).join('')}</table>`
+        inbox.packages.map((pkg) => {
+          // P32：`pkg.rfq.items` 是**投递信封 spec.items 投影出来的行数组** ⇒ 走唯一读数入口；
+          // 坏行不扮成行、也不静默丢（`all` 是源长度，`bad` 在本行末尾如实报出）。
+          const pkgItems = readRows(pkg?.rfq?.items)
+          return `<tr data-rfq-package="${esc(pkg?.rfq?.package_id)}" data-rfq-rev="${esc(pkg?.rfq?.rev ?? '')}"`
+            + ` data-rfq-items-dropped="${pkgItems.bad}">`
+            + `<td><code>${esc(pkg?.rfq?.package_id)}</code></td><td>@rev${esc(pkg?.rfq?.rev ?? '—')}</td>`
+            + `<td><code>${esc(pkg?.rfq?.quote_by ?? '—')}</code></td>`
+            + `<td><code>${esc(pkg?.rfq?.clarify_by ?? '—')}</code></td>`
+            + `<td>${pkgItems.all} 条（${esc(pkgItems.rows.map((item) => `${item?.item_id}×${item?.qty ?? '—'}${item?.unit}`).join('、') || '—')}）`
+            + `${pkgItems.bad > 0 ? ` · 另有 ${pkgItems.bad} 条读不出来（形状异常：不是对象）` : ''}</td>`
+            + `<td><code>${esc(pkg?.rfq?.delivered_at ?? '—')}</code></td></tr>`
+        }).join('')}</table>`
       : `<p data-rfq="empty">还没有发往本视角的 RFQ 包（<code>reason=${esc(inbox.reason)}</code>）—— `
         + '这不是页面坏了：投递事实里没有任何一份把包发给本视角。</p>'}
 <p data-rfq="basis">口径：只出**发给本视角**的包（投递信封的 <code>delivered_to</code> 命中本视角身份 `
@@ -2215,21 +2278,24 @@ ${sortForm('events', '筛查事件')}
     // 干跑的键下拉 = **可编辑键 ∪ 人工专属键**（后者本来就靠同一表单里的「人工引用」字段放行；
     // 只列可编辑键会让"人工专属但确实要改"的键（如 mail.smtp.host）在这张表单里选不到 —— 那不是纪律，是漏项）。
     const selectableKeys = Array.from(new Set([...editableKeys, ...humanKeys]))
-    const credRows = (creds.rows || []).map((row) => `<tr data-credential="${esc(row.name)}">`
-      + `<td><code>${esc(row.name)}</code></td><td><b>${row.configured ? '已配置' : '未配置'}</b></td>`
-      + `<td>${esc(row.source)}</td><td>${esc(row.required_mode)}</td>`
-      + `<td>${esc(row.fingerprint_first8 ?? '—')}</td><td>${esc(row.env || '—')}</td>`
-      + `<td>${esc(row.file || '—')}${row.file_mode ? `（${esc(row.file_mode)}）` : ''}</td>`
-      + `<td>${esc(row.next_action)}</td>`
-      + `<td><form method="post" action="${prefix}/admin/api/credentials/${encodeURIComponent(row.name)}">`
+    // P32：`creds.rows` / `audit.rows` 是**配置视图服务面给的快照行数组** ⇒ 走唯一读数入口
+    const credsRead = readRows(creds.rows)
+    const credRows = credsRead.rows.map((row) => `<tr data-credential="${esc(row?.name)}">`
+      + `<td><code>${esc(row?.name)}</code></td><td><b>${row?.configured ? '已配置' : '未配置'}</b></td>`
+      + `<td>${esc(row?.source)}</td><td>${esc(row?.required_mode)}</td>`
+      + `<td>${esc(row?.fingerprint_first8 ?? '—')}</td><td>${esc(row?.env || '—')}</td>`
+      + `<td>${esc(row?.file || '—')}${row?.file_mode ? `（${esc(row?.file_mode)}）` : ''}</td>`
+      + `<td>${esc(row?.next_action)}</td>`
+      + `<td><form method="post" action="${prefix}/admin/api/credentials/${encodeURIComponent(row?.name)}">`
       + `<input type="password" name="value" autocomplete="off" placeholder="只写不回显" size="12">`
       + `<button type="submit">提交</button></form></td></tr>`).join('')
-    const auditRows = (audit.rows || []).map((row) => `<tr data-audit="${esc(row.seq)}"><td>${esc(row.seq)}</td>`
-      + `<td><code>${esc(row.type)}</code></td><td>${esc(row.ts ?? '')}</td><td>${esc(row.actor ?? '')}</td>`
-      + `<td>${esc(row.layer ?? '')}</td><td><code>${esc(row.target ?? '')}</code></td>`
-      + `<td><code>${esc(row.key_path ?? '')}</code></td>`
-      + `<td>${esc(String(row.old_digest ?? '—').slice(0, 18))}</td><td>${esc(String(row.new_digest ?? '—').slice(0, 18))}</td>`
-      + `<td>${esc(row.approval_ref ?? '—')}</td><td>${esc(row.fingerprint_first8 ?? '—')}</td></tr>`).join('')
+    const auditRead = readRows(audit.rows)
+    const auditRows = auditRead.rows.map((row) => `<tr data-audit="${esc(row?.seq)}"><td>${esc(row?.seq)}</td>`
+      + `<td><code>${esc(row?.type)}</code></td><td>${esc(row?.ts ?? '')}</td><td>${esc(row?.actor ?? '')}</td>`
+      + `<td>${esc(row?.layer ?? '')}</td><td><code>${esc(row?.target ?? '')}</code></td>`
+      + `<td><code>${esc(row?.key_path ?? '')}</code></td>`
+      + `<td>${esc(String(row?.old_digest ?? '—').slice(0, 18))}</td><td>${esc(String(row?.new_digest ?? '—').slice(0, 18))}</td>`
+      + `<td>${esc(row?.approval_ref ?? '—')}</td><td>${esc(row?.fingerprint_first8 ?? '—')}</td></tr>`).join('')
     const degraded = data.degraded || creds.snapshot.available === false
     return anchorNav('admin', `${prefix}/admin/`, ADMIN_SECTIONS, [], [],
       [[`${prefix}/app/contractor/`, '授权区间（承包商 · GUI）'], [`${prefix}/app/supplier/`, '授权区间（供应商 · GUI）']])
@@ -2256,6 +2322,7 @@ ${sortForm('events', '筛查事件')}
       + `<table data-layer="credential"><thead><tr><th>名称</th><th>状态</th><th>来源</th><th>必须权限</th>`
       + `<th>指纹前 8</th><th>env</th><th>文件（权限）</th><th>下一步</th><th>提交新值</th></tr></thead>`
       + `<tbody>${credRows}</tbody></table>`
+      + droppedNote(credsRead, '凭据')
       + `<h3 id="write">④ 改配置 / 干跑（dry-run）与提交</h3>`
       + `<p>表单提交的值按标量强转（<code>true/false</code> → 布尔，整数/小数 → 数字，其余字符串）；`
       + `权威判定在 Python 侧，同一套白名单（<code>host/lib/schema.mjs</code> + <code>host/lib/config-keys.mjs</code>）。</p>`
@@ -2283,7 +2350,8 @@ ${sortForm('events', '筛查事件')}
           + `账本行**不含值**（只有键名与新旧摘要）；被拒的变更各 1 行 <code>config/refused</code>。</p>`
           + `<table data-layer="audit"><thead><tr><th>seq</th><th>类型</th><th>ts</th><th>actor</th><th>层</th>`
           + `<th>target</th><th>键路径</th><th>旧摘要</th><th>新摘要</th><th>人工引用</th><th>指纹前 8</th>`
-          + `</tr></thead><tbody>${auditRows}</tbody></table>`)
+          + `</tr></thead><tbody>${auditRows}</tbody></table>`
+          + droppedNote(auditRead, '审计'))
       + `<p><small>本页 **0 行 <code>&lt;script&gt;</code>、0 内联事件**：读用 GET 表单/链接，写用 POST 表单；`
       + `宿主不写文件（除 0600 待处理项）、不写账本、不取墙钟。</small></p>`
   }
@@ -3183,9 +3251,18 @@ ${sortForm('events', '筛查事件')}
     if (/^\/api\/retention\/?$/.test(path)) {
       const plan = retentionPlanOf('contractor') ?? retentionPlanOf('supplier')
       const snap = retention.snapshot(plan)
+      // P32：留存计划的 `items` 是**外部给的行数组**（Python 侧判定产物）⇒ 走唯一读数入口，
+      // 坏行**逐条计数并如实报出**（不静默丢）。注：`/api/retention` 的**顶层键集被 webui 门 E12 冻结**
+      // ⇒ 读数写进已有的 `note`，不加新键；`snap` 的形状也不动（它被 `retention-view` 门逐字对齐）。
+      const planItems = Array.isArray(plan?.items) ? plan.items : []
+      const itemsRead = readRows(planItems)
       return json(200, { source: 'retention-view（subagent 产出、经自进化流程晋升）+ services/retention.py（判定）',
         retention: snap, headline: retention.headline(plan),
-        note: '留存计划是**判定**不是执行：账本行永不销毁；销毁只作用于派生副本且不可重建物须过人工门' })
+        note: '留存计划是**判定**不是执行：账本行永不销毁；销毁只作用于派生副本且不可重建物须过人工门'
+          + (itemsRead.bad > 0
+            ? `（本次读数：条目 ${planItems.length} 条，读到 ${itemsRead.rows.length} 条，另有 ${itemsRead.bad} 条`
+              + '读不出来（形状异常：不是对象）—— 好条照列，坏条已跳过并计数（不静默丢））'
+            : '') })
     }
     if (/^\/api\/mail\/?$/.test(path)) {
       // 邮件域只读 JSON：投影由 `mail-view` 插件做（形状门/白名单/夹取/降级都在那里），这里只放行

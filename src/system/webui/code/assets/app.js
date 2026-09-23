@@ -2100,38 +2100,82 @@
   }
 
   // ---------------------------------------------------------------- 空态：先说人话 + 2–3 个真能做的下一步
+  /** 一行"业务数据"至少要**能指得出对象**（机制只按通用形状判，不看业务名词）：
+   *  `id`（对象 id）/ `ref`（对象深链）/ `action`（行内可执行的动作）/ `bucket`（筛选片归属）。
+   *  四个都没有的行，是面板**自己在说"我这里没有东西"**或给"下一步"的说明行（如 `gate.todo` 的
+   *  「没有待批的门」）—— 它照旧渲染、逐条如实列出，但不该把整块面板算成"有数据"。 */
+  const ADDRESSABLE_ROW_KEYS = ['id', 'ref', 'action', 'bucket']
+  const rowPointsToSomething = (row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return false
+    return ADDRESSABLE_ROW_KEYS.some((key) => {
+      const value = row[key]
+      if (value === undefined || value === null) return false
+      if (typeof value === 'object') return Object.keys(value).length > 0
+      return String(value).trim() !== ''
+    })
+  }
   /**
    * **这块面板有没有"业务数据"**（机制，只看通用形状与声明 —— 外壳不认识任何业务）：
    * `table.rows` / `list.items` / `kv.items` / `files.files`（活的）非空，或插件自己报的 `counts` 里有非零。
-   * 两条**例外**（都是声明，不是外壳猜的）：
+   * 三条**例外**（都是声明或通用形状，不是外壳猜的）：
    *   · `panel.not_data === true`（说明类/运营配置类：沙盘入口、名册与角色、导出偏好…）**不参与**这个判断
    *     —— 它照旧渲染、照旧有数据，只是不把空态挤掉；
    *   · **降级（`degraded`）不算有数据**：降级只是"读不到/还没轮到它"。
-   * `html`（说明）与 `metrics`（读数，零也常显示）也不当作"有数据"。
+   *   · **读数不算数据、说明行不算一行数据**（P31 收口；判据仍然只有形状）：
+   *     `html`（说明）/ `metrics`（读数）与 **`kv`（键值读数：落点 / 权限 / 上限 / 版本规则…）零也常显示**
+   *     —— 键值面板里那几条**永远是面板自己的口径说明**，不能证明"这一屏有活"；
+   *     `list` 的 `items[]` 里**没有任何一行能指得出对象**（见 `rowPointsToSomething`）⇒ 这一屏是在说
+   *     "我这里没有东西"。
+   *     空账本首屏此前被判成 `has-data` 的两处正是这两类（`system/approval#gate.todo` 的说明行、
+   *     `system/attachments#attach.store-home` 的键值读数）—— 两个插件都不在可改面内，所以收口只能落在
+   *     **机制**这一侧（就是下面这些规则）；`counts` 非零照旧算有数据（读数面板里真报了数就不算空）。
+   *     `rows`（表格）不受影响：表格的每一行都是面板列出来的一条记录。
    */
   function panelHasData(panel) {
     if (!panel || panel.not_data === true) return false
     const data = panel.data || {}
     if (data.degraded === true) return false
-    if (Array.isArray(data.rows) && data.rows.length) return true
-    if (Array.isArray(data.items) && data.items.length) return true
-    if (Array.isArray(data.files) && data.files.some((file) => file && file.deleted !== true)) return true
     if (data.counts && Object.values(data.counts).some((value) => Number(value) > 0)) return true
+    if (Array.isArray(data.rows) && data.rows.length) return true
+    if (Array.isArray(data.files) && data.files.some((file) => file && file.deleted !== true)) return true
+    if (Array.isArray(data.items) && data.items.some(rowPointsToSomething)) return true
     return false
+  }
+  /**
+   * **工作台（`home`）的空态判据**（P31 收口，home 专用规则）：工作台是**导向页** —— 它的面板
+   * 全是"读数 + 下一步"（各自的插件已经用 `not_data` 声明"这块不参与空态判断"），所以**只看面板**
+   * 会把"我这里有活"说成"空"。
+   *
+   * 判据只有一条（通用形状，不看业务名词）：工作台上**有没有一条"指得出对象"或"标了急"的待办** ——
+   *   · `ref.kind` + `ref.id` 都在 ⇒ 这条待办指向一个真对象（点得进去 → 说明确实有东西）；
+   *   · `level` 是 `warn`/`bad` ⇒ 这条待办现在卡着人（与 `quiet` 判据同一个口径）。
+   * 一条都没有 ⇒ 这一屏确实还没开始（空账本首屏就是这种情况）。
+   * 为什么不数"有按钮的待办"：导向页的每一条下一步**天生都带一个按钮**（"备一份草稿"），拿它当
+   * "有数据"会把空账本判成有活 —— 这正是 P31 之前 `gate.todo` / `attach.store-home` 那两处误判的同型错误。
+   */
+  function workbenchHasNothing() {
+    return !todoItems().items.some((item) => (item.ref && item.ref.kind && item.ref.id)
+      || item.level === 'warn' || item.level === 'bad')
   }
   /** 这一屏**一块有业务数据的面板都没有**（P28 实测：承包商的墙是 39 块空面板）—— 空态判据。
    *  返回 `withData`（哪几块算有数据）也是给对账用的：一眼能看出"为什么这一屏不算空"。 */
   function viewEmptiness() {
     const list = orderedPanels().list.map((item) => item.panel)
     const withData = list.filter(panelHasData)
-    return { total: list.length, withData, empty: list.length > 0 && withData.length === 0 }
+    const home = state.route.view === 'home'
+    const panelsEmpty = list.length > 0 && withData.length === 0
+    const nothingTodo = !home || workbenchHasNothing()
+    return { total: list.length, withData, home, home_nothing: home ? nothingTodo : null,
+      empty: panelsEmpty && nothingTodo }
   }
   const viewIsEmpty = () => viewEmptiness().empty
   /** 空态/非空态都要留一个**机器可读**的读数（截图之外还能逐条对账）。 */
   function emptinessMark() {
-    const { total, withData, empty } = viewEmptiness()
+    const { total, withData, empty, home, home_nothing: homeNothing } = viewEmptiness()
     return `<div class="q-emptiness" data-view-emptiness="${empty ? 'empty' : 'has-data'}"`
       + ` data-panels-total="${total}" data-panels-with-data="${attr(withData.map((panel) => panel.id).join(','))}"`
+      + ` data-emptiness-basis="${empty ? (home ? 'panels+todo' : 'panels') : 'has-data'}"`
+      + `${home ? ` data-home-nothing="${homeNothing ? '1' : '0'}"` : ''}`
       + ` hidden></div>`
   }
   /**
@@ -2185,10 +2229,16 @@
     const out = []
     let total = 0
     let urgent = 0
+    let degraded = 0
     const bucketTotal = {}
     const bucketUrgent = {}
     let windowed = false
     for (const panel of state.panels) {
+      // **降级（读不到）的面板不参与待办聚合**（P31 收口，与 `panelHasData` 的"降级不算有数据"同一口径）：
+      // 降级面板给的条目是"未登录 / 读不到"的说明行（如协作面的「未登录：先登录才知道哪些是「我的今日」」），
+      // 把它们算进「有 N 件需要你处理」正是 P31 前空账本首屏的另一处误判来源（未登录时那两行全是 warn）。
+      // 面板自己的说明行照旧在那一块里渲染 —— **不隐藏任何东西**，只是不冒充待办。
+      if ((panel.data || {}).degraded === true) { degraded += 1; continue }
       const q = (panel.data || {}).query
       if (q && q.server === true && Array.isArray(q.head)) {
         windowed = true
@@ -2219,7 +2269,7 @@
     }
     const rank = { bad: 0, warn: 1, info: 2, ok: 3 }
     const items = out.sort((left, right) => (rank[left.level] ?? 2) - (rank[right.level] ?? 2))
-    return { items, total, urgent, bucketTotal, bucketUrgent, windowed }
+    return { items, total, urgent, bucketTotal, bucketUrgent, windowed, degraded }
   }
 
   function workbenchHtml() {
@@ -2236,17 +2286,21 @@
     const shownTotal = current === '' ? tally.total : (tally.bucketTotal[current] ?? shown.length)
     const wantedCount = current === '' ? tally.urgent
       : (tally.bucketUrgent[current] ?? shown.filter((item) => item.level === 'warn' || item.level === 'bad').length)
-    const headline = current !== ''
+    const headline = (current !== ''
       ? `按「${esc(String(buckets.find((b) => b.key === current)?.label ?? current))}」筛选：${shownTotal} 条`
         + `（全部 ${tally.total} 条；不带分类的待办只在「全部」里出现）`
       : (wantedCount
         ? `有 ${wantedCount} 件需要你处理${tally.total > wantedCount ? `，另有 ${tally.total - wantedCount} 条信息` : ''}`
-        : (tally.total ? `眼下没有卡住你的事（${tally.total} 条信息）` : '还没有插件报告待办'))
+        : (tally.total ? `眼下没有卡住你的事（${tally.total} 条信息）` : '还没有插件报告待办')))
+      // **读不到的面板不计入这些数字**（与 `panelHasData` 同一口径）；但**必须如实说**有几块读不到 ——
+      // 否则"数字变小"会被读成"事情变少了"。
+      + (tally.degraded ? `（另有 ${tally.degraded} 块面板现在读不到：它们各自写着原因，不计入这里的数字）` : '')
     // 急的排前面，但**信息类也要摆出来**：只显示急的会让"收到几条报价登记"这种线索消失
     const list = shown.slice(0, 8)
     const rest = Math.max(0, shownTotal - list.length)
     return `<section class="q-todo" data-workbench="1" data-todo-count="${tally.total}"
-      data-todo-urgent="${wantedCount}" data-todo-windowed="${tally.windowed ? 1 : 0}">
+      data-todo-urgent="${wantedCount}" data-todo-windowed="${tally.windowed ? 1 : 0}"
+      data-todo-degraded-panels="${tally.degraded}">
   <div class="q-todo-head">
     <h2>你现在该做什么</h2>
     <p>${esc(headline)}</p>
@@ -3444,7 +3498,7 @@
     needsContext: () => partitionActions(viewActions(), {}).need.map((item) => ({
       id: item.action.id, missing: item.missing.map((one) => `${one.group}:${one.fields.join(',')}`) })),
     emptiness: () => { const out = viewEmptiness(); return { empty: out.empty, total: out.total,
-      with_data: out.withData.map((panel) => panel.id) } } }
+      home: out.home, home_nothing: out.home_nothing, with_data: out.withData.map((panel) => panel.id) } } }
 
   /** 「这些动作要先有一个对象」区（机制）：**不是把功能藏起来** —— 逐条写明它该在哪跑，点一下就挑一条。 */
   function needsContextBlock(list, label) {

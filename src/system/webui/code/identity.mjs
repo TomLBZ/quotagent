@@ -72,6 +72,28 @@ export const MAIL_INT_KEYS = ['mail.smtp.port', 'mail.imap.port', 'mail.timeout_
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
 const plain = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const text = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * **P32：外部行数组的唯一读数入口**（口径见 `src/system/webui/docs/row-action-prefill.md` §4）。
+ *
+ * 对**外部给的行数组**（账本/协作/服务面回的行）做 `map`/`for-of` 时**直接把元素当对象读属性**
+ * （`row.ref`），数组里只要混进**一条** `null`/字符串/数字/嵌套数组，读属性就抛 `TypeError`
+ * ⇒ 这一页 500（外壳对面板抛错则是整块 `data-failed`）。
+ * 纪律：坏行**逐条计数**（`bad` 必须显示出来）、**好行照列**；源不是数组 ⇒ `list:false`。
+ */
+const isRow = (value) => plain(value)
+const rowReadOf = (value) => {
+  if (!Array.isArray(value)) return { list: false, rows: [], all: 0, bad: 0 }
+  const rows = []
+  let bad = 0
+  for (const row of value) { if (isRow(row)) rows.push(row); else bad += 1 }
+  return { list: true, rows, all: value.length, bad }
+}
+/** 坏行的屏幕说法：**不静默丢**（好行照列、坏行如实报数）。 */
+const droppedNote = (read, what) => (read.bad > 0
+  ? `<p class="degraded" data-degraded="1" data-rows-dropped="${read.bad}">另有 <b>${read.bad}</b> 条${what}`
+    + `读不出来（形状异常：不是对象）—— 好行照列，坏条已跳过并计数（不静默丢）。</p>`
+  : '')
 /** HTML 转义（本文件所有渲染都过它：任何来自账本/表单的字节都不许当标记）。 */
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -823,10 +845,12 @@ export function createIdentity({ root, prefix, config, shell, services, people =
     }
     const data = workbench(who, { asOf: wanted === '' ? null : wanted })
     if (!data.ok) return { status: 400, body: htmlPage('待我处理', `<p>${esc(data.code)}：${esc(data.reason)}</p>`) }
-    const rows = data.items.map((item) => `<tr data-inbox-item="${esc(item.kind)}" data-ref="${esc(item.ref)}"`
-      + ` data-owed-by="${esc(item.owed_by)}"><td>${esc(item.kind)}</td><td><code>${esc(item.ref)}</code></td>`
-      + `<td>${esc(item.title)}</td><td><code>${esc(item.owed_by)}</code></td>`
-      + `<td>${esc(item.next_action)}</td></tr>`).join('')
+    // P32：`data.items` 是行数组 ⇒ 走唯一读数入口（坏行跳过 + 计数，好行照列）
+    const inboxRead = rowReadOf(data.items)
+    const rows = inboxRead.rows.map((item) => `<tr data-inbox-item="${esc(item?.kind)}" data-ref="${esc(item?.ref)}"`
+      + ` data-owed-by="${esc(item?.owed_by)}"><td>${esc(item?.kind)}</td><td><code>${esc(item?.ref)}</code></td>`
+      + `<td>${esc(item?.title)}</td><td><code>${esc(item?.owed_by)}</code></td>`
+      + `<td>${esc(item?.next_action)}</td></tr>`).join('')
     return { status: 200, body: htmlPage('待我处理', `<p data-inbox-identity="${esc(data.identity)}"`
       + ` data-inbox-view="${esc(data.view)}" data-inbox-as-of="${esc(data.as_of)}"`
       + ` data-inbox-count="${data.counts.total}" data-inbox-mine="${data.counts.mine}">`
@@ -834,7 +858,8 @@ export function createIdentity({ root, prefix, config, shell, services, people =
       + `<code>${esc(data.as_of)}</code>（${esc(data.as_of_source)}）：共 <b>${data.counts.total}</b> 项，`
       + `其中 <b>${data.counts.mine}</b> 项是本人的。</p>`
       + Object.entries(data.counts.by_kind).map(([kind, count]) => `<code>${esc(kind)}=${count}</code>`).join(' ')
-      + (data.items.length
+      + droppedNote(inboxRead, '待办项')
+      + (inboxRead.all
         ? `<table data-inbox="items"><thead><tr><th>类别</th><th>对象</th><th>是什么</th><th>谁该办</th>`
           + `<th>下一步</th></tr></thead><tbody>${rows}</tbody></table>`
         : `<p data-inbox-empty="${esc(data.empty_reason)}">没有该你处理的（${esc(data.empty_reason)}）`
@@ -895,10 +920,12 @@ export function createIdentity({ root, prefix, config, shell, services, people =
         `<p data-mail-refused="${esc(who.code)}">${esc(who.code)}：${esc(who.reason)} → ${esc(who.next_action)}</p>`) }
     }
     const data = mailFields()
-    const rows = data.rows.map((row) => `<tr data-mail-key="${esc(row.key)}"><td><code>${esc(row.key)}</code></td>`
-      + `<td>${esc(row.source)}</td><td>${row.value_present ? '已设值（不回显）' : '未设值'}</td>`
-      + `<td>${row.needs_approval ? '人工专属键' : '运行期键'}</td></tr>`).join('')
-    const keys = data.rows.map((row) => row.key).join('\n')
+    // P32：`data.rows` 是行数组 ⇒ 走唯一读数入口（坏行跳过 + 计数，好行照列）
+    const mailRead = rowReadOf(data.rows)
+    const rows = mailRead.rows.map((row) => `<tr data-mail-key="${esc(row?.key)}"><td><code>${esc(row?.key)}</code></td>`
+      + `<td>${esc(row?.source)}</td><td>${row?.value_present ? '已设值（不回显）' : '未设值'}</td>`
+      + `<td>${row?.needs_approval ? '人工专属键' : '运行期键'}</td></tr>`).join('')
+    const keys = mailRead.rows.map((row) => row?.key).join('\n')
     return { status: 200, body: htmlPage('邮件配置（SMTP/IMAP）', `<p data-mail-identity="${esc(meOf(who))}"`
       + ` data-mail-config-file="${esc(data.config_file)}">身份 <code>${esc(meOf(who))}</code>（ops）。`
       + `本页只改 <code>mail.smtp.*</code> / <code>mail.imap.*</code> / <code>mail.timeout_seconds</code> / `
@@ -907,6 +934,7 @@ export function createIdentity({ root, prefix, config, shell, services, people =
       + (data.degraded ? `<p><b>降级</b>：<code>${esc(data.reason)}</code></p>` : '')
       + `<table data-mail="keys"><thead><tr><th>键</th><th>source</th><th>值</th><th>门</th></tr></thead>`
       + `<tbody>${rows || '<tr><td colspan="4">（登记表里暂无邮件键）</td></tr>'}</tbody></table>`
+      + droppedNote(mailRead, '邮件键行')
       + `<h2>改配置</h2><form method="post" action="${pfx}/mail/config/">`
       + `<input type="hidden" name="next" value="${esc(`${pfx}/mail/config/`)}">`
       + `<label>SMTP 主机 <input name="mail.smtp.host" size="24"></label><br>`

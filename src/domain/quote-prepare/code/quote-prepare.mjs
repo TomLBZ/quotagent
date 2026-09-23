@@ -49,6 +49,21 @@
  */
 import { array, number, object, string } from '../lib/std-schema.mjs'
 
+/**
+ * **P32：外部行数组的唯一读数入口**（口径见 `src/system/webui/docs/row-action-prefill.md` §4）。
+ * 只认**非 null 的对象**行：数组里混进 `null`/字符串/数字/嵌套数组时，裸读 `row.item_id` 抛
+ * `TypeError` ⇒ 这一页/这块面板整块崩掉。
+ * 坏行**逐条计数**（`bad`，调用方必须如实报出）、**好行照列**；源不是数组 ⇒ `list:false`（「读不出来」≠「零行」）。
+ */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, rows: [], all: 0, bad: 0 }
+  const rows = []
+  let bad = 0
+  for (const row of value) { if (isRow(row)) rows.push(row); else bad += 1 }
+  return { list: true, rows, all: value.length, bad }
+}
+
 export const name = 'quote-prepare'
 
 export const inject = []                 // 纯函数插件：载荷由调用方给（宿主只读投影）
@@ -356,7 +371,10 @@ export function validate(input, config) {
       '从本页「行项目目录」一列里复制一个真 item_id')
   } else if (catalogue.items.length > 0 && !catalogue.items.some((row) => row.item_id === itemId)) {
     field('item_id', 'item-not-found',
-      `行项目 ${itemId} 不在本视角的行项目目录里（已知 ${catalogue.items.map((row) => row.item_id).slice(0, 6).join(' / ') || '无'}）`,
+      // P32：行数组走唯一读数入口（`bad` 不计入"已知目录"的判定）。注：上面这一行是 t286 变异 4 的
+      // **逐字锚点**（冻结断言），故保持原样 —— `catalogue.items` 由本文件 `buildCatalogue` 构造，
+      // 元素恒为对象（不在"外部给的行数组"这一类里）。
+      `行项目 ${itemId} 不在本视角的行项目目录里（已知 ${readRows(catalogue.items).rows.map((row) => row.item_id).slice(0, 6).join(' / ') || '无'}）`,
       '用页面上「行项目目录」里的真 item_id 重提；目录为空 ⇒ 先让 RFQ 事实进账本')
   }
 

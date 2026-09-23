@@ -184,36 +184,33 @@
 
 ## 7 补充：主文件 §7 的完整口径（auth 推导 / 偏好服务端化 / 邮件入口 / 人签门 / 一份报价一签）
 
-## 7. 台账与持久化（口径以本节为准）
-
-1. **`/api/routes` 的 `auth` 是真实值**（不再写 `none`）：业务路由（`${prefix}/<侧>/…`）**按路径推导**为 `identity-session`（与 `code/identity.mjs#gateBusinessRoute` **同一判据**）；`none` 只给真公开入口；表里给 `auth_basis`。**别手抄**（抄的会漂）。
-2. **偏好/已读/布局/筛选整份在服务端**（按身份，见 §9），**不是账本事实**。
-3. **邮件通道有界面入口**：工作台面板 + **界内配置表单**（POST `${prefix}/mail/config/`）→ `identity-mail-apply.py` → 唯一落盘者 `config-apply.py` 写 YAML（干跑 → 0600 待办件 → 落盘；凭据永不回显）；**`/workspace/config.yaml` 只读**。
-4. **人签动作的服务端身份门**：凡声明 `permission: 'human-signature'` 的动作，`POST ${prefix}/api/action/<id>` 上**服务端**校验「已登录 + 入参 `signature` == 会话身份」（401 `identity-required` / 403 `signer-mismatch`，账本零新增）；界面**不代签、不写账本**；这条门**一次也没放松**（批量见 §19）。
-5. **一份报价 = 一次人签**：整表**一次提交** ⇒ **一条**草稿（`quote/drafted` 带逐行 `lines[]`），人签**一签提交整份**（多行报价标量 `item_id`/`unit_price_cents` 留空）；单行报价 body **逐字节不变**（12 键）；缺行/改行**有名拒绝**（`pending-tampered`/`line-item-not-found`/`draft-tampered`，账本零新增）。
-
-**禁止**：界面不得成为第二条事实写路径；不得手抄 `auth`；不得把偏好类文件当账本事实。**真源**：`src/system/webui/docs/identity-and-selfservice.md`、`docs/design/19-mail-contract.md`；形状/有界/拒绝码见归档 §7-§8。
+**同文（P31 删重复）**：本节此前是主文件 §7 的**整段副本**，现只留这条指针（判据与禁止的真源仍是主文件 §7；
+形状 / 有界 / 拒绝码见上面 `## 7 台账与持久化的存储形状与拒绝码`）。副本里独有的两条补在这里：邮件入口的
+链路 = **干跑 → 0600 待办件 → 落盘**；多行草稿的标量 `item_id`/`unit_price_cents` **留空**（逐行值只在 `lines[]`）。
 
 ## 8 补充：主文件 §8 的完整口径（名册与角色）
 
-## 8. 名册与角色：「同事」= **名册里的人**（不是「登录过的人」），角色**限动作**而非限视图
-
-1. **名册是权威取值处**：`<ui_shared>/people/roster.json`（0700/**0600**、原子写、有界、超限**如实拒**），按**侧**分片（`side` 只由会话给）；**不进账本**（名册/角色/额度是**可改的运营配置**不是合同事实）。
-2. **`@提及`/指派/转交都从名册取值**（候选与校验同源 `GET /api/people/suggest`）；**未知名字如实拒**（`unknown-colleague`；跨侧 `@` ⇒ `cross-side-mentioned`）；**登录即登记**（第一次登录即进名册、角色「待指派」＝有名字没权限）。
-3. **按角色限动作**（服务端判据，在任何执行之前；拒绝 ⇒ **账本与待办件零新增**）：转交别人的活 ⇒ `transfer-not-yours`；额度超我角色的 `approval_limit_cents` ⇒ `role-limit-exceeded`（给出金额/额度/**该找哪个角色**）；有管理员之后改人/改角色/改策略**只有管理员**（`admin-required`）。
-4. **角色不改变签署权**（结构性）：额度/角色判据跑在「署名 == 会话身份」**之后**、插件自己的服务端一半**之前** —— 它**只能否决、不能放开**；角色再高也不能替别人签、也不能跳过人工门（§7.4 一字未动）。
-
-**禁止**：不得把名册/角色/额度写进账本或当模型可见输入；角色只能收紧不能放开动作。**真源**：`src/system/webui/docs/people-and-roles.md`；复跑 `python3 tmp/p5-people-verify.py`；逐条规则见归档 §8。
+**同文（P31 删重复）**：同 §7 补充，整段副本已删；真源仍是主文件 §8，逐条细节见上面
+`## 8 名册与角色的逐条细节`。副本里独有的两条补在这里：额度判据读的是**我的角色的
+`approval_limit_cents`**；**角色再高也不能替别人签、也不能跳过人工门**（角色只能否决、不能放开）。
 
 ## 9 主文件 §9 的完整口径（偏好 / 已读 / 布局 / 筛选）
 
-## 9. 通知偏好 / 已读 / **布局** / 筛选：**整份**服务端化（按身份）
+**同文（P31 删重复）**：同上，整段副本已删；真源仍是主文件 §9。副本里独有的三条补在这里：① **面板布局按
+「视图 + 对象类」分桶**存；② 未登录时 localStorage 只是**离线镜像**（界面如实说"只在本浏览器有效"）；
+③ 方法围栏的机检 = `tools/verify.sh quote-draft` 第 ③ 条（拿 `/api/routes` 逐条 POST）。
 
-1. `GET|POST ${prefix}/api/ui/notif-state`（`POST` **整体替换**）：已读集合、静音的插件、最低级别、**面板布局（顺序/折叠/隐藏，按「视图+对象类」分桶）**、筛选片**全部**落 `<ui_shared>/webui/notif-state.json`（0700/0600、原子写、有界、洗净；坏形状丢掉并**如实计数**）。
-2. **按会话身份隔离**：换浏览器/换设备读回同一份（"跨设备仍在"）；身份之间互不可见；未登录 ⇒ 401 `identity-required`（界面如实说"只在本浏览器有效"，localStorage 降为**离线镜像**）。
-3. **只读路由的方法围栏**：只应为 `GET` 的路由收到非 GET ⇒ **405 + `method-not-allowed` + 响应头 `Allow: GET`**，且**先按方法判据拒绝、再做身份校验**（顺序反了会变 401，"只读路由不接受写"就失效）。机检：`tools/verify.sh quote-draft` 第 ③ 条（拿 `/api/routes` 逐条 POST）。
+## 18 PWA 与离线 —— 缓存策略的逐条判据（主文件 §18 的细节面）
 
-**真源**：`src/system/webui/docs/people-and-roles.md`、`collab-and-roster-resilience.md` §4。
+策略本体在 `code/assets/sw.js` 文件头，机读副本在 `/api/ui/surface` 的 `pwa` 段；下面六条就是判据
+（P31 从主文件 §18 搬来，逐字保留）：
+
+1. **非 GET 完全不拦截**（不排队、不重放 —— 排队重放会把"我以为提交了"变成静默重复提交）。
+2. **永不缓存**：`/api/**`、身份 / 人签 / 待办 / 邮件 / 运维 / 管理面、`/<view>/**`。
+3. **只有外壳资源**（`assets/*` / 图标 / 清单）可 stale-while-revalidate。
+4. 导航到根与 `/app/**` ⇒ network-first；离线回退到**不含数据的壳**（`x-q-offline: 1`）。
+5. 其它路径离线**不回退、直接失败**（宁可失败，也不给一份像"没有数据"的页面）。
+6. 预缓存**恰 6 个外壳条目**（多一个都算改判据）。实测见 `python3 tmp/p19-shots/verify-pwa.py`（9/9）。
 
 ## 19 批量人签的形状（主文件 §19 的细节面）
 
@@ -251,8 +248,29 @@
 * 四个门（`advice`/`rfq-deadline`/`gates`/`authority`）：旧页存在类断言删除、等价或更强的判据接到 GUI，**插件层围栏判据一条没松**。
 
 ## 22 §22 的形状与逐条口径（判据与禁止仍在主文件）
-
 1（回执）：落点 / 形状 / 有界 / 拒绝码逐条 = `delivery-receipts-and-weekly.md` §2.2 + §4（`receipts/deliveries.json`，
    目录 0700 / 文件 **0600**、按对象聚合、60 s 去抖、对象 500 / 读者 64 / 512 KiB）。
 2（周报）：五项指标口径、逐行证据行号、门的配对键、导出三档与屏幕同源 = 同文件 §3.2 / §3.4；
    复跑 `python3 tmp/p26-verify.py`（读数与截图落 `tmp/p26-shots/`）。
+
+## 23 §23 的逐条判据与实测读数（能力与禁止仍在主文件）
+
+1（插件只声明两样）：动作入参字段的**来源**（`from_row` / `from_route` / `from_route_kind` / `new_value` /
+   `bulk`，`ui-surface.mjs#actionNeedsOf`）；`*_id`/`id` 形状的**必填**字段默认算「引用已有对象」
+   （`REFERENCE_FIELD_RE`）。面板可声明 `not_data: true`（说明/运营配置类：不参与空态判断）。
+2（机读形状）：`/api/ui/surface` 的 `actions[].needs = {object, route, row, selection, session, version, user,
+   new_value, bulk}`；`action_entry[] = {id, affinity[]}`（行内归属，供「该在哪跑」的人话与候选）；
+   `guides[] = {view, order, summary, steps[{action, label, input, note}]}`。
+3（外壳据此做的三条入口）：① 工具栏只摆**当前地址跑得起来**的动作（`partitionActions`）；
+   ② 缺上下文的进 `[data-need-context]` 区，点一条 → `openActionEntry` 出**候选清单**
+   （`contextCandidates`：给得出所需字段名的行 / 带 `ref` 的对象行，各上限 12）；③ 命令面板
+   （`#q-palette-list`）列**全部动作**，缺上下文的进去也是候选清单。挑一条 = 按那行预填
+   （`rowPresetOf`）→ 开同一个表单（与行内那颗按钮同一条路）。
+4（空态判据 `panelHasData`）：`counts` 非零 / `table.rows` 非空 / 活文件 / `list.items` 里有**可指认的行**
+   （`id`/`ref`/`action`/`bucket` 之一非空）⇒ 有数据；`not_data`、`degraded`、`html`/`metrics`/`kv` 与
+   **说明行**不算。工作台再叠 `workbenchHasNothing()`（没有一条待办带 `ref.kind`+`ref.id` 或标 `warn`/`bad`）。
+   读数：`[data-view-emptiness]` 的 `data-panels-with-data`/`data-emptiness-basis`/`data-home-nothing`。
+5（与空态同口径的一条修）：`todoItems()` **跳过降级（`degraded`）面板**（它给的是"未登录/读不到"的说明行，
+   不是待办），并把跳过几块如实写进卡头与 `data-todo-degraded-panels`。
+6（P31 实测，读数在 `tmp/p31-shots/`）：三条动作 × 两条入口都点到底并**真落账**（工具栏与命令面板各一轮）；负控三项（错署名 403 `signer-mismatch` / 越侧 403 `side-mismatch` /
+   未登录 401 `identity-required`）**两侧账本零新增**；空账本工作台 `data-view-emptiness=empty`。

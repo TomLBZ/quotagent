@@ -21,6 +21,21 @@ import { join } from 'node:path'
 import { LAYERS, PROJECT_KEYS, CREDENTIALS, envNameFor, matchSchemaPattern } from './config-keys.mjs'
 import { SCHEMA } from './schema.mjs'
 
+/**
+ * **P32：外部行数组的唯一读数入口**（口径见 `src/system/webui/docs/row-action-prefill.md` §4）。
+ * 只认**非 null 的对象**行：数组里混进 `null`/字符串/数字/嵌套数组时，裸读 `row.key` 抛
+ * `TypeError` ⇒ 这一页/这块面板整块崩掉。
+ * 坏行**逐条计数**（`bad`，调用方必须如实报出）、**好行照列**；源不是数组 ⇒ `list:false`（「读不出来」≠「零行」）。
+ */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, rows: [], all: 0, bad: 0 }
+  const rows = []
+  let bad = 0
+  for (const row of value) { if (isRow(row)) rows.push(row); else bad += 1 }
+  return { list: true, rows, all: value.length, bad }
+}
+
 export { LAYERS, PROJECT_KEYS, CREDENTIALS, envNameFor, matchSchemaPattern }
 
 // ---------------------------------------------------------------------------
@@ -570,7 +585,13 @@ export const previewPatch = ({ doc = {}, env = {}, runtime = {}, patch = {} }) =
     const keys = Object.keys(fields).sort()
     if (!keys.length) reasons.push({ code: 'no-fields', key: '', reason: '至少提交一个键' })
     const view = projectView({ doc, env, runtime })
-    const byKey = Object.fromEntries(view.rows.map((row) => [row.key, row]))
+    // P32：`view.rows` 是行数组 ⇒ 走唯一读数入口；坏行**不静默丢**（在 `reasons` 里如实报一条）
+    const viewRead = readRows(view.rows)
+    if (viewRead.bad > 0) {
+      reasons.push({ code: 'config-row-unreadable', key: '',
+        reason: `配置总览里有 ${viewRead.bad} 条读不出来（形状异常：不是对象）→ 这些键按"读不到旧值"处理（不猜、不编）` })
+    }
+    const byKey = Object.fromEntries(viewRead.rows.map((row) => [row?.key, row]))
     for (const key of keys) {
       const row = byKey[key]
       const declared = PROJECT_KEYS[key]
@@ -602,8 +623,8 @@ export const previewPatch = ({ doc = {}, env = {}, runtime = {}, patch = {} }) =
         vetoedBy = vetoedBy ?? 'type-mismatch'
         continue
       }
-      diff.push({ layer, target: key, key, old: row.value, old_digest: row.digest, new: coerced.value,
-        new_digest: digestOf(coerced.value), source: row.source, changed: digestOf(coerced.value) !== row.digest })
+      diff.push({ layer, target: key, key, old: row?.value, old_digest: row?.digest, new: coerced.value,
+        new_digest: digestOf(coerced.value), source: row?.source, changed: digestOf(coerced.value) !== row?.digest })
     }
   } else if (layer === 'plugin') {
     if (!/^[a-z0-9-]+\/[a-z0-9-]+$/.test(target)) {
