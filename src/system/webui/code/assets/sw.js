@@ -104,12 +104,14 @@ self.addEventListener('fetch', (event) => {
   if (isSensitive(path) && !isShellNav) return                       // ③ 敏感路径/旧页：网络 only
   if (!isShellNav) return                                            // 其它：网络 only（不缓存数据）
 
-  // ⑤ 导航：network-first；离线回退到**不含数据**的壳，并如实标记
+  // ⑤ 导航：network-first；**在线不可用**（网络错误）时回退到**不含数据**的壳，并如实标记。
+  // **P50 修正**：服务端的 **4xx/5xx 一律原样返回**（不再被当成"离线"）。判据只有一条：这是
+  // 「网络不可用」还是「服务端答了、只是答的是拒绝」——把 403 `side-mismatch`（越侧）这类**具名拒**
+  // 换成一份离线壳，等于把"服务端不让你看"说成"你现在离线"，用户会把拒绝当成网络问题（§18 的
+  // 「不得把'离线'说成'没有数据'」是这条的另一面）。离线（fetch 抛错）时的回退行为**一字未改**。
   event.respondWith((async () => {
     try {
-      const res = await fetch(req)
-      if (res && res.ok) return res
-      throw new Error(`status ${res ? res.status : 'none'}`)
+      return await fetch(req)
     } catch (err) {
       const cache = await caches.open(CACHE)
       const shell = await cache.match(SHELL_URL)

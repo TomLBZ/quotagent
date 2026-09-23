@@ -2735,28 +2735,34 @@ ${sortForm('events', '筛查事件')}
     // 静态业务路由**之前**；公开入口（`/`、`/app/**`、`/assets/**`、`/api/health`、`/api/status`、
     // `/api/ui/**`、`/ops/**`、`/admin/**`）与本门槛无关。
     // 台账注：`/api/routes` 表里这些行的 `auth` 仍写 `'none'`（本批只允许**追加**门槛，未改那张表）。
+    //
+    // **P50：`/app/<side>/**` 用同一份判据**（同一个函数、同一串拒绝语义，不另起一套）——
+    // 修前实测：承包商身份（或干脆不登录）请求 `${prefix}/app/supplier/` 与
+    // `/api/ui/panels?view=supplier` 都能拿到**供应商侧的取数行**（读数见
+    // `src/system/webui/docs/side-scoped-shell-data.md`）⇒ 外壳 HTML 共享没问题，**数据**必须按会话侧。
+    const replyIdentityGate = (verdict, wantsHtml) => {
+      if (verdict.kind === 'redirect') {
+        return send(verdict.status, 'text/plain; charset=utf-8', '', { location: verdict.location })
+      }
+      if (wantsHtml) {
+        return send(verdict.status, 'text/html; charset=utf-8',
+          '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
+          + `<title>需要身份 · ${esc(verdict.code)}</title></head><body>`
+          + `<h1>这一步需要身份：${esc(verdict.code)}</h1>`
+          + `<p>${esc(verdict.reason)}</p>`
+          + `<p>下一步：${esc(verdict.next_action)}</p>`
+          + `<p><a href="${esc(verdict.login)}">去登录 / 换一个身份</a> · `
+          + `<a href="${esc(prefix)}/">回工作台</a> · <a href="${esc(prefix)}/api/health">/api/health</a></p>`
+          + '</body></html>')
+      }
+      return json(verdict.status, verdict)
+    }
     const businessSide = /^\/(contractor|supplier)(?:\/|$)/.exec(path)?.[1] ?? null
     if (businessSide !== null) {
       const nextPath = `${prefix}${path === '/' ? '/' : path}${url.search}`
       const wantsHtml = String(req.headers.accept ?? '').includes('text/html')
       const verdict = identity.gateBusinessRoute(req, { side: businessSide, next: nextPath, wantsHtml })
-      if (verdict !== null) {
-        if (verdict.kind === 'redirect') {
-          return send(verdict.status, 'text/plain; charset=utf-8', '', { location: verdict.location })
-        }
-        if (wantsHtml) {
-          return send(verdict.status, 'text/html; charset=utf-8',
-            '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
-            + `<title>需要身份 · ${esc(verdict.code)}</title></head><body>`
-            + `<h1>这一步需要身份：${esc(verdict.code)}</h1>`
-            + `<p>${esc(verdict.reason)}</p>`
-            + `<p>下一步：${esc(verdict.next_action)}</p>`
-            + `<p><a href="${esc(verdict.login)}">去登录 / 换一个身份</a> · `
-            + `<a href="${esc(prefix)}/">回工作台</a> · <a href="${esc(prefix)}/api/health">/api/health</a></p>`
-            + '</body></html>')
-        }
-        return json(verdict.status, verdict)
-      }
+      if (verdict !== null) return replyIdentityGate(verdict, wantsHtml)
     }
 
     // ---- 退役的旧 SSR 页：旧地址**不 404**，303 到对应 GUI 视图 ------------------------------
@@ -2816,6 +2822,16 @@ ${sortForm('events', '筛查事件')}
         return json(404, { ok: false, code: 'unknown-view', view,
           next_action: `可用视图：home / ${config.views.join(' / ')}` })
       }
+      // **业务侧视图的侧门**（P50）：`view` 是 URL 给的、不是会话给的 —— 不拦就等于"改个地址看对方那一半"
+      // （这一页的 JS 会按 URL 里的 view 去 `/api/ui/panels?view=<它>` 取数）。判据与静态业务路由
+      // **同一个函数**（`identity.gateBusinessRoute`，未登录 303/401 · 越侧 403 `side-mismatch`）。
+      // `home`（工作台/登录后的第一屏）不在其中：它不是任何一侧的视图。
+      if (config.views.includes(view)) {
+        const wantsHtmlApp = String(req.headers.accept ?? '').includes('text/html')
+        const verdictApp = identity.gateBusinessRoute(req, { side: view,
+          next: `${prefix}${path}${url.search}`, wantsHtml: wantsHtmlApp })
+        if (verdictApp !== null) return replyIdentityGate(verdictApp, wantsHtmlApp)
+      }
       const kind = bits[2] ?? ''
       const id = bits[3] ?? ''
       if (kind !== '' && (id === '' || kind === 'panel')) {
@@ -2857,6 +2873,31 @@ ${sortForm('events', '筛查事件')}
     // 面板/对象/通知/状态都要**会话身份**（`identity.whoOf`）：协作类贡献从 `ctx.identity` 才知道"同侧是谁"；
     // 不按身份过滤数据（业务投影仍按视角隔离），但**侧的判定只认会话**，不认请求体/表单。
     const whom = identity.whoOf(req)
+    /**
+     * **数据面的侧门**（P50）：请求里的 `view` 是**参数**，会话才是"我是谁"的唯一来源。
+     * 登录了但不是这一侧 ⇒ 具名拒（403 `side-mismatch`，与 `/app/<side>/`、静态业务路由同一个 `code`）；
+     * 未登录（`whom.ok === false`）**不在这里拒**：面板清单是机制自述，数据行由 `rowsGateNote` 说明并
+     * 一概不下发（`app-shell.mjs#withRowsGate`）。非业务视图（`home`）不适用侧判据。
+     */
+    const sideVerdict = (who, view) => {
+      if (!who?.ok || !config.views.includes(view) || who.side === view) return null
+      return { ok: false, code: 'side-mismatch',
+        identity: { human: who.human, side: who.side },
+        reason: `你的会话是 ${who.side} 侧，却在请求 ${view} 侧的数据：侧只认会话（URL / 请求参数改不动"我是谁"）`,
+        next_action: `在自己的那一侧看：${prefix}/app/${who.side}/（越侧不回落成"能看"）`,
+        ledger_added: 0 }
+    }
+    /** 行下发的如实说明（无会话 ⇒ 行不下发；有会话 ⇒ 只给自己那一侧）。 */
+    const rowsGateNote = (who, view) => {
+      if (who?.ok) {
+        return { rows_scope: view === 'home' ? `会话所属侧（${who.side}）` : view,
+          rows_withheld: false, reason: '', code: '' }
+      }
+      return { rows_scope: '', rows_withheld: true, code: 'identity-required',
+        reason: '未登录：面板清单（哪些面板在这一页、有哪些动作/列/口径）照旧下发，'
+          + '数据行一概不下发（行只给会话所属侧）',
+        next_action: `先在 ${prefix}/identity/ 选一个身份登录（human:<名字> + 属于哪一侧），再回来读数据` }
+    }
     // **服务端窗口**（分页/筛选/排序/计数；本批）：请求里的 `w`/`pq`/`only`/`size/page/kw/sort/bucket` 由
     // 外壳的机制层解析（`app-shell.mjs#parseWindowRequest`）——**没带参数就整份下发**（兼容既有调用方），
     // 带了就只回窗口 + 在全集上算出来的数字。参数解析失败不抛错：坏值丢掉并如实记在回执的 `window.notes` 里。
@@ -2886,6 +2927,12 @@ ${sortForm('events', '筛查事件')}
         return json(400, { ok: false, code: 'unknown-view', view,
           next_action: `可用视图：home / ${config.views.join(' / ')}` })
       }
+      // **数据面的侧门**（P50）：`view` 是请求参数 —— 登录了但不是这一侧 ⇒ **403 `side-mismatch`**
+      // （与 `/app/<side>/`、静态业务路由同一个 `code`，不另起一套词）。**未登录**时这里不拒 401：面板
+      // 清单是**机制自述**（哪些面板注册在这一页、有哪些动作/列/口径），机制面照旧下发；但**数据行**
+      // 一概不下发（`app-shell.mjs#withRowsGate`，判据是同一个 `who.side`）⇒ 「拉对方视图的行数恒为 0」。
+      const crossView = sideVerdict(whom, view)
+      if (crossView !== null) return json(403, { ...crossView, view })
       // `kind`/`id` 非空 ⇒ **对象页**的面板（只出声明了该 object_kind 的面板；插件从 ctx.route 读对象身份）
       const kind = String(url.searchParams.get('kind') ?? '')
       const id = String(url.searchParams.get('id') ?? '')
@@ -2898,6 +2945,7 @@ ${sortForm('events', '筛查事件')}
       return json(200, { ok: true, view, kind, id, panels,
         window: { ...windowSpec.source, notes: windowSpec.notes, only: windowSpec.only },
         identity: whom.ok ? { human: whom.human, side: whom.side } : null,
+        rows_gate: rowsGateNote(whom, view),
         mechanism: '面板数据由插件自己的 data() 产出（通用形状：table/form/list/kv/metrics/html）；'
           + '外壳只按形状渲染，不解读语义。**行由服务端按窗口给**（`w=1`）：筛选/排序/分页与计数都在'
           + '服务端全量行集上算，客户端照抄（口径见 /api/ui/surface 的 io.window）' })
@@ -2909,13 +2957,16 @@ ${sortForm('events', '筛查事件')}
         return json(400, { ok: false, code: 'unknown-view', view,
           next_action: `可用视图：home / ${config.views.join(' / ')}` })
       }
+      const crossObject = sideVerdict(whom, view)
+      if (crossObject !== null) return json(403, { ...crossObject, view })
       const kind = String(url.searchParams.get('kind') ?? '')
       const id = String(url.searchParams.get('id') ?? '')
       if (kind === '' || id === '') {
         return json(400, { ok: false, code: 'object-address-incomplete', view, kind, id,
           next_action: `对象地址要写全：${prefix}/app/<view>/<kind>/<id>/；JSON 侧同样要 kind 与 id` })
       }
-      return json(200, shell.objectOf(view, kind, id, whom, windowSpec))
+      const objectOut = shell.objectOf(view, kind, id, whom, windowSpec)
+      return json(200, { ...objectOut, rows_gate: rowsGateNote(whom, view) })
     }
     if (path === '/api/ui/plugins') return json(200, shell.pluginsJson())
     if (path === '/api/ui/notifications') {

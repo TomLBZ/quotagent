@@ -28,14 +28,52 @@
  * 行的键就是 `gate_id`（`id` 与 `approval_id` 是同一个值），动作的入参字段也叫 `gate_id`。
  */
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 import {
-  authoritySnapshot, bandLineFromLowest,
+  authoritySnapshot, bandLineFromLowest, roleTerm,
 } from '../../../domain/authority-band/code/ui.mjs'
 
 export const plugin_id = 'system/approval'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * **门后面是不是一桩「授权区间变更」**（P50）：`scope=config.authority` 的门由
+ * `src/system/config/tools/authority-bands-apply.py --step request` 开出来，那份 **0600 暂存件**在
+ * `<ui_shared>/authority-bands/pending/<request_id>.json`（`ref = authority-band:<request_id>`）。
+ *
+ * 为什么审批面板要读它：复核人答不出「**我要批的是什么**」就没法负责地批 —— ref 只是一串哈希。
+ * 读得到 ⇒ 逐字给出「把哪一档改成多少分 / 谁提交的 / 批的人必须不是他」；读不到 ⇒ **如实说读不到**
+ * （**不编一个额度**，也不把"读不出来"说成"没有变更"）。
+ */
+const bandChangeOf = (gate, host) => {
+  const blank = { band_change_label: '', band_submitted_by: '', band_review_note: '' }
+  if (asText(gate?.scope) !== 'config.authority') return blank
+  const ref = asText(gate?.ref)
+  const requestId = ref.startsWith('authority-band:') ? ref.slice('authority-band:'.length) : ''
+  const base = asText(host?.sharedDir)
+  const file = requestId && base ? join(base, 'authority-bands', 'pending', `${requestId}.json`) : ''
+  let doc = null
+  try { doc = file ? JSON.parse(readFileSync(file, 'utf8')) : null } catch (err) { doc = null }
+  if (!doc) {
+    return { band_change_label: `（读不到变更正文：${file || '拿不到暂存件路径'}）`,
+      band_submitted_by: '',
+      band_review_note: '暂存件读不出来：不猜要批什么 —— 与提交人核对原话之后再批/驳（本页不替它编额度）' }
+  }
+  const role = asText(doc.band_role)
+  const cents = Number((doc.fields ?? {})[`authority.bands.${role}`])
+  const detail = Number.isFinite(cents)
+    ? `${roleTerm(role)}（${role}）的限额改成 ${cents} 分（= ${(cents / 100).toFixed(2)} 元）`
+    : `${role || '（角色取不到）'}（金额取不到）`
+  const submitted = asText(doc.submitted_by)
+  return { band_change_label: `把 ${detail}`,
+    band_submitted_by: submitted,
+    band_review_note: `批的人必须不是提交人 ${submitted || '（未记录）'}`
+      + '（自提自批在落盘时会被具名拒 `approver-must-differ`）；'
+      + '批准后回到「授权区间」面板点「② 把已复核的变更落盘」——唯一落盘者才写受管 YAML' }
+}
 
 /**
  * 工作台的卡头那句「有 N 件需要你处理」**只该算本侧**（P13 可用性修）：卡片把两侧插件贡献的待办并在一起，
@@ -362,6 +400,10 @@ export async function register(surface, host) {
           { key: 'amount_cents', label: '金额（整数分；取不到就写取不到）', filter: 'number' },
           { key: 'amount_label', label: '金额（元）· 取自哪条事实' },
           { key: 'band_verdict', label: '越界？（与「授权区间」同一口径）' },
+          // **P50：授权区间变更的门**（scope=config.authority）逐行给「要批的是什么」——
+          // 读不到就如实说读不到（**不编额度**），见 `bandChangeOf`。
+          { key: 'band_change_label', label: '待批的区间变更（config.authority）' },
+          { key: 'band_submitted_by', label: '谁提交的（批的人必须不是他）', type: 'code' },
           { key: 'who', label: '卡在谁（点名的审批人）', type: 'code' },
           { key: 'waited', label: '已等（按事实时刻）' },
           { key: 'policy_label', label: '超时策略', filter: 'enum' },
@@ -372,6 +414,7 @@ export async function register(surface, host) {
           { key: 'escalated_to', label: '升级/委托给' },
         ],
         rows: gates.map((gate) => ({ id: gate.approval_id, ...withAmount(view, rows, gate),
+          ...bandChangeOf(gate, host),
           overdue: gate.overdue ? '是（策略会执行；永远不自动批准）' : '否',
           escalated_to: gate.escalated_to ?? '' })),
         row_actions: ['gate.grant', 'gate.deny', 'gate.nudge', 'gate.escalate', 'gate.delegate', 'gate.abort'],
@@ -382,7 +425,9 @@ export async function register(surface, host) {
           nudges: gates.reduce((sum, gate) => sum + gate.nudge_count, 0),
           // **金额只统计得出来的那些行**（取不到的不当 0 算进小计 —— 与周报「算不出来的行排除出小计」同一口径）
           amount_known: gates.filter((gate) => amountOfGate(rows, gate).cents !== null).length,
-          amount_missing: gates.filter((gate) => amountOfGate(rows, gate).cents === null).length },
+          amount_missing: gates.filter((gate) => amountOfGate(rows, gate).cents === null).length,
+          // **P50**：待批的**授权区间变更**（`scope=config.authority`）—— 复核人一眼看得出有几条要批
+          authority_changes: gates.filter((gate) => asText(gate.scope) === 'config.authority').length },
         note: `事实时刻 ${moment || '—'}（等待时长与超时剩余都相对账本里最大的 ts 算，不取墙钟）；`
           + '「批准 / 驳回」在行内：署名必须等于会话身份（服务端判 403 signer-mismatch），'
           + '落的是既有事件 `approval/granted` / `approval/denied`（不新造事件类型），写者仍是'
@@ -397,6 +442,12 @@ export async function register(surface, host) {
           + 'lines / `change/priced` 的增量），一律整数分、取自账本、口径逐行写在「取自哪条事实」里；'
           + '取不到就写「取不到」（本页没声明这个 scope 的金额从哪取、或那条事实不在本账本里）——'
           + '不折算、不近似匹配、不当 0。'
+          // **P50**：授权区间变更的门（人工门 + 另一人复核）在这里批/驳，口径写清。
+          + ' `scope=config.authority` 的门 = 授权区间变更（谁把哪一档改成多少分，写在「待批的区间变更」列；'
+          + '0600 暂存件在 <ui_shared>/authority-bands/pending/，读不到就如实说读不到）：'
+          + '批准/驳回与其它门同一条写路径（`gate-actions.py`），但批的人不能是提交人 ——'
+          + '自提自批在「授权区间」面板落盘时会被具名拒 `approver-must-differ`；'
+          + '批准之后由人回到「授权区间」面板点「② 把已复核的变更落盘」（唯一落盘者才写受管 YAML）。'
           + '「越界？」列与「授权区间」面板同一份口径（同一个 `checkOf`）：参照角色 = 已登记限额最小的那一档'
           + '（由受管配置决定，不写死角色），越界时给出「下一个能批的是谁」；区间没登记 ⇒ 如实说未配置，'
           + '不编越界结论。金额与越界结论都不改判定：改判定的仍只有行内的人签「批准 / 驳回」' }

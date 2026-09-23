@@ -275,6 +275,13 @@ do_up() {
   fi
   mkdir -p "$DATA_DIR" 2>/dev/null || true
   START_MS=$(date +%s%3N 2>/dev/null || date +%s)
+  # `--config-file` **全链下传**（P50）：本脚本 → 服务进程环境 → `webui-serve.py` 把它作为 `--config-file`
+  # 交给 `host/cli.mjs` → 插件（`host.config.config_file` / 配置面 `configView`）。链路与端口/数据目录同一
+  # 套（服务是 Python 包装 + execve，只认环境变量）。**没给这个旗标就一个字节都不设** —— 缺省路径链
+  # （`/workspace/config.yaml`）与改前逐字节一致，不制造"读一份写另一份"。
+  # 注意：这里**只**写 `QUOTAGENT_UI_CONFIG`（config-view 认它）；`QUOTAGENT_CONFIG_FILE`（doctor/config
+  # init 的约定）故意不采纳 —— config-view 不认它，采纳就会造出新分歧。
+  if [ -n "$CONFIG_FILE" ]; then QUOTAGENT_UI_CONFIG=$CONFIG_FILE; export QUOTAGENT_UI_CONFIG; fi
   QUOTAGENT_WEBUI_PORT=$PORT \
   QUOTAGENT_WEBUI_HOST=$HOST \
   QUOTAGENT_WEBUI_PREFIX=$PREFIX \

@@ -29,6 +29,9 @@
 | ADR-0021 | 需求必须归属到插件（不存在「产品整体」的功能性需求） | accepted |
 | ADR-0022 | 人工门的派分事实（审批人与超时策略）随开单落账本 body | accepted |
 | ADR-0023 | 终止（`approval/aborted`）的理由正文进账本 body | accepted |
+| ADR-0024 | 承诺 / 发 PO 必须**消费**一扇别人批过的门（不得自签自批） | accepted |
+| ADR-0025 | 授权区间变更必须**另一个人**批过才生效（不得自提自批） | accepted |
+| ADR-0026 | GUI 外壳共享、**数据按会话侧隔离**（`/app/<侧>/**` 与 `/api/ui/panels\|object` 的侧门） | accepted |
 
 ## 格式
 

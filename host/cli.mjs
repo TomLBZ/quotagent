@@ -256,6 +256,11 @@ const main = async () => {
       port: Number(args.port ?? 8093),
       listen_host: String(args.host ?? '127.0.0.1'),
       route_prefix: String(args.prefix ?? '/quotagent'),
+      // **受管配置路径的传参入口**（P50）：`./run up --config-file X` → `webui-serve.py` → 本文件
+      // （`--config-file X`）→ 外壳 `webui.mjs#resolveManagedConfigFile` 解析成唯一真源 → 随
+      // `host.config.config_file` 交给每个插件。空串 = 没给 ⇒ 取值链照旧往下走（配置面 → env → 缺省），
+      // 一字未改。这里只搬运，不解释路径。
+      config_file: String(args['config-file'] ?? ''),
       // 留存计划的**绝对路径**（生产 cwd≠仓库根）：由 webui-serve 传入；缺失时路由降级
       retention_plan: String(args['retention-plan'] ?? process.env.QUOTAGENT_UI_RETENTION_PLAN ?? ''),
       admin_snapshot: String(args['admin-snapshot'] ?? process.env.QUOTAGENT_UI_ADMIN ?? ''),

@@ -1074,6 +1074,90 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const sandboxScopes = []
   const currentSandbox = () => (sandboxScopes.length ? sandboxScopes[sandboxScopes.length - 1] : null)
   const humanOf = (who) => (typeof who === 'string' ? who : String(who?.human ?? ''))
+
+  /**
+   * **沙盘里的名册与协作**（P50，item ④）：与真实面**同一套实现**（`people.mjs` / `collab.mjs`），
+   * 只是把 `ui_shared` 指到**沙盘目录** ⇒ 沙盘能造出一份**临时名册**（里面的第二个人 = 演示里那个
+   * "另一个人"，能批你提的那件事），而**真实名册/协作文件一个字节都不动**：两个 store 各读自己的文件，
+   * 沙盘 store 只在沙盘作用域里被取到；`sandbox.clear` 删掉整个沙盘目录 ⇒ **零残留**。
+   *
+   * 为什么需要它：修前沙盘每档只有一个演示身份、且名册是真实面 ⇒ 演示走不完「两人协作 / 一人批一人签」
+   * （P48 §10.1 登记的那条：那时只能借 `home` 档造"批门的人"，名册里没有第二个人）。
+   */
+  const sandboxStores = new Map()
+  /** 装配期后补的两样东西（会话文件 = "今天谁登录过"；合法侧 = 名册按侧分片）——沙盘 store 也吃它。 */
+  let rosterSessionsFileCache = sessionsFile
+  let rosterSidesCache = sides
+  const rosterSessions = () => rosterSessionsFileCache
+  const rosterSides = () => rosterSidesCache
+  const storesFor = (dir) => {
+    if (dir === sharedDir) return { people, collab }
+    let memo = sandboxStores.get(dir)
+    if (!memo) {
+      const sessions = rosterSessions()
+      const sidesForStore = rosterSides()
+      const sandboxPeople = createPeopleStore({ root, sharedDir: dir, sessionsFile: sessions,
+        sides: sidesForStore, log: (msg) => log?.(msg) })
+      const sandboxCollab = createCollabStore({ root, sharedDir: dir, sessionsFile: sessions,
+        sides: sidesForStore, log: (msg) => log?.(msg) })
+      sandboxCollab.configure({ people: sandboxPeople, sides: sidesForStore })
+      memo = { people: sandboxPeople, collab: sandboxCollab }
+      sandboxStores.set(dir, memo)
+    }
+    return memo
+  }
+  const effectiveDir = () => {
+    const entry = currentSandbox()
+    return entry ? entry.dir : sharedDir
+  }
+  const effStores = () => storesFor(effectiveDir())
+
+  /**
+   * **沙盘临时名册**（P50）：把这次演示的**两个身份**写进 `<沙盘目录>/people/roster.json`（0600）。
+   *
+   *   · 会话身份那一行：角色取**真实名册里的现有角色**（`fallback`，默认 `pending`）—— 沙盘**只加第二个人**，
+   *     绝不借着造名册把本人的角色抬高（"角色只能收紧不能放开"这条对沙盘一样成立）；
+   *   · 第二个演示身份（`demo-approver`）：角色 `supervisor`（主管）—— 演示里由它批别人提的那件事；
+   *   · 其它侧（供应商 / home）的演示身份也各记一行，跨侧协作面才不会把同事认成"未知名字"。
+   *
+   * 写不出就**如实说**（返回 `{ok:false, code, reason}`）：沙盘照样能跑，只是"两人协作"那一段走不了。
+   */
+  const SANDBOX_ROSTER_SCHEMA = 'quotagent/people-roster/v1'
+  const sandboxWriteRoster = (dir, { actors, sessionSide, sessionHuman }) => {
+    const roles = { session: String(realRoleOf(sessionHuman) || 'pending') }
+    const members = {}
+    for (const [key, who] of Object.entries(actors || {})) {
+      const name = String(who ?? '').replace(/^human:/, '')
+      if (!/^[a-z][a-z0-9._-]{0,31}$/.test(name)) continue
+      const side = key.split(':')[0]
+      const isSecond = key.includes(':')
+      const isSession = name === String(sessionHuman).replace(/^human:/, '')
+      members[name] = { name, side, role: isSecond ? 'supervisor' : (isSession ? roles.session : 'buyer'),
+        title: isSecond ? '沙盘演示：那另一个可以批准的人' : '沙盘演示身份',
+        reports_to: '', active: true, source: 'sandbox' }
+    }
+    const doc = { schema: SANDBOX_ROSTER_SCHEMA, members, updated_at: new Date().toISOString(),
+      note: '沙盘临时名册：只在沙盘作用域里被读到，随「清空沙盘」一起删掉（真实名册零改动）' }
+    const file = join(dir, 'people', 'roster.json')
+    try {
+      mkdirSync(join(dir, 'people'), { recursive: true, mode: 0o700 })
+      const tmp = `${file}.${process.pid}.tmp`
+      writeFileSync(tmp, `${JSON.stringify(doc, null, 1)}\n`, { encoding: 'utf8', mode: 0o600 })
+      chmodSync(tmp, 0o600)
+      renameSync(tmp, file)
+      return { ok: true, file, members: Object.keys(members).length }
+    } catch (err) {
+      return { ok: false, code: 'sandbox-roster-write-failed', reason: flat(err),
+        next_action: '先修沙盘目录的权限（机制只落 0600；写不出名册时"两人协作"那一段走不了）' }
+    }
+  }
+  /** 真实名册里那个人的角色（沙盘**不许**借造名册抬高本人角色；查不到 ⇒ 空串 ⇒ 调用方按 `pending` 记）。 */
+  const realRoleOf = (human) => {
+    try {
+      const member = typeof people.memberOf === 'function' ? people.memberOf(human) : null
+      return member ? String(member.role ?? '') : ''
+    } catch (err) { return '' }
+  }
   /** 压一个沙盘作用域（`entry` 的形状见 `sandboxEntry`）；`fn` 里的一切路径解析都跟着它走。
    *  `fn` 可能返回 Promise（动作的服务端一半是 async）⇒ 弹栈要等它 settle，否则 await 之后作用域就没了。 */
   const withSandboxEntry = (entry, fn) => {
@@ -1632,16 +1716,26 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     get sandbox() { const state = effective(); return { on: state.on, actors: state.actors,
       human: state.human, dir: state.on ? state.dir : '' } },
     now: () => new Date().toISOString(),
-    /** 本视角的账本行：沙盘打开时读**沙盘账本**（同一形状的 JSONL，同一批写者写的）。 */
-    rows: (view) => {
+    /**
+     * 本视角的账本行：沙盘打开时读**沙盘账本**（同一形状的 JSONL，同一批写者写的）。
+     *
+     * **P50：行跟着会话所属侧**（第二个参数是本次读的会话身份；不给就从当前动作作用域里的会话取）：
+     *   · `view` 是业务侧视图（`contractor`/`supplier`）⇒ 行就是它自己的（**越侧在路由层就被拒**，见
+     *     `webui.mjs#sideVerdict`：403 `side-mismatch`）；
+     *   · 其它视图（`home` 工作台…）⇒ 按**会话所属侧**解析 —— 工作台是"我今天要做什么"，不是"两边都能看"；
+     *   · **无会话** ⇒ 空（没有"我是谁"就没有"我的行"；形状上是空数组，界面上按空态如实说"先登录"）。
+     */
+    rows: (view, viewer = null) => {
       const state = effective()
       if (state.on) return sandboxRows(state.dir, view)
-      return typeof rowsOf === 'function' ? rowsOf(view) : []
+      const wanted = rowViewFor(view, viewer ?? currentActionScope()?.identity ?? null)
+      return wanted === '' || typeof rowsOf !== 'function' ? [] : rowsOf(wanted)
     },
-    publicRows: (view) => {
+    publicRows: (view, viewer = null) => {
       const state = effective()
       if (state.on) return sandboxRows(state.dir, view)
-      return typeof publicRowsOf === 'function' ? publicRowsOf(view) : []
+      const wanted = rowViewFor(view, viewer ?? currentActionScope()?.identity ?? null)
+      return wanted === '' || typeof publicRowsOf !== 'function' ? [] : publicRowsOf(wanted)
     },
     runPython, stage, readJson, sharedFile,
     /**
@@ -1653,11 +1747,13 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     /** 回执条目指代的待办件/请求文件名（basename；没有 ⇒ 空串）。判"哪几条**不**属于本动作"时用它。 */
     receiptFileName: (entry) => receiptFileName(entry),
     /** **同侧协作**句柄（指派/转交、关注、评论与 `@同事`、活动流、已读）：机制，不认识对象类。
-     *  插件可以拿它把协作挂到自己的对象上；`side`/`actor` 必须来自 `ctx.identity`（会话），不由表单给。 */
-    collab,
+     *  插件可以拿它把协作挂到自己的对象上；`side`/`actor` 必须来自 `ctx.identity`（会话），不由表单给。
+     *  **P50：沙盘作用域里解析到沙盘目录那一份**（临时协作痕迹，随「清空沙盘」一起删）。 */
+    get collab() { return effStores().collab },
     /** **人员名册与角色**句柄（同侧成员 / 角色 / 直属关系 / 按角色限动作）：机制，不认识业务对象。
-     *  `collab` 从这里取"同事是谁"（不再靠"登录过的人"）；动作总线用它判"这次请求能不能被执行"。 */
-    people,
+     *  `collab` 从这里取"同事是谁"（不再靠"登录过的人"）；动作总线用它判"这次请求能不能被执行"。
+     *  **P50：沙盘作用域里解析到沙盘目录那一份**（临时名册 = 演示里的第二个人；真实名册零改动）。 */
+    get people() { return effStores().people },
     /** 宿主自己注入的**服务句柄**（机制：按名字取；不知道任何服务的业务含义）。 */
     service: (name) => (services && typeof services === 'object' ? services[name] : undefined) ?? null,
     services: () => Object.keys(services ?? {}),
@@ -1766,6 +1862,16 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const configurePeople = ({ sessionsFile: file, sides: nextSides, views: nextViews } = {}) => {
     const store = people.configure({ sessionsFile: file, sides: nextSides })
     collab.configure({ people, sides: store.sides })
+    // **P50**：沙盘那一份 store 是**按需另建**的（`storesFor`），把它也配上同样的会话文件与合法侧
+    // —— 否则沙盘里的"本侧同事"与角色校验会拿不到配置（临时名册仍然只活在那个沙盘目录里）。
+    if (typeof file === 'string' && file.trim() !== '') rosterSessionsFileCache = file.trim()
+    if (Array.isArray(nextSides) && nextSides.length) rosterSidesCache = nextSides.map(String)
+    for (const memo of sandboxStores.values()) {
+      try {
+        memo.people.configure({ sessionsFile: rosterSessionsFileCache, sides: rosterSidesCache })
+        memo.collab.configure({ people: memo.people, sides: rosterSidesCache })
+      } catch (err) { say(`[sandbox] 沙盘名册补配置失败：${flat(err)}`) }
+    }
     const list = Array.isArray(nextViews) && nextViews.length
       ? nextViews.filter((view) => view !== 'home' && store.sides.includes(view)) : null
     const synced = list ? peopleSurface.configure({ views: list }) : syncPeople()
@@ -2052,10 +2158,53 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     return { human, name: String(who.name ?? ''), side }
   }
 
+  /**
+   * **行源解析**（P50）：行的归属只认**会话所属侧**。
+   *
+   *   · 业务侧视图（`views` 里的 `contractor`/`supplier`）⇒ 就是它自己（越侧在路由层已被拒，403）；
+   *   · 其它视图（`home` 工作台…）⇒ **会话所属侧**（工作台不是"两边合在一起看"）；
+   *   · 没有会话 ⇒ 空串 ⇒ 调用方给空数组（"没有我是谁，就没有我的行"）。
+   */
+  const rowViewFor = (view, who) => {
+    const wanted = String(view ?? '')
+    if (views.includes(wanted)) return wanted
+    const side = String(who?.side ?? '')
+    return views.includes(side) ? side : ''
+  }
+
+  /**
+   * **数据行只给会话所属侧**（P50）：无会话时把**行/条目/文件 + 派分计数**清空，机制面（`columns`/
+   * `actions`/`hint`/`note`/`title`…）照旧下发，并把这件事**如实写进** `rows_withheld`（含"拦下几行"）
+   * 与 `reason`（界面上按 29 §23 的空态渲染这句"不是没有数据，是没登录"）。
+   *
+   * 为什么不在路由层直接 401：面板清单是**机制自述**（这一页有哪些面板、有哪些动作与列）—— "这一页有什么"
+   * 与"这一页的数据"是两件事；**数据**才是会话侧的资产（`webui.mjs` 的 `/api/ui/panels` 注释同口径）。
+   */
+  const ROW_FIELDS = { table: 'rows', list: 'items', files: 'files', kv: 'items' }
+  const withRowsGate = (data, kind, who) => {
+    if (who && who.ok === true) return data
+    const field = ROW_FIELDS[kind]
+    const had = field && Array.isArray(data[field]) ? data[field].length : 0
+    const metrics = Array.isArray(data.metrics) ? data.metrics.length : 0
+    const counts = data.counts && typeof data.counts === 'object' ? Object.keys(data.counts).length : 0
+    if (field === undefined && metrics === 0 && counts === 0) return data
+    const out = { ...data, rows_withheld: { code: 'identity-required', rows: had, metrics, counts,
+      reason: '未登录：数据行不下发（行只给会话所属侧；面板清单/列/动作/口径照旧）',
+      next_action: '先在 /identity/ 选一个身份登录（human:<名字> + 属于哪一侧），再回来读数据' },
+      degraded: true,
+      reason: data.reason || '未登录：数据行不下发（不是「这里没有数据」）' }
+    if (field) out[field] = []
+    if (metrics) out.metrics = []
+    if (counts) out.counts = {}
+    return out
+  }
+
   const panelCtx = (view, route = { view }, who = null) => {
     const normalized = normRoute({ ...route, view })
-    return { view: normalized.view, route: normalized, host, now: host.now(), rows: host.rows(normalized.view),
-      identity: normIdentity(who),
+    const viewer = normIdentity(who)
+    return { view: normalized.view, route: normalized, host, now: host.now(),
+      rows: host.rows(normalized.view, viewer),
+      identity: viewer,
       panels: surface.panelsOf(normalized.view).map((panel) => panel.id),
       actions: surface.byKind('action').map((action) => action.id) }
   }
@@ -2218,7 +2367,10 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         if (!PANEL_KINDS.includes(kind)) {
           return { panel, base, visible: true, error: { code: 'unknown-panel-kind', reason: `kind=${kind}` } }
         }
-        return { panel, base, visible: true, kind, raw: data }
+        // **数据行只给会话所属侧**（P50）：无会话 ⇒ 行/条目/文件与派分计数清空（机制面照旧），
+        // 并如实标 `rows_withheld`。放在这里（开窗口**之前**）⇒ 窗口的分页/筛选计数也按空集算，
+        // 不会有"行数为 0、但计数说命中 32 条"这种自相矛盾的读数。
+        return { panel, base, visible: true, kind, raw: withRowsGate(data, kind, who) }
       } catch (err) {
         return { panel, base, visible: true, error: { code: 'data-failed', reason: flat(err) },
           next_action: '修面板的 data()（抛错不静默吞：这块不渲染，页面其余部分照常）' }
@@ -2280,6 +2432,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    */
   const objectOf = (view, kind, id, who = null, windowSpec = null) => {
     const kinds = surface.objectKindsFor(view)
+    const viewer = normIdentity(who)
     const claimed = kinds.includes(kind)
     const panels = claimed ? panelsOf(view, { view, kind, id }, who, windowSpec) : []
     const header = panels.map((panel) => (panel.data ?? {}).object).find((item) => item && typeof item === 'object')
@@ -2293,14 +2446,21 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     return {
       ok: true, view, kind, id, found,
       title: header?.title ?? (claimed ? `${kind} ${id}` : `${kind}（本视图没有这种对象）`),
-      subtitle: header?.subtitle ?? '', facts: Array.isArray(header?.facts) ? header.facts : [],
+      // **页头的事实项也只给会话所属侧**（P50）：无会话 ⇒ 标题/对象 id 照旧（地址里本来就有），
+      // 但 `subtitle`/`facts`（金额、对方字段这类**数据**）一概不下发，并如实标 `header_withheld`。
+      subtitle: viewer && typeof header?.subtitle === 'string' ? header.subtitle : '',
+      facts: viewer && Array.isArray(header?.facts) ? header.facts : [],
       links: Array.isArray(header?.links) ? header.links : [],
+      header_withheld: viewer ? null : { code: 'identity-required',
+        subtitle: Boolean(header?.subtitle), facts: Array.isArray(header?.facts) ? header.facts.length : 0,
+        reason: '未登录：对象页只给标题与对象 id（地址里本来就有），事实项/摘要不下发',
+        next_action: '先在 /identity/ 登录，再回来看这一页的事实与行' },
       // **乐观并发**：插件在 `data.object.version` 里给出"你打开这一页时看到的版本" ⇒ 界面保存时带回
       // 去（`expected_version`）。机制只搬运，不解读；没给 ⇒ 界面按"没看过"处理（服务端安全默认）。
-      version: header?.version && typeof header.version === 'object' ? header.version : null,
+      version: viewer && header?.version && typeof header.version === 'object' ? header.version : null,
       // **分享**：插件在 `data.object.share` 里声明"对方能不能看 / 从哪个视图看得到 / 要什么前提"
       //（机制据此拼分享弹层；不声明就如实说"插件没声明，无法断言对方能不能看"）。
-      share: header?.share && typeof header.share === 'object' ? header.share : null,
+      share: viewer && header?.share && typeof header.share === 'object' ? header.share : null,
       reason: found ? '' : (header?.reason ?? (claimed ? 'object-not-found' : 'object-kind-not-registered')),
       next_action: found ? '' : (header?.next_action ?? (claimed
         ? '这个 id 不在本视图的投影里：换成列表里真实存在的 id（列表里每一行的 id 就是它的深链）'
@@ -3482,7 +3642,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     // 动作金额超过**我的角色**额度 ⇒ 在动作的服务端一半执行**之前**拒绝（账本/待办件零新增），并告诉你该找谁。
     // 位置与纪律：它在人签门（`/api/action/<id>` 的「署名 == 会话身份」）**之后**、插件自己的服务端一半**之前** ——
     // 角色既不能替签、也不能跳过人工门；它只能否决（"角色不改变签署权"这条在这里是**结构性**的）。
-    const guardVerdict = people.guardAction({ action_id: action.id, input, identity: ctx.identity,
+    // **按角色限动作**：沙盘作用域里用**沙盘那一份名册**（P50 —— 演示里的第二个人在临时名册里；
+    // 真实面上 `effStores()` 就是装配期那一个 store，判据一字未变）。
+    const guardVerdict = effStores().people.guardAction({ action_id: action.id, input, identity: ctx.identity,
       view: ctx.view, rows: (view) => host.rows(view) })
     if (guardVerdict) {
       // 拒绝回执带上**可核对的读数**（我是什么角色、额度多少、这笔金额多少、该找哪个角色）：
@@ -3768,6 +3930,15 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    */
   const SANDBOX_PLUGIN_ID = 'system/webui-sandbox'
   const SANDBOX_DEMO_ACTOR = (side) => `demo-${safeSide(side)}`
+  /**
+   * **沙盘里的第二个演示身份**（P50）：同一个侧、**另一个人** —— 演示「两人协作 / 一人批一人签」时
+   * 由它去批会话身份提的那件事（真实面上这一步是名册里的同事）。它的名字与角色都会进**临时名册**
+   * （`<沙盘目录>/people/roster.json`，角色 `supervisor`），随「清空沙盘」一起消失。
+   */
+  const SANDBOX_SECOND_ACTOR = 'demo-approver'
+  const SANDBOX_SECOND_SLOT = 2
+  /** 第二个身份的**actors 键**（`<侧>:2`）——`step.as.slot === 2` 与 `$actors.<侧>:2` 都用它。 */
+  const sandboxSecondKey = (side) => `${side}:${SANDBOX_SECOND_SLOT}`
   function safeSide(side) { return String(side ?? '').replace(/[^a-z0-9-]/g, '').slice(0, 16) || 'side' }
 
   const sandboxStateFor = (human) => {
@@ -3807,7 +3978,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   }
   /** 值里的令牌：`$actor` = 这一步的演示身份；`$last.<点分路径>` = 上一步回执 `result` 里的值；
    * `$cap.<名字>.<点分路径>` = 更早某一步（声明了 `capture`）的回执 `result` 里的值。 */
-  const deref = (value, { actor, last, caps }) => {
+  const deref = (value, { actor, last, caps, actors = null }) => {
     const walk = (source, path) => {
       let cursor = source
       for (const key of path.split('.')) {
@@ -3816,13 +3987,23 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       }
       return cursor === undefined ? null : cursor
     }
+    const asHuman = (who) => (String(who ?? '').startsWith('human:') ? String(who) : `human:${who}`)
     if (typeof value === 'string') {
       // `$actor` = 这一步的演示身份。演示身份的**取值形状与真实会话身份同形**（`human:<名字>`）⇒ 这里
       // 已经是 `human:` 形状就**不再加一次前缀**。修前恒拼一次 ⇒ 沙盘账本里落的是 `human:human:limin`
       // （P41 主管走查实测，见 `tmp/p41-shots/REPORT.md` §5.2.9）：沙盘里看到的形状 ≠ 真实面，
       // 审计/对账会被误导（`human:` 只加一次，与 `src/system/webui/code/app-shell.mjs` 别处
       // 规范化身份的那一行同一判据）。
-      if (value === '$actor') return String(actor).startsWith('human:') ? String(actor) : `human:${actor}`
+      if (value === '$actor') return asHuman(actor)
+      // `$actors.<键>` = **这一场演示的某个身份**（P50）：键就是 `actors` 里的键 ——
+      // `contractor` / `supplier` / `home`（该侧的第一个身份），或 `contractor:2`（**同一个侧的第二个人**，
+      // `as: {side, slot: 2}` 用的那个）。取值一律规范化成 `human:<名字>`（与真实会话身份同形）。
+      // 用例：开单时点名**另一个人**批 —— `approvers: '$actors.contractor:2'`。
+      if (value.startsWith('$actors.')) {
+        const key = value.slice('$actors.'.length)
+        if (!actors || !(key in actors)) return null
+        return asHuman(actors[key])
+      }
       if (value.startsWith('$last.')) return walk(last, value.slice(6))
       if (value.startsWith('$cap.')) {
         const rest = value.slice(5)
@@ -3832,10 +4013,10 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       }
       return value
     }
-    if (Array.isArray(value)) return value.map((item) => deref(item, { actor, last, caps }))
+    if (Array.isArray(value)) return value.map((item) => deref(item, { actor, last, caps, actors }))
     if (value && typeof value === 'object') {
       const out = {}
-      for (const [key, item] of Object.entries(value)) out[key] = deref(item, { actor, last, caps })
+      for (const [key, item] of Object.entries(value)) out[key] = deref(item, { actor, last, caps, actors })
       return out
     }
     return value
@@ -3861,8 +4042,17 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     const reset = sandboxWipe(owner)
     if (reset.ok === false) return { ...reset, ledger_added: 0, steps: [] }
     const actors = {}
-    for (const side of new Set([sessionSide, ...group.steps.map((step) => step.as?.side).filter(Boolean)]).values())
-      if (side !== '') actors[side] = side === sessionSide ? String(who?.human ?? '') : SANDBOX_DEMO_ACTOR(side)
+    for (const side of new Set([sessionSide, ...group.steps.map((step) => step.as?.side).filter(Boolean)]).values()) {
+      if (side === '') continue
+      actors[side] = side === sessionSide ? String(who?.human ?? '') : SANDBOX_DEMO_ACTOR(side)
+      // **同一个侧的第二个人**（P50）：会话所属侧多一个演示身份（键 `<侧>:2`），场景里用
+      // `as: { side: '<侧>', slot: 2 }` 或 `$actors.<侧>:2` 指它 —— 演示「两人协作 / 一人批一人签」。
+      if (side === sessionSide) actors[sandboxSecondKey(side)] = SANDBOX_SECOND_ACTOR
+    }
+    // **临时名册**（P50）：两个/多个演示身份各记一行（会话身份照抄真实名册里的角色，**不抬高**），
+    // 写进沙盘目录 ⇒ 名册/协作/`@提及`/角色校验在沙盘里都按它算；真实名册零改动，清空即消失。
+    const roster = sandboxWriteRoster(sandboxDirFor(owner), { actors, sessionSide,
+      sessionHuman: String(who?.human ?? '') })
     const opened = sandboxOpen({ human: owner, actors, scenario })
     if (opened.ok === false) return { ...opened, ledger_added: 0, steps: [] }
     // 关键：**从这里开始整条链路都在沙盘作用域里**（`runScenario` 自己压栈，不依赖 HTTP 入口那一层）——
@@ -3875,12 +4065,30 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       for (const step of group.steps) {
         if (skip.includes(step.action)) { done.push({ action: step.action, skipped: true }); continue }
         const actorSide = step.as?.side ?? sessionSide
-        const actor = actors[actorSide] || String(who?.human ?? '')
-        const input = deref(step.input ?? {}, { actor, last, caps })
+        // **这一步由谁发起**：`as.human` 点名本次沙盘声明的某个演示身份（`ui-surface.mjs` 的步骤形状里
+        // 早就有这个字段，P50 才真的用起来）—— 演示「同一个侧的另一个人批你提的那件事」时，
+        // 场景写 `as: {side:"contractor", human:"demo-approver"}`（那个身份由机制生成、并进临时名册）。
+        // **不认识的名字一律拒这一步**（不静默回落成"第一个人"，免得回执里写着另一个人、账本里却是本人）。
+        const want = String(step.as?.human ?? '').trim().replace(/^human:/, '')
+        const declared = Object.entries(actors)
+        const hit = want === '' ? null : declared.find(([, who]) => String(who).replace(/^human:/, '') === want) ?? null
+        if (want !== '' && hit === null) {
+          done.push({ action: step.action, declared_by: step.declared_by, as: want, as_key: '',
+            view: step.view || actorSide, ok: false, code: 'unknown-sandbox-actor',
+            reason: `这一步点名了 ${want}，但本次沙盘声明的演示身份只有 `
+              + `${declared.map(([, who]) => who).join('、')}（不静默换成别人）`,
+            next_action: '改成声明的身份之一（同侧的第二个身份由机制生成，键形如 `contractor:2`）',
+            ledger_added: 0 })
+          break
+        }
+        const actorKey = hit ? hit[0] : actorSide
+        const actor = hit ? String(hit[1]) : (actors[actorSide] || String(who?.human ?? ''))
+        const input = deref(step.input ?? {}, { actor, last, caps, actors })
         /* eslint-disable no-await-in-loop */
         const out = await withSandboxActor(actor, () => runActionInner(step.action,
           { view: step.view || actorSide, input }, { human: actor, side: actorSide }, { chainSeeded: true }))
-        done.push({ action: step.action, declared_by: step.declared_by, as: actor, view: step.view || actorSide,
+        done.push({ action: step.action, declared_by: step.declared_by, as: actor, as_key: actorKey,
+          view: step.view || actorSide,
           ok: out?.ok === true, code: out?.code ?? null, reason: out?.reason ?? null,
           content: out?.content ?? null, next_action: out?.next_action ?? null,
           optional: step.optional === true,
@@ -3963,8 +4171,10 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
           body: `删掉 ${info.dir} 并关掉沙盘；真实账本一个字节都没动过`,
           next_action: '随时可以再来一次（造一组新的）', action: 'sandbox.clear', label: '清空沙盘' })
         return { ok: true, kind: 'list', items, degraded: false, counts: { scenarios: info.scenarios.length },
-          note: '沙盘 = 演示数据：数据走**同一套动作与唯一写者**，只是路径在沙盘目录里；'
-            + '它不写真实账本、不改真实待办件；名册/协作/附件仍是真实面（演示场景不用它们）' }
+          note: '沙盘 = 演示数据：数据走同一套动作与唯一写者，只是路径在沙盘目录里；'
+            + '它不写真实账本、不改真实待办件；名册与协作也切到沙盘目录那一份（P50：'
+            + '临时名册 = 同侧的第二个演示身份，能走完「两人协作 / 一人批一人签」），'
+            + '附件仍是真实面（演示场景不用它）；清空沙盘后沙盘目录整个删掉 ⇒ 真实面零残留' }
       } })
     const out = []
     out.push(panelFor('home', -98, '演示数据（沙盘）· 一键造一组可看的流转'))

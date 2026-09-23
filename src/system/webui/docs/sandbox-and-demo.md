@@ -31,9 +31,9 @@
 | 落在哪 | `<ui_shared>/sandbox/<身份>/`：`contractor/ledger.jsonl`、`supplier/ledger.jsonl`、各侧待办件目录、投递信封 |
 | 状态存哪 | `<ui_shared>/sandbox/state.json`（目录 0700 / 文件 **0600**、原子写、按身份分条、有界 ≤32 条） |
 | 真实账本会动吗 | **不会**。沙盘打开时 `host.config.ledger_*`、`host.sharedDir`、`host.rows()` 全部解析到沙盘路径；写者的 `--ledger` 也来自同一处 ⇒ 写也只进沙盘 |
-| 的人签是谁签的 | 沙盘里每一步由机制生成并固定的**演示身份**（本侧那一步用**你的**会话身份，对方那一侧用 `demo-<侧>`）。**真实面上这条替换不存在**：HTTP 动作请求仍只认会话身份，`signer-mismatch` 一字未改 |
+| 的人签是谁签的 | 沙盘里每一步由机制生成并固定的**演示身份**（本侧那一步用**你的**会话身份，对方那一侧用 `demo-<侧>`，**同一个侧还可以有第二个人** `demo-approver`）。**真实面上这条替换不存在**：HTTP 动作请求仍只认会话身份，`signer-mismatch` 一字未改 |
 | 它进账本吗（真实口径） | 沙盘账本**是**账本事件（同一批写者写的），但它**不是真实账本那一份**；`/api/ui/surface` 的 `sandbox` 段自述了 `why_not_ledger` |
-| 名册/协作/附件 | 仍是**真实面**（演示场景不使用它们；沙盘不接受改角色/传附件这类副作用）—— 如实登记的边界 |
+| 名册/协作/附件 | 名册与协作**也切到沙盘目录那一份**（P50：机制按需另建同一个 store，只是 `ui_shared` 指沙盘目录）⇒ 沙盘能造一份**临时名册**（含同侧的第二个演示身份），随「清空沙盘」一起删；**附件仍是真实面**（演示场景不用它）—— 如实登记的边界 |
 
 ## 3. 场景由插件声明（插件作者看这一节）
 
@@ -49,9 +49,12 @@ surface.scenario({ plugin_id: me, id: 'scenario.rfq-publish', scenario: 'demo.pr
 
 - `scenario` 是**分组键**：多个插件各自贡献自己那一段，按 `order` 串成一条流程（本仓已就位的四段见
   `domain/rfq`、`domain/quote-prepare`、`domain/compare`、`domain/commitments` 的 `code/ui.mjs`）。
-- `steps[].as = {side}`：这一步由**哪一侧**发起（沙盘里那一侧用哪个演示身份由机制决定）。
+- `steps[].as = {side, human?}`：这一步由**哪一侧**发起（`side`）；**同侧还想换人**时给 `human`
+  （P50：值必须是本次沙盘**声明的**演示身份之一，否则这一步被拒 `unknown-sandbox-actor` —— 不静默换成别人）。
 - `steps[].capture = '<名字>'`：把这一步的回执留下，后面的步骤用 `$cap.<名字>.<字段>` 取；
-  `$last.<字段>` 取**上一步**的；`$actor` = 这一步的演示身份。
+  `$last.<字段>` 取**上一步**的；`$actor` = 这一步的演示身份；`$actors.<键>` = 本次演示的某个身份
+  （键就是 `actors` 里的键：`contractor` / `supplier` / `home` / `contractor:2`）——
+  开单时点名**另一个人**批就用它：`approvers: '$actors.contractor:2'`。
 - `steps[].optional = true`：这一步失败**不算整条流程失败**（照旧往下跑，失败原样记进回执的
   `optional_failures` 并在面板上如实说明）。**本仓的演示流程里没有 `optional` 步骤**：P40 修掉写者
   只认单行报价形状的根因（`prepared_of` 按 29 §7.5 认 `lines[]`）之后，`compare.save-weights` 在
@@ -108,15 +111,23 @@ surface.scenario({ plugin_id: me, id: 'scenario.rfq-publish', scenario: 'demo.pr
 - 程序化核对：`host.sandbox`（插件侧）给出 `{on, actors, human, dir}`；
   `GET /api/ui/surface` → `sandbox` 段给出存储自述。
 
-## 6. 人门在沙盘里的样子（P48：演示身份只有「每档一个」）
+## 6. 人门在沙盘里的样子（P48 → P50：同侧的**两个**演示身份 + 临时名册）
 
-承诺与发 PO 现在**只消费一扇别人批过的门**（判据见 `identity-and-selfservice.md` §人门）。沙盘的演示身份是
-机制**按档位**生成的（`actors[side]`，档位 = 产品真有的视图档），**不建名册** ⇒ 同侧造不出第二个人。所以
-第 ⑤–⑨ 段这么做：**开单与署名**用 `contractor` 档（会话身份，就是你自己），**批门的人**借 `home` 档生成
-`demo-home`（沙盘面板的步骤表里写「（home 侧）」）—— 真实面里批门的是承包商侧名册角色为 `supervisor` 的那个人。
+承诺与发 PO **只消费一扇别人批过的门**（判据见 `identity-and-selfservice.md` §人门）。P48 时沙盘的演示身份
+**按档位**生成（`actors[side]`）、**不建名册** ⇒ 同侧造不出第二个人，只能借 `home` 档造"批门的人"（`demo-home`）。
+P50 把这件事做正：会话所属侧多一个演示身份 **`demo-approver`**（键 `contractor:2`），并给它造一份**临时名册**：
 
-演示出来的读数与真实面**同形**：`approval/requested`（requested_by = 会话身份）→ `approval/granted`
-（`decided_by = human:demo-home`，`approvers` 开单时点名）→ `award/committed` / `po/issued`
-（`actor = 会话身份`、`approved_by = human:demo-home`）⇒ 授标链与「已决定的门」都写「**谁批的 ≠ 谁签的**」。
-沙盘**不放宽任何判据**：没有门、或批的人就是署名者 ⇒ 写者照样具名拒（`approval-required` /
-`approver-must-differ`），账本零新增。
+| 机制 | 判据/读数 |
+|---|---|
+| 第二个演示身份 | `actors = {<会话侧>: <你>, '<会话侧>:2': 'demo-approver', <其它侧>: 'demo-<侧>'}`；场景里用 `as: {side, human:'demo-approver'}` 让某一步由它发起 |
+| 临时名册 | `<沙盘目录>/people/roster.json`（**0600**，与真实名册同一套结构）：`limin`（角色照抄真实名册，**不抬高**）、`demo-approver`（角色 `supervisor`，额度按出厂角色表）、`demo-supplier`。名册/协作/`@提及`/角色校验在沙盘作用域里都读这一份 |
+| 读到的证据 | 沙盘作用域里的「人员名册与角色」面板写「本侧在册成员（2 人）：@demo-approver（主管）@limin（待指派）」；真实名册里**没有** `demo-approver` |
+| 真实面零改动 | 两侧账本 + `people/roster.json` + `collab/<侧>.json` 的 sha256 在 `seed` 前后、`clear` 前后**逐字节一致**；`clear` 之后沙盘目录不存在（零残留） |
+
+演示出来的读数与真实面**同形**（实测沙盘账本）：`approval/requested`（`actor=human:limin`、
+`approvers=[human:demo-approver]`）→ `approval/granted`（`decided_by=human:demo-approver`）→
+`award/committed`（`actor=human:limin`、`approved_by=human:demo-approver`）⇒ 面板写「**谁批的 ≠ 谁签的**」，
+而且批的人**就在同一侧**（不是借对面档）。沙盘**不放宽任何判据**：没有门、或批的人就是署名者 ⇒ 写者照样
+具名拒（`approval-required` / `approver-must-differ`），账本零新增。复跑：
+`python3 tmp/p50-shots/p50-sandbox.py --port <端口>`（读数 `tmp/p50-shots/p50-sandbox-log.jsonl`，
+截图 `tmp/p50-shots/21-sandbox-two-actors.png`）。

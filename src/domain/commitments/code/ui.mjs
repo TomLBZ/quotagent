@@ -2167,26 +2167,27 @@ export async function register(surface, host) {
 
   out.push(surface.scenario({ plugin_id: me, id: 'scenario.award-gate-request', scenario: 'demo.procurement',
     scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',
-    title: '⑤ 开承诺的人门（请另一个人批）', view: 'contractor', order: 42,
-    hint: '承包商开单（`scope=award.commit`、`ref=<意向>`）、开单时点名审批人；这一条会进审批队列',
+    title: '⑤ 开承诺的人门（请同一个侧的另一个人批）', view: 'contractor', order: 42,
+    hint: '承包商开单（`scope=award.commit`、`ref=<意向>`）、开单时点名另一个演示身份'
+      + '（`$actors.contractor:2` = 沙盘临时名册里的那个"主管"）；这一条会进审批队列',
     steps: [{ action: 'gate.request',
-      input: { scope: 'award.commit', ref: '$cap.intent.intent_id', approvers: 'human:demo-home',
+      input: { scope: 'award.commit', ref: '$cap.intent.intent_id', approvers: '$actors.contractor:2',
         summary: '沙盘演示：授标承诺要人批', signature: '$actor',
         note: '沙盘演示：请另一个演示身份批这条承诺门', confirm_ack: '1' } }] }))
 
   out.push(surface.scenario({ plugin_id: me, id: 'scenario.award-gate-grant', scenario: 'demo.procurement',
     scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',
-    title: '⑥ 另一个人批准（人签，改判定）', view: 'home', order: 43,
-    hint: '由**不是署名者**的那个演示身份批准（谁批的 ≠ 谁签的）；沙盘只有每档一个演示身份，'
-      + '所以这一档就是「另一个批门的人」',
-    steps: [{ action: 'gate.grant', as: { side: 'home' },
+    title: '⑥ 另一个人批准（人签，改判定）', view: 'contractor', order: 43,
+    hint: '由同一个侧的第二个演示身份批准（`as: {side:"contractor", human:"demo-approver"}` ⇒ 临时名册里的'
+      + '「沙盘演示：那一个可以批准的人」）：谁批的 ≠ 谁签的，演示的是两人协作（不是借对面档）',
+    steps: [{ action: 'gate.grant', as: { side: 'contractor', human: 'demo-approver' },
       input: { gate_id: '$last.approval_id', signature: '$actor', confirm_ack: '1',
-        comment: '沙盘演示：另一个人批准（之后承诺才成立）' } }] }))
+        comment: '沙盘演示：同侧的另一个人批准（之后承诺才成立）' } }] }))
 
   out.push(surface.scenario({ plugin_id: me, id: 'scenario.award-commit', scenario: 'demo.procurement',
     scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',
     title: '⑦ 授标承诺（人签，消费那扇门）', view: 'contractor', order: 44,
-    hint: '三样门齐备才落账：意向 + 供应商确认 + **别人批过的人门**（没有门 ⇒ 具名拒、账本零新增）',
+    hint: '三样门齐备才落账：意向 + 供应商确认 + 别人批过的人门（没有门 ⇒ 具名拒、账本零新增）',
     steps: [{ action: 'award.commit', capture: 'award', input: { intent_id: '$cap.intent.intent_id',
       signature: '$actor', reason: '沙盘演示：人工批准（三样门齐备）', comment: '沙盘演示',
       confirm_ack: '1' } }] }))
@@ -2196,17 +2197,17 @@ export async function register(surface, host) {
     title: '⑧ 开 PO 的人门（请另一个人批）', view: 'contractor', order: 46,
     hint: '发 PO 与承诺同一条人门：`scope=po.issue`、`ref=<承诺>`，同样要另一个人批',
     steps: [{ action: 'gate.request',
-      input: { scope: 'po.issue', ref: '$cap.award.award_id', approvers: 'human:demo-home',
+      input: { scope: 'po.issue', ref: '$cap.award.award_id', approvers: '$actors.contractor:2',
         summary: '沙盘演示：发 PO 要人批', signature: '$actor',
         note: '沙盘演示：请另一个演示身份批这条发 PO 门', confirm_ack: '1' } }] }))
 
   out.push(surface.scenario({ plugin_id: me, id: 'scenario.po-gate-grant', scenario: 'demo.procurement',
     scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',
-    title: '⑨ 另一个人批准发 PO（人签）', view: 'home', order: 47,
-    hint: '与承诺那扇门同一条判定：署名者必须另有其人',
-    steps: [{ action: 'gate.grant', as: { side: 'home' },
+    title: '⑨ 另一个人批准发 PO（人签）', view: 'contractor', order: 47,
+    hint: '与承诺那扇门同一条判定：署名者必须另有其人（同样由同侧的第二个演示身份批）',
+    steps: [{ action: 'gate.grant', as: { side: 'contractor', human: 'demo-approver' },
       input: { gate_id: '$last.approval_id', signature: '$actor', confirm_ack: '1',
-        comment: '沙盘演示：另一个人批准发 PO' } }] }))
+        comment: '沙盘演示：同侧的另一个人批准发 PO' } }] }))
 
   out.push(surface.scenario({ plugin_id: me, id: 'scenario.po-issue-ack', scenario: 'demo.procurement',
     scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',

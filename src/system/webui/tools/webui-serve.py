@@ -190,6 +190,13 @@ def main(argv: list[str]) -> int:
             "--market-inventory", str(ROOT / "docs" / "design" / "14-plugin-inventory.md"),
             "--market-user-space", str(ROOT / "user-space"),
             "--user-space-root", str(ROOT / "user-space")]
+    # `--config-file` **全链下传**（P50）：`./run up --config-file X` 把 X 放进本进程环境
+    # （`QUOTAGENT_UI_CONFIG`，见 `run` 的 `do_up`），这里把它**显式**交给 `host/cli.mjs`
+    # （而不是靠 cli 自己再读一遍环境）：插件拿到的 `host.config.config_file` 与配置面（唯一落盘者的
+    # 入口）读的必须是**同一份路径**。空 = 一个字都不加 ⇒ 缺省链（`/workspace/config.yaml`）一字未改。
+    config_ui = os.environ.get("QUOTAGENT_UI_CONFIG", "").strip()
+    if config_ui:
+        args += ["--config-file", config_ui]
     # 管理员 token：**进子进程环境变量，不进 argv**（argv 在 ps 里可见）
     tok = admin_token()
     env = dict(os.environ)
