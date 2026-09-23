@@ -77,6 +77,20 @@ const sideScoped = (ctx, itemSide, item) => {
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const typeRows = (rows, type) => rows.filter((row) => String(row?.type ?? '') === type)
 /**
+ * 写者回执里的**「这次没有新事实」那一条**（P52）：`already-*`（幂等重放）或 `delivery-completed-now`
+ * （只补记投递）。它是幂等的**唯一判据**（写者自己写的 `duplicates[].reason`），界面不另立一套。
+ * 找不到 ⇒ 空串（照常按成功/失败两条路走）。
+ */
+const idempotentOf = (json) => (json?.duplicates ?? [])
+  .map((item) => asText(item?.reason))
+  .find((reason) => reason.startsWith('already-') || reason === 'delivery-completed-now') ?? ''
+/** 幂等回执里**从账本回读**的那几个真值（没有就**不写**，不填 `—` 冒充读过）。 */
+const idempotentFacts = (json) => [
+  asText(json?.po_id) || asText((json?.duplicates ?? [])[0]?.po_id),
+  asText(json?.award_id) || asText((json?.duplicates ?? []).find((item) => item?.award_id)?.award_id),
+  asText(json?.trace_mode), (json?.delivered_to ?? []).map(String).filter(Boolean).join('/'),
+  asText(json?.chain)].filter(Boolean)
+/**
  * **门被决定过**的那三种事件（批准 / 驳回 / 终止）——一件事一旦落在其中一条上，它就不在"还在等"里了。
  * 修前 `home.gates` 只认 granted/aborted ⇒ **被驳回的门一直以"还在等"挂在工作台上**（会误判成还没办）。
  */
@@ -691,13 +705,15 @@ export async function register(surface, host) {
         : (idempotent
           ? `这一份意向已经提过（${intentId || '—'}）⇒ 账本零新增：覆盖 ${lines.length} 行（${lineReceipt}）`
           : `已受理：一条意向 ${intentId || '—'} 覆盖整包 ${lines.length} 行（${lineReceipt}）`)
-      return { ok: done, code: json.refusal?.code ?? (done ? 'proposed' : 'writer-failed'),
+      // **code 也要如实**（P52）：幂等重放时不许写 `proposed`（那会被读成「刚提了一条新意向」）。
+      return { ok: done, code: json.refusal?.code ?? (done ? (idempotent ? 'already-proposed' : 'proposed') : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         note: `${head}；逐行 basis = ${quoteId}#<条目>:unit_price —— 账本里可逐行对账`,
         next_action: `${head} —— ${step}`,
         result: { intent_id: intentId || null, quote_id: quoteId, package_id: packageId,
           line_shape: lineShape, snapshot_rev: items.rev, lines_total: quoted.length,
-          lines_included: done ? lines.length : 0, receipts,
+          lines_included: done && !idempotent ? lines.length : 0,
+          idempotent: idempotent, idempotent_reason: idempotent ? 'already-proposed' : null, receipts,
           applied: json.applied ?? [], ledger_added: json.ledger_added ?? 0,
           duplicates: json.duplicates ?? [], envelope: json.envelope ?? null,
           writer_next_action: writerNext || null } }
@@ -729,17 +745,26 @@ export async function register(surface, host) {
       // 「谁批的 ≠ 谁签的」（P48）：写者回执里的人门那段**原样**抬到回执最外层 —— 界面上要能直接读到，
       // 而不是只藏一份 `result` 里。自签自批那种（只在运营侧开了开关时可能）如实写「来自你本人署名」。
       const gateNote = asText(json.gate_note)
-      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'committed' : 'writer-failed'),
+      // **幂等重放**（P52）：承诺早就成立过 ⇒ 如实报 `already-committed` + 零新增，不写「已成立」。
+      const dup = idempotentOf(json)
+      const awardId = asText(json.award_id) || asText((json.duplicates ?? [])[0]?.award_id)
+      return { ok: run.ok && json.ok === true,
+        code: json.refusal?.code ?? (json.ok ? (dup || 'committed') : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action
           ?? (json.ok === true
-            ? `已成立：${json.award_id ?? 'aw-…'} 已落账。人门：${gateNote || '（账本里的门）'}。`
-              + '下一步：在「授标链」行内点「发 PO（人签）」逐行派生采购单'
-              + '（发 PO 也要另一个人批过 po.issue 的门）'
+            ? (dup
+              ? `这份意向已经成承诺${awardId ? `（${awardId}）` : ''}：本次账本 +0 行（幂等：承诺不是可重复的事实），`
+                + '没有第二次承诺被写下；这次也没有消费任何门（门早被那次承诺消费掉了）。'
+                + '下一步：在「授标链」行内点「发 PO（人签）」逐行派生采购单（发 PO 要另一个人批过 po.issue 的门）'
+              : `已成立：${json.award_id ?? 'aw-…'} 已落账。人门：${gateNote || '（账本里的门）'}。`
+                + '下一步：在「授标链」行内点「发 PO（人签）」逐行派生采购单'
+                + '（发 PO 也要另一个人批过 po.issue 的门）')
             : (json.next_action ?? '看 result / stdout 定位唯一写者的输出（这条路才是失败）')),
         result: { award_id: json.award_id ?? null, approval_id: json.approval_id ?? null,
           approver: json.approver ?? null, signer: json.signer ?? null, gate: json.gate ?? null,
           gate_note: gateNote || null, gate_consumed: json.gate_consumed ?? false,
+          idempotent: dup !== '', idempotent_reason: dup || null,
           self_approved: json.self_approved ?? false,
           self_approval_switch: json.self_approval_switch ?? false,
           self_approval_policy: json.self_approval_policy ?? null,
@@ -776,13 +801,33 @@ export async function register(surface, host) {
           '--delivery-out', deliveryFile(), '--now', host.now()])
       const json = cleanJson(run)
       const gateNote = asText(json.gate_note)
-      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'issued' : 'writer-failed'),
+      // **幂等重放：如实报「零新增 / 已存在」，并把真值摆出来**（P52 修的缺陷）。
+      // 修前这条路上的 `code` 是 `issued`、文案是「已签发并投递：po-0001（追溯模式 —，投给 ）。人门：（账本里的门）」
+      // —— 而写者回执白纸黑字写着 `already-issued`/`already-delivered` 且 `ledger_added=0`：
+      // 用户会以为**又发了一张 PO**，而括号里那两个空占位看起来像「投给了空对象」。
+      // 现在：`code` 照抄写者那条幂等判据，文案说清「早就签发/投递过、这次 +0 行」，
+      // 真值（PO id / 追溯模式 / 投给谁 / 链）从写者回执里**账本回读**来的那一份取；读不到就不写那一句。
+      const dup = idempotentOf(json)
+      const added = Number(json.ledger_added ?? 0)
+      const idempotent = dup !== ''
+      const facts = idempotentFacts(json)
+      const factText = facts.length ? facts.join(' · ') : '（写者回执里没带回读值：去「采购单（PO）」面板看这张 PO 的真值）'
+      const dupCode = dup === 'delivery-completed-now' && added > 0 ? 'delivery-completed-now' : (dup || '')
+      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok
+        ? (idempotent ? dupCode : 'issued') : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action
-          ?? (json.ok === true ? '已签发并投递：' + (json.po_id ?? 'po-…') + '（追溯模式 ' + (json.trace_mode ?? '—')
-            + '，投给 ' + (json.delivered_to ?? []).join('/') + '）。人门：' + (gateNote || '（账本里的门）')
-            + '。下一步：对方在供应商道「发给我的采购单」里回签'
-            + '(人签)；你也可以点行内「追溯这条 PO」看四段链路'
+          ?? (json.ok === true
+            ? (idempotent
+              ? `这张 PO 早就签发${added > 0 ? '过、这次只补了投递登记' : '并投递过了'}：${factText}`
+                + ` ⇒ 本次账本 +${added} 行${added === 0 ? '（零新增：没有第二张 PO 被签发）' : ''}。`
+                + `人门：${gateNote || '账本行里没带批准人（去「已决定的门」看谁批的）'}。`
+                + '下一步：对方在供应商道「发给我的采购单」里回签(人签)；'
+                + '你也可以点行内「追溯这条 PO」看四段链路'
+              : '已签发并投递：' + (json.po_id ?? 'po-…') + '（追溯模式 ' + (json.trace_mode ?? '—')
+                + '，投给 ' + (json.delivered_to ?? []).join('/') + '）。人门：' + (gateNote || '（账本里的门）')
+                + '。下一步：对方在供应商道「发给我的采购单」里回签'
+                + '(人签)；你也可以点行内「追溯这条 PO」看四段链路')
             : (json.next_action ?? '看 result / stdout 定位唯一写者的输出（这条路才是失败）')),
         result: { po_id: json.po_id ?? null, award_id: json.award_id ?? null, chain: json.chain ?? null,
           trace_mode: json.trace_mode ?? null, total_amount: json.total_amount ?? null,
@@ -790,6 +835,7 @@ export async function register(surface, host) {
           premises: json.premises ?? {},
           approver: json.approver ?? null, signer: json.signer ?? null, gate: json.gate ?? null,
           gate_note: gateNote || null, gate_consumed: json.gate_consumed ?? false,
+          idempotent: idempotent, idempotent_reason: dupCode || null,
           self_approved: json.self_approved ?? false,
           self_approval_switch: json.self_approval_switch ?? false,
           self_approval_policy: json.self_approval_policy ?? null,
@@ -860,13 +906,20 @@ export async function register(surface, host) {
         ['--step', 'confirm', '--request', staged.path, '--ui-shared', host.sharedDir,
           '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(), '--now', host.now()])
       const json = cleanJson(run)
-      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'confirmed' : 'writer-failed'),
+      const dup = idempotentOf(json)
+      const intentId = asText(json.intent_id) || asText((json.duplicates ?? [])[0]?.intent_id)
+      return { ok: run.ok && json.ok === true,
+        code: json.refusal?.code ?? (json.ok ? (dup || 'confirmed') : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action
-          ?? (json.ok === true ? '已确认：对方侧（承包商）的「授标承诺」现在可以提交了（确认不等于承诺）。下一步回承包商侧的授标链看状态'
+          ?? (json.ok === true
+            ? (dup
+              ? `这份意向你已经确认过了${intentId ? `（${intentId}）` : ''}：本次账本 +0 行（确认是幂等动作），`
+                + '没有第二条 award/confirmed 被写下。下一步回承包商侧的授标链看状态（承诺仍要过人工门）'
+              : '已确认：对方侧（承包商）的「授标承诺」现在可以提交了（确认不等于承诺）。下一步回承包商侧的授标链看状态')
             : (json.next_action ?? '看 result / stdout 定位唯一写者的输出（这条路才是失败）')),
-        result: { intent_id: json.intent_id ?? null, applied: json.applied ?? [],
-          ledger_added: json.ledger_added ?? 0, duplicates: json.duplicates ?? [] } }
+        result: { intent_id: json.intent_id ?? null, idempotent: dup !== '', idempotent_reason: dup || null,
+          applied: json.applied ?? [], ledger_added: json.ledger_added ?? 0, duplicates: json.duplicates ?? [] } }
     } }))
 
   // ---------------------------------------------------------------- 供应商侧：**发给我的采购单**
@@ -1064,13 +1117,22 @@ export async function register(surface, host) {
         ['--step', 'acknowledge', '--request', staged.path, '--ui-shared', host.sharedDir,
           '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(), '--now', host.now()])
       const json = cleanJson(run)
-      return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'acknowledged' : 'writer-failed'),
+      const dup = idempotentOf(json)
+      const ackPo = asText(json.po_id)
+      return { ok: run.ok && json.ok === true,
+        code: json.refusal?.code ?? (json.ok ? (dup || 'acknowledged') : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action
-          ?? (json.ok === true ? '已回签：' + (json.po_id ?? 'po-…') + '（双方账本各一条 po/acknowledged，'
-            + '回签人 = 你的会话身份）。回签件可以挂在这张 PO 的「附件」面板里给承包商'
+          ?? (json.ok === true
+            ? (dup
+              ? `这张 PO 你已经回签过了${ackPo ? `（${ackPo}）` : ''}：本次账本 +0 行（回签是幂等动作），`
+                + '没有第二条 po/acknowledged 被写下；回签也不改 PO 的任何行与价。'
+                + '回签件可以挂在这张 PO 的「附件」面板里给承包商'
+              : '已回签：' + (json.po_id ?? 'po-…') + '（双方账本各一条 po/acknowledged，'
+                + '回签人 = 你的会话身份）。回签件可以挂在这张 PO 的「附件」面板里给承包商')
             : (json.next_action ?? '看 result / stdout 定位唯一写者的输出（这条路才是失败）')),
         result: { po_id: json.po_id ?? null, acknowledged_by: json.acknowledged_by ?? null,
+          idempotent: dup !== '', idempotent_reason: dup || null,
           applied: json.applied ?? [], ledger_added: json.ledger_added ?? 0,
           duplicates: json.duplicates ?? [] } }
     } }))

@@ -99,7 +99,32 @@ P20 把「勾选不跨页」那段话写在面板的 `data.note` 里 —— 而 
 `row-action-prefill.md` §3 的例外）；`people.roster-*` 与 `export.prefs-*`（**不在本批可改面**）。
 逐条清单：`tmp/p22-shots/row-fields-before.txt` 与 `row-fields-check.json`。
 
-## 5 复跑
+## 5 会话身份的预填不能在「还没读到身份」时静默失效（P52）
+
+**P51 实测的形态**（截图 `tmp/p51-shots/35-供应商确认授标-表单.png` 与同一次会话的
+`36-供应商确认授标-回执.png` 对照）：`award.confirm` 的表单里 `signature` **是空的**、顶栏徽标写着
+**「未登录」**，而同一个会话紧接着提交**成功**（回执那张截图里徽标已是 `wangjie`）。同一次会话、同一个身份，
+差别只在**表单打开的时刻**。
+
+**机制事实**：会话身份是客户端**异步**读一次的（`app.js#loadIdentity()` → `GET /identity/me`，页面装载时发起；
+徽标由它回来之后 `renderChrome()` 更新），而署名预填（`field.type === 'signature'` / `identity: true`
+⇒ 填 `human:<会话身份>`）发生在 `app.js#openAction()` 里。两者之间没有先后保证：表单开得早（或页面被
+**bfcache 还原**、或在别的标签页登录过再回来）⇒ `state.identity` 还是空 ⇒ 字段空着，用户**必须手抄自己的
+名字**，还要先撞一次 `required：必填`。这不是人签判据的问题（服务端一字不松），而是**界面的预填漏了一次**。
+
+**修法**（外壳，`code/assets/app.js#openAction`）：动作只要有 `signature` / `identity: true` 字段、而
+`state.identity` 还是空 ⇒ **先把身份读回来**（`await loadIdentity()`，只读一次，不缓存坏结果）**再渲染表单**；
+读到了就照旧按会话身份预填，读不到就照旧空着（**这是"不知道"，不是"没登录"** —— 绝不代签、绝不编一个名字）。
+于是徽标、署名、发言人这三处从同一份读数来，不会再出现"表单里是空的、徽标却已经是某某"。
+
+**读数（P52 真跑）**：正常路径（行内 / 工具栏 / 引导区）四条入口的 `signature` 都预填 `human:<会话身份>`
+（含 `award.confirm` / `po.acknowledge`）；把 `/identity/me` 在装载期挡掉一次（复现"打开表单时还不知道身份"）
+—— 修前 `signature` 空、修后仍是 `human:<会话身份>`。原始读数与截图见 `tmp/p52-shots/REPORT.md`。
+
+**边界**：预填**只是省手抄**；`signature` 必须等于会话身份这条服务端判据一条没松（`quote-draft` 门与
+`identity` 路由的负控照旧：错署名 `signer-mismatch`、未登录 `identity-required`、账本零新增）。
+
+## 6 复跑
 
 ```bash
 sh tmp/p22-shots/start.sh 8491 $(pwd)/tmp/p22-run          # ① 规模夹具（70 个包 > 上限 64）

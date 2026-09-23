@@ -204,6 +204,17 @@ export const REFUSAL_CODES = ['illegal-plugin-id', 'illegal-contribution-id', 'i
 
 const plainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const text = (value) => (typeof value === 'string' ? value.trim() : '')
+/**
+ * `select` 入参的选项（P52）：既接受**字符串**（值 == 显示），也接受 `{value, label}` ——
+ * 也就是「**机读值 + 人话显示**」可以分开声明（例：`{value:'buyer', label:'采购员（buyer）'}`）。
+ * 序列化一律成 `{value, label}`（与附件可见性选项同一形状）；界面照它渲染
+ * `<option value="<机读值>">人话</option>` —— 送出去的永远是机读值。
+ */
+const optionList = (value) => (Array.isArray(value) ? value : [])
+  .map((item) => (plainObject(item)
+    ? { value: text(item.value), label: text(item.label) || text(item.value) }
+    : { value: text(item), label: text(item) }))
+  .filter((item) => item.value !== '')
 const code = (name, reason, next_action) => ({ ok: false, code: name, reason, next_action })
 const orderOf = (value) => (Number.isInteger(value) ? value : 0)
 const sortKey = (entry) => `${String(entry.order).padStart(6, '0')}\u0000${entry.plugin_id}\u0000${entry.id}`
@@ -356,7 +367,7 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       }
       outFields.push({ name: text(field.name), label: text(field.label) || text(field.name), type,
         required: field.required === true, min: field.min ?? null, max: field.max ?? null,
-        pattern: text(field.pattern) || null, options: Array.isArray(field.options) ? field.options.map(text) : [],
+        pattern: text(field.pattern) || null, options: optionList(field.options),
         help: text(field.help), default: field.default ?? null,
         // `from_route: true` = 这个字段由**当前对象地址**的 id 预填（插件声明"它就是那个对象的 id"）：
         // 于是 `/app/<view>/<kind>/<id>/` 对象页工具栏上的动作可以一键打开，不用手抄 id。

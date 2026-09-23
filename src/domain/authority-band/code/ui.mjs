@@ -86,8 +86,14 @@ export const roleIdOf = (value) => {
   return hit ? hit[0] : raw
 }
 
-/** 动作入参里的「我的角色」选项：人话在前，内部 id 放括号里（机读面仍认 id；`roleIdOf` 反解）。 */
-export const roleOptions = () => [...new Set(REGISTERED_ROLES.map((role) => `${roleTerm(role)}（${role}）`))]
+/**
+ * 动作入参里的「角色」选项（P52）：**机读值与人话显示分开** —— `value` = 角色 id（`buyer`），
+ * `label` = 人话（`采购员（buyer）`）。修前这里把**人话标签整个当 value** 送出去（`采购员（buyer）`），
+ * 界面显示没问题，但请求体里就是一个给人看的字符串（写者两种都认，所以能用；按码判定的脚本会猜错）。
+ * `roleIdOf` 三种写法仍都认（id / 人话 / 人话（id））⇒ 既有调用方与门一个字节不用改。
+ */
+export const roleOptions = () => REGISTERED_ROLES
+  .map((role) => ({ value: role, label: `${roleTerm(role)}（${role}）` }))
 
 /** 表格里的角色写法（与名册面板同一约定：`采购员(buyer)` —— 人话在前、内部 id 在括号，两边都不藏）。 */
 export const roleCell = (id) => (ROLE_TERMS[asText(id)] ? `${ROLE_TERMS[asText(id)]}（${asText(id)}）` : (asText(id) || '—'))
@@ -412,7 +418,8 @@ export async function register(surface, host) {
       + '「② 把已复核的变更落盘」。本动作不改任何判定，也不能批准任何事。',
     input: { fields: [
       { name: 'role', label: '角色（改哪一档）', type: 'select', options: roleOptions(), required: true,
-        help: '键是受管 YAML 的 authority.bands.<角色>；这里给人话名，括号里是机读面的角色 id（两种写法都认）' },
+        help: '键是受管 YAML 的 authority.bands.<角色>；下拉里显示人话 + 机读 id，**送出去的是机读值**'
+          + '（如 buyer；服务端两种写法都认）' },
       { name: 'limit_cents', label: '这一档的新限额（整数分）', type: 'number', required: true,
         min: 0, max: AMOUNT_MAX,
         help: '500000 = 5000.00 元。整数分：把「元」当「分」写，数字会大 100 倍并被判越界' },

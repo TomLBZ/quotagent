@@ -3698,10 +3698,16 @@
         + `<span class="q-fielderr" data-err="${attr(field.name)}" role="alert"></span></div>`
     }
     if (field.type === 'select') {
+      // 选项有两种声明（P52）：字符串（值 == 显示）或 `{value, label}`（**机读值 + 人话显示**分开）。
+      // 送出去的永远是 `value`（机读），屏幕上给人看的是 `label` —— 界面自己不做翻译。
+      const options = (field.options || []).map((option) => (option && typeof option === 'object'
+        ? { value: String(option.value ?? ''), label: String(option.label ?? option.value ?? '') }
+        : { value: String(option), label: String(option) }))
       return `<div class="q-field"><label for="${attr(id)}">${esc(field.label)}${field.required ? ' *' : ''}</label>`
-        + `<select id="${attr(id)}" name="${attr(field.name)}">${(field.options || []).map((option) =>
-          `<option value="${attr(option)}"${String(option) === String(v) ? ' selected' : ''}>${esc(option)}</option>`)
-          .join('')}</select>${help}<span class="q-fielderr" data-err="${attr(field.name)}" role="alert"></span></div>`
+        + `<select id="${attr(id)}" name="${attr(field.name)}">${options.map((option) =>
+          `<option value="${attr(option.value)}"${option.value === String(v) ? ' selected' : ''}>`
+          + `${esc(option.label)}</option>`).join('')}</select>${help}`
+        + `<span class="q-fielderr" data-err="${attr(field.name)}" role="alert"></span></div>`
     }
     if (field.type === 'checkbox') {
       return `<div class="q-field"><label class="q-inline"><input type="checkbox" id="${attr(id)}"`
@@ -3931,12 +3937,21 @@
     wireBatchNext(modal, action, out, input, options)
   }
 
-  function openAction(id, presets, priorResult, options = {}) {
+  async function openAction(id, presets, priorResult, options = {}) {
     const action = actionOf(id)
     if (!action) {
       return toast('bad', '动作不存在', `注册面里没有 ${id}（插件卸载后它的入口会消失：刷新页面看当前可用的动作）`)
     }
     const fields = action.input?.fields || []
+    // **「署名/发言人」的预填不能在"还没读到身份"时静默失效**（P52 修的缺陷）：会话身份是页面装载时
+    // **异步**读一次的（`loadIdentity()` → `GET /identity/me`）。表单打开早于那次读回来（或被 bfcache
+    // 还原、或在别的标签页登录过 —— 徽标还写着「未登录」）⇒ `signature` 字段空着，用户必须手抄一次
+    // 自己的名字，撞一次「必填」。P51 截图 `35-供应商确认授标-表单` 就是这个形态（徽标「未登录」+ 署名空，
+    // 而同一次会话的动作回执里徽标已是 wangjie）。这里在**渲染表单之前**把身份读回来一次：
+    // 读得到 ⇒ 照旧按会话身份预填；读不到 ⇒ 照旧空着（服务端的人签门一条不松、绝不代签）。
+    if (fields.some((field) => field.type === 'signature' || field.identity === true) && !state.identity) {
+      try { await loadIdentity() } catch (err) { /* 读不到就不预填：这是"不知道"，不是"没登录" */ }
+    }
     // 对象页上：声明了 `from_route` 的字段用**当前对象地址的 id** 预填（插件自己声明"它就是那个对象的 id"），
     // 于是对象页工具栏上的动作一键打开即可，不用手抄 id。
     const routePreset = {}

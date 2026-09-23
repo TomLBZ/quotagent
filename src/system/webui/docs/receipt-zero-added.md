@@ -63,3 +63,25 @@ tools/verify.sh webui && tools/verify.sh quote-draft
 * 零新增**不等于失败**：回执仍是 `ok:true`（弹条用 `warn` 样式区别于 `bad` 的"被拒"）。
 * 批量与单条走的是**同一条**取数函数；某一侧取不到读数时，界面写「回执里没有这个读数（界面不替它猜）」，
   不写 0。
+
+## 5 幂等回执的**三件套**：`code` 如实 / 字段带真值 / `unaccounted` 不认领自己的件（P52）
+
+P51 终局验收在旧账本上按了一次「发 PO（人签）」（承诺早已承诺、PO 早已签发并投递），实测：
+
+* 响应 `ok:true`、`code:"issued"`、文案 `已签发并投递：po-0001（追溯模式 —，投给 ）。人门：（账本里的门）`；
+* `result` 里 `trace_mode` / `delivered_to` / `approver` / `signer` 全是 `null`（`投给 ` 后面是空的）；
+* 而写者回执白纸黑字写着 `duplicates:[{reason:"already-issued"},{reason:"already-delivered"}]`、
+  `ledger_added:0`、`note:"这份承诺已经发过 PO、也已投递：账本零新增"`；
+* 机制的两端对账还把**本动作自己的待办件**记进 `writer.ours.unaccounted`。
+
+三处都改（判据仍然只有写者回执那一处）：
+
+| # | 改哪 | 修后 |
+|---|---|---|
+| ① | **文案与 `code`**（插件侧，`domain/commitments/code/ui.mjs` 的五个动作） | 幂等重放时报写者给的那条判据（`already-proposed` / `already-committed` / `already-confirmed` / `already-acknowledged` / `already-issued`），文案写「**本次账本 +0 行（零新增：没有第二张 PO 被签发）**」+ 真值一句话；**不再出现 `—` / `投给 ` 这类空占位**（读不到的那句就直接不写，或写"去「采购单（PO）」面板看真值"） |
+| ② | **字段的来源**（唯一写者 `domain/commitments/tools/commitment-apply.py` 的 po 幂等分支） | 幂等回执**从账本回读**已有真值：`po_id`/`award_id`/`intent_id`/`quote_id`/`package_id`/`trace_mode`/`total_amount`/`chain`/`issued_at`/`approver`（= `po/issued` 行的 `approved_by`）/`signer`（= 写那一行的 `actor`）/`delivered_to`（= 投递登记的 `recipients`）+ `gate_note`（一句话说清"谁批的 / 谁签的"，读不到就说读不到）。**一个字节都不是新写的**（`ledger_added` 仍是 0） |
+| ③ | **归属**（机制，`app-shell.mjs#writerCheck`） | 除了按**逐条目**的文件名归属，再按**写者回执顶层那个 `request`**（每个写者只消费一个 `--request`）把**它点名的那个待办件**记进 `applied` / `duplicates` / `refused` 里它报的那一类 ⇒ 本动作自己的件不再落进 `unaccounted`。写者说 ok 却**没提这件**时，照旧留在 `unaccounted`（"跑了写者却什么也没说"必须照旧看得见） |
+
+**读数（P52 真跑，`tmp/p52-shots/`）**：同一份旧账本夹具上重放，修前/修后的原始响应全文在
+`p52-replay-raw-before.json` / `p52-replay-raw-after.json`；两侧账本 sha256 前后一致（零新增）。
+复跑：`python3 tmp/p52-shots/p52-replay.py --port <端口> --data-dir <数据根> --tag after`。

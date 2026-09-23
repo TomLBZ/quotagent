@@ -29,6 +29,11 @@
 兜底规则（机制，`ui-surface.mjs#REFERENCE_FIELD_RE`）：名字形如 `*_id` / `id` 的**必填**字段、且没声明
 `new_value` ⇒ 默认算「引用已有对象」（缺 `row` 上下文）。**显式声明优先于兜底**。
 
+`type: 'select'` 的 `options` 也可以写 `{value, label}`（P52）：**机读值与人话显示分开**
+（`{value:'buyer', label:'采购员（buyer）'}`）；字符串写法照旧（值 == 显示）。序列化一律成 `{value, label}`，
+界面渲染 `<option value="<机读值>">人话</option>` ⇒ **请求体里永远是机读值**
+（`domain/authority-band` 的角色下拉就是这么改的，修前它把整个人话标签当 value 送出去）。
+
 ### 1.2 面板是不是「读数」（`not_data`）
 
 `not_data: true` = 这块面板**不参与空态判断**（说明类 / 运营配置类：沙盘入口、名册与角色、导出偏好、
@@ -168,3 +173,26 @@ sh tmp/p49-shots/start.sh <仓库根> 8587 tmp/p49-run/shared tmp/p49-run/manage
 ```
 
 原始读数与截图落 `tmp/p49-shots/REPORT.md`（§1/§4）。
+
+## 8 同一条纪律的第二例：`compare.export` 的**四条入口**（P52）
+
+P51 §7.3 登记：`compare.export`（导出比价表：排名 CSV + 矩阵 CSV + 人读 TXT）**没有工具栏那颗按钮** ——
+入口只有「缺上下文引导区」与命令面板两条，第一次找的人容易以为导不出。按 §2/§6 的同一条纪律修（**不新造
+入口类型，只把插件声明补全**）：
+
+| 入口 | 声明在哪 | 点下去会怎样（预填了什么） |
+|---|---|---|
+| **包对象页的工具栏**（`partitionActions` → `toolbarHtml`） | `domain/compare/code/ui.mjs`：动作声明 `object_kind: 'package'`，`package_id` 字段声明 `from_route: true` | 一键开表单，`package_id` = **当前这一条包的地址**（与 `rfq.export` 同一形状；视图页工具栏仍然不摆它 —— **判据是"这个地址上跑不跑得起来"**：视图页满足不了这一个必填项） |
+| **「比价排名」行内那颗按钮** | `compare.ranking` 面板的 `row_actions: ['compare.save-weights', 'compare.export']` | 按**整行**预填：`package_id` 来自行（P49 起它就是这一面板的一列），`actor` 来自会话身份 |
+| **命令面板（Ctrl+K）** | 机制自带 | 出候选清单（给得出 `package_id` 的行 / 带 `ref` 的对象行），挑一条 = 按那行预填 |
+| **可打印的 HTML**（不同动作，同一处出口） | 报表声明 `report.compare`（`action: 'compare.print'`） | 工具栏报表条上的「导出 CSV / 打印 / HTML」——`compare.print` **只给 csv / html 两种格式**（P52 把 `compare.export` 里那句"另两种格式"的错文案改成实话：人读 TXT 只有导出那条路会落盘） |
+
+**如实记一条入口的搬家**：这一改之后，承包商**视图页**的「这些动作要先有一个对象」引导区**不再列
+`compare.export`**（它现在是一个**对象类动作**：按 `renderViewPage` 的分区，对象类动作不进视图级工具栏/
+引导区）。视图页上它换成了**更近的一条**——「比价排名」每一行那颗按钮（一键、按整行预填）；命令面板那条
+一字未变（同样是候选清单 → 挑一条）。三处入口合起来仍然满足 §2「每个动作至少有一条可发现、真能跑的入口」，
+且**没有一条是按下去必然被拒的**。
+
+机读读数：`/api/ui/surface` 的 `actions[]` 里 `compare.export` 的 `needs` / `object_kind` 与
+`panels[compare.ranking].row_actions` 同源（界面与机读面按同一份声明摆入口）。复跑与截图见
+`tmp/p52-shots/REPORT.md`。

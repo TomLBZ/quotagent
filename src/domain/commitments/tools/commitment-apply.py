@@ -232,6 +232,27 @@ def gate_receipt_note(receipt: dict) -> str:
             f"署名的是 {receipt.get('signer')}：**谁批的 ≠ 谁签的**{extra}")
 
 
+def idempotent_gate_note(facts: dict, po_id: str) -> str:
+    """**幂等重放**时的人门那一句（P52）——只从**账本里已有的那两行**回读，不编。
+
+    幂等路径没有可消费的门对象（门早就被消费掉了），所以不能照抄 `gate_receipt_note`；
+    但 `po/issued` 行自己带着 `approved_by`（谁批的）与行的 `actor`（谁署名的）——照实念出来，
+    用户不必去翻账本。两个值有一个读不到就**如实说读不到**（不填一个看起来像样的名字）。
+    """
+    approver = str(facts.get("approver") or "")
+    signer = str(facts.get("signer") or "")
+    if approver == "" and signer == "":
+        return f"这张 PO（{po_id or '—'}）的账本行没带批准人/署名：门是谁批的去「已决定的门」里看"
+    if approver == "":
+        return f"账本行只带署名（{signer}），没带门的批准人"
+    if signer == "":
+        return f"账本行只带门的批准人（{approver}），没带署名"
+    if approver == signer:
+        return (f"这张 PO 的批准人就是署名人（{approver}）：**自签自批**（旧行，或运营侧显式开了开关）")
+    return (f"这张 PO 的账本行自述：门由 {approver} 批准、署名的是 {signer} —— **谁批的 ≠ 谁签的**"
+            "（门早被这次签发消费掉了，这里是账本回读，不是本次新消费了一扇门）")
+
+
 def select_gate(approvals: ApprovalService, *, scope: str, ref: str, actor: str,
                 switch_on: bool) -> tuple[dict | None, bool, dict | None]:
     """承诺 / 发 PO 的**人门入口**：只消费账本里已经 granted 的、**别人**批的那一扇门（P48）。
@@ -958,6 +979,25 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         # 幂等：这份承诺已经发过 PO。但「已签发」不等于「已投递」——投递登记缺失时**补齐投递**
         # （同一个唯一写者、同一个形状），否则这张 PO 在收件人侧永远不存在（这正是本批要消除的缺口）。
         po_id = str(already.get("po_id") or "")
+        # **回执如实（P52）**：幂等的两条路都不写账本，但回执要把**账本里已经有的真值**摆出来
+        # （这张 PO 的追溯模式/投给谁/谁批的/谁署名的），否则界面只能印「追溯模式 —，投给 」这种空占位。
+        # 判据只有一处：`po/issued` 行的 body 与写它的那一行的 `actor`（正文与署名都从账本回读，
+        # 不编一个值出来；账本里没有的键就留空，读侧照实说读不到）。
+        issued_row = next((row for row in c_rows
+                           if str(row.get("type")) == "po/issued"
+                           and str(body_of(row).get("po_id") or "") == po_id), {})
+        s_distributed = delivered_in(s_rows, po_id) or {}
+        c_distributed = delivered_in(c_rows, po_id) or {}
+        facts = {"award_id": award_id, "po_id": po_id,
+                 "intent_id": already.get("intent_id"), "quote_id": already.get("quote_id"),
+                 "package_id": already.get("package_id"), "trace_mode": already.get("trace_mode"),
+                 "total_amount": already.get("total_amount"), "chain": already.get("chain"),
+                 "issued_at": already.get("issued_at"), "approver": already.get("approved_by"),
+                 "signer": str(issued_row.get("actor") or ""),
+                 "delivered_to": [str(item) for item in
+                                  (s_distributed.get("recipients") or s_distributed.get("delivered_to")
+                                   or c_distributed.get("recipients") or [])]}
+        gate_note = idempotent_gate_note(facts, po_id)
         if po_id and delivered_in(s_rows, po_id) is None:
             repaired, deny_ = deliver_po(po_body=already, led_contractor=led_contractor, c_rows=c_rows,
                                          led_supplier=led_supplier, s_rows=s_rows,
@@ -973,12 +1013,25 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                          "ledger_added": repaired["ledger_added"], "refusal": None, "po_id": po_id,
                          "award_id": award_id, "delivered_to": [repaired["recipient"]],
                          "delivery": repaired["envelope"],
-                         "note": "这张 PO 此前只签发了、没有投递登记：本次补上投递（两侧各一条 po/distributed）"}, 0)
+                         "trace_mode": facts["trace_mode"], "total_amount": facts["total_amount"],
+                         "chain": facts["chain"], "intent_id": facts["intent_id"],
+                         "quote_id": facts["quote_id"], "package_id": facts["package_id"],
+                         "issued_at": facts["issued_at"], "approver": facts["approver"],
+                         "signer": facts["signer"], "gate_note": gate_note,
+                         "note": "这张 PO 此前只签发了、没有投递登记：本次补上投递（两侧各一条 po/distributed）；"
+                                 "`po/issued` 那一条是账本里已有的（本次没有第二条 po/issued）"}, 0)
         return emit({"ok": True, "step": step, "applied": [], "request": str(request),
                      "duplicates": [{"award_id": award_id, "reason": "already-issued", "po_id": po_id},
                                     {"po_id": po_id, "reason": "already-delivered"}],
                      "ledger_added": 0, "refusal": None, "po_id": po_id,
-                     "note": "这份承诺已经发过 PO、也已投递：账本零新增"}, 0)
+                     "award_id": award_id, "intent_id": facts["intent_id"], "quote_id": facts["quote_id"],
+                     "package_id": facts["package_id"], "trace_mode": facts["trace_mode"],
+                     "total_amount": facts["total_amount"], "chain": facts["chain"],
+                     "issued_at": facts["issued_at"], "approver": facts["approver"],
+                     "signer": facts["signer"], "delivered_to": facts["delivered_to"],
+                     "gate_note": gate_note,
+                     "note": "这份承诺已经发过 PO、也已投递：账本零新增（上面这些值是 `po/issued` / "
+                             "`po/distributed` 两行里**已经有的**真值，不是这次新写的）"}, 0)
     award = None
     for row in c_rows:
         body = body_of(row)

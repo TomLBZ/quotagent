@@ -1608,16 +1608,27 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const writerCheck = (scope, verdictOk) => {
     const staged = scope.staged.map((item) => item.name)
     const ours = { applied: [], duplicates: [], refused: [], unaccounted: [...staged] }
+    /** 把某个待办件从 unaccounted 挪进它该在的那一类（不重复计；本来不在就只在类里加一次）。 */
+    const credit = (where, name) => {
+      if (name === '' || !staged.includes(name)) return
+      if (!ours[where].includes(name)) ours[where].push(name)
+      const index = ours.unaccounted.indexOf(name)
+      if (index >= 0) ours.unaccounted.splice(index, 1)
+    }
     for (const run of scope.runs) {
       for (const where of ['applied', 'duplicates', 'refused']) {
-        for (const entry of run.receipt[where]) {
-          const name = receiptFileName(entry)
-          if (name === '' || !staged.includes(name)) continue
-          if (!ours[where].includes(name)) ours[where].push(name)
-          const index = ours.unaccounted.indexOf(name)
-          if (index >= 0) ours.unaccounted.splice(index, 1)
-        }
+        for (const entry of run.receipt[where]) credit(where, receiptFileName(entry))
       }
+      // **写者回执自己点名的那个待办件**（P52 修的缺陷）：每个写者只消费一个 `--request`，回执**顶层**的
+      // `request` 就是它（写者自己写的路径，机制只取 basename）。有些幂等分支的 `duplicates` 条目里
+      // **不带文件名**（只带 award_id/po_id/reason，如 `already-issued`/`already-delivered`）—— 那时按逐条目名
+      // 归不了属，于是**本动作自己的件被算进 `unaccounted`**（P51 实测：commitment-apply-803dc6b0246e.json）。
+      // 判据仍然只有写者回执：它点名了这件 ⇒ 这件必有结局（被拒 / 真落行 / 幂等已存在），按它报的那一类归账。
+      // 三条都空（写者说 ok 但没提这件）⇒ **照旧留在 unaccounted**（"跑了写者却什么也没说"要照样看得见）。
+      const runFile = receiptFileName(run.receipt.json ?? {})
+      const where = run.receipt.refused.length ? 'refused'
+        : (run.receipt.applied.length ? 'applied' : (run.receipt.duplicates.length ? 'duplicates' : ''))
+      if (where !== '') credit(where, runFile)
     }
     const receipts = scope.runs.map((run) => receiptSummary(run.receipt, run.tool))
     const rows = receipts.reduce((sum, item) => sum + (Number(item.ledger_added) || 0), 0)

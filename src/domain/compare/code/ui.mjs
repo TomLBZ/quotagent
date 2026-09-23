@@ -110,7 +110,7 @@ export async function register(surface, host) {
         bulk: 'compare.rank',
         // **行内入口**（P49）：同一份动作也挂在行上 —— 点某一行那颗按钮 = 按那一行预填（包 id 来自行、
         // 「你看到的那一版」来自本面板的 `version_for`）。缺上下文靠"摆到能填的地方"解决，不靠藏。
-        row_actions: ['compare.save-weights'],
+        row_actions: ['compare.save-weights', 'compare.export'],
         counts: { ranked: ranking.length, ...(json.counts ?? {}) },
         // **乐观并发**：页面上声明"这一版权重是给哪个动作用的" ⇒ 打开「保存权重」时界面自动带上它
         // （行里另有 `package_id`：那份动作要的**最小上下文集**因此能被**一行**满足 —— 见 29 §23 与
@@ -375,18 +375,22 @@ export async function register(surface, host) {
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'compare.export', title: '导出比价表（排名 CSV + 矩阵 CSV + 人读 TXT）',
-    views: ['contractor'], group: '比价', order: 27,
+    views: ['contractor'], group: '比价', order: 27, object_kind: 'package',
     confirm: { required: true, message: '导出会写文件并落一条 compare/table-exported（导出留痕）：确认？' },
     hint: '导出三份文件：排名表 CSV + 同一行项目内的矩阵 CSV + 人读正文 TXT（同一份评估、不重算），'
-      + '并落一条 compare/table-exported（行数/字节数/evaluation_id）；可打印的 HTML 与另两种格式走'
-      + '工具栏的「导出 / 打印比价表」',
+      + '并落一条 compare/table-exported（行数/字节数/evaluation_id）。可打印的 HTML 走工具栏那条'
+      + '「比价表（CSV / 可打印 HTML）」（`compare.print`：只给 csv / html **两种**格式，没有 txt）；'
+      + '人读 TXT 只有这条导出会落盘。入口：包的对象页工具栏（对象地址预填「包 id」）、'
+      + '「比价排名」行内那颗按钮（按整行预填）、命令面板（缺上下文时先挑一条）',
     input: { fields: [
       { name: 'w_price', label: '权重：单价', type: 'number', min: 0, max: 1, default: DEFAULTS.price },
       { name: 'w_delivery', label: '权重：交期', type: 'number', min: 0, max: 1, default: DEFAULTS.delivery },
       { name: 'w_payment', label: '权重：付款条件', type: 'number', min: 0, max: 1, default: DEFAULTS.payment },
       { name: 'w_warranty', label: '权重：质保', type: 'number', min: 0, max: 1, default: DEFAULTS.warranty },
       { name: 'w_deviation', label: '权重：偏差计数', type: 'number', min: 0, max: 1, default: DEFAULTS.deviation },
-      { name: 'package_id', label: '包 id', type: 'text', required: true },
+      { name: 'package_id', label: '包 id', type: 'text', required: true, from_route: true,
+        help: '要导出哪一个包：**在包的对象页上会自动填当前这一条**；视图页上从「比价排名」那一行进来'
+          + '（行内那颗按钮把整行带入）或从命令面板先挑一条' },
       { name: 'actor', label: '发言人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
     ] },
     server: async (ctx, input) => {

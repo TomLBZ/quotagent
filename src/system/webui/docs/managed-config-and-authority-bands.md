@@ -92,3 +92,21 @@ P50 把它们收口：**① `./run --config-file` 全链下传**（run → 服�
 3. **供应商侧不能改**：两个动作只注册在承包商道（改限额不是投标方的事）；供应商侧的同一块面板是**看**的
    那一面（`authority.check` / `authority.escalate` 照旧两侧都有）。
 4. **本插件仍不能批准任何事**：它只提交变更与消费别人的批准；改判定的那一签永远在「审批队列」里由人签。
+
+## 5 角色下拉送**机读值**、屏幕显示人话（P52）
+
+P51 实测：两个动作的 `role` select 的 `option.value` 是**人话标签整个字符串**（
+`Array.from(s.options).map(o => [o.value, o.text])` = `[["采购员（buyer）","采购员（buyer）"], …]`）——
+写者两种写法都认，所以功能没坏；但请求体里出现的是给人看的字符串，**按码判定的脚本/运维会猜错**
+（同一个字段在机读面应该是 `buyer`）。
+
+修法（两处，都不碰判据）：
+① 机制层（`src/system/webui/code/ui-surface.mjs#optionList` + `code/assets/app.js#fieldHtml`）：`select` 的
+`options` 现在接受 `{value, label}` —— **value 是机读值、label 是人话**，界面渲染
+`<option value="buyer">采购员（buyer）</option>`；字符串写法照旧（值 == 显示）。
+② 本插件：`roleOptions()` 改成 `[{value:'buyer', label:'采购员（buyer）'}, …]`（`roleIdOf` 三种写法
+——id / 人话 / 人话（id）——**照旧都认**，既有调用方、门、脚本一个字节不用改）。
+
+**读数（P52 真跑）**：`authority.bands.set` 表单里下拉送出的 `role` = `buyer`（修前 = `采购员（buyer）`）；
+同一条提交（`buyer` → 250000 分）走完「提交 → 另一人复核 → 落盘」，与修前逐字一致（回执、账本行、
+受管 YAML sha 都对得上）。原始读数见 `tmp/p52-shots/REPORT.md`。
