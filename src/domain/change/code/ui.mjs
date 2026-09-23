@@ -35,8 +35,8 @@ const sideScoped = (ctx, itemSide, item) => {
   if (mine === itemSide) return item
   const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
   const why = mine === ''
-    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
-    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+    ? `（未登录：登录${label}之后这一条才算"需要你处理"）`
+    : `（不是你要办的：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
   const body = asText(item.body)
   return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
     body: `${body}${body ? ' ' : ''}${why}` }
@@ -213,7 +213,7 @@ export async function register(surface, host) {
         }),
         row_actions: ['exchange.change-respond'],
         counts: { changes: proposed.length, responded: responded.size, approved: approved.size },
-        note: '未批准的变更**一分钱都不计**；缺单价基准的行不可勾选（服务拒绝 `basis-mismatch` 时账本零新增）' }
+        note: '未批准的变更一分钱都不计；缺单价基准的行不可勾选（服务拒绝 `basis-mismatch` 时账本零新增）' }
     } }))
 
   /**
@@ -246,9 +246,9 @@ export async function register(surface, host) {
           + ` ${escHtml(status)}${asText(body.package_id) ? ` · 包 ${escHtml(asText(body.package_id))}` : ''}</li>`
       }).join('')
       return { ok: true, kind: 'html',
-        html: '<p class="q-hint">每条变更都能点进它的**逐行明细页**（<code>'
+        html: '<p class="q-hint">每条变更都能点进它的逐行明细页（<code>'
           + `${escHtml(host.prefix)}/supplier/changes/&lt;变更单 id&gt;/</code>）：逐行 原量×原价 → 新量×新价、`
-          + '行差额与**小计**（整数分、half-up 到分位），缺依据的行如实标出、绝不编数。</p>'
+          + '行差额与小计（整数分、half-up 到分位），缺依据的行如实标出、绝不编数。</p>'
           + `<ol class="q-list">${links}</ol>`
           + (proposed.length > DET ? `<p class="q-hint">共 ${proposed.length} 条，这里只列前 ${DET} 条</p>` : '') }
     } }))
@@ -310,7 +310,7 @@ export async function register(surface, host) {
           return latest !== null && basedOnRev(list, quote.submitted_at) < latest.rev
         }).length },
         note: '状态轨口径来自既有服务 `QuoteBook.on_amended`（`requires_requote` / `superseded_by_rev`）；'
-          + '重报只生成**草稿**，提交必须人签（本 APP 不代签）' }
+          + '重报只生成草稿，提交必须人签（本 APP 不代签）' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'exchange.prefill', title: '按最新 rev 重报：预填值（我看到的）',
@@ -379,7 +379,7 @@ export async function register(surface, host) {
 
   out.push(surface.panel({ plugin_id: me, id: 'exchange.change-candidates', title: '可提变更的报价行（本侧收到的报价）',
     view: 'contractor', order: 36, kind: 'table', actions: ['exchange.change-propose'],
-    hint: '原单价来自本侧 `quote/submitted` 事实、原数量来自已发布快照；提出变更**不产生义务**',
+    hint: '原单价来自本侧 `quote/submitted` 事实、原数量来自已发布快照；提出变更不产生义务',
     data: () => {
       const quotes = quotesOf(host, 'contractor')
       const snapshots = snapshotsOf(host)
@@ -406,7 +406,7 @@ export async function register(surface, host) {
         ],
         rows, row_actions: ['exchange.change-propose'],
         counts: { lines: rows.length, without_basis: rows.filter((row) => !row.has_basis).length },
-        note: '缺基准（快照里没有这一行的数量）⇒ 该行**不可提变更**（服务会以 `basis-qty-missing`/`unknown-line` 拒绝）' }
+        note: '缺基准（快照里没有这一行的数量）⇒ 该行不可提变更（服务会以 `basis-qty-missing`/`unknown-line` 拒绝）' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'exchange.requote-board', title: '改报看板（对方登记：作废 / 待重报）',
@@ -432,7 +432,7 @@ export async function register(surface, host) {
             ? `已登记重报（@${asText(requotes.find((item) => (item.quotes ?? []).includes(asText(entry.quote_id))).at)}）`
             : '待对方重报' })),
         counts: { superseded: superseded.length, requote_open: requotes.length },
-        note: '这些行是**对方侧**登记后镜像过来的（双向可断言）：供应商不是默默消失，而是明确"我需要按新版重报"' }
+        note: '这些行是对方侧登记后镜像过来的（双向可断言）：供应商不是默默消失，而是明确"我需要按新版重报"' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'exchange.rev-versions', title: '已发布的包（改量 → 发新版 rev+1）',
@@ -532,7 +532,7 @@ export async function register(surface, host) {
 
   out.push(surface.action({ plugin_id: me, id: 'exchange.requote-now', title: '按最新 rev 重报（预填，不自动提交）',
     views: ['supplier'], group: '改报', order: 30,
-    confirm: { required: true, message: '重报会先作废旧报价登记、并生成新 rev 的**草稿**（草稿不算对外报价，仍需人签提交）：确认？' },
+    confirm: { required: true, message: '重报会先作废旧报价登记、并生成新 rev 的草稿（草稿不算对外报价，仍需人签提交）：确认？' },
     hint: '两步：① 唯一写者 requote.py 落 quote/superseded + quote/requote-open；② 既有写者 quote-draft.py 生成新草稿',
     input: { fields: [
       { name: 'package_id', label: '包 id', type: 'text', required: true },
@@ -601,7 +601,7 @@ export async function register(surface, host) {
       const mineName = stagedDraft.name
       const otherRefused = (receipt.refused ?? []).filter((row) => host.receiptFileName(row) !== mineName)
       const othersNote = otherRefused.length
-        ? `（同一次运行里草稿写者还拒了 ${otherRefused.length} 条**别的**待办件：`
+        ? `（同一次运行里草稿写者还拒了 ${otherRefused.length} 条别的待办件：`
           + `${otherRefused.map((row) => row?.file ?? '?').join(' / ')} —— 那些不属于本动作）`
         : ''
       return { ok, code: ok ? 'requoted'
@@ -610,7 +610,7 @@ export async function register(surface, host) {
         next_action: ok
           ? (written
             ? '新 rev 的草稿已落账（quote/drafted）：在「我的草稿」里人签提交（quote.submit）才算对外报价'
-            : '这份新 rev 的草稿**本来就在账本里**（幂等：本次零新增）：直接去「我的草稿」人签提交')
+            : '这份新 rev 的草稿本来就在账本里（幂等：本次零新增）：直接去「我的草稿」人签提交')
             + othersNote
           : ((refusedRow?.next_action ?? receipt.next_action
             ?? `这条待办件（${mineName}）没在草稿写者回执里出现 ⇒ 本动作草稿账本零新增`)

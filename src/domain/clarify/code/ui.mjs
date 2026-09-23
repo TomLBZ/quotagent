@@ -37,8 +37,8 @@ const sideScoped = (ctx, itemSide, item) => {
   if (mine === itemSide) return item
   const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
   const why = mine === ''
-    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
-    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+    ? `（未登录：登录${label}之后这一条才算"需要你处理"）`
+    : `（不是你要办的：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
   const body = asText(item.body)
   return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
     body: `${body}${body ? ' ' : ''}${why}` }
@@ -360,13 +360,13 @@ export async function register(surface, host) {
           { key: 'po_ack', label: 'PO 确认' }],
         rows: table, row_actions: ['exchange.confirm-award', 'exchange.confirm-po'],
         counts: { intents: table.length, confirmed: confirmed.size, po: poNotices.length },
-        note: '确认中标要声明「能否按期」；不能按期时**备注必填**（避免确认了又交不了货）。'
-          + 'PO 确认只表示"我收到这张单"，不改变任何金额；**没有 PO 的行不会长出「确认收到 PO」按钮**' }
+        note: '确认中标要声明「能否按期」；不能按期时备注必填（避免确认了又交不了货）。'
+          + 'PO 确认只表示"我收到这张单"，不改变任何金额；没有 PO 的行不会长出「确认收到 PO」按钮' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'exchange.lost', title: '落标告知（本次未中选必须明确告知）',
     view: 'supplier', order: 30, kind: 'table', actions: ['exchange.ack-lost'],
-    hint: '落标不是"默默消失"：这里给出**一句话 + 原因类别**，并给「我知道了」的回执入口（不含别家的报价信息）',
+    hint: '落标不是"默默消失"：这里给出一句话 + 原因类别，并给「我知道了」的回执入口（不含别家的报价信息）',
     data: () => {
       const outcomes = outcomesOf(host)
       const lost = outcomes.mine.filter((item) => asText(item.kind) === 'lost')
@@ -374,7 +374,7 @@ export async function register(surface, host) {
         .map((row) => asText(bodyOf(row).outcome_id)))
       if (!lost.length) {
         return { ok: true, kind: 'table', degraded: true, reason: 'no-lost-notice',
-          next_action: '目前没有落标告知（有告知时这里会明确写出来；没有被选中**不会**静默消失）',
+          next_action: '目前没有落标告知（有告知时这里会明确写出来；没有被选中不会静默消失）',
           columns: [{ key: 'outcome_id', label: '告知' }], rows: [] }
       }
       return { ok: true, kind: 'table',
@@ -387,13 +387,13 @@ export async function register(surface, host) {
           notice: asText(item.notice), declared_by: asText(item.declared_by), at: asText(item.at),
           ack: acked.has(asText(item.outcome_id)) ? '已知悉' : '待知悉' })),
         row_actions: ['exchange.ack-lost'], counts: { lost: lost.length, acknowledged: acked.size },
-        note: '落标告知只含一句话与原因类别：**不含**其他供应商的代号、报价与比价基准（规则 4）' }
+        note: '落标告知只含一句话与原因类别：不含其他供应商的代号、报价与比价基准（规则 4）' }
     } }))
 
   // ================================================================== 承包商侧：待答队列 + 往来回读
   out.push(surface.panel({ plugin_id: me, id: 'exchange.queue', title: '供应商提问工单（待我回答）',
     view: 'contractor', order: 15, kind: 'table', actions: ['exchange.answer'],
-    hint: '作答者必须是 human:<名字>；作答后供应商侧**看得见答复正文**（问答串双向）',
+    hint: '作答者必须是 human:<名字>；作答后供应商侧看得见答复正文（问答串双向）',
     data: () => {
       const tickets = ticketsOf(host, 'contractor')
       const published = visiblePackages(host, 'contractor')
@@ -455,7 +455,7 @@ export async function register(surface, host) {
   // ================================================================== 动作（每个 = 一个真能点的按钮）
   out.push(surface.action({ plugin_id: me, id: 'exchange.ack', title: '我已收到 @revN（认收）', views: ['supplier'],
     group: '包往来', order: 10, confirm: { required: true,
-      message: '认收是给对方的**明确回执**（「我收到了，会报」）：确认以你的名义登记？' },
+      message: '认收是给对方的明确回执（「我收到了，会报」）：确认以你的名义登记？' },
     hint: '落自己账本 rfq/acknowledged + 承包商账本同名登记（对方「谁没回」名单随之变化）；可再认收新版本',
     input: { fields: [
       { name: 'package_id', label: '包 id', type: 'text', required: true, help: '从「我收到的包」表里复制' },
@@ -493,7 +493,7 @@ export async function register(surface, host) {
       const actor = asText(input.actor)
       if (!actor.startsWith('human:')) {
         return { ok: false, code: 'human-required',
-          reason: '对**对方**的回文承诺要有人署名（agent 不得代供应商承诺时限）',
+          reason: '对对方的回文承诺要有人署名（agent 不得代供应商承诺时限）',
           next_action: '写 human:<你的名字>' }
       }
       if (note.trim() === '') {
@@ -504,7 +504,7 @@ export async function register(surface, host) {
         record: { kind: 'package-ops', action: 'promise', view: 'supplier', package_id: asText(input.package_id),
           due_at: asText(input.due_at), actor, note, note_sha256: sha(note) },
         args: packageArgs, label: 'package-ops.py',
-        okNext: '已登记承诺：对方截止看板的 due_ts 现在来自这条事实（rfq/promised）；它**不发信**，只落事实' })
+        okNext: '已登记承诺：对方截止看板的 due_ts 现在来自这条事实（rfq/promised）；它不发信，只落事实' })
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'exchange.ask', title: '提问澄清（带版本与条目引用）',
@@ -563,7 +563,7 @@ export async function register(surface, host) {
   out.push(surface.action({ plugin_id: me, id: 'exchange.confirm-award', title: '确认中标（并声明能否按期）',
     views: ['supplier'], group: '结果', order: 40, permission: 'human-signature',
     confirm: { required: true, message: '确认中标＝对外承认这条授标：确认以你的署名确认？' },
-    hint: 'can_meet_due=false 时**备注必填**（避免"确认了又交不了货"）；落本侧 award/confirmed + 承包商侧同名登记',
+    hint: 'can_meet_due=false 时备注必填（避免"确认了又交不了货"）；落本侧 award/confirmed + 承包商侧同名登记',
     input: { fields: [
       { name: 'intent_id', label: '意向 id', type: 'text', required: true, help: '从「我的授标与 PO」表里复制' },
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },

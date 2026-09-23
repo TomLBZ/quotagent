@@ -64,14 +64,105 @@ const sideScoped = (ctx, itemSide, item) => {
   if (mine === itemSide) return item
   const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
   const why = mine === ''
-    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
-    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+    ? `（未登录：登录${label}之后这一条才算"需要你处理"）`
+    : `（不是你要办的：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
   const body = asText(item.body)
   return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
     body: `${body}${body ? ' ' : ''}${why}` }
 }
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const typeRows = (rows, prefix) => rows.filter((row) => String(row?.type ?? '').startsWith(prefix))
+
+/** 值的**形状名**（只用于如实报出"读不出来的是什么形状"，不做任何补值/猜测）。 */
+const shapeOf = (value) => (value === undefined ? 'missing' : value === null ? 'null'
+  : Array.isArray(value) ? 'array' : typeof value)
+/** 「行」的最小形状：非 null 的**对象**（数组不是行 —— 它是形状异常）。 */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+/** 值 → 单元格文本（读不出来的给空串；**不补 0、不写 undefined、不把对象 stringify 出来**）。 */
+const cellText = (value) => (isRow(value) || value === undefined || value === null ? '' : String(value))
+
+/**
+ * **逐行读数（唯一入口）**：`lines[]` / `items[]` 这类「行数组」一律走这里。
+ *
+ * 为什么必须有它（P27 实测的根因）：面板直接 `lines.map((line) => line.item_id)` 时，数组里
+ * **只要有一条不是对象**（null / 字符串 / 数字 / 数组），读 `.item_id` 就抛 `TypeError`；而外壳对
+ * `panel.data()` 抛错的处理是**整块面板判 `data-failed`**（页面其余部分照常，这一块整块没了）——
+ * 一条坏行把整块面板打崩。
+ *
+ * 本函数把坏行**逐条计数**、把能当行用的对象照常交出去；调用方再把 `dropped` 如实报出来
+ * （本仓纪律：读不到 ≠ 没有，也**不许静默丢**；但也不许因为一条坏行把这一块整块打崩）。
+ *
+ * 返回 `{all, list, rows, dropped, shape}`：`all` = 源**声明**有几条（不是数组 ⇒ 0）、
+ * `rows` = 能当行用的对象、`dropped` = 读不成对象的条数、`shape` = 源本身的形状名。
+ */
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { all: 0, list: false, rows: [], dropped: 0, shape: shapeOf(value) }
+  const rows = []
+  let dropped = 0
+  for (const row of value) {
+    if (isRow(row)) rows.push(row)
+    else dropped += 1
+  }
+  return { all: value.length, list: true, rows, dropped, shape: 'array' }
+}
+
+/** 逐行明细的一行在界面上的说法（唯一口径；坏行不参与 —— 它们的条数由调用方另行报出）。 */
+const lineLabelOf = (line) => `${asText(line.item_id) || '（无 id）'}@${cellText(line.unit_price_cents) || '—'}分`
+
+/**
+ * **标量名单**的安全读数（收件人 `to: ['supplier:g1']` 这类：数组里是字符串，不是对象行）。
+ * 只认**非空字符串**（数字/对象/null 一律不算名单里的人 —— 不编、也不猜）；
+ * 不是数组 ⇒ `list=false` + 形状名（调用方如实报"读不出来"，不编一个空名单）。
+ */
+const scalarListOf = (value) => {
+  if (!Array.isArray(value)) return { list: false, shape: shapeOf(value), items: [], dropped: 0 }
+  const items = value.filter((item) => typeof item === 'string' && item.trim() !== '')
+    .map((item) => item.trim())
+  return { list: true, shape: 'array', items, dropped: value.length - items.length }
+}
+
+/**
+ * 投递信封里的**行项目**（`spec.items`）—— 本插件唯一读它的地方。
+ *
+ * 三种源形状必须**分得开**（P27：修前它们长得一模一样，都是「空表 + 自称健康」）：
+ *   · **数组**：逐条只认对象行**且带可读 `item_id`**（没 id 的行备不了报价 —— 列出来点了必被
+ *     `item-not-found` 拒，所以不列，但**计入 dropped**）；
+ *   · **不是数组**（缺失 / 文本 / 键值表 / 数字）：**不是「零行项目」** ⇒ `list=false`，调用方如实降级；
+ *   · 数组里**混着坏行**：好行照常列，`dropped` 逐条计数 ⇒ 调用方如实报出来（不假装健康）。
+ */
+const packageItemsOf = (spec) => {
+  const holder = isRow(spec) ? spec : {}
+  const read = readRows(holder.items)
+  const rows = []
+  let withoutId = 0
+  for (const row of read.rows) {
+    const id = asText(row.item_id)
+    if (id === '') { withoutId += 1; continue }
+    rows.push({ ...row, item_id: id })
+  }
+  return { list: read.list, all: read.all, rows, dropped: read.dropped + withoutId,
+    without_id: withoutId, shape: read.shape, spec_shape: isRow(spec) ? 'object' : shapeOf(spec) }
+}
+
+/** 信封行项目读不出来时的说法（`degraded`/`reason`/`next_action` 共用，免得各处各写一句）。 */
+const itemsAnomaly = (packageId, items) => {
+  if (!items.list) {
+    return { degraded: true,
+      reason: `package-items-not-a-list：信封的 \`spec.items\` 是 ${items.shape}（不是行项目数组）`
+        + ` —— 空表不等于这份包没有行项目，本面板不编行项目`,
+      next_action: `让发包方按行项目数组重发 ${packageId || '这一版'}；`
+        + '本面板照常留了已读回执、也不假装这份包是空的（读不到 ≠ 没有）' }
+  }
+  if (items.dropped) {
+    const noId = items.without_id ? `，其中 ${items.without_id} 条没有可读的 \`item_id\`` : ''
+    return { degraded: true,
+      reason: `package-items-partly-unreadable：信封里有 ${items.dropped} 条行项目读不出来`
+        + `（形状异常：不是对象${noId}）—— 好行照常列出，坏行逐条计数、不静默丢`,
+      next_action: '让发包方把这一版按行项目数组重发（坏行已跳过并计数）；'
+        + '要按现在这些行备报价，先核对被跳过的条数是否与对方那份一致' }
+  }
+  return {}
+}
 
 /**
  * 本侧 realm 的**取值顺序**（与 `domain/commitments` 的 `realmOf('supplier')` **同一判据**）：
@@ -90,7 +181,11 @@ const registrationRealmOf = (host) => {
   for (const type of ['po/distributed', 'rfq/distributed']) {
     for (const row of typeRows(host.rows('supplier') ?? [], type)) {
       const body = bodyOf(row)
-      const mine = [body.supplier, ...(body.recipients ?? [])].map(asText).find((item) => item !== '')
+      // `recipients` **不是一个数组**时（字符串/数字/对象）修前 `...body.recipients` 会抛
+      // `TypeError: … is not iterable` ⇒ 读 realm 的这条路径把上游一起带崩；现在按座位名读数
+      // （不是数组 ⇒ 只认 `body.supplier`，不猜）。
+      const recipients = scalarListOf(body.recipients)
+      const mine = [asText(body.supplier), ...recipients.items].find((item) => item !== '')
       if (mine) return mine
     }
   }
@@ -154,7 +249,9 @@ const referenceablePackages = (host) => {
 const draftSlotOf = (input) => asText(input?.rfq_id)
 /** 这份草稿"写进去之后"的权威状态（乐观并发比对的字段；机制只取指纹与逐字段差异，不解读含义）。 */
 const draftStateOf = (input) => {
-  const lines = draftRowsOf(input).map((row) => ({
+  // 只认**对象行**（`row?.` 已挡住 null 的部分取值，但数组里的非对象行会静默变成空 id ⇒ 先把它们
+  // 剔掉：指纹只该由真行构成，坏行不参与比对，也不打崩这次保存）
+  const lines = draftRowsOf(input).filter(isRow).map((row) => ({
     item_id: asText(row?.item_id ?? row?.id),
     unit_price_cents: String(row?.unit_price_cents ?? input?.unit_price_cents ?? ''),
     lead_time_days: String(row?.lead_time_days ?? input?.lead_time_days ?? '') }))
@@ -174,8 +271,9 @@ const myPackage = (host, realm) => {
     reason: '宿主未配置投递信封位置（rfq_delivery）',
     next_action: '发布方（承包商）发布 RFQ 时会写这份信封；配置见 ./run 的 QUOTAGENT_UI_RFQ_DELIVERY' }
   const envelope = host.readJson(file)
-  if (!envelope) return { ok: false, code: 'delivery-missing', reason: `读不到投递信封：${file}`,
-    next_action: '等对方发布（或本机跑一次 APP 承包商道的「发布 RFQ」）' }
+  if (!envelope) return { ok: false, code: 'delivery-missing',
+    reason: '本侧还没有收到任何 RFQ 包（投递信封里还没有发给你的那一份）',
+    next_action: '等对方发布：承包商道「发布 RFQ」把包投给本侧 realm 之后，这一页会自动出现那一包' }
   const delivered = Array.isArray(envelope.delivered_to) ? envelope.delivered_to.map(String) : []
   if (realm && delivered.length && !delivered.includes(realm)) {
     return { ok: false, code: 'not-addressed-to-me', reason: `这份包发给了 ${delivered.join(' / ')}，不是 ${realm}`,
@@ -251,7 +349,8 @@ export async function register(surface, host) {
       }
       const envelope = mine.envelope
       const spec = envelope.spec && typeof envelope.spec === 'object' ? envelope.spec : {}
-      const items = Array.isArray(spec.items) ? spec.items : []
+      // **行项目读数（唯一入口）**：数组里混坏行 ⇒ 好行照列 + 逐条计数；不是数组 ⇒ 不是"零行项目"（见 `packageItemsOf`）
+      const items = packageItemsOf(spec)
       const drafts = new Map(typeRows(host.rows('supplier'), 'quote/drafted')
         .map((row) => [asText(bodyOf(row).item_id), bodyOf(row)]))
       const packageId = String(spec.package_id ?? '')
@@ -261,7 +360,9 @@ export async function register(surface, host) {
       // **预填的判据**：本侧事实真的认得这个包才预填（目录为空时无从判断，按旧行为预填）
       const referenceable = packageId === '' || known.ids.length === 0 || known.ids.includes(packageId)
       const declared = referenceable ? '（整数分，可直接改）' : '（整数分）'
-      return { ok: true, kind: 'table',
+      // **信封行项目读不出来** ⇒ 如实降级（不冒充健康，也不把这一块打崩）：好行照常列出
+      const anomaly = itemsAnomaly(packageId, items)
+      return { ok: true, kind: 'table', ...anomaly,
         columns: [
           { key: 'item_id', label: '行项目', type: 'code', pin: 'left' },
           { key: 'description', label: '描述' },
@@ -273,9 +374,9 @@ export async function register(surface, host) {
             ...(referenceable ? { editable: true } : {}), type: 'number' },
           { key: 'draft', label: '已备草稿' },
         ],
-        rows: items.map((item) => {
-          const draft = drafts.get(String(item.item_id))
-          return { id: String(item.item_id), item_id: String(item.item_id), description: item.description ?? '',
+        rows: items.rows.map((item) => {
+          const draft = drafts.get(asText(item.item_id))
+          return { id: asText(item.item_id), item_id: asText(item.item_id), description: item.description ?? '',
             qty: item.qty, unit: item.unit,
             unit_price_cents: draft?.unit_price_cents ?? '', lead_time_days: draft?.lead_time_days ?? '',
             draft: draft ? `${draft.quote_draft_id}（待签署）` : '' }
@@ -292,7 +393,7 @@ export async function register(surface, host) {
               // **乐观并发**：把"你打开这一页时看到的这一版草稿"交给界面（保存时带回 `expected_version`）。
               // 对象 = 这份包 + 这一组行项目（与 `quote.draft` 的 concurrency 同一口径，逐字对齐）。
               version: host.versions.current('supplier', 'quote-draft',
-                draftSlotOf({ rfq_id: packageId, rows: items.map((item) => ({ item_id: item.item_id })) })),
+                draftSlotOf({ rfq_id: packageId, rows: items.rows.map((item) => ({ item_id: item.item_id })) })),
               version_for: 'quote.draft' }
           : { degraded: true, reason: 'package-not-in-visible-facts',
               next_action: `本侧事实认得的包 id 目录已到上限（${LIMITS.max_items} 个${known.capped ? '，已满' : ''}）：`
@@ -304,13 +405,20 @@ export async function register(surface, host) {
                 + '要让最新那个包也备得了，得先让它的事实进本侧账本（写者/口径问题，不是界面能补的）。' }),
         ref: spec.package_id ? { kind: 'package', id: String(spec.package_id),
           title: `包 ${spec.package_id} rev${envelope.rev ?? '—'}` } : null,
-        counts: { items: items.length, rev: envelope.rev },
+        // **条数口径**：`items` = 能列出（且真能备报价）的行数；`envelope_items` = 信封里声明的条数
+        // （不是数组 ⇒ null，"读不出来"与"一条都没有"必须长得不一样）；`dropped` = 读不出来的条数。
+        counts: { items: items.rows.length, envelope_items: items.list ? items.all : null,
+          dropped: items.dropped, rev: envelope.rev },
         note: `包 ${spec.package_id ?? '—'} rev${envelope.rev ?? '—'} · 报价截止 ${(spec.deadlines ?? {}).quote_by ?? '—'}`
-          + ` · 报价一律**整数分**（8600 = 86.00）；改单价时右边实时算"×量 = 行合计"，底部编辑栏给小计`
+          + ` · 报价一律整数分（8600 = 86.00）；改单价时右边实时算"×量 = 行合计"，底部编辑栏给小计`
           + ` · 键盘：Tab 走格 / Enter 走同列下一行 / Esc 还原 / Ctrl+Enter 提交 —— 备多行报价不用鼠标`
-          + ` · **表里填几行就交几行**：一次「备这份草稿」= 一条草稿（多行），随后**一次人签**提交整份`
+          + ` · 表里填几行就交几行：一次「备这份草稿」= 一条草稿（多行），随后一次人签提交整份`
           + ` · 标题旁的「打开对象 →」是这个包的深链（可复制分享、刷新不丢）`
           + `${receiptNote(receipt) ? ` · ${receiptNote(receipt)}` : ''}`
+          + (items.list ? '' : ` · 信封的 \`spec.items\` 是 ${items.shape}（不是行项目数组）⇒ 本表只列得出可读的行项目，`
+            + `不拿空表顶替"这份包没有行项目"`)
+          + (items.dropped ? ` · 有 ${items.dropped} 条行项目读不出来（形状异常）⇒ 已跳过并逐条计数，不静默丢`
+            : '')
           + (referenceable ? '' : ` · 这一份包（${packageId}）现在备不了报价：它不在本侧事实的包目录里`
             + `（目录上限 ${LIMITS.max_items} 个）⇒ 提交必被拒，界面故意不预填它。`) }
     } }))
@@ -328,37 +436,51 @@ export async function register(surface, host) {
       const mine = myPackage(host, realm)
       const spec = mine.ok ? (mine.envelope.spec ?? {}) : {}
       const packageId = String(spec.package_id ?? '')
+      // 投递名单也是**行读数**：`delivered_to` 不是数组时（字符串/数字/对象）修前 `.join` / `.map` 直接
+      // TypeError ⇒ 这一页打不开；现在按形状如实说，不编一个空名单。
+      const delivered = mine.ok ? scalarListOf(mine.envelope.delivered_to) : null
+      const deliveredText = delivered === null ? ''
+        : (delivered.list ? delivered.items.join(' ')
+          || (delivered.dropped ? `（名单里有 ${delivered.dropped} 条读不出来）` : '')
+          : `（投递名单字段是 ${delivered.shape}，不是名单：读不出来就不编）`)
       if (!mine.ok || (wanted && packageId !== wanted)) {
         return { ok: true, kind: 'table', object: { found: false, title: `包 ${wanted}`,
           reason: mine.ok ? 'package-not-addressed-to-me' : mine.code,
           next_action: mine.ok
-            ? `这份包不是发给 ${realm || '本侧'} 的（投递名单：${((mine.envelope.delivered_to ?? [])).join(' ') || '—'}）：`
+            ? `这份包不是发给 ${realm || '本侧'} 的（投递名单：${deliveredText || '—'}）：`
               + '只出自己的那份，回供应商道首页看「发给我的 RFQ 包」'
             : (mine.next_action ?? '') },
           columns: [{ key: 'item_id', label: '行项目' }], rows: [] }
       }
-      const items = Array.isArray(spec.items) ? spec.items : []
+      const items = packageItemsOf(spec)
       // **已读回执**（对象页 = 真正「打开了这个包」）：给发包方留一条「谁在何时看过这个包」
       const receipt = recordPackageReceipt(ctx, packageId, 'package.mine')
       const drafts = new Map(typeRows(host.rows('supplier'), 'quote/drafted')
         .map((row) => [asText(bodyOf(row).item_id), bodyOf(row)]))
       // **乐观并发**：这一页上保存动作要带的"你看到的那一版"（与 `quote.draft` 的 concurrency 同一口径）
       const myDraftVersion = host.versions.current('supplier', 'quote-draft',
-        draftSlotOf({ rfq_id: packageId, rows: items.map((item) => ({ item_id: item.item_id })) }))
+        draftSlotOf({ rfq_id: packageId, rows: items.rows.map((item) => ({ item_id: item.item_id })) }))
       // 这一页也是"备报价"的入口之一 ⇒ **同一条预填判据**（见 `referenceablePackages` 的注释）：
       // 包不在本侧事实的目录里 ⇒ 不预填、不给备报价入口（提交必被拒）。
       const known = referenceablePackages(host)
       const referenceable = known.ids.length === 0 || known.ids.includes(packageId)
       const declared = referenceable ? '（整数分，可直接改）' : '（整数分）'
-      return { ok: true, kind: 'table',
+      // **信封行项目读不出来** ⇒ 如实降级（对象页也不假装健康）；好行照常列出
+      const anomaly = itemsAnomaly(packageId, items)
+      return { ok: true, kind: 'table', ...anomaly,
         object: { title: `包 ${packageId} rev${mine.envelope.rev ?? '—'}`, found: true,
-          subtitle: `发给 ${((mine.envelope.delivered_to ?? []).map(String).join(' ') || realm || '本侧')}`
+          subtitle: `发给 ${deliveredText || realm || '本侧'}`
             + ` · 报价截止 ${(spec.deadlines ?? {}).quote_by ?? '—'}`,
           facts: [
-            { key: '条目数', value: String(items.length) },
+            // **条目数分得开**：`条目数` = 能列出的行数；信封里声明的条数与读不出来的条数各自另立一行
+            // （"读不出来"不许冒充"一条都没有"，也不许静默吞掉）
+            { key: '条目数', value: `${items.rows.length}${items.dropped ? `（另有 ${items.dropped} 条读不出来）` : ''}` },
+            ...(items.list ? [] : [{ key: '信封行项目形状', code: true, value: `${items.shape}（不是行项目数组）`
+              + ' —— 本页只列得出可读的行项目，不拿空表顶替"这份包没有行项目"' }]),
+            ...(items.list ? [{ key: '信封声明的条数', value: String(items.all) }] : []),
             { key: '版本 rev', value: String(mine.envelope.rev ?? '—') },
             { key: '澄清截止', value: String((spec.deadlines ?? {}).clarify_by ?? '—') },
-            { key: '已备草稿', value: `${drafts.size} / ${items.length}` },
+            { key: '已备草稿', value: `${drafts.size} / ${items.rows.length}` },
             // 「能不能当 RFQ 引用」是备报价的前置判据 ⇒ 明写在对象页上（不在目录里就说不在）
             { key: '可作 RFQ 引用', value: referenceable
               ? '是（在本侧事实的包目录里）'
@@ -375,7 +497,7 @@ export async function register(surface, host) {
           links: [],
           // 分享：这个包的可见性由插件声明（机制据此写"对方需要什么身份/侧"）
           share: { visibility: 'both', other_side_view: 'supplier',
-            requirements: ['对方需要用**承包商侧**的身份登录（它是发包方）；这份包是按 realm 投递的，'
+            requirements: ['对方需要用承包商侧的身份登录（它是发包方）；这份包是按 realm 投递的，'
               + '只出现在被邀请方的视图里'],
             note: '包是交付件：你看到的是发给本侧的版本事实与行项目；对方那一侧只认它自己的投递信封。' },
           // **乐观并发**：这个对象页上的保存动作要带的那一版（草稿槽 = 这份包）
@@ -389,9 +511,9 @@ export async function register(surface, host) {
             ...(referenceable ? { editable: true } : {}), type: 'number' },
           { key: 'draft', label: '已备草稿' },
         ],
-        rows: items.map((item) => {
-          const draft = drafts.get(String(item.item_id))
-          return { id: String(item.item_id), item_id: String(item.item_id), description: item.description ?? '',
+        rows: items.rows.map((item) => {
+          const draft = drafts.get(asText(item.item_id))
+          return { id: asText(item.item_id), item_id: asText(item.item_id), description: item.description ?? '',
             qty: item.qty, unit: item.unit,
             unit_price_cents: draft?.unit_price_cents ?? '', lead_time_days: draft?.lead_time_days ?? '',
             draft: draft ? `${draft.quote_draft_id}（待签署）` : '' }
@@ -407,9 +529,12 @@ export async function register(surface, host) {
                 + `能作 RFQ 引用的包：${known.ids.slice(0, 3).join(' / ') || '（一个都没有）'}`
                 + `${known.ids.length > 3 ? ` …（共 ${known.ids.length} 个）` : ''}。`
                 + '要让最新那个包也备得了，得先让它的事实进本侧账本。' }),
-        counts: { items: items.length, rev: mine.envelope.rev },
-        note: '这一页是那个包的**对象地址**（刷新不丢、可复制）：改单价/交期 → 「备这份草稿」→ 再去「我的草稿」人签提交'
-          + `${receiptNote(receipt) ? ` · ${receiptNote(receipt)}` : ''}` }
+        counts: { items: items.rows.length, envelope_items: items.list ? items.all : null,
+          dropped: items.dropped, rev: mine.envelope.rev },
+        note: '这一页是那个包的对象地址（刷新不丢、可复制）：改单价/交期 → 「备这份草稿」→ 再去「我的草稿」人签提交'
+          + `${receiptNote(receipt) ? ` · ${receiptNote(receipt)}` : ''}`
+          + (items.dropped ? ` · 有 ${items.dropped} 条行项目读不出来（形状异常）⇒ 已跳过并逐条计数，不静默丢`
+            : '') }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'quote.object', title: '报价逐行明细（承包商收到的）',
@@ -428,6 +553,9 @@ export async function register(surface, host) {
             : (json.next_action ?? json.refusal?.next_action ?? '看只读工具的输出') },
           columns: [{ key: 'item_id', label: '行项目' }], rows: [] }
       }
+      // **逐行读数（唯一入口）**：收件箱 JSON 由只读工具给；数组里混坏行 ⇒ 好行照列 + 逐条计数，
+      // 一条坏行不再把整块面板打崩（修前实测：`line.item_id` 直接 TypeError ⇒ data-failed）。
+      const lines = readRows(quote.items)
       return { ok: true, kind: 'table',
         object: { title: `报价 ${asText(quote.quote_id)}`, found: true,
           subtitle: `供应商 ${asText(quote.supplier)} · 包 ${asText(bagOf.package_id)} rev${bagOf.rev ?? '—'}`
@@ -444,11 +572,18 @@ export async function register(surface, host) {
           ].filter((link) => link.id !== '') },
         columns: [{ key: 'item_id', label: '行项目', type: 'code' }, { key: 'qty', label: '量', filter: 'number' },
           { key: 'unit_price_cents', label: '单价（整数分）', filter: 'number' }, { key: 'lead_time_days', label: '交期（天）', filter: 'number' }],
-        rows: (quote.items ?? []).map((line) => ({ id: String(line.item_id), item_id: line.item_id,
-          qty: line.qty, unit_price_cents: line.unit_price_cents, lead_time_days: line.lead_time_days })),
-        counts: { lines: (quote.items ?? []).length },
-        note: '受理 / 退回 / 要求补件是人工门：本页工具栏上的那个动作直接对**这份**报价发起（id 已按地址预填，'
-          + '不必手抄）；逐行单价与量的对账口径见「报价收件箱」面板的备注' }
+        // **逐行读数**（收件箱 JSON 由只读工具给；数组里混坏行 ⇒ 好行照列 + 逐条计数，不打崩面板）
+        rows: lines.rows.map((line) => {
+          const id = asText(line.item_id)
+          return { ...(id ? { id } : {}), item_id: id || '（无 id）', qty: line.qty,
+            unit_price_cents: line.unit_price_cents, lead_time_days: line.lead_time_days }
+        }),
+        counts: { lines: lines.rows.length, quoted_items: lines.all, dropped: lines.dropped },
+        note: '受理 / 退回 / 要求补件是人工门：本页工具栏上的那个动作直接对这份报价发起（id 已按地址预填，'
+          + '不必手抄）；逐行单价与量的对账口径见「报价收件箱」面板的备注'
+          + (lines.dropped
+            ? ` · 收件箱里这份报价有 ${lines.dropped} 条行读不出来（形状异常）⇒ 已跳过并逐条计数，不静默丢`
+            : '') }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'quote.drafts', title: '我的草稿（待签署）', view: 'supplier',
@@ -459,11 +594,11 @@ export async function register(surface, host) {
     // 计数行写「已勾选 M 行」「取消勾选」「选中全部命中行（N）」。
     // **P25 按事实改口**：P21 之后手工勾选**跨页保留**（真跑：勾 2 行 → 翻到第 2 页 → 再翻回来，
     // 那 2 行还是勾着的、按钮写「已选 2 行」），原先那句"勾只算这一页 / 翻页后不跟着走"与事实不符。
-    hint: '勾选语义（说清，免得少签）：表格左侧的勾**按这一块记、跨页保留** —— 翻到下一页时，'
+    hint: '勾选语义（说清，免得少签）：表格左侧的勾按这一块记、跨页保留 —— 翻到下一页时，'
       + '上一页勾着的行不会丢（翻回来还是勾着的，勾过的行有底色）。'
       + '提交按钮上那个数字就是这一次真会送出的行数（手工勾过的 + 「选中全部命中行」选上的）：'
       + '本页没勾、只有别页勾着时它写成「已选 0（含不在本页共 M） 行」，计数行同时写「已勾选 M 行」。'
-      + '要**按命中行**签，先把命中行筛到 50 行以内，再点计数行上那颗「选中全部命中行（N）」：'
+      + '要按命中行签，先把命中行筛到 50 行以内，再点计数行上那颗「选中全部命中行（N）」：'
       + '它把命中全集选上（换筛选条件会自动作废这次跨页选择）。'
       + '本块含「已签署提交」的历史行（按「状态」列筛「待签署」只看待办的）；一次最多签 50 份。',
     data: () => {
@@ -472,13 +607,17 @@ export async function register(surface, host) {
         const body = bodyOf(row)
         const id = asText(body.quote_draft_id) || asText(row?.correlation_id)
         if (!id) continue
-        const lines = Array.isArray(body.lines) ? body.lines : []
+        // **逐行读数（唯一入口）**：`lines` 里混着 null/字符串/数字时，修前 `line.item_id` 直接 TypeError
+        // ⇒ 整块「我的草稿」面板 data-failed（一条坏行把面板打崩）；现在好行照列、坏行逐条计数。
+        const lines = readRows(body.lines)
         drafts.set(id, { id, quote_draft_id: id, draft_id: id, rfq_id: body.rfq_id ?? body.package_id ?? '',
           item_id: body.item_id ?? '', unit_price_cents: body.unit_price_cents ?? '',
           lead_time_days: body.lead_time_days ?? '', prepared_by: body.prepared_by ?? '',
-          line_count: lines.length || 1,
-          lines_text: lines.length > 1 ? lines.map((line) => `${line.item_id}@${line.unit_price_cents}分`).join(' ')
-            : '', ts: row.ts ?? '' })
+          line_count: lines.all || 1,
+          lines_text: lines.rows.length > 1 ? lines.rows.map(lineLabelOf).join(' ')
+            + (lines.dropped ? `（+${lines.dropped} 条读不出来）` : '')
+            : (lines.dropped ? `（有 ${lines.dropped} 条行读不出来）` : ''),
+          ts: row.ts ?? '' })
       }
       const submitted = new Set(typeRows(host.rows('supplier'), 'quote/submitted')
         .map((row) => asText(bodyOf(row).quote_draft_id)))
@@ -499,12 +638,12 @@ export async function register(surface, host) {
         // **批量人签**（一次署名 → 逐份落账）：表头出现勾选框与「批量人签提交」按钮；勾几份签几份，
         // 每一份仍各自跑唯一写者 quote-sign.py（见 quote.submit-batch 的服务端一半）。
         bulk: 'quote.submit-batch',
-        note: '草稿**不是报价**：只有人签提交（quote/submit）之后才算对外报价（AGENTS.md 规则 3）；'
-          + '**一份草稿 = 一整张表**（行数 > 1 的草稿签一次就提交全部行）；'
+        note: '草稿不是报价：只有人签提交（quote/submit）之后才算对外报价（AGENTS.md 规则 3）；'
+          + '一份草稿 = 一整张表（行数 > 1 的草稿签一次就提交全部行）；'
           + '一天几十份时用表格左侧勾选框多选后点「批量人签提交」（一次署名、逐份落账、逐份可拒）。'
-          + '**这一块含「已签署提交」的历史行**（按「状态」列筛「待签署」只看待办的）；'
-          + `**一次最多签 ${BATCH_SIGN_MAX} 份**，超过会被具名拒（batch-too-large）；`
-          + '**勾选跨页保留**（翻到下一页时上一页的勾不丢，翻回来还是勾着的）—— 要按「命中行」签，'
+          + '这一块含「已签署提交」的历史行（按「状态」列筛「待签署」只看待办的）；'
+          + `一次最多签 ${BATCH_SIGN_MAX} 份，超过会被具名拒（batch-too-large）；`
+          + '勾选跨页保留（翻到下一页时上一页的勾不丢，翻回来还是勾着的）—— 要按「命中行」签，'
           + `先筛到 ≤ ${BATCH_SIGN_MAX} 行、再点计数行上那颗「选中全部命中行（N）」` }
     } }))
 
@@ -525,16 +664,17 @@ export async function register(surface, host) {
           { key: 'lead_time_days', label: '首行交期（天）', filter: 'number' }, { key: 'approved_by', label: '签署人', type: 'code' },
           { key: 'approval_id', label: '人工门', type: 'code' }, { key: 'submitted_at', label: '提交时刻', filter: 'date' }],
         rows: rows.map((row) => {
-          const lines = Array.isArray(row.lines) ? row.lines : []
-          return { id: row.quote_id, ...row, line_count: lines.length || 1,
-            item_id: asText(row.item_id) || asText(lines[0]?.item_id),
-            lines_text: lines.length > 1 ? lines.map((line) => `${line.item_id}@${line.unit_price_cents}分`).join(' ')
-              : '',
+          const lines = readRows(row.lines)
+          return { id: row.quote_id, ...row, line_count: lines.all || 1,
+            item_id: asText(row.item_id) || asText(lines.rows[0]?.item_id),
+            lines_text: lines.rows.length > 1 ? lines.rows.map(lineLabelOf).join(' ')
+              + (lines.dropped ? `（+${lines.dropped} 条读不出来）` : '')
+              : (lines.dropped ? `（有 ${lines.dropped} 条行读不出来）` : ''),
             ref: { kind: 'quote', id: asText(row.quote_id), title: `报价 ${asText(row.quote_id)}` } }
         }),
         counts: { quotes: rows.length },
         note: '每一行都对应一次人签的人工门（approval/requested → granted → quote/submitted，顺序不可颠倒）；'
-          + '**一份报价 = 一次人签**：行数 > 1 的报价是一次签完整份的（逐行在 `lines` 里，标量列只是首行）' }
+          + '一份报价 = 一次人签：行数 > 1 的报价是一次签完整份的（逐行在 `lines` 里，标量列只是首行）' }
     } }))
 
   // ---- **对象页**：`/app/supplier/quote/<q-…>/`（我提交的那份报价的全链事实） ----
@@ -552,12 +692,15 @@ export async function register(surface, host) {
       }
       const gates = typeRows(host.rows('supplier'), 'approval/').map((row) => bodyOf(row))
         .filter((row) => asText(row.ref) === wanted)
+      // **逐行读数（唯一入口）**：`lines` 里混着 null/字符串/数字时，修前 `${line.item_id}` 直接 TypeError
+      // ⇒ 整个「我的报价」对象页打不开（data-failed）；现在好行照列、坏行逐条计数。
+      const lines = readRows(quote.lines)
       return { ok: true, kind: 'kv',
         object: { title: `报价 ${asText(quote.quote_id)}`, found: true,
           subtitle: `包 ${asText(quote.package_id)} · rev${asText(quote.rfq_rev) || '—'}`
             + ` · ${asText(quote.currency)}`,
           facts: [
-            { key: '行数', value: String((quote.lines ?? []).length) },
+            { key: '行数', value: `${lines.all}${lines.dropped ? `（其中 ${lines.dropped} 条读不出来）` : ''}` },
             { key: '签署人（人签）', value: asText(quote.approved_by), code: true },
             { key: '人工门', value: asText(quote.approval_id), code: true },
             { key: '提交时刻', value: asText(quote.submitted_at) },
@@ -565,13 +708,15 @@ export async function register(surface, host) {
           links: [{ kind: 'package', id: asText(quote.package_id),
             title: `包 ${asText(quote.package_id)}` }].filter((link) => link.id !== '') },
         items: [
-          { key: '逐行', value: (quote.lines ?? []).map((line) => `${line.item_id}: `
-            + `${line.unit_price_cents} 分 / ${line.lead_time_days} 天`).join('；') || '（没有行明细）' },
+          { key: '逐行', value: lines.rows.map((line) => `${asText(line.item_id) || '（无 id）'}: `
+            + `${cellText(line.unit_price_cents) || '—'} 分 / ${cellText(line.lead_time_days) || '—'} 天`).join('；')
+            + (lines.dropped ? `${lines.rows.length ? '；' : ''}（另有 ${lines.dropped} 条行读不出来：形状异常，已跳过并计数）` : '')
+            || '（没有行明细）' },
           { key: '人工门记录', value: gates.map((gate) => `${gate.status ?? ''} ${gate.decided_by ?? ''}`
             + ` ${gate.comment ?? ''}`.trim()).join(' | ') || '（没有批准记录）' },
           { key: '对账口径', value: '金额一律整数分；这一页只读，改报要按新版重填（人签提交）' },
         ],
-        note: '这一页是那份报价的**对象地址**：刷新不丢、可复制；对外承诺类动作只有人签提交那一步'
+        note: '这一页是那份报价的对象地址：刷新不丢、可复制；对外承诺类动作只有人签提交那一步'
           + `（提交入口在「我的草稿」面板）。` }
     } }))
 
@@ -597,8 +742,8 @@ export async function register(surface, host) {
           help: 'human:<你的名字>（登录后会按会话身份自动填）' },
         { name: 'note', label: '备注（可选）', type: 'textarea' },
       ] },
-    hint: '**一份草稿 = 一整张表**：表里填几行就交几行，落**一条**草稿（`lines`）；'
-      + '草稿是**非签名动作**（不产生对外义务），随后「人签提交」一次签完整份',
+    hint: '一份草稿 = 一整张表：表里填几行就交几行，落一条草稿（`lines`）；'
+      + '草稿是非签名动作（不产生对外义务），随后「人签提交」一次签完整份',
     server: async (ctx, input) => {
       const rows = Array.isArray(input.rows) && input.rows.length ? input.rows : [input]
       const payload = payloadOf(host, 'supplier')
@@ -612,6 +757,16 @@ export async function register(surface, host) {
       const lines = []
       const failures = []
       for (const row of rows.slice(0, LIMITS.max_items)) {
+        // **行形状异常不静默、也不抛错**：`rows` 里混进 null/字符串/数字时，修前 `row.item_id` 直接
+        // TypeError ⇒ 整个「备这份草稿」提交崩掉（用户看到的是报错而不是"哪一行不对"）。
+        // 现在落一条具名失败（整批按既有语义拒绝：`failures.length` ⇒ 什么都没落盘）。
+        if (!isRow(row)) {
+          failures.push({ item_id: null, code: 'row-malformed',
+            reason: `第 ${lines.length + failures.length + 1} 行的形状是 ${shapeOf(row)}（不是对象）：`
+              + '批量提交的每一行都必须是行对象（含 item_id / unit_price_cents / lead_time_days）',
+            next_action: '把这一行的形状改对（或从「发给我的 RFQ 包」表里重新提交编辑）' })
+          continue
+        }
         const itemId = asText(row.item_id ?? row.id)
         const form = { get: (key) => ({ rfq_id: asText(input.rfq_id), item_id: itemId,
           unit_price_cents: String(row.unit_price_cents ?? input.unit_price_cents ?? ''),
@@ -643,7 +798,7 @@ export async function register(surface, host) {
         return { ok: false, code: failures.length ? 'validation-failed' : 'no-lines',
           reason: failures.map((item) => `${item.item_id}: ${item.reason}`).join('；')
             || '表里没有可提交的行（一行都没有 ⇒ 不落任何草稿）',
-          next_action: '按每条的 next_action 改后重提（本次**什么都没落盘**）',
+          next_action: '按每条的 next_action 改后重提（本次什么都没落盘）',
           result: { applied: [], failures, drafts: 0, lines: 0 } }
       }
       // ③ **一整张表 → 一条草稿**：多行带 `lines`（标量三键写第一行，供既有读者兜底），单行沿用旧形状
@@ -693,7 +848,7 @@ export async function register(surface, host) {
       const othersApplied = (receipt.applied ?? []).filter((row) => host.receiptFileName(row) !== mineName)
       const otherRefused = (receipt.refused ?? []).filter((row) => host.receiptFileName(row) !== mineName)
       const othersNote = (written || duplicated) ? '' : (othersApplied.length || otherRefused.length
-        ? `（同一次运行里写者还处理了 ${othersApplied.length + otherRefused.length} 条**别的**待办件：`
+        ? `（同一次运行里写者还处理了 ${othersApplied.length + otherRefused.length} 条别的待办件：`
           + `${othersApplied.length} 条已落行、${otherRefused.length} 条被拒 —— 那些不属于本动作）`
         : '')
       const code = ok ? 'drafted'
@@ -701,10 +856,10 @@ export async function register(surface, host) {
       const reason = refusedRow?.reason ?? (ok ? '' : (receipt.reason || ''))
       return { ok, code, reason,
         next_action: ok
-          ? `草稿已落账（quote/drafted，**${written ? (written.line_count ?? lines.length) : lines.length} 行**`
+          ? `草稿已落账（quote/drafted，${written ? (written.line_count ?? lines.length) : lines.length} 行`
             + `，供应商 + 承包商各一条 ⇒ 本动作账本 +${ledgerAdded} 行）：在「我的草稿」里点「人签提交」`
             + '一次签完整份（不必一行签一次）'
-            + (duplicated ? '；这一份**本来就在账本里**（幂等：本次零新增）' : '')
+            + (duplicated ? '；这一份本来就在账本里（幂等：本次零新增）' : '')
             + (otherRefused.length ? `；同一次运行里另有 ${otherRefused.length} 条待办件被拒`
               + `（${otherRefused.map((row) => row?.file ?? '?').join(' / ')}）—— 它们不属于本动作` : '')
           : (refusedRow?.next_action ?? receipt.next_action
@@ -728,9 +883,9 @@ export async function register(surface, host) {
 
   out.push(surface.action({ plugin_id: me, id: 'quote.submit', title: '人签提交报价', views: ['supplier'],
     group: '报价', order: 20, permission: 'human-signature',
-    confirm: { required: true, message: '提交报价是**对外承诺**：确认以你的署名提交？' },
-    hint: '人工门：**一份草稿签一次**就提交整份（草稿里有几行就提交几行，不必一行签一次）；'
-      + '服务端会校验**署名 == 会话身份**，不一致一律拒（`signer-mismatch`，账本零新增）；'
+    confirm: { required: true, message: '提交报价是对外承诺：确认以你的署名提交？' },
+    hint: '人工门：一份草稿签一次就提交整份（草稿里有几行就提交几行，不必一行签一次）；'
+      + '服务端会校验署名 == 会话身份，不一致一律拒（`signer-mismatch`，账本零新增）；'
       + '落账本的是唯一写者 tools/quote-sign.py（界面不代签、不写账本）',
     input: { fields: [
       { name: 'draft_id', label: '草稿 id', type: 'text', required: true,
@@ -775,10 +930,10 @@ export async function register(surface, host) {
       return { ok, code, reason: refusedRow?.reason ?? (ok ? '' : receipt.reason),
         next_action: ok
           ? (already && !written
-            ? `这一份（${draftId}）**已经签过了**：账本零新增（签名是幂等动作，不会产生第二条报价事实）——`
+            ? `这一份（${draftId}）已经签过了：账本零新增（签名是幂等动作，不会产生第二条报价事实）——`
               + '去「已提交的报价」面板回读那一条'
             : `已提交：本侧账本多了 approval/requested、approval/granted、quote/submitted 三条`
-              + `${lines > 1 ? `（这一份报价 **${lines} 行**，一次签完）` : ''}；`
+              + `${lines > 1 ? `（这一份报价 ${lines} 行，一次签完）` : ''}；`
               + `承包商账本多了「供应商已提交报价」一条 ⇒ 本次账本共 +${ledgerAdded} 行`
               + '（下面两个面板都能回读）')
           : (refusedRow?.next_action ?? receipt.next_action
@@ -808,10 +963,10 @@ export async function register(surface, host) {
   out.push(surface.action({ plugin_id: me, id: 'quote.submit-batch',
     title: '批量人签提交（多选一次签，逐份落账）', views: ['supplier'], group: '报价', order: 21,
     permission: 'human-signature',
-    confirm: { required: true, message: '批量提交 = 一次署名、**逐份**对外承诺（每一份各落一条 quote/submitted）'
+    confirm: { required: true, message: '批量提交 = 一次署名、逐份对外承诺（每一份各落一条 quote/submitted）'
       + '：确认以你的署名提交所选草稿？' },
-    hint: '一次署名 → 逐份落账：每份草稿**单独**跑唯一写者 quote-sign.py（各落 approval/requested → granted → '
-      + 'quote/submitted）；写者逐份判定 ⇒ 某一份被拒（已被改过 / 形状不对 / 已经签过）**不影响**其余份；'
+    hint: '一次署名 → 逐份落账：每份草稿单独跑唯一写者 quote-sign.py（各落 approval/requested → granted → '
+      + 'quote/submitted）；写者逐份判定 ⇒ 某一份被拒（已被改过 / 形状不对 / 已经签过）不影响其余份；'
       + '回执逐条给「已签 / 已经签过（幂等，零新增）/ 被拒 + 原因」；同一批重签不重复落账',
     input: { bulk: 'ids', fields: [
       { name: 'draft_id', label: '草稿 id（单条时可填；批量时由勾选的行自带）', type: 'text',
@@ -845,7 +1000,7 @@ export async function register(surface, host) {
           reason: `一次最多签 ${BATCH_SIGN_MAX} 份，收到 ${ids.length} 份`,
           next_action: `先用「搜这块 / 按列筛选 / 状态=待签署」把命中行缩到 ≤ ${BATCH_SIGN_MAX} 行`
             + `（计数行会跟着变），再点计数行上那颗「选中全部命中行（N）」重来。手工勾的也能用：`
-            + `勾选**跨页保留**（第 1 页勾的在翻页后不跟着丢），提交按钮上的数字就是真会送出的行数。`
+            + `勾选跨页保留（第 1 页勾的在翻页后不跟着丢），提交按钮上的数字就是真会送出的行数。`
             + `本动作账本零新增` }
       }
       const comment = String(input.comment ?? '')
@@ -901,13 +1056,13 @@ export async function register(surface, host) {
       // `ledger_added` 来自写者这一次运行的**全局**计数（本侧 3 行 + 承包商侧登记 1 行），不是供应商单侧行数：
       // 措辞里写明口径，免得用户按"这一侧只落了 4 行"去对账。
       const one = (row) => `${row.draft_id}：${row.where === 'applied' ? `已签（写者本次 +${row.ledger_added} 行：本侧 3 + 承包商侧登记 1）`
-        : (row.where === 'duplicates' ? '**已经签过**（幂等：这一份零新增）'
-          : `**被拒**（${row.code}${row.reason ? `：${row.reason}` : ''}）`)}`
+        : (row.where === 'duplicates' ? '已经签过（幂等：这一份零新增）'
+          : `被拒（${row.code}${row.reason ? `：${row.reason}` : ''}）`)}`
       // 逐条如实报告（**不许**"要么全成要么全败"）：份数、行数、以及每一份的落点都写出来
       const next = `${results.length} 份：已签 ${signed.length} 份 · 已经签过（幂等）${idempotent.length} 份 · `
         + `被拒 ${failed.length} 份（本次账本 +${ledgerAdded} 行）—— ${results.map(one).join('；')}`
         + (failed.length
-          ? `。被拒的这几份要**单独**处理：${failed.map((row) => `${row.draft_id} ⇒ `
+          ? `。被拒的这几份要单独处理：${failed.map((row) => `${row.draft_id} ⇒ `
             + `${row.next_action || row.code}`).join('；')}（被拒的那几份账本零新增，其余份不受影响）`
           : '。已签的几份在「已提交的报价」里可回读')
       return { ok: (signed.length + idempotent.length) > 0,
@@ -944,15 +1099,19 @@ export async function register(surface, host) {
       const items = []
       for (const [id, body] of drafts) {
         if (signed.has(id)) continue
-        const lines = Array.isArray(body.lines) ? body.lines : []
+        // **逐行读数（唯一入口）**：`lines` 里混着 null/字符串/数字时，修前 `${line.item_id}` 直接
+        // TypeError ⇒ 整条通知源 poll() 抛错（外壳的通知面会因此报错）；现在好行照报、坏行计数。
+        const lines = readRows(body.lines)
         items.push({ id: `q:pending:${id}`, level: 'warn', at: String(body.submitted_at ?? ''),
-          title: `草稿待签署：${id}${lines.length > 1 ? `（${lines.length} 行）` : ''}`,
-          body: lines.length > 1
-            ? `${lines.length} 行：` + lines.slice(0, 3).map((line) => `${line.item_id}@${line.unit_price_cents}分`)
-              .join(' / ') + (lines.length > 3 ? ' …' : '')
-            : `行项目 ${body.item_id ?? '—'} · 单价 ${body.unit_price_cents ?? '—'} 分`,
-          next_action: lines.length > 1
-            ? `人签提交报价（**一次签完整份 ${lines.length} 行**；署名 = 你的会话身份）`
+          title: `草稿待签署：${id}${lines.all > 1 ? `（${lines.all} 行）` : ''}`,
+          body: lines.all > 1
+            ? `${lines.all} 行：` + lines.rows.slice(0, 3).map(lineLabelOf)
+              .join(' / ') + (lines.rows.length > 3 ? ' …' : '')
+              + (lines.dropped ? `（另有 ${lines.dropped} 条行读不出来：形状异常）` : '')
+            : `行项目 ${body.item_id ?? '—'} · 单价 ${body.unit_price_cents ?? '—'} 分`
+              + (lines.dropped ? `（另有 ${lines.dropped} 条行读不出来：形状异常）` : ''),
+          next_action: lines.all > 1
+            ? `人签提交报价（一次签完整份 ${lines.all} 行；署名 = 你的会话身份）`
             : '人签提交报价（署名 = 你的会话身份）',
           action: 'quote.submit', preset: { draft_id: id },
           ref: asText(body.rfq_id) === '' ? null : { view: 'supplier', kind: 'package',
@@ -977,28 +1136,38 @@ export async function register(surface, host) {
       const mine = myPackage(host, realmOf('supplier'))
       const known = referenceablePackages(host)
       const packageId = mine.ok ? String(mine.envelope.spec?.package_id ?? '') : ''
-      // 首屏的「备这份草稿」按钮也走同一条预填口径：包不在本侧事实的目录里就别给入口
-      const draftable = mine.ok && (known.ids.length === 0 || known.ids.includes(packageId))
+      // **信封行项目读数（唯一入口）**：首屏这一条也在报"几条行项目" —— 修前 `spec.items.length` 在
+      // `items` 是**文本**时会把字符串长度当成行数（README 级的谎）；现在只有数组才按条数报。
+      const packageItems = mine.ok ? packageItemsOf(mine.envelope.spec) : null
+      // 首屏的「备这份草稿」按钮也走同一条预填口径：包不在本侧事实的目录里、或行项目读不出来，就别给入口
+      const draftable = mine.ok && packageItems.list
+        && (known.ids.length === 0 || known.ids.includes(packageId))
       const items = []
       items.push(sideScoped(ctx, 'supplier', { level: pending.length ? 'warn' : 'info',
         title: pending.length ? `供应商侧：${pending.length} 份草稿待供应商人签提交` : '供应商侧：没有待签署的草稿',
-        body: '提交报价是对外承诺：要人签（human:<你的名字>）；**一份草稿签一次就提交整份**。'
-          + '（这一条属于**供应商侧**：工作台把两侧的待办并在一张卡上，只有登录供应商侧的那个人能签。）',
+        body: '提交报价是对外承诺：要人签（human:<你的名字>）；一份草稿签一次就提交整份。'
+          + '（这一条属于供应商侧：工作台把两侧的待办并在一张卡上，只有登录供应商侧的那个人能签。）',
         action: pending.length ? 'quote.submit' : 'quote.draft',
         label: pending.length ? '人签提交报价' : '备一份草稿',
         next_action: pending.length ? '点按钮直接开签名弹层（一次签完整份）；也可以在「我的草稿」里逐条签'
           : '先把表里的单价与交期填完，再「备这份草稿」（整张表一次提交）' }))
       items.push(sideScoped(ctx, 'supplier', { level: mine.ok ? 'info' : 'warn',
-        title: mine.ok ? `供应商侧：发给供应商的包（${(mine.envelope.spec?.items ?? []).length} 条行项目，rev${mine.envelope.rev}）`
+        title: mine.ok ? `供应商侧：发给供应商的包（${packageItems.list
+          ? `${packageItems.rows.length} 条行项目${packageItems.dropped ? `，另有 ${packageItems.dropped} 条读不出来` : ''}`
+          : `行项目读不出来：信封里 \`spec.items\` 是 ${packageItems.shape}`}，rev${mine.envelope.rev}）`
           : '供应商侧：还没有发给供应商的 RFQ 包',
         body: mine.ok ? `报价截止 ${(mine.envelope.spec?.deadlines ?? {}).quote_by ?? '—'}`
+          + (packageItems.list ? '' : ` · 信封里的行项目读不出来（是 ${packageItems.shape}，不是数组）⇒ 这份包现在备不了报价：`
+            + '界面不编行项目、也不给入口（空表不等于"没有行项目"）')
           + (draftable ? '' : ` · 这一份包现在备不了报价：它（${packageId}）不在本侧事实的包目录里`
             + `（上限 ${LIMITS.max_items} 个包）⇒ 提交必被拒，界面故意不给入口`) : mine.reason,
         action: mine.ok && draftable ? 'quote.draft' : '', label: '备这份草稿',
         next_action: mine.ok
           ? (draftable ? '去填单价与交期 → 备草稿'
-            : `先让这个包的事实进本侧账本（或按本侧事实里认得的包备报价：`
-              + `${known.ids.slice(0, 3).join(' / ') || '（一个都没有）'}）；这一份包现在点了也会被 rfq-not-found 拒`)
+            : (packageItems.list
+              ? `先让这个包的事实进本侧账本（或按本侧事实里认得的包备报价：`
+                + `${known.ids.slice(0, 3).join(' / ') || '（一个都没有）'}）；这一份包现在点了也会被 rfq-not-found 拒`
+              : `让发包方按行项目数组重发这一版（现在点「备报价」也没有可填的行）`))
           : (mine.next_action ?? ''),
         ref: mine.ok ? { kind: 'package', id: String(mine.envelope.spec?.package_id ?? '') } : null }))
       return { ok: true, kind: 'list', items }
@@ -1048,15 +1217,23 @@ export async function register(surface, host) {
           columns: [{ key: 'quote_id', label: '报价' }], rows: [] }
       }
       const rows = []
+      let droppedLines = 0
       for (const bag of json.packages ?? []) {
         for (const quote of bag.quotes ?? []) {
+          // **逐行读数（唯一入口）**：收件箱 JSON 里的 `quote.items` 混进 null/字符串/数字时，
+          // 修前 `${line.item_id}` 直接 TypeError ⇒ 整块收件箱面板 data-failed（承包商连受理都点不到）。
+          const lines = readRows(quote.items)
+          droppedLines += lines.dropped
           rows.push({ id: quote.quote_id, quote_id: quote.quote_id, package_id: bag.package_id, rev: bag.rev,
             supplier: quote.supplier, currency: quote.currency,
-            items: (quote.items ?? []).map((line) => `${line.item_id}×${line.qty ?? '?'}@${line.unit_price_cents}分`).join(' '),
+            items: lines.rows.map((line) => `${asText(line.item_id) || '（无 id）'}×${cellText(line.qty) || '?'}`
+              + `@${cellText(line.unit_price_cents) || '—'}分`).join(' ')
+              + (lines.dropped ? `（+${lines.dropped} 条读不出来）` : ''),
             total_cents: quote.total_cents, vs_current_rev: quote.vs_current_rev,
             submitted_at: quote.submitted_at, review_status: quote.review_status,
             reviewed_by: quote.reviewed_by ?? '', review_comment: quote.review_comment ?? '',
-            approved_by: quote.approved_by ?? '', lead_time: (quote.items ?? []).map((line) => line.lead_time_days).join('/'),
+            approved_by: quote.approved_by ?? '',
+            lead_time: lines.rows.map((line) => cellText(line.lead_time_days) || '—').join('/'),
             ref: { kind: 'quote', id: asText(quote.quote_id), title: `报价 ${asText(quote.quote_id)}` } })
         }
       }
@@ -1075,17 +1252,19 @@ export async function register(surface, host) {
           { key: 'reviewed_by', label: '受理人', type: 'code' },
         ],
         rows, row_actions: ['quote.review'], bulk: 'quote.review',
-        counts: { ...(json.counts ?? {}) },
+        counts: { ...(json.counts ?? {}), dropped_lines: droppedLines },
         note: `事实时刻 ${json.as_of || '—'} · 逐条「受理/退回/要求补件」（人签，按行内或勾选批量）；`
-          + '受理状态读账本 `approval/*` 的 `scope=quote-review:<decision>`；作废的报价不允许受理（`quote-superseded`）' }
+          + '受理状态读账本 `approval/*` 的 `scope=quote-review:<decision>`；作废的报价不允许受理（`quote-superseded`）'
+          + (droppedLines ? ` · 收件箱里有 ${droppedLines} 条报价行读不出来（形状异常）⇒ 已跳过并逐条计数，`
+            + '行级明细里如实标了「+N 条读不出来」，不静默丢' : '') }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'quote.review', title: '受理 / 退回 / 要求补件（人签）',
     views: ['contractor'], group: '报价', order: 5, permission: 'human-signature', inline: true,
     object_kind: 'quote',
-    confirm: { required: true, message: '这是**人签判定**：受理后对方会看到「已受理」；确认以你的署名执行？' },
+    confirm: { required: true, message: '这是人签判定：受理后对方会看到「已受理」；确认以你的署名执行？' },
     hint: '受理=approval/granted、退回/要补件=approval/denied（scope 带判定）；退回/补件必须给理由；'
-      + '通知对方只含判定与披露理由，**不含内部备注**',
+      + '通知对方只含判定与披露理由，不含内部备注',
     input: { bulk: 'ids', fields: [
       { name: 'quote_id', label: '报价 id', type: 'text', required: true, from_route: true,
         help: '从收件箱行里取（批量时每行自带）；在报价对象页上会自动填当前这一份' },
@@ -1155,8 +1334,14 @@ export async function register(surface, host) {
         const body = bodyOf(row)
         const subject = asText(body.subject)
         if (!subject.startsWith('报价评审：')) continue
+        // **收件人行读数**：`to` 不是一个数组时（字符串/数字/对象/缺失）修前 `(body.to ?? []).join` 直接
+        // TypeError ⇒ 整块「对方通知」面板打崩；现在按形状如实报出来（读不出来就说读不出来）。
+        const recipients = scalarListOf(body.to)
         rows.push({ id: `${body.message_id ?? ''}-${row.ts ?? ''}`, at: row.ts ?? '', subject,
-          to: (body.to ?? []).join(' '), body_sha256: asText(body.body_sha256),
+          to: recipients.list ? recipients.items.join(' ') + (recipients.dropped
+            ? `${recipients.items.length ? ' ' : ''}（另有 ${recipients.dropped} 条收件人读不出来）` : '')
+            : `（收件人字段是 ${recipients.shape}，不是名单：读不出来就不编）`,
+          body_sha256: asText(body.body_sha256),
           disclosed: letterOf(subject) })
       }
       if (!rows.length) {
@@ -1168,7 +1353,7 @@ export async function register(surface, host) {
         columns: [{ key: 'at', label: '收到时刻' }, { key: 'subject', label: '判定' },
           { key: 'disclosed', label: '承包商披露的理由' }, { key: 'body_sha256', label: '正文哈希', type: 'code' }],
         rows, counts: { notices: rows.length },
-        note: '只含判定与承包商愿意披露的理由（**不含**内部备注）；通知是"入队"事实，不代表邮件真的发出' }
+        note: '只含判定与承包商愿意披露的理由（不含内部备注）；通知是"入队"事实，不代表邮件真的发出' }
     } }))
 
   out.push(surface.notificationSource({ plugin_id: me, id: 'notify.quote-review', title: '待受理的报价',
@@ -1178,11 +1363,14 @@ export async function register(surface, host) {
       for (const bag of json.packages ?? []) {
         for (const quote of bag.quotes ?? []) {
           if (quote.review_status !== '待审') continue
+          const quoteLines = readRows(quote.items)
           items.push({ id: `quote:review:${quote.quote_id}`, level: 'warn', at: quote.submitted_at,
             ref: { view: 'contractor', kind: 'quote', id: asText(quote.quote_id),
               title: `报价 ${asText(quote.quote_id)}` },
             title: `待受理：${quote.quote_id}（${bag.package_id} · ${quote.supplier}）`,
-            body: `行合计 ${quote.total_cents} 分 · ${(quote.items ?? []).length} 行 · ${quote.vs_current_rev}`,
+            body: `行合计 ${quote.total_cents} 分 · ${quoteLines.rows.length} 行`
+              + `${quoteLines.dropped ? `（另有 ${quoteLines.dropped} 条行读不出来）` : ''}`
+              + ` · ${quote.vs_current_rev}`,
             next_action: '点下面的按钮受理/退回/要补件（人签）', action: 'quote.review',
             preset: { quote_id: asText(quote.quote_id) } })
         }

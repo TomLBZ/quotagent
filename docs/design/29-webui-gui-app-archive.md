@@ -249,3 +249,10 @@
 * 旧 UI 形态判据抓手：`refresh-ui-snapshots.py`、`ui-seed-pipeline.py`、`ui-mutate` 变异门、`AC-UXWEB-001` 旧判据（「三块第一屏锚点 + 0 内联脚本」+ 快照 hash）⇒ AC 资产 47→46。
 * 旧运维面登记标记：ap-0110 记录**保留**并标 `retired`（`pipeline-view`）；邮件域快照写入器搬进 `system/mail/tools/`。
 * 四个门（`advice`/`rfq-deadline`/`gates`/`authority`）：旧页存在类断言删除、等价或更强的判据接到 GUI，**插件层围栏判据一条没松**。
+
+## 22 §22 的形状与逐条口径（判据与禁止仍在主文件）
+
+1（回执）：落点 / 形状 / 有界 / 拒绝码逐条 = `delivery-receipts-and-weekly.md` §2.2 + §4（`receipts/deliveries.json`，
+   目录 0700 / 文件 **0600**、按对象聚合、60 s 去抖、对象 500 / 读者 64 / 512 KiB）。
+2（周报）：五项指标口径、逐行证据行号、门的配对键、导出三档与屏幕同源 = 同文件 §3.2 / §3.4；
+   复跑 `python3 tmp/p26-verify.py`（读数与截图落 `tmp/p26-shots/`）。

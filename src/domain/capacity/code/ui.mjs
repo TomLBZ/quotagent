@@ -31,8 +31,8 @@ const sideScoped = (ctx, itemSide, item) => {
   if (mine === itemSide) return item
   const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
   const why = mine === ''
-    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
-    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+    ? `（未登录：登录${label}之后这一条才算"需要你处理"）`
+    : `（不是你要办的：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
   const body = asText(item.body)
   return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
     body: `${body}${body ? ' ' : ''}${why}` }
@@ -105,7 +105,7 @@ export async function register(surface, host) {
   // ================================================================== 产能日历（热力图形态：按天一行）
   out.push(surface.panel({ plugin_id: me, id: 'exchange.calendar', title: '产能日历（按天：可用 / 已承诺 / 冲突）',
     view: 'supplier', order: 30, kind: 'table', actions: ['exchange.calendar', 'exchange.capacity-promise'],
-    hint: '日历是**本方私域**（只进本视角账本）；「已承诺」列给出落在该天窗口内的承诺，冲突标记来自 capacity/conflict',
+    hint: '日历是本方私域（只进本视角账本）；「已承诺」列给出落在该天窗口内的承诺，冲突标记来自 capacity/conflict',
     data: () => {
       const state = stateOf(host, 'supplier')
       const days = [...state.calendar.keys()].sort()
@@ -140,7 +140,7 @@ export async function register(surface, host) {
         rows, counts: { days: days.length, shown: rows.length, commitments: state.commitments.length,
           conflicts: state.conflicts.length },
         note: `天数上限 ${DAY_LIMIT} 行（有界；超出如实截断并给 counts）`
-          + ' · 冲突只提请人工：服务**不**自动改交期、**不**否决报价（护栏不否决）' }
+          + ' · 冲突只提请人工：服务不自动改交期、不否决报价（护栏不否决）' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'exchange.commitments', title: '我的承诺交期（firm 不可原地改）',
@@ -188,7 +188,7 @@ export async function register(surface, host) {
           required: item.required, available: item.available, shortfall: item.shortfall,
           requires_human: item.requires_human === true ? '是（只提请人工）' : '否' })),
         counts: { conflicts: state.conflicts.length },
-        note: '缺口数值是**本方私域**；对外的 share-safe 形态只有定性结论（承包商侧看不到这些数字）' }
+        note: '缺口数值是本方私域；对外的 share-safe 形态只有定性结论（承包商侧看不到这些数字）' }
     } }))
 
   // ================================================================== 承包商侧：对方承诺的 share-safe 交期
@@ -209,13 +209,13 @@ export async function register(surface, host) {
           { key: 'revision', label: 'revision' }, { key: 'by', label: '由谁', type: 'code' }],
         rows: rows.map((item) => ({ id: asText(item.commitment_id), ...item })),
         counts: { commitments: rows.length },
-        note: 'share-safe：只有交期与绑定性质（**不含**对方的产能日历、缺口值与里程碑细节 —— 规则 4）' }
+        note: 'share-safe：只有交期与绑定性质（不含对方的产能日历、缺口值与里程碑细节 —— 规则 4）' }
     } }))
 
   // ================================================================== 动作
   out.push(surface.action({ plugin_id: me, id: 'exchange.calendar', title: '设置产能日历（按天可用产量）',
     views: ['supplier'], group: '产能', order: 10,
-    hint: 'days 用 `YYYY-MM-DD=可用量` 每行一条；日历是**本方私域**，只进本视角账本',
+    hint: 'days 用 `YYYY-MM-DD=可用量` 每行一条；日历是本方私域，只进本视角账本',
     input: { fields: [
       { name: 'days_text', label: '日历（每行：YYYY-MM-DD=可用量）', type: 'textarea', required: true,
         help: '例：2026-10-01=12\\n2026-10-02=10\\n2026-10-03=8' },
@@ -256,7 +256,7 @@ export async function register(surface, host) {
 
   out.push(surface.action({ plugin_id: me, id: 'exchange.capacity-promise', title: '承诺交期（实时可行性试算）',
     views: ['supplier'], group: '产能', order: 20,
-    hint: 'firm = 有效期内不可变更；不可行**不夹取**：服务只提请人工（requires_human + capacity_risk）',
+    hint: 'firm = 有效期内不可变更；不可行不夹取：服务只提请人工（requires_human + capacity_risk）',
     input: { fields: [
       { name: 'quote_id', label: '报价 id', type: 'text', required: true, help: '从「已提交的报价」里复制' },
       { name: 'package_id', label: '包 id', type: 'text', required: true },

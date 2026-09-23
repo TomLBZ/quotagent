@@ -71,6 +71,11 @@ REAL_PIPELINE = ROOT / "tmp" / "ui-shared" / "pipeline.json"
 
 NOW = "2026-09-21T00:00:00Z"
 LATER = "2126-09-21T00:00:00Z"
+#: AC-ADMIN-004 里「phase 取自真源」的**反向对照值**：把真 state.json 的 `phase` 改成它，
+#: 判定器输出必须跟着改（硬编码阶段名的判据在这条下必红）。它**不是**任何真实阶段名 ——
+#: 判据里不再出现具体阶段字面量（D-086 把阶段从 `P2-advisor-and-live-canary` 换成
+#: `P2-webui-as-gui-app` 时，写死阶段名的那条断言误红过一次）。
+PHASE_SHIFT = "P0-fixture-phase-shift"
 SENTINEL = "ZZ-ADMIN-SENTINEL-ZZ"
 SHA_A = "sha256:" + "a" * 64
 REQUIRED_BLOCK_KEYS = ("block_id", "kind", "reason", "required_action", "refs")
@@ -271,15 +276,30 @@ def check_admin_004() -> list[Assertion]:
     # --- 4. 计数独立复算（D-056：不按列表长度推） --------------------------
     real_counts = _own_checklist_counts(REAL_CHECKLIST.read_text(encoding="utf-8"))
     progress = real["progress"]
+    # **`phase` 必须读真源**（P27 修）：期望值从真 `.agents/state.json` **独立读出来**（不是判定器
+    # 自报的、也不是字面量），并且拿一份**改了 phase 的副本**做反向对照 —— 副本换阶段，输出必须跟着换。
+    # 修前这里写死 `== "P2-advisor-and-live-canary"`：阶段一换（D-086 切到 `P2-webui-as-gui-app`）
+    # 就判红，而红的是**判据本身**、不是产品（放氪判据的反面：不许为了变绿删掉这条本意）。
+    truth_phase = json.loads(REAL_STATE.read_text(encoding="utf-8")).get("phase")
+    shifted_payload = json.loads(REAL_STATE.read_text(encoding="utf-8"))
+    shifted_payload["phase"] = PHASE_SHIFT
+    shifted_state = root / "state-phase-shift.json"
+    shifted_state.write_text(json.dumps(shifted_payload, ensure_ascii=False), encoding="utf-8")
+    shifted_phase = derive_blocks(shifted_state, REAL_CHECKLIST, real_pipeline, NOW)["progress"]["phase"]
     out.append(Assertion("进度数字只读且口径可核：`done/todo` 与**独立复算**的真进度清单一致，"
-                         "`phase/next_task` 取自 state.json，`progress.source` 非空（反例：写成固定数字 / 口径空 → 红）",
+                         "`phase/next_task` 取自 state.json（**与真源逐字比**：真 state.json 的 `phase` 换了，"
+                         "这里就必须跟着换 —— 硬编码字面量在这条下必红），`progress.source` 非空"
+                         "（反例：写成固定数字 / 口径空 / 把阶段名写死在判据里 → 红）",
                          (progress["done"], progress["todo"]) == (real_counts["done"], real_counts["todo"])
                          and progress["by_status"] == real_counts
                          and bool(str(progress.get("source") or "").strip())
-                         and progress["phase"] == "P2-advisor-and-live-canary"
+                         and bool(str(truth_phase or "").strip())
+                         and progress["phase"] == truth_phase
+                         and shifted_phase == PHASE_SHIFT
                          and bool(str(progress["next_task"] or "").strip()),
                          f"done/todo={progress['done']}/{progress['todo']} 复算={real_counts} "
-                         f"phase={progress['phase']}"))
+                         f"phase={progress['phase']}（真源 state.json={truth_phase}；"
+                         f"改 phase 的副本 → {shifted_phase}）"))
     bounded = derive_blocks(state, checklist, pipeline, NOW, max_blocks=1)
     ledger_records = [_record("blk-checklist-0000", "resolved"), _record("blk-state-human-required-0000", "pending")]
     with_history = derive_blocks(state, checklist, pipeline, NOW, records=ledger_records)

@@ -44,8 +44,8 @@ const sideScoped = (ctx, itemSide, item) => {
   if (mine === itemSide) return item
   const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
   const why = mine === ''
-    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
-    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+    ? `（未登录：登录${label}之后这一条才算"需要你处理"）`
+    : `（不是你要办的：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
   const body = asText(item.body)
   return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
     body: `${body}${body ? ' ' : ''}${why}` }
@@ -152,7 +152,7 @@ export async function register(surface, host) {
     if (who && asText(who.side) !== '') {
       if (asText(who.side) !== side) {
         return { ok: false, code: 'cross-side-action',
-          reason: `「${title}」是**${side} 侧**的动作；当前会话是 ${asText(who.side)} 侧（${asText(who.human)}）`,
+          reason: `「${title}」是${side} 侧的动作；当前会话是 ${asText(who.side)} 侧（${asText(who.human)}）`,
           next_action: `切到 ${side} 侧的身份再签：人签只能由本侧的人做（跨侧替签一律拒，账本零新增）` }
       }
       return null
@@ -204,7 +204,7 @@ export async function register(surface, host) {
           { key: 'award_id', label: '承诺', type: 'code' }, { key: 'approved_by', label: '承诺批准人', type: 'code' },
           { key: 'po_id', label: 'PO', type: 'code' }, { key: 'chain', label: '追溯链' }],
         rows: table, counts: { intents: intents.length, awards: awards.length, po: pos.length },
-        note: '承诺与 PO 两列只有在**人签并过人工门**之后才会有值（没签就是空 —— 不假装已承诺）' }
+        note: '承诺与 PO 两列只有在人签并过人工门之后才会有值（没签就是空 —— 不假装已承诺）' }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'award.propose', title: '提出授标意向（不产生义务）',
@@ -280,7 +280,7 @@ export async function register(surface, host) {
   out.push(surface.action({ plugin_id: me, id: 'po.issue', title: '发 PO（人签）', views: ['contractor'],
     group: '授标', order: 30, permission: 'human-signature', object_kind: 'award',
     confirm: { required: true, message: '发 PO 是承诺类动作：确认以你的署名发出并投递给中标供应商？' },
-    hint: 'PO 只能由承诺派生；行与价都从中标条目派生（不得在界面上自由改价）；发出即**同步投递**给中标供应商（两侧账本各一条投递登记）',
+    hint: 'PO 只能由承诺派生；行与价都从中标条目派生（不得在界面上自由改价）；发出即同步投递给中标供应商（两侧账本各一条投递登记）',
     input: { fields: [
       { name: 'award_id', label: '承诺 id', type: 'text', required: true, from_route: true,
         help: '从「授标链」表里复制（aw-…）；在授标对象页上会自动填当前这一条' },
@@ -342,7 +342,7 @@ export async function register(surface, host) {
           lines: (item.lines ?? []).map((line) => `${line.item_id}×${line.qty}@${line.unit_price_cents ?? line.unit_price}`).join(' '),
           reason: item.reason ?? '', confirmed: confirmedIds.has(asText(item.intent_id)) ? '已确认' : '待确认' })),
         row_actions: ['award.confirm'], counts: { intents: mine.length },
-        note: '确认是**你自己**的动作（只确认自己那份报价对应的意向）；确认不等于承诺' }
+        note: '确认是你自己的动作（只确认自己那份报价对应的意向）；确认不等于承诺' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'award.confirmed', title: '我确认过的授标（本侧账本）',
@@ -445,8 +445,8 @@ export async function register(surface, host) {
             ref: { kind: 'po', id: poId, title: `采购单 ${poId}` } }
         }),
         row_actions: ['po.acknowledge', 'po.export-received'], counts: { po: delivered.length },
-        note: '行来自**本侧账本**的投递登记（`po/distributed`，签发方写的那条）；投递信封里 `delivered_to` '
-          + '不含我这侧的条目**根本不出现在这里**（不是藏起来）'
+        note: '行来自本侧账本的投递登记（`po/distributed`，签发方写的那条）；投递信封里 `delivered_to` '
+          + '不含我这侧的条目根本不出现在这里（不是藏起来）'
           + `${receiptLine ? ` · ${receiptLine}` : ''}` }
     } }))
 
@@ -487,7 +487,7 @@ export async function register(surface, host) {
           links,
           // **分享**（插件声明"对方能不能看"；机制据此写分享弹层与邮件正文）
           share: { visibility: 'both', other_side_view: 'contractor',
-            requirements: ['对方要用**承包商侧**的身份登录（签发方）；这张 PO 是按 realm 投递的 —— '
+            requirements: ['对方要用承包商侧的身份登录（签发方）；这张 PO 是按 realm 投递的 —— '
               + '只有投递到本侧的 PO 才会出现在本侧视图里'],
             note: '这是投递给本侧的那一份（本侧账本里有投递登记）；回签件挂在这张 PO 的附件面板上。' } },
         items: [
@@ -499,7 +499,7 @@ export async function register(surface, host) {
           { key: '已读回执（签发方能看到）', value: receiptNote(receipt)
             || '这次没记（没有会话身份 → 不记回执；回执是读取痕迹，不进账本）' },
         ],
-        note: '这一页**只看**本侧账本的事实：PO 的行与价由承包商从承诺派生，本侧不提供任何改价入口；'
+        note: '这一页只看本侧账本的事实：PO 的行与价由承包商从承诺派生，本侧不提供任何改价入口；'
           + '回签（po/acknowledged）也不改 PO 的任何行与价'
           + `${receiptNote(receipt) ? ` · ${receiptNote(receipt)}` : ''}` }
     } }))
@@ -527,7 +527,7 @@ export async function register(surface, host) {
 
   out.push(surface.panel({ plugin_id: me, id: 'po.prereqs', title: '执行前提（送货地址 / 交期窗口 / 截止）',
     view: 'supplier', order: 52, kind: 'kv', object_kind: 'po',
-    hint: '有事实就照实给；没有的**如实说"对方没给"**（不编送货地址、不编交期）',
+    hint: '有事实就照实给；没有的如实说"对方没给"（不编送货地址、不编交期）',
     data: (ctx) => {
       const poId = asText(ctx.route?.id)
       const item = poReceivedOf(poId)
@@ -541,8 +541,8 @@ export async function register(surface, host) {
       const window = asText(delivery.delivery_window)
       const shipTo = asText(delivery.ship_to)
       const items = [
-        { key: '送货地址', value: shipTo || '承包商在这张 PO 上**没有给**（不是我没有权限看）' },
-        { key: '交期窗口', value: window || '承包商在这张 PO 上**没有给**' },
+        { key: '送货地址', value: shipTo || '承包商在这张 PO 上没有给（不是我没有权限看）' },
+        { key: '交期窗口', value: window || '承包商在这张 PO 上没有给' },
         { key: '行项目与数量', value: (item.lines ?? []).map((line) => `${line.ref_line}×${line.qty}`).join(' · ') },
         { key: '币种', value: asText(rfq.currency) || '（本侧账本里没有这个包的投递登记）' },
         { key: '报价截止（本侧包事实）', value: asText(rfq.quote_by) || '（同上）' },
@@ -550,7 +550,7 @@ export async function register(surface, host) {
       ]
       return { ok: true, kind: 'kv', items,
         real_facts: ['送货地址/交期窗口来自投递登记（发 PO 的人填的）', '币种/报价截止来自本侧 rfq/distributed'],
-        note: '本侧只如实显示有事实的前提：地址与交期没有就写"没有"，要补就把它作为**附件**挂在这张 PO 上'
+        note: '本侧只如实显示有事实的前提：地址与交期没有就写"没有"，要补就把它作为附件挂在这张 PO 上'
           + '（回签件/送货单），或用变更单（change/proposed）走人工门',
         next_action: (shipTo && window) ? '' : (asText(delivery.delivered_at)
           ? '要承包商补地址/交期：在本页「附件」面板里留言条，或用「变更单」提一条（双方都会看到）'
@@ -560,7 +560,7 @@ export async function register(surface, host) {
   out.push(surface.action({ plugin_id: me, id: 'po.acknowledge', title: '确认收到采购单（人签）', views: ['supplier'],
     group: '采购单', order: 41, permission: 'human-signature', object_kind: 'po',
     confirm: { required: true, message: '回签＝确认收到了这张采购单（不改变 PO 的行与价）：以你的署名确认？' },
-    hint: '写自己账本 po/acknowledged + 承包商账本一条同名登记（双向留痕）；只有**投递给本侧**的 PO 才能回签',
+    hint: '写自己账本 po/acknowledged + 承包商账本一条同名登记（双向留痕）；只有投递给本侧的 PO 才能回签',
     input: { fields: [
       { name: 'po_id', label: 'PO id', type: 'text', required: true, from_route: true,
         help: '从「发给我的采购单」表里取（po-…）；在 PO 对象页上会自动填当前这一条' },
@@ -912,7 +912,7 @@ export async function register(surface, host) {
               + `${asText(acks.get(asText(po.po_id)).acknowledged_at)}` : '待回签',
           ref: { kind: 'po', id: String(po.po_id), title: `PO ${po.po_id}` } })),
         row_actions: ['po.trace'], counts: { po: pos.length, delivered: deliveredIds.size, acked: acks.size },
-        note: '行内「打开 →」是这条 PO 的**对象深链**（可复制分享、刷新不丢）；'
+        note: '行内「打开 →」是这条 PO 的对象深链（可复制分享、刷新不丢）；'
           + '「追溯这条 PO」把链路摊到下方，两者同一份计算；'
           + '「投递/对方回签」两列读的是 `po/distributed` 与 `po/acknowledged` 事实（没投递就是"未投递"——不假装已送）'
       }
@@ -940,7 +940,7 @@ export async function register(surface, host) {
           reason: side === '' ? 'identity-required' : 'side-mismatch',
           columns: [{ key: 'po_id', label: 'PO' }], rows: [],
           next_action: side === ''
-            ? '先登录**承包商侧**身份：投递与已读回执是签发方（发送侧）的视图'
+            ? '先登录承包商侧身份：投递与已读回执是签发方（发送侧）的视图'
             : '这一块只给承包商侧（签发方）看：它是「对方看过你签发的 PO」的痕迹，供应商侧身份读不到' }
       }
       const rows = host.rows('contractor')
@@ -1004,8 +1004,8 @@ export async function register(surface, host) {
           acked: table.filter((row) => asText(row.ack) !== '还没有').length },
         note: '「投给谁 / 何时投的」逐行来自本侧账本的 `po/distributed`；「回签」来自 `po/acknowledged`'
           + '（两者都是账本事实，可逐行核）；「看过的人 / 首次 / 最近 / 次数」来自回执文件'
-          + `（0600，${reads.file}，**不进账本** —— 读取痕迹不是合同事实）。`
-          + '**看过 ≠ 回签**：回签是对方的人签（有义务语义），已读只是「他打开过这一页」。'
+          + `（0600，${reads.file}，不进账本 —— 读取痕迹不是合同事实）。`
+          + '看过 ≠ 回签：回签是对方的人签（有义务语义），已读只是「他打开过这一页」。'
           + (broken ? ` ⚠ 回执文件读不出来（${broken.code}）：${broken.reason} —— 不是"还没有人看过"，${broken.how_to_fix}` : '')
           + (problems.length ? ` ⚠ 有 ${problems.length} 处坏形状已跳过（原样留在文件里）` : '') }
     } }))
@@ -1055,7 +1055,7 @@ export async function register(surface, host) {
           links: (trace.segments ?? []).filter((seg) => seg.kind !== 'po'),
           // **分享**（插件声明"对方能不能看"；机制据此写分享弹层与邮件正文）
           share: { visibility: 'both', other_side_view: 'supplier',
-            requirements: ['对方要用**供应商侧**的身份登录（收件方）；这张 PO 只有**投递到它那一侧**'
+            requirements: ['对方要用供应商侧的身份登录（收件方）；这张 PO 只有投递到它那一侧'
               + '才会出现在它的视图里（发 PO 即投递）'],
             note: '这是承包商侧签发的原件；对方那一侧看到的是同一次投递的收件登记（逐行同源）。' } },
         items: [
@@ -1076,7 +1076,7 @@ export async function register(surface, host) {
           })() },
           { key: '事实时刻', value: trace.issued_at },
         ],
-        note: '这一页**只看**账本事实：PO 由承诺派生、逐行引用中标条目，界面上不提供任何改价入口；'
+        note: '这一页只看账本事实：PO 由承诺派生、逐行引用中标条目，界面上不提供任何改价入口；'
           + '投递与回签也各自是账本事实（po/distributed / po/acknowledged）' }
     } }))
 
@@ -1169,7 +1169,7 @@ export async function register(surface, host) {
           step('③ 人签承诺', Boolean(award), award ? `${award.award_id} · ${award.approved_by}` : '还没承诺'),
           step('④ 发 PO', Boolean(po), po ? `${po.po_id}` : '还没签发'),
         ],
-        note: `承诺与 PO 都必须**人签**且要过人工门（INV-005）；这一页只读。`
+        note: `承诺与 PO 都必须人签且要过人工门（INV-005）；这一页只读。`
           + `${po ? ` PO 深链：${base}po/${encodeURIComponent(asText(po.po_id))}/` : ''}` }
     } }))
 
@@ -1205,7 +1205,7 @@ export async function register(surface, host) {
           ref_line: line.ref_line ?? line.item_id, old_qty: line.old_qty, new_qty: line.new_qty,
           old_unit_price: line.old_unit_price ?? '' })),
         counts: { lines: (change.lines ?? []).length },
-        note: '未批准的变更**一分钱都不计**；批准/驳回都是人工门（在列表行内点，或本页工具栏的动作）' }
+        note: '未批准的变更一分钱都不计；批准/驳回都是人工门（在列表行内点，或本页工具栏的动作）' }
     } }))
 
   // ------------------------------------------------------------------ 变更与价格让步（DEF-018）
@@ -1295,7 +1295,7 @@ export async function register(surface, host) {
         }),
         row_actions: ['change.approve', 'change.reject'], counts: { changes: changes.length,
           approved: changes.filter((change) => change.status === 'approved').length },
-        note: '未批准的变更**一分钱都不计**（`effective_total` 只算已批准项）；批准走人工门 '
+        note: '未批准的变更一分钱都不计（`effective_total` 只算已批准项）；批准走人工门 '
           + '`change.approve`（人签），驳回走人工门 denied（理由逐字落 comment）；'
           + '缺单价基准的行会被服务拒（`change/rejected`，拒绝也留痕）' }
     } }))
@@ -1318,7 +1318,7 @@ export async function register(surface, host) {
       const decisions = changeDecisions(host.rows('contractor'))
       if (!rows.length) {
         return { ok: true, kind: 'html', html: '<p class="q-hint">本侧还没有变更单：变更从「可提变更的报价行」'
-          + '提出（提出变更**不产生义务**，未批准一分钱都不计）。提出后这里会给出每一条的逐行明细入口。</p>' }
+          + '提出（提出变更不产生义务，未批准一分钱都不计）。提出后这里会给出每一条的逐行明细入口。</p>' }
       }
       const DET = 150
       const links = rows.slice(0, DET).map((change) => {
@@ -1332,10 +1332,10 @@ export async function register(surface, host) {
           + ` ${escHtml(status)}${change.reason ? ` · ${escHtml(String(change.reason).slice(0, 40))}` : ''}</li>`
       }).join('')
       return { ok: true, kind: 'html',
-        html: '<p class="q-hint">每条变更都能点进它的**逐行明细页**（<code>'
+        html: '<p class="q-hint">每条变更都能点进它的逐行明细页（<code>'
           + `${escHtml(host.prefix)}/contractor/changes/&lt;变更单 id&gt;/</code>）：逐行 原量×原价 → 新量×新价、`
-          + '行差额与**小计**（整数分、half-up 到分位），缺依据的行如实标出、绝不编数。'
-          + '列表行内的「打开 →」是**对象页**（逐行差异 + 批准/驳回判定）。</p>'
+          + '行差额与小计（整数分、half-up 到分位），缺依据的行如实标出、绝不编数。'
+          + '列表行内的「打开 →」是对象页（逐行差异 + 批准/驳回判定）。</p>'
           + `<ol class="q-list">${links}</ol>`
           + (rows.length > DET ? `<p class="q-hint">共 ${rows.length} 条变更，这里只列前 ${DET} 条`
             + `（其余按 id 直接打开：<code>${escHtml(host.prefix)}/contractor/changes/&lt;id&gt;/</code>）</p>` : '') }

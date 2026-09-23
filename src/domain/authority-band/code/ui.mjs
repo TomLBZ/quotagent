@@ -78,7 +78,7 @@ const configSnapshot = () => {
 /** 一笔金额的**结论行**（人话）：在区间内 / 越界多少 / 未配置 / 输入被拒。 */
 const verdictOf = (run) => {
   if (run.status === 'inside-band') return `在区间内（还差 ${run.bands.find((b) => b.role === run.role)?.remaining_cents ?? '—'} 分到限额）`
-  if (run.status === 'over-band') return `**越界 ${run.over_by} 分**`
+  if (run.status === 'over-band') return `越界 ${run.over_by} 分`
   if (run.status === 'unconfigured') return `未配置（${run.code}）——不知道就是不知道`
   return `输入被拒（${run.code}）`
 }
@@ -108,7 +108,7 @@ export async function register(surface, host) {
           limit_cents: found ? found.limit_cents : null,
           // **逐行都写清"未配置 ≠ 0 ≠ 无限"**：这是 DEF-036 点名的那条误导
           limit_label: found ? `${found.limit_cents} 分（= ${(found.limit_cents / 100).toFixed(2)} 元）`
-            : '未配置 ⇒ 这个角色**不是"不限"**，而是"一律走人工门"',
+            : '未配置 ⇒ 这个角色不是"不限"，而是"一律走人工门"',
           status: probe.status, can_approve: '否（本面板不能批准、不能放行）',
         }
       })
@@ -119,7 +119,7 @@ export async function register(surface, host) {
           ? `授权区间还没登记（机器码 ${probe.code || 'band-unconfigured'}）—— 未配置 ≠ 额度无限：一律走人工门`
           : '',
         next_action: unset
-          ? `登记 \`authority.bands.<角色>\`（**整数分**）后本页立刻生效：${probe.config_where}；`
+          ? `登记 \`authority.bands.<角色>\`（整数分）后本页立刻生效：${probe.config_where}；`
             + '或者现在就用下面的「按金额查该谁批」表单算一笔，再点「提交给下一角色审批」开人工门'
           : '按金额查该谁批（表单），越界就一键开人工门；改判定永远在审批队列里由人签批准/驳回',
         columns: [
@@ -132,12 +132,12 @@ export async function register(surface, host) {
         row_actions: ['authority.check', 'authority.escalate'],
         counts: { registered_roles: rows.length, configured: configured.length },
         note: `口径：${MONEY_NOTE}。`
-          + `单位声明 ${MONEY_UNIT}；配置来源 = 受管 YAML ${path}（**只读** \`${CONFIG_PREFIX}\` 那些行，`
+          + `单位声明 ${MONEY_UNIT}；配置来源 = 受管 YAML ${path}（只读 \`${CONFIG_PREFIX}\` 那些行，`
           + '别的键读都不读）'
           + `${reason ? `；本次读取降级：${reason}` : ''}。`
           + (unset ? `${UNCONFIGURED_NOTE}。` : '')
           + '本面板由确定性规则派生（source=authority-band）：不读账本、不取墙钟、不调模型、'
-          + '**不能批准**——越界的唯一出路是人工门（提交后去「审批队列」由人签批准/驳回）。' }
+          + '不能批准——越界的唯一出路是人工门（提交后去「审批队列」由人签批准/驳回）。' }
     } })
 
   out.push(surface.view({ plugin_id: me, id: 'authority.workspace', title: '授权区间', order: 8,
@@ -151,11 +151,11 @@ export async function register(surface, host) {
   out.push(surface.action({ plugin_id: me, id: 'authority.check', title: '按金额查该谁批（只读，账本零新增）',
     views: ['contractor', 'supplier'], group: '审批', order: 5, permission: 'none', inline: true,
     confirm: { required: false },
-    hint: '跑的是插件自己的确定性规则（不读账本、不取墙钟）；**本动作不改任何判定、账本零新增**',
+    hint: '跑的是插件自己的确定性规则（不读账本、不取墙钟）；本动作不改任何判定、账本零新增',
     input: { fields: [
       { name: 'role', label: '我的角色', type: 'select', options: [...REGISTERED_ROLES], required: true,
         help: '限额是按角色登记的（authority.bands.<角色>）' },
-      { name: 'amount', label: '金额（**整数分**：500000 = 5000.00 元）', type: 'number', required: true,
+      { name: 'amount', label: '金额（整数分：500000 = 5000.00 元）', type: 'number', required: true,
         min: 0, max: AMOUNT_MAX, help: '不折算、不四舍五入：把元写成分会被判越界' },
     ] },
     server: async (ctx, input) => {
@@ -170,7 +170,7 @@ export async function register(surface, host) {
             ? `越界 ${run.over_by} 分：用「提交给下一角色审批」把这件事提成人工门`
               + `${run.next_role ? `（下一个能批的是 ${run.next_role}）` : '（没有角色的限额覆盖这笔金额：只能改配置或走人工门）'}`
             : (run.status === 'inside-band'
-              ? `${run.role} 的限额覆盖这笔金额：继续既有流程；**批准仍在审批队列里由人签**（本面板不能批准）`
+              ? `${run.role} 的限额覆盖这笔金额：继续既有流程；批准仍在审批队列里由人签（本面板不能批准）`
               : `${run.next_action}${reason ? `（配置读取降级：${reason}）` : ''}`)),
         result: { status: run.status, verdict: verdictOf(run), role: run.role, amount: run.amount,
           required_role: run.required_role, next_role: run.next_role, over_by: run.over_by,
@@ -188,11 +188,11 @@ export async function register(surface, host) {
       + '`tools/gate-actions.py`；门开出来后去「审批队列」由点名的审批人批准/驳回',
     input: { fields: [
       { name: 'role', label: '我的角色', type: 'select', options: [...REGISTERED_ROLES], required: true },
-      { name: 'amount', label: '金额（**整数分**）', type: 'number', required: true },
+      { name: 'amount', label: '金额（整数分）', type: 'number', required: true },
       { name: 'ref', label: '这笔钱挂在哪条事实上（被批对象的 id）', type: 'text', required: true,
         help: '如 q-… / aw-… / chg-…（门要挂在一个真对象上，不许凭空的金额）' },
       { name: 'approvers', label: '点名给谁批（human:<名字>）', type: 'text', required: true,
-        help: '越界时面板给出的 next_role 决定"该找哪个角色"，这里写**那个角色的具体人**' },
+        help: '越界时面板给出的 next_role 决定"该找哪个角色"，这里写那个角色的具体人' },
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true,
         help: 'human:<你的名字> —— 服务端要求它等于会话身份' },
       { name: 'note', label: '一句话说明（进待办件，不上账本正文）', type: 'textarea', required: false },

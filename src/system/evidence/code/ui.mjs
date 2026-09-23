@@ -89,8 +89,8 @@ export async function register(surface, host) {
           ? '用「导出证据包」选一个行号范围（默认全量）导出：会落一个 0600 的包文件，并在账本留一条'
             + ' `evidence/pack-exported`；导完点行内「验证这一个包」逐项看结果'
           : '点行内「验证这一个包」看逐项 pass/fail；要给别人一份就把包文件（或这个包的对象页深链）发出去',
-        note: `事实时刻按账本最大 ts；导出的包**不覆盖**留痕那一行（包的切片以导出时给的 to_seq 为准，`
-          + `0 = 导出到当时的最后一行）。包文件落 ${packDir()}（**0600**）。`
+        note: `事实时刻按账本最大 ts；导出的包不覆盖留痕那一行（包的切片以导出时给的 to_seq 为准，`
+          + `0 = 导出到当时的最后一行）。包文件落 ${packDir()}（0600）。`
           + `本侧账本事件类型前 5 名：${types.slice(0, 5).map(([t, n]) => `${t}×${n}`).join('、') || '（没有行）'}` }
     } })
 
@@ -113,7 +113,7 @@ export async function register(surface, host) {
           object: {
             title: `证据包 ${packId}`, found: code !== 'pack-missing',
             subtitle: code === 'pack-missing' ? '本侧导出目录里找不到这个包文件'
-              : `验证**没通过**（${said.first_failure || code}）`,
+              : `验证没通过（${said.first_failure || code}）`,
             facts: [{ key: 'code', value: code },
               { key: '原因', value: said.reason || said.first_failure || '看 checks 里 ok=false 的那几条' },
               { key: '包文件', value: `${packDir()}/${packId}.json` }],
@@ -134,14 +134,14 @@ export async function register(surface, host) {
           { key: '包哈希', value: String(said.pack?.pack_hash ?? '') },
           { key: '生成时刻', value: String(said.pack?.generated_at ?? '') },
           { key: '签名', value: said.pack?.signed_by ? `${said.pack.signed_by}（${said.pack.signature_algo}）`
-            : '未签名（未提供密钥时**不**把"有签名"当"签名通过"）' },
+            : '未签名（未提供密钥时不把"有签名"当"签名通过"）' },
           { key: '账本留痕', value: known ? `${known.actor} @${known.at}` : '本侧账本里没有这个包的留痕' },
         ] },
         columns: [{ key: 'name', label: '检查项' }, { key: 'ok', label: '通过？' }, { key: 'detail', label: '说明' }],
         rows: checks.map((check) => ({ id: check.name, name: check.name,
           ok: check.ok ? '✅ 通过' : '❌ 未通过', detail: check.detail || '' })),
         counts: { checks: checks.length, failed: checks.filter((c) => !c.ok).length },
-        note: '验证**只读**：不看导出方状态、不碰账本；别人给你的包只要放在本侧导出目录（或把路径填进'
+        note: '验证只读：不看导出方状态、不碰账本；别人给你的包只要放在本侧导出目录（或把路径填进'
           + '「验证一个包」）就能逐项复算 —— 这就是"独立验证不需信任导出方"的样子。' }
     } }))
 
@@ -204,7 +204,7 @@ export async function register(surface, host) {
   out.push(surface.action({ plugin_id: me, id: 'evidence.verify', title: '验证一个包（只读，逐项给结论）',
     views: ['contractor', 'supplier'], group: '证据', order: 6, permission: 'none', inline: true,
     confirm: { required: false },
-    hint: '只读：不看导出方状态、不碰账本；未提供密钥时**不**把"有签名"当"签名通过"（run 既有语义）',
+    hint: '只读：不看导出方状态、不碰账本；未提供密钥时不把"有签名"当"签名通过"（run 既有语义）',
     input: { fields: [
       { name: 'package_id', label: '包 id', type: 'text', required: true,
         help: '从面板行内点「验证」会自动带上（ep-…）；也可以填本侧导出目录里的文件名（不含 .json）' },

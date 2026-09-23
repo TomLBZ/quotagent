@@ -168,7 +168,7 @@ export async function register(surface, host) {
     return { json, ranking, run, matrix: json.matrix ?? null }
   }
 
-  out.push(surface.panel({ plugin_id: me, id: 'compare.matrix', title: '比较矩阵（**同一行项目内**才互相比较）',
+  out.push(surface.panel({ plugin_id: me, id: 'compare.matrix', title: '比较矩阵（同一行项目内才互相比较）',
     view: 'contractor', order: 32, kind: 'table', actions: ['compare.rank'],
     data: () => {
       const weights = weightsNow()
@@ -208,8 +208,8 @@ export async function register(surface, host) {
           { key: 'cheapest', label: '本行最便宜' },
         ],
         rows, bulk: 'compare.rank', counts: { ...(matrix.counts ?? {}) },
-        note: '单元格口径：`_minmax(价, **本行**最低, **本行**最高)`（per-item 归一）——'
-          + '不同行项目之间**不比**（量纲不同）；量从本侧包快照的清单取；缺报的行明确标「未报此行」。'
+        note: '单元格口径：`_minmax(价, 本行最低, 本行最高)`（per-item 归一）——'
+          + '不同行项目之间不比（量纲不同）；量从本侧包快照的清单取；缺报的行明确标「未报此行」。'
           + '全局名次仍是跨报价 minmax 的口径（上方排名表），两者不混算。'
           + ` 当前权重来源：${weightsSource()}` }
     } }))
@@ -259,8 +259,8 @@ export async function register(surface, host) {
         compare: { min: 2, max: 3, hint: '勾 2–3 家并排比较（勾多了先取消一个）' },
         group_totals: { key_prefix: 't__', label_suffix: '行合计总和（分）' },
         counts: { items: items.length, quotes: quotes.length, ...(matrix.counts ?? {}) },
-        note: '**对比模式**：勾选上面的列组（2–3 家）= 只把这几家并排摆出来；「行项目」列固定不随横向滚动跑掉。'
-          + '单元格口径是**同一行项目内**的 minmax（不同行项目不比量纲），每行最低价那格标绿；'
+        note: '对比模式：勾选上面的列组（2–3 家）= 只把这几家并排摆出来；「行项目」列固定不随横向滚动跑掉。'
+          + '单元格口径是同一行项目内的 minmax（不同行项目不比量纲），每行最低价那格标绿；'
           + '底部给每组"行合计总和"。整表事实来源与「比较矩阵」完全相同（同一份只读复算，零新增事实）。' }
     } }))
 
@@ -288,14 +288,14 @@ export async function register(surface, host) {
           citations: (row.citations ?? []).slice(0, 3).join(' ') })),
         counts: { ranked: ranking.length },
         note: `权重：${weightsText(weights)}（来源：${weightsSource()}）· `
-          + '左列是跨报价的口径（决定名次），右列是**同一行项目内**的口径（解释"这一行为什么贵/便宜"）；'
+          + '左列是跨报价的口径（决定名次），右列是同一行项目内的口径（解释"这一行为什么贵/便宜"）；'
           + '两者都不隐藏，页面不把它们混成一个数' }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'compare.save-weights', title: '保存权重为插件配置（并落一条事实）',
     views: ['contractor'], group: '比价', order: 25,
     confirm: { required: true, message: '保存这组权重：写插件配置 + 落一条 compare/rank-computed（不改任何判定）：确认？' },
-    hint: '权重存成插件配置（<ui-shared>/compare/weights.json，**下次打开还在**）+ 落 compare/rank-computed',
+    hint: '权重存成插件配置（<ui-shared>/compare/weights.json，下次打开还在）+ 落 compare/rank-computed',
     // **乐观并发**（机制）：这个动作保存的是"本侧当前这组比价权重"（一份全局配置，后写就盖前写）——
     // 两个同事先后改权重时，后改的人被**明确拒绝**并看到"谁在何时把哪个分量从多少改成了多少"。
     concurrency: { object_class: 'compare-weights', label: '本侧当前这组比价权重',
@@ -384,7 +384,7 @@ export async function register(surface, host) {
     views: ['contractor'], group: '比价', order: 32, icon: 'print',
     hint: '内容 = 本侧账本里已记录的那一次评估（名次/得分/偏差计数）；外壳只做序列化'
       + '（与既有的 `compare.export` 分工：那条把两份 CSV 落盘并留一条 `compare/table-exported` 事实，'
-      + '这条给界面内的**下载 + 打印**）',
+      + '这条给界面内的下载 + 打印）',
     input: { fields: [
       { name: 'format', label: '格式（csv = 表格；html = 可直接打印）', type: 'select', required: true,
         options: ['csv', 'html'], default: 'csv' },

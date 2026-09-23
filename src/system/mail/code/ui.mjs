@@ -96,13 +96,13 @@ export async function register(surface, host) {
       const fields = MAIL_FORM_KEYS.map((field) => `<label>${esc(field.label)} `
         + `<input name="${esc(field.name)}" size="24" placeholder="${esc(field.placeholder)}"></label>`).join('<br>')
       return { ok: true, kind: 'html', html:
-        `<p data-mail-channel="mechanism">这一块是**界面入口**：邮件通道不可用时，有权限的人在**这里**当场改好，`
+        `<p data-mail-channel="mechanism">这一块是界面入口：邮件通道不可用时，有权限的人在这里当场改好，`
         + `不必跳 <code>/admin/config/</code>（也不用提权）。提交后由既有唯一落盘者 `
         + `<code>config-apply.py</code> 落 YAML；<b>凭据（口令）永不回显</b>，也永远不经本页传输。</p>`
         + stateLine
         + `<h3>改配置（SMTP / IMAP）</h3>`
         + `<p><small>字段名就是配置键名（<code>mail.smtp.*</code> / <code>mail.imap.*</code>）；`
-        + `服务端会**干跑**（白名单 + 类型 + 人工门 + diff）后再落盘。</small></p>`
+        + `服务端会干跑（白名单 + 类型 + 人工门 + diff）后再落盘。</small></p>`
         + `<form method="post" action="${esc(mailTarget)}" data-mail-config-form="1">`
         + `${fields}<br>`
         + `<label>SMTP 握手 <select name="mail.smtp.security">`
@@ -114,7 +114,7 @@ export async function register(surface, host) {
         + `<label>事实时刻 now <input name="now" size="22" value="2026-09-30T00:00:00Z" required></label> `
         + `<input type="hidden" name="next" value="${esc(`${prefix}/app/home/`)}">`
         + `<button type="submit">干跑 → 落盘</button></form>`
-        + `<p><small><b>权限</b>：只有**运维侧**身份能改（<code>/mail/config/</code> 的服务端一半校验：side=ops + `
+        + `<p><small><b>权限</b>：只有运维侧身份能改（<code>/mail/config/</code> 的服务端一半校验：side=ops + `
         + `署名 == 会话身份）；其他身份提交会被拒（<code>permission-denied</code> / <code>signer-mismatch</code>，`
         + `零落盘）。没登录就先 <a href="${esc(`${prefix}/identity/?next=${encodeURIComponent(mailTarget)}`)}">登录</a>。`
         + `状态读数与尝试记录全在 <a href="${esc(opsPage)}" data-mail-ops-link="1">运维专页</a>`
@@ -214,8 +214,8 @@ export async function register(surface, host) {
       const st = human ? digestStateOf(human) : null
       const on = Boolean(row && row.on === true)
       const stateText = !who
-        ? '未登录：摘要偏好**按身份**存（登录后才知道是你的哪一条）'
-        : (!row ? '关（**默认关**：还没有你这个身份的偏好记录）'
+        ? '未登录：摘要偏好按身份存（登录后才知道是你的哪一条）'
+        : (!row ? '关（默认关：还没有你这个身份的偏好记录）'
           : (on ? `开 → ${domainOf(row.to)}（地址只在发信那一刻使用）` : '关（有记录，开关是关的）'))
       const lastText = !st || !asText(st.last_code)
         ? '还没有尝试记录'
@@ -240,9 +240,9 @@ export async function register(surface, host) {
           // 两个入口都长在这一行上（机制：行内动作 = 按钮，字段按同名预填 ⇒ 不必手抄地址）
           row_actions: ['mail.notify.prefs', 'mail.notify.send'],
         }],
-        note: '摘要只带**标题 / 下一步 / 来源 / 深链 / 计数**（通知正文、对方正文、私域字段与凭据都不进摘要）；'
-          + '同一件事重复通知**不重复发**（键 = 条目 id + 级别），窗口内不发第二封（节流）；'
-          + '它**不写账本**（发信回执里 `ledger_added: 0`）。开关与地址是**你自己的**偏好。',
+        note: '摘要只带标题 / 下一步 / 来源 / 深链 / 计数（通知正文、对方正文、私域字段与凭据都不进摘要）；'
+          + '同一件事重复通知不重复发（键 = 条目 id + 级别），窗口内不发第二封（节流）；'
+          + '它不写账本（发信回执里 `ledger_added: 0`）。开关与地址是你自己的偏好。',
         empty_reason: null,
         next_action: who ? '要改就点这一行的「改摘要偏好」；想立刻看一封就点「发一份摘要」'
           : `先登录（${prefix}/identity/）——偏好按身份存，没登录时不知道该读谁的`,
@@ -253,9 +253,9 @@ export async function register(surface, host) {
   out.push(surface.action({ plugin_id: me, id: 'mail.notify.prefs', title: '改摘要偏好（开关 / 收件地址）',
     views: ['home', 'contractor', 'supplier'], group: '邮件摘要', order: 45,
     placement: ['toolbar', 'inline', 'command'], confirm: { required: false },
-    hint: '按**会话身份**存（0600、跨浏览器仍在）：默认**关**；打开时必须给合法收件地址',
+    hint: '按会话身份存（0600、跨浏览器仍在）：默认关；打开时必须给合法收件地址',
     input: { fields: [
-      { name: 'on', label: '打开邮件摘要', type: 'checkbox', help: '关掉后**不再发**（已经发出去的那几封不会撤回）' },
+      { name: 'on', label: '打开邮件摘要', type: 'checkbox', help: '关掉后不再发（已经发出去的那几封不会撤回）' },
       { name: 'to', label: '收件地址', type: 'text',
         help: '例：wanglei@example.com；只在发信那一刻使用 —— 回执与日志里只留域名与指纹' },
       { name: 'min_level', label: '最低级别', type: 'select', options: ['warn', 'bad', 'info'], default: 'warn',
@@ -267,7 +267,7 @@ export async function register(surface, host) {
       const who = ctx?.identity ?? null
       if (!who) {
         return { ok: false, code: 'identity-required',
-          reason: '摘要偏好**按身份**存：当前请求没有会话身份，这一次什么都没写',
+          reason: '摘要偏好按身份存：当前请求没有会话身份，这一次什么都没写',
           next_action: `先登录（${prefix}/identity/?next=${encodeURIComponent(`${prefix}/app/home/`)}）再点这个按钮` }
       }
       const record = { op: 'prefs-set', kind: DIGEST_PENDING.prefs, identity: who.human, side: who.side,
@@ -296,20 +296,20 @@ export async function register(surface, host) {
     views: ['home', 'contractor', 'supplier'], group: '邮件摘要', order: 46,
     placement: ['toolbar', 'inline', 'command'],
     confirm: { required: true, message: '这会给你的邮箱发一封信（按你自己的偏好与节流窗口）——确认发？' },
-    hint: '条目来自**按会话身份聚合后的通知**（只带标题/下一步/来源/深链/计数）；开关关着、没有新条目、'
-      + '或窗口内 ⇒ **不发**并如实说明原因；它不写账本',
+    hint: '条目来自按会话身份聚合后的通知（只带标题/下一步/来源/深链/计数）；开关关着、没有新条目、'
+      + '或窗口内 ⇒ 不发并如实说明原因；它不写账本',
     input: { fields: [
       { name: 'min_level', label: '发到哪一级', type: 'select', options: ['warn', 'bad', 'info'], default: 'warn',
         help: 'warn = 待办及以上（默认）；info = 连知会也发' },
       { name: 'limit', label: '最多列几条', type: 'number', min: 1, max: 40, default: 20 },
       { name: 'force', label: '忽略节流与去重（仍然不绕过扫描）', type: 'checkbox',
-        help: '想看一封"完整重发"时用；**私域/凭据/正文扫描一律照旧**' },
+        help: '想看一封"完整重发"时用；私域/凭据/正文扫描一律照旧' },
     ] },
     server: async (ctx, input) => {
       const who = ctx?.identity ?? null
       if (!who) {
         return { ok: false, code: 'identity-required',
-          reason: '摘要按**会话身份**聚合（未登录时不知道"谁的事"），这一次什么都没写',
+          reason: '摘要按会话身份聚合（未登录时不知道"谁的事"），这一次什么都没写',
           next_action: `先登录（${prefix}/identity/）再点这个按钮` }
       }
       const minLevel = ['info', 'warn', 'bad'].includes(asText(input.min_level)) ? asText(input.min_level) : 'warn'

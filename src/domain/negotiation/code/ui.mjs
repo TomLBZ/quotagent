@@ -154,9 +154,9 @@ export async function register(surface, host) {
           rounds: threads.reduce((sum, thread) => sum + (thread.rounds ?? []).length, 0),
           rejected: threads.reduce((sum, thread) => sum + (thread.rejections ?? []).length, 0) },
         note: '每一栏都从账本行回读：边界 = `negotiate/bounds-declared`（底线/上沿/单次上限/策略哈希），'
-          + '轮次 = `negotiate/round`，被拒轮次 = `negotiate/round-rejected`（**被拒的尝试也占轮次号**），'
+          + '轮次 = `negotiate/round`，被拒轮次 = `negotiate/round-rejected`（被拒的尝试也占轮次号），'
           + '结局 = `negotiate/closed`。越界不是"不允许"三个字：拒绝原话（越界多少、该找哪条策略）'
-          + '就在上面那一栏。**本面板不能批准**：让步要过人工门（先请求批准，再提交同一轮的 approval_id）。' }
+          + '就在上面那一栏。本面板不能批准：让步要过人工门（先请求批准，再提交同一轮的 approval_id）。' }
     } })
 
   const roundsPanel = (view, order) => surface.panel({
@@ -200,7 +200,7 @@ export async function register(surface, host) {
         })),
         counts: { rounds: entries.filter((item) => !item.rejected).length,
           rejected: entries.filter((item) => item.rejected).length },
-        note: '时间一律是账本行的 `ts`（不取墙钟）；被拒的尝试**也占轮次号**（契约 §1），'
+        note: '时间一律是账本行的 `ts`（不取墙钟）；被拒的尝试也占轮次号（契约 §1），'
           + '所以"还剩几轮"按尝试数算，不是按成功数算。' }
     } })
 
@@ -275,7 +275,7 @@ export async function register(surface, host) {
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
       { name: 'note', label: '为什么让这一步（进待办件与门的理由）', type: 'textarea', required: true }],
     '落 `approval/requested`（scope 恰 `negotiate.price-concession`，ref 恰 `<线程>:a<第几次>`）：'
-    + '之后去「审批队列」由点名的审批人**批准**，再提交同一轮'))
+    + '之后去「审批队列」由点名的审批人批准，再提交同一轮'))
 
   out.push(stepAction('negotiate.round', 'round', '提交一轮（带上那一次的门）',
     [threadField('线程 id'), itemField, ...moveFields,
@@ -283,7 +283,7 @@ export async function register(surface, host) {
         help: '先「为一轮请求人工批准」，去「审批队列」批准后把那个 ap-… 填这里（没有批准必被拒）' },
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
       { name: 'note', label: '理由（进账本 citations/round）', type: 'textarea', required: false }],
-    '判定链（维度 → 轮次上限 → 幅度 → 底线 → 区间 → 人工门）在服务里跑：越界**不落 round**，'
+    '判定链（维度 → 轮次上限 → 幅度 → 底线 → 区间 → 人工门）在服务里跑：越界不落 round，'
     + '落 `negotiate/round-rejected` 留痕并具名拒（被拒也占轮次号）'))
 
   out.push(stepAction('negotiate.close', 'close', '关闭线程（不产生义务）',
@@ -292,7 +292,7 @@ export async function register(surface, host) {
         help: 'accepted = 接受当前这条线；rejected/withdrawn/limit-reached 各有各的语义' },
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
       { name: 'note', label: '说明（进账本 comment）', type: 'textarea', required: false }],
-    '落 `negotiate/closed`：**不产生义务**（无承诺事件、无 PO、无对外报价）'))
+    '落 `negotiate/closed`：不产生义务（无承诺事件、无 PO、无对外报价）'))
 
   out.push(surface.statusItem({ plugin_id: me, id: 'status.negotiation', title: '谈判', order: 7, read: () => {
     const threads = threadsOf(host.rows('contractor')).concat(threadsOf(host.rows('supplier')))

@@ -112,7 +112,7 @@ export async function register(surface, host) {
                 + `<input type="hidden" name="plugin" value="${esc(plugin)}">`
                 + `<button type="submit" data-userspace-op="${on ? 'unload' : 'load'}"`
                 + ` data-userspace-plugin="${esc(key)}">${on ? '卸载' : '装载'}</button></form>`
-              : `<small>别人的命名空间：装卸找管理员（<code>${esc(pfx)}/admin/api/user-plugins/**</code>）</small>`
+              : `<small>别人的命名空间：装卸找管理员（<code>${esc(pfx)}/admin/api/user-plugins/</code>）</small>`
             return `<li data-userspace-plugin="${esc(key)}" data-userspace-loaded="${on ? '1' : '0'}">`
               + `<code>${esc(plugin)}</code> ${on ? '已装载（它的界面贡献在注册面里）' : '未装载'} ${action}</li>`
           }).join('')
@@ -132,7 +132,7 @@ export async function register(surface, host) {
           + `<p class="q-hint">用户空间插件和别的插件一样：在 <code>code/ui.mjs</code> 里`
           + ` <code>export register(surface, host)</code> 注册视图 / 面板 / 动作 / 快捷键 ⇒ `
           + `<b>装载后自建视图随之出现</b>；卸载后一起消失（<code>AGENTS.md</code> 规则 1）。`
-          + `"已装载"的判据是**注册面里有没有它的贡献**，不是另记一份状态。</p>`
+          + `"已装载"的判据是注册面里有没有它的贡献，不是另记一份状态。</p>`
           + (listing.unreadable.length
             ? `<p class="q-hint">读不到的目录（如实报，不当成空）：${listing.unreadable.map(esc).join('、')}</p>`
             : ''),

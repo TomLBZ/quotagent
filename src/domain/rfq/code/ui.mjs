@@ -34,8 +34,8 @@ const sideScoped = (ctx, itemSide, item) => {
   if (mine === itemSide) return item
   const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
   const why = mine === ''
-    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
-    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+    ? `（未登录：登录${label}之后这一条才算"需要你处理"）`
+    : `（不是你要办的：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
   const body = asText(item.body)
   return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
     body: `${body}${body ? ' ' : ''}${why}` }
@@ -148,7 +148,7 @@ export async function register(surface, host) {
           reason: side === '' ? 'identity-required' : 'side-mismatch',
           columns: [{ key: 'package_id', label: '包' }], rows: [],
           next_action: side === ''
-            ? '先登录**承包商侧**身份：投递与已读回执是发包方（发送侧）的视图'
+            ? '先登录承包商侧身份：投递与已读回执是发包方（发送侧）的视图'
             : '这一块只给承包商侧（发包方）看：它是「对方看过你发的包」的痕迹，供应商侧身份读不到' }
       }
       const rows = host.rows('contractor')
@@ -227,8 +227,8 @@ export async function register(surface, host) {
           unread: rowsOut.filter((row) => asText(row.readers) === '').length },
         note: '「投给谁 / 哪个版本 / 何时投的」逐行来自本侧账本的 `rfq/distributed`（可与账面逐行核）；'
           + '「看过的人 / 首次 / 最近 / 次数」来自回执文件 `<ui-shared>/receipts/deliveries.json`'
-          + `（0600，${reads.file}，**不进账本** —— 读取痕迹不是合同事实）。`
-          + '回执按**包**聚合、投递按**版本**记账：看到「已读」不等于「看了最新的那一版」，'
+          + `（0600，${reads.file}，不进账本 —— 读取痕迹不是合同事实）。`
+          + '回执按包聚合、投递按版本记账：看到「已读」不等于「看了最新的那一版」，'
           + '要按版本确认请让对方认收（`exchange.ack` 落 `rfq/acknowledged`，那是账本事实）。'
           + (broken ? ` ⚠ 回执文件读不出来（${broken.code}）：${broken.reason} —— 不是"还没有人看过"，${broken.how_to_fix}` : '')
           + (problems.length ? ` ⚠ 有 ${problems.length} 处坏形状已跳过（原样留在文件里）` : '') }
@@ -293,7 +293,7 @@ export async function register(surface, host) {
     return { ok: true, kind: 'kv', degraded: true,
       reason: side === '' ? 'identity-required' : 'side-mismatch', items: [],
       next_action: side === ''
-        ? '先登录**承包商侧**身份：周报读的是承包商侧账本（花出去的钱、发出去的包）'
+        ? '先登录承包商侧身份：周报读的是承包商侧账本（花出去的钱、发出去的包）'
         : '这一块只给承包商侧看：它汇总的是承包商侧账本的事实（供应商侧身份读不到）' }
   }
 
@@ -318,24 +318,24 @@ export async function register(surface, host) {
       const items = [
         { key: '周窗口（口径）', value: `${json.week?.iso ?? ''} · ${json.week?.start ?? ''} — ${json.week?.end ?? ''}`
           + `（ISO 周，周一 00:00Z 起，左闭右开）` },
-        { key: '事实时刻 as_of', value: `${json.as_of}（${json.as_of_basis}，**不取墙钟**）`, code: true },
-        { key: '账本', value: String(json.ledger ?? ''), code: true },
+        { key: '事实时刻 as_of', value: `${json.as_of}（${json.as_of_basis}，不取墙钟）`, code: true },
+        { key: '账本（逐行对账用）', value: String(json.ledger ?? ''), code: true },
         ...WEEKLY_LABELS.map(([key, label]) => ({ key: label, value: metricText(metrics[key]) })),
         { key: '（附加）本周发 PO', value: `${json.supporting?.po_issued?.value ?? 0} 张 · 原生金额合计 `
           + `${json.supporting?.po_issued?.total_amount_native ?? '0'}` },
       ]
       if (weeksAgo() > 0) {
         items.push({ key: '看的不是本周', value: `你把它往前挪了 ${weeksAgo()} 周（动作「看哪一周」设的；`
-          + '这是**内存便签**，重启服务后回到本周）' })
+          + '这是内存便签，重启服务后回到本周）' })
       }
       return { ok: true, kind: 'kv', items,
         counts: { packages: metrics.packages_published?.value ?? 0, quotes: metrics.quotes_received?.value ?? 0,
           award_amount_cents: metrics.award_amount_cents?.value ?? 0,
           gates: metrics.gate_avg_wait_seconds?.gates ?? 0, overdue: metrics.overdue_no_reply?.value ?? 0 },
-        note: '这五个数**不是界面算的**：它们逐项由只读汇总器 `src/domain/rfq/tools/weekly-report.py` 从本侧账本'
+        note: '这五个数不是界面算的：它们逐项由只读汇总器 `src/domain/rfq/tools/weekly-report.py` 从本侧账本'
           + '按 ISO 周聚合（口径写在同一份报表的 `metrics.*.basis`）。'
           + '⚠ 空档的两种含义分得清：`人工门平均等待` 为「没有门被决定」而不是 0 秒；'
-          + '算不出来的行（缺量/缺价、配不上对的审批）**不进小计**：见 `amount_missing` / `gate_unmatched`（下方对账表里列出）。'
+          + '算不出来的行（缺量/缺价、配不上对的审批）不进小计：见 `amount_missing` / `gate_unmatched`（下方对账表里列出）。'
           + ` ${(json.notes ?? []).slice(-1)[0] ?? ''}` }
     } }))
 
@@ -415,13 +415,13 @@ export async function register(surface, host) {
           { key: 'object', label: '对象', type: 'code' }, { key: 'amount_cents', label: '金额（分）', filter: 'number' },
           { key: 'detail', label: '口径 / 明细' }],
         rows, counts: { rows: rows.length, metrics: WEEKLY_LABELS.length },
-        note: '`seq` 就是**账本行号**（append-only 账本里那一行的位置）—— 拿它回账本逐行核即可；'
-          + '金额一律**整数分**；「对不上」的行走的是同一条口径说明，**没有被算进**任何小计。' }
+        note: '`seq` 就是账本行号（append-only 账本里那一行的位置）—— 拿它回账本逐行核即可；'
+          + '金额一律整数分；「对不上」的行走的是同一条口径说明，没有被算进任何小计。' }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'rfq.weekly-week', title: '看哪一周（周报往前挪几周）',
     views: ['contractor'], group: '发包', order: 45,
-    hint: '只读：只改"周报看哪一周"这个**内存便签**（0=本周）；不写账本、不落文件',
+    hint: '只读：只改"周报看哪一周"这个内存便签（0=本周）；不写账本、不落文件',
     input: { fields: [
       { name: 'weeks_ago', label: '往前挪几周（0 = 本周）', type: 'number', required: true, min: 0, max: 52,
         help: '0 = 含事实时刻（账本最大 ts）的那一周；1 = 上一周' },
@@ -444,7 +444,7 @@ export async function register(surface, host) {
         result_kind: 'view-preference',
         note: `周报现在看：${json.week?.iso ?? '（算不出来）'} · ${json.week?.start ?? ''} — ${json.week?.end ?? ''}`
           + `（as_of ${json.as_of ?? '—'}，${json.as_of_basis ?? '—'}）`
-          + ' —— 这一步只改**内存便签**（不是账本事实、不落文件）',
+          + ' —— 这一步只改内存便签（不是账本事实、不落文件）',
         next_action: '上方的「本周汇报」已按这一周重算；要发给别人就用「导出 / 打印」区的 TXT / CSV / HTML',
         result: { weeks_ago: Math.floor(raw), week: json.week ?? null, as_of: json.as_of ?? null,
           metrics: Object.fromEntries(WEEKLY_LABELS.map(([key]) => [key, metrics[key]?.value ?? null])),
@@ -486,7 +486,7 @@ export async function register(surface, host) {
             next_action: `用 CLI 复跑一次确认：python3 ${WEEKLY_TOOL} --ledger <账本> --format ${format}` }
         }
         return { ok: true, code: 'weekly-exported', ledger_added: 0,
-          note: `导出已生成（${format}，${json.week?.iso ?? ''}）：内容 = 只读汇总器对**本侧账本**的聚合结果`
+          note: `导出已生成（${format}，${json.week?.iso ?? ''}）：内容 = 只读汇总器对本侧账本的聚合结果`
             + `（每一项都带账本行号）`,
           next_action: format === 'txt'
             ? '下载/复制这份正文即可发给管理者；要表格就改用 csv（或打印 HTML）'
@@ -541,7 +541,7 @@ export async function register(surface, host) {
             event: 'po/issued', object: item.po_id, amount_cents: '',
             detail: `${item.lines} 行 · 原生金额 ${item.total_amount}` }))),
         notes: ['每一项的「账本行号」就是 append-only 账本里那一行的位置 ⇒ 可逐行回账本核。',
-          '算不出来的行（缺量/缺价、审批配不上对）**没有被算进**任何小计：它们单独列出来。',
+          '算不出来的行（缺量/缺价、审批配不上对）没有被算进任何小计：它们单独列出来。',
           '报表不取墙钟：事实时刻 = 账本里最大的 ts（同一份账本在任何时间跑都得到同一组数）。'],
         report_id: 'rfq.weekly', source: `quotagent · 本周汇报（只读汇总器 ${WEEKLY_TOOL}）`,
         generated_at: json.as_of ?? '' })
@@ -554,7 +554,7 @@ export async function register(surface, host) {
 
   out.push(surface.report({ plugin_id: me, id: 'report.weekly', title: '本周汇报（TXT / CSV / 打印）',
     views: ['contractor'], order: 20, action: 'rfq.weekly-export', formats: ['csv', 'txt', 'html'],
-    hint: '导出的是**同一份只读报表**：csv = 指标表（带证据账本行号）、txt = 人读正文、html = 可打印文档；'
+    hint: '导出的是同一份只读报表：csv = 指标表（带证据账本行号）、txt = 人读正文、html = 可打印文档；'
       + '内容由 `domain/rfq` 的 `rfq.weekly-export` 生成（外壳只做序列化）',
     columns: [{ key: 'metric', label: '指标' }, { key: 'value', label: '数值' }, { key: 'unit', label: '单位' },
       { key: 'basis', label: '口径' }, { key: 'rows', label: '证据账本行号' }, { key: 'extra', label: '附加读数' }] }))
@@ -568,7 +568,7 @@ export async function register(surface, host) {
       const rows = rowsOfType(host.rows('contractor'), 'quote/submitted').map((row) => bodyOf(row))
       if (!rows.length) {
         return { ok: true, kind: 'table', degraded: true, reason: 'no-quote-submitted',
-          next_action: '等供应商在 APP 里备报价并**人签提交**（提交会同时在本侧登记一条）',
+          next_action: '等供应商在 APP 里备报价并人签提交（提交会同时在本侧登记一条）',
           columns: [{ key: 'quote_id', label: '报价' }], rows: [] }
       }
       const qtyIndex = itemQtyIndex(host.rows('contractor'))
@@ -604,9 +604,9 @@ export async function register(surface, host) {
           { key: 'qty_source', label: '量的来源' }],
         rows: table, bulk: 'compare.rank',
         counts: { quotes: rows.length, lines: table.length, qty_known: table.length - missing },
-        note: '一份报价可以有多行（`lines[]`）：这里**逐行**列，行内「提出授标意向」把这一行的包/报价/条目/'
+        note: '一份报价可以有多行（`lines[]`）：这里逐行列，行内「提出授标意向」把这一行的包/报价/条目/'
           + '数量/单价带进表单（多行报价没有"唯一那个行项目"，所以必须逐行给入口）。'
-          + '数量取自**包事实**（发布事实 / 投递快照的 `spec.items`，并按 `rfq/amended` 取最新一版）；'
+          + '数量取自包事实（发布事实 / 投递快照的 `spec.items`，并按 `rfq/amended` 取最新一版）；'
           + '意向不产生义务，可撤回。'
           + (missing ? ` 有 ${missing} 行读不到量（数量列显示「—」）：现在提意向会被唯一写者按 \`line-qty-invalid\` 拒，`
             + '先在「包的行项目」里把这一包的条目补上（或让供应商按最新一版重报）。' : '') }
@@ -923,7 +923,7 @@ export async function register(surface, host) {
           not_replied: rows.reduce((sum, row) => sum + (row.not_replied.startsWith('（') ? 0 : row.not_replied.split(' ').length), 0) },
         note: `事实时刻 ${moment || '—'} · 勾选若干行（或行内）点「催报」：落本侧 \`mail/queued\`（催报本体）+`
           + `对方账本 \`mail/queued\`（对方可见）；临近/已过截止会另落 \`rfq/due-soon\`|\`rfq/overdue\`；`
-          + `邮件通道不可用时**绝不假装已发**（如实报 mail-smtp-unconfigured，可复制正文文件）` }
+          + `邮件通道不可用时绝不假装已发（如实报 mail-smtp-unconfigured，可复制正文文件）` }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'rfq.remind', title: '催报（一键 · 真落账 · 给对方出通知）',
@@ -991,7 +991,7 @@ export async function register(surface, host) {
           { key: 'package_id', label: '包', type: 'code' }, { key: 'rfq_rev', label: 'rev' },
           { key: 'letter', label: '对方原话' }, { key: 'body_sha256', label: '正文哈希', type: 'code' }],
         rows, counts: { reminders: rows.length },
-        note: '通知是"入队"事实（`mail/queued`）：**不代表邮件真的发出**（本机没有 SMTP 凭据时如实为 refused）' }
+        note: '通知是"入队"事实（`mail/queued`）：不代表邮件真的发出（本机没有 SMTP 凭据时如实为 refused）' }
     } }))
 
   // ------------------------------------------------------------------ 澄清单据（DEF-014）
@@ -1065,7 +1065,7 @@ export async function register(surface, host) {
           open: tickets.filter((ticket) => ticket.status === 'open').length,
           answered: tickets.filter((ticket) => ticket.status === 'answered').length,
           closed: tickets.filter((ticket) => ticket.status === 'closed').length },
-        note: `事实时刻 ${moment || '—'} · 答复必须署名 \`human:*\`；**广播必须覆盖全部在册投标人**`
+        note: `事实时刻 ${moment || '—'} · 答复必须署名 \`human:*\`；广播必须覆盖全部在册投标人`
           + `（缺一家就落 \`clarification/broadcast-incomplete\` 并拒绝），未完整广播的工单不得关闭（INV-006）` }
     } }))
 
@@ -1127,7 +1127,7 @@ export async function register(surface, host) {
 
   out.push(surface.action({ plugin_id: me, id: 'clarify.broadcast', title: '广播答复（覆盖在册投标人）',
     views: ['contractor', 'supplier'], group: '澄清', order: 20, permission: 'human-signature', inline: true,
-    confirm: { required: true, message: '广播后**在册投标人全员**可见（缺一家会被拒，工单不得关闭）：确认？' },
+    confirm: { required: true, message: '广播后在册投标人全员可见（缺一家会被拒，工单不得关闭）：确认？' },
     hint: '默认广播给全部在册投标人（本包邀请名单）；名单不全即 `broadcast-incomplete` 并拒绝',
     input: { fields: [
       { name: 'ticket_id', label: '工单 id', type: 'text', required: true },
@@ -1315,7 +1315,7 @@ export async function register(surface, host) {
       }
       return { ok: true, kind: 'table', columns, rows,
         counts: { matched: result.total, shown: rows.length },
-        note: `关键词「${query}」· 深链可直接发给同事（对方视角打开只会在**它自己**的投影里找，找不到就如实未命中）`
+        note: `关键词「${query}」· 深链可直接发给同事（对方视角打开只会在它自己的投影里找，找不到就如实未命中）`
           + ` · 本视图可打开的对象类：${result.kinds.join(' / ') || '（无）'}` }
     } })
 

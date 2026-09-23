@@ -94,7 +94,7 @@ export function renderReviewPanel({ prefix = '', side = '', kind = '', id = '', 
     })
   }
   const versionBlock = groups.length
-    ? `<h4>版本（同一对象上**同名**文件每传一次就是一版；旧版不覆盖、仍可逐条下载）</h4>`
+    ? `<h4>版本（同一对象上同名文件每传一次就是一版；旧版不覆盖、仍可逐条下载）</h4>`
       + `<div class="q-scroll"><table class="q-table q-files-table" data-att-versions="1">`
       + `<caption class="q-caption">${groups.length} 个文件名 · ${rows.length} 条版本`
       + `${versioned ? ` · ${versioned} 个文件名有多版` : '（还没有同名多版）'}</caption>`
@@ -133,13 +133,13 @@ export function renderReviewPanel({ prefix = '', side = '', kind = '', id = '', 
       + `<pre class="q-att-text" data-att-text="${esc(item.id)}">${esc(item.text ?? '')}</pre>`
       + `<figcaption class="q-hint">${item.truncated
         ? `只显示了前 ${esc(humanBytes(item.previewed_bytes))}（全文 ${esc(humanBytes(item.total_bytes))}）——`
-          + '**没有假装是全文**：'
+          + '没有假装是全文：'
         : '按 UTF-8 解码后以纯文本显示（不解析、不执行）：'}`
       + `<a class="q-deeplink" href="${esc(fileUrl(item.id))}" download="${esc(item.name)}">下载全文</a>`
       + '</figcaption></figure>')
   }
   const notPreviewable = skipped.length
-    ? `<p class="q-hint" data-att-not-previewable="${skipped.length}">界内**不预览**（如实说明，不假装加载中）：`
+    ? `<p class="q-hint" data-att-not-previewable="${skipped.length}">界内不预览（如实说明，不假装加载中）：`
       + skipped.slice(0, 8).map((item) => `<code>${esc(item.name)}</code>（${esc(previewRefusalReason(item.name))}）`)
         .join('、')
       + `${skipped.length > 8 ? ` … 共 ${skipped.length} 个` : ''}——这一类要下载来看`
@@ -153,10 +153,10 @@ export function renderReviewPanel({ prefix = '', side = '', kind = '', id = '', 
   const head = `<p class="q-hint" data-att-review="${esc(`${kind}/${id}`)}">`
     + `本对象（${esc(policy?.label ?? kind)} ${esc(id)}）· 身份 <code>${esc(identity?.side ?? '（未登录）')}</code>`
     + `${identity?.human ? ` / <code>${esc(identity.human)}</code>` : ''}`
-    + ' · 版本与预览都是**读**：不写账本（ledger_added 恒 0），正文仍在 0600 存储里</p>'
-  const rule = `<p class="q-hint">口径：同一对象上**同名**文件 = 一条版本链（v1、v2…），每条版本有自己的`
-    + ` id / sha256 / 上传人 / 时刻，**旧版不覆盖、仍可下载**；预览只做图片 / PDF / 文本，`
-    + `身份与侧判据与下载**同一套**（未登录 401 / 跨侧 403），不引任何外网依赖。</p>`
+    + ' · 版本与预览都是读：不写账本（ledger_added 恒 0），正文仍在 0600 存储里</p>'
+  const rule = `<p class="q-hint">口径：同一对象上同名文件 = 一条版本链（v1、v2…），每条版本有自己的`
+    + ` id / sha256 / 上传人 / 时刻，旧版不覆盖、仍可下载；预览只做图片 / PDF / 文本，`
+    + `身份与侧判据与下载同一套（未登录 401 / 跨侧 403），不引任何外网依赖。</p>`
   const degraded = reason
     ? `<p class="q-hint" data-att-review-reason="${esc(reason)}">这一块读不完整：${esc(reason)}`
       + `${nextAction ? `｜下一步：${esc(nextAction)}` : ''}</p>`
@@ -183,7 +183,7 @@ export async function register(surface, host) {
   out.push(surface.action({
     plugin_id: me, id: 'attach.delete', title: '删除这个附件（留痕）', views: ['contractor', 'supplier'],
     group: '附件', order: 62, icon: 'trash', context_menu: true,
-    hint: '只能删**自己上传**的附件；删除**留痕**：索引留墓碑、原件进 trash/、journal.jsonl 记一行（不是静默清除）',
+    hint: '只能删自己上传的附件；删除留痕：索引留墓碑、原件进 trash/、journal.jsonl 记一行（不是静默清除）',
     confirm: { required: true,
       message: '删除后这条附件从双方视野里消失（不可撤销）；痕迹（墓碑 + trash/ 原件 + 日志一行）会保留。确认删除？' },
     input: { fields: [
@@ -216,14 +216,14 @@ export async function register(surface, host) {
         plugin_id: me, id: `attach.files-${view}-${kind}`,
         title: `附件（${policy.label}）：拖进来就能传，双方向可核`,
         view, order: 62, kind: 'files', object_kind: kind, placement: 'main',
-        hint: '文件名/大小/上传人/时间/sha256 都可核；正文**不进账本**（只落 0600 存储）',
+        hint: '文件名/大小/上传人/时间/sha256 都可核；正文不进账本（只落 0600 存储）',
         data: (ctx) => {
           const id = asText(ctx.route?.id)
           const side = ctx.identity?.side ?? ''
           if (id === '') {
             return { ok: true, kind: 'files', degraded: true, reason: 'object-address-incomplete',
               files: [], upload: null, object: { kind, id: '' },
-              next_action: `附件挂在**对象**上：打开 ${prefix}/app/${view}/${kind}/<id>/ 再传` }
+              next_action: `附件挂在对象上：打开 ${prefix}/app/${view}/${kind}/<id>/ 再传` }
           }
           const seen = store.visibleObjects(side)
           const visible = side !== '' && store.objectVisible(side, kind, id)
@@ -251,7 +251,7 @@ export async function register(surface, host) {
             counts: { ...(listed.counts ?? {}), visible_ids: (seen.ids[kind] ?? new Set()).size },
             degraded: reason !== '',
             reason,
-            visibility_rule: '下载与删除都要**会话身份**（未登录 401）；跨侧只在「交付件 + 对方是该对象当事方」'
+            visibility_rule: '下载与删除都要会话身份（未登录 401）；跨侧只在「交付件 + 对方是该对象当事方」'
               + '时放行，本侧内部件永不出本侧',
             next_action: reason === 'identity-required'
               ? `先在 ${prefix}/identity/ 登录：附件按侧隔离，未登录看不到任何一侧的件`
@@ -291,14 +291,14 @@ export async function register(surface, host) {
         title: `附件：预览与版本（图片/PDF/文本在界内看；同名多版不覆盖）`,
         view, order: 61, kind: 'html', object_kind: kind, placement: 'wide',
         hint: '预览 = 不下载也能看（只做图片/PDF/文本：浏览器自带渲染器，同源、不引外网）；'
-          + '版本 = 同一对象上同名文件每传一次就是一版，**旧版不覆盖、仍可下载**（每条带人/时间/sha256）',
+          + '版本 = 同一对象上同名文件每传一次就是一版，旧版不覆盖、仍可下载（每条带人/时间/sha256）',
         data: (ctx) => {
           const id = asText(ctx.route?.id)
           const side = ctx.identity?.side ?? ''
           if (id === '') {
             return { ok: true, kind: 'html', degraded: true, reason: 'object-address-incomplete',
               html: renderReviewPanel({ prefix, kind, id: '', reason: 'object-address-incomplete',
-                nextAction: `附件挂在**对象**上：打开 ${prefix}/app/${view}/${kind}/<id>/ 再看版本与预览` }),
+                nextAction: `附件挂在对象上：打开 ${prefix}/app/${view}/${kind}/<id>/ 再看版本与预览` }),
               next_action: `打开 ${prefix}/app/${view}/${kind}/<id>/` }
           }
           const visible = side !== '' && store.objectVisible(side, kind, id)
@@ -335,7 +335,7 @@ export async function register(surface, host) {
             identity: side ? { side, human: ctx.identity?.human ?? '' } : null,
             policy, reason: side === '' ? 'identity-required' : (visible ? '' : 'object-not-in-your-view'),
             nextAction: side === ''
-              ? `先在 ${prefix}/identity/ 登录：版本与预览按**侧**隔离，未登录看不到任何一侧的件`
+              ? `先在 ${prefix}/identity/ 登录：版本与预览按侧隔离，未登录看不到任何一侧的件`
               : (visible ? '' : `本侧看不到这个 ${policy.label}（${id}）：先让对方投给你，或换一个对象`) })
           const extra = latestPreviewable.length > renderable.length
             ? `还有 ${latestPreviewable.length - renderable.length} 个可预览的没内联渲染（界面上限 ${limits.max_preview_render} 个：不把一页撑爆）——` 
@@ -350,7 +350,7 @@ export async function register(surface, host) {
               previewable: latestPreviewable.length, previewed: renderable.length,
               not_previewable: skipped.length },
             ledger_added: 0,
-            note: `预览与版本都是**读**：不写账本、不改索引（正文在 ${store.dir} 的 0600 存储里）`
+            note: `预览与版本都是读：不写账本、不改索引（正文在 ${store.dir} 的 0600 存储里）`
               + `${extra ? `｜${extra}` : ''}`,
             next_action: extra || (skipped.length
               ? '这一类没有浏览器自带渲染器：点文件名下载来看（预览不假装加载中）'
@@ -411,7 +411,7 @@ export async function register(surface, host) {
           + `同名多版的逐条版本读 \`${prefix}/api/attachments/versions?kind=<对象类>&id=<对象 id>\``,
           code: true },
         { key: '预览（不下载也能看）', value: `只做 ${PREVIEW_KINDS.join(' / ')}（${Object.keys(info.preview.types)
-          .sort().join(' ')}）：图片与 PDF 交给**浏览器自带**渲染器，文本按 UTF-8 解码后进纯文本；`
+          .sort().join(' ')}）：图片与 PDF 交给浏览器自带渲染器，文本按 UTF-8 解码后进纯文本；`
           + `其余类型如实说"不预览"并给下载。不引 CDN / 外网字体 / 第三方解析器` },
         { key: '预览的身份判据', value: info.preview.identity_rule },
         { key: '对象类', value: Object.values(info.object_policy)
@@ -419,7 +419,7 @@ export async function register(surface, host) {
         { key: '为什么不是账本', value: info.why_not_ledger },
         { key: '跨侧规则', value: info.visibility_rule },
       ],
-      note: '这一块是**只读读数**：它证明附件本体没进账本（ledger_added=0）、正文与索引都在 0600 存储里；'
+      note: '这一块是只读读数：它证明附件本体没进账本（ledger_added=0）、正文与索引都在 0600 存储里；'
         + '版本链与预览都只读同一份索引',
       next_action: '要传文件：打开一个对象页（RFQ 包/报价/变更/PO），在「附件」面板里拖文件进来；'
         + '同名文件再传一次就是新版本（旧版保留），图片/PDF/文本可在「附件：预览与版本」里直接看' }

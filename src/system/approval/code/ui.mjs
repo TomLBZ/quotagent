@@ -40,8 +40,8 @@ const sideScoped = (ctx, itemSide, item) => {
   if (mine === itemSide) return item
   const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
   const why = mine === ''
-    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
-    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+    ? `（未登录：登录${label}之后这一条才算"需要你处理"）`
+    : `（不是你要办的：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
   const body = asText(item.body)
   return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
     body: `${body}${body ? ' ' : ''}${why}` }
@@ -194,14 +194,14 @@ export async function register(surface, host) {
         counts: { pending: gates.length, decided: decided.length,
           nudges: gates.reduce((sum, gate) => sum + gate.nudge_count, 0) },
         note: `事实时刻 ${moment || '—'}（等待时长与超时剩余都相对账本里最大的 ts 算，不取墙钟）；`
-          + '**「批准 / 驳回」在行内**：署名必须等于会话身份（服务端判 403 signer-mismatch），'
-          + '落的是既有事件 `approval/granted` / `approval/denied`（**不新造事件类型**），写者仍是'
+          + '「批准 / 驳回」在行内：署名必须等于会话身份（服务端判 403 signer-mismatch），'
+          + '落的是既有事件 `approval/granted` / `approval/denied`（不新造事件类型），写者仍是'
           + ' `tools/gate-actions.py`（GUI 不写账本）；驳回必须留理由（逐字进账本 `comment`）；'
-          + '只有开单时**点名**的审批人能批（`approver-not-named`），已决定的门不能再批'
+          + '只有开单时点名的审批人能批（`approver-not-named`），已决定的门不能再批'
           + '（`gate-already-decided`）；'
-          + '「卡在谁 / 超时策略 / 超时剩余 / 该催谁」**开单后即可回读**（追加键 approvers/timeout_policy/'
+          + '「卡在谁 / 超时策略 / 超时剩余 / 该催谁」开单后即可回读（追加键 approvers/timeout_policy/'
           + 'timeout_s/escalate_to/requested_at，ADR-0022；旧行按缺省读）；'
-          + '超时策略只有 remind/escalate/abort，**不存在超时自动批准**' }
+          + '超时策略只有 remind/escalate/abort，不存在超时自动批准' }
     } })
 
   /** 已决定的门：批准/驳回**留痕可回读**（谁在何时、意见是什么）——批完不必去翻账本 JSONL。 */
@@ -238,7 +238,7 @@ export async function register(surface, host) {
         counts: { decided: decided.length,
           granted: decided.filter((gate) => gate.status === 'granted').length,
           denied: decided.filter((gate) => gate.status === 'denied').length },
-        note: `事实时刻 ${moment || '—'}；每一行的结论都来自账本里这条门**最后一次**写入的行`
+        note: `事实时刻 ${moment || '—'}；每一行的结论都来自账本里这条门最后一次写入的行`
           + '（`approval/granted` / `approval/denied` / `approval/aborted`），不是界面记的状态；'
           + '意见正文逐字来自账本 `comment`' }
     } })
@@ -304,7 +304,7 @@ export async function register(surface, host) {
     plugin_id: me, id, title, views: ['contractor', 'supplier'], group: '审批', inline: true,
     order: step === 'grant' ? 1 : 2, permission: 'human-signature',
     confirm: { required: true, message: `${title}：确认以你的署名${step === 'grant' ? '批准' : '驳回'}这条门？`
-      + '（这一步**改判定**，落一条账本事实，不可撤销）' },
+      + '（这一步改判定，落一条账本事实，不可撤销）' },
     hint, input: { fields: [
       { name: 'gate_id', label: '门 id', type: 'text', required: true, help: '从队列卡片复制（ap-…）；行内点「批准」会自动带上' },
       { name: 'signature', label: `署名（人签，${step === 'grant' ? '批准人' : '驳回人'}）`, type: 'signature',
@@ -387,10 +387,10 @@ export async function register(surface, host) {
   out.push(surface.action({ plugin_id: me, id: 'gate.decide-batch',
     title: '批量人签决定（批准 / 驳回，多选一次签）', views: ['contractor', 'supplier'], group: '审批',
     order: 3, permission: 'human-signature',
-    confirm: { required: true, message: '批量决定 = 一次署名、**逐条**改判定（每条门各落一条 '
+    confirm: { required: true, message: '批量决定 = 一次署名、逐条改判定（每条门各落一条 '
       + '`approval/granted` / `approval/denied`，不可撤销）：确认以你的署名执行？' },
-    hint: '一次署名 → 逐条落账：每条门**单独**跑唯一写者 `gate-actions.py`（`--step grant|deny`）；'
-      + '写者逐条判定（门不在本账本 / 已经决定过 / 你不是开单时点名的审批人）⇒ 某一条被拒**不影响**其余条；'
+    hint: '一次署名 → 逐条落账：每条门单独跑唯一写者 `gate-actions.py`（`--step grant|deny`）；'
+      + '写者逐条判定（门不在本账本 / 已经决定过 / 你不是开单时点名的审批人）⇒ 某一条被拒不影响其余条；'
       + '回执逐条给「已批准 / 已驳回 / 已经决定过（幂等，零新增）/ 被拒 + 原因」；同一批重签不重复落账',
     input: { bulk: 'ids', fields: [
       { name: 'gate_id', label: '门 id（批量时由勾选的行自带）', type: 'text',
@@ -428,7 +428,7 @@ export async function register(surface, host) {
         return { ok: false, code: 'batch-too-large',
           reason: `一次最多决定 ${BATCH_DECIDE_MAX} 条门，收到 ${ids.length} 条`,
           next_action: `先用「搜这块 / 按列筛选」把命中行缩到 ≤ ${BATCH_DECIDE_MAX} 行（计数行会跟着变），`
-            + `再点表头那颗「选中全部命中行（N）」重来。手工勾的也能用：勾选**跨页保留**`
+            + `再点表头那颗「选中全部命中行（N）」重来。手工勾的也能用：勾选跨页保留`
             + `（第 1 页勾的在翻页后不跟着丢），提交按钮上的数字就是真会送出的条数。本动作账本零新增` }
       }
       const actor = asText(input.signature)
@@ -486,12 +486,12 @@ export async function register(surface, host) {
       const ledgerAdded = results.reduce((sum, row) => sum + Number(row.ledger_added ?? 0), 0)
       const verb = step === 'grant' ? '已批准' : '已驳回'
       const one = (row) => `${row.gate_id}：${row.where === 'applied' ? `${verb}（${row.event}，本动作 +1 行）`
-        : (row.where === 'duplicates' ? '**已经决定过**（幂等：这一条零新增）'
-          : `**被拒**（${row.code}${row.reason ? `：${row.reason}` : ''}）`)}`
+        : (row.where === 'duplicates' ? '已经决定过（幂等：这一条零新增）'
+          : `被拒（${row.code}${row.reason ? `：${row.reason}` : ''}）`)}`
       const next = `${results.length} 条门：${verb} ${decided.length} 条 · 已决定过（幂等）${idempotent.length} 条 · `
         + `被拒 ${failed.length} 条（本次账本 +${ledgerAdded} 行）—— ${results.map(one).join('；')}`
         + (failed.length
-          ? `。被拒的这几条要**单独**处理：${failed.map((row) => `${row.gate_id} ⇒ `
+          ? `。被拒的这几条要单独处理：${failed.map((row) => `${row.gate_id} ⇒ `
             + `${row.next_action || row.code}`).join('；')}（被拒的那几条账本零新增，其余条不受影响）`
           : `。${verb}的门在「已决定的门」里可回读（谁在何时、什么意见）`)
       return { ok: (decided.length + idempotent.length) > 0,
@@ -558,7 +558,7 @@ export async function register(surface, host) {
       const otherApplied = (receipt.applied ?? []).filter((row) => host.receiptFileName(row) !== mineName)
       const otherRefused = (receipt.refused ?? []).filter((row) => host.receiptFileName(row) !== mineName)
       const othersNote = otherApplied.length || otherRefused.length
-        ? `（同一次运行里写者还处理了 ${otherApplied.length + otherRefused.length} 条**别的**待办件：`
+        ? `（同一次运行里写者还处理了 ${otherApplied.length + otherRefused.length} 条别的待办件：`
           + `${otherApplied.length} 条已落行、${otherRefused.length} 条被拒 —— 那些不属于本动作）`
         : ''
       const code = ok ? (written ? 'nudged' : 'already-nudged')
@@ -621,7 +621,7 @@ export async function register(surface, host) {
     { name: 'ref', label: 'ref（被批对象的 id）', type: 'text', required: true, help: '如 q-… / aw-… / chg-…' },
     { name: 'summary', label: '一句话摘要（给人看）', type: 'text' },
     { name: 'timeout_policy', label: '超时策略', type: 'select', options: ['remind', 'escalate', 'abort'],
-      default: 'remind', help: '**没有"超时自动批准"**；escalate 必须给上级' },
+      default: 'remind', help: '没有"超时自动批准"；escalate 必须给上级' },
     { name: 'timeout_s', label: '超时秒数', type: 'number', min: 1, max: 7776000, default: 3600 },
     { name: 'escalate_to', label: '升级/上级（policy=escalate 时必填）', type: 'text', help: 'human:<上级名字>' },
     { name: 'approvers', label: '审批人（逗号分隔，默认自己）', type: 'text', help: 'human:<名字>' },
@@ -630,14 +630,14 @@ export async function register(surface, host) {
   out.push(stepAction('gate.escalate', 'escalate', '升级到下一角色', [
     { name: 'escalate_to', label: '升级给（human:<名字>）', type: 'text', required: true,
       help: '下一角色从本视图的「授权区间（谁能批到多少）」面板直接读（越界时它给出 next_role）' },
-  ], '落 `approval/escalated`（与 ApprovalService.sweep 的 escalate 分支同形）；**升级不是批准**'))
+  ], '落 `approval/escalated`（与 ApprovalService.sweep 的 escalate 分支同形）；升级不是批准'))
 
   out.push(stepAction('gate.delegate', 'delegate', '委托给另一个人等', [
     { name: 'escalate_to', label: '委托给（human:<名字>）', type: 'text', required: true },
   ], '落 `approval/escalated`（action=delegate）；门仍是 pending，只是换了人'))
 
   out.push(stepAction('gate.abort', 'abort', '终止这个门', [],
-    '落 `approval/aborted`：本次意图作废（需重新发起），**必须留理由**；已决定的门会被拒'))
+    '落 `approval/aborted`：本次意图作废（需重新发起），必须留理由；已决定的门会被拒'))
 
   out.push(surface.shortcut({ plugin_id: me, id: 'shortcut.gate-queue', keys: 'g', action: 'gate.nudge',
     title: '催办一个门', order: 5 }))
