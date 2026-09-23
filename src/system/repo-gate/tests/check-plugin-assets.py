@@ -39,17 +39,23 @@
       ⑥ 在 `tools/` 的源码里写死仓库根（PA9）⑦ 在没有扩展名的**根入口 `run`** 里写死仓库根（PA9 的
       扫描面自证：那一层不在 `**/*.sh` 里）。
   F5 防假变异：不存在的锚点必须被判为假变异（不许"没改到任何字节"也算红）。
-  F6 全过程**产品树字节不变**（变异只写在 `tmp/` 的整树副本里）。
+  F6 全过程**产品树字节不变**（变异只写在 `tmp/` 的整树副本里；副本**由门自己收拾** ——
+      正常 / 断言失败 / 被 timeout 收走（SIGTERM）都在退出前删掉本进程造的副本，
+      不清理就每跑一次留 7 份整树副本（本轮实测 65 MB；更早两次各 76 MB，`tmp/plugin-assets-*`，
+      两个批次吃满过磁盘）。删副本**不放松任何判据**：F6 比的是**产品树文件**的前后摘要，
+      副本是执行手段、不是任何断言的证据材料。
 
 用法：`tools/verify.sh plugin-assets`（或 `python3 tools/check-plugin-assets.py [--root DIR]`）
 退出码：0 全通过 / 1 有断言失败 / 2 环境错误。
 """
 from __future__ import annotations
 
+import atexit
 import hashlib
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -823,6 +829,59 @@ def tree_copy(src: Path, dst: Path) -> Path:
     return dst
 
 
+#: 本次进程**自己造的**临时树（整树副本 + 外层 scratch）：退出前全部删掉（见 `cleanup_active_trees`）。
+#: 只登记自己的 ⇒ 不碰别的并发门跑留下的副本（同一个 `tmp/` 里可能同时有别门/别批次在跑）。
+_ACTIVE_TREES: list[Path] = []
+
+
+def cleanup_active_trees() -> int:
+    """删掉本进程造的临时树（幂等；返回真删掉的份数）。
+
+    `tmp/plugin-assets-*` 每次跑留 7 份整树副本（本轮实测每份 11 MB、整个 scratch 65 MB；更早两次各 76 MB）
+    —— 之前两个批次把它堆到 4.4 G、吃满过磁盘（EV-192）。删的是**执行手段**，不是任何判据的证据材料：
+    F6 比的是**产品树文件**的前后摘要。
+    """
+    removed = 0
+    for path in list(_ACTIVE_TREES):
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+                removed += 1
+        except OSError:
+            pass                       # 删不掉就如实留着（下次跑门的登记里不会有它；不假装删成功了）
+        finally:
+            if path in _ACTIVE_TREES:
+                _ACTIVE_TREES.remove(path)
+    return removed
+
+
+def release_tree(path: Path) -> None:
+    """**评完就删**这一份副本（并摘掉登记）：峰值从 7 份降到 1 份；删不掉就交回给收抬兜底。"""
+    if path in _ACTIVE_TREES:
+        _ACTIVE_TREES.remove(path)
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def _on_signal(signum, _frame) -> None:   # pragma: no cover - 只在被信号收走时跑
+    """被 timeout（SIGTERM）/ Ctrl-C（SIGINT）收走之前先收抬，再按原来的方式死掉（退出码不变）。"""
+    cleanup_active_trees()
+    signal.signal(signum, signal.SIG_DFL)
+    os.kill(os.getpid(), signum)
+
+
+def install_cleanup_handlers() -> None:
+    """正常退出（atexit）+ 异常/断言失败（`main` 的 finally）+ 超时被收走（信号）三条路都收抬。"""
+    atexit.register(cleanup_active_trees)
+    for name in ("SIGTERM", "SIGINT", "SIGHUP"):
+        signum = getattr(signal, name, None)
+        if signum is None:
+            continue
+        try:
+            signal.signal(signum, _on_signal)
+        except (ValueError, OSError):
+            pass                       # 非主线程/平台不支持 ⇒ 退化成 atexit 兜底（仍然收抬）
+
+
 def apply_replacement(path: Path, find: str, replace: str) -> bool:
     """唯一锚点替换；锚点不存在或不唯一 ⇒ False（= 假变异）。"""
     text = path.read_text(encoding="utf-8")
@@ -832,7 +891,7 @@ def apply_replacement(path: Path, find: str, replace: str) -> bool:
     return True
 
 
-def main() -> int:
+def run_gate() -> int:
     global ROOT
     argv = list(sys.argv[1:])
     if "--root" in argv:
@@ -853,10 +912,12 @@ def main() -> int:
     RESULTS.extend(evaluate(ROOT, run_gates=True)[0])
     baseline_red = [name for name, ok, _ in RESULTS if not ok]
 
-    # --- F1..F4：4 处单点变异（整树副本；每处必须让指定断言变红）------------------------
+    install_cleanup_handlers()      # 正常 / 异常 / 超时（SIGTERM）三条路都把本进程造的副本收抬
+    # --- F1..F4：4 处单点变异（整树副本；每处必须让指定断言变红）--------------------------
     tmp_root = ROOT / "tmp"
     tmp_root.mkdir(exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="plugin-assets-", dir=str(tmp_root)))
+    _ACTIVE_TREES.append(work)
     mutant_specs = [
         {"name": "F1 抽走目标目录里的资产（`src/domain/authority-band/tests/check-authority-route.py`）必须让 PA1 变红",
          "apply": lambda base: (base / "src/domain/authority-band/tests/check-authority-route.py").unlink(),
@@ -899,6 +960,7 @@ def main() -> int:
     mutated_roots: list[Path] = []
     for index, spec in enumerate(mutant_specs, start=1):
         base = tree_copy(ROOT, work / f"mutant-{index}")
+        _ACTIVE_TREES.append(base)     # 先登记再动手：`apply`/`evaluate` 抛错也照样被收抬
         spec["apply"](base)
         res, _facts = evaluate(base, run_gates=True)
         reds = [name for name, ok, _ in res if not ok]
@@ -908,6 +970,9 @@ def main() -> int:
         check(f"{spec['name']}", bool(hit) and bool(delta),
               f"变异体红 {len(reds)} 项、新增红 {len(delta)} 项、命中指定断言={bool(hit)}；{spec['why']}；"
               f"红项={[n.split(' ')[0] for n in reds][:8]}")
+        # **评完就删这一份**（峰值从 9 份整树副本降到 1 份）：副本不是任何判据的证据材料 ——
+        # F6 比的是**产品树**文件的前后摘要 ⇒ 删副本**不放松一条断言**。
+        release_tree(base)
 
     check("F0 基线（未变异）在同一套判据上**不红**（否则 4 处变异变红都是空转）",
           not baseline_red, f"基线红项={baseline_red}")
@@ -917,9 +982,12 @@ def main() -> int:
           apply_replacement(probe, "不存在的锚点", "x") is False,
           "唯一锚点缺失 ⇒ False（探针文件在 tmp/ 副本根，产品树不受影响）")
     after = {str(p): sha256(p) for p in relevant if p.is_file()}
+    leftover = sorted(p.name for p in work.glob("mutant-*")) if work.is_dir() else []
     check("F6 全过程**产品树字节不变**（变异只写在 tmp/ 的整树副本里）",
           after == digests_before, f"前后 {len(digests_before)}/{len(after)} 个文件摘要一致="
-                                   f"{after == digests_before}；副本 {len(mutated_roots)} 份在 {work}")
+                                   f"{after == digests_before}；整树副本 {len(mutated_roots)} 份"
+                                   f"（每份评完即删 ⇒ `tmp/` 里残留 {len(leftover)} 份；收抬见门头 F6 与 "
+                                   f"`cleanup_active_trees`：删副本不改任何断言）")
 
     failed = [item for item in RESULTS if not item[1]]
     for name, ok, detail in RESULTS:
@@ -929,6 +997,18 @@ def main() -> int:
     total = len(RESULTS)
     print(f"RESULT: {'PASS' if not failed else 'FAIL'}（plugin-assets 门 {total - len(failed)}/{total}）")
     return 1 if failed else 0
+
+
+def main() -> int:
+    """`run_gate()` 的收抬壳：**不管怎么退出**（全绿 / 有红 / 抛异常）都把本进程造的整树副本删掉。
+
+    `atexit` + 信号处理器（`install_cleanup_handlers`）覆盖正常退出与 SIGTERM/SIGINT 收走；
+    这一层 `finally` 覆盖"没走到 `raise SystemExit` 的异常"（它也会让 atexit 跑，但显式更清楚）。
+    """
+    try:
+        return run_gate()
+    finally:
+        cleanup_active_trees()
 
 
 if __name__ == "__main__":

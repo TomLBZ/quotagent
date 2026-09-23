@@ -86,6 +86,17 @@ surface.scenario({ plugin_id: me, id: 'scenario.rfq-publish', scenario: 'demo.pr
    ⇒ 不带版本会被乐观并发闸判 `object-changed`（演示第 4 步自 P14 起一直红的真因）。现在由机制在
    派发前把**当前那一版**填进去：沙盘里只有这条链在写、而且它整段持着写者闸门 ⇒ "读到"与"派发"
    之间插不进别人的写。**HTTP 入口一个字都没变**（界面怎么带版本还怎么带）。
+3. **闸门锁面 = 本会话的有效数据目录**（`code/app-shell.mjs#writerGateFace()` → `effective().dir`）：
+   主线程动作与动作运行时（worker）**同一来源**取锁 —— 沙盘打开时两半都锁
+   `<ui_shared>/sandbox/<身份>/webui/writer.lock`、关着时都锁 `<ui_shared>/webui/writer.lock`。
+   改前是主线程按真实 `sharedDir`、worker 按 `effective().dir` ⇒ **两个锁面**：同一个沙盘里
+   "批量（worker）"与"单条写（主线程）"各锁各的（沙盘账本反而没有互斥），而且**跨面互相干扰**
+   （真实面持锁会挡住沙盘面的写）。**跨面本来就不需要互斥**：两个面写的是两份账本
+   （`effective().config.ledger_*` 各指一份文件）⇒ 只要各自面内互斥即可。
+   读数（改前树 vs 本树，同一套探针）：`tmp/p38-shots/gate-faces-probe.py`（本树，29/29：
+   真实面 6 并发 + 沙盘面 6 并发全 ok、两侧账本无重复 `seq`/无断链、`timeouts` 0、跨面持锁 0 干扰、
+   持沙盘锁时批量（worker）逐条 `writer-gate-timeout`）；对照 `tmp/p38-shots/gate-faces-before-probe.py`
+   （改前树：持沙盘锁时沙盘面的单条写**照样成功**、同刻 worker 却逐条被拒 ⇒ 两个锁面共存）。
 
 ## 5. 想知道"沙盘模式是不是开着"
 

@@ -10,8 +10,10 @@
 **批量动作（一次署名 · 逐份落账的那几颗）的服务端一半搬进了一个 worker 线程**：
 插件代码照旧同步跑、照旧 `spawnSync` 唯一写者，但阻塞的只是那个线程 —— 主线程照常服务别人的翻页与写。
 代价是一条**must**：写者之间必须显式互斥（`writer.queue` 票据 + `writer.lock` 原子争锁），
-因为 Python 侧唯一写者 append JSONL 时不是并发安全的；没有这条闸门，实测会出现**重复 seq / 断链 ⇒ 账本冻结**。
-进度与逐条结果落 `<ui_shared>/webui/jobs.json`（0600、原子写、有界）⇒ 刷新或进程崩了都读得回"这一批到哪了"。
+因为 Python 侧唯一写者 append JSONL 时不是并发安全；没有它实测会出现**重复 seq / 断链 ⇒ 账本冻结**。
+**锁面 = 本会话有效数据目录**（`writerGateFace()` → `effective().dir`）：主线程与 worker **同一来源**取锁
+（沙盘打开 ⇒ 沙盘目录）；两半各按一处算就是两个锁面。
+进度与逐条结果落 `<ui_shared>/webui/jobs.json`（0600、原子写、有界）⇒ 刷新/崩了都读得回"这批到哪了"。
 
 ## 1 机制（都在 `code/app-shell.mjs`，零业务语义）
 
@@ -20,7 +22,7 @@
 | **认"这是批量动作"** | `batchIdsOf(action, input)` | 注册面声明 `action.input.bulk === 'ids'` 且 `input.ids` 非空 —— **不认插件 id、不认业务名词** |
 | **动作运行时** | `ACTION_RUNTIME_ENTRY` + `runInActionRuntime()` | worker 线程里 `import` 磁盘上那个 `code/ui.mjs`、用只含机制的 `host` 注册、再调它自己的 `server(ctx, input)`；`spawnSync` 阻塞的是 worker 不是主线程 |
 | **并发上限** | `job_concurrency`（默认 1，`QUOTAGENT_UI_JOB_CONCURRENCY`） | 批量之间排队；**动作不被拒**（拒绝只给渲染重读，见 §20 ④） |
-| **唯一写者闸门** | `WRITER_GATE` / `writerGateTicket` / `writerGateTry` / `writerGateTakeSync` | 文件锁 + FIFO 票据：主线程动作**动作级**取放（`await`，不阻塞事件循环）、worker **逐次写者调用**取放（`Atomics.wait`）；批量动作不取动作级闸门（否则与 worker 互等 ⇒ 死锁），退回主线程执行时才现取 |
+| **唯一写者闸门** | `WRITER_GATE` / `writerGateFace` / `writerGateTicket` / `writerGateTry` / `writerGateTakeSync` | 文件锁 + FIFO 票据：主线程动作**动作级**取放（`await`，不阻塞事件循环）、worker **逐次写者调用**取放（`Atomics.wait`）；批量动作不取动作级闸门（否则与 worker 互等 ⇒ 死锁），退回主线程时才现取 |
 | **进度** | `jobOnProgress()` | worker 每跑一次写者发两条进度（`writer-start` / `writer-done`，带 `--<x>-id` 那个值当"正在处理哪一条"）；主线程更新记录并按 150ms 节流落盘 |
 | **逐条结果** | `jobItemsOf()` / `jobCountsOf()` | 从插件自己的 `result.results[]` / `result.batch` **照抄**（`where`/`code`/`ledger_added`/`reason`/`next_action`），机制不做任何判定 |
 | **读回** | `GET /api/ui/jobs`（只读，POST 孪生 405 + `Allow: GET`） | `running`（正在跑的那一批：`done/total`、`active.target`）+ `recent`（含 `interrupted` + `pending_ids`/`refused_ids`）；**按会话身份隔离**、未登录 401 |
@@ -40,10 +42,10 @@
 1. **写者必须排队**（§0 的 must）：批量进行中，另一个人的**单条写**要等到当前那一条写完（FIFO 票据，实测 p50 ≈ 300ms），
    不排队就会撞坏账本链。只读（翻页/通知/状态）**完全不排队**。
 2. **运行时的 host 面**是"机制的那一半"：批量动作目前只用到 `runPython`/`stage`/`writerReceipt`/`sharedDir`/`now`/`config`。
-   将来某个批量动作用到 `host.digest()` 这类运行时拿不到的能力 ⇒ 该动作会自动**回退主线程执行**（结果一样，只是会冻结），
-   `io.jobs.inline_fallback` 会 +1 并在日志里说明 —— 不静默。
-3. **并发读可能撞上写者的 append**（真异步的固有面）：读路径（`rows()`）不做加锁；P21 压测中批量期间发出的
-   121 次翻页/读请求全部成功（没有撕裂行）。要彻底消除这一面得让读也进闸门（那会把读变慢，本批没做）。
+   将来某个批量动作用到 `host.digest()` 这类运行时拿不到的能力 ⇒ 该动作自动**回退主线程**（结果一样，只是会冻结），
+   `io.jobs.inline_fallback` +1 并在日志里说明 —— 不静默。
+3. **并发读可能撞上写者的 append**（真异步的固有面）：读路径（`rows()`）不加锁；P21 压测中批量期间的
+   121 次读全部成功（无撕裂行，§3）。要消除这一面得让读也进闸门（读会变慢，本批没做）。
 4. **中断与恢复**（P23 真跑读数见 §5.2）：进程被杀之后，`jobs.json` 里那一条还写着 `running`；下一次读
    （`jobsLoad()`）把**上一个进程**的 `running/queued` 改成 `interrupted`，并用进度里的写者回执推出 `pending_ids`
    （没跑过的那些）与 `refused_ids`（跑过但被写者拒的）——**当场落盘**，所以刷新/换设备读回的是同一份"到哪了"。
@@ -68,7 +70,7 @@
 
 **没有闸门时的反证**（同一批代码，只去掉闸门）：50 份批量与另一客户端的 `rfq.publish` 并发写 ⇒ 供应商账本出现
 重复 `seq 309` / 断链 ⇒ 写者自己发现并**冻结账本**（`ledger-frozen`，49/50 被拒）。读数：
-`tmp/p21-shots/concurrent-broken-chain.json`、本页 §4。这条反证就是"闸门是必需的、不是优化"的判据。
+`tmp/p21-shots/`（那次的反证 JSON 已不在树）、本页 §4。这条反证就是"闸门是必需的、不是优化"的判据。
 
 ## 4 复跑
 
@@ -146,9 +148,9 @@ for _ in range(60):
 subprocess.Popen(["sh", start.sh, str(args.port), str(run)], ...)   # ← 于是把 job 记录当数据目录传下去
 ```
 
-`start.sh` 把第 2 个参数当 `RUN`，散给 `--ui-shared`/`--ledger-*`/… ⇒ 服务**带着 3.3 KB 的参数启动**，
-`identity` 的会话目录变成 `<工作目录>/{'id': 'job-…`（>4096 B 的路径 + 里面还夹着 `/`）⇒ `mkdir` 先建出
-第一个分量、再因后面的分量过长而 `ENAMETOOLONG` ⇒ 登录必失败。`/proc/<pid>/cmdline` 里能逐字看到这件事。
+`start.sh` 把第 2 个参数当 `RUN`，散给 `--ui-shared`/`--ledger-*`/… ⇒ 服务**带着 3.3 KB 的参数启动**，`identity`
+会话目录变成 `<工作目录>/{'id': 'job-…`（>4096 B 且夹着 `/`）⇒ `mkdir` 先建第一个分量、再因后面过长而
+`ENAMETOOLONG` ⇒ 登录必失败。`/proc/<pid>/cmdline` 里逐字可见。
 
 **为什么产品侧没有这个取值路径**（判据，逐条可查）：
 
@@ -165,8 +167,8 @@ subprocess.Popen(["sh", start.sh, str(args.port), str(run)], ...)   # ← 于是
    与"复现时 argv 里那个值的键集"逐一比对过：**28 : 28 全等**（`tmp/p23-shots/shape-probe.txt`）。
 5. **修法与负控**：只改那三行变量名（`run` → `active`），其余一个字没动 —— 同一份夹具、同一批数据、
    同一串用例：**修前 FAIL（login 400 + ④-1 红）→ 修后 PASS（0 失败）**。`tmp/p23-shots/fixture-fix.diff`
-   就是全部改动；**原始夹具 `tmp/p21-shots/batch-timing.py` 也已同样修好**（免下一个人再踩），
-   `tmp/p23-shots/batch-timing-bug.py` 保留为可复跑的负控（它当初在仓库根目录留下的空目录已删）。
+   就是全部改动；**原始夹具 `tmp/p21-shots/batch-timing.py` 也已同样修好**；
+   `tmp/p23-shots/batch-timing-bug.py` 保留为可复跑的负控。
 
 **复跑命令**（复现根因）：
 

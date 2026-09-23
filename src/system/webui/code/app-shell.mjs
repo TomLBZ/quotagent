@@ -2848,12 +2848,29 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     if (ranWriter) writerFree.set(actionId, 0)
     else writerFree.set(actionId, Math.min(2, writerFreeCount(actionId) + 1))
   }
+  /**
+   * **闸门锁面 = 本会话的「有效数据目录」**（`effective().dir`）—— 两个执行面从这里**同一来源**取锁：
+   * 主线程动作（`writerGateAcquire`）与动作运行时（worker 的 `writerGateTakeSync`）拿到的
+   * `writerLock` / `writerQueue` 都出自这一个函数。
+   *
+   * 为什么必须同源：沙盘打开时 `effective().dir` 是**沙盘目录**、`sharedDir` 是**真实目录**。
+   * 改前主线程按真实 `sharedDir` 取锁、worker 按 `effective().dir` 取锁 ⇒ 沙盘一开就是**两个锁面**：
+   * 同一个沙盘里，"批量动作（worker）"与"单条写（主线程）"各锁各的，沙盘账本反而没有互斥；
+   * 关掉/打开沙盘时锁面还会整体搬家（真实面的队排着，沙盘面另起一队）。
+   * 改后：锁面**跟着这一份数据目录走** —— 沙盘面两半共锁沙盘目录，真实面两半共锁真实目录；
+   * 两个面之间是两份账本（`effective().config.ledger_*` 各指一份文件）⇒ 各自互斥即可，跨面不需要互斥。
+   */
+  const writerGateFace = () => {
+    const eff = effective()
+    return { dir: eff.dir, sandbox: eff.on, lock: WRITER_GATE.lock(eff.dir), queue: WRITER_GATE.dir(eff.dir) }
+  }
   /** 异步取闸门（主线程**不阻塞事件循环**：等的时候让出，别人的翻页照常；协议本体在 `writerGateTry`）。
    *  **可重入**：这条异步链上已经持有同一把锁 ⇒ 直接放行（`reentrant:true`，不取票/不放锁；
    *  场景 runner 在外层动作的闸门里 dispatch 步骤就是这种情形 —— 见 `WRITER_GATE_CHAIN`）。 */
   const writerGateAcquire = async (action, meta = {}) => {
-    const lock = WRITER_GATE.lock(sharedDir)
-    const dir = WRITER_GATE.dir(sharedDir)
+    const face = writerGateFace()
+    const lock = face.lock
+    const dir = face.queue
     const chain = WRITER_GATE_CHAIN.getStore()
     if (chain && chain.has(lock)) {
       gateStats.reentrant += 1
@@ -3351,6 +3368,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       return settle({ ok: false, wrote: false, error: `找不到插件的 code/ui.mjs：${action.plugin_id}` })
     }
     const eff = effective()
+    const face = writerGateFace()          // 与主线程动作**同一来源**（见 `writerGateFace`）
     const worker = new Worker(`(${ACTION_RUNTIME_ENTRY.toString()})(require('node:worker_threads'))`, {
       eval: true,
       workerData: {
@@ -3360,7 +3378,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         config: eff.config, sharedDir: eff.dir, startedAt: Date.now(),
         pythonBin, pythonTimeoutMs: PYTHON_TIMEOUT_MS,
         sandbox: { on: eff.on, actors: eff.actors, human: eff.human, dir: eff.on ? eff.dir : '' },
-        writerLock: WRITER_GATE.lock(eff.dir), writerQueue: WRITER_GATE.dir(eff.dir), gateWaitMs,
+        writerLock: face.lock, writerQueue: face.queue, gateWaitMs,
         ledgerPaths: { contractor: String(eff.config?.ledger_contractor ?? ''),
           supplier: String(eff.config?.ledger_supplier ?? '') },
       },
@@ -4356,9 +4374,17 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       jobs: { ...jobsDescribe(), running_now: jobsRunning, queued: jobWaiters.length },
       // **唯一写者闸门**（P21）：真异步之后写者之间必须显式互斥（同刻只有一个写者在写）。
       // `waited_ms/peak_wait_ms` = 动作等闸门的真实读数；`timeouts` = 等不到而如实拒的次数（0 才是常态）。
-      writer_gate: { ...WRITER_GATE, ...gateStats, wait_ms: gateWaitMs,
-        held: writerGateInfo(WRITER_GATE.lock(sharedDir)),
-        queued: (() => { try { return readdirSync(WRITER_GATE.dir(sharedDir)).length } catch (err) { return 0 } })() },
+      // `face` = 这次读数取自**哪一份目录的锁**：`effective().dir` —— 主线程动作与动作运行时（worker）
+      // 同一来源（沙盘打开 ⇒ 沙盘目录，否则真实 `sharedDir`）；改前两半各锁各的（两个锁面）。
+      writer_gate: (() => {
+        const face = writerGateFace()
+        return { ...WRITER_GATE, ...gateStats, wait_ms: gateWaitMs,
+          face: { dir: face.dir, sandbox: face.sandbox,
+            source: 'effective().dir —— 主线程与动作运行时的 writerLock/writerQueue 都出自这一处；'
+              + '沙盘打开 ⇒ 沙盘目录，否则真实 sharedDir' },
+          held: writerGateInfo(face.lock),
+          queued: (() => { try { return readdirSync(face.queue).length } catch (err) { return 0 } })() }
+      })(),
       // **上一次页面渲染**的代价（本批新增）：`spawns` = 这一次 `/api/ui/panels` 起了几个 Python 进程。
       // 用途：长列表改造前后的"渲染耗时 / DOM 节点数 / Python spawn 次数"三件套里最后一件的前后对照。
       last_render: ioStats.last_render ?? null,
