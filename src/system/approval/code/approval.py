@@ -38,6 +38,17 @@ HUMAN_PREFIX = "human:"
 #: 所以旧行读出来逐字段与改前一致；新键只**增加**可回读的事实，不改任何既有键的语义。
 GATE_FACT_KEYS = ("approvers", "timeout_policy", "timeout_s", "escalate_to", "requested_at")
 
+#: `approval/aborted` 有两个生产者，**键集不同但都不是新事件类型**（ADR-0023）：
+#:
+#:   · 人做的终止（`tools/gate-actions.py --step abort`）：`{**上一行的 body, action, status='aborted',
+#:     aborted_by, aborted_at, last_action_at, reason_sha256, **comment=理由正文逐字**, note}` ——
+#:     理由正文进账本，是为了让「为什么作废」从账本回读（审计底线：谁/何时/为什么/依据哪一行可一屏答出）。
+#:   · 超时策略触发的作废（下面的 `sweep()`）：**没有人类理由**，`comment` 沿用记录里的空串 ——
+#:     读侧如实显示"没有人写过理由"，**不替它编一句**（`aborted_by` 也不会凭空写一个人名）。
+#:
+#: 兼容性（追加型）：旧账本行没有 `comment`（只有 `reason_sha256`）⇒ 读侧按缺省处理并**如实说**
+#: 「账本只有理由哈希、正文在 0600 待办件里」；旧行一个字节不动。
+
 
 class ApprovalError(RuntimeError):
     """人工门错误基类。"""
@@ -250,6 +261,8 @@ class ApprovalService:
                 record["status"] = "aborted"
                 record["aborted_at"] = stamp
                 record["last_action_at"] = stamp
+                # 超时作废**没有人类理由**：`comment` 保持空串、**不写** `aborted_by`（不编一个署名）——
+                # 读侧据此如实显示"没有人写过理由（超时策略的自动作废）"，见 ADR-0023。
                 body = {**record, "action": "abort", "policy": policy,
                         "note": "作废本次意图（需重新发起）；不得解释为批准或拒绝"}
                 self._append(ABORTED_EVENT, body, correlation_id=record["ref"] or key)

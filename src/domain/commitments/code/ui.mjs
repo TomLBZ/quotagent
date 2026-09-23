@@ -30,8 +30,32 @@
  */
 export const plugin_id = 'domain/commitments'
 import { createReceiptStore } from '../../../system/attachments/code/delivery-receipts.mjs'
+import { plainText } from '../../../system/approval/code/ui.mjs'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * 写者回执里的 `json` → **给人看的那一份**（P43）。
+ *
+ * 唯一写者（Python 工具）的 `reason` / `next_action` 会带**命令行旗标**（`--step confirm`、
+ * `--actor human:<人名>`、`PYTHONPATH=… python3 -m …`）——产品界面不该教人回终端
+ * （`docs/design/29-webui-gui-app.md` §21.4）。`plainText` 是**唯一一份实现**
+ * （在 `system/approval/code/ui.mjs` 里，与审批队列用同一个函数），这里只把它套在写者文案上。
+ *
+ * **不像素级改写判据**：只动 `refusal.reason` / `refusal.next_action` / `next_action` / `next_action_runtime`
+ * 这四个**文案**键；`ok` / `ledger_added` / `applied` / `duplicates` / `refused` / 事件名一律不动。
+ * 写者原文挂在 `writer_text` 上 ⇒ 回执的 `result.writer_text` 照样可查（一个字都没丢，可审计）。
+ */
+const cleanJson = (run) => {
+  const json = run?.json ?? {}
+  const clean = (value) => (typeof value === 'string' && value !== '' ? plainText(value) : value)
+  const refusal = json.refusal && typeof json.refusal === 'object'
+    ? { ...json.refusal, reason: clean(json.refusal.reason), next_action: clean(json.refusal.next_action) }
+    : json.refusal
+  return { ...json, refusal,
+    next_action: clean(json.next_action), next_action_runtime: clean(json.next_action_runtime),
+    writer_text: { reason: json.refusal?.reason ?? '', next_action: json.refusal?.next_action ?? '' } }
+}
 
 /**
  * 工作台的卡头那句「有 N 件需要你处理」**只该算本侧**（P13 可用性修）：卡片把两侧插件贡献的待办并在一起，
@@ -52,6 +76,11 @@ const sideScoped = (ctx, itemSide, item) => {
 }
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const typeRows = (rows, type) => rows.filter((row) => String(row?.type ?? '') === type)
+/**
+ * **门被决定过**的那三种事件（批准 / 驳回 / 终止）——一件事一旦落在其中一条上，它就不在"还在等"里了。
+ * 修前 `home.gates` 只认 granted/aborted ⇒ **被驳回的门一直以"还在等"挂在工作台上**（会误判成还没办）。
+ */
+const DECIDED_GATE_EVENTS = ['approval/granted', 'approval/denied', 'approval/aborted']
 /** 值的**形状名**（只用于如实报出"读不出来的是什么形状"，不做任何补值/猜测）。 */
 const shapeOf = (value) => (value === undefined ? 'missing' : value === null ? 'null'
   : Array.isArray(value) ? 'array' : typeof value)
@@ -405,11 +434,14 @@ export async function register(surface, host) {
         ['--step', 'propose', '--request', staged.path, '--ui-shared', host.sharedDir,
           '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(),
           '--intent-out', intentFile(), '--now', host.now()])
-      const json = run.json ?? {}
+      const json = cleanJson(run)
       // 唯一写者的 `next_action` 里偶尔提到走查脚本（`本脚本 --step confirm`）——产品界面不该教用户回终端，
       // 这里换成**界面内**的下一步（写者原文仍留在 `result.writer_next_action` 里可查）。
       const writerNext = asText(json.next_action)
-      const inAppNext = (writerNext && /本脚本|--step|PYTHONPATH/.test(writerNext))
+      // 「写者文案里提到命令行」这条判据看**写者原文**（`json.writer_text`，见 `cleanJson`）：
+      // 给人看的那一份已经被洗过，洗过的文本里不会再出现旗标 —— 判据必须落在原文上。
+      const writerMentionsCli = /本脚本|--step|PYTHONPATH/.test(asText(json.writer_text?.next_action))
+      const inAppNext = (writerNext && writerMentionsCli)
         ? '等供应商在 APP 里确认中标（供应商道「确认授标」/ 通知中心「去处理」）；'
           + '确认 + 人工批准齐备后，在「授标链」行内点「授标承诺（人签）」'
         : writerNext
@@ -536,7 +568,7 @@ export async function register(surface, host) {
         ['--step', 'propose', '--request', staged.path, '--ui-shared', host.sharedDir,
           '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(),
           '--intent-out', intentFile(), '--now', host.now()])
-      const json = run.json ?? {}
+      const json = cleanJson(run)
       const done = run.ok && json.ok === true
       // 幂等：同一份意向已经提过时写者回 `duplicates[{intent_id, reason:'already-proposed'}]`（账本零新增）——
       // 那一条也把 intent_id 报出来，界面照实说"已经提过这一条"，不假装刚提的。
@@ -548,7 +580,10 @@ export async function register(surface, host) {
           intent_id: intentId, basis: `${quoteId}#${line.item_id}:unit_price` })
       }
       const writerNext = asText(json.next_action)
-      const inAppNext = (writerNext && /本脚本|--step|PYTHONPATH/.test(writerNext))
+      // 「写者文案里提到命令行」这条判据看**写者原文**（`json.writer_text`，见 `cleanJson`）：
+      // 给人看的那一份已经被洗过，洗过的文本里不会再出现旗标 —— 判据必须落在原文上。
+      const writerMentionsCli = /本脚本|--step|PYTHONPATH/.test(asText(json.writer_text?.next_action))
+      const inAppNext = (writerNext && writerMentionsCli)
         ? '等供应商在 APP 里确认中标（供应商道「确认授标」）；确认 + 人工批准齐备后在「授标链」行内点'
           + '「授标承诺（人签）」—— 一次承诺覆盖整包，再发一张 PO（逐行 basis 指向报价条目）'
         : writerNext
@@ -594,7 +629,7 @@ export async function register(surface, host) {
       const run = host.runPython('src/domain/commitments/tools/commitment-apply.py',
         ['--step', 'commit', '--request', staged.path, '--ui-shared', host.sharedDir,
           '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(), '--now', host.now()])
-      const json = run.json ?? {}
+      const json = cleanJson(run)
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'committed' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action
@@ -630,7 +665,7 @@ export async function register(surface, host) {
         ['--step', 'po', '--request', staged.path, '--ui-shared', host.sharedDir,
           '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(),
           '--delivery-out', deliveryFile(), '--now', host.now()])
-      const json = run.json ?? {}
+      const json = cleanJson(run)
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'issued' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action
@@ -708,7 +743,7 @@ export async function register(surface, host) {
       const run = host.runPython('src/domain/commitments/tools/commitment-apply.py',
         ['--step', 'confirm', '--request', staged.path, '--ui-shared', host.sharedDir,
           '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(), '--now', host.now()])
-      const json = run.json ?? {}
+      const json = cleanJson(run)
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'confirmed' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action
@@ -910,7 +945,7 @@ export async function register(surface, host) {
       const run = host.runPython('src/domain/commitments/tools/commitment-apply.py',
         ['--step', 'acknowledge', '--request', staged.path, '--ui-shared', host.sharedDir,
           '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(), '--now', host.now()])
-      const json = run.json ?? {}
+      const json = cleanJson(run)
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'acknowledged' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action
@@ -1001,23 +1036,57 @@ export async function register(surface, host) {
         if (!String(row?.type ?? '').startsWith('approval/')) continue
         const body = bodyOf(row)
         const id = asText(body.approval_id)
-        if (id) last.set(id, { type: String(row.type), scope: body.scope, ref: body.ref })
+        // `approvers` 一起读回来：**这条门点的是谁的名**决定它算不算"要你处理"（P43）。
+        if (id) last.set(id, { type: String(row.type), scope: body.scope, ref: body.ref,
+          approvers: Array.isArray(body.approvers) ? body.approvers.map(asText).filter(Boolean) : [] })
       }
+      const me = asText(ctx?.identity?.human)
       const items = []
+      const others = []
       for (const [id, gate] of last) {
-        if (gate.type === 'approval/granted' || gate.type === 'approval/aborted') continue
-        items.push(sideScoped(ctx, 'contractor', { level: 'warn',
+        // **已被决定的门不在这一栏**：granted / denied / aborted 三种都算决定过 —— 修前只跳
+        // granted/aborted ⇒ 一条**被驳回**的门会一直以"还在等"挂在工作台上（与 §4.2 的"为什么作废答不出"
+        // 同一类误判，一批治掉）。
+        if (DECIDED_GATE_EVENTS.includes(gate.type)) continue
+        // **点名我的才算"要你处理"**（P43，与 `system/approval#gate.todo` 同一判据）：
+        // 写者判 `approver-not-named`；开单时没点名审批人的旧门按缺省放行（谁都能决定）。
+        const named = !gate.approvers.length ? 'unassigned'
+          : (me === '' ? 'unknown' : (gate.approvers.includes(me) ? 'mine' : 'others'))
+        const mine = named === 'mine' || named === 'unassigned'
+        const who = gate.approvers.map((name) => `@${name.replace(/^human:/, '')}`).join('、') || '（开单时没点名）'
+        const tail = named === 'others'
+          ? `点名的是 ${who} —— 你批这条会被写者拒（approver-not-named）⇒ 不算「需要你处理」`
+          : (named === 'unknown'
+            ? '未登录：判定不出这条点的是不是你的名（登录后它才可能算「需要你处理」）'
+            : (named === 'unassigned' ? '开单时没点名审批人：这条谁都能决定' : `点名的是 ${who}`))
+        const openable = gate.scope === 'change.approve' ? 'change.approve'
+          : (gate.scope === 'award.commit' ? 'award.commit' : '')
+        if (named === 'others') others.push(`${id}（${gate.scope}）`)
+        items.push(sideScoped(ctx, 'contractor', { level: mine ? 'warn' : 'info',
           title: `承包商侧：人工门 ${id} 还在等（${gate.scope}）`,
-          body: `对象 ${gate.ref}`, next_action: '打开这条门看卡在哪/等多久；门本身的人签动作在「授标与订单」里，界面不代签',
+          body: `对象 ${gate.ref} · ${tail}`,
+          next_action: mine
+            ? '打开这条门看卡在哪/等多久；门本身的人签动作在「授标与订单」里，界面不代签'
+            : `去承包商道「审批队列」：那张表按「卡在谁（点名的审批人）」列筛出 ${who} 这一行`
+              + '（表里有金额与越界标识）；要让给别人就点行内「升级 / 委托」（人签）',
           // 门自己也是一个**可协作的对象**（`/app/<view>/gate/<id>/`）：指派/关注/评论由外壳的协作面提供，
           // 这里只声明"门后面那个对象是哪一类"（scope→kind 是本插件的领域知识）。
           ref: { kind: 'gate', id, view: 'contractor', title: `审批门 ${id}` },
           // **跨面板去重的判据**：同一批门在 `system/approval#gate.todo` 里已经列过一次 ⇒ 键相同，
           // 外壳合并成一条（不重复占位）；`ref` 保留 ⇒ 合并后仍能从这条点进门的对象页。
           dedupe_key: `gate:${id}`,
-          action: gate.scope === 'change.approve' ? 'change.approve'
-            : (gate.scope === 'award.commit' ? 'award.commit' : '') ,
-          label: gate.scope === 'change.approve' ? '去批准这条变更' : '去人签' }))
+          // **只有点了我名的门才给「去批准」按钮**：点的是别人的名 ⇒ 不给按钮（点了必被
+          // `approver-not-named` 拒 —— 摆一个按下去必被拒的按钮就是让人误判"这活归我"）。
+          action: mine ? openable : '',
+          label: mine ? (gate.scope === 'change.approve' ? '去批准这条变更' : '去人签') : '' }))
+      }
+      // 「别人的」照实报数 + 给查看入口（不藏、也不冒充"要你处理"）。
+      if (others.length) {
+        items.push(sideScoped(ctx, 'contractor', { level: 'info',
+          title: `承包商侧：另有 ${others.length} 条待批门点名的是别人（不归你处理）`,
+          body: `${others.join('；')} —— 这些不算卡头「有 N 件需要你处理」`,
+          next_action: '去承包商道「审批队列」看全部待批（含点名别人的）：按「卡在谁」列筛，'
+            + '金额与越界标识都在那张表上' }))
       }
       const intents = typeRows(cRows, 'award/intent-proposed').length
       const awards = typeRows(cRows, 'award/committed').length
@@ -1802,7 +1871,7 @@ export async function register(surface, host) {
       const run = host.runPython(changeTool, ['--step', 'propose', '--request', staged.path,
         '--ui-shared', host.sharedDir, '--ledger-contractor', asText(host.config?.ledger_contractor),
         '--ledger-supplier', asText(host.config?.ledger_supplier), '--now', host.now()])
-      const json = run.json ?? {}
+      const json = cleanJson(run)
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'proposed' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '看 result 里的逐行差额与下一步',
@@ -1828,7 +1897,7 @@ export async function register(surface, host) {
       const run = host.runPython(changeTool, ['--step', step, '--request', staged.path,
         '--ui-shared', host.sharedDir, '--ledger-contractor', asText(host.config?.ledger_contractor),
         '--ledger-supplier', asText(host.config?.ledger_supplier), '--now', host.now()])
-      const json = run.json ?? {}
+      const json = cleanJson(run)
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? step : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '看 result 里的账本增量',

@@ -123,9 +123,39 @@ python3 tmp/p5-people-verify.py     # 自造夹具（g1side 走查）+ 独立服
 **没有**入口）管「这一笔钱谁能批」；名册角色额度（`approval_limit_cents` + `policy.amount_limit.rules`，界面上
 可改、**立刻生效**）管「谁能执行受额度限制的动作」。两处口径与角色名都不同，面板 note 已写明。
 
-**仍做不到（外壳/写者面，明细见报告）**：终止（abort）的**理由正文不在账本**（只有 `reason_sha256`）⇒
-「为什么作废」一屏答不出，且 `已决定的门` 里 aborted 行的「谁决定的」是空的（账本里其实有 `aborted_by`）；
-队列行**没有金额列**，越界与否要另开授权区间面板手算；工作台卡头「有 N 件需要你处理」按**侧**算（点名别人的门
-也计进来，点下去会被 `approver-not-named` 拒）；拒绝与批量的 next_action 里仍有 `--step escalate/delegate` 这类
-CLI 旗标；授权区间面板读的是 `QUOTAGENT_UI_CONFIG`/`/workspace/config.yaml`，**不是** `--config-file`
+**仍做不到（外壳/写者面，明细见报告）**：**终止（abort）的理由正文现在逐字进账本**
+（`approval/aborted.comment`，ADR-0023）⇒「为什么作废」已能答出，`已决定的门` 里 aborted 行的
+「谁决定的」也按 `aborted_by` 兜底不再空白（口径与实测见 `decided-gates-and-abort-reason.md`）；
+授权区间面板读的是 `QUOTAGENT_UI_CONFIG`/`/workspace/config.yaml`，**不是** `--config-file`
 （壳配置不带 `config_file`）⇒ 用 `--config-file` 起的服务会显示"未配置"而实际配好了（已在插件侧优先取宿主给的路径）。
+**`award.commit` / `po.issue` 自动开的那条门，账本行 `actor` 仍是写者默认值 `agent:approval`**
+（`src/domain/commitments/tools/commitment-apply.py:530/654/813` 三处 `ApprovalService(ledger=ledger)`
+没把已解析出来的 `actor` 传进去；一行修法 = `ApprovalService(ledger=ledger, actor=actor)`）——
+写者面不在 P43 可改面内 ⇒ 只登记；界面侧改为**如实标注**（见 §10「请求人不是人」条）。
+
+## 10. 角色/额度术语：**唯一映射**（P43）
+
+两套角色 id **不是同一套**（不改口径、不抹平差异）—— 界面上「人话在前、内部 id 在括号」，
+机读面（动作入参、`result`、配置键）照旧用内部 id：
+
+| 在哪 | 内部 id（机读面） | 界面人话 | 管什么 | 真源 |
+|---|---|---|---|---|
+| 授权区间 | `buyer` / `lead` / `director` | 采购员 / 主管 / 管理员 | **这一笔钱**谁能批（越界找谁） | 受管 YAML `authority.bands.<角色>`（`system/authority-band`） |
+| 名册角色额度 | `pending` / `buyer` / `supervisor` / `admin` | 待指派 / 采购员 / 主管 / 管理员 | 谁能**执行受额度限制的动作**（`role-limit-exceeded`） | `<ui_shared>/people/roster.json` 的 `roles[]`（界面上可改、立刻生效） |
+
+**映射只有一份**：`src/domain/authority-band/code/ui.mjs` 的 `ROLE_TERMS`（+ `roleTerm`/`roleIdOf`/`roleOptions`/`roleCell`）；
+审批队列、状态栏、授权区间面板都从它取词；动作的 `role` 入参**同时认** `buyer`、`采购员`、`采购员（buyer）` 三种写法
+（判据一条）。**`lead`（授权区间的主管档）与 `supervisor`（名册的主管）不是同一个角色 id**，改一处不影响另一处 ——
+面板 note 把这条对照逐条写出来，不靠一句"两套口径"让用户自己猜。
+
+**请求人不是人（如实标注）**：`award.commit` / `po.issue` 自动开门的账本行 `actor = agent:approval`（写者面，见 §9）；
+门对象页的「请求人」照账本原样显示，**不编一个人类名字**；这条门的署名仍能在 `award/committed.approved_by` /
+`po/issued.approved_by` 上逐行读回（批准人 = 会话身份）。
+
+**P43 已修（同一批走查的三条「会误判」）**：① **队列有金额列与越界标识**（`gate.queue` 新增「金额（整数分）」
+与「越界？（与「授权区间」同一口径）」两列：金额取自 `award/committed` / `po/issued` / `change/priced` 的账本事实、
+口径逐行写在「取自哪条事实」里，取不到就写「取不到」；越界判据用**同一个** `checkOf`、参照角色 = 已登记限额最小的
+那一档）；② **工作台只算「点名我的」**（`gate.todo` 与 `commitments#home.gates`：点的是别人的名 ⇒ 降成信息、
+写明"你批会被 `approver-not-named` 拒"、**不给「去批准」按钮**，并给「审批队列」按「卡在谁」筛的入口；
+未登录时如实说"判定不出来"）；③ **回执/拒绝文案里不再露 CLI 旗标**（`--step escalate/delegate` →
+「升级 / 委托」；写者原文留在 `result.writer_text` 里可查）。复跑与截图见 §9 报告 + `tmp/p43-shots/`。

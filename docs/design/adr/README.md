@@ -21,6 +21,14 @@
 | ADR-0014 | P1 的推进前提（V 假设通过，标 not_a_conclusion）、MVP 判据、削减顺序与"绝不许假"清单 | accepted |
 | ADR-0012 | 直接依赖 cordis 4.0.0-rc.10 作为宿主层（取代 ADR-0001 的"不引入其代码"；含实测约定与桥接边界） | accepted |
 | ADR-0011 | P0 的比价 TCO 口径与引用链、护栏只标注（Flag 枚举扩展 `private_leak`）、场景集确定性与指标基线 | accepted |
+| ADR-0016 | 自进化的可写面：插件产物由提案交付，晋升仍需人工引用 | accepted |
+| ADR-0017 | canary 分流与自动回滚的方向性 | accepted |
+| ADR-0018 | 留存与销毁的边界：账本行永不销毁，销毁只作用于派生副本 | accepted |
+| ADR-0019 | 谈判轮次与让步的边界 | accepted |
+| ADR-0020 | 一切皆插件：三层分类、目录规范与注入式 UI | accepted |
+| ADR-0021 | 需求必须归属到插件（不存在「产品整体」的功能性需求） | accepted |
+| ADR-0022 | 人工门的派分事实（审批人与超时策略）随开单落账本 body | accepted |
+| ADR-0023 | 终止（`approval/aborted`）的理由正文进账本 body | accepted |
 
 ## 格式
 

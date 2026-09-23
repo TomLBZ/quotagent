@@ -40,6 +40,59 @@ const CONFIG_ENV = 'QUOTAGENT_UI_CONFIG'
 const CONFIG_DEFAULT = '/workspace/config.yaml'
 
 /**
+ * **角色术语的唯一定义处**（P43 打掉「两套角色名」的那条）。
+ *
+ * 界面上原来有两种写法：授权区间这一页列 `buyer / lead / director`（受管 YAML 的键），
+ * 名册面板列 `采购员 / 主管 / 管理员`（名册自己的标签）—— 同一个人在两块面板上看到两套名字，
+ * 无从判断它们是同一件事还是两件事。现在：**人话名只有这一份映射**，界面（本面板、审批队列、
+ * 状态栏）一律用它；`buyer/lead/director` 这些内部 id 照旧留在**机读面**（动作入参、`result`、
+ * 配置键列 `authority.bands.<角色>`）里，一个字都没改。
+ *
+ * **两套角色 id 不是同一套**（不许为好看抹平）：
+ *   · 授权区间（受管 YAML `authority.bands.<id>`）：`buyer` / `lead` / `director` —— 管「**这一笔钱**谁能批」；
+ *   · 名册（`<ui_shared>/people/roster.json` 的 `roles[].id`）：`pending` / `buyer` / `supervisor` / `admin`
+ *     —— 管「谁能**执行受额度限制的动作**」（`role-limit-exceeded`）。
+ * 两条链**互不影响**：`lead`（授权区间的主管档）与 `supervisor`（名册的主管）**不是同一个角色 id**，
+ * 改一处不会改另一处 —— 所以这里的映射是**两个角色集的对照表**，不是「同一个角色的两种写法」。
+ * 名册那一侧的标签真源仍是名册自己（`system/people` 的 `DEFAULT_ROLES[].label`）；本表只在
+ * 「授权区间的角色 id 怎么说成人话」这件事上是权威，并把名册的 id→人话一并列出来供对照。
+ */
+export const ROLE_TERMS = Object.freeze({
+  // 授权区间（受管 YAML 的键；机读面照旧用这些 id）
+  buyer: '采购员', lead: '主管', director: '管理员',
+  // 名册（对照用；真源是名册自己，这里只保证**同一句人话**不出现两种写法）
+  pending: '待指派', supervisor: '主管', admin: '管理员',
+})
+
+/** 角色 id → 人话。**不认识的角色 id 原样显示**（不编一个好听的名字冒充已知角色）。 */
+export const roleTerm = (id) => ROLE_TERMS[asText(id)] ?? (asText(id) || '—')
+
+/**
+ * 反向映射：人话（或内部 id）→ 内部 id。动作的 `role` 入参**同时接受三种写法**：
+ * `buyer`（机读面：脚本/门/既有调用方）、`采购员`（人话）、`采购员（buyer）`（界面上给的那种，
+ * 见 `roleOptions`）—— 三者走同一条判据。认不出来就**原样返回**（不猜一个角色，由插件/服务如实拒）。
+ */
+export const roleIdOf = (value) => {
+  const raw = asText(value)
+  if (raw === '') return ''
+  if (Object.prototype.hasOwnProperty.call(ROLE_TERMS, raw)) return raw
+  const inner = asText((raw.match(/[（(]([^（()）]+)[)）]/) ?? [])[1] ?? '')
+  if (inner !== '') {
+    if (Object.prototype.hasOwnProperty.call(ROLE_TERMS, inner)) return inner
+    const byInnerLabel = Object.entries(ROLE_TERMS).find(([, label]) => label === inner)
+    if (byInnerLabel) return byInnerLabel[0]
+  }
+  const hit = Object.entries(ROLE_TERMS).find(([, label]) => label === raw)
+  return hit ? hit[0] : raw
+}
+
+/** 动作入参里的「我的角色」选项：人话在前，内部 id 放括号里（机读面仍认 id；`roleIdOf` 反解）。 */
+export const roleOptions = () => [...new Set(REGISTERED_ROLES.map((role) => `${roleTerm(role)}（${role}）`))]
+
+/** 表格里的角色写法（与名册面板同一约定：`采购员(buyer)` —— 人话在前、内部 id 在括号，两边都不藏）。 */
+export const roleCell = (id) => (ROLE_TERMS[asText(id)] ? `${ROLE_TERMS[asText(id)]}（${asText(id)}）` : (asText(id) || '—'))
+
+/**
  * 受管配置文件的路径：与宿主**应**为同一处。
  *
  * P41 主管走查实测：壳给的 `host.config` **不带** `config_file`（装配点 `host/cli.mjs` 的壳配置块里没有
@@ -49,34 +102,41 @@ const CONFIG_DEFAULT = '/workspace/config.yaml'
  * 并把**实际读的那个路径**写进面板（降级时也写在原因里）——用户能一眼看出它读的是哪一份文件。
  */
 let hostConfigFile = ''
-const configPath = () => asText(hostConfigFile) || asText(process.env[CONFIG_ENV]) || CONFIG_DEFAULT
+const configPath = (configFile = '') => asText(configFile) || asText(hostConfigFile)
+  || asText(process.env[CONFIG_ENV]) || CONFIG_DEFAULT
 
 /**
  * 只读配置快照（**按 mtime 备忘**：面板每次渲染都会调 `data()`，9KB 的 YAML 解析一次够了）。
  * 读不到 ⇒ `{}`（插件据此报 `config-missing`，**不假装**区间存在）。
+ *
+ * **导出给别的插件用**（P43：审批队列的「越界？」列要按**同一份**区间口径算）：调用方把宿主给的
+ * `config_file` 传进来即可（不传就是本进程的「宿主给的路径 → 环境变量 → 缺省」），读法与缓存
+ * **只有这一份**——不允许在第二个插件里再写一个读受管 YAML 的解析器。
  */
-let snapshotCache = { at: -1, size: -1, snapshot: null, reason: '' }
-const configSnapshot = () => {
-  const path = configPath()
+let snapshotCache = { at: -1, size: -1, path: '', snapshot: null, reason: '' }
+export const authoritySnapshot = (configFile = '') => {
+  const path = configPath(configFile)
   let stat = null
   try {
     stat = statSync(path)          // 只为了拿 mtime/size 做缓存判据；读取与解析都在 `config-ui.mjs`（同一份实现）
   } catch (err) {
-    snapshotCache = { at: -1, size: -1, snapshot: null, reason: 'config-file-missing' }
+    snapshotCache = { at: -1, size: -1, path, snapshot: null, reason: 'config-file-missing' }
     return { snapshot: null, reason: 'config-file-missing', path }
   }
-  if (snapshotCache.snapshot && snapshotCache.at === stat.mtimeMs && snapshotCache.size === stat.size) {
+  if (snapshotCache.snapshot && snapshotCache.path === path
+    && snapshotCache.at === stat.mtimeMs && snapshotCache.size === stat.size) {
     return { snapshot: snapshotCache.snapshot, reason: snapshotCache.reason, path }
   }
   const file = readConfigFile(path)
   if (!file.ok) {
-    snapshotCache = { at: stat.mtimeMs, size: stat.size, snapshot: null, reason: file.reason || 'config-unreadable' }
+    snapshotCache = { at: stat.mtimeMs, size: stat.size, path, snapshot: null,
+      reason: file.reason || 'config-unreadable' }
     return { snapshot: null, reason: file.reason || 'config-unreadable', path }
   }
   // 受管 YAML 的 `project:` 段在本仓库里是**嵌套**写的（`./run config init` 与 `tools/config-apply.py`
   // 的渲染约定：缩进 2 空格），而 `projectView` 的**文件层**是按**点分扁平键**取值的
-  // （`hasOwnProperty(fileLayer, 'authority.bands.buyer')`）⇒ 这里先用 `flattenDoc`（**同一个模块导出的**
-  // 同一个展平函数，不是自己写一个解析器）把嵌套展平，两种写法（嵌套 / 已经是点分键）都能读到。
+  // （`hasOwnProperty(fileLayer, 'authority.bands.buyer')`）⇒ 这里先用 `flattenDoc`（**同一个模块导出的**）
+  // 把嵌套展平，两种写法（嵌套 / 已经是点分键）都能读到。
   // 读的是**同一份** `PROJECT_KEYS` 登记表：`authority.*` 之外的键一个都不取。
   const rows = projectView({ doc: { project: flattenDoc(file.value?.project ?? {}) } }).rows
   const snapshot = {}
@@ -85,8 +145,45 @@ const configSnapshot = () => {
     if (!key.startsWith(CONFIG_PREFIX)) continue
     snapshot[key] = row.value === undefined ? null : row.value
   }
-  snapshotCache = { at: stat.mtimeMs, size: stat.size, snapshot, reason: '' }
+  snapshotCache = { at: stat.mtimeMs, size: stat.size, path, snapshot, reason: '' }
   return { snapshot, reason: '', path }
+}
+
+/**
+ * **已登记限额最小的那一档角色**（就是"最严的那一档"）—— 审批队列判断「这笔钱越没越界」时用的参照角色。
+ * 由**配置**决定（不写死角色名）：一条 `authority.bands.*` 都没登记 ⇒ 空串（调用方据此如实说「未配置」）。
+ */
+export const lowestBandRole = (snapshot) => {
+  const probe = checkOf({ view: 'contractor', role: REGISTERED_ROLES[0] ?? 'buyer', amount: 1, config: snapshot }, {})
+  const bands = (Array.isArray(probe.bands) ? probe.bands : [])
+    .filter((band) => Number.isFinite(Number(band?.limit_cents)))
+  if (!bands.length) return ''
+  return String(bands.reduce((low, band) => (Number(band.limit_cents) < Number(low.limit_cents) ? band : low)).role)
+}
+
+/**
+ * 一笔金额（整数分）的**结论行**（人话）：在区间内 / 越界多少 / 未配置。
+ *
+ * **审批队列的「越界？」列用的就是这个函数** ⇒ 队列与「授权区间」面板的「按金额查该谁批」
+ * 是同一份口径（同一个 `checkOf`），两边对同一笔钱给出的结论必然一致（逐条可对账）。
+ * 判据里没有任何"猜"：未配置就说未配置，不编限额也不假装越界。
+ */
+export const bandLineFromLowest = (view, cents, snapshot) => {
+  const role = lowestBandRole(snapshot)
+  if (role === '') {
+    return { role: '', text: '未配置（一条 authority.bands.* 都没登记：一律走人工门，判不出越界）' }
+  }
+  const run = checkOf({ view, role, amount: cents, config: snapshot }, {})
+  const band = (Array.isArray(run.bands) ? run.bands : []).find((item) => item.role === role)
+  if (run.status === 'inside-band') {
+    return { role, text: `在区间内（最严的一档 ${roleTerm(role)} 限额 ${band?.limit_cents ?? '—'} 分覆盖这笔）` }
+  }
+  if (run.status === 'over-band') {
+    return { role, text: `越界 ${run.over_by} 分 ⇒ 下一个能批的是 `
+      + `${run.next_role ? `${roleTerm(run.next_role)}（${run.next_role}）` : '（没有角色的限额覆盖这笔金额）'}` }
+  }
+  if (run.status === 'unconfigured') return { role, text: `未配置（${run.code}）——不知道就是不知道` }
+  return { role, text: `输入被拒（${run.code}）` }
 }
 
 /** 一笔金额的**结论行**（人话）：在区间内 / 越界多少 / 未配置 / 输入被拒。 */
@@ -113,14 +210,14 @@ export async function register(surface, host) {
     title: '授权区间（谁能批到多少 / 越界找谁）', view, order, kind: 'table',
     actions: ['authority.check', 'authority.escalate'],
     data: () => {
-      const { snapshot, reason, path } = configSnapshot()
+      const { snapshot, reason, path } = authoritySnapshot()
       const meta = { unit: MONEY_UNIT, registered_roles: [...REGISTERED_ROLES] }
       const probe = checkOf({ view, role: REGISTERED_ROLES[0] ?? 'buyer', amount: 1, config: snapshot }, {})
       const configured = Array.isArray(probe.bands) ? probe.bands : []
       const rows = (meta.registered_roles ?? []).map((role) => {
         const found = configured.find((item) => item.role === role) ?? null
         return {
-          id: role, role, band_key: `${BAND_PREFIX}${role}`,
+          id: role, role: roleCell(role), role_id: role, band_key: `${BAND_PREFIX}${role}`,
           limit_cents: found ? found.limit_cents : null,
           // **逐行都写清"未配置 ≠ 0 ≠ 无限"**：这是 DEF-036 点名的那条误导
           limit_label: found ? `${found.limit_cents} 分（= ${(found.limit_cents / 100).toFixed(2)} 元）`
@@ -141,7 +238,7 @@ export async function register(surface, host) {
             + '先不改配置也能干活：用下面的「按金额查该谁批」算一笔，越界就点「提交给下一角色审批」开人工门'
           : '按金额查该谁批（表单），越界就一键开人工门；改判定永远在审批队列里由人签批准/驳回',
         columns: [
-          { key: 'role', label: '角色', type: 'code' },
+          { key: 'role', label: '角色（人话 + 内部 id）', type: 'code' },
           { key: 'limit_cents', label: '限额（整数分）', filter: 'number' },
           { key: 'limit_label', label: '这一行到底什么意思' },
           { key: 'band_key', label: '配置键（人工专属）', type: 'code' },
@@ -149,15 +246,24 @@ export async function register(surface, host) {
         rows,
         row_actions: ['authority.check', 'authority.escalate'],
         counts: { registered_roles: rows.length, configured: configured.length },
-        note: `口径：${MONEY_NOTE}。`
+        // 口径常数（`MONEY_NOTE`/`UNCONFIGURED_NOTE`）自带 markdown 星号 —— 外壳把文案当**纯文本**渲染，
+        // 原样贴上去用户会读到 `**整数分**`（P41 登记的同一类"机制噪音"）⇒ 过一遍 `plain()`。
+        note: `口径：${plain(MONEY_NOTE)}。`
           + `单位声明 ${MONEY_UNIT}；配置来源 = 受管 YAML ${path}（只读 \`${CONFIG_PREFIX}\` 那些行，`
           + '别的键读都不读）'
           + `${reason ? `；本次读取降级：${reason}` : ''}。`
-          + (unset ? `${UNCONFIGURED_NOTE}。` : '')
+          + (unset ? `${plain(UNCONFIGURED_NOTE)}。` : '')
           // 主管/审批人最容易混的一点：「授权区间」与「名册角色额度」是**两套口径、两处入口**。
           // 这一页读的是受管配置（业务界面里改不了）；名册那套在「人员名册与角色」面板里改、立刻生效。
-          + '这一页的角色名（buyer / lead / director）与「人员名册与角色」面板里的角色名（采购员 / 主管 / 管理员…）'
-          + '是两套口径：这一页管「这一笔钱谁能批」，那套管「谁能执行受额度限制的动作」。'
+          // P43：术语**只有一份映射**（`ROLE_TERMS`：界面上人话在前、内部 id 在括号里），下面把两个
+          // 角色集的对照**逐条列出来**——不靠一句"两套口径"让用户自己去猜谁是谁。
+          + '术语对照（两个角色集不是同一套，改一处不会改另一处）：'
+          + `① 授权区间 = 受管 YAML 的 \`${BAND_PREFIX}<角色>\`，管「这一笔钱谁能批」，`
+          + `角色是 ${REGISTERED_ROLES.map((role) => `${roleTerm(role)}（${role}）`).join(' / ')}；`
+          + '② 名册角色额度 = 「人员名册与角色」面板里的角色，管「谁能执行受额度限制的动作」'
+          + '（role-limit-exceeded），角色是 待指派（pending）/ 采购员（buyer）/ 主管（supervisor）/ 管理员（admin）。'
+          + '两边都叫「主管」的 lead 与 supervisor 是两个不同的角色 id：'
+          + '本页这一栏的 lead 只在这一页管钱，名册里的 supervisor 只在那套管动作。'
           + '本面板由确定性规则派生（source=authority-band）：不读账本、不取墙钟、不调模型、'
           + '不能批准——越界的唯一出路是人工门（提交后去「审批队列」由人签批准/驳回）。' }
     } })
@@ -175,14 +281,17 @@ export async function register(surface, host) {
     confirm: { required: false },
     hint: '跑的是插件自己的确定性规则（不读账本、不取墙钟）；本动作不改任何判定、账本零新增',
     input: { fields: [
-      { name: 'role', label: '我的角色', type: 'select', options: [...REGISTERED_ROLES], required: true,
-        help: '限额是按角色登记的（authority.bands.<角色>）' },
+      { name: 'role', label: '我的角色', type: 'select', options: roleOptions(), required: true,
+        help: '限额是按角色登记的（受管 YAML 的 authority.bands.<角色>）；这里给人话名，'
+          + '括号里是机读面用的角色 id（两种写法都认）' },
       { name: 'amount', label: '金额（整数分：500000 = 5000.00 元）', type: 'number', required: true,
         min: 0, max: AMOUNT_MAX, help: '不折算、不四舍五入：把元写成分会被判越界' },
     ] },
     server: async (ctx, input) => {
-      const { snapshot, reason } = configSnapshot()
-      const run = checkOf({ view: String(ctx.view ?? 'contractor'), role: asText(input.role),
+      const { snapshot, reason } = authoritySnapshot()
+      // 入参同时接受人话与内部 id（见 `roleIdOf`）：判据只有一条，机读面照旧用 `buyer/lead/director`。
+      const role = roleIdOf(input.role)
+      const run = checkOf({ view: String(ctx.view ?? 'contractor'), role,
         amount: input.amount, config: snapshot }, {})
       const bad = ['input-rejected'].includes(run.status)
       return { ok: !bad, code: bad ? (run.code || 'input-rejected') : `authority-${run.status}`,
@@ -190,12 +299,12 @@ export async function register(surface, host) {
         next_action: bad ? run.next_action
           : (run.status === 'over-band'
             ? `越界 ${run.over_by} 分：用「提交给下一角色审批」把这件事提成人工门`
-              + `${run.next_role ? `（下一个能批的是 ${run.next_role}）` : '（没有角色的限额覆盖这笔金额：只能改配置或走人工门）'}`
+              + `${run.next_role ? `（下一个能批的是 ${roleTerm(run.next_role)}（${run.next_role}））` : '（没有角色的限额覆盖这笔金额：只能改配置或走人工门）'}`
             : (run.status === 'inside-band'
-              ? `${run.role} 的限额覆盖这笔金额：继续既有流程；批准仍在审批队列里由人签（本面板不能批准）`
+              ? `${roleTerm(run.role)}（${run.role}）的限额覆盖这笔金额：继续既有流程；批准仍在审批队列里由人签（本面板不能批准）`
               : `${plain(run.next_action)}${reason ? `（配置读取降级：${reason}）` : ''}`)),
-        result: { status: run.status, verdict: verdictOf(run), role: run.role, amount: run.amount,
-          required_role: run.required_role, next_role: run.next_role, over_by: run.over_by,
+        result: { status: run.status, verdict: verdictOf(run), role: run.role, role_label: roleTerm(run.role),
+          amount: run.amount, required_role: run.required_role, next_role: run.next_role, over_by: run.over_by,
           bands: run.bands, within: run.within, unit: run.unit, can_approve: run.can_approve,
           unconfigured: run.unconfigured, blocked_by: run.blocked_by, config_where: run.config_where,
           approval_note: run.approval_note, notes: run.notes, ledger_added: 0 } }
@@ -209,18 +318,18 @@ export async function register(surface, host) {
     hint: '落 `approval/requested`（既有事件，scope=authority.escalate）—— 写者仍是 '
       + '`tools/gate-actions.py`；门开出来后去「审批队列」由点名的审批人批准/驳回',
     input: { fields: [
-      { name: 'role', label: '我的角色', type: 'select', options: [...REGISTERED_ROLES], required: true },
+      { name: 'role', label: '我的角色', type: 'select', options: roleOptions(), required: true },
       { name: 'amount', label: '金额（整数分）', type: 'number', required: true },
       { name: 'ref', label: '这笔钱挂在哪条事实上（被批对象的 id）', type: 'text', required: true,
         help: '如 q-… / aw-… / chg-…（门要挂在一个真对象上，不许凭空的金额）' },
       { name: 'approvers', label: '点名给谁批（human:<名字>）', type: 'text', required: true,
-        help: '越界时面板给出的 next_role 决定"该找哪个角色"，这里写那个角色的具体人' },
+        help: '越界时面板给出的下一档角色决定"该找哪个角色"，这里写那个角色的具体人' },
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true,
         help: 'human:<你的名字> —— 服务端要求它等于会话身份' },
       { name: 'note', label: '一句话说明（进待办件，不上账本正文）', type: 'textarea', required: false },
     ] },
     server: async (ctx, input) => {
-      const role = asText(input.role)
+      const role = roleIdOf(input.role)          // 人话与内部 id 都认（判据只有一条）
       const ref = asText(input.ref)
       const asked = String(ctx.view ?? 'contractor')
       const mine = asText(ctx?.identity?.side)
@@ -230,11 +339,11 @@ export async function register(surface, host) {
           next_action: `在 ${mine} 侧自己的「授权区间」面板里发起` }
       }
       const view = mine === '' ? asked : mine
-      const { snapshot } = configSnapshot()
+      const { snapshot } = authoritySnapshot()
       const run = checkOf({ view, role, amount: input.amount, config: snapshot }, {})
       if (run.status === 'inside-band') {
         return { ok: false, code: 'not-over-band',
-          reason: `${run.role} 的限额 ${run.bands.find((b) => b.role === run.role)?.limit_cents} 分`
+          reason: `${roleTerm(run.role)}（${run.role}）的限额 ${run.bands.find((b) => b.role === run.role)?.limit_cents} 分`
             + `覆盖这笔 ${run.amount} 分：没有越界，不需要升级`,
           next_action: '直接走既有流程；整笔的批准仍在「审批队列」里由人签（本面板不能批准）' }
       }
@@ -248,11 +357,11 @@ export async function register(surface, host) {
       if (!approvers.length || bad.length) {
         return { ok: false, code: 'approver-not-human',
           reason: `点名审批人必须是 human:<名字>（收到 ${JSON.stringify(input.approvers)}）`,
-          next_action: `写 human:<名字>；越界时该找哪个角色看面板给出的 next_role`
-            + `${run.next_role ? `（本题的 next_role=${run.next_role}）` : '（本题没有角色能批这笔金额）'}` }
+          next_action: '写 human:<名字>；越界时该找哪个角色看面板给出的「下一个能批的是」'
+            + `${run.next_role ? `（本题是 ${roleTerm(run.next_role)}（${run.next_role}））` : '（本题没有角色能批这笔金额）'}` }
       }
       const staged = host.stage('gate-actions', { kind: 'gate-actions', action: 'request', view,
-        scope: 'authority.escalate', ref, summary: `越界 ${run.over_by} 分（角色 ${run.role}）待批`,
+        scope: 'authority.escalate', ref, summary: `越界 ${run.over_by} 分（角色 ${roleTerm(run.role)}）待批`,
         timeout_policy: 'escalate', timeout_s: 86400, escalate_to: approvers[0], approvers,
         actor: asText(input.signature), note: String(input.note ?? '') })
       if (!staged.ok) return staged
@@ -275,13 +384,15 @@ export async function register(surface, host) {
     } }))
 
   out.push(surface.statusItem({ plugin_id: me, id: 'status.authority', title: '授权区间', order: 8, read: () => {
-    const { snapshot, reason } = configSnapshot()
+    const { snapshot, reason } = authoritySnapshot()
     const probe = checkOf({ view: 'contractor', role: REGISTERED_ROLES[0] ?? 'buyer', amount: 1, config: snapshot }, {})
     const configured = Array.isArray(probe.bands) ? probe.bands.length : 0
+    // 术语**只有一份**（`ROLE_TERMS`/`roleTerm`）：状态栏也写人话，内部 id 留在机读面与面板的配置键列里。
+    const ladder = REGISTERED_ROLES.map((role) => `${roleTerm(role)}（${role}）`).join(' / ')
     return { text: probe.status === 'unconfigured'
-      ? `未配置（${configured}/${REGISTERED_ROLES.length} 角色登记了授权区间；未配置 ≠ 不限额；`
-        + '这是「授权区间」，与「名册角色额度」不是同一处）'
-      : `已登记 ${configured} 个角色`,
+      ? `未配置（${configured}/${REGISTERED_ROLES.length} 个角色登记了授权区间；未配置 ≠ 不限额；`
+        + `这是「授权区间」（${ladder}），与「名册角色额度」不是同一处）`
+      : `已登记 ${configured} 个角色：${ladder}`,
       level: probe.status === 'unconfigured' ? 'warn' : 'ok',
       next_action: probe.status === 'unconfigured'
         ? '在「授权区间」面板登记 authority.bands.<角色>（整数分），或先按金额算一笔再开人工门'

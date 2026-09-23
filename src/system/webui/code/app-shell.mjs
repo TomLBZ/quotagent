@@ -3794,7 +3794,12 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       return cursor === undefined ? null : cursor
     }
     if (typeof value === 'string') {
-      if (value === '$actor') return `human:${actor}`
+      // `$actor` = 这一步的演示身份。演示身份的**取值形状与真实会话身份同形**（`human:<名字>`）⇒ 这里
+      // 已经是 `human:` 形状就**不再加一次前缀**。修前恒拼一次 ⇒ 沙盘账本里落的是 `human:human:limin`
+      // （P41 主管走查实测，见 `tmp/p41-shots/REPORT.md` §5.2.9）：沙盘里看到的形状 ≠ 真实面，
+      // 审计/对账会被误导（`human:` 只加一次，与 `src/system/webui/code/app-shell.mjs` 别处
+      // 规范化身份的那一行同一判据）。
+      if (value === '$actor') return String(actor).startsWith('human:') ? String(actor) : `human:${actor}`
       if (value.startsWith('$last.')) return walk(last, value.slice(6))
       if (value.startsWith('$cap.')) {
         const rest = value.slice(5)
@@ -3911,7 +3916,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         items.push({ level: info.on ? 'ok' : 'info',
           title: info.on ? `沙盘已打开（${info.scenarios.length} 条可用场景）` : '沙盘未打开（你现在看的是真实数据）',
           body: info.on ? `沙盘目录：${info.dir}｜演示身份：${Object.entries(info.actors)
-            .map(([side, name]) => `${side}=${name}`).join('、')}` : '点下面的按钮造一组演示数据'
+            // 演示身份按**显示口径**写（去 `human:` 前缀：29 §16「不得裸展示 human:<名字>」）；
+            // 原始值照旧在面板下面的动作回执 `result.sandbox.actors` 里（机读面一字未改）。
+            .map(([side, name]) => `${side}=${String(name).replace(/^human:/, '')}`).join('、')}` : '点下面的按钮造一组演示数据'
             + '（包 → 报价 → 比价 → 授标 → PO）：它是真流转、真账本事件，只是落在沙盘目录里',
           next_action: !who ? `先登录（沙盘按会话身份分条存放，谁造的谁清）：${prefix}/identity/?next=${prefix}/`
             : (info.on ? '切到另一个视角看对面的那一半；看完「清空沙盘」回到真实面'

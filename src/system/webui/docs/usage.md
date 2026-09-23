@@ -16,8 +16,7 @@
 ./run down    # 停服务
 ```
 
-换端口/数据目录：`./run up --port 8207 --data-dir tmp/gui-run`（或 `node host/cli.mjs webui --help`；路径类开关有
-同名环境变量 `QUOTAGENT_UI_*`）。首屏是**工作台**（「我今天要做什么」），不是报告列表；页面脚本**只来自本服务**
+换端口/数据目录：`./run up --port 8207 --data-dir tmp/gui-run`（路径类开关有同名环境变量 `QUOTAGENT_UI_*`）。首屏是**工作台**（「我今天要做什么」），不是报告列表；页面脚本**只来自本服务**
 （`assets/app.js`/`app.css`），不引外网 CDN。空数据目录下面板**如实报 degraded + next_action**。
 ## 1. 界面骨架（机制在外壳、功能在插件）
 
@@ -31,7 +30,7 @@
 | 状态栏 | 插件注册的状态读数（>8 项收进「更多 N 项」）+ 当前视图与可复制深链 |
 | 快捷键 | 外壳：`g h/c/s` 切视图、`?` 帮助、`r` 重载、`Esc` 关弹层；插件：`p` 发包、`d` 备草稿、`c` 比价、`a` 提意向（卸载后一起消失）；见 **§9** |
 | 表格 | 单元格里改 →「提交编辑」批量提交（键盘/小计见 §9）；勾选 + 批量按钮；右键出行动作并按该行字段预填。**长列表/查询见 §9.6** |
-| 人工门 | 需要人签的动作标题带 `✍`：表单里必须写 `human:<你的名字>`，执行前再确认一次；**表格多选** + 批量动作 ⇒ 一次署名办一整批（逐份落账、逐份可拒、幂等；见 `approval-decisions-and-evidence.md`） |
+| 人工门 | 需要人签的动作标题带 `✍`：表单里必须写 `human:<你的名字>`，确认一次；**队列行带金额与越界标识**（与授权区间同口径）；**表格多选** + 批量动作 ⇒ 一次署名办一整批（逐份落账、逐份可拒、幂等；见 `approval-decisions-and-evidence.md`） |
 
 ## 2. 供应商侧闭环（看包 → 备报价 → 人签提交 → 回读）
 
@@ -39,7 +38,7 @@
 2. **备报价**：表里「单价/交期」直接改 →「提交编辑」（或 `d`）→ **`quote.draft`** → 0600 待办件 →
    唯一写者 `quote-draft.py` 落 `quote/drafted`（**非签名**，可续）。
 3. **提交（人工门）**：草稿行「人签提交」→ 确认 → **`quote.submit`** → `quote-sign.py` 落
-   `approval/requested`→`granted`→`quote/submitted`，并在**承包商账本**登记一条。
+   `approval/requested`→`granted`→`quote/submitted`，并在承包商账本登记一条。
 4. **回读**：「已提交的报价」给出报价 id / 单价（整数分）/ 交期 / **签署人** / 人工门 id / 提交时刻 —— 全来自事实行。
 
 ## 3. 承包商侧闭环（发布 RFQ → 比价 → 批准 → 授标 → 发 PO）
@@ -55,7 +54,7 @@
 
 ## 4. 动作与接口清单
 
-**以 API 为准，本文件不复制该表（避免与实现漂移）**：`GET /api/routes` 给路由/auth/what；
+**以 API 为准，本文件不复制该表（避免漂移）**：`GET /api/routes` 给路由/auth/what；
 `GET /api/ui/surface` 给动作 id、入参 schema、权限档（`human-signature` 等）、确认策略、快捷键与对象类。
 
 ## 5. 写路径纪律（GUI 不是第二条事实写路径）
@@ -77,10 +76,9 @@
 
 ## 6. 卸载一个注册了 UI 的插件（可撤销）
 
-（撤销一个插件的全部 UI 贡献 = `POST /api/ui/plugins/<插件 id>/unload`，见 §4 的插件行；也可在顶栏「插件」点。）
+（= `POST /api/ui/plugins/<插件 id>/unload`；也可在顶栏「插件」点。）
 
-卸载后：该插件的入口（含快捷键与右键菜单项）在界面与 `/api/ui/surface` 里**同时消失**，其余插件的面板
-**逐字节不变**；恢复 `POST …/{load,reload}`（§4，不必重启），`plugin.json` 类插件走 `/admin/api/user-plugins/**`。
+卸载后：该插件的入口（含快捷键与右键菜单）在界面与 `/api/ui/surface` 里**同时消失**，其余插件面板**逐字节不变**；恢复 `POST …/{load,reload}`（§4，不必重启），`plugin.json` 类插件走 `/admin/api/user-plugins/**`。
 
 插件把自己搬上界面只需一件事：在 `code/ui.mjs` 里 `export register(surface, host)`，用
 `surface.view/panel/action/shortcut/notificationSource/statusItem/validator` 注册并返回回执数组（示例见
@@ -153,7 +151,7 @@
 `@提及/指派/转交`的候选与校验都从它来（未知名字拒）；**登录即入册**（角色「待指派」= 有名字、没有权限）。
 界面：「人员名册与角色」面板 + 「名册表（逐行可改）」。**按角色限动作**（不是限视图）：转交别人的活要
 「归我/我指派的」或 `transfer.override_roles` 里的角色；额度越界 ⇒ `role-limit-exceeded` 并给出该找谁。
-**角色不改变签署权**（人签仍是署名 == 会话身份，越权一律拒、账本零新增）。见 `docs/people-and-roles.md`。
+**角色不改变签署权**（人签仍是署名 == 会话身份，越权一律拒、账本零新增）。**两套角色/额度术语只有一份映射**（映射表见 `docs/people-and-roles.md` §10）。
 
 ## 12. 两个人同时干活（乐观并发）/ 分享 / 导出列（都不写账本）
 

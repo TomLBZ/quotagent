@@ -16,7 +16,9 @@
   · `--step escalate`  升级：`approval/escalated`（与 `ApprovalService.sweep` 的 escalate 分支**同形**），
     `approvers` 改为目标人，`escalated_to` 记名。
   · `--step delegate`  委托：同上，`action='delegate'`（把门委托给另一个人继续等，不是批准）。
-  · `--step abort`     终止：`approval/aborted`（`status='aborted'`，**必须留理由**）。
+  · `--step abort`     终止：`approval/aborted`（`status='aborted'`，**必须留理由** —— 理由正文**逐字**落
+    本行 `comment`（ADR-0023，与 `approval/denied.comment` 同口径），同时保留 `reason_sha256` 作为那份
+    0600 待办件的完整性锚点：否则「为什么作废」只能答"哈希在账本里、正文在待办件里"）。
 
 为什么不用 `ApprovalService.sweep()` 做升级/终止：`sweep()` 只处理**已超时**的门，而这里的动作是
 "人现在就决定这么做"，且落账时间必须由 `--now` 给（本脚本不读墙钟）。落账 body 与 sweep 的分支**同形**，
@@ -387,6 +389,12 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         else:  # abort
             body = {**last_body, "action": "abort", "status": "aborted", "aborted_by": actor,
                     "aborted_at": args.now, "last_action_at": args.now, "reason_sha256": digest_of(reason),
+                    # **终止的理由正文逐字进账本**（与 `approval/denied.comment` 同口径）：ADR-0023。
+                    # 为什么必须进：审计型产品的底线是「一屏答出谁、何时、**为什么**、依据哪一行」，而
+                    # 修前只有 `reason_sha256` ⇒ 理由正文只活在 0600 待办件里 ⇒ 「为什么作废」永远答不出。
+                    # 追加型：**新行**多这一个键；旧行一个字节不动（读侧缺 `comment` 时按缺省显示哈希）。
+                    # `reason_sha256` 仍保留：它是那份 0600 待办件的完整性锚点（正文与哈希可互证）。
+                    "comment": reason,
                     "note": "作废本次意图（需重新发起）；不得解释为批准或拒绝"}
             ledger.append("approval/aborted", body, correlation_id=last_body.get("ref") or gate_id,
                           actor=actor, ts=args.now,
@@ -405,7 +413,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                 "（原门不会被\"再批一次\"翻案）。",
         "escalate": "已升级：队列里的「卡在谁」与已催/已升级历史都会跟着变；升级**不是批准**。",
         "delegate": "已委托：门转给目标人继续等（仍不批准）。",
-        "abort": "已终止：本次意图作废（需重新发起）；终止留了理由哈希，正文只在待办件里。",
+        "abort": "已终止：本次意图作废（需重新发起）；理由正文逐字进了 `approval/aborted.comment`"
+                 "（同时留 `reason_sha256` 作完整性锚点）⇒ 「为什么作废」现在能从账本回读到，不必去找待办件。",
     }[step]
     return emit({"ok": True, "step": step, "event": applied[-1]["event"] if applied else None,
                  "applied": applied, "duplicates": [], "ledger_added": ledger_added, "refusal": None,

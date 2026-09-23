@@ -79,7 +79,7 @@
 | `approval/denied` | emit | ✔ | `ctx.approval` | 人工门：拒绝 |
 | `approval/reminded` | emit | ✔ | `ctx.approval` | 超时策略 `remind`：仍等待人类决定（不改状态） |
 | `approval/escalated` | emit | ✔ | `ctx.approval` | 超时策略 `escalate`：转上级继续等待 |
-| `approval/aborted` | emit | ✔ | `ctx.approval` | 超时策略 `abort`：作废本次意图（需重新发起） |
+| `approval/aborted` | emit | ✔ | `ctx.approval`（超时） / `tools/gate-actions.py --step abort`（人） | 作废本次意图（需重新发起）。body = 与 `approval/requested` **同基底**（7 键 + 派分事实键）**+ 追加键**：`action`/`status`（值 = aborted）/`aborted_by`/`aborted_at`/`last_action_at`/`reason_sha256`/**`comment`（人写的理由正文逐字，ADR-0023）**/`note` —— **「谁、何时、为什么、依据哪一行」一律可由账本回读**。两个生产者键集不同且都不新造事件类型：**超时**作废那一支没有人类理由（`comment` 空、不写 `aborted_by`）⇒ 读侧如实说「没有人写过理由」；**旧行**只有 `reason_sha256` ⇒ 读侧如实说「正文在 0600 待办件里」（旧行一字不动） |
 | `gate/nudged` | emit | ✔ | `tools/gate-nudge.py` → 双侧结算 | 有人**催办**过某个待批门（body 恰 5 键：`gate_id`/`view`/`actor`/`reason_sha256`/`ok`）—— 只记"谁在什么时候催过哪个门"，**不改门的判定状态**、不含理由正文（催办 ≠ 批准） |
 | `quote/guard-check` | bail | durable | `ctx.guard` → approval | 异常低价/漏项/产能/条款/注入检测 |
 | `terms/defined` | emit | ✔ | `ctx.terms` | 条款基线载入/修订（版本化，只追加） |

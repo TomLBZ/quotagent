@@ -4,9 +4,13 @@
  *
  * 注册的东西（全部经注册面 `src/system/webui/code/ui-surface.mjs`）：
  *   · 面板 `gate.queue`（承包商道）与 `gate.queue.supplier`（供应商道）：门卡片表 —— 待批对象 / 卡在谁 /
- *     等待时长（按**事实时刻**算，不取墙钟）/ 超时策略与倒计时 / 已催 N 次 @ts / 升级与委托记录；
- *   · 面板 `gate.decided`：**已决定的门**（批准/驳回留痕：谁在何时、意见是什么）—— 批完能回读；
+ *     等待时长（按**事实时刻**算，不取墙钟）/ 超时策略与倒计时 / 已催 N 次 @ts / 升级与委托记录 /
+ *     **金额（整数分 + 取自哪条事实）** / **越界？（与「授权区间」同一口径的 `checkOf`）**；
+ *   · 面板 `gate.decided`：**已决定的门**（批准 / 驳回 / **终止**留痕：谁决定的、什么时候、为什么、
+ *     依据哪一行账本行）—— 批完能回读；终止的**理由正文**逐字来自账本 `comment`（ADR-0023）；
  *   · 面板 `gate.todo`（工作台）：一行一条"要人决定的事" + 可复制的 next_action；
+ *     **只把「点名我的」算成"需要你处理"**（P43）：点的是别人的名 ⇒ 降成信息、如实写清并给队列入口
+ *     （写者判 `approver-not-named`，点错了会被拒 —— 卡头不该把它算成你的活）；
  *   · 动作（都是**界内真动作**，服务端一半落 0600 待办件 → 唯一写者落账）：
  *       `gate.grant`    **批准** → `src/system/approval/tools/gate-actions.py --step grant` 落 `approval/granted`
  *       `gate.deny`     **驳回** → 同上 `--step deny` 落 `approval/denied`（**必须留理由**）
@@ -24,6 +28,10 @@
  * 行的键就是 `gate_id`（`id` 与 `approval_id` 是同一个值），动作的入参字段也叫 `gate_id`。
  */
 import { createHash } from 'node:crypto'
+
+import {
+  authoritySnapshot, bandLineFromLowest,
+} from '../../../domain/authority-band/code/ui.mjs'
 
 export const plugin_id = 'system/approval'
 
@@ -51,6 +59,171 @@ const hex64 = (text) => createHash('sha256').update(String(text), 'utf8').digest
 const RESOLVED = ['approval/granted', 'approval/denied', 'approval/aborted']
 const POLICY_LABEL = { remind: '提醒（不改状态）', escalate: '升级', abort: '终止' }
 
+// ---------------------------------------------------------------------------
+// ① 给人看的文本 vs 写者文案（P43：清掉用户可见的 CLI 旗标）
+// ---------------------------------------------------------------------------
+/**
+ * 写者（Python 工具）自己的 `reason` / `next_action` 是**运维口径**：里面会写
+ * 「（--step escalate / --step delegate）」「本脚本 --step confirm」这类**命令行旗标**。
+ * 产品界面不该教人回终端（`docs/design/29-webui-gui-app.md` §21.4：产品面 `python3`/`PYTHONPATH`/「终端」
+ * 0 命中），而写者是**唯一判据**、拒绝文案又是用户唯一能看到的"为什么"——所以在这里做一次
+ * **翻译**：① 已知旗标短语 → 界面上的说法（`STEP_TERMS` 是唯一一份映射）；② 剩下的 `--xxx` 一律不露给用户。
+ *
+ * **不改语义、不改判据、不吞信息**：写者原文一个字都没丢 —— 动作回执的 `result.writer_text.*`
+ * 照旧带原文（可 grep、可审计），只是不再把它当用户可见文案。
+ */
+const STEP_TERMS = Object.freeze({
+  request: '提交人工门', grant: '批准', deny: '驳回', escalate: '升级', delegate: '委托', abort: '终止',
+  propose: '提出授标意向', confirm: '确认授标', po: '发 PO', acknowledge: '确认收到采购单',
+  ask: '提问', answer: '作答', broadcast: '广播', close: '关闭', 'request-concession': '请求价格让步批准',
+})
+export const plainText = (value) => {
+  let text = String(value ?? '')
+  if (text.trim() === '') return ''
+  text = text.replace(/PYTHONPATH=\S+/g, '')
+  // 整条命令行（含 `python3 -m <模块>` 与它后面的参数 —— 写到中文括号或行尾为止）：用户不需要看到
+  text = text.replace(/\b(?:python3?|node)\b[^（(]*/g, '')
+  text = text.replace(/--step\s+([A-Za-z][A-Za-z0-9-]*)/g,
+    (whole, step) => `「${STEP_TERMS[String(step).toLowerCase()] ?? '界面上对应的那一步'}」`)
+  text = text.replace(/--actor\s*/g, '')
+  text = text.replace(/--now\b(\s+\S+)?/g, '落账时间')
+  text = text.replace(/--help\b/g, '用法说明')
+  text = text.replace(/本脚本/g, '本动作')
+  // 写者文案里也偶有 markdown 星号（外壳把面板/回执文案当**纯文本**渲染 ⇒ 星号会原样显示）
+  text = text.replace(/\*\*/g, '')
+  // 兜底：剩下的旗标（`--inbox` / `--ledger-contractor` / `--view` …）只讲"怎么在终端跑这个工具"，
+  // 与用户在界面上要做的下一步无关 ⇒ 一律不露出来（原文在 `result.writer_text` 里可查）。
+  text = text.replace(/--[A-Za-z][\w-]*(\s+[^\s，。；、)）]+)?/g, '')
+  text = text.replace(/[（(]\s*[，,、；;：]?\s*[）)]/g, '')
+  text = text.replace(/[（(]\s*[，,、；;：]\s*/g, '（')
+  text = text.replace(/\s+([，。；、)）])/g, '$1')
+  return text.replace(/\s{2,}/g, ' ').trim()
+}
+
+// ---------------------------------------------------------------------------
+// ② 「这笔钱越没越界？」：金额从**账本事实**量出来，越界判据用**同一份**授权区间口径
+// ---------------------------------------------------------------------------
+/**
+ * 门后面那个对象在哪条事实上带金额（**声明式映射**）：不认识的 scope 一律**如实说「金额取不到」**，
+ * 绝不猜、不按名字近似匹配。逐条写清「从哪条事件、哪个键取」——金额一律**整数分**，与
+ * `domain/rfq/tools/weekly-report.py` 的 `line_cents` **同一口径**（先 `unit_price_cents`，
+ * 没有再 `unit_price × 100` 半进位），并把取数口径写在行里，可逐条对账。
+ */
+const AMOUNT_SOURCES = Object.freeze({
+  'award.commit': { event: 'award/committed', ref_keys: ['intent_id', 'award_id'], lines: true,
+    label: '授标承诺金额' },
+  'po.issue': { event: 'po/issued', ref_keys: ['award_id', 'po_id'], lines: true, label: '采购单金额' },
+  'change.approve': { event: 'change/priced', ref_keys: ['change_id'], amount_key: 'delta_amount',
+    label: '变更增量金额（不是整单金额）' },
+})
+const numOf = (value) => {
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+/** 一条行项目 →（整数分, 取数口径）。**算不出来就给 `why`**（调用方据此如实说"取不到"）。 */
+const lineCents = (line) => {
+  if (!line || typeof line !== 'object') return { cents: null, why: '这一行不是对象' }
+  const qty = numOf(line.qty)
+  if (qty === null) return { cents: null, why: '该行没有可读的 qty' }
+  const exact = numOf(line.unit_price_cents)
+  if (exact !== null) {
+    return { cents: Math.round(qty * exact), basis: `unit_price_cents=${line.unit_price_cents}×qty=${line.qty}` }
+  }
+  const price = numOf(line.unit_price)
+  if (price === null) return { cents: null, why: '该行既没有 unit_price_cents 也没有 unit_price' }
+  return { cents: Math.round(qty * Math.round(price * 100)), basis: `unit_price=${line.unit_price}×100×qty=${line.qty}` }
+}
+/** 门后面那个对象的金额（整数分）+ 取数口径；取不到就给 `why`（**不编一个数**）。 */
+const amountOfGate = (rows, gate) => {
+  const scope = asText(gate.scope)
+  const spec = AMOUNT_SOURCES[scope]
+  if (!spec) {
+    return { cents: null, label: '', basis: '',
+      why: `本页没有声明 scope=${scope || '（空）'} 的金额从哪条事实取（不猜）` }
+  }
+  const gateId = asText(gate.approval_id)
+  const ref = asText(gate.ref)
+  const same = rows.filter((row) => String(row?.type ?? '') === spec.event)
+  const byApproval = same.filter((row) => asText(bodyOf(row).approval_id) === gateId)
+  const byRef = same.filter((row) => spec.ref_keys.some((key) => asText(bodyOf(row)[key]) === ref))
+  const hit = byApproval.length ? byApproval[byApproval.length - 1] : byRef[byRef.length - 1]
+  if (!hit) {
+    return { cents: null, label: spec.label, basis: '',
+      why: `账本里没有 ${spec.event} 配上这条门（门 ${gateId || '—'} / 引用 ${ref || '—'}）——`
+        + `本页按「approval_id 相同」或「${spec.ref_keys.join(' / ')} 等于 ref」对账（金额取不到）` }
+  }
+  const body = bodyOf(hit)
+  const where = `${spec.event} 账本行 ${hit.seq ?? '—'}`
+  if (spec.lines) {
+    const lines = Array.isArray(body.lines) ? body.lines : []
+    if (!lines.length) {
+      return { cents: null, label: spec.label, basis: where, why: `${where} 的 body 里没有 lines[]（金额取不到）` }
+    }
+    let total = 0
+    const bases = []
+    for (const line of lines) {
+      const one = lineCents(line)
+      if (one.cents === null) {
+        return { cents: null, label: spec.label, basis: where, why: `${where}：${one.why}` }
+      }
+      total += one.cents
+      bases.push(one.basis)
+    }
+    return { cents: total, label: spec.label, basis: `${where} · ${bases.join(' + ')}`, why: '' }
+  }
+  const value = numOf(body[spec.amount_key])
+  if (value === null) {
+    return { cents: null, label: spec.label, basis: where,
+      why: `${where} 的 ${spec.amount_key} 读不出来（金额取不到）` }
+  }
+  return { cents: Math.round(value * 100), label: spec.label, basis: `${where} · ${spec.amount_key}=${body[spec.amount_key]} 元×100`, why: '' }
+}
+/**
+ * 「越界？」**与「授权区间」面板同一份口径**（同一个 `checkOf`）：区间没登记 ⇒ 如实说未配置；
+ * 口径读不到 ⇒ 如实说判不了（**不编一个越界结论**）。
+ */
+const bandOfCents = (view, cents) => {
+  try {
+    const { snapshot, reason } = authoritySnapshot()
+    if (!snapshot) return { role: '', text: `判不了（授权区间读不到：${reason || 'config-missing'}）` }
+    return bandLineFromLowest(view, cents, snapshot)
+  } catch (err) {
+    return { role: '', text: '判不了（区间口径异常：本页不编一个越界结论）' }
+  }
+}
+/** 队列行：金额 + 越界标识（两个字段都**带口径**，可逐条对账）。 */
+const withAmount = (view, rows, gate) => {
+  const amount = amountOfGate(rows, gate)
+  const band = amount.cents === null ? { role: '', text: '判不了（金额取不到）' } : bandOfCents(view, amount.cents)
+  return { ...gate,
+    amount_cents: amount.cents,
+    amount_label: amount.cents === null
+      ? `金额取不到：${amount.why}`
+      : `${(amount.cents / 100).toFixed(2)} 元（${amount.cents} 分）· ${amount.label}`,
+    amount_basis: amount.cents === null ? amount.why : amount.basis,
+    band_verdict: band.text,
+    band_role: band.role }
+}
+
+// ---------------------------------------------------------------------------
+// ③ 「这条门点的是不是我的名」：工作台「有 N 件需要你处理」只算点名我的（P43）
+// ---------------------------------------------------------------------------
+/**
+ * 判据与写者**同一条**（`gate-actions.py` 的 `approver-not-named`：`approvers` 里有我就只有我能批；
+ * 开单没点名审批人的旧门 ⇒ 缺省放行，谁都能决定）。这里只把它**读出来**，一条判据都不新造：
+ *   · `mine`      = 我是开单时点名的人（或者这条门开单时没点名任何人 ⇒ 缺省放行）
+ *   · `others`    = 点的是别人的名 ⇒ 我批会被写者拒 ⇒ **不算「需要你处理」**，但照旧列出来（如实标注）
+ *   · `unknown`   = 未登录（不知道我是谁）⇒ 判定不出来，一律按"信息"算并说清楚
+ */
+const namedBy = (gate, me) => {
+  const named = (gate.approvers ?? []).map(asText).filter(Boolean)
+  if (!named.length) return 'unassigned'
+  if (me === '') return 'unknown'
+  return named.includes(me) ? 'mine' : 'others'
+}
+const shortName = (who) => asText(who).replace(/^human:/, '')
+
 /** 账本行 → 门登记（同一 approval_id 取**最后一次**写入；状态语义与 `ApprovalService.replay` 同形）。 */
 const gatesOf = (rows) => {
   const order = []
@@ -67,16 +240,25 @@ const gatesOf = (rows) => {
       approval_id: id, scope: asText(body.scope), ref: asText(body.ref),
       status: RESOLVED.includes(type) ? asText(body.status) || (type === 'approval/granted' ? 'granted' : 'denied')
         : 'pending',
-      decided_by: body.decided_by ?? null, comment: body.comment ?? '',
+      decided_by: body.decided_by ?? previous.decided_by ?? null, comment: body.comment ?? '',
       requested_at: previous.requested_at ?? String(row.ts ?? ''),
       last_event: type, last_at: String(row.ts ?? ''),
+      // **决定时刻 / 署名 / 理由都从账本回读**（ADR-0023）：批准/驳回写 `decided_at`/`decided_by`，
+      // 终止写 `aborted_at`/`aborted_by` 与 `comment`（**理由正文逐字**）。这里一并兜底；
+      // 旧行（本批之前写入的）缺这些键就一路 `??` 到 `null`/空串，读侧**如实**呈现多寡，绝不编。
+      decided_at: body.decided_at ?? body.aborted_at ?? previous.decided_at ?? null,
+      aborted_at: body.aborted_at ?? previous.aborted_at ?? null,
+      reason_sha256: asText(body.reason_sha256) || asText(previous.reason_sha256) || '',
+      // 「依据哪一行」：账本行的 `seq` 与 `actor`（外壳的行形状：`{seq, type, actor, ts, body}`）。
+      ledger_seq: Number.isFinite(Number(row.seq)) ? Number(row.seq) : null,
+      row_actor: asText(row.actor),
       timeout_policy: asText(body.timeout_policy) || previous.timeout_policy || 'remind',
       timeout_s: Number(body.timeout_s ?? previous.timeout_s ?? 3600),
       approvers: Array.isArray(body.approvers) ? body.approvers : (previous.approvers ?? []),
       escalate_to: body.escalate_to ?? previous.escalate_to ?? null,
       escalated_to: body.escalated_to ?? previous.escalated_to ?? null,
       escalated_by: body.escalated_by ?? previous.escalated_by ?? null,
-      aborted_by: body.aborted_by ?? null,
+      aborted_by: body.aborted_by ?? previous.aborted_by ?? null,
       remind_count: Number(body.remind_count ?? previous.remind_count ?? 0),
       reason: body.reason ?? previous.reason ?? '',
     })
@@ -175,6 +357,11 @@ export async function register(surface, host) {
           { key: 'approval_id', label: '门', type: 'code' },
           { key: 'scope', label: '待批对象（scope）', type: 'code', filter: 'enum' },
           { key: 'ref', label: '引用（ref）', type: 'code' },
+          // P43 新增两列：**这笔钱是多少 / 越没越界**。判据与「授权区间」面板同一份口径
+          // （`checkOf`），参照角色 = 已登记限额最小的那一档（由配置决定，不写死角色名）。
+          { key: 'amount_cents', label: '金额（整数分；取不到就写取不到）', filter: 'number' },
+          { key: 'amount_label', label: '金额（元）· 取自哪条事实' },
+          { key: 'band_verdict', label: '越界？（与「授权区间」同一口径）' },
           { key: 'who', label: '卡在谁（点名的审批人）', type: 'code' },
           { key: 'waited', label: '已等（按事实时刻）' },
           { key: 'policy_label', label: '超时策略', filter: 'enum' },
@@ -184,7 +371,7 @@ export async function register(surface, host) {
           { key: 'last_nudged_at', label: '最后一次催办 @ts', filter: 'date' },
           { key: 'escalated_to', label: '升级/委托给' },
         ],
-        rows: gates.map((gate) => ({ id: gate.approval_id, ...gate,
+        rows: gates.map((gate) => ({ id: gate.approval_id, ...withAmount(view, rows, gate),
           overdue: gate.overdue ? '是（策略会执行；永远不自动批准）' : '否',
           escalated_to: gate.escalated_to ?? '' })),
         row_actions: ['gate.grant', 'gate.deny', 'gate.nudge', 'gate.escalate', 'gate.delegate', 'gate.abort'],
@@ -192,7 +379,10 @@ export async function register(surface, host) {
         // 选几条就逐条各跑一次唯一写者（见 `gate.decide-batch` 的服务端一半）。
         bulk: 'gate.decide-batch',
         counts: { pending: gates.length, decided: decided.length,
-          nudges: gates.reduce((sum, gate) => sum + gate.nudge_count, 0) },
+          nudges: gates.reduce((sum, gate) => sum + gate.nudge_count, 0),
+          // **金额只统计得出来的那些行**（取不到的不当 0 算进小计 —— 与周报「算不出来的行排除出小计」同一口径）
+          amount_known: gates.filter((gate) => amountOfGate(rows, gate).cents !== null).length,
+          amount_missing: gates.filter((gate) => amountOfGate(rows, gate).cents === null).length },
         note: `事实时刻 ${moment || '—'}（等待时长与超时剩余都相对账本里最大的 ts 算，不取墙钟）；`
           + '「批准 / 驳回」在行内：署名必须等于会话身份（服务端判 403 signer-mismatch），'
           + '落的是既有事件 `approval/granted` / `approval/denied`（不新造事件类型），写者仍是'
@@ -201,22 +391,57 @@ export async function register(surface, host) {
           + '（`gate-already-decided`）；'
           + '「卡在谁 / 超时策略 / 超时剩余 / 该催谁」开单后即可回读（追加键 approvers/timeout_policy/'
           + 'timeout_s/escalate_to/requested_at，ADR-0022；旧行按缺省读）；'
-          + '超时策略只有 remind/escalate/abort，不存在超时自动批准' }
+          + '超时策略只有 remind/escalate/abort，不存在超时自动批准；'
+          // P43：这两列的口径写在这里（人话 + 出处），用户不必再切面板手算。
+          + '金额两列 = 门后面那条事实里的钱（`award/committed` 的 lines×qty×单价 / `po/issued` 的 '
+          + 'lines / `change/priced` 的增量），一律整数分、取自账本、口径逐行写在「取自哪条事实」里；'
+          + '取不到就写「取不到」（本页没声明这个 scope 的金额从哪取、或那条事实不在本账本里）——'
+          + '不折算、不近似匹配、不当 0。'
+          + '「越界？」列与「授权区间」面板同一份口径（同一个 `checkOf`）：参照角色 = 已登记限额最小的那一档'
+          + '（由受管配置决定，不写死角色），越界时给出「下一个能批的是谁」；区间没登记 ⇒ 如实说未配置，'
+          + '不编越界结论。金额与越界结论都不改判定：改判定的仍只有行内的人签「批准 / 驳回」' }
     } })
 
-  /** 已决定的门：批准/驳回**留痕可回读**（谁在何时、意见是什么）——批完不必去翻账本 JSONL。 */
+  /**
+   * 「谁决定的 / 什么时候 / 为什么 / 依据哪一行」**四问全部从账本回读**（ADR-0023）。
+   *
+   * 修前的两处空白（P41 登记）：① `approval/aborted` 行的「谁决定的」是空的 —— 面板读 `decided_by`，
+   * 而账本里终止写的是 `aborted_by`；② 终止只落 `reason_sha256` ⇒「为什么作废」答不出。
+   * 现在：署名 `decided_by || aborted_by`；时刻 `decided_at || aborted_at || 账本行 ts`；
+   * 理由 `comment` 逐字（终止也写了正文）；依据 = 该门**最后一次写入**的账本行（`seq` + 事件名 + actor）。
+   * **缺什么就如实写缺什么**（旧行只有哈希 / 超时自动作废没有人写理由），不编一个理由、不改写历史。
+   */
+  const DECIDED_LABEL = { granted: '已批准', denied: '已驳回', aborted: '已终止' }
+  const decidedWhoOf = (gate) => asText(gate.decided_by) || asText(gate.aborted_by)
+  const whoLabelOf = (gate) => decidedWhoOf(gate) || (gate.status === 'aborted'
+    ? `（未记录署名：这一行没带 aborted_by/decided_by；账本行 actor=${gate.row_actor || '—'}）`
+    : `（未记录署名：这一行没带 decided_by；账本行 actor=${gate.row_actor || '—'}）`)
+  const whyLabelOf = (gate) => asText(gate.comment) || (gate.reason_sha256
+    ? `（账本只带理由哈希 ${gate.reason_sha256} —— 本批之前写入的旧行，正文在 0600 待办件里；不编造）`
+    : (gate.status === 'aborted'
+      ? '（账本没有理由正文：这条是超时策略 abort 的自动作废 —— 没有人写过理由）'
+      : '（账本没有意见正文）'))
+  const whenLabelOf = (gate) => asText(gate.decided_at) || asText(gate.aborted_at) || asText(gate.last_at) || ''
+  const basisLabelOf = (gate) => `#${gate.ledger_seq ?? '—'} ${gate.last_event}`
+    + `${gate.row_actor ? ` · actor=${gate.row_actor}` : ''}`
+
+  /** 已决定的门：批准 / 驳回 / **终止** 留痕可回读（谁决定的、什么时候、为什么、依据哪一行）。 */
   const decidedPanel = (view, order) => surface.panel({
     plugin_id: me, id: view === 'supplier' ? 'gate.decided.supplier' : 'gate.decided',
-    title: '已决定的门（批准 / 驳回留痕）', view, order, kind: 'table', actions: [],
+    title: '已决定的门（批准 / 驳回 / 终止留痕）', view, order, kind: 'table', actions: [],
     data: () => {
       const rows = host.rows(view)
       const moment = asOf(rows)
       const decided = gatesOf(rows).filter((gate) => gate.status !== 'pending')
         .map((gate) => ({ id: gate.approval_id, ...gate,
           gate_id: gate.approval_id,
-          status_label: gate.status === 'granted' ? '已批准' : (gate.status === 'denied' ? '已驳回' : gate.status),
+          status_label: DECIDED_LABEL[gate.status] ?? gate.status,
           decision: `${gate.last_event}（${gate.status}）`,
-          comment: asText(gate.comment) || '（没有意见正文）' }))
+          decided_by_label: whoLabelOf(gate),
+          decided_at_label: whenLabelOf(gate) || '（账本行没带时刻）',
+          reason_label: whyLabelOf(gate),
+          basis_label: basisLabelOf(gate),
+          comment: asText(gate.comment) || '' }))
       if (!decided.length) {
         return { ok: true, kind: 'table', degraded: true,
           reason: '这一侧还没有被决定过的门（机器码 no-decided-gate）——不是坏了，是还没批过',
@@ -229,18 +454,23 @@ export async function register(surface, host) {
           { key: 'status_label', label: '结论', filter: 'enum' },
           { key: 'scope', label: '待批对象（scope）', type: 'code', filter: 'enum' },
           { key: 'ref', label: '引用（ref）', type: 'code' },
-          { key: 'decided_by', label: '谁决定的', type: 'code' },
-          { key: 'last_at', label: '决定时刻（账本 ts）', filter: 'date' },
-          { key: 'comment', label: '意见（账本 comment）' },
+          { key: 'decided_by_label', label: '谁决定的（账本署名）', type: 'code' },
+          { key: 'decided_at_label', label: '决定时刻（账本事实）', filter: 'date' },
+          { key: 'reason_label', label: '为什么（账本 comment / 如实说明）' },
+          { key: 'basis_label', label: '依据（账本行）', type: 'code' },
           { key: 'decision', label: '落账事件', type: 'code' },
         ],
         rows: decided,
         counts: { decided: decided.length,
           granted: decided.filter((gate) => gate.status === 'granted').length,
-          denied: decided.filter((gate) => gate.status === 'denied').length },
+          denied: decided.filter((gate) => gate.status === 'denied').length,
+          aborted: decided.filter((gate) => gate.status === 'aborted').length },
         note: `事实时刻 ${moment || '—'}；每一行的结论都来自账本里这条门最后一次写入的行`
           + '（`approval/granted` / `approval/denied` / `approval/aborted`），不是界面记的状态；'
-          + '意见正文逐字来自账本 `comment`' }
+          + '「谁决定的」批准/驳回取 `decided_by`、终止取 `aborted_by`（旧行缺就如实写未记录署名）；'
+          + '「为什么」逐字取账本 `comment` —— 终止的人写理由现在也逐字进这一行（ADR-0023）；'
+          + '旧行只有 `reason_sha256` 时如实说"账本只有哈希、正文在 0600 待办件里"，超时自动作废则说'
+          + '"没有人写过理由"，都不编；「依据」给出该门最后一行账本行的 `seq` 与事件名，可逐行对账' }
     } })
 
   out.push(surface.view({ plugin_id: me, id: 'gate.workspace', title: '审批队列', order: 5, view: 'contractor',
@@ -254,17 +484,35 @@ export async function register(surface, host) {
     order: 15, kind: 'list',
     data: (ctx) => {
       const items = []
+      // 会话身份里的名字（`human:<名字>`）——「点名我的」这条判据要用它。未登录 ⇒ 空串（判定不出来）。
+      const me = asText(ctx?.identity?.human)
       for (const view of ['contractor', 'supplier']) {
         const label = view === 'supplier' ? '供应商侧' : '承包商侧'
+        const others = []
         for (const gate of pendingRows(host.rows(view))) {
-          // 侧标写在标题里（`workbench-two-sides.md` 的纪律），**级别按本侧**（卡头计数只算本侧）。
-          items.push(sideScoped(ctx, view, { level: gate.overdue ? 'warn' : 'info',
+          // **点名我的才算「需要你处理」**（P43）：写者判 `approver-not-named`——点的是别人的名，
+          // 我批一定被拒 ⇒ 这条不该进卡头计数，也不该给「去批准」的暗示。这里把它降成"信息"，
+          // **照旧列出来**并如实写清"点名的是谁、你批会被拒"，并给出查看入口（队列的「卡在谁」列）。
+          const named = namedBy(gate, me)
+          const mine = named === 'mine' || named === 'unassigned'
+          if (named === 'others') others.push(gate)
+          const who = shortName(gate.who)
+          const why = named === 'others'
+            ? ` · 点名的是 @${who}（不是你的活：你批这条会被写者拒 —— approver-not-named）`
+            : (named === 'unknown'
+              ? ' · 未登录：判定不出这条点的是不是你的名（登录后它才可能算「需要你处理」）'
+              : (named === 'unassigned' ? ' · 开单时没点名审批人：这条谁都能决定' : ''))
+          // 侧标写在标题里（`workbench-two-sides.md` 的纪律），**级别按本侧 + 按点名**（卡头计数只算**点名我的**）。
+          items.push(sideScoped(ctx, view, { level: (mine && gate.overdue) ? 'warn' : 'info',
             title: `${label}：人工门 ${gate.approval_id} 等 ${gate.waited}：${gate.scope}（${gate.ref}）`,
             // 人名与时刻不裸展示内部标识（`human:liangzi` / 毫秒 ISO）——与名册、协作面同一口径
-            body: `卡在 @${asText(gate.who).replace(/^human:/, '')} · 已催 ${gate.nudge_count} 次`
+            body: `卡在 @${who} · 已催 ${gate.nudge_count} 次`
               + `${gate.last_nudged_at ? ` @${gate.last_nudged_at}` : ''}`
-              + ` · 超时策略 ${gate.policy_label}（${gate.timeout_left}）`,
-            next_action: `深链 ${host.prefix}/app/${view}/ → 「审批队列」卡片上点催办/升级/终止（人签）`,
+              + ` · 超时策略 ${gate.policy_label}（${gate.timeout_left}）${why}`,
+            next_action: mine
+              ? `深链 ${host.prefix}/app/${view}/ → 「审批队列」卡片上点催办/升级/终止（人签）`
+              : `上一条不是你的活：深链 ${host.prefix}/app/${view}/ → 「审批队列」按「卡在谁（点名的审批人）」` +
+                `列筛出 @${who} 那一行；要让给别人就点行内「升级 / 委托」（人签）`,
             // **跨面板去重的判据**（机制只比较字符串，不解读）：同一个门 id ⇒ 与别块面板列的那条是同一件事，
             // 外壳会合并成一条（见 `app-shell.mjs#foldPanelDuplicates`）。同一份 `ref` 让合并后的条目
             // **仍然能点进 `/app/<view>/gate/<id>/` 对象页**（指派/关注/评论都在那一页上）；
@@ -272,6 +520,18 @@ export async function register(surface, host) {
             // `home` 视角（那里没注册 `gate` 对象类，只能如实说"本视图里没有这个对象"）。
             ref: { kind: 'gate', id: gate.approval_id, view, title: `审批门 ${gate.approval_id}` },
             dedupe_key: `gate:${gate.approval_id}` }))
+        }
+        // 「别人的」也**照实报数并给入口**（不藏、也不冒充"要你处理"）：一条总账 + 队列深链。
+        if (others.length) {
+          items.push({ level: 'info',
+            title: `${label}：另有 ${others.length} 条待批门点名的是别人（不归你处理）`,
+            body: others.map((gate) => `${gate.approval_id}（卡在 @${shortName(gate.who)}：${gate.scope}）`).join('；')
+              + ' —— 这些不算卡头「有 N 件需要你处理」；你批它们会被写者拒（approver-not-named）',
+            next_action: `深链 ${host.prefix}/app/${view}/ → 「审批队列」列出这一侧全部待批（含点名别人的），`
+              + '用「卡在谁（点名的审批人）」列筛；要换人就在那一行点「升级 / 委托」（人签）',
+            // 入口 = 队列那一侧（表格里有金额、越界标识与「卡在谁」）——这里不摆必被拒的批准按钮。
+            ref: { kind: 'gate', id: others[0].approval_id, view, title: `审批门 ${others[0].approval_id}` },
+            dedupe_key: `gate-others:${view}:${others.length}` })
         }
       }
       if (!items.length) {
@@ -351,14 +611,18 @@ export async function register(surface, host) {
       const event = json.event ?? (step === 'grant' ? 'approval/granted' : 'approval/denied')
       const code = refusal?.code ?? json.code
         ?? (duplicated ? 'already-applied' : (ok ? (step === 'grant' ? 'granted' : 'denied') : 'writer-failed'))
-      return { ok, code, reason: refusal?.reason ?? (ok ? '' : (run.reason ?? '')),
-        next_action: refusal?.next_action ?? json.next_action_runtime
+      // **给人看的那一份过 `plainText`**（写者文案里会带 `--step escalate / --step delegate` 这类旗标）；
+      // 原文照旧留在 `result.writer_text` 里可查（不改判据、不吞信息）。
+      return { ok, code, reason: plainText(refusal?.reason ?? (ok ? '' : (run.reason ?? ''))),
+        next_action: plainText(refusal?.next_action ?? json.next_action_runtime
           ?? (ok ? (duplicated
             ? '同一份载荷已经消费过（幂等，账本零新增）：这条门的状态以「已决定的门」里读到的为准'
             : `已落 ${event}（本动作账本 +${added} 行）：这条门从待批里消失、`
               + '出现在「已决定的门」里（谁在何时、什么意见都能读回来）')
-            : '看 result.stdout 定位后重提（本动作账本零新增）'),
+            : '看 result.stdout 定位后重提（本动作账本零新增）')),
         result: { pending: staged.file, pending_file: staged.name, view, step,
+          writer_text: { source: 'gate-actions.py', reason: refusal?.reason ?? '',
+            next_action: refusal?.next_action ?? json.next_action_runtime ?? '' },
           approval_id: json.approval_id ?? gateId, scope: json.scope ?? '', ref: json.ref ?? '',
           status: json.status ?? '', decided_by: json.decided_by ?? asText(input.signature),
           decided_at: json.decided_at ?? '', event, ledger_added: added,
@@ -469,8 +733,8 @@ export async function register(surface, host) {
         results.push({ gate_id: gateId, where: appliedHere ? 'applied' : (already ? 'duplicates' : 'refused'),
           ok, code: ok ? (appliedHere ? (step === 'grant' ? 'granted' : 'denied') : 'already-applied')
             : (refusedRow?.code ?? receipt.code ?? 'writer-failed'),
-          reason: ok ? '' : (refusedRow?.reason ?? receipt.reason ?? ''),
-          next_action: refusedRow?.next_action ?? receipt.next_action ?? '',
+          reason: ok ? '' : plainText(refusedRow?.reason ?? receipt.reason ?? ''),
+          next_action: plainText(refusedRow?.next_action ?? receipt.next_action ?? ''),
           event, scope: appliedHere ? asText(written.scope) : asText(receipt.json?.scope),
           ref: appliedHere ? asText(written.ref) : asText(receipt.json?.ref),
           decided_at: appliedHere ? asText(written.decided_at) : '', decided_by: actor,
@@ -564,16 +828,18 @@ export async function register(surface, host) {
       const code = ok ? (written ? 'nudged' : 'already-nudged')
         : (refusedRow?.code ?? receipt.code ?? (mine ? 'writer-refused' : 'writer-receipt-missing'))
       return { ok, code,
-        reason: refusedRow?.reason ?? (ok ? '' : (receipt.reason || '')),
-        next_action: ok
+        reason: plainText(refusedRow?.reason ?? (ok ? '' : (receipt.reason || ''))),
+        next_action: plainText(ok
           ? (written
             ? `催办已落 \`gate/nudged\`（本动作账本 +${ledgerAdded} 行）：队列里会出现「已催 N 次 @ts」`
               + '（不改门的判定）'
             : '同一句理由催过了（幂等，账本零新增）：换个说法或先看队列里"已催 N 次"')
           : ((refusedRow?.next_action ?? receipt.next_action
             ?? `这条待办件（${mineName}）没在写者回执里出现（applied/duplicates/refused 都没有）`
-              + '⇒ 本动作账本零新增：看 result.writer.stdout_tail 定位后重提') + othersNote),
+              + '⇒ 本动作账本零新增：看 result.writer.stdout_tail 定位后重提') + othersNote)),
         result: { pending: staged.file, pending_file: staged.name, ledger_added: ledgerAdded,
+          writer_text: { source: 'gate-nudge.py', reason: refusedRow?.reason ?? receipt.reason ?? '',
+            next_action: refusedRow?.next_action ?? receipt.next_action ?? '' },
           applied: written ? [written] : [], duplicates: duplicated ? [duplicated] : [],
           refused: refusedRow ? [refusedRow] : [],
           others: { applied: otherApplied.map((row) => ({ file: row?.file ?? '', gate_id: row?.gate_id ?? '' })),
@@ -592,7 +858,9 @@ export async function register(surface, host) {
       ...extraFields,
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
       { name: 'note', label: '理由', type: 'textarea', required: step === 'abort',
-        help: step === 'abort' ? '终止必须留理由（事后要能回答"为什么作废"）' : '进 0600 待办件，不进账本正文' },
+        help: step === 'abort'
+          ? '终止必须留理由：正文逐字落 `approval/aborted.comment`（ADR-0023）—— 事后「为什么作废」从账本回读'
+          : '进 0600 待办件，不进账本正文' },
     ] },
     server: async (ctx, input) => {
       const payload = { kind: 'gate-actions', action: step, view: String(ctx.view ?? 'contractor'),
@@ -608,9 +876,11 @@ export async function register(surface, host) {
         '--view', String(ctx.view ?? 'contractor'), '--now', host.now()])
       const json = run.json ?? {}
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? step : 'writer-failed'),
-        reason: json.refusal?.reason ?? run.reason ?? '',
-        next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '看 result 里的账本增量与下一步',
+        reason: plainText(json.refusal?.reason ?? run.reason ?? ''),
+        next_action: plainText(json.refusal?.next_action ?? json.next_action_runtime ?? '看 result 里的账本增量与下一步'),
         result: { pending: staged.file, approval_id: json.approval_id ?? null, escalated_to: json.escalated_to ?? null,
+          writer_text: { source: 'gate-actions.py', reason: json.refusal?.reason ?? '',
+            next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '' },
           applied: json.applied ?? [], ledger_added: json.ledger_added ?? 0, stdout: run.stdout ? run.stdout.slice(-400) : '' } }
     } })
 
@@ -637,7 +907,8 @@ export async function register(surface, host) {
   ], '落 `approval/escalated`（action=delegate）；门仍是 pending，只是换了人'))
 
   out.push(stepAction('gate.abort', 'abort', '终止这个门', [],
-    '落 `approval/aborted`：本次意图作废（需重新发起），必须留理由；已决定的门会被拒'))
+    '落 `approval/aborted`：本次意图作废（需重新发起），必须留理由；'
+    + '理由正文逐字进账本 `comment`（ADR-0023）⇒ 事后「谁、何时、为什么」一屏可从账本回读；已决定的门会被拒'))
 
   out.push(surface.shortcut({ plugin_id: me, id: 'shortcut.gate-queue', keys: 'g', action: 'gate.nudge',
     title: '催办一个门', order: 5 }))
