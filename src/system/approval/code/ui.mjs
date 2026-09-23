@@ -201,7 +201,14 @@ export async function register(surface, host) {
             body: `卡在 @${asText(gate.who).replace(/^human:/, '')} · 已催 ${gate.nudge_count} 次`
               + `${gate.last_nudged_at ? ` @${gate.last_nudged_at}` : ''}`
               + ` · 超时策略 ${gate.policy_label}（${gate.timeout_left}）`,
-            next_action: `深链 ${host.prefix}/app/${view}/ → 「审批队列」卡片上点催办/升级/终止（人签）` }))
+            next_action: `深链 ${host.prefix}/app/${view}/ → 「审批队列」卡片上点催办/升级/终止（人签）`,
+            // **跨面板去重的判据**（机制只比较字符串，不解读）：同一个门 id ⇒ 与别块面板列的那条是同一件事，
+            // 外壳会合并成一条（见 `app-shell.mjs#foldPanelDuplicates`）。同一份 `ref` 让合并后的条目
+            // **仍然能点进 `/app/<view>/gate/<id>/` 对象页**（指派/关注/评论都在那一页上）；
+            // `view` 必须写出来：不写的话深链按"当前页的视角"拼 ⇒ 从工作台点过去会落在
+            // `home` 视角（那里没注册 `gate` 对象类，只能如实说"本视图里没有这个对象"）。
+            ref: { kind: 'gate', id: gate.approval_id, view, title: `审批门 ${gate.approval_id}` },
+            dedupe_key: `gate:${gate.approval_id}` }))
         }
       }
       if (!items.length) {

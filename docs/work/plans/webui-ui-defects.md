@@ -31,6 +31,34 @@
 `advice`/`authority`/`gates` 各 2、`change-detail` 1）；逐条修法见 EV-190 §5（夹具先登录，或按规则 12 / 29 §2.2
 删旧断言）。`storage`/`p0-no-node`/`AC-ADMIN-004` 的红在纯 HEAD 基线上同样存在，与本批无关。
 
+**P15 批已修（两个岗位重走全部业务步骤的走查；原始输出、截图与复跑命令见 `tmp/p15-report.md`）**：
+
+1. **行内动作「行里明明有值、表单却让你手抄」**（机制：外壳按**字段名**在行对象里取值 ⇒ 字段名 ≠ 行键名 = 表单空白）。
+   · 供应商「我已收到 @revN（认收）」的 `seen_rev`、「提问澄清」的 `rfq_rev`：行里只有 `rev` ⇒ 补 `seen_rev`/`rfq_rev`
+   （`src/domain/clarify/code/ui.mjs`，`exchange.inbox`）。
+   · 供应商「按最新 rev 重报」的 `package_id`/`lead_time_days`：那张表**没有「包」这一列**，包 id 无从抄起 ⇒ 行里补
+   `package_id`/`lead_time_days`（`src/domain/change/code/ui.mjs`，`exchange.requote-rail`）。
+   三处都在浏览器里做过改前/改后对照，并复读 `GET /api/ui/panels` 的行数据。机制坑与自查命令见
+   `src/system/webui/docs/row-action-prefill.md`。
+2. **这次走查的另一半结论**：APP 外壳里**已无**「教用户回终端」的文案（60 动作 / 117 面板 / 6329 通知产出全量扫描，
+   `python3`·`PYTHONPATH`·`g1side`·`终端` **零命中**）；两个岗位的写动作真点真落账、回执写明「账本多了哪几条、对方看得见什么」。
+
+**P15 新登记（本批允许面之外，未动手；逐条给复现与期望，见 `tmp/p15-report.md` §5）**：
+
+- **P1 · 真·回终端仍在五个旧 SSR 页里**：`/contractor/gates/`（21 处「终端」、40 条 `g1side` 命令）、`/contractor/deadlines/`（20 处）、
+  `/contractor/advice/`（自述「批准/提交报价/定标/发 PO/变更批准五件事**永远在终端做人签**」）、`/contractor/authority/`
+  （「越界只出命令，签字在终端」）。app 外壳不链接它们（`app.js` 里只有 1 处 `/plugins/`）⇒ 地址还活着的死页，且与 29 §2.2 冲突。
+  生成方 = `code/webui.mjs`（本批禁改）+ `code/{gate-timeline,advice-panel,authority-band,rfq-deadline}.mjs`。
+- **P1 · 审批队列没有「批准/驳回/退回重做」**：行内只有催办/升级/委托/终止（插件自述「每一步都真落账，且都不是"批准"」），
+  1200 个待批门没有任何一处告诉用户「这条门怎么才算批了」。期望：门卡片上的批准/驳回（人签）或「去点哪个动作就会批它」的映射。
+- **P1 · 授权区间在 APP 内无入口**：外壳 0 面板，读数只在旧页（而那页教你回终端）；`gate.escalate` 的字段帮助却让你去看那一页。
+- **P1 · 审计证据包导出/验证无入口**（DEF-029 未关）；**P1 · 谈判整条无入口**（DEF-020 未关，surface 里 `谈判`/`协商` 0 命中）；
+  **P1 · 用户空间插件在 APP 内无入口**（DEF-026 未关）。
+- **P2 · `gate.queue` 行内动作字段名 `gate_id` ≠ 行键 `id`/`approval_id`** ⇒ 从行里点「催办」要手抄门 id（同 §2.1 的机制坑，属 `system/approval`）。
+- **P2 · 降级原因第一行是机器码**（`calendar-not-set`/`no-query`/`no-ticket`/`no-lost-notice`），人话在第二行（外壳 `app.js` 渲染层）。
+- **存疑（不计入缺陷）**：顶栏「通知 0」与通知中心「共 0 条（后台产出）…（本页 600 条）」自相矛盾（同时 `items:600`、`produced:6329`）——
+  但同一天 02:00 首次加载时徽标是 573/600，且 `src/system/webui/code/**` 当时正被其它 agent 未提交地改着 ⇒ 留在干净 HEAD 上复验。
+
 ---
 
 ## 1. P0 —— 阻断一条真实闭环

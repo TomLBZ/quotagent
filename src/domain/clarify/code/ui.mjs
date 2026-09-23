@@ -264,6 +264,10 @@ export async function register(surface, host) {
           const ack = acked.get(entry.package_id)
           const promise = promised.get(entry.package_id)
           return { id: entry.package_id, package_id: entry.package_id, rev: rev ?? '—',
+            // P15：行内动作（认收 `exchange.ack` 要 `seen_rev`、提问 `exchange.ask` 要 `rfq_rev`）
+            // 的字段名与**行里的键名**对齐 —— 这一行已经显示「最新 rev」了，不该再让用户手抄一个数字。
+            // （外壳的预填机制就是「按字段名在行里取值」：名字对不上 = 表单空白。）
+            seen_rev: rev ?? '', rfq_rev: rev ?? '',
             items: entry.items.length,
             qty: entry.items.map((item) => `${item.item_id}×${item.qty}${item.unit ?? ''}`).join('、').slice(0, 120),
             quote_by: entry.quote_by || '—',

@@ -497,6 +497,16 @@ export function apply(ctx, config) {
       note: '通知偏好 / 已读 / **面板布局** / **筛选片**按**会话身份**落在服务端（0600 文件）：'
         + '换浏览器、换设备仍在；它不是账本事实（偏好不是业务承诺）。' } }
   }
+  /**
+   * 这次请求的会话身份在服务端存的**已读 id 集合**（通知窗口据此算"未读"；**不改任何东西**）。
+   * 未登录 ⇒ `null`：服务端不知道谁读过什么（那时界面如实说"未读只按本页算"，不猜、不冒充）。
+   */
+  const notifReadSetOf = (req) => {
+    const who = identity.whoOf(req)
+    if (!who.ok) return null
+    const stored = notifRead().identities[who.human]
+    return Array.isArray(stored?.read) ? stored.read : []
+  }
   /** 写一个身份的服务端通知状态（整体替换：标为已读/未读都要能生效）。 */
   const notifSave = (req, payload) => {
     const who = identity.whoOf(req)
@@ -2915,7 +2925,16 @@ ${sortForm('events', '筛查事件')}
     if (path === '/api/ui/plugins') return json(200, shell.pluginsJson())
     if (path === '/api/ui/notifications') {
       if (shedIfBusy()) return undefined
-      return json(200, { ok: true, items: shell.notifications(whom) })
+      // **通知窗口**（与面板同一套机制）：`w=1` + `pq.notify` ⇒ 只回这一页 + 在**全量**上算出来的
+      // 计数（共/命中/页/未读/还剩多少没翻到）；不带窗口 ⇒ 旧口径（整份 + 上限 600，一字不变）。
+      // "未读"由服务端按**会话身份**存的已读集合算（未登录 ⇒ `unread.known=false`，界面如实说）。
+      const out = shell.notifications(whom, windowSpec, notifReadSetOf(req))
+      return json(200, { ok: true, ...out,
+        identity: whom.ok ? { human: whom.human, side: whom.side } : null,
+        window: { ...windowSpec.source, notes: windowSpec.notes },
+        next_action: out.query === null || out.query === undefined
+          ? '要一页页翻（界面走的就是这条路）：带 `w=1&pq={"notify":{"size":25,"page":0}}`'
+          : '' })
     }
     // 通知偏好/已读的**服务端化**（0600 落盘，按会话身份）：GET 读、POST 写；未登录 ⇒ 401（不落盘）
     if (path === '/api/ui/notif-state' && method === 'POST') {
@@ -3206,10 +3225,15 @@ ${sortForm('events', '筛查事件')}
             what: '注册面自述：视图 / 面板 / 动作与命令（含入参 schema、权限、确认策略）/ 快捷键 / 通知源 / 状态项'
               + ' + 逐插件的贡献清单（卸载演示与审计据此对照）' },
           { path: `${prefix}/api/ui/panels`, method: 'GET', auth: 'none',
-            what: '面板数据（参数 view=home|<视图>）：通用形状 table/form/list/kv/metrics/html，由插件自己的 data() 产出' },
+            what: '面板数据（参数 view=home|<视图>）：通用形状 table/form/list/kv/metrics/html，由插件自己的 data() 产出；'
+              + '带 `w=1` ⇒ 服务端窗口（筛选/排序/分页与计数都在全量行集上算，只回这一页）' },
           { path: `${prefix}/api/ui/notifications`, method: 'GET', auth: 'none',
-            what: '通知中心（插件通知源 + 动作结果队列：进度 / 失败原因 / next_action / 待人工门）',
-            auth_note: '本路由**不强制**身份：未登录也能调（返回匿名视图）；带会话时按会话身份过滤' },
+            what: '通知中心（插件通知源 + 动作结果队列：进度 / 失败原因 / next_action / 待人工门）；'
+              + '带 `w=1&pq={"notify":{size,page,kw,chip,tag,level,muted}}` ⇒ **通知窗口**：只回这一页，'
+              + '并把在**全量产出**上算出来的数字一起给（共/命中/第 P/PP 页/未读/还剩多少没翻到）⇒ 全部通知都翻得到；'
+              + '不带 `w` ⇒ 旧口径（整份 + 上限 600 条，并如实报 `dropped`）',
+            auth_note: '本路由**不强制**身份：未登录也能调（返回匿名视图）；带会话时按会话身份过滤，'
+              + '并且**未读**按该身份在服务端存的已读集合算（未登录 ⇒ `unread.known=false`，界面如实说）' },
           { path: `${prefix}/api/ui/notif-state`, method: 'GET', auth: 'identity',
             what: '通知偏好 / 已读 / **面板布局（顺序·折叠·隐藏）** / **筛选片**的**服务端状态**'
               + '（按会话身份；0600 文件 `<ui_shared>/webui/notif-state.json`）：换浏览器/换设备仍在；'

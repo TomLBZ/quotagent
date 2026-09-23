@@ -624,7 +624,10 @@ export async function register(surface, host) {
           body: `对象 ${gate.ref}`, next_action: '打开这条门看卡在哪/等多久；门本身的人签动作在「授标与订单」里，界面不代签',
           // 门自己也是一个**可协作的对象**（`/app/<view>/gate/<id>/`）：指派/关注/评论由外壳的协作面提供，
           // 这里只声明"门后面那个对象是哪一类"（scope→kind 是本插件的领域知识）。
-          ref: { kind: 'gate', id, title: `审批门 ${id}` },
+          ref: { kind: 'gate', id, view: 'contractor', title: `审批门 ${id}` },
+          // **跨面板去重的判据**：同一批门在 `system/approval#gate.todo` 里已经列过一次 ⇒ 键相同，
+          // 外壳合并成一条（不重复占位）；`ref` 保留 ⇒ 合并后仍能从这条点进门的对象页。
+          dedupe_key: `gate:${id}`,
           action: gate.scope === 'change.approve' ? 'change.approve'
             : (gate.scope === 'award.commit' ? 'award.commit' : '') ,
           label: gate.scope === 'change.approve' ? '去批准这条变更' : '去人签' }))
@@ -733,7 +736,8 @@ export async function register(surface, host) {
       const items = []
       for (const [id, item] of last) {
         if (item.type === 'approval/granted' || item.type === 'approval/aborted') continue
-        items.push({ id: `gate:${id}`, level: 'warn', at: '', ref: { kind: 'gate', id, title: `审批门 ${id}` },
+        items.push({ id: `gate:${id}`, level: 'warn', at: '',
+          ref: { kind: 'gate', id, view: 'contractor', title: `审批门 ${id}` },
           title: `人工门 ${id} 还在等（${item.scope}）`,
           body: `对象 ${item.ref} —— 承诺类动作没有人工批准就落不了账`,
           next_action: '点「打开 审批门 …」进这条门的对象页（可以指派/评论）；'

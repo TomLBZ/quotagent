@@ -232,6 +232,9 @@ export async function register(surface, host) {
           const done = superseded.has(`${quote.quote_id}#${latest?.rev ?? ''}`)
           const open = requotes.find((entry) => (entry.quotes ?? []).includes(quote.quote_id))
           return { id: quote.quote_id, quote_id: quote.quote_id, item_id: quote.item_id,
+            // P15：行内动作 `exchange.requote-now` 要的是 `package_id`（必填）——而这张表**没有**「包」这一列，
+            // 用户在这一行上根本无从抄起。把包 id 与旧交期带进行里：表单据此预填，人只需确认/改数。
+            package_id: quote.package_id, lead_time_days: quote.lead_time_days ?? '',
             unit_price_cents: quote.unit_price_cents, based_on_rev: base, latest_rev: latest ? latest.rev : '—',
             status: stale ? (done ? '已被新版作废（superseded）' : '需作废（待落账）') : 'active',
             rev_diff: diff || '（无可比版本：只有一版）',

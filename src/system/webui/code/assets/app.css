@@ -574,6 +574,12 @@ table.q-table th .q-sortmark { color: var(--accent); }
 .q-notify-pages { position: sticky; bottom: 0; background: var(--bg-raise); padding: 6px 0;
   border-top: 1px solid var(--line); }
 .q-qcount[data-q-count="notify"] { margin: 0; }
+/*
+ * 通知中心：列表跟着**正文**一起滚（`.q-modal-body` 是卡片里那个可滚的块），不要再让列表自己也滚一遍
+ * —— 两层滚动条在窄屏上会让"到底还有没有下一条"变得没法回答（P14 走查实测：外层正文 + 内层列表两个
+ * scrollport 重叠时，底部吸底的计数/翻页条会盖住列表最后几行）。
+ */
+#q-modal[data-kind="q-notify"] .q-modal-body > ul { max-height: none; }
 
 /* ---- 窄屏：查询条不挤成一行糊字 ---- */
 @media (max-width: 560px) {

@@ -17,6 +17,12 @@
  *   ② `panel`  一块可渲染数据：`{plugin_id, id, title, view, order, kind, when?, data(ctx)}`；
  *              `data()` 返回**通用形状**（`table` / `form` / `list` / `kv` / `metrics` / `html`），
  *              外壳只按形状渲染，不解读语义；
+ *              `list` 形状的条目可以带 **`dedupe_key`**（不透明串，如 `gate:ap-…`）：同一个键被**两块不同面板**
+ *              各列一次时，外壳合并成一条（先出现的赢，级别取更急的一档，`ref`/`action` 缺的补上 ⇒ 合并后仍能
+ *              点进对象页；`merged_count`/`also_from` 如实写清还有哪块面板也列了它）。判据**完全由插件给**，
+ *              外壳只比较字符串；同一块面板内部的重复不动。为什么要这条：同一批人工门被两块面板各列一遍，会让
+ *              「有 N 件需要你处理」的计数翻倍（口径见 `app-shell.mjs#foldPanelDuplicates` 与
+ *              `docs/scale-and-performance.md`）；
  *   ③ `action` 动作/命令：`{plugin_id, id, title, views, group?, order?, inline?, icon?,
  *              input:{fields:[{name,label,type,required,min,max,pattern,options,help}]},
  *              permission:'none'|'human-signature', confirm:{required,message}, server(ctx, input)}`

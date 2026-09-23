@@ -121,9 +121,11 @@
     }
     return out
   }
-  /** 把当前偏好推到服务端（有 300ms 去抖：打开通知中心会连续标已读，不必每次都打一次）。 */
+  /** 把当前偏好推到服务端（有 300ms 去抖：打开通知中心会连续标已读，不必每次都打一次）。
+   *  `immediate=true` 时**立刻发**并返回这次 POST 的 promise —— 通知中心打开时要用它保证
+   *  「已读先落服务端、再取未读数」的顺序（否则界面上的"未读"是标已读之前的读数）。 */
   function pushNotifState(immediate = false) {
-    if (notifSource !== 'server') return
+    if (notifSource !== 'server') return Promise.resolve(null)
     if (notifPushTimer) clearTimeout(notifPushTimer)
     const send = async () => {
       notifPushTimer = null
@@ -135,9 +137,11 @@
           out.next_action || '偏好仍写在本浏览器（localStorage）；服务恢复后再点一次「标为已读」即可')
         paintBadge()
       }
+      return out
     }
-    if (immediate) { send(); return }
+    if (immediate) return send()
     notifPushTimer = setTimeout(send, 300)
+    return Promise.resolve(null)
   }
 
   // ---------------------------------------------------------------- 协作类的「我的 / 我指派的 / 全部」筛选
@@ -1253,7 +1257,8 @@
     const href = refLink(row.ref)
     if (!href) return ''
     return `<a class="q-deeplink" href="${attr(href)}" data-open-object="1" data-k="${attr(row.ref.kind)}"`
-      + ` data-id="${attr(row.ref.id)}" title="打开 ${attr(refLabel(row.ref))} 的对象页（可复制走）">打开 →</a>`
+      + ` data-v="${attr(row.ref.view || '')}" data-id="${attr(row.ref.id)}"`
+      + ` title="打开 ${attr(refLabel(row.ref))} 的对象页（可复制走）">打开 →</a>`
   }
 
   // ---------------------------------------------------------------- 可编辑表格的取值（编辑优先，原值兜底）
@@ -1505,13 +1510,18 @@
     const all = data.items || []
     const buckets = bucketsOf(data, all)
     const current = filterOf(panel.id)
+    // **跨面板去重**（机制）：这一块里有 N 条与别块面板列的是同一件事（外壳在服务端合并了）——
+    // 如实说出来，免得用户以为"少了几条"。合并后的条目带着 `ref`，仍然可以点进对象页。
+    const dedupeNote = Number(data.deduped) > 0
+      ? `<p class="q-hint" data-dedupe="1" data-dedupe-count="${attr(data.deduped)}">${
+        esc(data.dedupe_note || `跨面板去重：合并了 ${data.deduped} 条重复（同一对象被两块面板各列一次）`)}</p>` : ''
     // 桶筛选片的数字：服务端窗口开路时用**服务端在全集上算好的桶计数**（否则只有一页，片上的数字会跟着变小）
     const counts = server ? { '': Number(data.query.total_full) || 0, ...(data.query.bucket_counts || {}) } : null
     const bar = bucketBar(panel.id, buckets, current, all, counts)
     // 服务端窗口：桶筛选**已经在服务端做过**（`pq.<面板>.bucket`），这里别再筛第二遍（会把窗口再切小）
     const items = server ? all : byBucket(all, current)
     if (!items.length) {
-      return bar + stateBlock({ kind: 'empty',
+      return bar + dedupeNote + stateBlock({ kind: 'empty',
         title: current === '' ? '没有条目' : '这一桶里没有条目（不是坏了）',
         reason: current === '' ? (data.reason || 'no-items') : `bucket=${current}`,
         next_action: data.next_action || (current === '' ? '' : '点筛选片上的「全部」看所有条目') })
@@ -1536,16 +1546,19 @@
         + `${item.level ? badge(item.level, item.level === 'bad' ? 'bad' : (item.level === 'warn' ? 'warn'
           : (item.level === 'ok' ? 'ok' : ''))) + ' ' : ''}`
         + `<span class="q-li-title">${esc(item.title || item.label || '')}</span>`
+        + `${item.merged_count > 1 ? ` <span class="q-tag" data-merged-count="${attr(item.merged_count)}"`
+          + ` title="${attr(`这一条在 ${item.merged_count} 块面板里都出现过，外壳合并成了一条：${
+            (item.also_from || []).map((row) => row.panel_id).join(' / ')}`)}">合并 ${item.merged_count} 块</span>` : ''}`
         + `${item.bucket_label ? ` <span class="q-tag q-bucket-tag">${esc(item.bucket_label)}</span>` : ''}`
         + `${item.body ? `<div class="q-li-body">${esc(item.body)}</div>` : ''}`
         + `${action || href ? `<div class="q-actions">${action
           ? `<button class="primary" data-action="${attr(action.id)}" data-preset='${attr(JSON.stringify(item.ref || {}))}'>`
             + `${esc(item.label || action.title)}</button>` : ''}${href
           ? `<a class="q-deeplink" href="${attr(href)}" data-open-object="1" data-k="${attr(item.ref.kind)}"`
-            + ` data-id="${attr(item.ref.id)}">打开 ${esc(refLabel(item.ref))} →</a>` : ''}</div>` : ''}`
+            + ` data-v="${attr(item.ref.view || '')}" data-id="${attr(item.ref.id)}">打开 ${esc(refLabel(item.ref))} →</a>` : ''}</div>` : ''}`
         + `${item.next_action ? `<div class="q-hint">下一步：<code>${esc(item.next_action)}</code></div>` : ''}</li>`
     }).join('')
-    return bar + qbar + `<ul class="q-list">${listBody}</ul>`
+    return bar + dedupeNote + qbar + `<ul class="q-list">${listBody}</ul>`
   }
 
   function renderData(panel, data) {
@@ -1784,7 +1797,8 @@
       + `<div class="q-panel-head"><button class="q-drag" draggable="true" data-drag="${attr(panel.id)}"`
       + ` title="拖动换顺序（键盘：焦点在这里按 Alt+↑ / Alt+↓）" aria-label="拖动排序">⠿</button>`
       + `<h3>${esc(panel.title)}${refHref ? ` <a class="q-deeplink" href="${attr(refHref)}"`
-        + ` data-open-object="1" data-k="${attr(panelRef.kind)}" data-id="${attr(panelRef.id)}"`
+        + ` data-open-object="1" data-k="${attr(panelRef.kind)}" data-v="${attr(panelRef.view || '')}"`
+        + ` data-id="${attr(panelRef.id)}"`
         + ` title="打开 ${attr(refLabel(panelRef))} 的对象页（可复制分享）">打开对象 →</a>` : ''}</h3>`
       + `<button class="q-panel-btn" data-collapse="${attr(panel.id)}" aria-expanded="${collapsed ? 'false' : 'true'}"`
       + ` title="${collapsed ? '展开这块' : '收起这块（收起后标题与深链仍在）'}">${collapsed ? '▸' : '▾'}</button></div>`
@@ -1929,13 +1943,16 @@
       + `${item.level ? badge(item.level, item.level === 'bad' ? 'bad' : (item.level === 'warn' ? 'warn'
         : (item.level === 'ok' ? 'ok' : ''))) + ' ' : ''}`
       + `<span class="q-li-title">${esc(item.title || '')}</span>`
+      + `${item.merged_count > 1 ? ` <span class="q-tag" data-merged-count="${attr(item.merged_count)}"`
+        + ` title="${attr(`这一条在 ${item.merged_count} 块面板里都出现过，外壳合并成了一条（计数不重复算）：${
+          (item.also_from || []).map((row) => row.panel_id).join(' / ')}`)}">合并 ${item.merged_count} 块</span>` : ''}`
       + `${item.bucket_label ? ` <span class="q-tag q-bucket-tag">${esc(item.bucket_label)}</span>` : ''}`
       + `${item.body ? `<div class="q-li-body">${esc(item.body)}</div>` : ''}`
       + `${item.next_action ? `<div class="q-hint">${esc(item.next_action)}</div>` : ''}`
       + `${action || href ? `<div class="q-actions">${action ? `<button class="primary" data-action="${attr(action.id)}"`
         + ` data-preset='${attr(JSON.stringify(item.ref || {}))}'>${esc(item.label || action.title)}</button>` : ''}`
         + `${href ? `<a class="q-deeplink" href="${attr(href)}" data-open-object="1" data-k="${attr(item.ref.kind)}"`
-          + ` data-id="${attr(item.ref.id)}">打开 ${esc(refLabel(item.ref))} →</a>` : ''}</div>` : ''}</li>`
+          + ` data-v="${attr(item.ref.view || '')}" data-id="${attr(item.ref.id)}">打开 ${esc(refLabel(item.ref))} →</a>` : ''}</div>` : ''}</li>`
   }
 
   // ---------------------------------------------------------------- 主区渲染
@@ -2482,7 +2499,10 @@
     root.querySelectorAll('[data-open-object]').forEach((node) => node.addEventListener('click', (ev) => {
       if (ev.metaKey || ev.ctrlKey) return
       ev.preventDefault()
-      navigate(state.route.view, node.dataset.k, node.dataset.id)
+      // 视角以**这一条自己声明的**为准（`data-v`），没声明才按当前页的视角 —— 与 `refLink()`
+      // 拼 href 用的是同一条规则（否则 href 写着 `/app/contractor/gate/…`、点下去却跳到当前视角，
+      // 而那个视角可能根本没注册这个对象类，只能如实说"本视图里没有这个对象"：P14 走查实测）。
+      navigate(node.dataset.v || state.route.view, node.dataset.k, node.dataset.id)
     }))
     root.querySelectorAll('[data-copy]').forEach((node) =>
       node.addEventListener('click', () => copyText(node.dataset.copy)))
@@ -3364,6 +3384,8 @@
     const modal = el('q-modal')
     const restore = modalOpener
     modalOpener = null
+    // 通知中心的异步取数在弹层关掉之后可能才回来 ⇒ 记下"已关"，回来时不再往空气里画
+    state.notifyOpen = false
     if (modal) modal.remove()
     const app = el('q-app')
     if (app) app.removeAttribute('inert')
@@ -3432,98 +3454,144 @@
     input.focus(); draw()
   }
 
-  // ---------------------------------------------------------------- ① 通知中心（未读 / 标已读 / 按对象跳转 / 不刷屏）
+  // ---------------------------------------------------------------- ① 通知中心（**服务端窗口**：数字如实 + 真能翻到底）
   const LEVEL_RANK = { bad: 3, warn: 2, info: 1, ok: 1 }
   const LEVEL_TEXT = { bad: '失败/被拒', warn: '待办', info: '进展', ok: '进展' }
   /**
-   * 通知中心的**查询状态**（会话内）：关键字 / 每页条数 / 页码 / 级别筛选。
-   * 为什么也要有它：规模下"先给 12 条 + 还有 N 条"在多到几百条时等于没法用（点一次只多 12 条、
-   * 也不能搜"那条讲哪个报价的"）。这里与各面板里的表同一口径：全集计数 + 关键字 + 页码。
+   * 通知中心的**查询状态**（会话内）：关键字 / 每页条数 / 页码 / 级别 / 筛选片 / 协作标签。
+   * 为什么不再在本地筛选分页：通知的**全量产出**可以有好几千条（规模数据下 6324 条），界面不可能把它整个
+   * 拉下来再自己截断 —— 那正是「共 600 条」说谎的根源（界面上写着 600，后台产出 6324，剩下的 5724 条
+   * 哪儿都点不到）。现在与各面板**同一套**：请求带上 `w=1` + `pq.notify` → 服务端在**全量条目**上
+   * 筛选 → 排序 → 分页 → 只回这一页，并把在全集上算出来的数字一并给出（共 / 命中 / 第 P/PP 页 / 未读 /
+   * 还剩多少条没翻到）→ 界面**照抄**（`data-notify-*` 就是可对账的读数）。
    */
   const NOTIF_SIZES = [10, 25, 50, 100, 250]
   state.notifKw = String(state.notifKw || '')
   state.notifSize = NOTIF_SIZES.includes(Number(state.notifSize)) ? Number(state.notifSize) : 25
   state.notifPage = Math.max(0, Number(state.notifPage) || 0)
   state.notifFilter = state.notifFilter || 'all'
-  /** 通知的**稳定 id**：同一件事在多次轮询里 id 不变 —— 已读状态才站得住（否则刷新就"又未读"）。 */
-  const notifId = (item) => String(item.id || `${item.plugin_id || ''}:${item.title || ''}`)
-  /**
-   * 合并「插件通知源（每次渲染实时 poll）」+「本次会话的动作结果」，并**就地折叠重复项**：
-   * 同一 id 只出一条（带 ×N）。急的排前面。这是"通知多时不刷屏"的第一道闸。
-   */
-  function notifList() {
-    const seen = new Map()
-    for (const item of [...state.notifications, ...state.results]) {
-      const id = notifId(item)
-      if (seen.has(id)) {
-        const prev = seen.get(id)
-        prev.count += 1
-        if (item.level === 'bad') prev.level = 'bad'
-        continue
-      }
-      seen.set(id, { ...item, id, count: 1, unread: !state.notif.read.has(id),
-        rank: LEVEL_RANK[item.level] ?? 1 })
-    }
-    return [...seen.values()].sort((left, right) => (right.rank - left.rank)
-      || String(right.at || '').localeCompare(String(left.at || '')))
+  /** 通知窗口的这一页要什么（形状与面板的 `pq` 同一套；级别/静音/筛选片都由客户端显式给）。 */
+  const notifSpecOf = (page, extra = null) => ({ size: state.notifSize,
+    page: Math.max(0, Number(page ?? state.notifPage) || 0),
+    kw: String(state.notifKw || ''), chip: state.notifFilter || 'all', tag: String(filterOf('notifTag') || ''),
+    level: state.notif.minLevel, muted: state.notif.muted, ...(extra || {}) })
+  const notifUrl = (page, extra) => `/api/ui/notifications?w=1&pq=${
+    encodeURIComponent(JSON.stringify({ notify: notifSpecOf(page, extra) }))}`
+  /** 上一次**成功取到**的那一页（服务端给的数字与行；读不到时保留并标陈旧，不冒充空）。 */
+  const notifQuery = () => ((state.notify && state.notify.query) || null)
+  const notifPageItems = () => ((state.notify && state.notify.items) || [])
+    .map((item) => { const id = String(item.id || ''); return { ...item, id,
+      count: Number(item.count) || 1, unread: !state.notif.read.has(id) } })
+  const notifUnreadKnown = () => notifQuery()?.unread?.known === true
+  /** 未读：服务端按**会话身份的已读记录**算（`unread.known`）；未登录 ⇒ 只按本页算（界面如实说）。 */
+  function unreadCount() {
+    const q = notifQuery()
+    if (!q) return 0
+    if (q.unread?.known === true) return Number(q.unread.total) || 0
+    return notifPageItems().filter((item) => item.unread).length
   }
-  /** 偏好过滤（静音某个插件 / 只看 warn 以上）—— 第二道闸：用户选择"哪些事值得打断我"。 */
-  const notifVisible = () => {
-    const minRank = LEVEL_RANK[state.notif.minLevel] ?? 1
-    return notifList().filter((item) => !state.notif.muted.includes(item.plugin_id)
-      && (LEVEL_RANK[item.level] ?? 1) >= minRank)
-  }
-  const unreadCount = () => notifVisible().filter((item) => item.unread).length
   function paintBadge() {
     const node = el('q-notify-count')
     if (!node) return
+    const q = notifQuery()
+    const known = notifUnreadKnown()
     const unread = unreadCount()
-    const total = notifVisible().length
+    const total = q ? Number(q.produced) || 0 : 0
     node.textContent = String(unread)
     node.className = `q-badge ${unread || state.notifError ? 'warn' : ''}`
-    node.title = state.notifError
-      ? `未读 ${unread} / 共 ${total} 条（**这两行是上一次成功读到的**：现在读不到通知源 ——`
-        + ` ${state.notifError.code}；点开看原因与下一步）`
-      : `未读 ${unread} / 共 ${total} 条（点开是通知中心）`
+    const stale = state.notifError
+      ? `**这一行是上一次成功读到的**：现在读不到通知源 —— ${state.notifError.code}（点开看原因与下一步）`
+      : '点开是通知中心'
+    node.title = !q
+      ? '通知还没读到（点开通知中心看原因）'
+      : (known ? `未读 ${unread} / 共 ${total} 条 · ${stale}`
+        : `未读 ${unread}（**未登录**：服务端不知道谁读过什么，这个数只按本页算）/ 共 ${total} 条 · ${stale}`)
   }
   function markRead(ids, value = true) {
-    for (const id of ids) { if (value) state.notif.read.add(id); else state.notif.read.delete(id) }
+    for (const id of ids) { if (value) state.notif.read.add(String(id)); else state.notif.read.delete(String(id)) }
     saveNotif()
-    pushNotifState()          // 已读/未读一并落服务端（跨浏览器/跨设备仍在）
+    pushNotifState()          // 已读/未读一并落服务端（跨浏览器/跨设备仍在）—— 未读数由服务端据此算
     paintBadge()
   }
+  /**
+   * 取通知窗口的**这一页**（只回这一页；页号越界由服务端夹回合法页 ⇒ 取回后跟着服务端的页号走，
+   * 否则界面上的页号与这一页的内容会对不上）。
+   */
+  async function fetchNotify(page) {
+    state.notifyBusy = true
+    const out = await getJson(notifUrl(page))
+    state.notifyBusy = false
+    if (!out.ok) {
+      state.notifyError = { code: out.code || 'notifications-read-failed', reason: out.reason || '',
+        next_action: out.next_action || '点顶部「重载」重试' }
+      paintBadge()
+      return false
+    }
+    state.notifyError = null
+    state.notify = { at: new Date().toISOString(), query: out.query || null, items: out.items || [],
+      stats: out.stats || null }
+    // 徽标与通知中心**共用同一份读数**（`chip_counts`/`unread` 都是在全集上算的，与筛选/关键字无关）
+    state.notifPoll = { at: state.notify.at, query: state.notify.query, items: state.notify.items }
+    if (out.query) {
+      state.notifPage = Math.max(0, Number(out.query.page) || 0)
+      state.notifSize = Number(out.query.size) || state.notifSize
+    }
+    paintBadge()
+    return true
+  }
 
-  /** 通知中心：级别筛选 / 每插件静音 / 全部标已读 / 按对象跳转 / 分批展开（不再一次糊 200 条）。 */
-  function openNotify() {
-    const filter = state.notifFilter || 'all'
-    const all = notifVisible()
-    const counts = { all: all.length, unread: all.filter((item) => item.unread).length,
-      todo: all.filter((item) => item.level === 'warn' || item.level === 'bad').length,
-      bad: all.filter((item) => item.level === 'bad').length }
-    const shown = all.filter((item) => (filter === 'unread' ? item.unread
-      : (filter === 'todo' ? (item.level === 'warn' || item.level === 'bad')
-        : (filter === 'bad' ? item.level === 'bad' : true))))
-    // **协作筛选**（「我的 / 我指派的 / @我 / 我关注的」）：通知可以声明 `tags`（外壳只搬运字符串）。
-    // 选中的标签存在本浏览器（`quotagent.filters.notifTag`）；它与上面的级别/未读筛选叠加。
-    const tagCounts = {}
-    for (const item of all) for (const tag of (item.tags || [])) tagCounts[tag] = (tagCounts[tag] || 0) + 1
-    const tags = Object.keys(tagCounts).sort((left, right) => tagCounts[right] - tagCounts[left]
-      || (left < right ? -1 : 1))
-    const tag = tags.includes(filterOf('notifTag')) ? filterOf('notifTag') : ''
-    const afterTag = tag === '' ? shown : shown.filter((item) => (item.tags || []).includes(tag))
-    // **关键字搜索**（同一套机制：标题/正文/下一步/插件/对象 id 都算命中）+ **真分页**
-    // （原来是"先给 12 条 + 还有 N 条"，规模下点一次只多 12 条：这里换成页码/每页行数，
-    //  并且计数都在**全集**上算 —— 与工作台上那些表同一口径）。
-    const kw = String(state.notifKw || '').trim().toLowerCase()
-    const picked = kw === '' ? afterTag : afterTag.filter((item) => [
-      item.title, item.body, item.next_action, item.plugin_id, item.ref?.kind, item.ref?.id,
-      item.ref?.title, ...(item.tags || [])].map(textOf).join(' \u0000 ').toLowerCase().includes(kw))
-    const size = NOTIF_SIZES.includes(Number(state.notifSize)) ? Number(state.notifSize) : 25
-    const pages = Math.max(1, Math.ceil(picked.length / size))
-    const at = Math.min(Math.max(0, Number(state.notifPage) || 0), pages - 1)
-    const page = picked.slice(at * size, at * size + size)
-    state.notifPage = at
-    const plugins = [...new Set(all.map((item) => item.plugin_id))].sort()
+  /**
+   * 通知中心（弹层）：**服务端窗口**的一页 + 在**全量产出**上算出来的计数。
+   *
+   * 打开 / 翻页 / 搜索 / 换筛选片都走同一个入口：先画上一次取到的那一页（或"正在取这一页…"），
+   * 再取这一次的窗口 —— **只回这一页**（不是把全量拉下来自己截），数字全部来自服务端。
+   * 顶栏那句是**如实**的：`共 N 条（后台产出）· 已显示 N 条 · 剩余 M 条`，与 `/api/ui/status` 的
+   * 「通知」那一行同源（`data-notify-head` 上的属性就是可对账的读数）。
+   */
+  async function openNotify() {
+    state.notifyOpen = true
+    renderNotify()
+    await fetchNotify(state.notifPage)
+    if (!state.notifyOpen) return
+    // 打开即把**本页**标为已读（与邮件客户端一致；想看未读的用「未读」筛选片）。
+    // 登录时先把已读**立即**写到服务端、再取一次这一页 ⇒ 界面上的"未读"与每条的小圆点同一时刻，不自相矛盾。
+    const fresh = notifPageItems().filter((item) => item.unread)
+    if (fresh.length) {
+      markRead(fresh.map((item) => item.id), true)
+      if (notifUnreadKnown()) {
+        await pushNotifState(true)
+        if (!state.notifyOpen) return
+        await fetchNotify(state.notifPage)
+      }
+    }
+    if (state.notifyOpen) renderNotify()
+  }
+
+  /** 画通知中心（用**上一次成功取到**的那一页 + 服务端给的计数；取数中则如实标"正在取这一页…"）。 */
+  function renderNotify() {
+    const q = notifQuery()
+    const page = notifPageItems()
+    const busy = state.notifyBusy === true
+    const filter = String((q && q.chip) || state.notifFilter || 'all')
+    const counts = (q && q.chip_counts) || { all: null, unread: null, todo: null, bad: null }
+    const unreadKnown = notifUnreadKnown()
+    const produced = q ? Number(q.produced) || 0 : 0     // 后台产出（全部，可一页页翻到）
+    const shown = q ? Number(q.end) || 0 : 0             // 已显示 = 按页推进已经到过的条数
+    const rest = q ? Number(q.rest) || 0 : 0             // 剩余 = 还没翻到的条数
+    const matched = q ? Number(q.matched) || 0 : 0       // 当前筛选/关键字命中的条数
+    const pageAt = q ? (Number(q.page) || 0) + 1 : 1
+    const pages = q ? Math.max(1, Number(q.pages) || 1) : 1
+    const size = q ? Number(q.size) || state.notifSize : state.notifSize
+    const kw = String(state.notifKw || '')
+    const tag = String(filterOf('notifTag') || '')
+    const tags = (q && q.tags) || []
+    const tagCounts = (q && q.tag_counts) || {}
+    const pageUnread = page.filter((item) => item.unread).length
+    const readCap = 500        // 已读记录的容量（本浏览器 500 条；服务端 1000 条，见 notif-state 的 bounds）
+    // 静音下拉的候选：**通知源清单**（`/api/ui/surface` 的 `notification_sources` 元数据）——
+    // 不必把全量通知拉下来才知道"有哪些插件在发通知"。
+    const plugins = [...new Set([...(state.surface.notification_sources || []).map((item) => item.plugin_id),
+      ...state.notif.muted, ...page.map((item) => item.plugin_id).filter(Boolean)])].sort()
     const groups = [['bad', '失败 / 被拒'], ['warn', '要你处理'], ['info', '进展与信息']]
     const rows = []
     for (const [level, title] of groups) {
@@ -3556,30 +3624,55 @@
       }
     }
     const body = `<h2 id="q-action-title">通知中心</h2>`
-      + `<p class="q-src">动作结果、插件通知源与待人工门都排在这里（有界、不编造）；`
-      + `同一件事只出一条（重复的合成 <code>×N</code>）。规模大时用关键字与页码翻，`
-      + `计数（共 / 命中 / 未读）都在**全集**上算 —— 与各面板里的表同一口径。</p>`
-      + `${state.notifError ? `<div class="q-state warn" data-state="degraded" data-state-reason="${attr(state.notifError.code)}">`
-        + `<b>通知没读到最新的一版（不是"没有通知"）</b> <code>${esc(state.notifError.code)}</code>`
-        + `<div>下面这份是**上一次成功读到**的（${esc(String(state.notifReadAt || '').slice(0, 19))}）：`
-        + `${esc(state.notifError.reason || '')}</div>`
-        + `<div class="q-hint">下一步：${esc(state.notifError.next_action || '点顶部「重载」重试')}</div></div>` : ''}`
+      + `<p class="q-src">同一件事只出一条（重复的合成 <code>×N</code>，跨插件的重复在服务端就合并了）。`
+      + `**这一页由服务端按窗口给**（与各面板里的表同一套机制）：「共 / 已显示 / 剩余」都是在**全量产出**上`
+      + `算出来的（与 <code>/api/ui/status</code> 的「通知」那一行同源）——「已显示」= 按页推进已到过的条数、`
+      + `「剩余」= 还没翻到的条数，点「末页 ⏭」能一直翻到底，不存在"只给你前 600 条"。</p>`
+      + `${state.notifyError ? `<div class="q-state warn" data-state="degraded" data-state-reason="${attr(state.notifyError.code)}">`
+        + `<b>通知没读到最新的一版（不是"没有通知"）</b> <code>${esc(state.notifyError.code)}</code>`
+        + `<div>下面这份是**上一次成功读到**的（${esc(String((state.notify && state.notify.at) || '').slice(0, 19))}）：`
+        + `${esc(state.notifyError.reason || '')}</div>`
+        + `<div class="q-hint">下一步：${esc(state.notifyError.next_action || '点顶部「重载」重试')}</div></div>` : ''}`
+      // **正文**（`.q-modal-body`：卡片是 flex 列、max-height 88vh —— 正文滚、底部计数/翻页条吸底）。
+      // 这既是外壳既有的弹层口径（`app.css` 的 `#q-modal .q-modal-body`），也让通知列表拿到剩下的全部高度。
+      + `<div class="q-modal-body">`
       + `<div class="q-notify-tools">`
       + `<label class="q-qkw">搜通知：<input type="search" data-notify-kw="1" value="${attr(state.notifKw || '')}"`
       + ` placeholder="标题 / 正文 / 插件 / 对象 id…" autocomplete="off" aria-label="在通知里搜关键字"></label>`
       + `<button data-notify-clear="1"${(kw || filter !== 'all' || tag) ? '' : ' disabled'}>清空筛选</button>`
-      + `<span class="q-qcount" data-q-count="notify" data-count-total="${attr(all.length)}"`
-      + ` data-count-matched="${attr(picked.length)}" data-count-window="${attr(page.length)}"`
-      + ` data-page="${attr(at + 1)}" data-pages="${attr(pages)}" data-unread="${attr(counts.unread)}">`
-      + `<span>共 <b>${all.length}</b> 条</span><span>命中 <b>${picked.length}</b></span>`
-      + `<span>未读 <b>${counts.unread}</b></span>`
-      + `<span>第 <b>${at + 1}</b>/${pages} 页（本页 ${page.length} 条）</span></div></div>`
+      + `<span class="q-qcount" data-q-count="notify" data-notify-head="1"`
+      + ` data-count-produced="${attr(produced)}" data-count-total="${attr(produced)}"`
+      + ` data-count-shown="${attr(shown)}" data-count-rest="${attr(rest)}"`
+      + ` data-count-matched="${attr(matched)}" data-count-window="${attr(page.length)}"`
+      + ` data-count-full="${attr(produced)}" data-page="${attr(pageAt)}" data-pages="${attr(pages)}"`
+      + ` data-page-size="${attr(size)}" data-unread-known="${unreadKnown ? 1 : 0}"`
+      + ` data-unread="${attr(unreadKnown ? (Number(counts.unread) || 0) : '')}" data-q-server="1"`
+      + `${busy ? ' data-q-fetching="1"' : ''}>`
+      + `<span>共 <b data-notify-produced="1">${produced}</b> 条（后台产出）</span>`
+      + `<span>已显示 <b data-notify-shown="1">${shown}</b> 条</span>`
+      + `<span>剩余 <b data-notify-rest="1">${rest}</b> 条</span>`
+      + `<span>命中 <b>${matched}</b></span>`
+      + (unreadKnown ? `<span>未读 <b data-notify-unread="1">${Number(counts.unread) || 0}</b></span>`
+        : `<span>未读 <b data-notify-unread="1">${pageUnread}</b>（**未登录 ⇒ 只按本页算**）</span>`)
+      + `<span>第 <b data-notify-page-num="1">${pageAt}</b>/<b>${pages}</b> 页（本页 <b>${page.length}</b> 条`
+      + ` · 每页 ${size}）</span>`
+      + (q ? `<span class="q-qhint" data-q-server="1" title="这一页由服务端在**全量产出**上筛选/排序/分页后下发；`
+        + `计数、未读与'还剩多少没翻到'都是服务端算的 —— 客户端手里只有这一页">服务端窗口</span>` : '')
+      + (busy ? `<span class="q-qhint" data-q-fetching="1">正在取这一页…（数字还是上一次的）</span>` : '')
+      // 收口：计数块是 `<span class="q-qcount">`（不是 div）⇒ 必须用 `</span>` 结束，否则浏览器会把
+      // 下面整段内容挤出 `.q-card`（P14 走查实测：老代码写成 `</div></div>`，弹层因此被压成一条窄栏、
+      // 计数与列表浮在卡片外面）。
+      + `</span></div>`
       + `<div class="q-notify-tools">`
-      + `<span class="q-chip${filter === 'all' ? ' on' : ''}" data-notify-filter="all">全部 ${counts.all}</span>`
-      + `<span class="q-chip${filter === 'unread' ? ' on' : ''}" data-notify-filter="unread">未读 ${counts.unread}</span>`
-      + `<span class="q-chip${filter === 'todo' ? ' on' : ''}" data-notify-filter="todo">待我处理 ${counts.todo}</span>`
-      + `<span class="q-chip${filter === 'bad' ? ' on' : ''}" data-notify-filter="bad">失败 ${counts.bad}</span>`
-      + `<button data-notify-read-all="1">全部标已读（${counts.unread}）</button>`
+      + `<span class="q-chip${filter === 'all' ? ' on' : ''}" data-notify-filter="all">全部 ${counts.all === null ? '—' : counts.all}</span>`
+      + `<span class="q-chip${filter === 'unread' ? ' on' : ''}" data-notify-filter="unread">未读 ${unreadKnown
+        ? (counts.unread === null ? '—' : counts.unread) : `（本页 ${pageUnread}）`}</span>`
+      + `<span class="q-chip${filter === 'todo' ? ' on' : ''}" data-notify-filter="todo">待我处理 ${counts.todo === null ? '—' : counts.todo}</span>`
+      + `<span class="q-chip${filter === 'bad' ? ' on' : ''}" data-notify-filter="bad">失败 ${counts.bad === null ? '—' : counts.bad}</span>`
+      + `<button data-notify-read-all="1"${matched > readCap ? ' disabled' : ''} title="${
+        matched > readCap ? `命中 ${matched} 条超过已读记录的容量（本浏览器 ${readCap} / 服务端 1000），`
+          + `这一颗会丢记录 ⇒ 用「标记本页 N 条」或先缩小筛选` : '把当前筛选命中的这些条全部标为已读（不是全部通知）'
+      }">全部标已读（${matched}）</button>`
       + `<label>只看 <select data-notify-level="1">${['info', 'warn', 'bad'].map((level) =>
         `<option value="${level}"${level === state.notif.minLevel ? ' selected' : ''}>`
         + `${esc(LEVEL_TEXT[level])}以上</option>`).join('')}</select></label>`
@@ -3589,32 +3682,35 @@
       + `<label>每页 <select data-notify-size="1" aria-label="通知每页多少条">`
       + NOTIF_SIZES.map((n) => `<option value="${n}"${n === size ? ' selected' : ''}>${n}</option>`).join('')
       + `</select></label>`
-      + `<button data-notify-page="prev"${at === 0 ? ' disabled' : ''}>上一页</button>`
-      + `<button data-notify-page="next"${at >= pages - 1 ? ' disabled' : ''}>下一页</button>`
+      + `<button data-notify-page="prev"${pageAt <= 1 ? ' disabled' : ''}>上一页</button>`
+      + `<button data-notify-page="next"${pageAt >= pages ? ' disabled' : ''}>下一页</button>`
       + `<span class="q-hint" data-notify-state-note="1">${esc(notifStateNote)}</span></div>`
       + (tags.length ? `<div class="q-notify-tools q-notify-tags" data-notify-tag-bar="1">`
         + `<span class="q-bucketbar-label">按协作筛选</span>`
-        + `<span class="q-chip${tag === '' ? ' on' : ''}" data-notify-tag="">全部 ${all.length}</span>`
+        + `<span class="q-chip${tag === '' ? ' on' : ''}" data-notify-tag="">全部 ${counts.all === null ? '—' : counts.all}</span>`
         + tags.map((label) => `<span class="q-chip${tag === label ? ' on' : ''}"`
           + ` data-notify-tag="${attr(label)}">${esc(label)} ${tagCounts[label]}</span>`).join('')
         + `<span class="q-hint">「我的」= 指派给我 / @我 / 我关注的；「我指派的」= 我交出去的活的进展</span></div>`
         : '')
-      + `<ul>${rows.length ? rows.join('') : '<li class="q-empty">这一类里没有通知（不是坏了）</li>'}</ul>`
+      + `<ul>${rows.length ? rows.join('') : `<li class="q-empty">${q
+        ? '这一类里没有通知（不是坏了）'
+        : '通知还没读到 —— 看上面那条原因与下一步'}</li>`}</ul>`
       + `<div class="q-qbar-row q-qpages q-notify-pages">`
-      + `<span class="q-hint" data-notify-counts="1">共 ${all.length} 条 · 命中 ${picked.length} 条 · `
-      + `第 ${at + 1}/${pages} 页（本页 ${page.length} 条）`
+      + `<span class="q-hint" data-notify-counts="1">共 ${produced} 条（后台产出）· 已显示 ${shown} 条 · `
+      + `剩余 ${rest} 条 · 当前筛选命中 ${matched} 条 · 第 ${pageAt}/${pages} 页（本页 ${page.length} 条）`
       + `${kw ? ` · 关键字「${esc(state.notifKw)}」` : ''}${tag ? ` · 协作标签「${esc(tag)}」` : ''}`
-      + ` · 过滤后仍未读 ${picked.filter((item) => item.unread).length} 条</span>`
-      + `<button data-notify-page="first"${at === 0 ? ' disabled' : ''}>⏮ 首页</button>`
-      + `<button data-notify-page="prev"${at === 0 ? ' disabled' : ''}>上一页</button>`
-      + `<button data-notify-page="next"${at >= pages - 1 ? ' disabled' : ''}>下一页</button>`
-      + `<button data-notify-page="last"${at >= pages - 1 ? ' disabled' : ''}>末页 ⏭</button>`
-      + `<button data-notify-read-picked="1" title="把当前筛选命中的这些条全部标为已读（不是全部通知）">`
+      + ` · 本页仍未读 ${pageUnread} 条${unreadKnown ? '' : '（未登录：未读只按本页算）'}</span>`
+      + `<button data-notify-page="first"${pageAt <= 1 ? ' disabled' : ''}>⏮ 首页</button>`
+      + `<button data-notify-page="prev"${pageAt <= 1 ? ' disabled' : ''}>上一页</button>`
+      + `<button data-notify-page="next"${pageAt >= pages ? ' disabled' : ''}>下一页</button>`
+      + `<button data-notify-page="last"${pageAt >= pages ? ' disabled' : ''}>末页 ⏭</button>`
+      + `<button data-notify-read-picked="1" title="把**这一页**的这些条全部标为已读（不是全部通知）">`
       + `标记本页 ${page.length} 条为已读</button></div>`
+      + `</div>`                     // 收口 `.q-modal-body`
     openModal(body, 'q-notify')
     const modal = el('q-modal')
     modal.querySelectorAll('[data-notify-action]').forEach((node) => node.addEventListener('click', () => {
-      const item = notifList().find((row) => row.id === node.closest('[data-notify]')?.dataset?.notify)
+      const item = notifPageItems().find((row) => row.id === node.closest('[data-notify]')?.dataset?.notify)
       openAction(node.dataset.notifyAction, item?.preset || null)
     }))
     modal.querySelectorAll('[data-open-object]').forEach((node) => node.addEventListener('click', (ev) => {
@@ -3627,8 +3723,21 @@
       markRead([node.dataset.notifyRead], node.dataset.notifyValue !== '1')
       openNotify()
     }))
-    modal.querySelector('[data-notify-read-all]')?.addEventListener('click', () => {
-      markRead(picked.map((item) => item.id), true)
+    modal.querySelector('[data-notify-read-all]')?.addEventListener('click', async () => {
+      // 「全部标已读」= 当前**筛选命中的全部**（不只本页）：按需向服务端要一次命中行 id 清单
+      // （与面板的「选中全部命中行」同一套 `keys=true`；命中超过上限时服务端**如实说**、不静默给一半）。
+      const out = await getJson(notifUrl(state.notifPage, { keys: true }))
+      const keys = Array.isArray(out.query?.matched_keys) ? out.query.matched_keys : []
+      if (!out.ok || !keys.length) {
+        toast('warn', '没拿到「命中全部」的 id 清单', out.next_action || out.reason
+          || `命中 ${out.query?.matched_keys_available ?? '—'} 条`)
+        return
+      }
+      const capped = out.query.matched_keys_capped === true
+      markRead(keys, true)
+      toast(capped ? 'warn' : 'ok', `已把命中的 ${keys.length} 条标为已读`,
+        capped ? '命中超过服务端一次给的行数上限 ⇒ 这份清单不是全部，先用关键字缩小范围再标'
+          : '已读记录保存在服务端（按会话身份）；界面上的未读数会跟着更新')
       openNotify()
     })
     // ---- 通知中心的查询交互（关键字 / 页码 / 每页条数 / 清空筛选）----
@@ -3661,8 +3770,9 @@
     })
     modal.querySelectorAll('[data-notify-page]').forEach((node) => node.addEventListener('click', () => {
       const where = node.dataset.notifyPage
+      // 页号是**0 基**（与面板同一套）；越界由服务端夹回合法页，取回后界面跟着服务端的页号走
       state.notifPage = where === 'first' ? 0 : (where === 'last' ? pages - 1
-        : (where === 'next' ? at + 1 : at - 1))
+        : (where === 'next' ? (pageAt - 1) + 1 : (pageAt - 1) - 1))
       openNotify()
     }))
     modal.querySelector('[data-notify-read-picked]')?.addEventListener('click', () => {
@@ -3689,12 +3799,6 @@
       saveNotif(); paintBadge(); openNotify()
       toast('ok', `已静音 ${plugin}`, '再选「（不静音）」就恢复：静音只影响提醒与徽标，该做的事还是照做')
     })
-    modal.querySelector('[data-notify-more]')?.addEventListener('click', () => {
-      state.notifCap = cap + 20
-      openNotify()
-    })
-    // 打开即**把看到的这批标为已读**（与邮件客户端一致；想看未读的用「未读」筛选）
-    if (counts.unread) markRead(page.filter((item) => item.unread).map((item) => item.id), true)
   }
 
   // ---------------------------------------------------------------- ⑤ 最近访问 / 继续上次
@@ -3904,7 +4008,9 @@
       // 计数/排序/筛选由服务端在全集上算（口径见 `/api/ui/surface` 的 `io.window`）。
       // 没带 `pq` 的面板用服务端默认每页行数（25）—— 与界面默认一致。
       getJson(panelsUrl(null)),
-      getJson('/api/ui/notifications'),
+      // **通知同样走窗口**（`w=1` + `pq.notify`）：只回这一页 + 在**全量产出**上算出来的计数
+      // （共 / 命中 / 未读 / 还剩多少没翻到）。整个全量不再下发（旧口径会在 600 条处静默截断）。
+      getJson(notifUrl(state.notifPage)),
       getJson('/api/ui/status'),
     ])
     state.loading = null
@@ -3928,8 +4034,12 @@
       }
     }
     if (notifications.ok) {
-      state.notifications = notifications.items || []
-      state.notifReadAt = new Date().toISOString()
+      // 只**换掉这一页**（读不到时**不清空**：留着上一次成功的那一页并标陈旧 —— 清空会让徽标变 0，
+      // 那等于假装"没有待办"，比显示出旧数据更坏）
+      state.notify = { at: new Date().toISOString(), query: notifications.query || null,
+        items: notifications.items || [], stats: notifications.stats || null }
+      state.notifPoll = { at: state.notify.at, query: state.notify.query, items: state.notify.items }
+      if (notifications.query) state.notifPage = Math.max(0, Number(notifications.query.page) || 0)
     } else {
       state.notifError = { code: notifications.code || 'notifications-read-failed',
         reason: notifications.reason || '', next_action: notifications.next_action || '点顶部「重载」重试' }
@@ -3985,16 +4095,18 @@
     // 服务端那份（若在）是"换设备仍在"的来源：读回来后把受影响的块重绘一遍（查询状态就是它给的）
     const affected = hydrateQueryFromMirror()
     repaintQueriedPanels([...affected])
-    paintBadge()
-    return out
-  })
+    // 偏好（级别/静音/已读）读回来之后，通知的**计数与未读**都要按它重算一次（服务端算的）
+    return fetchNotify(state.notifPage).then(() => out).catch(() => out)
+  }).then(paintBadge)
   /**
    * 通知轮询（15s）：只更**徽标**，并且**最多弹一条**汇总提示 —— 一次来 8 条也不刷屏。
-   * 首次看到某条 id 时才提示（`state.seenNotifs` 是本次会话的内存集合）。
+   * 取的是**通知窗口的第一页**（不是全量）：`unread`/`chip_counts` 是服务端在**全量产出**上算的读数，
+   * 所以徽标上的数字与通知中心里那句"共 N 条"永远同源。首次看到某条 id 时才提示
+   * （`seenNotifs` 是本次会话的内存集合）。
    */
   const seenNotifs = new Set()
   const pollNotify = async () => {
-    const out = await getJson('/api/ui/notifications')
+    const out = await getJson(notifUrl(0))
     if (!out.ok) {
       // 轮询失败**不静默**（否则徽标会一直显示"没有新事情"）：记下来、在上报面上如实标陈旧。
       state.notifError = { code: out.code || 'notifications-read-failed', reason: out.reason || '',
@@ -4003,10 +4115,11 @@
       return
     }
     state.notifError = null
-    state.notifReadAt = new Date().toISOString()
-    state.notifications = out.items || []
-    const fresh = notifVisible().filter((item) => item.unread && !seenNotifs.has(item.id))
-    for (const item of notifList()) seenNotifs.add(item.id)
+    state.notifPoll = { at: new Date().toISOString(), query: out.query || null, items: out.items || [] }
+    // "新到的"只在**第一页**里认（急的排前面 ⇒ 真出事的会在第一页上）；口径如实写在提示里
+    const fresh = (out.items || []).filter((item) => !state.notif.read.has(String(item.id))
+      && !seenNotifs.has(String(item.id)))
+    for (const item of (out.items || [])) seenNotifs.add(String(item.id))
     paintBadge()
     if (!fresh.length) return
     if (fresh.length === 1) {
@@ -4015,9 +4128,9 @@
         [one.body, one.next_action].filter(Boolean).join(' · '))
       return
     }
-    toast('warn', `新增 ${fresh.length} 条通知（不逐条弹）`, `最急的一条：${fresh[0].title}`
-      + ` · 点顶栏「通知」看全部（${unreadCount()} 条未读）`)
+    toast('warn', `第一页上有 ${fresh.length} 条新通知（不逐条弹）`, `最急的一条：${fresh[0].title}`
+      + ` · 点顶栏「通知」看全部（共 ${unreadCount()} 条未读）`)
   }
   setInterval(pollNotify, 15000)
-  setTimeout(() => { for (const item of notifList()) seenNotifs.add(item.id) }, 1200)
+  setTimeout(() => { for (const item of notifPageItems()) seenNotifs.add(String(item.id)) }, 1200)
 })()

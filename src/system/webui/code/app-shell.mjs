@@ -1891,6 +1891,67 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   }
 
   /**
+   * 条目上的**跨面板去重键**（机制，不透明串）：插件声明"这一条讲的是哪个对象/哪个门"。
+   * 外壳不解读它的内容（`gate:ap-…` 与 `foo:1` 对它没有区别），只拿它当"是不是同一件事"的判据。
+   */
+  const normDedupeKey = (value) => {
+    const key = String(value ?? '').trim()
+    return key === '' || key.length > 160 ? '' : key
+  }
+
+  /**
+   * **跨面板去重**（机制，0 业务语义）—— 判据由插件给，合并规则由外壳定。
+   *
+   * 为什么有这一条：同一件事可以被两块面板各列一次（本批实测：`system/approval#gate.todo` 与
+   * `domain/commitments#home.gates` 把**同一批人工门**各列一遍 ⇒ 本侧「有 N 件需要你处理」里
+   * 2404 条中有 1200 条是重复占位）。重复占位不是"多给点信息"，它让计数说谎：用户以为有两倍的门要批。
+   *
+   * 判据与边界（都不认识任何领域概念）：
+   *   · 条目的 `dedupe_key` 非空时才参与（插件显式声明）；键相同 ⇒ 认作同一件事；
+   *   · **只跨面板**（`panel_id` 不同）：同一块面板内部的重复是那个插件自己的事，外壳不动；
+   *   · 先出现的赢（面板按 `order` 排过序 ⇒ "更该由谁来说这件事"由插件用顺序表达）；
+   *   · 输的那条**不丢信息**：`merged_count` + `also_from[{panel_id,plugin_id}]` 写在赢的那条上
+   *     （界面上照实说"另有 N 块面板也列了它"），级别取更急的一档、缺的 `ref`/`action`/`bucket`/
+   *     `preset`/`label` 补上 ⇒ **合并后仍然能点进对象页、仍然能一键发起那个动作**。
+   */
+  const foldPanelDuplicates = (entries, tally) => {
+    const seen = new Map()
+    for (const entry of entries) {
+      if (entry.error || entry.visible === false || entry.kind !== 'list') continue
+      const items = Array.isArray(entry.raw?.items) ? entry.raw.items : null
+      if (!items) continue
+      const kept = []
+      for (const item of items) {
+        const key = item && typeof item === 'object' && !Array.isArray(item) ? normDedupeKey(item.dedupe_key) : ''
+        const prev = key === '' ? null : seen.get(key)
+        if (!prev || prev.panel_id === entry.panel.id) {
+          kept.push(item)
+          if (key) seen.set(key, { panel_id: entry.panel.id, plugin_id: entry.panel.plugin_id, item })
+          continue
+        }
+        const rank = (value) => WINDOW_LEVEL_RANK[String(value ?? 'info')] ?? WINDOW_LEVEL_RANK.info
+        const winner = prev.item
+        winner.merged_count = (winner.merged_count || 1) + 1
+        winner.also_from = [...(winner.also_from || []),
+          { panel_id: entry.panel.id, plugin_id: entry.panel.plugin_id }]
+        if (rank(item.level) < rank(winner.level)) winner.level = item.level
+        for (const field of ['ref', 'action', 'bucket', 'bucket_label', 'preset', 'label']) {
+          if (!winner[field] && item[field]) winner[field] = item[field]
+        }
+        tally.deduped += 1
+      }
+      if (kept.length !== items.length) {
+        const merged = items.length - kept.length
+        entry.raw.items = kept
+        entry.raw.deduped = merged
+        entry.raw.dedupe_note = `跨面板去重：${merged} 条与别块面板列的是同一件事（同一个 \`dedupe_key\`），`
+          + '已合并成一条 —— 计数按合并后算；合并后的条目仍可点进对象页'
+        tally.dedupe_panels += 1
+      }
+    }
+  }
+
+  /**
    * 某视图上面板的数据。
    * `route.kind` 非空 ⇒ **对象页**：只渲染声明了该 `object_kind` 的面板（其余面板在这一页上不出现），
    * 且 `ctx.route` 带上 `kind/id` 供插件渲染那一个对象；没声明过该对象类 ⇒ 返回空数组（调用方报未命中）。
@@ -1912,29 +1973,47 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     // 所以在这里量到的增量就是"打开这一页起了几个进程"，不必改任何路由代码。
     const before = { spawns: ioStats.spawns, read: ioStats.read_spawns, hits: ioStats.read_hits, at: Date.now() }
     // 这一次渲染的**载荷口径**（前后对比用的就是这几个数：面板给了多少行 vs 真下发多少行）
-    const tally = { full: 0, sent: 0, windowed: 0, shapes: {} }
+    const tally = { full: 0, sent: 0, windowed: 0, shapes: {}, deduped: 0, dedupe_panels: 0 }
     // 一次渲染的作用域：这一页上的多块面板读同一个只读工具时**只起一个进程**（缓存见 `runPython`）。
-    const rows = withRenderScope(() => picked.map((panel) => {
+    // **① 先算 `data()`、先不开窗口**：跨面板去重（②）必须在**面板给的全量条目**上做，③ 才逐块开窗口
+    // —— 否则窗口里的那一页是先于去重的，计数里仍然带着 2× 的重复。
+    const prepared = withRenderScope(() => picked.map((panel) => {
       const base = { id: panel.id, title: panel.title, plugin_id: panel.plugin_id, order: panel.order,
         panel_kind: panel.panel_kind, placement: panel.placement, actions: panel.actions, hint: panel.hint,
         object_kind: panel.object_kind, wide: panel.placement === 'wide' }
       try {
-        if (panel.when && panel.when(ctx) !== true) return { ...base, visible: false, data: null }
+        if (panel.when && panel.when(ctx) !== true) return { panel, base, visible: false, data: null }
       } catch (err) {
-        return { ...base, visible: true, error: { code: 'when-failed', reason: flat(err) },
+        return { panel, base, visible: true, error: { code: 'when-failed', reason: flat(err) },
           next_action: '修面板的 when（可见性条件抛错时不渲染该面板，但如实报错）' }
       }
       try {
         const data = panel.data(ctx)
         if (!data || typeof data !== 'object') {
-          return { ...base, visible: true, error: { code: 'invalid-data', reason: 'data() 没有返回对象' } }
+          return { panel, base, visible: true, error: { code: 'invalid-data', reason: 'data() 没有返回对象' } }
         }
         const kind = data.kind ?? panel.panel_kind
         if (!PANEL_KINDS.includes(kind)) {
-          return { ...base, visible: true, error: { code: 'unknown-panel-kind', reason: `kind=${kind}` } }
+          return { panel, base, visible: true, error: { code: 'unknown-panel-kind', reason: `kind=${kind}` } }
         }
-        // **服务端窗口**（机制）：只换"这一页看到的行"，并把在**全集**上算出来的数字一起给
-        //（`data.query`）；形状没有行数组（metrics/form/html）⇒ 原样返回，不假装分页。
+        return { panel, base, visible: true, kind, raw: data }
+      } catch (err) {
+        return { panel, base, visible: true, error: { code: 'data-failed', reason: flat(err) },
+          next_action: '修面板的 data()（抛错不静默吞：这块不渲染，页面其余部分照常）' }
+      }
+    }))
+    // ② **跨面板去重**（机制）：同一件事（同一个对象/门）被两块面板各列一次 ⇒ 合并成一条。
+    foldPanelDuplicates(prepared, tally)
+    // ③ 每块面板各自的**服务端窗口**（机制）：只换"这一页看到的行"，并把在**去重后的全集**上算出来的
+    // 数字一起给（`data.query`）；形状没有行数组（metrics/form/html）⇒ 原样返回，不假装分页。
+    const rows = prepared.map((entry) => {
+      if (entry.error) {
+        return { ...entry.base, visible: true, error: entry.error, next_action: entry.next_action }
+      }
+      if (entry.visible === false || !entry.raw) return { ...entry.base, visible: false, data: null }
+      const { panel, base, kind } = entry
+      const data = entry.raw
+      try {
         const windowed = windowSpec?.enabled === true ? windowize(data, kind, panel, windowSpec, tally) : null
         const out = windowed || data
         // `files` 面板的**地址纪律**（机制，与 `suggest_url` 同一口径）：下载地址与上传地址只允许**本服务
@@ -1960,12 +2039,14 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         return { ...base, visible: true, error: { code: 'data-failed', reason: flat(err) },
           next_action: '修面板的 data()（抛错不静默吞：这块不渲染，页面其余部分照常）' }
       }
-    }).sort((left, right) => (left.order - right.order) || (left.id < right.id ? -1 : 1)))
+    }).sort((left, right) => (left.order - right.order) || (left.id < right.id ? -1 : 1))
     // 收口这次渲染的代价读数（`/api/ui/surface` 的 `io.last_render` 与状态栏都读它；只为可对账，不影响结果）
     ioStats.last_render = { at: host.now(), view, kind: normalized.kind, panels: rows.length,
       spawns: ioStats.spawns - before.spawns, read_spawns: ioStats.read_spawns - before.read,
       read_cache_hits: ioStats.read_hits - before.hits, ms: Date.now() - before.at,
       rows_full: tally.full, rows_sent: tally.sent, windowed_panels: tally.windowed,
+      // **跨面板去重**的读数（只为可对账）：合并掉几条、涉及几块面板
+      deduped: tally.deduped, dedupe_panels: tally.dedupe_panels,
       only: only ? [...only] : [], shapes: tally.shapes }
     return rows
   })
@@ -2036,16 +2117,39 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 
   /**
    * 通知**在所有来源之间公平分配名额**（机制，0 业务语义；口径见 `docs/design/29-webui-gui-app.md`
-   * 的可用性节与 `src/system/webui/docs/scale-and-performance.md`）。
+   * 的可用性节与 `src/system/webui/docs/scale-and-performance.md` §5）。
    *
    * 修前的口径是 `items.slice(0, 200)`：来源按注册顺序往后接，**一个来源给出几百条时，后面的来源
-   * 整体看不到**（本批实测：规模数据下 400 个待批人工门把 200 个名额吃光，报价/包/变更的通知一条
-   * 都进不来）。现在的口径是：
+   * 整体看不到**（实测：规模数据下 400 个待批人工门把 200 个名额吃光，报价/包/变更的通知一条都进不来）。
+   * 现在的口径是：
    *   · 每个来源**轮转取一条**（round-robin），谁也不会被别的来源挤掉；
-   *   · 总数仍有上限（`NOTIF_CAP`，防止一次轮询把页面拖住），但**上限与产出数都如实记账**，
-   *     连"被截掉多少"一起放进 `io.notify` 与状态栏 —— 不静默截断。
+   *   · 同一件事（**同一个 `id`**）被多个来源各报一次 ⇒ 合并成一条（`count` = ×N、`plugins` = 谁报的、
+   *     级别取更急的一档）—— 这一条以前在客户端做（`notifList()`），现在必须在服务端做，
+   *     否则「同一件事只出一条」这条承诺在服务端分页下就失效了；
+   *   · **全部产出都能翻到**：不带窗口的旧调用（脚本/老客户端）仍按 `NOTIF_CAP` 截断并如实记账
+   *     （`returned`/`cap`/`dropped`）；界面走的是**通知窗口**（`w=1` + `pq.notify`）——
+   *     服务端在全量条目上筛选→排序→分页、**只回这一页**，同时把在全集上算出来的数字一并给出
+   *     ⇒ 界面上能如实写「共 N 条 · 已显示 N · 剩余 M」，并且真能一页页翻到头（不是前 600 条的切片）。
    */
   const NOTIF_CAP = 600
+  /** 通知窗口在 `pq` 里的块 id（与面板同一套机制；`pq={"notify":{size,page,kw,…}}`）。 */
+  const NOTIF_BLOCK_ID = 'notify'
+  /** 通知的列声明（服务端窗口按它判筛型；都是文本 ⇒ 关键字在「标题/正文/下一步/来源/id」里找）。 */
+  const NOTIF_COLUMNS = [{ key: 'title', label: '标题' }, { key: 'body', label: '正文' },
+    { key: 'next_action', label: '下一步' }, { key: 'plugin_id', label: '来源插件' }, { key: 'id', label: '通知 id' }]
+  /** 级别排序与客户端 `LEVEL_RANK` 同口径（急的在前）；与 `WINDOW_LEVEL_RANK`（0 = 最急）方向一致。 */
+  const NOTIF_LEVEL_RANK = { bad: 0, warn: 1, info: 2, ok: 2 }
+  const NOTIF_CHIPS = ['all', 'unread', 'todo', 'bad']
+  const notifRank = (item) => NOTIF_LEVEL_RANK[String(item?.level ?? 'info')] ?? 2
+  /** 偏好/筛选片里那些「不是关键字」的维度（都由客户端在 `pq.notify` 里显式给；外壳不猜）。 */
+  const normNotifFilter = (raw) => {
+    const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+    const chip = NOTIF_CHIPS.includes(String(source.chip ?? '')) ? String(source.chip) : 'all'
+    const level = ['info', 'warn', 'bad'].includes(String(source.level ?? '')) ? String(source.level) : 'info'
+    return { chip, level, tag: String(source.tag ?? '').slice(0, 24),
+      muted: [...new Set((Array.isArray(source.muted) ? source.muted : [])
+        .map((item) => String(item ?? '').trim()).filter((item) => item !== ''))].slice(0, 50) }
+  }
   /**
    * **通知聚合的短 TTL 备忘**（P13）。为什么必须有：一次通知聚合要**逐个通知源**跑一遍
    * （本批规模下 13 个来源、每个都要在 6865 行账本上筛一遍），是这一页里最贵的一次读——
@@ -2070,58 +2174,152 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     return `${normIdentity(who)?.human ?? 'anonymous'}\u0000${state.on ? state.dir : ''}`
   }
   const clearNotifyCache = () => { if (notifyCache.size) notifyCache.clear() }
-  const notifications = (who = null) => withSandbox(who, () => {
-    const cacheKey = notifyCacheKey(who)
+  /**
+   * 聚合后的**全量条目**（round-robin 合并 + 「同一件事只出一条」），带短 TTL 备忘。
+   * 备忘里存的必须是**全量**（不是某一页）：窗口请求按页来，每次都要在这份全量上筛选→排序→分页。
+   */
+  const notifyAggregate = (who, cacheKey) => {
     const hit = notifyCache.get(cacheKey)
     if (notifyCacheTtlMs > 0 && hit && Date.now() - hit.at <= notifyCacheTtlMs) {
-      ioStats.notify = { ...hit.stats, cache_hit: true, cache_age_ms: Date.now() - hit.at,
-        cache_ttl_ms: notifyCacheTtlMs }
-      return hit.items.slice()
+      return { ...hit, cache_hit: true, cache_age_ms: Date.now() - hit.at }
     }
-    return withRenderScope(() => {
-    const lists = []
-    const sources = surface.byKind('notification-source')
-    for (const source of sources) {
-      const rows = []
-      try {
-        const out = source.poll(panelCtx(source.view || 'home', undefined, who)) || []
-        for (const item of Array.isArray(out) ? out : []) {
-          rows.push({ id: String(item.id ?? `${source.plugin_id}:${rows.length}`), level: String(item.level ?? 'info'),
-            title: String(item.title ?? ''), body: String(item.body ?? ''),
-            next_action: String(item.next_action ?? ''), action: item.action ? String(item.action) : '',
-            ref: normRef(item.ref), at: String(item.at ?? ''), plugin_id: source.plugin_id,
-            tags: normTags(item.tags),
-            // `preset`：点通知上的「去处理」时，用这些键值预填动作表单（如那条通知讲的是哪个报价）
-            preset: item.preset && typeof item.preset === 'object' && !Array.isArray(item.preset)
-              ? item.preset : null })
+    const built = withRenderScope(() => {
+      const lists = []
+      const sources = surface.byKind('notification-source')
+      for (const source of sources) {
+        const rows = []
+        try {
+          const out = source.poll(panelCtx(source.view || 'home', undefined, who)) || []
+          for (const item of Array.isArray(out) ? out : []) {
+            rows.push({ id: String(item.id ?? `${source.plugin_id}:${rows.length}`), level: String(item.level ?? 'info'),
+              title: String(item.title ?? ''), body: String(item.body ?? ''),
+              next_action: String(item.next_action ?? ''), action: item.action ? String(item.action) : '',
+              ref: normRef(item.ref), at: String(item.at ?? ''), plugin_id: source.plugin_id,
+              tags: normTags(item.tags),
+              // `preset`：点通知上的「去处理」时，用这些键值预填动作表单（如那条通知讲的是哪个报价）
+              preset: item.preset && typeof item.preset === 'object' && !Array.isArray(item.preset)
+                ? item.preset : null })
+          }
+        } catch (err) {
+          rows.push({ id: `${source.plugin_id}:poll-failed`, level: 'bad', title: '通知源读取失败',
+            body: flat(err), next_action: '修该通知源的 poll()', plugin_id: source.plugin_id,
+            at: host.now(), ref: null, action: '', tags: [] })
         }
-      } catch (err) {
-        rows.push({ id: `${source.plugin_id}:poll-failed`, level: 'bad', title: '通知源读取失败',
-          body: flat(err), next_action: '修该通知源的 poll()', plugin_id: source.plugin_id,
-          at: host.now(), ref: null, action: '', tags: [] })
+        lists.push(rows)
       }
-      lists.push(rows)
-    }
-    // 动作流水：只保留 `{kind,id}` 形状的对象引用（动作回执是任意 JSON，不能当深链用）；
-    // 并且**只给自己看**（`actor` 全会话身份；未登录时看不到任何人的动作流水）。自己的动作结果排最前。
-    const me = normIdentity(who)
-    const mine = []
-    for (const entry of actionLog.slice(0, 20)) {
-      if (entry.actor !== (me ? me.human : '')) continue
-      mine.push({ ...entry, ref: normRef(entry.ref) })
-    }
-    const merged = []
-    const depth = lists.reduce((max, rows) => Math.max(max, rows.length), 0)
-    for (let i = 0; i < depth; i += 1) for (const rows of lists) if (rows[i]) merged.push(rows[i])
-    const items = [...mine, ...merged]
-    ioStats.notify = { at: host.now(), sources: sources.length,
-      per_source: sources.map((source, index) => ({ plugin_id: source.plugin_id, produced: lists[index].length })),
-      produced: merged.length, returned: Math.min(items.length, NOTIF_CAP), cap: NOTIF_CAP,
-      cache_hit: false, cache_age_ms: 0, cache_ttl_ms: notifyCacheTtlMs }
-    const kept = items.slice(0, NOTIF_CAP)
-    if (notifyCacheTtlMs > 0) notifyCache.set(cacheKey, { at: Date.now(), items: kept, stats: ioStats.notify })
-    return kept.slice()
+      // 动作流水：只保留 `{kind,id}` 形状的对象引用（动作回执是任意 JSON，不能当深链用）；
+      // 并且**只给自己看**（`actor` 全会话身份；未登录时看不到任何人的动作流水）。自己的动作结果排最前。
+      const me = normIdentity(who)
+      const mine = []
+      for (const entry of actionLog.slice(0, 20)) {
+        if (entry.actor !== (me ? me.human : '')) continue
+        mine.push({ ...entry, ref: normRef(entry.ref) })
+      }
+      const merged = []
+      const depth = lists.reduce((max, rows) => Math.max(max, rows.length), 0)
+      for (let i = 0; i < depth; i += 1) for (const rows of lists) if (rows[i]) merged.push(rows[i])
+      // **「同一件事只出一条」**（机制）：`id` 相同就是同一件事（两个插件报同一个门时 id 一样）⇒ 合并成一条，
+      // 带 `count`（界面上的 ×N）、`plugins`（谁报的，如实写清）、级别取更急的一档。
+      // 这一条口径以前在客户端做；服务端分页之后必须在这里做，否则同一条会在两页里各出现一次。
+      const byId = new Map()
+      const items = []
+      for (const item of [...mine, ...merged]) {
+        const prev = byId.get(item.id)
+        if (!prev) { item.count = 1; byId.set(item.id, item); items.push(item); continue }
+        prev.count += 1
+        prev.plugins = [...new Set([...(prev.plugins || [prev.plugin_id]), item.plugin_id])]
+        if (notifRank(item) < notifRank(prev)) prev.level = item.level
+        if (!prev.ref && item.ref) prev.ref = item.ref
+        if (!prev.action && item.action) prev.action = item.action
+        if (!prev.preset && item.preset) prev.preset = item.preset
+        if (!prev.body && item.body) prev.body = item.body
+        prev.tags = normTags([...(prev.tags || []), ...(item.tags || [])])
+        if (String(item.at || '') > String(prev.at || '')) prev.at = item.at
+      }
+      return { at: Date.now(), sources: sources.length,
+        per_source: sources.map((source, index) => ({ plugin_id: source.plugin_id, produced: lists[index].length })),
+        produced_sources: merged.length, mine: mine.length, items }
     })
+    if (notifyCacheTtlMs > 0) notifyCache.set(cacheKey, built)
+    return { ...built, cache_hit: false, cache_age_ms: 0 }
+  }
+  /**
+   * **通知**（机制）：不带窗口 ⇒ 旧口径（整份、`NOTIF_CAP` 上限、截断如实记账，脚本与老客户端一字不变）；
+   * 带窗口（`w=1` + `pq.notify`）⇒ 在**全量条目**上筛选 → 排序 → 分页，**只回这一页**，并把在全集上
+   * 算出来的数字一并给出（共 / 命中 / 第 P/PP 页 / 未读 / 还剩多少条没翻到 / 各级别计数 / 协作标签计数）。
+   *
+   * `read` = 这次请求的会话身份在服务端存的**已读 id 集合**（`Array`），或 `null`（未登录 ⇒ 服务端不知道
+   * 谁读过什么）。它只影响\"未读\"的计数与筛选片，**不改条目本身**（同一条对谁都在）。
+   */
+  const notifications = (who = null, windowSpec = null, read = null) => withSandbox(who, () => {
+    const aggregate = notifyAggregate(who, notifyCacheKey(who))
+    const items = aggregate.items
+    const total = items.length
+    const stats = { at: host.now(), sources: aggregate.sources, per_source: aggregate.per_source,
+      produced_sources: aggregate.produced_sources, mine: aggregate.mine, produced: total, cap: NOTIF_CAP,
+      cache_hit: aggregate.cache_hit, cache_age_ms: aggregate.cache_age_ms, cache_ttl_ms: notifyCacheTtlMs }
+    if (windowSpec?.enabled !== true) {
+      const kept = items.slice(0, NOTIF_CAP)
+      ioStats.notify = { ...stats, windowed: false, returned: kept.length,
+        dropped: Math.max(0, total - kept.length), read_known: Array.isArray(read),
+        read_count: Array.isArray(read) ? read.length : 0 }
+      return { items: kept, stats: ioStats.notify, query: null }
+    }
+    const filter = normNotifFilter((windowSpec.perPanel || {})[NOTIF_BLOCK_ID])
+    const readKnown = Array.isArray(read)
+    const readSet = new Set(readKnown ? read.map((item) => String(item)) : [])
+    const unreadOf = (item) => readKnown && !readSet.has(item.id)
+    // ① 偏好（静音某个插件 / 只看某级别以上）：与客户端 `notifVisible()` 同口径，服务端算一次
+    const minRank = { info: 2, warn: 1, bad: 0 }[filter.level]
+    const visible = items.filter((item) => !filter.muted.includes(item.plugin_id) && notifRank(item) <= minRank)
+    const chipCounts = { all: visible.length, unread: readKnown ? visible.filter(unreadOf).length : null,
+      todo: visible.filter((item) => item.level === 'warn' || item.level === 'bad').length,
+      bad: visible.filter((item) => item.level === 'bad').length }
+    const tagCounts = {}
+    for (const item of visible) for (const tag of (item.tags || [])) tagCounts[tag] = (tagCounts[tag] || 0) + 1
+    const tags = Object.keys(tagCounts).sort((left, right) => tagCounts[right] - tagCounts[left]
+      || (left < right ? -1 : 1))
+    // ② 筛选片（全部 / 未读 / 待我处理 / 失败）+ 协作标签（未登录 ⇒ \"未读\"服务端不知道，留给客户端按本页算）
+    let shown = visible
+    if (filter.chip === 'todo') shown = visible.filter((item) => item.level === 'warn' || item.level === 'bad')
+    else if (filter.chip === 'bad') shown = visible.filter((item) => item.level === 'bad')
+    else if (filter.chip === 'unread' && readKnown) shown = visible.filter(unreadOf)
+    if (filter.tag !== '') shown = shown.filter((item) => (item.tags || []).includes(filter.tag))
+    // ③ 排序：急的在前，然后按时刻倒序（与客户端 `notifList()` 同口径；稳定 ⇒ 同一页永远是同一批条目）
+    const sorted = shown.map((item, index) => ({ item, index }))
+      .sort((left, right) => (notifRank(left.item) - notifRank(right.item))
+        || String(right.item.at || '').localeCompare(String(left.item.at || '')) || (left.index - right.index))
+      .map((entry) => entry.item)
+    // ④ 分页：与面板**同一套**（`size` ∈ {10,25,50,100,250,0=全部}、页号越界夹回合法页、关键字在全集上筛）
+    const per = (windowSpec.perPanel || {})[NOTIF_BLOCK_ID] || {}
+    const spec = normalizeWindowSpec({ ...(windowSpec.defaults || {}), ...per }, NOTIF_COLUMNS)
+    const windowed = windowPanelData({ field: 'items', columns: NOTIF_COLUMNS, rows: sorted, spec,
+      // `keys=true` = 界面上的「全部标已读」要**命中全集的行 id**（默认不给：6000 行 ≈ 100 KB）
+      options: { levels: true, wantKeys: per.keys === true || per.keys === '1' } })
+    const query = { server: true, block_id: NOTIF_BLOCK_ID, field: 'items',
+      size: windowed.query.size, page: windowed.query.page, pages: windowed.query.pages,
+      start: windowed.query.start, end: windowed.query.end, window: windowed.query.window,
+      matched: windowed.query.matched,
+      matched_unread: readKnown ? windowed.rows.filter(unreadOf).length : null,
+      produced: total, visible: visible.length, total_full: total,
+      unread: { known: readKnown, read_count: readSet.size, total: chipCounts.unread },
+      chip: filter.chip, chip_counts: chipCounts, tag: filter.tag, tag_counts: tagCounts, tags,
+      level: filter.level, muted: filter.muted,
+      applied: { kw: spec.kw, chip: filter.chip, tag: filter.tag, level: filter.level, muted: filter.muted },
+      level_counts: windowed.query.level_counts, row_keys: windowed.query.row_keys,
+      // 「全部标已读」按需取回的**命中全集行 id**（默认空 + `on_demand`，与面板同一套）
+      matched_keys: windowed.query.matched_keys || [], matched_keys_on_demand: true,
+      matched_keys_capped: windowed.query.matched_keys_capped === true,
+      matched_keys_available: windowed.query.matched_keys_available ?? windowed.query.matched,
+      matched_keys_cap: windowed.query.matched_keys_cap ?? null,
+      // 「已显示 N / 剩余 M」用的两个数：`end` = 按页推进后**已经到过**的条数、`rest` = 还没翻到的条数
+      rest: Math.max(0, windowed.query.matched - windowed.query.end),
+      hidden_by_prefs: total - visible.length, notes: windowSpec.notes }
+    ioStats.notify = { ...stats, windowed: true, returned: windowed.rows.length, dropped: 0,
+      page: windowed.query.page, pages: windowed.query.pages, size: windowed.query.size,
+      matched: windowed.query.matched, visible: visible.length,
+      read_known: readKnown, read_count: readSet.size }
+    return { items: windowed.rows, stats: ioStats.notify, query }
   })
 
   const statusItems = (who = null) => withSandbox(who, () => withRenderScope(() => {
@@ -2151,19 +2349,35 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
           + `Python 进程 ${last.spawns} 次（只读 ${last.read_spawns}，命中缓存 ${last.read_cache_hits}）· `
           + `服务端耗时 ${last.ms}ms` })
     }
-    // **通知的名额分配**（本批新增）：产出多少、返回多少、上限多少 —— 截断如实记账，不静默
+    // **通知的名额分配**（机制）：产出多少 / 这一页返回多少 / 上限多少 / 还剩多少没翻到 —— 如实记账，不静默
     const notify = ioStats.notify
     if (notify) {
-      const dropped = Math.max(0, notify.produced - notify.returned)
-      const busiest = [...(notify.per_source || [])].sort((left, right) => right.produced - left.produced)[0]
-      out.push({ id: 'shell.notify', title: '通知', level: dropped ? 'warn' : 'ok', plugin_id: 'system/webui',
-        text: `来源 ${notify.sources} 个 · 产出 ${notify.produced} 条 · 返回 ${notify.returned} 条`
-          + `（上限 ${notify.cap}${dropped ? `，截掉 ${dropped} 条` : ''}）`
-          + `${busiest ? ` · 产出最多：${busiest.plugin_id} ${busiest.produced} 条` : ''}`
-          + `${notify.cache_hit ? ` · 这一条来自 ${notify.cache_age_ms}ms 前的聚合缓存（TTL ${notify.cache_ttl_ms}ms；`
-            + '任何动作都会立刻清掉它）' : ''}`,
-        next_action: dropped
-          ? '同一件事在多条时是"一次轮询的上限"：用关键字/筛选在通知中心里缩小范围，或按插件静音'
+      // 口径：`produced` = 去重后 ＋ 本会话动作结果（界面上"共 N 条"读的就是它）；
+      // `produced_sources` = 各通知源**合并后、去重前**的条数。两个数不等时如实写清差在哪。
+      const folded = notify.produced - notify.mine
+      const parts = [`来源 ${notify.sources} 个`, `产出 ${notify.produced} 条`]
+      const detail = []
+      if (notify.produced_sources !== folded) {
+        detail.push(`源合并 ${notify.produced_sources} 条 → 按 id 去重后 ${folded} 条`)
+      }
+      if (notify.mine) detail.push(`本会话动作结果 ${notify.mine} 条`)
+      if (detail.length) parts.push(`（${detail.join(' ＋ ')}）`)
+      if (notify.windowed === true) {
+        parts.push(`通知窗口可翻到底：共 ${notify.produced} 条 · 第 ${notify.page + 1}/${notify.pages} 页`
+          + `（本页 ${notify.returned} 条 · 每页 ${notify.size} · 命中 ${notify.matched} 条`
+          + `${notify.matched !== notify.visible ? ` · 符合偏好的 ${notify.visible} 条` : ''}）`)
+      } else {
+        parts.push(`这一次**不带窗口**（脚本/旧调用）：返回 ${notify.returned} 条（上限 ${notify.cap}`
+          + `${notify.dropped ? `，截掉 ${notify.dropped} 条` : ''}）`)
+      }
+      parts.push(notify.read_known === true
+        ? `已读记录 ${notify.read_count} 条（服务端，按会话身份）`
+        : '未登录：服务端不知道谁读过什么（未读只按本页算）')
+      out.push({ id: 'shell.notify', title: '通知',
+        level: notify.windowed === false && notify.dropped > 0 ? 'warn' : 'ok', plugin_id: 'system/webui',
+        text: parts.join(' · '),
+        next_action: notify.windowed === false && notify.dropped > 0
+          ? '界面走的是**通知窗口**（`w=1`）：全部通知都能一页页翻到（末页可点）；这条上限只约束不带 `w` 的旧调用'
           : '' })
     }
     // **账本只读备忘**（P13）：并发卡死的定位读数就在这一行 —— 同一份账本被读了几遍
@@ -2943,8 +3157,27 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       // **上一次页面渲染**的代价（本批新增）：`spawns` = 这一次 `/api/ui/panels` 起了几个 Python 进程。
       // 用途：长列表改造前后的"渲染耗时 / DOM 节点数 / Python spawn 次数"三件套里最后一件的前后对照。
       last_render: ioStats.last_render ?? null,
-      // **通知名额分配**（本批新增）：产出 / 返回 / 上限 —— 截断不静默。
+      // **跨面板去重**（机制）：同一件事被两块面板各列一次时合并成一条（判据 = 条目上的 `dedupe_key`）。
+      dedupe: { schema: 'quotagent/webui-item-dedupe/v1', key: 'item.dedupe_key',
+        scope: '同一视图内、**跨面板**；同一块面板内部的重复不动',
+        winner: '面板按 `order` 先出现的那一条',
+        merges: ['级别取更急的一档', 'ref/action/bucket/bucket_label/preset/label 缺的补上（合并后仍可点进对象页）',
+          'merged_count / also_from[{panel_id,plugin_id}] 如实写清还有哪块面板也列了它'],
+        reading: ioStats.last_render
+          ? { deduped: ioStats.last_render.deduped ?? 0, panels: ioStats.last_render.dedupe_panels ?? 0 } : null,
+        note: '重复占位不是"多给点信息"，它让计数说谎（两块面板各列同一批门 ⇒ 本侧计数 2×）。'
+          + '外壳不认识任何对象类：它只比较插件自己给的 `dedupe_key` 字符串' },
+      // **通知的名额分配**（本批新增）：产出 / 返回 / 上限 / 窗口 —— 截断与可翻到哪一条都如实写。
       notify: ioStats.notify ?? null,
+      // **通知窗口**（本批新增）：通知中心走的就是面板那一套服务端窗口（`w=1` + `pq.notify`）。
+      notify_window: { schema: 'quotagent/webui-notify-window/v1', block_id: NOTIF_BLOCK_ID,
+        request: `w=1&pq={"${NOTIF_BLOCK_ID}":{"size":25,"page":0,"kw":"","chip":"all|unread|todo|bad",`
+          + '"tag":"","level":"info|warn|bad","muted":["<插件 id>"]}}',
+        sizes: [...WINDOW_SIZES], default_size: WINDOW_DEFAULT_SIZE, cap: NOTIF_CAP,
+        reads: '未读由**服务端**按会话身份存的已读集合算（`/api/ui/notif-state`）；未登录 ⇒ `unread.known=false`，'
+          + '界面如实说"未读只按本页算"',
+        note: '不带 `w` 的旧调用仍是"整份 + 上限 600 条"（脚本一字不变）；界面走窗口 ⇒ 只回这一页、'
+          + '计数/未读/还剩多少都在全集上算，**全部产出都能翻到**' },
       // **服务端窗口（分页/筛选/排序）**：口径、默认值、上限、请求参数 —— 界面与对账脚本都读它。
       window: windowDescribe(),
       note: '只读工具调用（插件声明 read:true）按「工具+参数」缓存 TTL；任何一次动作/落待办件都会清空缓存；'
@@ -2966,6 +3199,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     panels: surface.byKind('panel').map((panel) => ({ id: panel.id, title: panel.title, view: panel.view,
       panel_kind: panel.panel_kind, placement: panel.placement, actions: panel.actions, order: panel.order,
       object_kind: panel.object_kind, plugin_id: panel.plugin_id })),
+    // **通知源**（机制）：只给元数据。界面拿它做「按插件静音」的下拉候选（不必把全量通知拉下来才知道有谁）。
+    notification_sources: surface.byKind('notification-source').map((item) => ({ id: item.id, title: item.title,
+      view: item.view, order: item.order, plugin_id: item.plugin_id })),
     // **导出 / 打印**（`report` 贡献）：只给元数据（谁声明的、什么对象类、哪几种格式、真干活的动作是哪个）。
     reports: surface.reports().map((item) => ({ id: item.id, title: item.title, views: item.views,
       view: item.view, object_kind: item.object_kind, formats: item.formats, action: item.action,
