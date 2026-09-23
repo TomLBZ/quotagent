@@ -117,6 +117,40 @@ def package_of(snapshot_dir: Path, package_id: str) -> tuple[dict | None, str | 
     return package, None, str(latest)
 
 
+def quote_lines_of(body: dict) -> list[dict]:
+    """一条 `quote/submitted` 事实的**逐行报价**（与 `compare-apply.py#quote_lines_of` 同一口径）：
+
+      · **多行报价**：行在 `lines[]` 里（`item_id` + `unit_price_cents`；只给 `unit_price` 时 ×100）；
+        多行形态的 body 顶层是 `item_id: ""` / `unit_price_cents: null`（真值在行里）。
+      · **单行报价**：body 顶层那 12 键。
+
+    读不出来的行**逐行跳过**（不编价、不拿 0 冒充），**不放宽任何判据**：一份报价一行都读不出来时，
+    它就不算候选（下游照旧走 `no-quotes-for-package` 那条降级）。
+    """
+    raw = body.get("lines")
+    out: list[dict] = []
+    if isinstance(raw, list) and raw:
+        for line in raw:
+            if not isinstance(line, dict):
+                continue
+            item_id = str(line.get("item_id") or line.get("ref_line") or "").strip()
+            cents = line.get("unit_price_cents")
+            if cents is None:
+                price = line.get("unit_price")
+                cents = round(float(price) * 100) if isinstance(price, (int, float)) else None
+            if item_id == "" or isinstance(cents, bool) or not isinstance(cents, (int, float)):
+                continue
+            out.append({"item_id": item_id, "unit_price_cents": float(cents),
+                        "lead_time_days": line.get("lead_time_days")})
+        return out
+    item_id = str(body.get("item_id") or "").strip()
+    cents = body.get("unit_price_cents")
+    if item_id != "" and not isinstance(cents, bool) and isinstance(cents, (int, float)):
+        out.append({"item_id": item_id, "unit_price_cents": float(cents),
+                    "lead_time_days": body.get("lead_time_days")})
+    return out
+
+
 def per_item_matrix(package: dict, prepared: list[dict], weights: dict) -> dict:
     """比较矩阵 + **同一行项目内**才互相比较（per-item 归一）的贡献分解（DEF-012）。
 
@@ -225,10 +259,13 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                                              "lead_time_days": body.get("lead_time_days"),
                                              "supplier": str(body.get("supplier") or ""),
                                              "items": {}})
-        item_id = str(body.get("item_id") or "").strip()
-        cents = body.get("unit_price_cents")
-        if item_id and isinstance(cents, (int, float)):
-            entry["items"][item_id] = float(cents)
+        # **行形状按 29 §7.5 认两种**（与 `compare-apply.py#prepared_of` 同一口径）：多行报价的行在
+        # `lines[]` 里（顶层 `item_id`/`unit_price_cents` 是空的），单行报价就在顶层。修前只认顶层 ⇒
+        # 多行报价的 `items` 恒为空 ⇒ 排名、矩阵、贡献分解全都少掉这份报价。
+        for line in quote_lines_of(body):
+            entry["items"][line["item_id"]] = line["unit_price_cents"]
+            if entry.get("lead_time_days") is None and line.get("lead_time_days") is not None:
+                entry["lead_time_days"] = line["lead_time_days"]
     if not quotes:
         return emit({"ok": True, "view": args.view, "package_id": args.package_id or None,
                      "weights": weights, "ranking": [], "excluded": [], "citations": [],

@@ -3611,26 +3611,64 @@
   function versionPreset(action, { preset = {}, panel = null, fresh = false } = {}) {
     const field = versionFieldOf(action)
     if (!field) return { preset: {}, note: null }
-    const fromPanel = (item) => (item?.data?.version_for === action.id || item?.id === panel?.id
-      ? fingerprintOfVersion(item?.data?.version) : '')
-    const candidates = fresh
-      ? [fingerprintOfVersion(panel?.data?.version), fromPanel(panel), fingerprintOfVersion(preset.version),
-        ...state.panels.map(fromPanel), fingerprintOfVersion(state.object?.version)]
-      : [preset[field.name], fingerprintOfVersion(preset.version), fingerprintOfVersion(panel?.data?.version),
-        ...state.panels.map(fromPanel), fingerprintOfVersion(state.object?.version)]
-    const value = candidates.find((item) => typeof item === 'string' && item.trim() !== '') ?? ''
+    /**
+     * 候选 = `{value, label, declared}`：
+     *   · `value` = 这一处能给出的版本指纹（空串 = 这一处没有版本）；
+     *   · `label` = **这一版从哪取来的**（人不必猜）；
+     *   · `declared` = 这一处**声明了**"你看到的那一版"（29 §14：面板的 `version`/`version_for`、行级
+     *     `version`、对象页页头的 `version`）——**声明了但没有值**与**根本没人声明**是两回事：
+     *     前者 = 这个对象还没有人保存过（首次保存会放行并记下 rev 1），后者 = 界面没能把版本交给服务端。
+     *     P39 终局验收 §4.2 看到的"只读字段为空 + 弹层写'这一页没有声明'"正是把两者混成一类造成的。
+     */
+    const panelCandidate = (item) => (item?.data?.version_for === action.id || item?.id === panel?.id
+      // `declared` 只认**真的声明过**：`version_for` 指名这个动作，或那份数据里真有 `version` 键
+      // （只因为"它是打开表单的那块面板"就说"声明过"会把没声明的面板也算进来 —— 那就是在编。）
+      ? { value: fingerprintOfVersion(item?.data?.version),
+        declared: item?.data?.version_for === action.id
+          || Object.prototype.hasOwnProperty.call(item?.data || {}, 'version'),
+        label: `面板「${item.title || item.id}」${item.data?.version_for ? `（声明给 ${item.data.version_for}）` : ''}` }
+      : null)
+    const inObjectPage = Boolean(state.object) && typeof state.object === 'object'
+      && Object.prototype.hasOwnProperty.call(state.object, 'version')
+      && (!action.object_kind || action.object_kind === state.route.kind)
+    const ordered = [
+      { value: field.name in (preset || {}) ? String(preset[field.name] ?? '').trim() : '',
+        declared: false, label: '上一次打开这个动作时带上的版本（重开表单时沿用）' },
+      { value: fingerprintOfVersion(preset.version),
+        declared: Boolean(preset) && Object.prototype.hasOwnProperty.call(preset, 'version'),
+        label: '打开这一条时带的版本（那一行 / 那份载荷）' },
+      { value: fingerprintOfVersion(panel?.data?.version),
+        declared: Boolean(panel) && Object.prototype.hasOwnProperty.call(panel.data || {}, 'version'),
+        label: `当前面板「${panel?.title || panel?.id || '—'}」` },
+      ...state.panels.map(panelCandidate).filter(Boolean),
+      ...(inObjectPage
+        ? [{ value: fingerprintOfVersion(state.object.version), declared: true, label: '这一页的对象页页头' }]
+        : []),
+    ]
+    // 取值顺序（都有出处，不猜）：① 打开时给的预填/行级版本 ② 打开它的那块面板 ③ 页面上声明 `version_for`
+    // 命中这个动作的面板 ④ 对象页页头。`fresh`（冲突后"带上最新版本重做"）把面板/页头的读数提前。
+    const candidates = fresh ? [...ordered.slice(2), ...ordered.slice(0, 2)] : ordered
+    const hit = candidates.find((item) => item.value !== '') ?? null
+    const value = hit ? hit.value : ''
+    const declared = ordered.some((item) => item.declared)
     // 版本的人话说明（有 `rev/at/by` 就说出来；只有指纹就把指纹摆出来）——界面不编，只搬运
     const sources = [preset.version, panel?.data?.version, ...state.panels.map((item) => item.data?.version),
       state.object?.version].filter((item) => item && typeof item === 'object')
     const found = sources.find((item) => fingerprintOfVersion(item) === value) ?? null
-    const note = value === ''
-      ? '这一次**没有带上版本**（这一页没有声明"你看到的那一版"）：服务端按安全默认判 ——'
-        + '内容与现在一样就放行，**会覆盖别人的改动就拒**'
-      : `你带上的版本：${found
+    const note = value !== ''
+      ? `你带上的版本：${found
         ? `rev ${esc(String(found.rev ?? '?'))}${found.by ? ` · ${esc(String(found.by))}` : ''}`
           + `${found.at ? ` @ ${esc(String(found.at).slice(0, 19))}` : ''}`
         : '（只有指纹）'} ｜ \`${esc(String(value).slice(0, 23))}…\` —— `
-        + '别人在你打开这一页之后先保存过，这次保存就会被明确拒绝并给出差异'
+        + '别人在你打开这一页之后先保存过，这次保存就会被明确拒绝并给出差异。'
+        + `（这一版取自：${esc(hit?.label || '（没记出处）')}）`
+      : (declared
+        ? '这一页声明了你看到的那一版'
+          + `（${ordered.filter((item) => item.declared).map((item) => esc(item.label)).join(' / ')}），`
+          + '但还没有人保存过它：服务端按"首次"放行并记下 rev 1 + 指纹 —— 之后打开这一页'
+          + '就会自动把这一版带上（别人先改过就会明确拒绝并给出差异）'
+        : '这一次没有带上版本（这一页没有任何面板 / 行 / 对象页声明"你看到的那一版"）：'
+          + '服务端按安全默认判 —— 内容与现在一样就放行，会覆盖别人的改动就拒')
     return { preset: { [field.name]: value }, note }
   }
 
@@ -4029,11 +4067,25 @@
 
   /** **界内确认**（不再用浏览器原生 confirm）：显示签什么、后果、以及要提交的字段值 —— 可返回修改。 */
   function showConfirm(action, input, modal, onYes) {
+    /**
+     * **多行值按行渲染**（P39 终局验收 §4.4）：`items` 这类"一行一条"的文本域里真有换行，但 HTML 里换行
+     * 只是空白 ⇒ 确认页把它们折成一行（`L-001,…,20L-002,…`，看着像格式错了）。这里把多行值**逐行摆出来**
+     * 并如实写出共几行 —— 不改任何提交内容（提交的仍是那一个原样的字符串）。
+     */
     const rows = (action.input?.fields || []).map((field) => {
-      const value = input[field.name]
-      const shown = value === undefined || value === null || value === '' ? '（空）' : String(value)
-      return `<dt>${esc(field.label)}</dt><dd>${field.type === 'signature' ? `<code>${esc(shown)}</code>`
-        : esc(shown)}</dd>`
+      const raw = input[field.name]
+      const shown = raw === undefined || raw === null || raw === '' ? '' : String(raw)
+      const lines = shown === '' ? [] : shown.split(/\r?\n/)
+      const body = shown === ''
+        ? '（空）'
+        : (field.type === 'signature' ? `<code>${esc(shown)}</code>`
+          : (lines.length > 1
+            ? `<div class="q-lines" data-confirm-lines="${lines.length}">${
+              lines.map((line) => `<span class="q-line">${esc(line) || '（空行）'}</span>`).join('')}</div>`
+              + `<span class="q-hint">这一格共 <b>${lines.length}</b> 行（按换行分行，逐行提交；`
+              + `不改内容，只是不再挤成一行）</span>`
+            : esc(shown)))
+      return `<dt>${esc(field.label)}</dt><dd>${body}</dd>`
     }).join('')
     // **确认页要复述"这一批几份"**（P21 / D5）：P20 实测确认页只有字段值（`ids` 是数组，渲染成 `（空）`），
     // 用户要签 88 份却看不到这个数字 —— 而它正是"一次署名"这句话里唯一需要用户确认的量。

@@ -86,6 +86,11 @@ table.q-table input, table.q-table select { width: 100%; background: var(--bg-ra
 .q-kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 4px 0; }
 .q-kv dt { color: var(--fg-dim); }
 .q-kv dd { margin: 0; overflow-wrap: anywhere; }
+/* **多行值**（确认页里"一行一条"的文本域：`items` 之类）：逐行摆出来，别让 HTML 把换行折成空格。
+   只影响显示 —— 提交的仍是原样的那一个字符串。 */
+.q-lines { display: grid; gap: 2px; }
+.q-lines .q-line { display: block; white-space: pre-wrap; overflow-wrap: anywhere;
+  border-left: 2px solid var(--line); padding-left: 6px; font-variant-numeric: tabular-nums; }
 .q-object-facts { background: var(--bg-raise); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 8px 10px; }
 .q-metrics { display: flex; gap: 18px; flex-wrap: wrap; }

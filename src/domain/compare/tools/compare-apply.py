@@ -10,7 +10,8 @@
     同 body ⇒ 去重命中），如实报 `duplicates`。
   · `--step export`  导出 CSV：`ExportService.export(evaluation, path, ledger=…)` 落
     `compare/table-exported`（行数/字节数/`evaluation_id`）并写**排名表 CSV**；同时写
-    **比较矩阵 CSV**（`compare-rank.py` 的 `per_item_matrix` —— 单元格只在**同一行项目内**比较）。
+    **比较矩阵 CSV**（`compare-rank.py` 的 `per_item_matrix` —— 单元格只在**同一行项目内**比较）与
+    **人读正文 TXT**（`ranking_txt()`：同一份评估，不重算；csv 给机器 / txt 给人）。
     页脚写 `source=eval:<id>` 与行数，可与账本逐行核对。
 
 只读复算与展示仍走 `src/domain/compare/tools/compare-rank.py`（它账本零新增）。
@@ -208,8 +209,48 @@ def package_of(ui_shared: Path, package_id: str) -> tuple[dict | None, str | Non
             "snapshot_hash": snapshot.get("snapshot_hash")}, None, str(latest)
 
 
+def quote_lines_of(body: dict) -> list[dict]:
+    """一条 `quote/submitted` 事实的**逐行报价**（两种形状都认，口径见 29 §7.5）：
+
+      · **多行报价**：行在 `lines[]` 里（`item_id` + `unit_price_cents`；只给 `unit_price` 时 ×100 换成分）。
+        多行形态的 body 顶层是 `item_id: ""` / `unit_price_cents: null`（真值在行里）——**只看顶层会得到空集**。
+      · **单行报价**：body 顶层就是那 12 键（`item_id` + `unit_price_cents`）—— 与旧口径逐字节一致。
+
+    读不出来的行（不是对象 / 没有 id / 价不是有限数）**逐行跳过**：不编价、不拿 0 冒充，也不放宽任何判据
+    （候选集为空时写者照旧按 `no-quotes-for-package` 拒）。
+    """
+    raw = body.get("lines")
+    out: list[dict] = []
+    if isinstance(raw, list) and raw:
+        for line in raw:
+            if not isinstance(line, dict):
+                continue
+            item_id = str(line.get("item_id") or line.get("ref_line") or "").strip()
+            cents = line.get("unit_price_cents")
+            if cents is None:
+                price = line.get("unit_price")
+                cents = round(float(price) * 100) if isinstance(price, (int, float)) else None
+            if item_id == "" or isinstance(cents, bool) or not isinstance(cents, (int, float)):
+                continue
+            out.append({"item_id": item_id, "unit_price_cents": float(cents),
+                        "lead_time_days": line.get("lead_time_days")})
+        return out
+    item_id = str(body.get("item_id") or "").strip()
+    cents = body.get("unit_price_cents")
+    if item_id != "" and not isinstance(cents, bool) and isinstance(cents, (int, float)):
+        out.append({"item_id": item_id, "unit_price_cents": float(cents),
+                    "lead_time_days": body.get("lead_time_days")})
+    return out
+
+
 def prepared_of(rows: list[dict], package: dict) -> list[dict]:
-    """已送达本侧的报价 → `CompareService.rank` 的候选（与 `compare-rank.py` 同口径）。"""
+    """已送达本侧的报价 → `CompareService.rank` 的候选（与 `compare-rank.py` 同口径）。
+
+    **逐行读数走 `quote_lines_of`（29 §7.5 的两种形状）**：修前这里只认 body 顶层的
+    `item_id`/`unit_price_cents`，而一份多行报价的顶层那两个键是空的 ⇒ 候选集恒为空 ⇒ 写者按
+    `no-quotes-for-package` 拒：比价矩阵/导出/打印/存权重在纯界面下**全部走不通**（P39 终局验收
+    的阻断项）。行形状是**既有语义**（账本里就是这么落的），不是本脚本新造的判据。
+    """
     quotes: dict[str, dict] = {}
     for row in rows:
         if str(row.get("type")) != "quote/submitted":
@@ -218,14 +259,16 @@ def prepared_of(rows: list[dict], package: dict) -> list[dict]:
         if str(body.get("package_id") or "") != str(package.get("package_id") or ""):
             continue
         quote_id = str(body.get("quote_id") or "")
-        item_id = str(body.get("item_id") or "")
-        cents = body.get("unit_price_cents")
-        if not quote_id or not item_id or not isinstance(cents, (int, float)):
+        lines = quote_lines_of(body)
+        if not quote_id or not lines:
             continue
         entry = quotes.setdefault(quote_id, {"quote_id": quote_id, "currency": str(body.get("currency") or "CNY"),
                                              "lead_time_days": body.get("lead_time_days"),
                                              "supplier": str(body.get("supplier") or ""), "items": {}})
-        entry["items"][item_id] = float(cents)
+        for line in lines:
+            entry["items"][line["item_id"]] = line["unit_price_cents"]
+            if entry.get("lead_time_days") is None and line.get("lead_time_days") is not None:
+                entry["lead_time_days"] = line["lead_time_days"]
     qty_of = {str(item.get("item_id")): item.get("qty") for item in package.get("items") or []}
     out: list[dict] = []
     for entry in quotes.values():
@@ -268,6 +311,39 @@ def matrix_csv(matrix: dict) -> str:
         writer.writerow([f"# 行小计：{item.get('item_id')} 本行最低价（分）", item.get("min_unit_price_cents"),
                          "", "", "", "", "", "", "", "", f"极差 {item.get('spread_pct')}%"])
     return buffer.getvalue()
+
+
+def ranking_txt(evaluation: dict, prepared: list[dict], weights: dict, footer: str) -> str:
+    """**人读正文**（`.txt`）：同一份评估的排名表 —— 每名一行，带得分、五分量贡献、引用链。
+
+    与 `ExportService.export` 落的 `-ranking.csv` **同源**（同一份 `evaluation`，不重算、不改口径）：
+    CSV 给机器，TXT 给人（导出格式三件套 csv / txt / html 里的 txt；html 与打印走界面上的
+    `compare.print`）。行序即名次；页脚写 `source=eval:<id>` 与权重，便于逐行回账本核。
+    """
+    supplier_of = {str(quote.get("quote_id")): str(quote.get("supplier") or "") for quote in prepared}
+    lines = ["比价表（承包商侧导出 · 人读正文）",
+             f"包 {evaluation.get('package_id')} rev{evaluation.get('package_rev')}"
+             f" · 币种 {evaluation.get('currency')}",
+             f"权重：{json.dumps(weights, ensure_ascii=False, sort_keys=True)}",
+             "",
+             f"{'名次':<4} {'得分':>8}  {'报价':<22} {'供应商':<14} 分量贡献 / 引用链"]
+    for position, row in enumerate(evaluation.get("ranking") or [], start=1):
+        quote_id = str(row.get("quote_id"))
+        components = row.get("components") or {}
+        why = " · ".join(f"{name}={components[name]['value']}" for name in COMPONENTS if name in components)
+        citations = " ".join(row.get("citations") or [])
+        lines.append(f"{position:<4} {row.get('score'):>8}  {quote_id:<22} {supplier_of.get(quote_id, ''):<14} {why}")
+        if citations:
+            lines.append(f"{'':<4} {'':>8}  {'':<22} {'':<14} 引用：{citations}")
+    excluded = evaluation.get("excluded") or []
+    if excluded:
+        lines.append("")
+        lines.append(f"被排除（{len(excluded)} 家）：{' '.join(str(item) for item in excluded)}")
+    lines.append("")
+    lines.append(footer.rstrip("\n"))
+    lines.append("（这份 TXT 与同一目录下的 -ranking.csv / -matrix.csv 同源；csv 给机器、txt 给人；"
+                 "可打印的 HTML 由界面上的「导出 / 打印比价表」生成）")
+    return "\n".join(lines) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:  # noqa: C901
@@ -392,20 +468,25 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                        + f"# 矩阵：{matrix['counts']['items']} 行项目 × {matrix['counts']['quotes']} 家"
                          f"（单元格只在同一行项目内比较）\n")
         matrix_path.write_text(matrix_text, encoding="utf-8")
+        # **人读正文**（导出格式三件套里的 txt）：同一份评估，不重算、不改口径（CSV 给机器 / TXT 给人）。
+        txt_path = ui_shared / "compare" / f"export-{tag}-ranking.txt"
+        txt_text = ranking_txt(evaluation, prepared, weights, footer)
+        txt_path.write_text(txt_text, encoding="utf-8")
         after_export, _ = load_rows(ledger_path)
         ledger_added = max(0, len(after_export or []) - before)
         applied.append({"event": "compare/table-exported", "evaluation_id": evaluation["evaluation_id"],
                         "path": str(ranking_path), "rows": body["rows"], "bytes": len(ranking_text.encode("utf-8")),
                         "matrix_path": str(matrix_path),
-                        "matrix_bytes": len(matrix_text.encode("utf-8"))})
-        saved = {"ranking_csv": str(ranking_path), "matrix_csv": str(matrix_path),
+                        "matrix_bytes": len(matrix_text.encode("utf-8")),
+                        "txt_path": str(txt_path), "txt_bytes": len(txt_text.encode("utf-8"))})
+        saved = {"ranking_csv": str(ranking_path), "matrix_csv": str(matrix_path), "ranking_txt": str(txt_path),
                  "rows": body["rows"], "ranked": body["ranked"], "excluded": body["excluded"],
                  "matrix_counts": matrix["counts"]}
 
     archived = archive(inbox, request) if request.resolve().parent == inbox.resolve() else ""
     hint = ("权重已存成插件配置（%s）并落了一条 compare/rank-computed；下次打开比价页会读回这组权重。"
             % str(config_path) if step == "weights" else
-            "已导出两份 CSV（排名表 + 同一行项目内的比较矩阵）并落了一条 compare/table-exported；"
+            "已导出三份文件（排名表 CSV + 同一行项目内的比较矩阵 CSV + 人读正文 TXT）并落了一条 compare/table-exported；"
             "页脚写了 source=eval:<id> 与行数，可与账本逐行核对。")
     return emit({"ok": True, "step": step, "event": applied[-1]["event"], "applied": applied,
                  "duplicates": [] if ledger_added else [{"reason": "idempotent-rank", "evaluation_id": evaluation["evaluation_id"]}],

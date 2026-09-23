@@ -88,6 +88,11 @@ const linesTextOf = (read, render, { sep = ' ', empty = '' } = {}) => {
 /** `html` 面板里逐段转义（面板的 html 是原样注入的 ⇒ 值必须自己转义；只转义，不解读）。 */
 const escHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+/**
+ * **整包授标**一次最多覆盖几行（与批量人签的 `batch-too-large` 同一口径：50）。
+ * 超限**具名拒 + 给下一步**，不静默截断成"前 50 行"（截断会让用户以为整包提过了）。
+ */
+const MAX_PACKAGE_LINES = 50
 
 export async function register(surface, host) {
   const me = plugin_id
@@ -96,6 +101,44 @@ export async function register(surface, host) {
   const ledgerS = () => asText(host.config?.ledger_supplier)
   const intentFile = () => `${host.sharedDir}/exchange/award-intents.json`
   const deliveryFile = () => `${host.sharedDir}/exchange/po-deliveries.json`
+  /**
+   * **包的行项目量**（`byItem`: `<条目 id>` → 快照里的那一条）：给整包授标带出每一行的量。
+   *
+   * 口径与 `src/domain/rfq/code/ui.mjs#itemQtyIndex` **同源**（那里是真源，这里只取同一份快照文件）：
+   * 唯一写者 `rfq-publish.py` 发布时把 `<ui-shared>/contractor/rfq-<包>-rev<n>.json` 落盘，包体
+   * （含 `spec.items` 的 `qty`）**不进账本**，所以量只能从这份快照读。读不到 ⇒ 如实说读不到
+   * （**不编数量**：没有量时唯一写者会按 `line-qty-invalid` 拒，界面先一步说清）。
+   * 先按账本里 `rfq/published` 给过的 rev 找，再退回 rev 1..5（与 rfq 侧同一套兜底顺序）。
+   */
+  const packageItemsOf = (rows, packageId) => {
+    const revs = typeRows(rows, 'rfq/published').map((row) => bodyOf(row))
+      .filter((body) => asText(body.package_id) === packageId)
+      .map((body) => Number(body.rev)).filter((rev) => Number.isFinite(rev) && rev > 0)
+      .sort((left, right) => right - left)
+    const wanted = [...new Set([...revs, 5, 4, 3, 2, 1])]
+    let sawFile = false
+    for (const rev of wanted) {
+      const data = host.readJson(`${host.sharedDir}/contractor/rfq-${packageId}-rev${rev}.json`)
+      if (!data || typeof data !== 'object') continue
+      sawFile = true
+      const spec = data.spec && typeof data.spec === 'object' && data.spec !== null ? data.spec : {}
+      const rowsOfItems = readRows(spec.items).rows
+      if (!rowsOfItems.length) continue
+      const byItem = new Map()
+      for (const item of rowsOfItems) {
+        const itemId = asText(item.item_id)
+        if (itemId === '') continue
+        byItem.set(itemId, { qty: Number(item.qty), unit: asText(item.unit) })
+      }
+      if (byItem.size) return { ok: true, rev, byItem, why: '',
+        dropped: readRows(spec.items).dropped }
+    }
+    return { ok: false, rev: 0, byItem: new Map(),
+      why: sawFile
+        ? `包 ${packageId} 的快照里没有可读的行项目（\`spec.items\` 不是行数组或为空）⇒ 不编数量`
+        : `本机没有包 ${packageId} 的快照文件（\`<ui-shared>/contractor/rfq-<包>-rev<n>.json\`）；`
+          + '发布这一包时唯一写者会落它 —— 读不到就如实降级（不编条目/数量）' }
+  }
   /**
    * 本侧 realm（= 身份）。
    *
@@ -261,6 +304,69 @@ export async function register(surface, host) {
           + '（缺什么、下一步该谁办，写在「下一步」列里）—— 不摆按下去必被拒的按钮。' }
     } }))
 
+  /**
+   * **意向逐行明细**（整包授标的「账本逐行对账」那一半）：一条意向覆盖整包多行时，把账本里
+   * `award/intent-proposed.lines[]` **逐行摊开** —— 每行给条目 / 量 / 整数分单价 + 它的单价基准
+   * （`<报价>#<条目>:unit_price`，也就是后面 PO 行会带的 `basis`）+ **这一行的账本行号**。
+   *
+   * 为什么要有这一块：`award.propose-package` 的**逐条回执**（toast / 「最近」流水）是一次性的；
+   * 之后要回答"这份整包意向到底覆盖了哪几行、每行多少钱、逐行对不对得上账本"就得有这么一处
+   * 只读面。行序 = 账本里 `lines[]` 的顺序（不重排），坏行逐条计数、好行照列。
+   */
+  out.push(surface.panel({ plugin_id: me, id: 'award.intent-lines',
+    title: '意向逐行明细（整包授标 · 逐行对账）', view: 'contractor', order: 42, kind: 'table',
+    hint: '一条意向覆盖整包多行时，这里把账本 `award/intent-proposed.lines[]` 逐行摊开：条目 / 量 / '
+      + '整数分单价 + 单价基准（报价#条目）+ 这一行的账本行号 —— 逐行可回账本核，不用只信一句"已受理"。',
+    data: () => {
+      const rows = host.rows('contractor')
+      const confirmed = new Map(typeRows(rows, 'award/confirmed')
+        .map((row) => [asText(bodyOf(row).intent_id), bodyOf(row)]))
+      const awards = new Map(typeRows(rows, 'award/committed')
+        .map((row) => [asText(bodyOf(row).intent_id), bodyOf(row)]))
+      const pos = typeRows(rows, 'po/issued').map((row) => bodyOf(row))
+      const table = []
+      let dropped = 0
+      for (const row of typeRows(rows, 'award/intent-proposed')) {
+        const body = bodyOf(row)
+        const intentId = asText(body.intent_id)
+        const packageId = asText(body.package_id)
+        const quoteId = asText(body.quote_id)
+        const lines = readRows(body.lines)
+        dropped += lines.dropped
+        const award = awards.get(intentId) ?? null
+        const po = award ? pos.find((item) => asText(item.award_id) === asText(award.award_id)) ?? null : null
+        lines.rows.forEach((line, index) => {
+          const itemId = asText(line.item_id)
+          table.push({ id: `${intentId}#${itemId}#${index}`, intent_id: intentId, ledger_seq: row.seq,
+            package_id: packageId, quote_id: quoteId, item_id: itemId, qty: line.qty ?? '',
+            unit_price_cents: line.unit_price_cents ?? '', basis: `${quoteId}#${itemId}:unit_price`,
+            lines_in_intent: lines.all,
+            status: award ? '已成承诺' : (confirmed.has(intentId) ? '供应商已确认' : '待供应商确认'),
+            award_id: award ? asText(award.award_id) : '', po_id: po ? asText(po.po_id) : '' })
+        })
+      }
+      if (!table.length) {
+        return { ok: true, kind: 'table', degraded: true, reason: 'no-award-intent',
+          next_action: '在「收到的报价（逐行）」表里按行内「整包提出授标意向」提一条（覆盖整包的多行）',
+          columns: [{ key: 'item_id', label: '条目' }], rows: [] }
+      }
+      return { ok: true, kind: 'table',
+        columns: [
+          { key: 'intent_id', label: '意向', type: 'code' }, { key: 'ledger_seq', label: '账本行号', filter: 'number' },
+          { key: 'package_id', label: '包', type: 'code' }, { key: 'quote_id', label: '报价', type: 'code' },
+          { key: 'item_id', label: '条目', type: 'code' }, { key: 'qty', label: '量', filter: 'number' },
+          { key: 'unit_price_cents', label: '单价（整数分）', filter: 'number' },
+          { key: 'basis', label: '单价基准（报价#条目）', type: 'code' },
+          { key: 'lines_in_intent', label: '这份意向共几行', filter: 'number' },
+          { key: 'status', label: '状态' }, { key: 'award_id', label: '承诺', type: 'code' },
+          { key: 'po_id', label: 'PO', type: 'code' }],
+        rows: table,
+        counts: { intents: new Set(table.map((item) => item.intent_id)).size, lines: table.length, dropped },
+        note: '行序 = 账本里 `lines[]` 的顺序（不重排）；`basis` 就是后面 PO 行会带的单价基准 ——'
+          + '一行一条链、逐行可回账本核（`ledger_seq` 是那条事实在 append-only 账本里的位次）。'
+          + (dropped ? ` 另有 ${dropped} 条行读不出来（形状异常）：已跳过并逐条计数，不静默丢。` : '') }
+    } }))
+
   out.push(surface.action({ plugin_id: me, id: 'award.propose', title: '提出授标意向（不产生义务）',
     views: ['contractor'], group: '授标', order: 10,
     hint: '意向可撤回、可重提；承诺不可凭空产生（FR-AWARD-001/002）',
@@ -312,6 +418,160 @@ export async function register(surface, host) {
         next_action: json.refusal?.next_action ?? inAppNext ?? '看 stdout 定位唯一写者的拒绝原因',
         result: { intent_id: json.intent_id ?? null, applied: json.applied ?? [], envelope: json.envelope ?? null,
           ledger_added: json.ledger_added ?? 0, duplicates: json.duplicates ?? [],
+          writer_next_action: writerNext || null } }
+    } }))
+
+  /**
+   * **整包授标**（P39 终局验收 §4.3 的缺口）：多行报价（29 §7.5：行在 `lines[]` 里）原先只能**逐行**
+   * 提意向 ⇒ 一份 2 行报价要走「2 条意向 / 2 次供应商确认 / 2 份承诺 / 2 张 PO」。这条动作把**整份报价
+   * 的行一次提完**：一条 `award/intent-proposed`（body 的 `lines[]` 带上每一行），随后供应商**一次**
+   * 确认、承包商**一次**人签承诺、**一张** PO 覆盖整包 —— 链只有一条，但**逐行仍各带自己的引用链**：
+   *
+   *   · 行与价**逐行取自本侧账本的报价事实**（界面不许手抄、不许改价；量取自本侧发布的包快照文件）；
+   *   · 意向/承诺/PO 三处都按行保留 `item_id` 与整数分单价，PO 行还带
+   *     `basis = <报价 id>#<条目>:unit_price` ⇒ 账本里**逐行**都能对回原报价那一条。
+   *
+   * 回执**逐条**（沿用 P18 批量人签的语义与文案口径）：逐行列出入批的条目/量/单价 + 它的引用链，
+   * 并且**不是**"全成/全败"的模糊话 —— 每条自带 `where`（`included` / `refused`）与具名原因；
+   * 行数上限 50（`batch-too-large`，与 P18 同一口径）；同一份意向重提 ⇒ 写者如实报 `already-proposed`
+   * 且**账本零新增**（幂等）。**一条意向是原子的**：有任何一行读不出来（没有量/没有价/行形状坏）⇒
+   * **整包具名拒**、账本零新增 —— 不拿"部分行"冒充整包（逐行入口仍照旧可用：行内「提出授标意向」）。
+   */
+  out.push(surface.action({ plugin_id: me, id: 'award.propose-package',
+    title: '整包提出授标意向（覆盖这份报价的每一行）', views: ['contractor'], group: '授标', order: 12,
+    confirm: { required: true,
+      message: '整包意向覆盖这份报价的每一行（逐行仍各带自己的引用链），不产生义务、可撤回：确认？' },
+    hint: '一条意向覆盖整包：行与价逐行取自本侧账本的报价事实（界面不改价），量取自本侧发布的包快照；'
+      + '随后供应商一次确认 → 承包商一次人签承诺 → 一张 PO（逐行 basis 指向中标报价条目）',
+    input: { fields: [
+      { name: 'package_id', label: '包', type: 'text', required: true, from_row: true,
+        help: '从「收到的报价（逐行）」那一行带入（行内点「整包提出授标意向」会自动填）' },
+      { name: 'quote_id', label: '报价', type: 'text', required: true, from_row: true,
+        help: '这一份报价的整包意向覆盖它 `lines[]` 里的每一行（行形状见 29 §7.5）' },
+      { name: 'reason', label: '理由（进意向正文）', type: 'text' },
+    ] },
+    server: async (ctx, input) => {
+      const packageId = asText(input.package_id)
+      const quoteId = asText(input.quote_id)
+      if (packageId === '' || quoteId === '') {
+        return { ok: false, code: 'package-or-quote-required',
+          reason: '整包意向要知道是哪个包的哪一份报价（不猜）',
+          next_action: '在「收到的报价（逐行）」表里按行的「整包提出授标意向」打开（包/报价会带进来）' }
+      }
+      const rows = host.rows('contractor')
+      // ---- 逐行报价事实（29 §7.5 的两种形状；口径与 `rfq.responses` / `compare-rank.py` 同一个）---
+      const quoted = []
+      let lineShape = 'none'
+      for (const row of typeRows(rows, 'quote/submitted')) {
+        const body = bodyOf(row)
+        if (asText(body.quote_id) !== quoteId) continue
+        const multi = Array.isArray(body.lines) && body.lines.length > 0
+        const list = multi ? body.lines
+          : [{ item_id: body.item_id, unit_price_cents: body.unit_price_cents,
+            lead_time_days: body.lead_time_days }]
+        lineShape = multi ? 'lines[]（多行）' : 'body 顶层（单行）'
+        for (const line of readRows(list).rows) {
+          const itemId = asText(line.item_id)
+          const raw = line.unit_price_cents ?? (Number.isFinite(Number(line.unit_price))
+            ? Number(line.unit_price) * 100 : null)
+          const cents = Number(raw)
+          if (itemId === '' || !Number.isFinite(cents) || cents <= 0) continue
+          quoted.push({ item_id: itemId, unit_price_cents: cents,
+            lead_time_days: Number.isFinite(Number(line.lead_time_days)) ? Number(line.lead_time_days) : null })
+        }
+      }
+      if (!quoted.length) {
+        return { ok: false, code: 'quote-lines-unreadable',
+          reason: `本侧账本里读不出报价 ${quoteId} 的任何一行（行形状：${lineShape}）`,
+          next_action: '先让对方把报价送达本侧（APP 的「人签提交报价」会写这条登记），或按行内'
+            + '「提出授标意向」逐行提（那一行会把量/单价带进表单）' }
+      }
+      if (quoted.length > MAX_PACKAGE_LINES) {
+        return { ok: false, code: 'batch-too-large',
+          reason: `这份报价 ${quoted.length} 行超过一次上限 ${MAX_PACKAGE_LINES} 行`,
+          next_action: `分两次提（先按行内「提出授标意向」提一部分，再提剩下的）；`
+            + `上限与批量人签同一口径（${MAX_PACKAGE_LINES}）` }
+      }
+      // ---- 量：只取**本侧发布的包快照**（唯一写者落盘的那份），读不到就说读不到 ----
+      const items = packageItemsOf(rows, packageId)
+      if (!items.ok) {
+        return { ok: false, code: 'package-snapshot-missing',
+          reason: `读不到包 ${packageId} 的行项目快照：${items.why || '没有可读的快照'}`,
+          next_action: '先在「发包」里发布这一包（快照是量的唯一来源，不编数量）；'
+            + '或在「收到的报价」表里按行内「提出授标意向」逐行提（那一行自带量）',
+          result: { quote_id: quoteId, package_id: packageId, line_shape: lineShape,
+            lines_total: quoted.length } }
+      }
+      const lines = []
+      const receipts = []
+      const missingQty = []
+      for (const line of quoted) {
+        const item = items.byItem.get(line.item_id)
+        const qty = item ? Number(item.qty) : Number.NaN
+        if (!Number.isFinite(qty) || qty <= 0) { missingQty.push(line.item_id); continue }
+        lines.push({ item_id: line.item_id, qty, unit_price_cents: line.unit_price_cents })
+      }
+      if (missingQty.length) {
+        for (const line of quoted) {
+          receipts.push({ item_id: line.item_id, qty: items.byItem.get(line.item_id)?.qty ?? null,
+            unit_price_cents: line.unit_price_cents,
+            where: missingQty.includes(line.item_id) ? 'refused' : 'included',
+            code: missingQty.includes(line.item_id) ? 'line-qty-invalid' : '',
+            reason: missingQty.includes(line.item_id) ? '包快照里没有这一行的量（不编数量）' : '',
+            basis: `${quoteId}#${line.item_id}:unit_price` })
+        }
+        return { ok: false, code: 'line-qty-invalid',
+          reason: `有 ${missingQty.length} 行在包快照里读不到量（${missingQty.join(' ')}）⇒ 整包意向不落账`,
+          next_action: '先在「包的行项目」里把这一包的条目补上（或让对方按最新一版重报），再提整包意向；'
+            + '只提读得出量的那几行可以走行内「提出授标意向」',
+          result: { quote_id: quoteId, package_id: packageId, line_shape: lineShape,
+            snapshot_rev: items.rev, lines_total: quoted.length, receipts } }
+      }
+      // ---- 一条意向覆盖整包：**只经唯一写者** `commitment-apply.py --step propose`（界面不是第二条写路径）----
+      const staged = host.stage('commitment-apply', { kind: 'commitment-apply', action: 'propose',
+        view: 'contractor', package_id: packageId, quote_id: quoteId, lines,
+        reason: String(input.reason ?? ''), note: '', actor: 'agent:commitment-apply' })
+      if (!staged.ok) return staged
+      const run = host.runPython('src/domain/commitments/tools/commitment-apply.py',
+        ['--step', 'propose', '--request', staged.path, '--ui-shared', host.sharedDir,
+          '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(),
+          '--intent-out', intentFile(), '--now', host.now()])
+      const json = run.json ?? {}
+      const done = run.ok && json.ok === true
+      // 幂等：同一份意向已经提过时写者回 `duplicates[{intent_id, reason:'already-proposed'}]`（账本零新增）——
+      // 那一条也把 intent_id 报出来，界面照实说"已经提过这一条"，不假装刚提的。
+      const intentId = asText(json.intent_id) || asText((json.duplicates ?? [])[0]?.intent_id)
+      for (const line of lines) {
+        receipts.push({ item_id: line.item_id, qty: line.qty, unit_price_cents: line.unit_price_cents,
+          where: done ? 'included' : 'refused', code: done ? '' : (json.refusal?.code ?? 'writer-failed'),
+          reason: done ? '' : (json.refusal?.reason ?? run.reason ?? ''),
+          intent_id: intentId, basis: `${quoteId}#${line.item_id}:unit_price` })
+      }
+      const writerNext = asText(json.next_action)
+      const inAppNext = (writerNext && /本脚本|--step|PYTHONPATH/.test(writerNext))
+        ? '等供应商在 APP 里确认中标（供应商道「确认授标」）；确认 + 人工批准齐备后在「授标链」行内点'
+          + '「授标承诺（人签）」—— 一次承诺覆盖整包，再发一张 PO（逐行 basis 指向报价条目）'
+        : writerNext
+      // **逐条回执**（沿用 P18 批量人签的文案口径）：逐行列明这次进了哪几行、量/单价各是多少 ——
+      // 回执里看得见这句话（toast / 「最近」动作流水照抄 `next_action`），不只是一句"成功了"。
+      const lineReceipt = lines
+        .map((line) => `${line.item_id}×${line.qty}@${line.unit_price_cents}分`).join(' · ')
+      const step = json.refusal?.next_action ?? inAppNext ?? '看 result 里的逐条回执定位'
+      const idempotent = (json.duplicates ?? []).some((item) => item?.reason === 'already-proposed')
+      const head = json.refusal
+        ? `整包 ${lines.length} 行一次提交，未落账（${json.refusal.code}）：${lineReceipt}`
+        : (idempotent
+          ? `这一份意向已经提过（${intentId || '—'}）⇒ 账本零新增：覆盖 ${lines.length} 行（${lineReceipt}）`
+          : `已受理：一条意向 ${intentId || '—'} 覆盖整包 ${lines.length} 行（${lineReceipt}）`)
+      return { ok: done, code: json.refusal?.code ?? (done ? 'proposed' : 'writer-failed'),
+        reason: json.refusal?.reason ?? run.reason ?? '',
+        note: `${head}；逐行 basis = ${quoteId}#<条目>:unit_price —— 账本里可逐行对账`,
+        next_action: `${head} —— ${step}`,
+        result: { intent_id: intentId || null, quote_id: quoteId, package_id: packageId,
+          line_shape: lineShape, snapshot_rev: items.rev, lines_total: quoted.length,
+          lines_included: done ? lines.length : 0, receipts,
+          applied: json.applied ?? [], ledger_added: json.ledger_added ?? 0,
+          duplicates: json.duplicates ?? [], envelope: json.envelope ?? null,
           writer_next_action: writerNext || null } }
     } }))
 
@@ -498,7 +758,7 @@ export async function register(surface, host) {
         .slice(0, 1).join('')
       return { ok: true, kind: 'table',
         columns: [{ key: 'po_id', label: 'PO', type: 'code' }, { key: 'lines', label: '行数', filter: 'number' },
-          { key: 'total_amount', label: '金额', filter: 'number' }, { key: 'approved_by', label: '签发人', type: 'code' },
+          { key: 'total_amount', label: '金额（元）', filter: 'number' }, { key: 'approved_by', label: '签发人', type: 'code' },
           { key: 'issued_at', label: '签发时刻', filter: 'date' }, { key: 'delivered_at', label: '投递时刻', filter: 'date' },
           { key: 'chain', label: '追溯链' }, { key: 'ack', label: '回签' }],
         rows: delivered.map((item) => {
@@ -547,7 +807,7 @@ export async function register(surface, host) {
         object: { title: `采购单 ${poId}`, found: true,
           subtitle: `${asText(item.chain)} · 追溯模式 ${asText(item.trace_mode)} · 签发 ${asText(item.issued_at)}`,
           facts: [
-            { key: '金额', value: String(item.total_amount ?? '') },
+            { key: '金额（元）', value: String(item.total_amount ?? '') },
             { key: '行数', value: String((item.lines ?? []).length) },
             { key: '签发人（承包商侧人签）', value: asText(item.approved_by), code: true },
             { key: '投递对象', value: (item.recipients ?? []).join(' / '), code: true },
@@ -585,7 +845,7 @@ export async function register(surface, host) {
       const lines = readRows(item.lines)
       return { ok: true, kind: 'table',
         columns: [{ key: 'ref_line', label: '行项目', type: 'code' }, { key: 'qty', label: '量', filter: 'number' },
-          { key: 'unit_price', label: '单价', filter: 'number' }, { key: 'amount', label: '行金额', filter: 'number' },
+          { key: 'unit_price', label: '单价（元）', filter: 'number' }, { key: 'amount', label: '行金额（元）', filter: 'number' },
           { key: 'basis', label: '单价基准（中标报价条目）', type: 'code' },
           { key: 'trace', label: '追溯模式' }],
         rows: lines.rows.map((line) => ({ id: String(line?.ref_line), ref_line: line?.ref_line,
@@ -701,7 +961,7 @@ export async function register(surface, host) {
           { key: '签发时刻', value: asText(item.issued_at) },
           { key: '投递时刻（本侧收到的时刻）', value: asText(item.sent_at) },
           { key: '追溯链', value: asText(item.chain) },
-          { key: '金额合计', value: String(item.total_amount ?? '') },
+          { key: '金额合计（元）', value: String(item.total_amount ?? '') },
           { key: '送货地址', value: asText(item.ship_to) || '（承包商未给）' },
           { key: '交期窗口', value: asText(item.delivery_window) || '（承包商未给）' },
           { key: '回签', value: ack ? `${asText(ack.acknowledged_by)} @ ${asText(ack.acknowledged_at)}` : '未回签' },
@@ -709,7 +969,7 @@ export async function register(surface, host) {
             : `seq ${poRow.seq} · ${asText(poRow.entry_hash)}` },
         ],
         columns: [{ key: 'no', label: '#' }, { key: 'ref_line', label: '行项目' }, { key: 'qty', label: '数量', filter: 'number' },
-          { key: 'unit_price', label: '单价', filter: 'number' }, { key: 'amount', label: '行金额', filter: 'number' },
+          { key: 'unit_price', label: '单价（元）', filter: 'number' }, { key: 'amount', label: '行金额（元）', filter: 'number' },
           { key: 'basis', label: '单价基准（可追溯）' }, { key: 'trace', label: '追溯模式' },
           { key: 'quote_id', label: '来源报价' }],
         rows: lines,
@@ -726,7 +986,7 @@ export async function register(surface, host) {
     // `columns` = 这份导出有哪些列（**元数据**：界面拿它做「列选择」个人偏好；内容仍由 action 生成）。
     // 与 `po.export-received` 的 spec.columns 逐字一致 —— 改了这里就要改那里（同一份台账）。
     columns: [{ key: 'no', label: '#' }, { key: 'ref_line', label: '行项目' }, { key: 'qty', label: '数量', filter: 'number' },
-      { key: 'unit_price', label: '单价', filter: 'number' }, { key: 'amount', label: '行金额', filter: 'number' },
+      { key: 'unit_price', label: '单价（元）', filter: 'number' }, { key: 'amount', label: '行金额（元）', filter: 'number' },
       { key: 'basis', label: '单价基准（可追溯）' }, { key: 'trace', label: '追溯模式' },
       { key: 'quote_id', label: '来源报价' }],
     hint: '逐行带单价基准与来源报价；表头给追溯链、投递时刻、送货地址/交期与回签状态' }))
@@ -826,18 +1086,36 @@ export async function register(surface, host) {
         const scope = asText(body.scope)
         const target = asText(body.ref)
         const kind = GATE_SCOPE_KIND[scope] ?? ''
-        const decided = status === 'granted' || status === 'aborted'
-        const granted = rows.find((row) => String(row?.type ?? '') === 'approval/granted')
-        const grantedBy = granted ? asText(bodyOf(granted).decided_by) || asText(bodyOf(granted).by) : ''
+        // **这扇门的一屏三问**（主管/审批人）：「谁提的 / 谁批的·什么时候 / 为什么」。
+        // 修前：请求人读的是**最后一行**的 `requested_by`（账本里根本没有这个键）⇒ 永远显示「（未记）」，
+        // 而真正的请求人就在**第一行**的 `actor` 里；「批准人」只认 `approval/granted`（驳回/终止的门
+        // 那一格空着），决定时刻与**意见正文**压根没摆出来。
+        const first = rows[0]
+        const firstBody = bodyOf(first)
+        const requestedBy = asText(firstBody.requested_by) || asText(first.actor)
+        const decided = status === 'granted' || status === 'denied' || status === 'aborted'
+        const decision = decided ? last : null
+        const decider = decision ? (asText(body.decided_by) || asText(body.aborted_by) || asText(decision.actor)) : ''
+        const comment = asText(body.comment)
+        const requester = requestedBy || '（账本这一行的 actor 也没记）'
         const facts = [
           { key: '门 id', value: id, code: true },
           { key: '范围（scope）', value: scope || '（未登记范围）', code: true },
           { key: '状态', value: status === 'requested' ? '还在等（requested）'
-            : (status === 'granted' ? '已批准（granted）' : `${status}`) },
+            : (status === 'granted' ? '已批准（granted）'
+              : (status === 'denied' ? '已驳回（denied）' : `${status}`)) },
           { key: '门后面那个对象', value: kind ? `${kind} ${target}` : `（未登记类别）${target}` },
-          { key: '请求人', value: asText(body.requested_by) || '（未记）' },
-          { key: '事实时刻', value: String(last.ts ?? '') },
-          { key: '批准人', value: grantedBy || '（还没批）' },
+          { key: '请求人', value: requester, code: true },
+          { key: '请求时刻', value: asText(firstBody.requested_at) || String(first.ts ?? '') },
+          { key: '点名的审批人', value: (Array.isArray(body.approvers) ? body.approvers.join(' ') : '')
+            || asText(body.escalate_to) || '（开单时没点名）' },
+          { key: '谁批的 / 什么时候', value: decision
+            ? `${decider || '（账本没记决定人）'} @ ${String(decision.ts ?? '')}（${status}）`
+            : '（还没决定——门还在队列里等）' },
+          { key: '为什么（意见正文）', value: decision
+            ? (comment || (status === 'aborted'
+              ? '（终止：账本只留理由哈希，正文在 0600 待办件里）' : '（没留意见正文）'))
+            : '—' },
         ]
         return { ok: true, kind: 'kv', items: facts,
           object: { title: `审批门 ${id}`, subtitle: `${scope || '（范围未登记）'} · ${decided
@@ -926,13 +1204,38 @@ export async function register(surface, host) {
     const award = awardsOf(rows).find((item) => asText(item.award_id) === asText(po.award_id)) ?? {}
     const intent = intentsOf(rows).find((item) => asText(item.intent_id) === asText(po.intent_id)) ?? {}
     const base = `${host.prefix}/app/${view}/`
+    // **人工门那一段（谁批的 / 什么时候 / 为什么）**：门的事实就在本侧账本里（`approval/*` 行，`approval_id`
+    // 与 PO 的 `approval_id` 同值）。主管/审批人从一条 PO 回溯时，这三问必须**一屏可答** ——
+    // 修前只给了"批准人 + 人工门 id"两个裸值（而且门 id 不是链接，只能手敲 URL 去门对象页）；
+    // 现在把门的结论、决定时刻与**意见正文**一并摊出来，并给门对象页的可点入口。
+    const gateRows = rows.filter((row) => String(row?.type ?? '').startsWith('approval/')
+      && asText(bodyOf(row).approval_id) === asText(po.approval_id))
+    const gateFirst = gateRows[0] ?? null
+    const DECIDED = ['approval/granted', 'approval/denied', 'approval/aborted']
+    const gateDecided = [...gateRows].reverse().find((row) => DECIDED.includes(String(row?.type ?? ''))) ?? null
+    const gateBody = bodyOf(gateDecided ?? gateFirst ?? {})
+    const gateStatus = gateDecided ? String(gateDecided.type).replace('approval/', '') : (gateRows.length ? 'requested' : '')
+    const gateWho = asText(gateBody.decided_by) || asText(gateBody.aborted_by)
+      || (gateDecided ? asText(gateDecided.actor) : '')
+    const gateWhy = asText(gateBody.comment)
+    // 终止（abort/deny）在账本里只有 `reason_sha256`：**照实说**「正文不在账本里」，不编一句"为什么"
+    const gateWhyLabel = gateWhy || (gateDecided
+      ? (gateStatus === 'aborted'
+        ? '（这条门被终止：账本里只有理由哈希，正文留在 0600 待办件里）'
+        : '（这条门没留意见正文）')
+      : '（还没决定）')
+    const gate = { approval_id: asText(po.approval_id), status: gateStatus, decided_by: gateWho,
+      decided_at: gateDecided ? String(gateDecided.ts ?? '') : '',
+      comment: gateWhy, comment_label: gateWhyLabel,
+      requested_by: gateFirst ? (asText(bodyOf(gateFirst).requested_by) || asText(gateFirst.actor)) : '',
+      requested_at: gateFirst ? (asText(bodyOf(gateFirst).requested_at) || String(gateFirst.ts ?? '')) : '' }
     return {
       po_id: po.po_id, chain: po.chain, trace_mode: po.trace_mode, total_amount: po.total_amount,
       approved_by: po.approved_by, issued_at: po.issued_at, approval_id: po.approval_id,
-      award_id: po.award_id, intent_id: po.intent_id, quote_id: po.quote_id,
+      award_id: po.award_id, intent_id: po.intent_id, quote_id: po.quote_id, gate,
       segments: [
         { kind: 'po', id: po.po_id, label: `PO ${po.po_id}`, where: '承包商道 › 授标与订单 › 采购单',
-          fact: `${(po.lines ?? []).length} 行 · 金额 ${po.total_amount} · ${po.issued_at}`,
+          fact: `${(po.lines ?? []).length} 行 · 金额 ${po.total_amount} 元 · ${po.issued_at}`,
           href: `${base}po/${encodeURIComponent(asText(po.po_id))}/` },
         { kind: 'award', id: po.award_id, label: `承诺 ${po.award_id}`, where: '承包商道 › 授标与订单 › 授标链',
           fact: `批准人 ${po.approved_by} · 人工门 ${po.approval_id}`,
@@ -943,12 +1246,19 @@ export async function register(surface, host) {
         { kind: 'quote', id: po.quote_id, label: `报价 ${po.quote_id}`, where: '承包商道 › 报价收件箱 / 比价',
           fact: `${(intent.lines ?? []).length} 行快照`,
           href: `${base}quote/${encodeURIComponent(asText(po.quote_id))}/` },
+        // **第五段：人工门**（决定 + 谁批的 / 什么时候 / 为什么）—— 点它进门的对象页。
+        ...(gateRows.length ? [{ kind: 'gate', id: gate.approval_id, label: `人工门 ${gate.approval_id}`,
+          where: '承包商道 › 审批队列 › 已决定的门',
+          fact: `${gate.status || '还在等'} · 谁批的 ${gate.decided_by || '（还没批）'}`
+            + ` · 什么时候 ${gate.decided_at || '（还没决定）'} · 为什么 ${gate.comment_label}`,
+          href: `${base}gate/${encodeURIComponent(gate.approval_id)}/` }] : []),
       ],
       lines: readRows(po.lines).rows.map((line) => ({ ref_line: line?.ref_line, qty: line?.qty,
         unit_price: line?.unit_price, basis: line?.basis, trace: line?.trace,
         quote_id: po.quote_id, href: `${base}quote/${encodeURIComponent(asText(po.quote_id))}/` })),
-      note: '链路四段都能点（每段给出所在页面与事实摘要）；行内 `basis` 指向中标报价条目，'
-        + '点报价段进「报价收件箱/比价」页核对',
+      note: '链路五段都能点（PO / 承诺 / 意向 / 报价 / 人工门——每段给出所在页面与事实摘要）；'
+        + '「人工门」那一段直接答「谁批的 / 什么时候 / 为什么」（意见正文逐字来自账本 comment），'
+        + '点它进门的对象页；行内 `basis` 指向中标报价条目，点报价段进「报价收件箱/比价」页核对',
     }
   }
 
@@ -1083,7 +1393,7 @@ export async function register(surface, host) {
           + (problems.length ? ` ⚠ 有 ${problems.length} 处坏形状已跳过（原样留在文件里）` : '') }
     } }))
 
-  out.push(surface.action({ plugin_id: me, id: 'po.trace', title: '追溯这条 PO（四段可点）',
+  out.push(surface.action({ plugin_id: me, id: 'po.trace', title: '追溯这条 PO（五段可点：PO→承诺→意向→报价→人工门）',
     views: ['contractor'], group: '授标', order: 40, inline: true, object_kind: 'po',
     hint: '只读：把 po → 承诺 → 意向 → 报价 的链路与逐行 basis 摊开（账本零新增）',
     input: { fields: [
@@ -1099,7 +1409,7 @@ export async function register(surface, host) {
       }
       host.note.set(me, TRACE_KEY, trace)
       return { ok: true, code: 'traced',
-        next_action: '链路已摊到下方「追溯链」面板：四段与逐行 basis 都能点'
+        next_action: '链路已摊到下方「追溯链」面板：五段（含人工门：谁批的/什么时候/为什么）与逐行 basis 都能点'
           + `（也可以直接把 ${host.prefix}/app/contractor/po/${asText(poId)}/ 发给同事）`,
         result: trace }
     } }))
@@ -1120,10 +1430,14 @@ export async function register(surface, host) {
         object: { title: `PO ${trace.po_id}`, subtitle: `${trace.chain} · 追溯模式 ${trace.trace_mode}`
           + ` · 签发 ${trace.issued_at}`, found: true,
           facts: [
-            { key: '金额', value: String(trace.total_amount) },
+            { key: '金额（元）', value: String(trace.total_amount) },
             { key: '行数', value: String((trace.lines ?? []).length) },
             { key: '签发人（人签）', value: trace.approved_by, code: true },
             { key: '人工门', value: trace.approval_id, code: true },
+            // **一屏内回答三问**（主管/审批人回溯）：谁批的、什么时候、为什么（意见逐字来自账本）
+            { key: '人工门（谁批 / 何时 / 为什么）', value: `${trace.gate?.status || '还在等'} · `
+              + `谁批的 ${trace.gate?.decided_by || '（还没批）'} · 什么时候 ${trace.gate?.decided_at || '（还没决定）'}`
+              + ` · 为什么 ${trace.gate?.comment_label || '（还没决定）'}` },
             { key: '报价', value: trace.quote_id, code: true },
           ],
           links: (trace.segments ?? []).filter((seg) => seg.kind !== 'po'),
@@ -1166,7 +1480,7 @@ export async function register(surface, host) {
       const lines = readRows(trace.lines)
       return { ok: true, kind: 'table',
         columns: [{ key: 'ref_line', label: 'PO 行', type: 'code' }, { key: 'qty', label: '量', filter: 'number' },
-          { key: 'unit_price', label: '单价' }, { key: 'basis', label: '单价基准（中标报价条目）', type: 'code' },
+          { key: 'unit_price', label: '单价（元）' }, { key: 'basis', label: '单价基准（中标报价条目）', type: 'code' },
           { key: 'trace', label: '追溯模式' }],
         rows: lines.rows.map((line) => ({ id: String(line?.ref_line), ...line })),
         counts: { lines: lines.rows.length, dropped: lines.dropped },
@@ -1192,9 +1506,14 @@ export async function register(surface, host) {
         + `<td>${escHtml(line?.qty)}</td><td>${escHtml(line?.unit_price)}</td>`
         + `<td><a href="${escHtml(line?.href)}" title="去报价收件箱/比价核对这条基准"><code>${escHtml(line?.basis)}</code></a></td>`
         + `<td>${escHtml(line?.trace)}</td></tr>`).join('')
+      const gateSeg = (trace.segments ?? []).find((item) => item.kind === 'gate') ?? null
+      const gateLine = `人工门：${trace.gate?.status || '还在等'} · 谁批的 `
+        + `${trace.gate?.decided_by || '（还没批）'} · 什么时候 ${trace.gate?.decided_at || '（还没决定）'}`
+        + ` · 为什么 ${trace.gate?.comment_label || '（还没决定）'}`
       return { ok: true, kind: 'html', html: `<p class="q-hint"><b>${trace.chain}</b> · 追溯模式 `
-        + `<code>${trace.trace_mode}</code> · 金额 ${trace.total_amount} · 签发 ${trace.issued_at}`
-        + ` · 人工门 <code>${trace.approval_id}</code>（${trace.approved_by}）</p>`
+        + `<code>${trace.trace_mode}</code> · 金额 ${trace.total_amount} 元 · 签发 ${trace.issued_at}`
+        + ` · 人工门 ${gateSeg ? `<a href="${escHtml(gateSeg.href)}" title="进门的对象页（结论 / 谁批的 / 意见）"><code>${escHtml(trace.approval_id)}</code></a>` : `<code>${escHtml(trace.approval_id)}</code>`}（${escHtml(trace.approved_by)}）</p>`
+        + `<p class="q-hint">${escHtml(gateLine)}</p>`
         + `<ol class="q-list">${(trace.segments ?? []).map(seg).join('')}</ol>`
         + `<div class="q-scroll"><table class="q-table"><thead><tr><th>PO 行</th><th>量</th><th>单价</th>`
         + `<th>单价基准（可点）</th><th>追溯模式</th></tr></thead><tbody>${lines}</tbody></table></div>`
@@ -1591,13 +1910,13 @@ export async function register(surface, host) {
           { key: '批准人（署名）', value: asText(po.approved_by) },
           { key: '签发时刻', value: asText(po.issued_at) },
           { key: '追溯链', value: asText(po.chain) },
-          { key: '金额合计', value: String(po.total_amount ?? '') },
+          { key: '金额合计（元）', value: String(po.total_amount ?? '') },
           { key: '中标条目（承诺里）', value: String((award.lines ?? intent.lines ?? []).length) },
           { key: '账本行', value: poRow.seq === undefined ? '—'
             : `seq ${poRow.seq} · ${asText(poRow.entry_hash)}` },
         ],
         columns: [{ key: 'no', label: '#' }, { key: 'ref_line', label: '行项目' }, { key: 'qty', label: '数量', filter: 'number' },
-          { key: 'unit_price', label: '单价', filter: 'number' }, { key: 'amount', label: '行金额', filter: 'number' },
+          { key: 'unit_price', label: '单价（元）', filter: 'number' }, { key: 'amount', label: '行金额（元）', filter: 'number' },
           { key: 'basis', label: '单价基准（可追溯）' }, { key: 'trace', label: '追溯模式' },
           { key: 'quote_id', label: '来源报价' }],
         rows: lines,
@@ -1614,7 +1933,7 @@ export async function register(surface, host) {
     // `columns` = 这份导出有哪些列（**元数据**：界面拿它做「列选择」个人偏好；内容仍由 action 生成）。
     // 与 `po.export` 的 spec.columns 逐字一致 —— 改了这里就要改那里（同一份台账）。
     columns: [{ key: 'no', label: '#' }, { key: 'ref_line', label: '行项目' }, { key: 'qty', label: '数量', filter: 'number' },
-      { key: 'unit_price', label: '单价', filter: 'number' }, { key: 'amount', label: '行金额', filter: 'number' },
+      { key: 'unit_price', label: '单价（元）', filter: 'number' }, { key: 'amount', label: '行金额（元）', filter: 'number' },
       { key: 'basis', label: '单价基准（可追溯）' }, { key: 'trace', label: '追溯模式' },
       { key: 'quote_id', label: '来源报价' }],
     hint: '逐行带单价基准与来源报价；表头给四段追溯链与账本行号' }))

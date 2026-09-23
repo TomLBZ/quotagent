@@ -361,10 +361,12 @@ export async function register(surface, host) {
           evaluation_id: json.evaluation_id ?? null, duplicates: json.duplicates ?? [] } }
     } }))
 
-  out.push(surface.action({ plugin_id: me, id: 'compare.export', title: '导出比价 CSV（含 per-item 矩阵）',
+  out.push(surface.action({ plugin_id: me, id: 'compare.export', title: '导出比价表（排名 CSV + 矩阵 CSV + 人读 TXT）',
     views: ['contractor'], group: '比价', order: 27,
     confirm: { required: true, message: '导出会写文件并落一条 compare/table-exported（导出留痕）：确认？' },
-    hint: '导出两份 CSV（排名表 + 同一行项目内的矩阵）+ 落 compare/table-exported（行数/字节数/evaluation_id）',
+    hint: '导出三份文件：排名表 CSV + 同一行项目内的矩阵 CSV + 人读正文 TXT（同一份评估、不重算），'
+      + '并落一条 compare/table-exported（行数/字节数/evaluation_id）；可打印的 HTML 与另两种格式走'
+      + '工具栏的「导出 / 打印比价表」',
     input: { fields: [
       { name: 'w_price', label: '权重：单价', type: 'number', min: 0, max: 1, default: DEFAULTS.price },
       { name: 'w_delivery', label: '权重：交期', type: 'number', min: 0, max: 1, default: DEFAULTS.delivery },
@@ -392,7 +394,7 @@ export async function register(surface, host) {
       const json = run.json ?? {}
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'exported' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
-        next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '看 result 里的 CSV 路径与行数',
+        next_action: json.refusal?.next_action ?? json.next_action_runtime ?? '看 result 里的三份文件路径与行数',
         result: { pending: staged.file, config: json.config ?? null, ledger_added: json.ledger_added ?? 0,
           evaluation_id: json.evaluation_id ?? null, applied: json.applied ?? [] } }
     } }))
@@ -489,13 +491,10 @@ export async function register(surface, host) {
     steps: [{ action: 'compare.rank', input: { package_id: 'DEMO-PKG-001', w_price: 0.6, w_delivery: 0.15,
       w_payment: 0.1, w_warranty: 0.05, w_deviation: 0.1 } },
     // 排完再**把这次评估落成一条事实**（`compare/rank-computed`）：导出/打印比价表要的就是这条记录
-    // （只跑 rank 只是"看一眼"，不落账；导出面板会如实说"还没有已记录的评估"）。
-    { action: 'compare.save-weights', optional: true,
-      // 可选项：这一步依赖 compare 的**写者**认这份多行报价（口径见 29 §7.5：多行报价没有"唯一那个行项目"）。
-      // 现状：`compare-rank.py`（只读）认，`compare-apply.py`（写者）按 item_id 找报价 ⇒ 多行报价被它拒
-      // （`no-quotes-for-package`）。这不是沙盘的问题，也不属于本批允许改的文件；故标 optional ⇒ 演示照旧
-      // 走完，失败原样记进回执（`optional_failures`），界面上也照实说"比价表导出要的那条评估还没有"。
-      note: '可选项：把这次评估落成事实（多行报价当前会被 compare 的写者按 item_id 拒）',
+    // （只跑 rank 只是"看一眼"，不落账；导出动作会如实说"还没有已记录的评估"）。
+    // 不再是可选项：P40 修掉了写者只认单行报价形状的根因（`prepared_of` 现在按 29 §7.5 认 `lines[]`），
+    // 所以多行报价在沙盘里也真能落 `compare/rank-computed` —— 这一步失败就是真失败，照实报（不吞）。
+    { action: 'compare.save-weights',
       input: { w_price: 0.6, w_delivery: 0.15, w_payment: 0.1,
       w_warranty: 0.05, w_deviation: 0.1, package_id: 'DEMO-PKG-001', actor: '$actor', confirm_ack: '1' } }] }))
 

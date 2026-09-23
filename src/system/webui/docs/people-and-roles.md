@@ -111,3 +111,21 @@ python3 tmp/p5-people-verify.py     # 自造夹具（g1side 走查）+ 独立服
    不需要的人由管理员在名册里停用。
 3. `unknown_amount: refuse` 时，**事实还没落账**的动作会被额度判据拦下（这是"宁可拦一次"的选择，可在界面改）。
 4. 名册**不是**权威人事系统：它没有与上游 HR 同步，也不做离职流程；它是"这一侧的人怎么协作"的配置面。
+
+## 9. 主管/审批人视角的一日走查（P41：只用手界面、空数据）
+
+复跑 `sh tmp/p41-shots/p41-start.sh`（端口 8480、私有数据目录与私有受管配置，**不碰** `/workspace/config.yaml`）；
+逐步截图 `tmp/p41-shots/*.png`、完整清单与复现 `tmp/p41-shots/REPORT.md`。走通的一段：登录 → 名册加人 /
+改角色 / 设角色额度 / 策略 → 审批队列（批准 / 驳回 / **批量一次署名逐条落账** / 催办 / 升级 / 委托 / 终止）→
+越界提门再回头批 → 从一条 PO 回溯报价与**人工门**（五段）→ 周报五项 + 逐行对账。
+
+**两套额度不是一回事**（最容易被读混）：`authority.bands.<角色>`（buyer/lead/director，读受管 YAML，业务界面
+**没有**入口）管「这一笔钱谁能批」；名册角色额度（`approval_limit_cents` + `policy.amount_limit.rules`，界面上
+可改、**立刻生效**）管「谁能执行受额度限制的动作」。两处口径与角色名都不同，面板 note 已写明。
+
+**仍做不到（外壳/写者面，明细见报告）**：终止（abort）的**理由正文不在账本**（只有 `reason_sha256`）⇒
+「为什么作废」一屏答不出，且 `已决定的门` 里 aborted 行的「谁决定的」是空的（账本里其实有 `aborted_by`）；
+队列行**没有金额列**，越界与否要另开授权区间面板手算；工作台卡头「有 N 件需要你处理」按**侧**算（点名别人的门
+也计进来，点下去会被 `approver-not-named` 拒）；拒绝与批量的 next_action 里仍有 `--step escalate/delegate` 这类
+CLI 旗标；授权区间面板读的是 `QUOTAGENT_UI_CONFIG`/`/workspace/config.yaml`，**不是** `--config-file`
+（壳配置不带 `config_file`）⇒ 用 `--config-file` 起的服务会显示"未配置"而实际配好了（已在插件侧优先取宿主给的路径）。

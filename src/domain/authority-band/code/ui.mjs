@@ -31,11 +31,25 @@ import {
 export const plugin_id = 'domain/authority-band'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+/**
+ * **纯文本**（`**加粗**` 这类 markdown 标记一律去掉）：外壳把面板/回执文案当**纯文本**渲染
+ * （不解读 markdown）⇒ 留着星号就等于让用户读到 `**人工专属键**` 这种原样标记。
+ */
+const plain = (value) => asText(value).replace(/\*\*/g, '')
 const CONFIG_ENV = 'QUOTAGENT_UI_CONFIG'
 const CONFIG_DEFAULT = '/workspace/config.yaml'
 
-/** 受管配置文件的路径：**与宿主同一处**（`QUOTAGENT_UI_CONFIG` → 缺省 `/workspace/config.yaml`）。 */
-const configPath = () => asText(process.env[CONFIG_ENV]) || CONFIG_DEFAULT
+/**
+ * 受管配置文件的路径：与宿主**应**为同一处。
+ *
+ * P41 主管走查实测：壳给的 `host.config` **不带** `config_file`（装配点 `host/cli.mjs` 的壳配置块里没有
+ * 这个键），而服务进程里也**没有** `QUOTAGENT_UI_CONFIG` ⇒ 用 `--config-file` 起的服务，本面板读的其实是
+ * `/workspace/config.yaml`：**面板说"未配置"，而宿主实际在用的受管配置里 `authority.bands.*` 是登记好的**。
+ * 现在按「宿主给的路径 → 环境变量 → 缺省」取值（壳哪天把 `config_file` 传下来，这里立刻就对），
+ * 并把**实际读的那个路径**写进面板（降级时也写在原因里）——用户能一眼看出它读的是哪一份文件。
+ */
+let hostConfigFile = ''
+const configPath = () => asText(hostConfigFile) || asText(process.env[CONFIG_ENV]) || CONFIG_DEFAULT
 
 /**
  * 只读配置快照（**按 mtime 备忘**：面板每次渲染都会调 `data()`，9KB 的 YAML 解析一次够了）。
@@ -85,6 +99,8 @@ const verdictOf = (run) => {
 
 export async function register(surface, host) {
   const me = plugin_id
+  // **受管配置的真实路径**（宿主给的就是它在用的那一份）：面板/动作按它读 `authority.*`。
+  hostConfigFile = asText(host?.config?.config_file)
   const out = []
   const gateTool = 'src/system/approval/tools/gate-actions.py'
   const ledgerC = () => asText(host.config?.ledger_contractor)
@@ -117,10 +133,12 @@ export async function register(surface, host) {
         // **降级原因第一行是人话**（机器码放括号里）：读配置读出了"还没登记"这件事，不是坏了
         reason: unset
           ? `授权区间还没登记（机器码 ${probe.code || 'band-unconfigured'}）—— 未配置 ≠ 额度无限：一律走人工门`
+            + `；本页读的受管配置：${path}`
           : '',
         next_action: unset
-          ? `登记 \`authority.bands.<角色>\`（整数分）后本页立刻生效：${probe.config_where}；`
-            + '或者现在就用下面的「按金额查该谁批」表单算一笔，再点「提交给下一角色审批」开人工门'
+          ? '这一页的限额还没登记：登记 `authority.bands.<角色>`（整数分）之后本页立刻按它算。'
+            + `登记处在：${plain(probe.config_where)}；`
+            + '先不改配置也能干活：用下面的「按金额查该谁批」算一笔，越界就点「提交给下一角色审批」开人工门'
           : '按金额查该谁批（表单），越界就一键开人工门；改判定永远在审批队列里由人签批准/驳回',
         columns: [
           { key: 'role', label: '角色', type: 'code' },
@@ -136,6 +154,10 @@ export async function register(surface, host) {
           + '别的键读都不读）'
           + `${reason ? `；本次读取降级：${reason}` : ''}。`
           + (unset ? `${UNCONFIGURED_NOTE}。` : '')
+          // 主管/审批人最容易混的一点：「授权区间」与「名册角色额度」是**两套口径、两处入口**。
+          // 这一页读的是受管配置（业务界面里改不了）；名册那套在「人员名册与角色」面板里改、立刻生效。
+          + '这一页的角色名（buyer / lead / director）与「人员名册与角色」面板里的角色名（采购员 / 主管 / 管理员…）'
+          + '是两套口径：这一页管「这一笔钱谁能批」，那套管「谁能执行受额度限制的动作」。'
           + '本面板由确定性规则派生（source=authority-band）：不读账本、不取墙钟、不调模型、'
           + '不能批准——越界的唯一出路是人工门（提交后去「审批队列」由人签批准/驳回）。' }
     } })
@@ -171,7 +193,7 @@ export async function register(surface, host) {
               + `${run.next_role ? `（下一个能批的是 ${run.next_role}）` : '（没有角色的限额覆盖这笔金额：只能改配置或走人工门）'}`
             : (run.status === 'inside-band'
               ? `${run.role} 的限额覆盖这笔金额：继续既有流程；批准仍在审批队列里由人签（本面板不能批准）`
-              : `${run.next_action}${reason ? `（配置读取降级：${reason}）` : ''}`)),
+              : `${plain(run.next_action)}${reason ? `（配置读取降级：${reason}）` : ''}`)),
         result: { status: run.status, verdict: verdictOf(run), role: run.role, amount: run.amount,
           required_role: run.required_role, next_role: run.next_role, over_by: run.over_by,
           bands: run.bands, within: run.within, unit: run.unit, can_approve: run.can_approve,
@@ -257,7 +279,8 @@ export async function register(surface, host) {
     const probe = checkOf({ view: 'contractor', role: REGISTERED_ROLES[0] ?? 'buyer', amount: 1, config: snapshot }, {})
     const configured = Array.isArray(probe.bands) ? probe.bands.length : 0
     return { text: probe.status === 'unconfigured'
-      ? `未配置（${configured}/${REGISTERED_ROLES.length} 角色登记了限额；未配置 ≠ 不限额）`
+      ? `未配置（${configured}/${REGISTERED_ROLES.length} 角色登记了授权区间；未配置 ≠ 不限额；`
+        + '这是「授权区间」，与「名册角色额度」不是同一处）'
       : `已登记 ${configured} 个角色`,
       level: probe.status === 'unconfigured' ? 'warn' : 'ok',
       next_action: probe.status === 'unconfigured'

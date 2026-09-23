@@ -582,9 +582,11 @@ export async function register(surface, host) {
 
   out.push(surface.panel({ plugin_id: me, id: 'rfq.responses', title: '收到的报价（本侧登记行）',
     view: 'contractor', order: 20, kind: 'table',
-    actions: ['compare.rank', 'award.propose'],
+    actions: ['compare.rank', 'award.propose', 'award.propose-package'],
     hint: '每一行 = 一条（报价 × 行项目）登记；行内「提出授标意向」把这一行的包/报价/条目/数量/单价带进表单'
-      + '（数量取自包事实 —— 缺量就会被唯一写者按 line-qty-invalid 拒）',
+      + '（数量取自包事实 —— 缺量就会被唯一写者按 line-qty-invalid 拒）；'
+      + '多行报价要**一次提完整包**就用「整包提出授标意向」（一条意向覆盖这份报价的每一行，'
+      + '行与价逐行取自账本、逐行仍各带自己的引用链）',
     data: () => {
       const rows = rowsOfType(host.rows('contractor'), 'quote/submitted').map((row) => bodyOf(row))
       if (!rows.length) {
