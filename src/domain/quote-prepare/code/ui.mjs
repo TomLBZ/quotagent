@@ -66,6 +66,30 @@ const sideScoped = (ctx, itemSide, item) => {
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const typeRows = (rows, prefix) => rows.filter((row) => String(row?.type ?? '').startsWith(prefix))
 
+/**
+ * 本侧 realm 的**取值顺序**（与 `domain/commitments` 的 `realmOf('supplier')` **同一判据**）：
+ * ① 投影行上的行级 `realm`（夹具/单账本模式下才有；机制给的投影默认只出
+ * `seq/type/correlation_id/actor/ts/body`，所以真实面上这一条通常取不到）；
+ * ② **投递登记**里的收件人（`rfq/distributed` / `po/distributed` 的 `recipients[]` 或 `supplier`）。
+ *
+ * **为什么必须对齐**（P20 走查实测的核心流程阻断）：报价上记的 `supplier` 会被 `award.propose`
+ * 逐字抄进授标意向的 `delivered_to`，而供应商侧「发给我的授标意向」按**它自己**算出来的 realm 过滤。
+ * 两边取值规则不一致时（这里是硬编码兜底 `supplier:gui` vs 投递登记的 `supplier:g1`），
+ * 意向**永远投不到供应商那一侧** ⇒ 「确认中标」在 GUI 里点不到 ⇒ 承包商「授标承诺」被
+ * `supplier-confirmation-required` 拒 ⇒ PO / 回签整条链卡住（AGENTS.md 规则 11：双方仅通过 GUI
+ * 走完全部业务流程）。对齐之后两侧同源，投递与过滤按构造一致。
+ */
+const registrationRealmOf = (host) => {
+  for (const type of ['po/distributed', 'rfq/distributed']) {
+    for (const row of typeRows(host.rows('supplier') ?? [], type)) {
+      const body = bodyOf(row)
+      const mine = [body.supplier, ...(body.recipients ?? [])].map(asText).find((item) => item !== '')
+      if (mine) return mine
+    }
+  }
+  return ''
+}
+
 /** 本视角投影事实行 → 插件要的白名单载荷（只有 `rfq/*`、`quote/*` 的类型，逐键白名单）。 */
 const FACT_KEYS = ['item_id', 'item_ids', 'items', 'lines', 'currency', 'package_id', 'rfq_id', 'quote_id',
   'quote_by', 'quote_draft_id', 'unit_price_cents', 'lead_time_days', 'supplier', 'ok', 'status',
@@ -137,6 +161,8 @@ const myPackage = (host, realm) => {
 export async function register(surface, host) {
   const me = plugin_id
   const out = []
+  /** 批量人签一次最多几份（面板文案与拒绝判据**同一个常量**：写在 register 顶部，免得面板 note 引用到 TDZ）。 */
+  const BATCH_SIGN_MAX = 50
   const supplierLedger = () => asText(host.config?.ledger_supplier)
   const contractorLedger = () => asText(host.config?.ledger_contractor)
   const realmOf = (view) => {
@@ -348,7 +374,11 @@ export async function register(surface, host) {
         bulk: 'quote.submit-batch',
         note: '草稿**不是报价**：只有人签提交（quote/submit）之后才算对外报价（AGENTS.md 规则 3）；'
           + '**一份草稿 = 一整张表**（行数 > 1 的草稿签一次就提交全部行）；'
-          + '一天几十份时用表格左侧勾选框多选后点「批量人签提交」（一次署名、逐份落账、逐份可拒）' }
+          + '一天几十份时用表格左侧勾选框多选后点「批量人签提交」（一次署名、逐份落账、逐份可拒）。'
+          + '**这一块含「已签署提交」的历史行**（按「状态」列筛「待签署」只看待办的）；'
+          + `**一次最多签 ${BATCH_SIGN_MAX} 份**，超过会被具名拒（batch-too-large）；`
+          + '**勾选不跨页**（翻页后上一页的勾不跟着走）—— 要跨页按「命中行」签，先筛到 ≤ '
+          + `${BATCH_SIGN_MAX} 行、再点表头的「选中全部命中行（N）」` }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'quote.submitted', title: '已提交的报价（提交结果回读）',
@@ -490,7 +520,7 @@ export async function register(surface, host) {
           result: { applied: [], failures, drafts: 0, lines: 0 } }
       }
       // ③ **一整张表 → 一条草稿**：多行带 `lines`（标量三键写第一行，供既有读者兜底），单行沿用旧形状
-      const supplierRealm = asText(rows0?.realm) || 'supplier:gui'
+      const supplierRealm = asText(rows0?.realm) || registrationRealmOf(host) || 'supplier:gui'
       const first = lines[0]
       const prepared = { schema: 1, kind: 'quote-draft', view: 'supplier', requested_action: 'draft',
         rfq_id: asText(input.rfq_id), item_id: first.item_id, unit_price_cents: first.unit_price_cents,
@@ -647,7 +677,6 @@ export async function register(surface, host) {
    *     回执逐条列「已签 / 幂等（零新增）/ 被拒（原因）」，不是全成或全败的二选一；
    *   · **幂等**：同一批再签一次，写者按草稿 id 认出 already-signed ⇒ **账本零新增**（回执如实说零新增）。
    */
-  const BATCH_SIGN_MAX = 50
   const DRAFT_ID_RE = /^qd-[A-Za-z0-9-]+-[0-9a-f]{12}$/
   out.push(surface.action({ plugin_id: me, id: 'quote.submit-batch',
     title: '批量人签提交（多选一次签，逐份落账）', views: ['supplier'], group: '报价', order: 21,
@@ -687,7 +716,9 @@ export async function register(surface, host) {
       if (ids.length > BATCH_SIGN_MAX) {
         return { ok: false, code: 'batch-too-large',
           reason: `一次最多签 ${BATCH_SIGN_MAX} 份，收到 ${ids.length} 份`,
-          next_action: `拆成每批 ≤ ${BATCH_SIGN_MAX} 份后重提（本动作账本零新增）` }
+          next_action: `先用「搜这块 / 按列筛选 / 状态=待签署」把命中行缩到 ≤ ${BATCH_SIGN_MAX} 行`
+            + `（计数行会跟着变），再点表头那颗「选中全部命中行（N）」重来 —— 不要靠手工勾行：`
+            + `勾选**不跨页**（第 1 页勾的在翻页后不跟着走）。本动作账本零新增` }
       }
       const comment = String(input.comment ?? '')
       const policy = asText(input.timeout_policy) || 'remind'
@@ -739,7 +770,9 @@ export async function register(surface, host) {
       const idempotent = results.filter((row) => row.where === 'duplicates')
       const failed = results.filter((row) => row.where === 'refused')
       const ledgerAdded = results.reduce((sum, row) => sum + Number(row.ledger_added ?? 0), 0)
-      const one = (row) => `${row.draft_id}：${row.where === 'applied' ? `已签（本动作 +${row.ledger_added} 行）`
+      // `ledger_added` 来自写者这一次运行的**全局**计数（本侧 3 行 + 承包商侧登记 1 行），不是供应商单侧行数：
+      // 措辞里写明口径，免得用户按"这一侧只落了 4 行"去对账。
+      const one = (row) => `${row.draft_id}：${row.where === 'applied' ? `已签（写者本次 +${row.ledger_added} 行：本侧 3 + 承包商侧登记 1）`
         : (row.where === 'duplicates' ? '**已经签过**（幂等：这一份零新增）'
           : `**被拒**（${row.code}${row.reason ? `：${row.reason}` : ''}）`)}`
       // 逐条如实报告（**不许**"要么全成要么全败"）：份数、行数、以及每一份的落点都写出来

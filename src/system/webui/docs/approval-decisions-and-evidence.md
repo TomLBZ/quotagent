@@ -72,6 +72,9 @@
 **幂等**：同一批原样重签 ⇒ `already-signed` / `already-applied`（写者按归档摘要逐字节比对）⇒ 账本零新增。
 一次最多 50 条（`batch-too-large` 具名拒绝）；批量驳回必须留理由（`empty-reason`）。
 复跑：`python3 tmp/p18-shots/verify.py`（A 报价批 / B 门批 / C 负控 / D 幂等，四组全绿）。
+**规模 + 并发 + 真手机宽度（390px）下的实测、缺陷与已做的文案修**：见
+`src/system/webui/docs/scale-batch-and-narrow-screen.md`（含 50 上限 × 跨页全选、
+40+3 逐条回执、并发冻结读数、勾选不跨页、390px 全流程逐步截图清单）。
 
 ### 1.6 变更单的**逐行明细页**入口（GUI 侧，DEF-037）
 

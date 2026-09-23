@@ -7,9 +7,10 @@
 
 - 口径：路径清单 = `git ls-files src host tools user-space`（HEAD 时点，**250** 个路径）+ `user-space/` 磁盘上的 **6** 个文件 = **256** 个路径，另有 **8** 个在飞（未跟踪）源文件。
 - 行数：**248 行迁移 + 5 个保留入口（不迁移，见下行与迁移计划 §2 阶段 0）= 253**；表内另有 **8** 行在飞 ⇒ 表体 **256** 行
-  （比生成时点少 3 行：三个已迁资产已按 29 §2 删除；本批再净少 4 行：三域流水运维面退役删掉 5 个已搬资产、
-  新增 1 个已搬资产 `tools/mail-snapshot.py`。逐条见 §分类 的注记）。未映射 **0** 个（判据：映射脚本对未知路径 `raise`，不静默跳过）。
+  （比生成时点少 3 行：三个已迁资产已按 29 §2 删除；再净少 4 行：三域流水运维面退役删 5 个已搬资产、加 1 个
+  `tools/mail-snapshot.py`；逐条见 §分类 注记）。生成时点未映射 **0** 个（判据：映射脚本对未知路径 `raise`）。
 - 保留不动的是 `tools/` 的 5 个薄入口：`verify.sh`/`run.sh`/`runtime.sh`/`bootstrap.sh`/`cordis.sh`（门与一键运行的稳定入口，见 `27-plugin-architecture.md` §9 未决 3）。
+- **计数复核（2026-09-23，`docs/design/29-webui-gui-app.md` 口径回写同批）**：`git ls-files src host tools user-space` = **854** + 磁盘 `user-space/` **26** = **880**；表内路径 **597**，**未登记 426**（多为迁移后直接长在新布局里的新文件：`src/system/webui` 37、`src/system/runtime` 18…）⇒「未映射 0」是**生成时点**口径，不是 HEAD。
 - 每行都由**规则**产生（不是逐条手写），规则表与复算命令在 `plugin-migration-plan.md` §3（`tmp/arch-batch/gen_map.py` 为一次性脚手架，不入库）。
 
 | 现路径 | 目标路径 | 备注 |

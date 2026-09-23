@@ -427,7 +427,9 @@ export async function register(surface, host) {
       if (ids.length > BATCH_DECIDE_MAX) {
         return { ok: false, code: 'batch-too-large',
           reason: `一次最多决定 ${BATCH_DECIDE_MAX} 条门，收到 ${ids.length} 条`,
-          next_action: `拆成每批 ≤ ${BATCH_DECIDE_MAX} 条后重提（本动作账本零新增）` }
+          next_action: `先用「搜这块 / 按列筛选」把命中行缩到 ≤ ${BATCH_DECIDE_MAX} 行（计数行会跟着变），`
+            + `再点表头那颗「选中全部命中行（N）」重来 —— 不要靠手工勾行：勾选**不跨页**`
+            + `（第 1 页勾的在翻页后不跟着走）。本动作账本零新增` }
       }
       const actor = asText(input.signature)
       const results = []
