@@ -87,3 +87,21 @@ handover 各自的集合机制照旧（14 与清单的集合早已存在，hando
 
 逐批的原始证据与结论在 `docs/work/evidence/`（索引：`INDEX.md` / `INDEX-P2.md` / `INDEX-P2-archive*.md`）；任务行与
 状态在 `docs/work/progress-checklist.md`（较早的行在 `progress-checklist-archive.md`）。
+
+## 5 本批（P44/P45/P46，`EV-193`/`EV-194`）：写者面收口 → 29 对账 → 三处遗留收尾
+
+**P44/P45（提交 `1857614`，`EV-193`）**：① **写者面收口** —— `commitment-apply.py` 三处（+两处干跑影子）传 `actor`
+⇒ 新门的账本 `actor=human:<真身份>`（旧门仍是 `agent:approval`，界面照账本显示、不编人名）；`quote-sign.py` 与
+`identity-mail-apply.py` 改调 `ApprovalService.request()/decide()`（新行带 `approvers`/`timeout_policy`/`requested_at`，
+旧行字节未动）② `05-events.md` 逐行声明 body 键集；审计脚本进仓（`body-keys-audit.py`，偏差 13→3）③ 29（含归档）
+承诺↔实现对账 **157 条 = 承接 152 / 缺口 0 / 漂移 5**（5 条当场改完）。**当时登记的遗留**：`identity.mjs:408` 仍直读
+`body.requested_by`（新门的待办卡 detail 为 null）；`ApprovalService.__init__` 的 `_counter=0` 在 `replay()` **之后**
+（门号重号根因，当时只能靠 4 个写者各留 `bump_counter()` 兜底）；`handover.md` 只剩 19 B、`progress-checklist` 未更新。
+
+**P46（本批，`EV-194`）**：三处遗留收尾 —— ① 待办卡请求人 `body.requested_by ?? row.actor`（真起服务 + 真登录 +
+真读接口，三个夹具：新行 `human:wanglei` / 旧口径行 `human:p21-supplier` / 旧服务行 `agent:approval`）② **计数器根因
+修好**（`_counter = 0` 挪到 `replay()` 之前；同账本正/反两边：修后 `ap-0275`，旧顺序 `ap-0001` 重号复现）③ **两支审计
+尺子都进仓**（`src/system/repo-gate/tools/`；承诺真源 = `docs/work/evidence/EV-193-claims.json`，`runner_source` 副本
+删除；**什么时候跑 / 怎么读 / 偏差怎么处置 = 29 §24**）④ `handover`/`progress-checklist` 腾字节补行（`T-318`/`T-319`
+整行搬入归档、补 `T-332`/`T-333`）、证据索引补齐 `EV-190/191/192` 并新增 `EV-194`。**下一批**：四处冗余
+`bump_counter()` 的过时注释收口、`EV-192` 归因的两条「旧 UI 形态」AC 注册断言。

@@ -405,7 +405,8 @@ export function createIdentity({ root, prefix, config, shell, services, people =
       push({ kind: 'gate-to-approve', owed_by: `side:${owed}`, ref: String(body.ref ?? row.correlation_id ?? ''),
         title: `待批准：${scope}（${body.approval_id ?? '—'}${body.ref ? ` / ${body.ref}` : ''}）`,
         fact: { type: row.type, seq: row.seq, ts: row.ts }, stage: 'ledger',
-        detail: { approval_id: body.approval_id ?? null, scope, requested_by: body.requested_by ?? null },
+        detail: { approval_id: body.approval_id ?? null, scope,
+          requested_by: body.requested_by ?? row.actor ?? null },
         next_action: `${owed === side ? '本侧' : '对方侧'}待办：批准动作必须由拥有该权限的人签（actor 取自会话）` })
     }
 

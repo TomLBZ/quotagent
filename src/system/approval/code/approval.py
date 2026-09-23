@@ -75,10 +75,14 @@ class ApprovalService:
         self._records: dict[str, dict] = {}
         self._order: list[str] = []
         self.replayed = 0
+        # 计数器**先归零、再由 `replay()` 推到已用过的最大序号**：顺序反过来（先 replay 再置 0）
+        # 会把重放算出的序号抹掉，于是**每个新进程都从 `ap-0001` 起** —— 跨进程动作（GUI 一次一进程）
+        # 在同一账本上产出**重号**的批准记录（实测同一账本上出现过两个 `ap-0001`）。
+        # 无账本时保持 0（既不重放也无从推）。`replay()` 的这一步是既有语义，本处只按正确顺序调用它。
+        self._counter = 0
         if self.ledger is not None:
             replay = self.replay()
             self.replayed = replay["replayed"]
-        self._counter = 0
 
     # --- 请求 -------------------------------------------------------------
     def replay(self) -> dict:

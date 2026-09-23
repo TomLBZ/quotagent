@@ -1,8 +1,8 @@
 {
  "source": "docs/work/evidence/EV-193-claims.json",
  "stats": {
-  "total": 157,
-  "anchored": 152,
+  "total": 158,
+  "anchored": 153,
   "gap": 0,
   "drift": 5
  },
@@ -138,6 +138,12 @@
    "anchored": 10,
    "gap": 0,
    "drift": 0
+  },
+  "§24": {
+   "total": 1,
+   "anchored": 1,
+   "gap": 0,
+   "drift": 0
   }
  },
  "rows": [
@@ -156,7 +162,7 @@
    "section": "§0",
    "claim": "归档 §0 保留另两条原话（Teams 对照判据 + 「人类可用、易用、功能完善的产品」）",
    "status": "承接",
-   "anchor": "docs/design/29-webui-gui-app-archive.md:174；docs/design/29-webui-gui-app-archive.md:175",
+   "anchor": "docs/design/29-webui-gui-app-archive.md:173；docs/design/29-webui-gui-app-archive.md:174",
    "missing": [],
    "note": "",
    "drift": ""
@@ -376,7 +382,7 @@
    "section": "§7",
    "claim": "§7.1 /api/routes 的 auth 是真实值 + 给 auth_basis（按路径推导，不手抄）",
    "status": "承接",
-   "anchor": "src/system/webui/code/webui.mjs:3268；src/system/webui/code/identity.mjs:776",
+   "anchor": "src/system/webui/code/webui.mjs:3268；src/system/webui/code/identity.mjs:777",
    "missing": [],
    "note": "",
    "drift": ""
@@ -406,7 +412,7 @@
    "section": "§7",
    "claim": "§7.3 邮件通道有界内入口 POST /mail/config/（ops 侧）",
    "status": "承接",
-   "anchor": "src/system/webui/code/identity.mjs:1108",
+   "anchor": "src/system/webui/code/identity.mjs:1109",
    "missing": [],
    "note": "",
    "drift": ""
@@ -916,7 +922,7 @@
    "section": "§15",
    "claim": "§15 四个自助面路由齐：登录 / 待我处理 / 人签 / 我的插件（+ 邮件配置）",
    "status": "承接",
-   "anchor": "src/system/webui/code/identity.mjs:1035；src/system/webui/code/identity.mjs:1063；src/system/webui/code/identity.mjs:1101；src/system/webui/code/identity.mjs:1125",
+   "anchor": "src/system/webui/code/identity.mjs:1036；src/system/webui/code/identity.mjs:1064；src/system/webui/code/identity.mjs:1102；src/system/webui/code/identity.mjs:1126",
    "missing": [],
    "note": "",
    "drift": ""
@@ -926,7 +932,7 @@
    "section": "§15",
    "claim": "§15 身份路由 21 条（12 条字面 + 3 侧 × 2 条 inbox + 3 个插件操作 = 21）",
    "status": "承接",
-   "anchor": "src/system/webui/code/identity.mjs:798；src/system/webui/code/identity.mjs:1022；src/system/webui/code/identity.mjs:1027",
+   "anchor": "src/system/webui/code/identity.mjs:799；src/system/webui/code/identity.mjs:1023；src/system/webui/code/identity.mjs:1028",
    "missing": [],
    "note": "",
    "drift": ""
@@ -946,7 +952,7 @@
    "section": "§15",
    "claim": "§15 「49 条断言」（原写 48 —— 漂移，已改）",
    "status": "漂移（已改）",
-   "anchor": "docs/design/29-webui-gui-app.md:125；tmp/verify-identity/verify.out:315",
+   "anchor": "docs/design/29-webui-gui-app.md:122；tmp/verify-identity/verify.out:315",
    "missing": [],
    "note": "",
    "drift": "原文档写「48 条断言」，实测 **49**：`tmp/verify-identity/verify-result.json` 的 `checks` 长 49（`failures` 0）、`tmp/verify-identity/verify.out` 末行「结果：断言 49 条，失败 0 条」。处理：**29 主文件已改为 49**（本条 probe 即修后真值）；插件 doc `src/system/webui/docs/identity-and-selfservice.md:15` 同句**登记待定**（本轮允许面外）。"
@@ -1707,6 +1713,16 @@
    "claim": "§17.2 去重在开窗口之前（tally.deduped 在聚合阶段算，计数按合并后）",
    "status": "承接",
    "anchor": "src/system/webui/code/app-shell.mjs:2161",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C158",
+   "section": "§24",
+   "claim": "§24 登记两支可重跑审计尺子（事件 body 键集 / 承诺↔实现）：脚本在仓内固定位置，并写清什么时候跑、怎么读 rc、偏差怎么处置",
+   "status": "承接",
+   "anchor": "docs/design/29-webui-gui-app.md:197；docs/design/29-webui-gui-app-archive.md:276；src/system/repo-gate/tools/claim-impl-audit.py:43；src/system/repo-gate/tools/body-keys-audit.py:52",
    "missing": [],
    "note": "",
    "drift": ""

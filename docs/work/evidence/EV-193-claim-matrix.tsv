@@ -1,9 +1,9 @@
-# P45 清单：29（含归档）承诺 ↔ 实现逐条对账（157 条）
-# 生成：python3 tmp/p45-shots/p45-scan.py run docs/work/evidence/EV-193-claims.json docs/work/evidence/EV-193-claim-matrix.tsv
-# 统计：承接 152 / 缺口 0 / 漂移 5
+# 承诺 ↔ 实现对账清单（158 条）—— 由 `claim-impl-audit.py` 生成，勿手改
+# 生成：python3 src/system/repo-gate/tools/claim-impl-audit.py（承诺真源 = docs/work/evidence/EV-193-claims.json）
+# 统计：承接 153 / 缺口 0 / 漂移 5
 # 列：id | § | 状态 | 承接点（file:line）| 可检验承诺 | 备注/漂移证据
 C01	§0	承接	docs/design/29-webui-gui-app.md:10	用户原话（不是账本投影/只读路由，而是完整 GUI app）逐字留在主文件 §0	
-C02	§0	承接	docs/design/29-webui-gui-app-archive.md:174；docs/design/29-webui-gui-app-archive.md:175	归档 §0 保留另两条原话（Teams 对照判据 + 「人类可用、易用、功能完善的产品」）	
+C02	§0	承接	docs/design/29-webui-gui-app-archive.md:173；docs/design/29-webui-gui-app-archive.md:174	归档 §0 保留另两条原话（Teams 对照判据 + 「人类可用、易用、功能完善的产品」）	
 C03	§1	承接	docs/work/functional-requirements.md:111；docs/work/acceptance-criteria.md:108	判定标准「双方仅通过 GUI 走完全部业务流程」进了硬需求（FR/AC）	
 C04	§1	承接	docs/design/29-webui-gui-app.md:23；src/system/webui/code/assets/app.js:12	允许前端框架：交互能力来自真实前端资产（不再靠「零内联脚本」判据）	
 C05	§1	承接	src/system/webui/code/ui-surface.mjs:319；src/system/webui/code/ui-surface.mjs:287	外壳给机制（面板/动作/通知/深链），业务功能由插件注册进来	
@@ -25,10 +25,10 @@ C20	§4	承接	src/domain/quote-prepare/code/ui.mjs:8；src/domain/quote-prepare
 C21	§4	承接	src/domain/clarify/code/ui.mjs:21；src/domain/capacity/code/ui.mjs:4；src/domain/negotiation/code/ui.mjs:120	供应商流程：澄清提问 / 承诺交期（产能日历）/ 谈判	
 C22	§4	承接	src/system/approval/code/ui.mjs:336；src/domain/authority-band/code/ui.mjs:15；src/domain/rfq/code/ui.mjs:917；src/system/mail/code/ui.mjs:87；src/system/user-plugin-manager/code/ui.mjs:77	共同侧：审批队列 gate.queue / 授权区间 authority.bands / 截止看板 rfq.remind-board / 邮件通道 / 用户空间插件都有面板	
 C23	§4	承接	src/system/webui/code/app-shell.mjs:160	失败时给可复制的下一步（拒绝体一律带 next_action）	
-C24	§7	承接	src/system/webui/code/webui.mjs:3268；src/system/webui/code/identity.mjs:776	§7.1 /api/routes 的 auth 是真实值 + 给 auth_basis（按路径推导，不手抄）	
+C24	§7	承接	src/system/webui/code/webui.mjs:3268；src/system/webui/code/identity.mjs:777	§7.1 /api/routes 的 auth 是真实值 + 给 auth_basis（按路径推导，不手抄）	
 C25	§7	承接	src/domain/quote-prepare/tests/check-quote-draft-route.py:467	§7.1 门拿 /api/routes 逐条反查 auth/basis（抄的会漂）	
 C26	§7	承接	src/system/webui/code/webui.mjs:2848；src/system/webui/code/app-shell.mjs:2501	§7.2 偏好/已读/布局/筛选整份落服务端（按身份）	
-C27	§7	承接	src/system/webui/code/identity.mjs:1108	§7.3 邮件通道有界内入口 POST /mail/config/（ops 侧）	
+C27	§7	承接	src/system/webui/code/identity.mjs:1109	§7.3 邮件通道有界内入口 POST /mail/config/（ops 侧）	
 C28	§7	承接	src/system/webui/tools/identity-mail-apply.py:5；src/system/config/tools/config-apply.py:2	§7.3 链路 = identity-mail-apply.py（0600 待办件）→ config-apply.py 唯一落盘者	
 C29	§7	承接	src/system/webui/code/identity.mjs:22	§7.3 凭据永不回显；/workspace/config.yaml 只读	
 C30	§7	承接	src/system/webui/code/identity.mjs:58；src/system/webui/tools/identity-sign.py:11	§7.4 人签动作的服务端身份门：401 identity-required / 403 signer-mismatch	
@@ -79,10 +79,10 @@ C74	§14	承接	src/system/webui/code/app-shell.mjs:62	§14.1 内容会变或版
 C75	§14	承接	src/system/webui/code/app-shell.mjs:4108	§14.2 分享动作 share.object（不写账本/不落文件/不发邮件，产出深链 + 需求清单 + 邮件正文）	
 C76	§14	承接	src/system/webui/code/app-shell.mjs:1233；src/system/webui/code/app-shell.mjs:1307	§14.3 导出列偏好落 export-prefs.json（0600 有界）；一列不剩 ⇒ report-columns-empty	
 C77	§15	承接	src/system/webui/code/identity.mjs:12	§15 业务动作的身份只认会话（human:<名字>），不再手填 actor	
-C78	§15	承接	src/system/webui/code/identity.mjs:1035；src/system/webui/code/identity.mjs:1063；src/system/webui/code/identity.mjs:1101；src/system/webui/code/identity.mjs:1125	§15 四个自助面路由齐：登录 / 待我处理 / 人签 / 我的插件（+ 邮件配置）	
-C79	§15	承接	src/system/webui/code/identity.mjs:798；src/system/webui/code/identity.mjs:1022；src/system/webui/code/identity.mjs:1027	§15 身份路由 21 条（12 条字面 + 3 侧 × 2 条 inbox + 3 个插件操作 = 21）	
+C78	§15	承接	src/system/webui/code/identity.mjs:1036；src/system/webui/code/identity.mjs:1064；src/system/webui/code/identity.mjs:1102；src/system/webui/code/identity.mjs:1126	§15 四个自助面路由齐：登录 / 待我处理 / 人签 / 我的插件（+ 邮件配置）	
+C79	§15	承接	src/system/webui/code/identity.mjs:799；src/system/webui/code/identity.mjs:1023；src/system/webui/code/identity.mjs:1028	§15 身份路由 21 条（12 条字面 + 3 侧 × 2 条 inbox + 3 个插件操作 = 21）	
 C80	§15	承接	src/system/webui/code/identity.mjs:59；tmp/verify-identity.py:145	§15 负控：未登录 / 署名不符 / 替别人签 ⇒ 401/403/not-my-draft 且账本零新增	
-C81	§15	漂移（已改）	docs/design/29-webui-gui-app.md:125；tmp/verify-identity/verify.out:315	§15 「49 条断言」（原写 48 —— 漂移，已改）	原文档写「48 条断言」，实测 **49**：`tmp/verify-identity/verify-result.json` 的 `checks` 长 49（`failures` 0）、`tmp/verify-identity/verify.out` 末行「结果：断言 49 条，失败 0 条」。处理：**29 主文件已改为 49**（本条 probe 即修后真值）；插件 doc `src/system/webui/docs/identity-and-selfservice.md:15` 同句**登记待定**（本轮允许面外）。
+C81	§15	漂移（已改）	docs/design/29-webui-gui-app.md:122；tmp/verify-identity/verify.out:315	§15 「49 条断言」（原写 48 —— 漂移，已改）	原文档写「48 条断言」，实测 **49**：`tmp/verify-identity/verify-result.json` 的 `checks` 长 49（`failures` 0）、`tmp/verify-identity/verify.out` 末行「结果：断言 49 条，失败 0 条」。处理：**29 主文件已改为 49**（本条 probe 即修后真值）；插件 doc `src/system/webui/docs/identity-and-selfservice.md:15` 同句**登记待定**（本轮允许面外）。
 C82	§16	承接	src/system/webui/code/collab.mjs:392	§16.1 协作状态落 <ui_shared>/collab/<侧>.json（0600、按侧分片、不进账本）	
 C83	§16	承接	src/system/webui/code/collab.mjs:440	§16.4 往坏容器追加 ⇒ collab-shape-malformed（只读不回写）	
 C84	§16	承接	src/system/webui/code/collab-ui.mjs:52；src/system/webui/code/collab-ui.mjs:92	§16.4 坏形状如实降级：跳过 + 计数 + 原样留在文件里（读不出来 ≠ 还没有）	
@@ -159,3 +159,4 @@ C154	§9	承接	src/system/webui/code/webui.mjs:153	§9 只读路由围栏「先
 C155	§10	承接	src/system/webui/code/webui.mjs:2596；src/system/attachments/code/index.mjs:100	§10.4 外壳那个 16 KiB 读体夹取确实存在（插件因此必须自己读正文）	
 C156	§11	承接	src/system/webui/code/app-shell.mjs:3775；src/system/webui/code/app-shell.mjs:3989	§11.3 sandbox.clear 只删该会话身份自己的沙盘目录（sandboxWipe(human)）	
 C157	§17	承接	src/system/webui/code/app-shell.mjs:2161	§17.2 去重在开窗口之前（tally.deduped 在聚合阶段算，计数按合并后）	
+C158	§24	承接	docs/design/29-webui-gui-app.md:197；docs/design/29-webui-gui-app-archive.md:276；src/system/repo-gate/tools/claim-impl-audit.py:43；src/system/repo-gate/tools/body-keys-audit.py:52	§24 登记两支可重跑审计尺子（事件 body 键集 / 承诺↔实现）：脚本在仓内固定位置，并写清什么时候跑、怎么读 rc、偏差怎么处置	

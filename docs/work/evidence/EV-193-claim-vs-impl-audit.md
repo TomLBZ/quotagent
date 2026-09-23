@@ -1,10 +1,10 @@
-# EV-193 · 29（主文件 + 归档）「承诺 ↔ 实现」对账审计（P45 批）
+# EV-193 · 29（主文件 + 归档）「承诺 ↔ 实现」对账审计（P45 批；P46 补登记 §24 并复跑）
 
 口径（不许放宽）：把 29 主文件与归档里**每条可检验的承诺**抽成一句「看到 X 就应该 Y」，逐条在实现里找**承接点**（文件:行 / 函数 / 路由 / 动作 / 断言）——probe 全部命中 ⇒ `承接`；任一未命中 ⇒ `缺口`（不写成已实现）；承接了但与文档不一致 ⇒ `漂移`（带证据行，并标已改/待改）。
 
-**结论**：157 条承诺 = 承接 **152** + 缺口 **0** + 漂移 **5**（已改 5 / 待改 0；另 2 项登记待定见 §5）。
+**结论**：158 条承诺 = 承接 **153** + 缺口 **0** + 漂移 **5**（已改 5 / 待改 0；另 2 项登记待定见 §5）。
 
-逐条清单表（157 行：id / § / 状态 / 承接点 / 承诺 / 备注）= [`EV-193-claim-matrix.tsv`](EV-193-claim-matrix.tsv)；机读真源 = [`EV-193-claims.json`](EV-193-claims.json)（承诺 + probe + 判定，含重跑脚本源码）。
+逐条清单表（158 行：id / § / 状态 / 承接点 / 承诺 / 备注）= [`EV-193-claim-matrix.tsv`](EV-193-claim-matrix.tsv)；机读真源 = [`EV-193-claims.json`](EV-193-claims.json)（承诺 + probe + 判定）。**P46 起消费脚本在仓内** `src/system/repo-gate/tools/claim-impl-audit.py`（不再依赖 `tmp/`）。
 
 ## 1 统计（按 §）
 
@@ -32,7 +32,8 @@
 | §21 | 6 | 5 | 0 | 1 |
 | §22 | 8 | 8 | 0 | 0 |
 | §23 | 10 | 10 | 0 | 0 |
-| **合计** | **157** | **152** | **0** | **5** |
+| §24 | 1 | 1 | 0 | 0 |
+| **合计** | **158** | **153** | **0** | **5** |
 
 ## 2 漂移 5 条：证据 + 处理
 
@@ -63,7 +64,7 @@
 
 ## 3 缺口 0 条（含审计过程的诚实披露）
 
-probe 初跑报过 9 条「缺口」，逐条人工核实后**全部**是「实现里真有承接点、只是第一版 probe 写得不准」：`gate.grant`/`gate.deny` 经 `decideAction(...)` 参数注册（字面 `id: 'gate.grant'` 不存在）；`tools/verify.sh` 的分支带缩进（`^advice)` 匹配不到）；`signer-mismatch` 在 `identity-sign.py` 而非 `quote-sign.py`。改正 probe 后复跑 ⇒ 缺口 0；清单表每条都带 `file:line`，没有一条是「找不到承接却写成已实现」。
+probe 初跑报过 9 条「缺口」，逐条核实后**全部**是「实现里真有承接点、只是第一版 probe 写得不准」：`gate.grant`/`gate.deny` 经 `decideAction(...)` 参数注册（字面 `id: 'gate.grant'` 不存在）；`tools/verify.sh` 的分支带缩进（`^advice)` 匹配不到）；`signer-mismatch` 在 `identity-sign.py` 而非 `quote-sign.py`。改正 probe 后复跑 ⇒ 缺口 0；清单表每条都带 `file:line`，没有一条是「找不到承接却写成已实现」。
 
 边界：判定口径 = probe 命中（可重跑、可复核），**不是**运行时行为断言；真 HTTP / 真浏览器读数由各节原验证脚本负责，清单表逐条留了路径。
 
@@ -73,7 +74,7 @@ probe 初跑报过 9 条「缺口」，逐条人工核实后**全部**是「实�
 |---|---|---|---|
 | 1 | `src/domain/rfq/code/ui.mjs`（周报降级分支 `next_action`） | `python3 …weekly-report.py --ledger …` 换成界内下一步（换一周再看 / 看通知中心 / 转运维） | 29 §21.4 禁止产品面教用户回终端；这是**动作载荷**，原样会进界面 |
 | 2 | `src/domain/rfq/code/ui.mjs`（`report-render-missing` 分支） | CLI 复跑命令换成「换格式 / 换一周 / 转运维」 | 同上（同插件第二处） |
-| 3 | `docs/design/29-webui-gui-app.md` | §12 对比度改「算过；1 处例外已登记」；删与 §2.2 重复的 §12「禁止」句；§15 断言数 48→49；头部加本页指针 | 漂移 C63/C81 + 腾预算（28 KB 硬上限） |
+| 3 | `docs/design/29-webui-gui-app.md` | §12 对比度改「算过；1 处例外已登记」；删 §12 重复的「禁止」句；§15 断言数 48→49 | 漂移 C63/C81 + 腾预算（28 KB 硬上限） |
 | 4 | `docs/design/29-webui-gui-app-archive.md` | §12.5 记「858 处、例外 1 处」；复跑指针 `tmp/p7-report.md`→在盘读数；§20 反证读数指针改到在盘原件 | 漂移 C63/C136/C114 |
 
 ## 5 登记待定（允许面外）
@@ -84,18 +85,16 @@ probe 初跑报过 9 条「缺口」，逐条人工核实后**全部**是「实�
 ## 6 复跑（可重跑）
 
 ```bash
-# 清单表 + 统计（写回同一份 TSV 与 .resolved.json）
-python3 tmp/p45-shots/p45-scan.py run docs/work/evidence/EV-193-claims.json \
-    docs/work/evidence/EV-193-claim-matrix.tsv
-# tmp 被清理后重建脚本（源码存在 claims.json 的 runner_source 字段）
-python3 -c "import json;print(json.load(open('docs/work/evidence/EV-193-claims.json'))['runner_source'])" \
-    > tmp/p45-shots/p45-scan.py
-tools/run.sh tools/check-docs.py    # 预算/ID/引用（本轮改了 29 与归档，必须绿）
+# 判 + 写回同一份 TSV 与 .resolved.json（**任意 cwd**；rc=0 = 无缺口/无待改漂移）
+python3 src/system/repo-gate/tools/claim-impl-audit.py
+python3 src/system/repo-gate/tools/claim-impl-audit.py --no-write   # 只判、不写文件
+tools/run.sh tools/check-docs.py    # 预算/ID/引用（改了 29 与归档，必须绿）
 ```
+
+**P46 复跑（cwd=`/tmp`）**：158 条 = 承接 153 / 缺口 0 / 漂移 5、`rc=0`；脚本进仓后 `tmp/` 被清也能复跑（另一把尺子见 29 §24）。
 
 ## 7 未覆盖 / 风险
 
-- 静态承接点口径：probe 命中的是「承诺对应的实现位置」；本轮未起服务、未开浏览器。
-- `tmp/**` 是临时区：清单表引用的读数脚本会被清理轮次删掉 ⇒ 表里的 `tmp` 路径按「当时在盘」读。
+- 静态承接点口径：probe 命中的是「承诺对应的实现位置」；本页不起服务、不开浏览器。
+- 清单表里的 `tmp` 路径按「当时在盘」读（`tmp/**` 会被清理轮次删）。
 - 锚点是**扫描时刻**的快照：工作树里有并发/遗留的未提交改动（本批未提交），行号会随之移动。
-- 归档 §12 的例外只登记 1 处（PO 对象页 2 个节点）；同一次读数里 390/1440 工作台 858 处零不达标（最低 5.5）。
