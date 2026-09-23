@@ -72,7 +72,8 @@ const humanBytes = (value) => {
  * ⑤ 一类只做图片 / PDF / 文本 —— 其余的**逐个列出来如实说"不预览"**（不静默）。
  */
 export function renderReviewPanel({ prefix = '', side = '', kind = '', id = '', groups = [], previews = [],
-  skipped = [], limits = {}, identity = null, reason = '', nextAction = '', policy = null } = {}) {
+  skipped = [], limits = {}, identity = null, reason = '', nextAction = '', policy = null,
+  notes = [], indexDegraded = null } = {}) {
   const fileUrl = (attId) => `${prefix}/api/attachments/file?id=${encodeURIComponent(attId)}`
   const previewUrl = (attId) => `${prefix}/api/attachments/preview?id=${encodeURIComponent(attId)}`
   const visLabel = (value) => (value === 'both' ? '交付件（对方可见）' : '本侧内部件')
@@ -169,7 +170,14 @@ export function renderReviewPanel({ prefix = '', side = '', kind = '', id = '', 
     ? `<p class="q-hint" data-att-review-reason="${esc(reason)}">这一块读不完整：${esc(reason)}`
       + `${nextAction ? `｜下一步：${esc(nextAction)}` : ''}</p>`
     : ''
-  return [head, degraded, versionBlock, previewBlock, rule].filter((part) => part !== '').join('\n')
+  // P35：**读不出来 ≠ 没有** —— 索引整份坏 / 索引里有坏条目时，把读数与"怎么修"直接摆在这一屏上
+  //（不静默吞：否则下面那张空版本表会被读成"这个对象没有版本"）
+  const notesBlock = notes.length
+    ? `<p class="q-hint" data-att-notes="${notes.length}"`
+      + `${indexDegraded ? ` data-att-index-degraded="${esc(indexDegraded.code)}"` : ''}>`
+      + notes.map((item) => esc(item)).join('<br>') + '</p>'
+    : ''
+  return [head, degraded, notesBlock, versionBlock, previewBlock, rule].filter((part) => part !== '').join('\n')
 }
 
 export async function register(surface, host) {
@@ -240,6 +248,13 @@ export async function register(surface, host) {
             : store.list({ side, kind, id })
           const listedRead = readRows(listed.files)
           const listedRows = listedRead.rows
+          // P35：这一屏也要能看出"读不出来"（不是"没有"）：
+          //   `index_degraded`  = 索引**整份**读不出来（具名 code + 为什么 + 怎么修）
+          //   `scan_dropped`    = 本侧可见性扫描里读不出来的账本行（越权判据因此可能少读了对象 id）
+          //   `index_unreadable`= 索引里的坏条目（list() 的 counts.unreadable）
+          const indexIssue = listed.degraded ?? null
+          const notes = [listed.note, seen.note].filter((item) => typeof item === 'string' && item !== '')
+          const scanCounts = seen.counts ?? {}
           const files = listedRows.map((row) => ({ ...row, url: fileUrl(row.id),
             bytes_label: humanBytes(row.bytes), sha256_short: String(row.sha256 ?? '').slice(0, 19),
             // **多版本**与**预览**的界面声明（文件表本身按六列渲染；这两个字段给「预览与版本」面板与脚本用）
@@ -259,14 +274,24 @@ export async function register(surface, host) {
             found: visible, identity: side ? { side, human: ctx.identity.human } : null,
             files, upload, row_actions: ['attach.delete'],
             counts: { ...(listed.counts ?? {}), visible_ids: (seen.ids[kind] ?? new Set()).size,
-              unreadable: listedRead.dropped },
+              unreadable: listedRead.dropped,
+              // 坏读数**只在真的发生时出现**（干净索引/干净扫描的面板数据一字不变）
+              ...(listed.counts?.unreadable ? { index_unreadable: listed.counts.unreadable } : {}),
+              ...(scanCounts.ledger_dropped ? { scan_dropped: scanCounts.ledger_dropped } : {}),
+              ...(scanCounts.envelopes_unreadable
+                ? { scan_envelopes_unreadable: scanCounts.envelopes_unreadable } : {}) },
+            // 读数照抄插件（这一屏要能分辨"读不出来"与"没有"）；干净索引时这些键不出现
+            ...(indexIssue ? { index_degraded: indexIssue } : {}),
+            ...(notes.length ? { notes } : {}),
             degraded: reason !== '',
             reason,
             visibility_rule: '下载与删除都要会话身份（未登录 401）；跨侧只在「交付件 + 对方是该对象当事方」'
               + '时放行，本侧内部件永不出本侧',
             next_action: reason === 'identity-required'
               ? `先在 ${prefix}/identity/ 登录：附件按侧隔离，未登录看不到任何一侧的件`
-              : (visible ? (files.length ? '' : '拖文件到这个方块里，或点「选择文件」（可多选）')
+              : (visible
+                ? (indexIssue ? indexIssue.next_action
+                  : (files.length ? '' : '拖文件到这个方块里，或点「选择文件」（可多选）'))
                 : `本侧看不到这个 ${policy.label}（${id}）：先让对方投给你，或换一个对象`),
             object_header: visible ? {
               found: true,
@@ -313,7 +338,9 @@ export async function register(surface, host) {
               next_action: `打开 ${prefix}/app/${view}/${kind}/<id>/` }
           }
           const visible = side !== '' && store.objectVisible(side, kind, id)
-          const groups = visible ? (store.versions({ side, kind, id }).groups ?? []) : []
+          const versionsOut = visible ? store.versions({ side, kind, id }) : null
+          const scan = side === '' ? null : store.visibleObjects(side)
+          const groups = versionsOut?.groups ?? []
           // 最新一版、活的、可预览的（旧版照样在版本表里，逐条能下、也能逐条预览）
           const latestPreviewable = groups.map((group) => group.versions.find((version) => !version.deleted))
             .filter((row) => row && row.previewable)
@@ -345,9 +372,13 @@ export async function register(surface, host) {
             previews: renderable, skipped, limits,
             identity: side ? { side, human: ctx.identity?.human ?? '' } : null,
             policy, reason: side === '' ? 'identity-required' : (visible ? '' : 'object-not-in-your-view'),
+            // P35：版本层的坏条目计数 / 索引整份读不出来，都摆到这一屏（`data-att-notes` / `data-att-index-degraded`）
+            notes: [versionsOut?.note, scan?.note].filter((item) => typeof item === 'string' && item !== ''),
+            indexDegraded: versionsOut?.degraded ?? null,
             nextAction: side === ''
               ? `先在 ${prefix}/identity/ 登录：版本与预览按侧隔离，未登录看不到任何一侧的件`
-              : (visible ? '' : `本侧看不到这个 ${policy.label}（${id}）：先让对方投给你，或换一个对象`) })
+              : (visible ? (versionsOut?.degraded ? versionsOut.degraded.next_action : '')
+                : `本侧看不到这个 ${policy.label}（${id}）：先让对方投给你，或换一个对象`) })
           const extra = latestPreviewable.length > renderable.length
             ? `还有 ${latestPreviewable.length - renderable.length} 个可预览的没内联渲染（界面上限 ${limits.max_preview_render} 个：不把一页撑爆）——` 
               + '在下面「附件」面板里点文件名下载，或在版本表里逐个「预览」'
@@ -359,10 +390,17 @@ export async function register(surface, host) {
               versions: groups.reduce((sum, group) => sum + (group.version_count ?? 0), 0),
               versioned_groups: groups.filter((group) => (group.version_count ?? 0) > 1).length,
               previewable: latestPreviewable.length, previewed: renderable.length,
-              not_previewable: skipped.length },
+              not_previewable: skipped.length,
+              // P35：可见性扫描里的坏读数（账本坏行 / 读不出来的交换件）也照抄在这一屏的 counts 里
+              //（干净扫描时这两个键不出现 ⇒ 干净面板的数据形状一字不变）
+              ...(scan?.counts?.ledger_dropped ? { scan_dropped: scan.counts.ledger_dropped } : {}),
+              ...(scan?.counts?.envelopes_unreadable
+                ? { scan_envelopes_unreadable: scan.counts.envelopes_unreadable } : {}) },
             ledger_added: 0,
             note: `预览与版本都是读：不写账本、不改索引（正文在 ${store.dir} 的 0600 存储里）`
-              + `${extra ? `｜${extra}` : ''}`,
+              + `${extra ? `｜${extra}` : ''}`
+              + `${versionsOut?.degraded ? `｜附件索引这一份文件读不出来（${versionsOut.degraded.code}）：`
+                + '这一块列出的 0 条版本链是"读不出来"，不是"没有版本"' : ''}`,
             next_action: extra || (skipped.length
               ? '这一类没有浏览器自带渲染器：点文件名下载来看（预览不假装加载中）'
               : (renderable.length ? '要换一版：在「附件」面板里把新文件拖进来（同名 = 新版本，旧版保留）'
@@ -376,10 +414,15 @@ export async function register(surface, host) {
   out.push(surface.statusItem({ plugin_id: me, id: 'status.attachments', title: '附件', order: 62, read: () => {
     const info = store.describe()
     const mode = info.index_mode
+    const indexIssue = info.index_degraded ?? null
     return { text: `附件 ${info.counts.live} 个（已删 ${info.counts.deleted}）· ${info.counts.blob_bytes} B · `
-      + `存储 ${mode}${mode === '0600' ? ' ✓' : '（应为 0600）'}`,
-      level: mode === '0600' ? 'ok' : 'warn',
-      next_action: info.counts.live ? '' : '在对象页的附件面板里拖一个文件试试（PDF/图片/CSV 都行）' }
+      + `存储 ${mode}${mode === '0600' ? ' ✓' : '（应为 0600）'}`
+      // P35：索引整份读不出来时，状态栏就说"读不出来"（而不是把 0 个当成"没有附件"）
+      + `${indexIssue ? ` · **索引读不出来**（${indexIssue.code}）` : ''}`
+      + `${info.counts.unreadable ? ` · 索引里 ${info.counts.unreadable} 条坏条目（已跳过并计数）` : ''}`,
+      level: (mode === '0600' && !indexIssue) ? 'ok' : 'warn',
+      next_action: indexIssue ? indexIssue.next_action
+        : (info.counts.live ? '' : '在对象页的附件面板里拖一个文件试试（PDF/图片/CSV 都行）') }
   } }))
 
   // ---------------------------------------------------------------- 通知源：**本侧可见的附件被删**（留痕的可见面）

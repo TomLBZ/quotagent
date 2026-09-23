@@ -4,15 +4,15 @@
 
 ## 现在在哪
 
-P2 · **WebUI 口径纠正 + 转做真 GUI**（用户 2026-09-22 指令 `D-086`）：WebUI 是**完整 GUI 应用**（不是账本投影 /
-只读路由），插件注册 UI/交互/动作/业务逻辑，**双方仅用 GUI 走完全部业务流程**是验收标准；真源
-`docs/design/29-webui-gui-app.md` + `AGENTS.md` 规则 11/12。细节见归档 §0 / §1。
+P2 · **WebUI 口径纠正 + 转做真 GUI**（`D-086`）：WebUI 是**完整 GUI 应用**（真源
+`docs/design/29-webui-gui-app.md` + `AGENTS.md` 规则 11/12）。P36（本批）实测：套件 `s1..s4` 全绿，
+逐门 58/59（红 `clean-copy`/`evolve-module`/`p0-no-node`，**全部既有红**，归因见
+`docs/work/evidence/EV-192`）；`tmp/` 4.4 G → 183 M。细节见归档 §0 / §1。
 
 ## 下一步唯一动作
 
-按 `docs/design/29-webui-gui-app.md` 的 **P0 路线**：应用外壳 + 注册面（视图/交互/动作+服务端一半/通知状态）
-+ 双方各一条**真闭环**（供应商 看包→备报价→签名提交；承包商 发 RFQ→比价→批准→授标→PO），经人工门与
-唯一写者落账本。
+按 `EV-192` 归因表修两条「旧 UI 形态」AC 注册断言（`checks_adv.py:114`、`checks_gate.py:372`；等价判据已在
+路由门与 `t281`/`t283`）—— 它们是 `p0-no-node`/`clean-copy` 红的唯一根因；沙盘 seed 的写者闸门另开一轮。
 
 ## 不变量
 

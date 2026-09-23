@@ -85,12 +85,33 @@
 
 ## 6 附件索引的坏条目（同一入口的另一处）
 
-`<ui_shared>/attachments/index.json` 的 `attachments` 里混进 `null`/字符串/数组时：
-`list()` 现在给 `counts.unreadable`（**只在 >0 时出现**）+ 一句 `note`（「好条照列、坏条已跳过并计数（不静默丢）」），
-**好条目照列**；`stats()` 的 `entries` 本来就是全量计数。同一 sha256 被多个文件名指向时，
-列表按**内容寻址**给出多条（同一份字节一份正文），下载逐条按 sha256 自校验。
+`<ui_shared>/attachments/index.json` 的 `attachments` 里混进 `null`/字符串/数组时：`list()` / `versions()`
+都给 `counts.unreadable`（**只在 >0 时出现**）+ `note`（「好条照列、坏条目逐条计数、不静默丢」）；
+`describe()`（`/api/attachments/store`）另给同一计数，且**不再对坏条目抛 500**（修前 `item.deleted` 对 `null`
+deref ⇒ 读数面 500）；`entries` 仍全量计数，`live`/`deleted` 只数好条。
 
-## 7 复跑（只动 `/tmp/p34-fx/` 下的副本；真账本零改动）
+### 6.1 索引**整份**读不出来（不再拿空索引顶替）
+
+`index-too-large` / `index-shape-invalid` / `index-unreadable` 三类：`list()`/`versions()` 多出
+`degraded:{code,file,reason,next_action}`（**只在降级时加键**）+ `index_note`，`next_action` 从"还没有附件"
+换成"先修索引 —— 修好之前 0 条是**读不出来**、不是没有附件"；`get()` 的 404 带上同一句；`describe()` 给
+`index_degraded`。GUI 抓手：附件面板的 `index_degraded`/`counts.index_unreadable`/`counts.scan_dropped`、
+「预览与版本」块里的 `data-att-notes` / `data-att-index-degraded=<code>`。**索引文件不存在**仍算"真的空"。
+
+`visibleObjects()`（越权判据的可见性扫描）也逐条计数：账本坏行 ⇒ `counts.ledger_dropped` +
+`ledger_first_bad_line`（真实行号）；读不出来的交换件 ⇒ `counts.envelopes_unreadable` +
+`sources[].reason='unreadable'`；`note` 说清"少读了对象 id ⇒ 可能把'本侧可见'读成'本侧不可见'"，与"确实看不到"分得开。
+
+### 6.2 投影备忘的键：投递信封也是一份会变的输入
+
+投影 = 本视角账本行 + **发给本视角的投递信封** + realm + 上限，是纯函数 ⇒ 按
+`(视角, 账本路径/戳, 投递信封戳, 是否消费投递事实, 上限)` 备忘（`webui.mjs#projectionOf`）。账本与信封是
+**两份互相独立的文件事实**：发送方只追加一封信封时本视角账本可以一字未动 —— 备忘键漏掉信封戳 ⇒ 命中旧投影
+⇒ 把「少一个包 / 少一条投递事实」的**旧数据**发给人（`tools/verify.sh rfq-visibility` 路由门 ⑥ 判的就是这条）。
+信封戳与账本同一把尺子（`mtime:size`；目录时 = 文件名清单 + 每份戳）；输入没变仍走备忘
+（实测同 URL 两次 `projections=1`、改信封 ⇒ `projections=2`）。
+
+## 7 复跑（只动 `/tmp/p34-fx/`、`/tmp/p35-fx/` 下的副本；真账本零改动）
 
 ```bash
 python3 tmp/p34-shots/make-fixtures.py                 # 17 个「坏数据/坏环境」变体（各报注入前后 sha256）
@@ -101,22 +122,23 @@ python3 tmp/p34-shots/scenario-runtime.py interrupt|twoproc|clock         # 中�
 python3 tmp/p34-shots/scenario-chardev.py --tag before|after               # ENOSPC 与无界读
 python3 tmp/p34-shots/check-pollution.py               # 读数是不是本批自己的服务（防串台）
 python3 tmp/p34-shots/stop-mine.py                     # 按端口收尾（只杀带 p34-fx 的进程）
+# P35：附件索引坏数据、信封改了要重算、并发回归（6+12 客户端）
+python3 tmp/p35-shots/make-fixtures.py && python3 tmp/p35-shots/attachments-probe.py --tag after --root "$(pwd)"
+python3 tmp/p35-shots/memo-probe.py --tag after --root "$(pwd)" ; python3 tmp/p35-shots/run-concurrent.py
 ```
 
 ## 8 已知限制（如实登记，不假装完成）
 
-1. **`/workspace` 是 ZFS `nfs4acl` ⇒ mode 位不生效**：`chmod 0000` 在那里仍可读。坏权限场景的夹具因此建在
-   `/tmp/p34-fx/`（脚本里用 `P34_FX_ROOT` 覆盖）。⇒ 本机**不能**用 mode 位兑现「名册/偏好/回执/待办件 0600」这条纪律：
-   真源是 ACL，要运维在 ACL 层钉（本批不改鉴权、不碰 ACL）。**另外**：即使文件系统判 mode 位，
-   「把目录设成只读」也拦不住**属主进程** —— 服务会 `chmodSync(dir, 0o700)` 把自己的目录改回来再写
-   （`identity#saveSessions`）；真拦得住的是 EROFS/只读挂载或 ACL（实测：只有它**不**去 chmod 的
-   `<ui_shared>/webui/` 让写者闸门报 EACCES）。
+1. **`/workspace` 是 ZFS `nfs4acl` ⇒ mode 位不生效**（`chmod 0000` 在那里仍可读）⇒ 坏权限夹具建在 `/tmp/`；
+   「名册/偏好/回执 0600」这条**读侧**强制力要运维在 ACL 层钉（本批不改鉴权、不碰 ACL）。即使判 mode 位，
+   「目录只读」也拦不住**属主进程**（服务会 `chmodSync(dir, 0o700)` 改回来再写）——真拦得住的是 EROFS/只读挂载或 ACL。
 2. **上限 64 MiB 是宿主侧整份读入的取舍**：超过就具名拒读（不静默截断），而不是流式分页 —— 大账本要先用
    Python 侧工具归档/分页。这个数写死在 `webui.mjs`（`LEDGER_READ.max_bytes`）。
 3. **`ledger_added` 在拒绝路径上是 `null` 不是 `0`**：屏幕文案说"本动作什么都没做"，但没有一个机器可读的 `0`。
    改它要动写者回执形状（`writerReceipt`），本批没动。
-4. **附件 `versions()` 与 `visibleObjects()` 的坏行只跳过、没上屏计数**：前者只过滤非对象条目、后者注释写明
-   "账本行的真源不在这里"。要补计数得再动这两处的返回形状。
-5. **`/api/attachments/*` 在账本是 FIFO 时会读它**（`visibleObjects` 有 `isFile()` 闸门，故不会阻塞；
-   但那条路径的降级只有 `sources[].reason='unreadable'`，没有屏幕读数）。
-6. **本批不新建门/测试**（按要求）：全部验证脚本在 `tmp/p34-shots/`，不进 `docs/work/evidence/`。
+4. **附件 `put()` 在索引里有坏条目时仍会抛**（`item.deleted` 对 `null` deref ⇒ 上传 500）：本批只修了**读**路径
+   （`list`/`versions`/`get`/`describe`）；写路径的合并语义（坏条目算不算占额、要不要丢弃）**没定**，故没动。
+5. **`/api/attachments/*` 在账本是 FIFO 时**：`visibleObjects` 有 `isFile()` 闸门（不会阻塞），降级读数现在有
+   `counts.ledger_dropped` / `envelopes_unreadable` / `sources[].reason='unreadable'`，但那是"本侧可见性扫描"
+   的读数面，不是账本页那种整段降级。
+6. **不新建门/测试**：脚本都在 `tmp/p34-shots/`、`tmp/p35-shots/`，不进 `docs/work/evidence/`。

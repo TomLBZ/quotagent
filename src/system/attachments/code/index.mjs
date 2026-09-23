@@ -267,8 +267,13 @@ export const HANDLERS = {
       if (!out.ok) return refuse(request, out)
       return request.json(200, { ok: true, service: 'quotagent-attachments', side: who.side,
         object: { kind: out.kind, id: out.id }, files: out.files, counts: out.counts,
+        // P35：坏条目的 note 与索引整份读不出来时的具名降级**照抄插件读数**（不再是"接口不传、当空"）
+        ...(out.note ? { note: out.note } : {}),
+        ...(out.degraded ? { degraded: out.degraded, index_note: out.index_note } : {}),
         visibility_rule: '本侧内部件（visibility=side）永不出本侧；交付件（both）对方是该对象当事方才可见',
-        next_action: out.files.length ? '' : '还没有附件：在附件面板里拖文件进来（或点「选择文件」）' })
+        next_action: out.degraded
+          ? out.degraded.next_action
+          : (out.files.length ? '' : '还没有附件：在附件面板里拖文件进来（或点「选择文件」）') })
     },
     POST: ({ methodsNotAllowed }) => (request) => methodsNotAllowed(request, 'GET'),
   },
@@ -310,10 +315,13 @@ export const HANDLERS = {
             ? `${prefix}/api/attachments/preview?id=${encodeURIComponent(version.id)}` : '' })) }))
       return request.json(200, { ok: true, service: 'quotagent-attachments', side: who.side,
         object: { kind: out.kind, id: out.id }, groups, counts: out.counts, rule: out.rule,
+        // P35：与 `list` 同一口径 —— 坏条目计数（`counts.unreadable`）/ 索引整份坏时的具名降级都照抄插件读数
+        ...(out.note ? { note: out.note } : {}),
+        ...(out.degraded ? { degraded: out.degraded, index_note: out.index_note } : {}),
         ledger_added: 0,
-        next_action: out.counts.versioned_groups
+        next_action: out.degraded ? out.degraded.next_action : (out.counts.versioned_groups
           ? '同名附件里有多版：逐条版本都有一个下载地址（旧版**不覆盖**、仍可下）'
-          : '这个对象上还没有「同名多版」：同名文件再传一次就会多出一版（旧版保留）' })
+          : '这个对象上还没有「同名多版」：同名文件再传一次就会多出一版（旧版保留）') })
     },
     POST: ({ methodsNotAllowed }) => (request) => methodsNotAllowed(request, 'GET'),
   },

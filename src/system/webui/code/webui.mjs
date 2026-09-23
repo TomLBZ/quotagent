@@ -839,24 +839,45 @@ export function apply(ctx, config) {
    * 目录形态按**文件名排序**且有界（`RFQ_DELIVERY_MAX_FILES`）：同一批文件在任何时刻给出同一结果。
    */
   const RFQ_DELIVERY_MAX_FILES = 64
-  // 投递信封的**只读备忘**（同一件东西一次渲染只读一次）：按"目标路径 + 该文件的
-  // mtime/size"（目录时另加"目录 mtime + 文件数"）判有没有变。信封是**发送方写的文件**，
+  // 投递信封的**只读备忘**（同一件东西一次渲染只读一次）：按"目标路径 + 该文件的 mtime/size"
+  //（目录时再加"文件名清单"，见 `deliveryStampOf`）判有没有变。信封是**发送方写的文件**，
   // 变了就重读 —— 不缓存"变化前"的内容。
   const deliveryMemo = { key: '', value: null }
-  const deliveryEnvelopes = () => {
+  /** 投递信封的**文件清单**（只读、有界、按文件名排序）：目录读不到 ⇒ `ok:false` + 空清单（按无投递处理）。 */
+  const deliveryFiles = () => {
     const target = String(config.rfq_delivery ?? '').trim()
-    if (target === '') return []
+    if (target === '') return { target, ok: true, files: [] }
     let files = [target]
     try {
-      if (!existsSync(target)) return []
+      if (!existsSync(target)) return { target, ok: false, files: [] }
       if (statSync(target).isDirectory()) {
         files = readdirSync(target).filter((name) => name.endsWith('.json')).sort()
           .slice(0, RFQ_DELIVERY_MAX_FILES).map((name) => join(target, name))
       }
     } catch (err) {
       console.error(`[webui] 投递信封目录不可读（按无投递处理）：${String(err).slice(0, 120)}`)
-      return []
+      return { target, ok: false, files: [] }
     }
+    return { target, ok: true, files }
+  }
+  /**
+   * 投递信封的**戳**（与账本备忘同一把尺子 `mtime:size`；目录时 = 目标路径 + 文件名清单 + 每个文件的戳）。
+   *
+   * 投递信封是**发送方写的文件**，与账本是两份**互相独立**的事实：发送方只追加一封信封时，
+   * 本视角的账本可以**一字未动**。投影是"账本行 + 发给我的信封"的纯函数，所以投影备忘的键
+   * **必须含这个戳** —— 否则只追加信封会命中旧投影，把「少一个包 / 少一条投递事实」的**旧数据**
+   * 发给用户（`tools/verify.sh rfq-visibility` 的路由门 ⑥：追加「同时发给两家」的信封后
+   * 事件与首页**必须**变化，正是按这条判的）。
+   */
+  const deliveryStampOf = () => {
+    const { target, ok, files } = deliveryFiles()
+    if (target === '') return ''
+    if (!ok) return `${target}\u0000unreadable`
+    return `${target}\u0000${files.map((file) => ledgerStampOf(file)).join('\u0000')}`
+  }
+  const deliveryEnvelopes = () => {
+    const { target, files } = deliveryFiles()
+    if (target === '' || files.length === 0) return []
     const key = `${target}\u0000${files.map((file) => ledgerStampOf(file)).join('\u0000')}`
     if (deliveryMemo.key === key && deliveryMemo.value) return deliveryMemo.value.slice()
     const out = []
@@ -883,8 +904,14 @@ export function apply(ctx, config) {
     // 与账本备忘同一把尺子（mtime:size）⇒ 账本一变，投影立刻重算，不会给出旧白名单结果。
     const stamp = typeof ledger.path === 'string' ? ledgerStampOf(ledger.path) : ''
     const usesDelivery = (projection.deliveryViews ?? []).includes(view)
+    // 备忘键 = 视角 + 账本路径/戳 + **投递信封戳** + 是否消费投递事实 + 上限：
+    // 投影的输入有**两份互相独立的文件事实**（本视角账本、发送方写的投递信封）——
+    // 只认账本戳时，「账本一字未动、只追加了一封信封」会命中旧投影，把**旧数据**
+    // （少一个包 / 少一条投递事实）发给用户。信封戳（文件名清单 + 每个文件的 mtime:size）
+    // 进键后，信封一变就重算（`tools/verify.sh rfq-visibility` 门 ⑥ 按这条判）。
+    const deliveryStamp = usesDelivery ? deliveryStampOf() : ''
     const cacheKey = `${view}\u0000${ledger.path ?? ''}\u0000${stamp}\u0000${usesDelivery ? 'delivery' : ''}`
-      + `\u0000${config.rfq_delivery_max ?? ''}`
+      + `\u0000${deliveryStamp}\u0000${config.rfq_delivery_max ?? ''}`
     const cached = ledger.path && projectionMemo.get(cacheKey)
     if (cached) {
       ledgerStats.projection_hits = (ledgerStats.projection_hits ?? 0) + 1
@@ -2260,15 +2287,22 @@ ${inbox.packages.length
       ? `<table data-rfq="packages"><tr><th>包</th><th>版本</th><th>报价截止</th><th>澄清截止</th><th>行项目</th><th>收到于</th></tr>${
         inbox.packages.map((pkg) => {
           // P32：`pkg.rfq.items` 是**投递信封 spec.items 投影出来的行数组** ⇒ 走唯一读数入口；
-          // 坏行不扮成行、也不静默丢（`all` 是源长度，`bad` 在本行末尾如实报出）。
+          // 坏行不扮成行、也不静默丢。
+          // P35：`data-rfq-items-dropped` 与正文里的丢条读数取**投影层给的读数**（`items_dropped` /
+          // `items_declared` / `items_dropped_reason` / `items_dropped_fix`）—— 那才是"信封里声明几条、
+          // 读到几条、丢几条"的真源。在**已经过滤干净**的 `pkg.rfq.items` 上重算恒为 0（下游因此
+          // 永远看不到丢了几条：P33 REPORT §6.1 登记的那一处缺口）。
           const pkgItems = readRows(pkg?.rfq?.items)
+          const dropped = Number.isInteger(pkg?.items_dropped) ? pkg.items_dropped : pkgItems.bad
+          const declared = Number.isInteger(pkg?.items_declared) ? pkg.items_declared : pkgItems.all
           return `<tr data-rfq-package="${esc(pkg?.rfq?.package_id)}" data-rfq-rev="${esc(pkg?.rfq?.rev ?? '')}"`
-            + ` data-rfq-items-dropped="${pkgItems.bad}">`
+            + ` data-rfq-items-dropped="${dropped}">`
             + `<td><code>${esc(pkg?.rfq?.package_id)}</code></td><td>@rev${esc(pkg?.rfq?.rev ?? '—')}</td>`
             + `<td><code>${esc(pkg?.rfq?.quote_by ?? '—')}</code></td>`
             + `<td><code>${esc(pkg?.rfq?.clarify_by ?? '—')}</code></td>`
-            + `<td>${pkgItems.all} 条（${esc(pkgItems.rows.map((item) => `${item?.item_id}×${item?.qty ?? '—'}${item?.unit}`).join('、') || '—')}）`
-            + `${pkgItems.bad > 0 ? ` · 另有 ${pkgItems.bad} 条读不出来（形状异常：不是对象）` : ''}</td>`
+            + `<td>${declared} 条（${esc(pkgItems.rows.map((item) => `${item?.item_id}×${item?.qty ?? '—'}${item?.unit}`).join('、') || '—')}）`
+            + `${dropped > 0 ? ` · 另有 ${dropped} 条读不出来（原因：${esc(pkg?.items_dropped_reason || 'item-not-an-object')}）`
+              + ` · 怎么修：${esc(pkg?.items_dropped_fix ?? '')}` : ''}</td>`
             + `<td><code>${esc(pkg?.rfq?.delivered_at ?? '—')}</code></td></tr>`
         }).join('')}</table>`
       : `<p data-rfq="empty">还没有发往本视角的 RFQ 包（<code>reason=${esc(inbox.reason)}</code>）—— `

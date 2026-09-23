@@ -235,6 +235,37 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
     writeAtomic(indexFile, JSON.stringify({ schema: SCHEMA, seq: doc.seq, attachments: doc.attachments },
       null, 1) + '\n')
   }
+  /**
+   * 索引**整份**读不出来时的具名降级（P35）：**不再拿一张空索引顶替**。
+   *
+   * `readIndex()` 的既有口径是"读不出来 ⇒ 当空索引"，那是**写**路径的安全默认（不猜内容、
+   * 也不凭猜去改别人的文件）；但**读**路径必须把这件事说出来 —— 否则 `list()` / `versions()` /
+   * `get()` 会把「索引读不出来」画成「这个对象没有附件 / 没有这个附件」：用户看到的是"没有数据"，
+   * 而真相是"读不出来"，两者在屏幕上必须长得不一样（口径真源：
+   * `src/system/webui/docs/retention-and-storage.md` §0/§6）。
+   *
+   * 返回 `null` = 索引读得干干净净（含"索引文件还不存在" ⇒ 那是**真的**空，不是读不出来）。
+   */
+  const indexDegraded = () => {
+    if (indexNote === '') return null
+    const howto = '这一份修好之前，下面看到的 0 条是「读不出来」，**不是**「没有附件」'
+    if (indexNote.startsWith('index-too-large:')) {
+      return { code: 'index-too-large', file: indexFile,
+        reason: `附件索引 ${indexNote.slice('index-too-large:'.length)} 字节，超过宿主整份读入上限 `
+          + `${bounds.max_index_bytes} 字节（整份读进来会把内存吃光）`,
+        next_action: '先用 Python 侧脚本按 journal.jsonl 与 blobs/ 对账，把不再需要的条目归档/删掉重写'
+          + ` <ui_shared>/attachments/index.json（宿主不把超大索引整份读进内存，也不静默截断）；${howto}` }
+    }
+    if (indexNote === 'index-shape-invalid') {
+      return { code: 'index-shape-invalid', file: indexFile,
+        reason: '附件索引的形状不合法（顶层不是对象，或没有 attachments 映射）',
+        next_action: `按既有形状修 <ui_shared>/attachments/index.json：顶层是 `
+          + `{"schema":"${SCHEMA}","seq":N,"attachments":{…}}（先把它备份出来手工核对，再补回合法形状）；${howto}` }
+    }
+    return { code: 'index-unreadable', file: indexFile,
+      reason: `附件索引读不出来：${indexNote.replace(/^index-unreadable:/, '')}`,
+      next_action: `先修 <ui_shared>/attachments/index.json（0600、合法 UTF-8 JSON）——权限/内容；${howto}` }
+  }
   /** 留痕（append-only，0600）：上传与删除各一行；**拒绝不写**（拒绝不该留残留）。 */
   const journal = (record) => {
     try {
@@ -325,13 +356,25 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
     const ids = emptyIds()
     const sources = []
     const rows = []
+    // P35：两处**逐条计数、不静默丢**（口径：坏行跳过就要说出来 —— 越权判据因此可能"少读了对象 id"，
+    // 那与"本侧确实看不到那个对象"是两件事，必须能分辨）：
+    //   `dropped`        = 本侧账本里读不出来的行（JSON 半截/编码截断/形状坏）
+    //   `unreadableFiles`= 读不出来或形状不认识的交换件（自己目录 / 对方目录 / 投递目录）
+    let dropped = 0
+    let firstBadLine = 0
+    let unreadableFiles = 0
     const ledgerFile = ledgerPathOf(side)
     try {
       const info = statSync(ledgerFile)
       if (info.isFile()) {
-        const lines = readFileSync(ledgerFile, 'utf8').split('\n').filter((line) => line.trim() !== '')
-          .slice(0, bounds.max_ledger_rows)
-        for (const line of lines) {
+        // 按**原始行号**遍历（空行不算行、也不计入读数）：坏行的"第一处在第几行"要对得上文件里的真实行号
+        const allLines = readFileSync(ledgerFile, 'utf8').split('\n')
+        let seen = 0
+        for (let at = 0; at < allLines.length; at += 1) {
+          const line = allLines[at]
+          if (line.trim() === '') continue
+          if (seen >= bounds.max_ledger_rows) break
+          seen += 1
           try {
             const row = JSON.parse(line)
             rows.push(row)
@@ -339,16 +382,21 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
             collectIds(row?.refs, ids)
             collectIds({ package_id: row?.package_id, quote_id: row?.quote_id, po_id: row?.po_id,
               change_id: row?.change_id }, ids)
-          } catch (err) { /* 坏行跳过：账本行的真源不在这里 */ }
+          } catch (err) {
+            // 坏行**逐条计数**（账本行的真源不在这里，但"读不出来几条、第一处在哪"必须报出来）
+            dropped += 1
+            if (!firstBadLine) firstBadLine = at + 1
+          }
         }
-        sources.push({ kind: 'ledger', file: ledgerFile, rows: rows.length })
+        sources.push({ kind: 'ledger', file: ledgerFile, rows: rows.length, lines: seen,
+          ...(dropped ? { dropped, first_bad_line: firstBadLine } : {}) })
       }
     } catch (err) { sources.push({ kind: 'ledger', file: ledgerFile, rows: 0, reason: 'unreadable' }) }
     const realm = realmOfSide(side, rows)
     const own = join(shared, side)
     for (const file of jsonFilesIn(own)) {
       const doc = readJsonFile(file, bounds.max_envelope_bytes)
-      if (doc === null) continue
+      if (doc === null) { unreadableFiles += 1; sources.push({ kind: 'own-envelope', file, reason: 'unreadable' }); continue }
       collectIds(doc, ids)
       sources.push({ kind: 'own-envelope', file, delivered: true })
     }
@@ -356,7 +404,7 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
     for (const other of others) {
       for (const file of jsonFilesIn(other)) {
         const doc = readJsonFile(file, bounds.max_envelope_bytes)
-        if (doc === null) continue
+        if (doc === null) { unreadableFiles += 1; sources.push({ kind: 'peer-envelope', file, reason: 'unreadable' }); continue }
         const mine = addressedTo(doc, side, realm) || addressedTo(Array.isArray(doc) ? { delivered_to: [] } : doc,
           side, realm)
         const list = Array.isArray(doc) ? doc : [doc]
@@ -368,13 +416,29 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
     }
     for (const file of jsonFilesIn(text(delivery))) {
       const doc = readJsonFile(file, bounds.max_envelope_bytes)
-      if (doc === null) continue
+      if (doc === null) { unreadableFiles += 1; sources.push({ kind: 'delivery', file, reason: 'unreadable' }); continue }
       const list = Array.isArray(doc) ? doc : [doc]
       if (!list.some((item) => addressedTo(item, side, realm))) continue
       collectIds(doc, ids)
       sources.push({ kind: 'delivery', file, delivered: true })
     }
-    const value = { realm, ids, sources, at: new Date().toISOString() }
+    // 读数（**只在有坏东西时出现**：干净扫描的返回形状一字不变，与 `list()` 的 `counts.unreadable` 同一口径）
+    const counts = { ledger_rows: rows.length }
+    if (dropped) { counts.ledger_dropped = dropped; counts.ledger_first_bad_line = firstBadLine }
+    if (unreadableFiles) counts.envelopes_unreadable = unreadableFiles
+    const notes = []
+    if (dropped) {
+      notes.push(`本侧账本里有 ${dropped} 行读不出来（第一处在第 ${firstBadLine} 行）——这些行里的对象 id `
+        + '**一条都没读到**（好行照读、坏行逐条计数，不静默丢）：越权判据可能因此把"本侧可见"读成'
+        + '"本侧不可见"；先按行号修那一行，或用 Python 侧账本工具核对链')
+    }
+    if (unreadableFiles) {
+      notes.push(`交换件里有 ${unreadableFiles} 份读不出来（JSON 坏 / 不是普通文件 / 超过单份读入上限）`
+        + '——它们里的对象 id 一条都没读进来（不猜内容）：先修或移走那几份文件'
+        + `（read 面自述：sources 里 kind + reason='unreadable' 的那几条）`)
+    }
+    const value = { realm, ids, sources, counts, ...(notes.length ? { note: notes.join('；') } : {}),
+      at: new Date().toISOString() }
     visibilityCache.set(side, { at: Date.now(), value })
     return value
   }
@@ -604,6 +668,8 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
       return refusal('identity-required', '未登录：读不到任何一侧的附件', '先在 /identity/ 登录')
     }
     const doc = readIndex()
+    // P35：索引**整份**读不出来 ⇒ 具名降级（**不拿空索引顶替**：`total:0` 是"读不出来"，不是"没有附件"）
+    const indexIssue = indexDegraded()
     // P34：坏条目（null / 字符串 / 数组）**逐条计数，不静默丢**（口径见 `row-action-prefill.md` §4）
     const allEntries = Object.values(doc.attachments)
     const unreadable = allEntries.filter((entry) => !plain(entry)).length
@@ -627,9 +693,19 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
     const names = new Set(rows.map((row) => `${row.object?.kind}/${row.object?.id}/${row.name_key}`))
     const versioned = [...names].filter((name) => rows.filter((row) =>
       `${row.object?.kind}/${row.object?.id}/${row.name_key}` === name).length > 1).length
+    // 屏幕上要说清的两件事（都只在真的发生时出现）：坏条目计数 / 索引整份读不出来
+    const notes = []
+    if (indexIssue) {
+      notes.push(`附件索引**这一份文件**读不出来（${indexIssue.code}）：${indexIssue.reason}——`
+        + '所以下面列出的 0 条是"读不出来"，**不是**"没有附件"')
+    }
+    if (unreadable > 0) {
+      notes.push(`附件索引里有 ${unreadable} 条读不出来（形状异常：不是对象）—— `
+        + '好条照列、坏条已跳过并计数（不静默丢）：先修 <ui_shared>/attachments/index.json 的那几条')
+    }
     return { ok: true, side, kind: text(kind), id: text(id), files: rows,
-      ...(unreadable > 0 ? { note: `附件索引里有 ${unreadable} 条读不出来（形状异常：不是对象）—— `
-        + '好条照列、坏条已跳过并计数（不静默丢）：先修 <ui_shared>/attachments/index.json 的那几条' } : {}),
+      ...(notes.length ? { note: notes.join('；') } : {}),
+      ...(indexIssue ? { degraded: indexIssue, index_note: indexNote } : {}),
       counts: { total: rows.length, live: rows.filter((row) => !row.deleted).length,
         deleted: rows.filter((row) => row.deleted).length, mine: rows.filter((row) => row.mine).length,
         names: names.size, versioned_names: versioned,
@@ -650,7 +726,14 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
       return refusal('identity-required', '未登录：读不到任何一侧的附件版本', '先在 /identity/ 登录')
     }
     const doc = readIndex()
-    const picked = Object.values(doc.attachments).filter((entry) => plain(entry)
+    // P35：与 `list()` 同一口径的两处**逐条计数、不静默丢**：
+    //   ① 索引**整份**读不出来 ⇒ 具名降级（不拿空索引顶替）；
+    //   ② 索引里的坏条目（null / 字符串 / 数组）逐条计数 —— 修前这里只是一句 `.filter(plain)`，
+    //      坏的条目悄悄消失，界面上看不出"版本链少了几条"。
+    const indexIssue = indexDegraded()
+    const allEntries = Object.values(doc.attachments)
+    const unreadable = allEntries.filter((entry) => !plain(entry)).length
+    const picked = allEntries.filter((entry) => plain(entry)
       && (kind === undefined || text(kind) === '' || entry.object?.kind === text(kind))
       && (id === undefined || text(id) === '' || entry.object?.id === text(id)))
       .filter((entry) => canSee(entry, side))
@@ -663,10 +746,23 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
         latest_id: chain.latest_id, latest_version: chain.latest ? Number(chain.latest.version) || 1 : 0,
         versions: chain.versions.map((entry) => ({ ...publicEntry(entry), mine: entry.side === side,
           latest: chain.latest_id === entry.id, is_latest: chain.latest_id === entry.id })) }))
+    const notes = []
+    if (indexIssue) {
+      notes.push(`附件索引**这一份文件**读不出来（${indexIssue.code}）：${indexIssue.reason}——`
+        + '所以下面列出的 0 条版本链是"读不出来"，**不是**"没有版本"')
+    }
+    if (unreadable > 0) {
+      notes.push(`附件索引里有 ${unreadable} 条读不出来（形状异常：不是对象）—— `
+        + '它们没有进版本链，也没有被静默丢掉（好条照列、坏条已跳过并计数）：'
+        + '先修 <ui_shared>/attachments/index.json 的那几条')
+    }
     return { ok: true, side, kind: text(kind), id: text(id), groups,
+      ...(notes.length ? { note: notes.join('；') } : {}),
+      ...(indexIssue ? { degraded: indexIssue, index_note: indexNote } : {}),
       counts: { groups: groups.length, versions: groups.reduce((sum, group) => sum + group.version_count, 0),
         versioned_groups: groups.filter((group) => group.version_count > 1).length,
-        deleted: groups.reduce((sum, group) => sum + group.deleted_count, 0) },
+        deleted: groups.reduce((sum, group) => sum + group.deleted_count, 0),
+        ...(unreadable > 0 ? { unreadable } : {}) },
       rule: '同一对象上同名文件 = 一条版本链；每条版本都有自己的 id、sha256、上传人与时刻，'
         + '旧版**不覆盖**、仍可下载（删除的版本留墓碑）' }
   }
@@ -720,6 +816,14 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
     }
     const { entry } = entryOf(wanted)
     if (entry === null) {
+      // P35：索引**整份**读不出来时，「找不到」这句必须带上真相（否则等于拿"读不出来"顶替"没有"）
+      const indexIssue = indexDegraded()
+      if (indexIssue) {
+        return refusal('attachment-not-found',
+          `没有这个附件：${wanted} —— 但**附件索引这一份文件读不出来**（${indexIssue.code}：${indexIssue.reason}）`
+            + '，所以这条"没有"是"读不出来"，**不是**"确实没有"',
+          indexIssue.next_action, { degraded: indexIssue, index_note: indexNote })
+      }
       return refusal('attachment-not-found', `没有这个附件：${wanted}`, '回对象的附件面板看当前有哪些（列表即真源）')
     }
     if (entry.deleted === true) {
@@ -812,6 +916,9 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
   const describe = () => {
     const doc = readIndex()
     const rows = Object.values(doc.attachments)
+    // P35：索引**整份**读不出来时，读数面也照实说（`index_note` 的既有键保留；多一个结构化读数）
+    const indexIssue = indexDegraded()
+    const unreadableEntries = rows.filter((item) => !plain(item)).length
     let blobCount = 0
     let blobBytes = 0
     try {
@@ -826,14 +933,17 @@ export function createAttachmentsStore({ root = '.', sharedDir = 'tmp/ui-shared'
       ok: true, schema: SCHEMA, service: 'quotagent-attachments', root: dir,
       dir_mode: modeOf(dir, '0700（未建）'), index_mode: modeOf(indexFile, '0600（未建）'),
       journal: journalFile, journal_lines: journalLines(1000).length,
-      counts: { entries: rows.length, live: rows.filter((item) => item.deleted !== true).length,
-        deleted: rows.filter((item) => item.deleted === true).length, blobs: blobCount, blob_bytes: blobBytes },
+      counts: { entries: rows.length, live: rows.filter((item) => plain(item) && item.deleted !== true).length,
+        deleted: rows.filter((item) => plain(item) && item.deleted === true).length, blobs: blobCount,
+        blob_bytes: blobBytes,
+        ...(unreadableEntries > 0 ? { unreadable: unreadableEntries } : {}) },
       limits: bounds,
       allowed_types: Object.keys(ALLOWED_TYPES).sort(),
       object_policy: Object.fromEntries(Object.entries(OBJECT_POLICY)
         .map(([kind, policy]) => [kind, { label: policy.label, upload_sides: policy.upload_sides,
           default_visibility: policy.default_visibility, note: policy.note }])),
       index_note: indexNote,
+      ...(indexIssue ? { index_degraded: indexIssue } : {}),
       why_not_ledger: '附件是**交付物**不是合同事实：`docs/design/25-storage-plugins.md` §3 要求存储不得成为'
         + '第二条事实写路径；写进账本会改事件类型目录、证据包哈希与审计取证语义（与名册/协作面同一口径）',
       visibility_rule: '下载/列表/删除都要会话身份；跨侧只在「交付件（visibility=both）**且**本侧是该对象当事方」'
