@@ -188,6 +188,9 @@ export async function register(surface, host) {
           overdue: gate.overdue ? '是（策略会执行；永远不自动批准）' : '否',
           escalated_to: gate.escalated_to ?? '' })),
         row_actions: ['gate.grant', 'gate.deny', 'gate.nudge', 'gate.escalate', 'gate.delegate', 'gate.abort'],
+        // **批量人签决定**（一次署名 → 逐条落账）：表头出现勾选框与「批量人签决定」按钮；
+        // 选几条就逐条各跑一次唯一写者（见 `gate.decide-batch` 的服务端一半）。
+        bulk: 'gate.decide-batch',
         counts: { pending: gates.length, decided: decided.length,
           nudges: gates.reduce((sum, gate) => sum + gate.nudge_count, 0) },
         note: `事实时刻 ${moment || '—'}（等待时长与超时剩余都相对账本里最大的 ts 算，不取墙钟）；`
@@ -368,6 +371,145 @@ export async function register(surface, host) {
   out.push(decideAction('gate.deny', 'deny', '驳回（人签，改判定，必留理由）',
     '落 `approval/denied`（既有事件），理由逐字进账本 `comment`；'
     + '判定与「批准」同一条（门在不在 / 决定过没有 / 是不是点名的审批人）。'))
+
+  /**
+   * **批量人签决定**（一次署名 → **逐条落账**）—— 队列里常有十几条门，逐条点在现实里很磨人。
+   *
+   * 语义与 `gate.grant` / `gate.deny` **完全同一条**，只是把「一次署名」用在多条门上：
+   *   · 人签门一字未动（机制层校验「已登录 + 署名 == 会话身份」，插件侧再核一遍 + 跨侧具名拒绝）；
+   *   · 落账仍是**一条门一次**：每条门**单独**跑唯一写者 `gate-actions.py --step grant|deny`
+   *     （同一条写路径、同一批事件 `approval/granted` / `approval/denied`），没有「一个动作落多条」的旁路；
+   *   · 判定全在写者里（门不在本账本 `gate-not-found` / 已决定 `gate-already-decided` /
+   *     不是开单时点名的审批人 `approver-not-named`）⇒ 某一条被拒**不影响**其余条；
+   *   · **幂等**：同一条门的同一份载荷再签一次，写者认归档摘要 ⇒ `already-applied`（**账本零新增**）。
+   */
+  const BATCH_DECIDE_MAX = 50
+  out.push(surface.action({ plugin_id: me, id: 'gate.decide-batch',
+    title: '批量人签决定（批准 / 驳回，多选一次签）', views: ['contractor', 'supplier'], group: '审批',
+    order: 3, permission: 'human-signature',
+    confirm: { required: true, message: '批量决定 = 一次署名、**逐条**改判定（每条门各落一条 '
+      + '`approval/granted` / `approval/denied`，不可撤销）：确认以你的署名执行？' },
+    hint: '一次署名 → 逐条落账：每条门**单独**跑唯一写者 `gate-actions.py`（`--step grant|deny`）；'
+      + '写者逐条判定（门不在本账本 / 已经决定过 / 你不是开单时点名的审批人）⇒ 某一条被拒**不影响**其余条；'
+      + '回执逐条给「已批准 / 已驳回 / 已经决定过（幂等，零新增）/ 被拒 + 原因」；同一批重签不重复落账',
+    input: { bulk: 'ids', fields: [
+      { name: 'gate_id', label: '门 id（批量时由勾选的行自带）', type: 'text',
+        help: 'ap-…；在「审批队列」里勾选后不必手抄' },
+      { name: 'decision', label: '结论（对所选每一条门）', type: 'select', options: ['grant', 'deny'],
+        default: 'grant', help: 'grant=批准、deny=驳回（与单条动作同一条判定；驳回必须给理由）' },
+      { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
+      { name: 'comment', label: '意见 / 驳回理由（驳回必填，逐字进账本 comment）', type: 'textarea' },
+    ] },
+    server: async (ctx, input) => {
+      const step = asText(input.decision) === 'deny' ? 'deny' : 'grant'
+      const comment = String(input.comment ?? '')
+      if (step === 'deny' && comment.trim() === '') {
+        return { ok: false, code: 'empty-reason', reason: '批量驳回也要留理由（每条门都要能把"为什么不行"落进账本）',
+          next_action: '在「驳回理由」里写清楚再提交（理由会逐字进每条门的 `approval/denied.comment`）' }
+      }
+      // 「侧只认会话」：与单条决定同一条（绝不把供应商会话的署名写进承包商账本）
+      const asked = String(ctx.view ?? 'contractor')
+      const mine = asText(ctx?.identity?.side)
+      if (mine !== '' && mine !== asked) {
+        return { ok: false, code: 'cross-side-action',
+          reason: `你的会话是 ${mine} 侧，却在 ${asked} 侧发起批量决定：侧只认会话（请求体改不动"我是谁"）`,
+          next_action: `在 ${mine} 侧自己的「审批队列」里决定属于你这一侧的门`
+            + '（跨侧的门属于对方的账本，你这边看不到、也不该批）' }
+      }
+      const view = mine === '' ? asked : mine
+      const raw = Array.isArray(input.ids) && input.ids.length ? input.ids : [input.gate_id]
+      const ids = [...new Set(raw.map((item) => asText(typeof item === 'object' && item !== null
+        ? (item.gate_id ?? item.approval_id ?? item.id) : item)).filter(Boolean))]
+      if (!ids.length) {
+        return { ok: false, code: 'gate-id-missing', reason: '没有选中任何门',
+          next_action: '在「审批队列」里用表格左侧的勾选框选几条门（表头可全选本页），再点「批量人签决定」' }
+      }
+      if (ids.length > BATCH_DECIDE_MAX) {
+        return { ok: false, code: 'batch-too-large',
+          reason: `一次最多决定 ${BATCH_DECIDE_MAX} 条门，收到 ${ids.length} 条`,
+          next_action: `拆成每批 ≤ ${BATCH_DECIDE_MAX} 条后重提（本动作账本零新增）` }
+      }
+      const actor = asText(input.signature)
+      const results = []
+      for (const gateId of ids) {                     // 顺序逐条：一条门一次写者运行，回执逐条可指认
+        if (!/^ap-[0-9]{4,}$/.test(gateId)) {
+          results.push({ gate_id: gateId, where: 'refused', ok: false, code: 'gate-id-malformed',
+            reason: `门 id 形状非法：${gateId}`, next_action: '从队列卡片上取真门 id（形如 ap-0007）',
+            ledger_added: 0 })
+          continue
+        }
+        // 待办件名由宿主按**载荷摘要**生成 ⇒ 同一批的同一份意图永远是同一个名字：
+        // 再签一次不会新落一个待办件，写者据归档摘要判 `already-applied`（幂等，账本零新增）。
+        const staged = host.stage('gate-actions', { kind: 'gate-actions', action: step, view, gate_id: gateId,
+          actor, note: comment })
+        if (!staged.ok) {
+          results.push({ gate_id: gateId, where: 'refused', ok: false, code: staged.code,
+            reason: staged.reason, next_action: staged.next_action, ledger_added: 0 })
+          continue
+        }
+        const run = host.runPython(gateTool, ['--step', step, '--request', staged.path,
+          '--ui-shared', host.sharedDir, '--ledger-contractor', ledgerFromView(view),
+          '--view', view, '--now', host.now()])
+        // 本次运行**只处理这一条门**（`--request` 指到这一份待办件）⇒ 这条回执就是这一条门的回执。
+        // 归属仍显式指认（先按待办件名，再要求清单里恰好只有一条），绝不拿 `applied[0]` 当结论。
+        const receipt = host.writerReceipt(run)
+        // 归属显式指认：这一条门的这次运行只处理这一份待办件 ⇒ applied 里的条目**必须**写的就是这个门
+        // （`applied[].approval_id`）；对不上宁可如实报拒，也不认领别人的条目、也不把真落账说成失败。
+        const named = (entry) => asText(entry?.approval_id) === gateId
+        const written = receipt.applied.length > 0 && receipt.applied.every(named) ? receipt.applied[0] : null
+        const already = receipt.duplicates.length === 1 ? receipt.duplicates[0] : null
+        const refusedRow = receipt.refusal ?? (receipt.refused.length === 1 ? receipt.refused[0] : null)
+        const appliedHere = Boolean(written)
+        const idMismatch = receipt.applied.length > 0 && !written
+        const ok = Boolean(receipt.ok && (appliedHere || already))
+        const added = appliedHere ? Number(receipt.ledger_added ?? 0) : 0
+        const event = appliedHere ? asText(written.event) : ''
+        results.push({ gate_id: gateId, where: appliedHere ? 'applied' : (already ? 'duplicates' : 'refused'),
+          ok, code: ok ? (appliedHere ? (step === 'grant' ? 'granted' : 'denied') : 'already-applied')
+            : (refusedRow?.code ?? receipt.code ?? 'writer-failed'),
+          reason: ok ? '' : (refusedRow?.reason ?? receipt.reason ?? ''),
+          next_action: refusedRow?.next_action ?? receipt.next_action ?? '',
+          event, scope: appliedHere ? asText(written.scope) : asText(receipt.json?.scope),
+          ref: appliedHere ? asText(written.ref) : asText(receipt.json?.ref),
+          decided_at: appliedHere ? asText(written.decided_at) : '', decided_by: actor,
+          ledger_added: added, writer_rc: receipt.rc, writer_ok: receipt.said,
+          writer_consistency: idMismatch ? 'id-mismatch' : 'consistent',
+          pending_file: staged.name, pending_duplicate: staged.duplicate === true,
+          applied: appliedHere ? [written] : [], duplicates: already ? [already] : [],
+          refused: refusedRow ? [refusedRow] : [] })
+      }
+      const decided = results.filter((row) => row.where === 'applied')
+      const idempotent = results.filter((row) => row.where === 'duplicates')
+      const failed = results.filter((row) => row.where === 'refused')
+      const ledgerAdded = results.reduce((sum, row) => sum + Number(row.ledger_added ?? 0), 0)
+      const verb = step === 'grant' ? '已批准' : '已驳回'
+      const one = (row) => `${row.gate_id}：${row.where === 'applied' ? `${verb}（${row.event}，本动作 +1 行）`
+        : (row.where === 'duplicates' ? '**已经决定过**（幂等：这一条零新增）'
+          : `**被拒**（${row.code}${row.reason ? `：${row.reason}` : ''}）`)}`
+      const next = `${results.length} 条门：${verb} ${decided.length} 条 · 已决定过（幂等）${idempotent.length} 条 · `
+        + `被拒 ${failed.length} 条（本次账本 +${ledgerAdded} 行）—— ${results.map(one).join('；')}`
+        + (failed.length
+          ? `。被拒的这几条要**单独**处理：${failed.map((row) => `${row.gate_id} ⇒ `
+            + `${row.next_action || row.code}`).join('；')}（被拒的那几条账本零新增，其余条不受影响）`
+          : `。${verb}的门在「已决定的门」里可回读（谁在何时、什么意见）`)
+      return { ok: (decided.length + idempotent.length) > 0,
+        code: failed.length === 0 ? (decided.length ? `batch-${step}ed` : 'batch-already-decided')
+          : ((decided.length + idempotent.length) ? 'batch-partial' : 'batch-refused'),
+        reason: failed.map((row) => `${row.gate_id}: ${row.reason || row.code}`).join('；'),
+        next_action: next,
+        result: { batch: { total: results.length, step, view, decided: decided.length,
+            already: idempotent.length, refused: failed.length, ledger_added: ledgerAdded,
+            max_per_batch: BATCH_DECIDE_MAX, ids }, results, ledger_added: ledgerAdded } }
+    } }))
+
+  /** 批量驳回必须留理由（与单条 `gate.deny` 同一条判据；字段级校验表达不了「按结论条件必填」）。 */
+  out.push(surface.validator({ plugin_id: me, id: 'validator.gate-decide-batch', title: '批量决定的理由规则',
+    actions: ['gate.decide-batch'], order: 3,
+    validate: (input) => (asText(input.decision) === 'deny' && String(input.comment ?? '').trim() === '')
+      ? [{ field: 'comment', code: 'empty-reason',
+        message: '驳回必须留理由（逐字进每条门的 approval/denied.comment）',
+        next_action: '在「驳回理由」里写清楚"为什么不行"再提交' }]
+      : [] }))
 
   out.push(surface.action({ plugin_id: me, id: 'gate.nudge', title: '催办（真落账）', views: ['contractor', 'supplier'],
     group: '审批', order: 10, permission: 'human-signature', inline: true,

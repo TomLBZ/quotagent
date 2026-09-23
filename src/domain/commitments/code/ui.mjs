@@ -48,6 +48,9 @@ const sideScoped = (ctx, itemSide, item) => {
 }
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const typeRows = (rows, type) => rows.filter((row) => String(row?.type ?? '') === type)
+/** `html` 面板里逐段转义（面板的 html 是原样注入的 ⇒ 值必须自己转义；只转义，不解读）。 */
+const escHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 export async function register(surface, host) {
   const me = plugin_id
@@ -1152,6 +1155,47 @@ export async function register(surface, host) {
         note: '未批准的变更**一分钱都不计**（`effective_total` 只算已批准项）；批准走人工门 '
           + '`change.approve`（人签），驳回走人工门 denied（理由逐字落 comment）；'
           + '缺单价基准的行会被服务拒（`change/rejected`，拒绝也留痕）' }
+    } }))
+
+  /**
+   * **DEF-037**：旧的变更单列表长在**已退役**的 `/gates/` 页上（每行 `data-change-detail-link` →
+   * `/<view>/changes/<id>/`），那页退役后 GUI 的变更列表面板**没有**指向**逐行明细页**的链接 ——
+   * 明细页与它的门都还在、真跑（`tools/verify.sh change-detail`），只是"列表里点不过去"。
+   *
+   * 这里把入口补回 GUI 的同一个视图上：表格式面板的单元格是**转义文本**（塞不进链接），
+   * 所以用 `html` 面板给出每一条变更的**明细入口**，href 就是那页的真地址
+   * `<前缀>/<视角>/changes/<变更单 id>/`（金额口径那一页：逐行 原量×原价 → 新量×新价、
+   * 行差额与小计，**整数分**、half-up 到分位；缺依据的行如实标出、不编数）。
+   * 列表行内的「打开 →」（`ref.kind='change'`）指向**对象页**（逐行差异 + 批准判定），两者互补。
+   */
+  out.push(surface.panel({ plugin_id: me, id: 'change.detail-links',
+    title: '变更单逐行明细（点进去看金额 · 整数分口径）', view: 'contractor', order: 62, kind: 'html',
+    data: () => {
+      const rows = changeRows(host.rows('contractor'))
+      const decisions = changeDecisions(host.rows('contractor'))
+      if (!rows.length) {
+        return { ok: true, kind: 'html', html: '<p class="q-hint">本侧还没有变更单：变更从「可提变更的报价行」'
+          + '提出（提出变更**不产生义务**，未批准一分钱都不计）。提出后这里会给出每一条的逐行明细入口。</p>' }
+      }
+      const DET = 150
+      const links = rows.slice(0, DET).map((change) => {
+        const id = asText(change.change_id)
+        const decision = decisions.get(id)
+        const status = change.status === 'approved' ? '已批准（生效）'
+          : (decision?.decision === 'denied' ? `已驳回（${asText(decision.by)}）` : '待批（未生效，不计金额）')
+        // 每一条只留**够用**的字节（首屏载荷是要花的钱：P13 量过）：短 title + 截断的理由
+        return `<li><a href="${host.prefix}/contractor/changes/${encodeURIComponent(id)}/"`
+          + ` title="逐行明细页（整数分口径）"><code>${escHtml(id)}</code> 明细 →</a>`
+          + ` ${escHtml(status)}${change.reason ? ` · ${escHtml(String(change.reason).slice(0, 40))}` : ''}</li>`
+      }).join('')
+      return { ok: true, kind: 'html',
+        html: '<p class="q-hint">每条变更都能点进它的**逐行明细页**（<code>'
+          + `${escHtml(host.prefix)}/contractor/changes/&lt;变更单 id&gt;/</code>）：逐行 原量×原价 → 新量×新价、`
+          + '行差额与**小计**（整数分、half-up 到分位），缺依据的行如实标出、绝不编数。'
+          + '列表行内的「打开 →」是**对象页**（逐行差异 + 批准/驳回判定）。</p>'
+          + `<ol class="q-list">${links}</ol>`
+          + (rows.length > DET ? `<p class="q-hint">共 ${rows.length} 条变更，这里只列前 ${DET} 条`
+            + `（其余按 id 直接打开：<code>${escHtml(host.prefix)}/contractor/changes/&lt;id&gt;/</code>）</p>` : '') }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'change.inbox', title: '承包商提出的变更（对方通知）',

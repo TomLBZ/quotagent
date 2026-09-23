@@ -952,13 +952,125 @@
     ? linkOf(ref.view || state.route.view, ref.kind, ref.id) : '')
   const refLabel = (ref) => (ref && ref.title ? ref.title : (ref ? `${ref.kind} ${ref.id}` : ''))
 
+  // ---------------------------------------------------------------- PWA：可安装 + **离线如实**
+  /**
+   * 装成应用（standalone 启动）+ 离线壳：策略原文在 `assets/sw.js`，机读副本在 `/api/ui/surface` 的 `pwa`。
+   *
+   * 这边只做两件事：① 注册那个 Service Worker（失败**如实说**，不静默）；② 把"离线"变成一个
+   * **看得见、说得清**的状态：顶部横幅 + 状态栏连接灯都写「离线：数据可能陈旧（上次成功读到的时刻）」，
+   * 面板/通知照旧走各自的「读不到 / 保留上次读数并标陈旧」口径 —— **绝不假装有数据**。
+   *
+   * 为什么不去缓存数据：数据（面板/通知/对象/协作）与身份/人签/运维面一律**不进**缓存
+   * （`sw.js` 的 `NEVER_CACHE`）—— 宁可显示"读不到"，也不把一份旧 JSON 当新数据端上来。
+   */
+  const offlineState = { on: false, at: '', lastGood: '', why: '', failed: 0 }
+  /** 界面要显示的离线读数（机器可读：`data-offline-*`，见状态栏与横幅）。 */
+  function offlineReadout() {
+    return { on: offlineState.on, at: offlineState.at, last_good: offlineState.lastGood,
+      why: offlineState.why, failures: offlineState.failed }
+  }
+  function offlineBanner() {
+    const when = offlineState.lastGood || ''
+    const detail = offlineState.why + (when ? ` · 上一次成功读到 ${when}` : ' · 这一次还没有成功读到过数据')
+      + ` · 失败的请求 ${offlineState.failed} 次`
+    banner('warn', '离线：数据可能陈旧', detail,
+      '离线壳只缓存**外壳**（界面本身），不缓存任何数据：面板/通知会如实显示"读不到"或保留上次读数并标陈旧。'
+      + '动作与人签需要网络（离线时不排队、不重放）。')
+  }
+  function setOffline(on, why) {
+    if (on) {
+      offlineState.on = true
+      offlineState.at = new Date().toISOString()
+      offlineState.why = why || offlineState.why
+    } else {
+      offlineState.on = false
+      offlineState.why = ''
+      state.banners = state.banners.filter((item) => item.title !== '离线：数据可能陈旧')
+    }
+    offlineBanner()
+    renderBanners()
+    try { renderStatus() } catch (err) { /* 只为如实显示，不影响取数 */ }
+  }
+  /** 一次**网络层失败**（fetch 抛错）：记一次并在界面上说出来（不静默）。 */
+  function offlineNoteBad(path) {
+    offlineState.failed += 1
+    setOffline(true, `请求 ${String(path || '').slice(0, 80)} 没有回音（网络不可达或服务不在）`)
+  }
+  /** 一次成功读到：刷新"上次成功读到"的时刻；网络回来了就把离线标记去掉。 */
+  function offlineNoteGood() {
+    offlineState.lastGood = new Date().toISOString()
+    offlineState.failed = 0
+    if (offlineState.on) setOffline(false)
+  }
+
+  // ---------------------------------------------------------------- PWA：注册离线壳（可安装的另一半）
+  /** **是不是以应用方式在跑**（standalone）：装成应用后浏览器不给地址栏/刷新键 —— 外壳自己得给导航与刷新，
+   *  所以这件事在界面上要看得见（状态栏一行），也是"装上了没有"最直接的读数。 */
+  function standaloneNow() {
+    try {
+      return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+    } catch (err) { return false }
+  }
+  function pwaStatus() {
+    return state.pwa || { supported: false, ok: false, code: 'sw-not-registered', scope: '',
+      script: API('/sw.js'), display: 'standalone', standalone: standaloneNow() }
+  }
+  function registerShellWorker() {
+    if (!('serviceWorker' in navigator)) {
+      state.pwa = { supported: false, ok: false, code: 'sw-unsupported', scope: API('/'),
+        script: API('/sw.js'), reason: '这个浏览器不支持 Service Worker（界面照常可用：只是没有离线壳）' }
+      return
+    }
+    const script = API('/sw.js')
+    navigator.serviceWorker.register(script, { scope: API('/') }).then((reg) => {
+      state.pwa = { supported: true, ok: true, scope: reg.scope || API('/'), script,
+        active: Boolean(reg.active), installing: Boolean(reg.installing), waiting: Boolean(reg.waiting),
+        display: 'standalone' }
+      try { renderStatus() } catch (err) { /* 只为如实显示 */ }
+    }).catch((err) => {
+      state.pwa = { supported: true, ok: false, code: 'sw-register-failed', scope: API('/'), script,
+        reason: String(err).slice(0, 160) }
+      banner('warn', '离线壳没有装上（界面照常可用）',
+        `注册 ${script} 失败：${String(err).slice(0, 160)}`,
+        '浏览器要求 Service Worker 走 https（或 localhost）并且作用域在本前缀下；装不上只是"没有离线能力"，'
+        + '不影响任何动作与写路径')
+      try { renderStatus() } catch (err2) { /* 同上 */ }
+    })
+    // 离线壳离线回退时会**明说**这一页是离线壳（`sw.js` 的 `q-offline` 消息）：
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      const data = event && event.data ? event.data : {}
+      if (data.type === 'q-offline') setOffline(true, '离线壳（Service Worker 回退到不含数据的壳页面）')
+    })
+  }
+  window.addEventListener('online', () => setOffline(false))
+  window.addEventListener('offline', () => setOffline(true, '浏览器报告网络已断开（navigator.onLine=false）'))
+
+  if (navigator.onLine === false) setOffline(true, '打开这一页时浏览器报告网络已断开（navigator.onLine=false）')
+  // 装成应用/退出应用（standalone 切换）时，状态栏那一行跟着变 —— 不需要刷新整页
+  try {
+    window.matchMedia('(display-mode: standalone)')
+      .addEventListener('change', () => { try { renderStatus() } catch (err) { /* 只为如实显示 */ } })
+  } catch (err) { /* 老浏览器没有 addEventListener：那一行只在渲染时更新 */ }
+  registerShellWorker()
+  /**
+   * **只读自述**（给自动化与排障用；**不含任何机密**：没有账本内容、没有凭据、没有别人的数据）：
+   *   `window.quotagentShell.offline()` → 离线读数（是否离线/上次成功读到/失败次数/原因）
+   *   `window.quotagentShell.pwa()`     → 离线壳（Service Worker）状态与作用域
+   *   `window.quotagentShell.prefix()`  → 路由前缀
+   * 为什么给：装成应用之后，"离线壳到底装没装上、现在是不是离线"这两件事不该只靠肉眼看状态栏。
+   */
+  window.quotagentShell = { offline: () => offlineReadout(), pwa: () => pwaStatus(), prefix: () => Q.prefix,
+    standalone: () => standaloneNow() }
+
   async function getJsonOnce(path) {
     try {
       const res = await fetch(API(path), { headers: { accept: 'application/json' } })
-      try { return await res.json() } catch (err) { return { ok: false, code: 'bad-json', reason: String(err) } }
+      try { const out = await res.json(); offlineNoteGood(); return out }
+      catch (err) { return { ok: false, code: 'bad-json', reason: String(err) } }
     } catch (err) {
+      offlineNoteBad(path)
       return { ok: false, code: 'offline', reason: `请求 ${path} 失败：${String(err)}`,
-        next_action: '确认本服务还在跑（状态栏的连接灯），然后点顶部「重载」' }
+        next_action: '确认网络/本服务还在跑（状态栏的连接灯），然后点顶部「重载」' }
     }
   }
   /**
@@ -1001,9 +1113,12 @@
     try {
       const res = await fetch(API(path), { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body || {}) })
-      try { return await res.json() } catch (err) { return { ok: false, code: 'bad-json', reason: String(err) } }
+      try { const out = await res.json(); offlineNoteGood(); return out }
+      catch (err) { return { ok: false, code: 'bad-json', reason: String(err) } }
     } catch (err) {
-      return { ok: false, code: 'offline', reason: String(err), next_action: '确认服务在跑后重试' }
+      offlineNoteBad(path)
+      return { ok: false, code: 'offline', reason: String(err),
+        next_action: '写操作需要网络（离线壳**不**排队、**不**重放写请求）：恢复网络后重试这一次操作' }
     }
   }
   async function copyText(text) {
@@ -1201,13 +1316,17 @@
   function renderStatus() {
     const route = state.route
     const deep = route.kind && route.id ? linkOf(route.view, route.kind, route.id) : linkOf(route.view)
-    // **服务端忙**（P13）时连接灯说"忙"（不是"正常"，也不是"失败"）：这一次请求被服务端当场拒了、
-    // 界面正在按它给的 Retry-After 重试 —— 三个状态长得不一样，互不冒充。
-    const conn = state.busy
-      ? ['连接', `服务端忙（等 ${state.busy.wait_ms}ms 重试${Number.isFinite(state.busy.loop_lag_ms)
-        ? ` · 滞后 ${state.busy.loop_lag_ms}ms` : ''}）`, 'warn']
-      : (state.banners.some((item) => item.kind === 'bad')
-        ? ['连接', '有请求失败', 'bad'] : ['连接', '正常', 'ok'])
+    // **离线**（PWA）：连接灯有第四种样子 —— 它说的是「我现在读不到新数据，屏上的东西可能陈旧」，
+    // 与「正常」「服务端忙」「有请求失败」都长得不一样（四个状态互不冒充）。
+    // `data-offline*` 是机器可读的那一维（离线壳只缓存外壳，不缓存数据）。
+    const pwa = pwaStatus()
+    const conn = offlineState.on
+      ? ['连接', `离线：数据可能陈旧${offlineState.lastGood ? `（上次成功读到 ${offlineState.lastGood}）` : '（这次还没读到过数据）'}`, 'warn']
+      : (state.busy
+        ? ['连接', `服务端忙（等 ${state.busy.wait_ms}ms 重试${Number.isFinite(state.busy.loop_lag_ms)
+          ? ` · 滞后 ${state.busy.loop_lag_ms}ms` : ''}）`, 'warn']
+        : (state.banners.some((item) => item.kind === 'bad')
+          ? ['连接', '有请求失败', 'bad'] : ['连接', '正常', 'ok']))
     const statusLine = (item) => `<span class="q-st ${item.level === 'ok' ? '' : item.level}">${esc(item.title)}：`
       + `${esc(item.text)}${item.level && item.level !== 'ok'
         ? ` ${badge(item.level, item.level === 'bad' ? 'bad' : 'warn')}` : ''}</span>`
@@ -1215,10 +1334,17 @@
     const shown = state.status.slice(0, 8)
     const rest = state.status.slice(8)
     el('q-status').innerHTML = html([
-      `<span class="q-st ${conn[2]}">${conn[0]}：${conn[1]}</span>`,
+      `<span class="q-st ${conn[2]}" data-offline="${offlineState.on ? '1' : '0'}"`
+      + ` data-offline-at="${attr(offlineState.at)}" data-offline-last-good="${attr(offlineState.lastGood)}"`
+      + ` data-offline-failures="${attr(String(offlineState.failed))}">${conn[0]}：${conn[1]}</span>`,
       ...shown.map(statusLine),
       rest.length ? `<button class="q-link" data-status-all="1">更多 ${rest.length} 项</button>` : '',
       '<span class="q-spacer"></span>',
+      `<span class="q-st" data-pwa="${pwa.ok ? 'installed' : 'not-installed'}" data-pwa-code="${attr(pwa.code || '')}"`
+      + ` data-pwa-scope="${attr(pwa.scope || '')}">离线壳 `
+      + `${pwa.ok ? `已装（scope ${esc(pwa.scope || '')}）` : `未装（${esc(pwa.code || '')}）`}</span>`,
+      `<span class="q-st" data-standalone="${standaloneNow() ? '1' : '0'}">`
+      + `${standaloneNow() ? '以应用方式启动（standalone）' : '浏览器标签页'}</span>`,
       `<span class="q-st">动作 ${state.surface.actions.length} · 面板 ${state.surface.panels.length}`
       + ` · 快捷键 ${state.surface.shortcuts.length}</span>`,
       `<span class="q-st">深链 <button class="q-link" data-copy="${attr(deep)}">复制</button>`

@@ -1,0 +1,26 @@
+{
+  "name": "quotagent —— 采购协作台",
+  "short_name": "quotagent",
+  "description": "承包商与供应商的采购协作台：发包 / 报价 / 比价 / 批准 / 授标 / 发 PO，全部在应用内闭环。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0f1115",
+  "theme_color": "#0f1115",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "./assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "工作台（我今天要做什么）", "url": "./app/home/", "description": "待办 / 通知 / 演示数据" },
+    { "name": "承包商视角", "url": "./app/contractor/", "description": "发包 / 比价 / 批准 / 授标 / 发 PO" },
+    { "name": "供应商视角", "url": "./app/supplier/", "description": "看包 / 备报价 / 人签提交" }
+  ]
+}

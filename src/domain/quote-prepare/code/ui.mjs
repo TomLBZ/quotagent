@@ -343,8 +343,12 @@ export async function register(surface, host) {
           { key: 'unit_price_cents', label: '首行单价（整数分）', filter: 'number' },
           { key: 'lead_time_days', label: '首行交期（天）', filter: 'number' }, { key: 'status', label: '状态', filter: 'enum' }],
         rows, row_actions: ['quote.submit'], counts: { drafts: rows.length },
+        // **批量人签**（一次署名 → 逐份落账）：表头出现勾选框与「批量人签提交」按钮；勾几份签几份，
+        // 每一份仍各自跑唯一写者 quote-sign.py（见 quote.submit-batch 的服务端一半）。
+        bulk: 'quote.submit-batch',
         note: '草稿**不是报价**：只有人签提交（quote/submit）之后才算对外报价（AGENTS.md 规则 3）；'
-          + '**一份草稿 = 一整张表**（行数 > 1 的草稿签一次就提交全部行）' }
+          + '**一份草稿 = 一整张表**（行数 > 1 的草稿签一次就提交全部行）；'
+          + '一天几十份时用表格左侧勾选框多选后点「批量人签提交」（一次署名、逐份落账、逐份可拒）' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'quote.submitted', title: '已提交的报价（提交结果回读）',
@@ -629,6 +633,130 @@ export async function register(surface, host) {
           // 原始判据（rc + stdout JSON）与本次运行的全局读数都留在回执里，供界面/审计核对
           writer: { rc: receipt.rc, stdout_ok: receipt.said, code: receipt.code,
             ledger_added: receipt.ledger_added, json: receipt.json } } }
+    } }))
+
+  /**
+   * **批量人签提交报价**（一次署名 → **逐份落账**）—— 现实里一份包几十行、一天几十份，逐份点一次是磨人的。
+   *
+   * 语义**一条都不松**：
+   *   · 署名仍只有**一次**，人签门一字未动（机制层先校验「已登录 + 署名 == 会话身份」，插件侧再核一遍）；
+   *   · 落账仍是**一份一份**的：每一份草稿**单独**跑唯一写者 `tools/quote-sign.py`（同一条写路径、
+   *     同一张人工门形状 approval/requested → approval/granted → quote/submitted），
+   *     不存在「一个动作落多条」这种绕过人签门的旁路；
+   *   · 每份**各自判定**（写者自己判：草稿在不在本账本 / 行被改过 / 已经签过）⇒ 某一份被拒**不影响**其余份，
+   *     回执逐条列「已签 / 幂等（零新增）/ 被拒（原因）」，不是全成或全败的二选一；
+   *   · **幂等**：同一批再签一次，写者按草稿 id 认出 already-signed ⇒ **账本零新增**（回执如实说零新增）。
+   */
+  const BATCH_SIGN_MAX = 50
+  const DRAFT_ID_RE = /^qd-[A-Za-z0-9-]+-[0-9a-f]{12}$/
+  out.push(surface.action({ plugin_id: me, id: 'quote.submit-batch',
+    title: '批量人签提交（多选一次签，逐份落账）', views: ['supplier'], group: '报价', order: 21,
+    permission: 'human-signature',
+    confirm: { required: true, message: '批量提交 = 一次署名、**逐份**对外承诺（每一份各落一条 quote/submitted）'
+      + '：确认以你的署名提交所选草稿？' },
+    hint: '一次署名 → 逐份落账：每份草稿**单独**跑唯一写者 quote-sign.py（各落 approval/requested → granted → '
+      + 'quote/submitted）；写者逐份判定 ⇒ 某一份被拒（已被改过 / 形状不对 / 已经签过）**不影响**其余份；'
+      + '回执逐条给「已签 / 已经签过（幂等，零新增）/ 被拒 + 原因」；同一批重签不重复落账',
+    input: { bulk: 'ids', fields: [
+      { name: 'draft_id', label: '草稿 id（单条时可填；批量时由勾选的行自带）', type: 'text',
+        help: 'qd-supplier-…；在「我的草稿」里勾选后不必手抄' },
+      { name: 'signature', label: '署名（人签，所选每一份都用它）', type: 'signature', required: true,
+        help: 'human:<你的名字> —— 服务端要求它等于会话身份（不一致 403 signer-mismatch，账本零新增）' },
+      { name: 'comment', label: '批注（逐份进批准记录 / approval/granted.comment）', type: 'text' },
+      { name: 'timeout_policy', label: '超时策略（每份各自声明）', type: 'select',
+        options: ['remind', 'escalate', 'abort'], default: 'remind' },
+    ] },
+    server: async (ctx, input) => {
+      // 与 quote.submit 同一道插件侧留痕：服务端一半**再核一遍**「署名 == 会话身份」
+      const session = ctx.session && typeof ctx.session === 'object' ? ctx.session : null
+      const typed = asText(input.signature)
+      if (session && session.human && typed !== session.human) {
+        return { ok: false, code: 'signer-mismatch',
+          reason: `署名 ${typed} 与会话身份 ${session.human} 不一致`,
+          next_action: `人签只能本人签：用 ${session.human} 署名，或切换到该身份的会话（账本零新增）` }
+      }
+      const raw = Array.isArray(input.ids) && input.ids.length ? input.ids : [input.draft_id]
+      // 勾选的行键就是草稿 id（行键 = `row.id` = `quote_draft_id`）；单条路径也接受完整行对象
+      const ids = [...new Set(raw.map((item) => asText(typeof item === 'object' && item !== null
+        ? (item.quote_draft_id ?? item.draft_id ?? item.id) : item)).filter(Boolean))]
+      if (!ids.length) {
+        return { ok: false, code: 'drafts-required', reason: '没有选中任何草稿',
+          next_action: '在「我的草稿（待签署）」里用表格左侧的勾选框选几份（表头可全选本页），'
+            + '再点表头的「批量人签提交」' }
+      }
+      if (ids.length > BATCH_SIGN_MAX) {
+        return { ok: false, code: 'batch-too-large',
+          reason: `一次最多签 ${BATCH_SIGN_MAX} 份，收到 ${ids.length} 份`,
+          next_action: `拆成每批 ≤ ${BATCH_SIGN_MAX} 份后重提（本动作账本零新增）` }
+      }
+      const comment = String(input.comment ?? '')
+      const policy = asText(input.timeout_policy) || 'remind'
+      const results = []
+      for (const draftId of ids) {                       // 顺序逐份：一份一份地写，回执逐份可指认
+        if (!DRAFT_ID_RE.test(draftId)) {
+          results.push({ draft_id: draftId, where: 'refused', ok: false, code: 'draft-id-malformed',
+            reason: `草稿 id 形状不对：${draftId}`, next_action: '从「我的草稿」勾选那一行（id 会自带）',
+            ledger_added: 0 })
+          continue
+        }
+        const run = host.runPython('src/domain/quote-prepare/tools/quote-sign.py',
+          ['--ui-shared', host.sharedDir, '--draft-id', draftId, '--actor', typed, '--now', host.now(),
+            '--comment', comment, '--timeout-policy', policy,
+            '--ledger-supplier', supplierLedger(), '--ledger-contractor', contractorLedger()])
+        // 本次运行**只处理这一份草稿**（`--draft-id` 一次一个）⇒ 这条回执（rc + stdout JSON）就是这一份的回执。
+        // 归属仍按 `draft_id` **显式指认**（`receipt.item()`）；只有「这一份」的清单里恰好只有一条时才取它，
+        // 绝不把 `applied[0]` 当成结论（写者一次处理多条时那条不是你的 —— 那是"假失败"的老根因）。
+        const receipt = host.writerReceipt(run)
+        const mine = receipt.item({ draft_id: draftId })
+        // 兜底只在**这一份的回执**内部成立时使用：一次运行只处理这一份草稿 ⇒ 回执里的 applied/duplicates
+        // 条目**要么没写 draft_id、要么就是这一份**（`quote-sign.py` 一次运行给 2 条 applied：两侧各一条）。
+        // 这样既不把「写者真落了行」误报成失败（假失败比真失败更坏），也不会认领别人的条目。
+        const belongsHere = (list) => list.length > 0
+          && list.every((entry) => asText(entry?.draft_id) === '' || asText(entry?.draft_id) === draftId)
+        const written = (mine && mine.where === 'applied' ? mine.entry : null)
+          ?? (belongsHere(receipt.applied) ? receipt.applied[0] : null)
+        const already = (mine && mine.where === 'duplicates' ? mine.entry : null)
+          ?? (belongsHere(receipt.duplicates) ? receipt.duplicates[0] : null)
+        const refusedRow = mine && mine.where === 'refused' ? mine.entry : null
+        const idMismatch = [written, already].filter(Boolean)
+          .some((entry) => asText(entry.draft_id) !== '' && asText(entry.draft_id) !== draftId)
+        const ok = Boolean(receipt.ok && (written || already))
+        const added = written ? Number(receipt.ledger_added ?? 0) : 0
+        results.push({ draft_id: draftId, where: written ? 'applied' : (already ? 'duplicates' : 'refused'),
+          ok, code: ok ? (written ? 'submitted' : 'already-signed')
+            : ((refusedRow ?? receipt.refusal)?.code ?? receipt.code ?? 'writer-failed'),
+          reason: ok ? '' : ((refusedRow ?? receipt.refusal)?.reason ?? receipt.reason ?? ''),
+          next_action: (refusedRow ?? receipt.refusal)?.next_action ?? receipt.next_action ?? '',
+          quote_id: written?.quote_id ?? already?.quote_id ?? (asText(receipt.json?.quote_id) || null),
+          approval_id: written?.approval_id ?? already?.approval_id ?? (asText(receipt.json?.approval_id) || null),
+          line_count: Number(written?.line_count ?? 0) || null,
+          ledger_added: added, writer_rc: receipt.rc, writer_ok: receipt.said,
+          writer_consistency: idMismatch ? 'id-mismatch' : 'consistent',
+          applied: written ? [written] : [], duplicates: already ? [already] : [],
+          refused: refusedRow ? [refusedRow] : [] })
+      }
+      const signed = results.filter((row) => row.where === 'applied')
+      const idempotent = results.filter((row) => row.where === 'duplicates')
+      const failed = results.filter((row) => row.where === 'refused')
+      const ledgerAdded = results.reduce((sum, row) => sum + Number(row.ledger_added ?? 0), 0)
+      const one = (row) => `${row.draft_id}：${row.where === 'applied' ? `已签（本动作 +${row.ledger_added} 行）`
+        : (row.where === 'duplicates' ? '**已经签过**（幂等：这一份零新增）'
+          : `**被拒**（${row.code}${row.reason ? `：${row.reason}` : ''}）`)}`
+      // 逐条如实报告（**不许**"要么全成要么全败"）：份数、行数、以及每一份的落点都写出来
+      const next = `${results.length} 份：已签 ${signed.length} 份 · 已经签过（幂等）${idempotent.length} 份 · `
+        + `被拒 ${failed.length} 份（本次账本 +${ledgerAdded} 行）—— ${results.map(one).join('；')}`
+        + (failed.length
+          ? `。被拒的这几份要**单独**处理：${failed.map((row) => `${row.draft_id} ⇒ `
+            + `${row.next_action || row.code}`).join('；')}（被拒的那几份账本零新增，其余份不受影响）`
+          : '。已签的几份在「已提交的报价」里可回读')
+      return { ok: (signed.length + idempotent.length) > 0,
+        code: failed.length === 0 ? (signed.length ? 'batch-submitted' : 'batch-already-signed')
+          : ((signed.length + idempotent.length) ? 'batch-partial' : 'batch-refused'),
+        reason: failed.map((row) => `${row.draft_id}: ${row.reason || row.code}`).join('；'),
+        next_action: next,
+        result: { batch: { total: results.length, signed: signed.length, already: idempotent.length,
+            refused: failed.length, ledger_added: ledgerAdded, max_per_batch: BATCH_SIGN_MAX, ids, policy },
+          results, ledger_added: ledgerAdded } }
     } }))
 
   out.push(surface.shortcut({ plugin_id: me, id: 'shortcut.quote-draft', keys: 'd', action: 'quote.draft',

@@ -1455,6 +1455,18 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     services: () => Object.keys(services ?? {}),
     note: noteStore,
     /**
+     * **通知摘要的投影**（机制）：把"按**会话身份**聚合后的通知"投影成一份只含
+     * 「标题 / 下一步 / 来源 / 深链 / 计数」的清单（**不带通知正文**；含私域哨兵/凭据样态的那条会被拦下并计数）。
+     *
+     * 用途：插件要把"有事等你"送到**浏览器之外**（例如邮件摘要）时，**不要**自己去读账本/通知源 ——
+     * 谁才知道"谁在等我"是外壳的聚合面；插件只把它交给自己的服务端一半去投递（`system/mail` 的
+     * 邮件摘要就是第一个使用者）。身份**只取当前动作的会话身份**（入参改不动"我是谁"）。
+     * 只读：不写账本、不落文件（`ledger_added: 0`）。
+     */
+    digest: (opts) => notifyDigest(opts || {}),
+    /** 某会话身份在服务端存的**已读 id 集合**（`null` = 没给身份；`[]` = 没有记录）。只读。 */
+    notifReadIds: (human) => notifReadIdsOf(human),
+    /**
      * **导出/打印**（机制）：插件把"这一侧账本里的事实 + 一张表"交进来 ⇒ 拿到标准导出形状
      * （CSV 或可打印 HTML + 内容指纹），直接作为动作回执的 `result` 返回即可。
      * 外壳**不认识表里的业务**、也**不生成任何行**（谁的事实谁导出）。
@@ -2243,6 +2255,133 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     if (notifyCacheTtlMs > 0) notifyCache.set(cacheKey, built)
     return { ...built, cache_hit: false, cache_age_ms: 0 }
   }
+  /**
+   * **邮件摘要的条目投影**（机制，0 业务语义）：把**聚合后的通知**投影成一份"可以发出去"的样子。
+   *
+   * 为什么是机制而不是插件：通知本身来自各插件的通知源（插件才知道"这条通知是什么意思"），
+   * 而"哪几件正在等我、有几件未读"这件事只有外壳的聚合面知道。插件（`system/mail` 的摘要入口）
+   * 只需要把这一份交给它自己的服务端一半去发信 —— 于是**谁的事实谁给，机制只搬运**。
+   *
+   * 三条纪律（判据都在这里）：
+   *   · **白名单字段**：只带 `id/level/title/next_action/plugin_id/at/count/link/ref/tags` ——
+   *     **不带 `body`**。通知的 `body` 常常是同侧同事的评论原文/对方的备注（对方正文），
+   *     摘要**绝不**把它们带出去（需求：私域、凭据、对方正文一个字节都不许泄露）。
+   *   · **逐条扫描**：标题/下一步/来源/深链里出现私域哨兵（`reserve_price`/`cost_model`/`signature`/`private:`）
+   *     或泄露样态词（password/secret 之类）⇒ 那一条**不进摘要**（`withheld` 如实计数，并写明命中了哪一类）。
+   *   · **有界**：条数、每个字段的长度都夹取（超出**计数**，不静默丢）。
+   * 未读由服务端按**会话身份**存的已读集合算；没有记录 ⇒ `unread_known:false`（**不猜**）。
+   */
+  const DIGEST_LIMITS = { items: 40, title: 160, next: 200, id: 120, link: 400, at: 40, plugin: 64, tags: 6 }
+  const DIGEST_PRIVATE = ['reserve_price', 'cost_model', 'signature', 'private:']
+  const DIGEST_HINTS = ['password', 'secret', 'api_key', 'bearer ']
+  const digestOneLine = (value, max) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+  const digestHits = (value) => {
+    const low = String(value ?? '').toLowerCase()
+    const out = []
+    for (const token of DIGEST_PRIVATE) if (low.includes(token)) out.push(`private:${token}`)
+    for (const hint of DIGEST_HINTS) if (low.includes(hint)) out.push(`hint:${hint.trim()}`)
+    return out
+  }
+  /**
+   * 某会话身份在服务端存的已读 id 集合（没有记录 ⇒ `[]`；未给身份 ⇒ `null` = 不知道）。
+   *
+   * 落点与 `webui.mjs` 的 `notifFile` **同一个**（`<ui_shared>/webui/notif-state.json`，0600、按身份）：
+   * 那边管读写与鉴权，这边只**读**这一个字段（摘要里要给出"未读几条"）。读不到 ⇒ `null`（不猜）。
+   */
+  const notifStateFilePath = () => join(sharedDir, 'webui', 'notif-state.json')
+  const notifReadIdsOf = (human) => {
+    const name = String(human ?? '').trim()
+    if (name === '') return null
+    const doc = readDoc(notifStateFilePath())
+    const stored = doc && doc.identities && typeof doc.identities === 'object' ? doc.identities[name] : null
+    if (!stored || typeof stored !== 'object') return []
+    return Array.isArray(stored.read) ? stored.read.map(String) : []
+  }
+  /**
+   * 会话身份 → 一份**可以发出去**的通知摘要（供插件的服务端一半使用；只读、不写任何东西）。
+   * 身份**只取当前动作作用域的会话身份**（插件不能通过入参改"我是谁"）。
+   */
+  const notifyDigest = (opts = {}) => {
+    const scope = currentActionScope()
+    const raw = scope?.identity ?? null
+    // 动作作用域里的身份已经是**规范化**过的（`{human, name, side}`）；面板/渲染期没有作用域 ⇒ 拒绝。
+    const who = raw && raw.human && raw.side
+      ? { human: String(raw.human), name: String(raw.name ?? ''), side: String(raw.side) } : null
+    if (!who) {
+      return { ok: false, code: 'identity-required',
+        reason: '摘要按**会话身份**聚合（未登录时无法知道"谁的事"）：先登录再点这个按钮',
+        next_action: `去 ${prefix}/identity/ 登录（human:<名字> + 属于哪一侧）后再试；这一次什么都没写` }
+    }
+    const view = who
+    const want = String(opts.min_level ?? 'warn')
+    const minLevel = ['info', 'warn', 'bad'].includes(want) ? want : 'warn'
+    const minRank = { info: 2, warn: 1, bad: 0 }[minLevel]
+    let limit = Number(opts.limit)
+    limit = Number.isFinite(limit) ? Math.max(1, Math.min(DIGEST_LIMITS.items, Math.trunc(limit)))
+      : DIGEST_LIMITS.items
+    const human = String(view.human).startsWith('human:') ? String(view.human) : `human:${view.human}`
+    // 机制面（通知源/协作面/名册面）认的是**请求作用域**那个形状（`{ok:true, human, name, side}`）：
+    // 动作作用域里的 `ctx.identity` 已经是规范化后的 `{human,name,side}`，直接传下去会让 `normIdentity()`
+    // 判成"没有身份" ⇒ 依赖身份的**通知源**（协作的 @我 / 指派给我）会静默给空。这里把它还原成同一形状。
+    const identity = { ok: true, human, name: String(view.name ?? ''), side: view.side }
+    return withSandbox(identity, () => {
+      const aggregate = notifyAggregate(identity, notifyCacheKey(identity))
+      const all = aggregate.items
+      const ranked = all.map((item, index) => ({ item, index }))
+        .sort((left, right) => (notifRank(left.item) - notifRank(right.item))
+          || String(right.item.at || '').localeCompare(String(left.item.at || ''))
+          || (left.index - right.index)).map((entry) => entry.item)
+      const read = notifReadIdsOf(view.human)
+      const readSet = new Set(read ?? [])
+      const visible = ranked.filter((item) => notifRank(item) <= minRank)
+      const items = []
+      const withheld = []
+      let truncated = 0
+      for (const item of visible) {
+        const ref = item.ref ?? null
+        const safe = {
+          id: digestOneLine(item.id, DIGEST_LIMITS.id),
+          level: ['info', 'warn', 'bad'].includes(item.level) ? item.level : 'info',
+          title: digestOneLine(item.title, DIGEST_LIMITS.title),
+          next_action: digestOneLine(item.next_action, DIGEST_LIMITS.next),
+          plugin_id: digestOneLine(item.plugin_id, DIGEST_LIMITS.plugin),
+          at: digestOneLine(item.at, DIGEST_LIMITS.at),
+          count: Number(item.count ?? 1) || 1,
+          link: '',
+          ref: ref ? { kind: digestOneLine(ref.kind, 32), id: digestOneLine(ref.id, DIGEST_LIMITS.id),
+            view: String(ref.view ?? ''), title: digestOneLine(ref.title, DIGEST_LIMITS.title) } : null,
+          tags: normTags(item.tags),
+        }
+        if (safe.ref && safe.ref.kind !== '' && safe.ref.id !== '') {
+          const linkView = views.includes(safe.ref.view) ? safe.ref.view : view.side
+          if (views.includes(linkView)) {
+            safe.link = `${prefix}/app/${linkView}/${safe.ref.kind}/${encodeURIComponent(safe.ref.id)}/`
+          }
+        }
+        const hits = digestHits(JSON.stringify(safe))
+        if (hits.length) { withheld.push({ id: safe.id || '?', hits }); continue }
+        if (safe.title === '' && safe.next_action === '') { truncated += 1; continue }
+        if (items.length >= limit) { truncated += 1; continue }
+        safe.unread = read === null ? null : !readSet.has(String(item.id))
+        items.push(safe)
+      }
+      const todo = items.filter((item) => item.level === 'warn' || item.level === 'bad').length
+      return {
+        ok: true, identity: human, side: view.side, prefix, generated_at: host.now(),
+        limit, min_level: minLevel,
+        counts: { produced: all.length, visible: visible.length, listed: items.length, todo,
+          bad: items.filter((item) => item.level === 'bad').length, unread: read === null ? 0 : items.filter((item) => item.unread === true).length,
+          unread_known: read !== null, withheld: withheld.length, truncated },
+        items, withheld, limits: DIGEST_LIMITS,
+        mechanism: '通知聚合（round-robin + 同一件事只出一条）→ 级别过滤 → **白名单投影**（不带 body）→'
+          + ' 逐条扫私域哨兵/凭据样态 → 有界夹取；未读按服务端存的已读集合算',
+        note: '这一份只含「标题 / 下一步 / 来源 / 深链 / 计数」：**不含**通知正文（对方正文不进摘要）、'
+          + '不含私域字段与凭据；含哨兵的那一条会被拦下（见 withheld）',
+        ledger: null, ledger_added: 0,
+      }
+    })
+  }
+
   /**
    * **通知**（机制）：不带窗口 ⇒ 旧口径（整份、`NOTIF_CAP` 上限、截断如实记账，脚本与老客户端一字不变）；
    * 带窗口（`w=1` + `pq.notify`）⇒ 在**全量条目**上筛选 → 排序 → 分页，**只回这一页**，并把在全集上
@@ -3107,6 +3246,16 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(config.page_title ?? 'quotagent')} · ${esc(title)}</title>
 <link rel="stylesheet" href="${prefix}/assets/app.css">
+<!-- PWA（机制）：可安装 + standalone 启动。清单里的 URL 一律相对 ⇒ 任意路由前缀都对；
+     图标与离线壳也只来自本服务（本前缀下的 /assets/** 与 /sw.js），**没有外网 CDN**。 -->
+<link rel="manifest" href="${prefix}/manifest.webmanifest">
+<meta name="theme-color" content="#0f1115">
+<link rel="icon" type="image/png" sizes="192x192" href="${prefix}/assets/icon-192.png">
+<link rel="apple-touch-icon" href="${prefix}/assets/icon-192.png">
+<meta name="application-name" content="${esc(config.page_title ?? 'quotagent')}">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="${esc(config.page_title ?? 'quotagent')}">
 <script type="application/json" id="q-boot">${initial}</script>
 </head><body>
 <div id="q-app">
@@ -3123,9 +3272,16 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 </body></html>`
   }
 
+  /** **二进制资源**（图标…）：必须按字节读 —— 按 utf8 读会把 PNG 读坏（实测：一张 848 B 的图标
+   *  经 utf8 往返后变成 1300 B 的乱码，浏览器装不上应用）。其余（js/css/清单/sw）仍是文本。 */
+  const BINARY_ASSETS = ['.png', '.ico', '.webp', '.woff', '.woff2']
   const asset = (name) => {
     const file = join(root, 'src', 'system', 'webui', 'code', 'assets', name)
-    try { return { ok: true, body: readFileSync(file, 'utf8') } } catch (err) {
+    const binary = BINARY_ASSETS.some((ext) => String(name).toLowerCase().endsWith(ext))
+    try {
+      return binary ? { ok: true, body: readFileSync(file), binary: true }
+        : { ok: true, body: readFileSync(file, 'utf8'), binary: false }
+    } catch (err) {
       return { ok: false, code: 'asset-missing', reason: flat(err) }
     }
   }
@@ -3144,6 +3300,38 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     deep_link: { pattern: `${prefix}/app/<view>/[<kind>/<id>/]`,
       note: '视图地址 `…/app/<view>/`；**对象地址** `…/app/<view>/<kind>/<id>/`（kind 由插件声明 object_kind，'
         + '刷新不丢、可复制分享；对方视角打开同一 id 只会在它自己的投影里找不到 ⇒ 如实未命中）' },
+    // **PWA（可安装 + 离线壳）**：机读口径与实现同源（`code/assets/sw.js` 的注释是策略原文）。
+    // 为什么要有它：人不在浏览器里时要有东西告诉他"有事等你"（邮件摘要，见 `host.digest`），
+    // 而"人打开浏览器时"这一半要把界面做得值得装成应用 —— 装得上、能 standalone 启动、
+    // 离线时**如实说**而不是假装有数据。
+    pwa: { schema: 'quotagent/webui-pwa/v1',
+      manifest: `${prefix}/manifest.webmanifest`, service_worker: `${prefix}/sw.js`,
+      scope: `${prefix}/`, start_url: `${prefix}/app/home/`, display: 'standalone',
+      icons: [`${prefix}/assets/icon-192.png`, `${prefix}/assets/icon-512.png`],
+      sources: '清单 / 图标 / 离线壳三类资源都只来自本服务 `src/system/webui/code/assets/`：**没有外网 CDN**，'
+        + '也没有构建产物（脚本无框架、无打包步骤）',
+      cache_policy: { precache: ['壳 HTML（不含数据）', `${prefix}/assets/app.js`, `${prefix}/assets/app.css`,
+        `${prefix}/assets/manifest.webmanifest`, '图标 ×2'],
+        never_cached: ['/api/**（面板/通知/对象/协作/名册/附件/状态）', '身份 /identity/**',
+          '人签 /sign/**', '待办 /inbox/**', '邮件 /mail/**', '运维 /ops/**', '管理 /admin/**',
+          '自己的插件 /plugins/**', '服务端渲染的旧页 /<view>/**（可能含数据）', '一切非 GET 请求'],
+        offline_navigation: '导航请求 network-first；离线时**只**对应用根与深链 `/app/**` 回退到那份不含数据的壳，'
+          + '并带 `x-q-offline: 1` + 给页面发 `{type:"q-offline"}` 消息；其它路径离线直接失败（不回退）',
+        honesty: '界面据此显示「离线：数据可能陈旧（上次读到的时刻）」并把面板/通知标为读不到或陈旧 —— 不假装有数据' },
+      note: '装成应用（standalone）与离线壳都不改变写路径：动作仍 POST 到 `/api/action/<id>`，'
+        + '写请求不被 Service Worker 拦截、不排队、不重放（离线时如实失败）' },
+    // **通知摘要的机制面**（谁才能把"有事等你"送到浏览器之外）：机读自述，实现见 `host.digest()`。
+    digest: { schema: 'quotagent/webui-notify-digest/v1', mechanism: 'host.digest({min_level, limit})',
+      who: '插件的动作服务端一半（身份只取**当前动作的会话身份**，入参改不动"我是谁"）',
+      carrying: ['id', 'level', 'title', 'next_action', 'plugin_id', 'at', 'count', 'link', 'ref', 'tags'],
+      not_carried: ['通知正文 body（常常是同事评论原文/对方备注 ⇒ 不进摘要）', '任何凭据值', '私域字段'],
+      scanning: '逐条扫 `reserve_price` / `cost_model` / `signature` / `private:` 与泄露样态词'
+        + '（password / secret / api_key / bearer）⇒ 命中那一条**不进摘要**并在 `withheld` 如实计数；'
+        + '投递侧（`system/mail` 的邮件摘要）再对**整份报文**扫一遍，命中就整封不发',
+      reads: '未读按**服务端存的已读集合**（`/api/ui/notif-state`，0600、按身份）算；'
+        + '没有记录 ⇒ `unread_known:false`（不猜、不冒充）',
+      ledger: '只读投影：不写账本、不落文件（`ledger_added: 0`）',
+      first_user: '`system/mail#mail.notify.send`（邮件摘要：开关默认关、按身份、去重 + 节流、走既有 SMTP 通道）' },
     io: { python_spawns: ioStats.spawns, python_read_spawns: ioStats.read_spawns,
       read_cache_hits: ioStats.read_hits, read_cache_ttl_ms: readCacheTtlMs, cache_clears: ioStats.cache_clears,
       // **账本只读备忘**（P13）：`parses` = 真读盘 + 逐行 JSON.parse 的次数、`memo_hits` = 走备忘的次数。

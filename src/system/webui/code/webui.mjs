@@ -154,6 +154,8 @@ const GET_ONLY_PATTERNS = [
   /^\/api\/collab\/(store|object|hub)\/?$/,
   /^\/api\/people\/(roster|suggest|store)\/?$/,
   /^\/assets\/[A-Za-z0-9._-]+$/,                                // GUI 外壳自己的客户端资源（只来自本服务）
+  /^\/manifest\.webmanifest$/,                                  // PWA 清单（机制；相对 URL ⇒ 任意前缀都对）
+  /^\/sw\.js$/,                                                 // PWA Service Worker（离线壳；必须落在前缀根上才拿到 scope）
   /^\/app(\/[A-Za-z0-9._%<>-]+)*\/?$/,                          // GUI 深链（工作台/各视图/**对象** `/app/<view>/<kind>/<id>/`）
   // 上面这条也认**路由表里的占位形式**（`<view>`/`<kind>`/`<id>`，含被百分号编码的 `%3C…%3E`）：反向对照门会拿
   // `/api/routes` 的 path 逐条 POST，占位形式若落不到这张表就会变成 404 而不是 405 —— 那等于"只读路由对写方法不表态"。
@@ -435,6 +437,8 @@ export function apply(ctx, config) {
   // —— 实测踩过：写成 join 会落出 `<repo>/workspace/projects/<repo>/tmp/...` 这种鬼路径（写成 `resolve` 才是
   // 「绝对路径覆盖前缀」的语义，与 `identity.mjs` 的 `sharedDir` 同一口径）。
   const notifDir = resolve(repoRoot, String(config.ui_shared ?? 'tmp/ui-shared'), 'webui')
+  // 落点由**这一行**定：`app-shell.mjs` 的 `notifStateFilePath()`（摘要读"未读几条"用）与之同值 ——
+  // 改路径时两处一起改（两边都有这条注释）。
   const notifFile = join(notifDir, 'notif-state.json')
   const notifEmpty = () => ({ schema: NOTIF_SCHEMA, identities: {} })
   const notifRead = () => {
@@ -2477,8 +2481,25 @@ ${sortForm('events', '筛查事件')}
       const found = shell.asset(name)
       if (!found.ok) return json(404, { ok: false, code: found.code, name, reason: found.reason })
       const type = name.endsWith('.css') ? 'text/css; charset=utf-8'
-        : (name.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/plain; charset=utf-8')
-      return send(200, type, found.body)
+        : (name.endsWith('.js') ? 'text/javascript; charset=utf-8'
+          : (name.endsWith('.webmanifest') ? 'application/manifest+json; charset=utf-8'
+            : (name.endsWith('.png') ? 'image/png' : 'text/plain; charset=utf-8')))
+      return send(200, type, found.body,
+        name.endsWith('.png') ? { 'cache-control': 'public, max-age=86400' } : {})
+    }
+    // ---- PWA（机制）：清单落在**前缀根**（模板里的相对 URL 因此指向本前缀），
+    //      Service Worker 也落在**前缀根** —— 它的作用域才正好是整个应用（`${prefix}/`）。
+    //      两者都只来自本服务（`code/assets/`），**没有任何外网 CDN**；详见 `assets/sw.js` 里的缓存策略。
+    if (path === '/manifest.webmanifest' || path === '/sw.js') {
+      const name = path === '/sw.js' ? 'sw.js' : 'manifest.webmanifest'
+      const found = shell.asset(name)
+      if (!found.ok) return json(404, { ok: false, code: found.code, name, reason: found.reason })
+      return path === '/sw.js'
+        // SW 总要走网络取最新的：`no-store` + 显式 `Service-Worker-Allowed`（作用域 = 前缀根）
+        ? send(200, 'text/javascript; charset=utf-8', found.body,
+          { 'cache-control': 'no-store', 'service-worker-allowed': `${prefix}/` })
+        : send(200, 'application/manifest+json; charset=utf-8', found.body,
+          { 'cache-control': 'no-cache' })
     }
     if (path === '/api/ui/surface') return json(200, shell.surfaceJson())
     // 面板/对象/通知/状态都要**会话身份**（`identity.whoOf`）：协作类贡献从 `ctx.identity` 才知道"同侧是谁"；
@@ -2851,6 +2872,13 @@ ${sortForm('events', '筛查事件')}
           { path: `${prefix}/assets/app.js`, method: 'GET', auth: 'none',
             what: 'GUI 客户端脚本（**只来自本服务**：src/system/webui/code/assets/，无外网 CDN、无构建步骤）' },
           { path: `${prefix}/assets/app.css`, method: 'GET', auth: 'none', what: 'GUI 客户端样式（同上）' },
+          { path: `${prefix}/manifest.webmanifest`, method: 'GET', auth: 'none',
+            what: 'PWA 清单（**可安装**：`display:standalone` + 192/512 图标；清单里的 URL 一律**相对** ⇒ '
+              + '任意路由前缀都对）。图标与清单都来自本服务 `code/assets/`：**没有外网 CDN**' },
+          { path: `${prefix}/sw.js`, method: 'GET', auth: 'none',
+            what: 'PWA 离线壳（Service Worker，**动过就别瞎缓存**）：只预缓存外壳资源 + 一份不含数据的壳 HTML；'
+              + '`/api/**` 与身份/人签/邮件/运维/管理面**永不缓存**（离线=读不到，如实说），'
+              + '写请求一律不拦截。策略原文在 `code/assets/sw.js`，机读副本在 `/api/ui/surface` 的 `pwa`' },
           { path: `${prefix}/api/ui/surface`, method: 'GET', auth: 'none',
             what: '注册面自述：视图 / 面板 / 动作与命令（含入参 schema、权限、确认策略）/ 快捷键 / 通知源 / 状态项'
               + ' + 逐插件的贡献清单（卸载演示与审计据此对照）' },

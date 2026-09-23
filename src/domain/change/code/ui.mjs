@@ -20,6 +20,9 @@ export const plugin_id = 'domain/change'
 import { createHash } from 'node:crypto'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+/** `html` 面板里逐段转义（面板的 html 是原样注入的 ⇒ 值必须自己转义；只转义，不解读）。 */
+const escHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 /**
  * 工作台的卡头那句「有 N 件需要你处理」**只该算本侧**（P13 可用性修）：卡片把两侧插件贡献的待办并在一起，
@@ -195,6 +198,43 @@ export async function register(surface, host) {
         row_actions: ['exchange.change-respond'],
         counts: { changes: proposed.length, responded: responded.size, approved: approved.size },
         note: '未批准的变更**一分钱都不计**；缺单价基准的行不可勾选（服务拒绝 `basis-mismatch` 时账本零新增）' }
+    } }))
+
+  /**
+   * **DEF-037（供应商侧）**：供应商道原先也只有「变更单」列表 —— 逐行明细页（`/<视角>/changes/<id>/`，
+   * 金额口径：整数分、half-up 到分位）**没有**从 GUI 点得过去的入口。这里补上：每条变更一个链接，
+   * href 就是那页真地址。表格式面板的单元格是转义文本，塞不进链接，所以用 `html` 面板。
+   */
+  out.push(surface.panel({ plugin_id: me, id: 'exchange.change-detail-links',
+    title: '变更单逐行明细（点进去看金额 · 整数分口径）', view: 'supplier', order: 24, kind: 'html',
+    data: () => {
+      const rows = host.rows('supplier')
+      const proposed = typeRows(rows, 'change/proposed')
+      if (!proposed.length) {
+        return { ok: true, kind: 'html', html: '<p class="q-hint">本侧还没有变更单：承包商提出变更后会镜像到这里，'
+          + '每一条都会有逐行明细入口（原量×原价 → 新量×新价、行差额与小计）。</p>' }
+      }
+      const responded = new Map(typeRows(rows, 'change/responded')
+        .map((row) => [asText(bodyOf(row).change_id), bodyOf(row)]))
+      const approved = new Set(typeRows(rows, 'change/approved').map((row) => asText(bodyOf(row).change_id)))
+      const DET = 150
+      const links = proposed.slice(0, DET).map((row) => {
+        const body = bodyOf(row)
+        const id = asText(body.change_id)
+        const answer = responded.get(id)
+        const status = approved.has(id) ? '已生效'
+          : (answer ? `我的回应：${asText(answer.decision) === 'accept' ? '接受' : '异议'}` : '待我回应')
+        // 每一条只留**够用**的字节（首屏载荷是要花的钱）
+        return `<li><a href="${host.prefix}/supplier/changes/${encodeURIComponent(id)}/"`
+          + ` title="逐行明细页（整数分口径）"><code>${escHtml(id)}</code> 明细 →</a>`
+          + ` ${escHtml(status)}${asText(body.package_id) ? ` · 包 ${escHtml(asText(body.package_id))}` : ''}</li>`
+      }).join('')
+      return { ok: true, kind: 'html',
+        html: '<p class="q-hint">每条变更都能点进它的**逐行明细页**（<code>'
+          + `${escHtml(host.prefix)}/supplier/changes/&lt;变更单 id&gt;/</code>）：逐行 原量×原价 → 新量×新价、`
+          + '行差额与**小计**（整数分、half-up 到分位），缺依据的行如实标出、绝不编数。</p>'
+          + `<ol class="q-list">${links}</ol>`
+          + (proposed.length > DET ? `<p class="q-hint">共 ${proposed.length} 条，这里只列前 ${DET} 条</p>` : '') }
     } }))
 
   // ================================================================== 供应商侧：改报

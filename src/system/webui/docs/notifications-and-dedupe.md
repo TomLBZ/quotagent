@@ -129,3 +129,10 @@ python3 tmp/p11-negative.py --base http://127.0.0.1:8461/quotagent --ledger-dir 
 python3 src/system/webui/tests/check-webui.py              # 存量门（47/47）
 # 浏览器侧（真点真截）：登录 wanglei → 工作台 → 「通知」→ 末页 ⏭ → 面板里「打开 审批门 … →」
 ```
+
+## 7. 同一条通知怎么"走得比浏览器更远"：**邮件摘要**
+
+通知中心只在页面里 ⇒ 人不在浏览器时没人提醒他。同一份「按身份聚合后的通知」现在可以经**邮件**送出：
+外壳只提供**投影**（`host.digest()`：标题 / 下一步 / 来源 / 深链 / 计数，**不带通知正文** + 逐条扫私域哨兵），
+投递与判定在 `system/mail`（开关默认关、按身份 0600、去重 + 节流、走既有 SMTP 通道、**不写账本**）。
+口径、边界与真跑读数见 `src/system/mail/docs/notification-digest.md`（复跑 `python3 tmp/p19-shots/verify-digest.py`，16/16）。

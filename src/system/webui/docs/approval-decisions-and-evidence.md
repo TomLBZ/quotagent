@@ -53,6 +53,34 @@
 **新增面板**：`gate.decided` / `gate.decided.supplier` —— 已决定的门**留痕可回读**（谁在何时、什么意见），
 批完不必去翻账本 JSONL。列里的 `决定时刻` 是账本行的 `ts`，`意见` 逐字来自 `comment`。
 
+### 1.5 批量人签（**一次署名 → 逐份/逐条落账**）
+
+现实里一天几十份草稿、队列里十几条门，逐个点一次是磨人的。所以**多选**之后一次署名办一整批 —— 但
+**落账仍是一份（条）一次**，没有任何"一个动作落多条"的旁路：
+
+| 面板 | 批量动作 | 每一条落什么 | 写者（**逐条各跑一次**） |
+|---|---|---|---|
+| 「我的草稿（待签署）」（供应商道） | `quote.submit-batch` | 每份各落 `approval/requested` → `approval/granted` → `quote/submitted`（+ 承包商侧一条登记） | `src/domain/quote-prepare/tools/quote-sign.py`（`--draft-id` 一次一个） |
+| 「审批队列」（两侧） | `gate.decide-batch`（`grant` / `deny`） | 每条门各落 `approval/granted` 或 `approval/denied` | `src/system/approval/tools/gate-actions.py --step grant|deny`（`--request` 一次一件） |
+
+判据与单条动作**同一条**，一条没松：署名仍**一次**且人签门在动作总线上原样生效（未登录 401 /
+署名 ≠ 会话身份 403 / `agent:*` 拒）；每条**各自判定**（写者自己判：`draft-not-found` / `gate-not-found` /
+`gate-already-decided` / `approver-not-named`）⇒ **一条被拒不影响其余条**。回执**逐条如实**放在
+`result.results[]`（`{where: applied|duplicates|refused, code, ledger_added, reason, next_action}`），
+汇总句形如「5 份：已签 2 份 · 已经签过（幂等）3 份 · 被拒 0 份（本次账本 +8 行）—— <逐条>」——
+**不是**"全成/全败"的二选一；有落账就不是失败（`ok=true`，部分被拒时 `code=batch-partial`）。
+**幂等**：同一批原样重签 ⇒ `already-signed` / `already-applied`（写者按归档摘要逐字节比对）⇒ 账本零新增。
+一次最多 50 条（`batch-too-large` 具名拒绝）；批量驳回必须留理由（`empty-reason`）。
+复跑：`python3 tmp/p18-shots/verify.py`（A 报价批 / B 门批 / C 负控 / D 幂等，四组全绿）。
+
+### 1.6 变更单的**逐行明细页**入口（GUI 侧，DEF-037）
+
+旧的变更单列表长在已退役的 `/gates/` 页上，那页每行有 `data-change-detail-link` → `/<view>/changes/<id>/`；
+页退役后 GUI 的变更列表**没有**指向明细页的链接（明细页与 `change-detail` 门都还在、真跑）。
+现在两侧各补一个 `html` 面板给出每条的入口（`change.detail-links` / `exchange.change-detail-links`），
+href 就是那页真地址（逐行 原量×原价 → 新量×新价、行差额与小计，**整数分**、half-up 到分位）；
+列表行内的「打开 →」（`ref.kind='change'`）仍指向**对象页**（逐行差异 + 批准判定）。两者互补。
+
 ## 2. 授权区间（谁能批到多少 / 越界找谁）
 
 - **面板** `authority.bands` / `authority.bands.supplier`（两侧）：登记的角色 + 限额（**整数分**）+
