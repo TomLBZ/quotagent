@@ -87,8 +87,9 @@
 
 ```sh
 sh tmp/p42-shots/p42-start.sh                       # 端口 8484、数据目录 tmp/p42-run、私有受管配置
-python3 tmp/p42-shots/body-keys-audit.py            # 事件 body 键集逐字机检（§6）
+python3 src/system/repo-gate/tools/body-keys-audit.py   # 事件 body 键集逐字机检（§6；P44 搬进仓内，判据未改）
 python3 tmp/p42-shots/panel-probe.py                # 面板四问 + 旧行呈现（只读，打印 JSON）
+# P44 复跑（写者面收口 + 读侧对照）：tmp/p44-shots/{p44-start.sh,p44-writer-face-real-run.py,p44-panel-probe.py}
 # 停服务：按端口拿 PID 再 kill（不要用 pkill -f "…8484"）
 PID=$(ps -eo pid,cmd | grep "[c]li.mjs webui" | grep -F -- "--port 8484 " | awk '{print $1}'); kill $PID
 ```
@@ -100,35 +101,58 @@ PID=$(ps -eo pid,cmd | grep "[c]li.mjs webui" | grep -F -- "--port 8484 " | awk 
    供人自行推断（判据不在界面里编）。
 2. **门对象页的状态文案**显示账本里的英文状态（`aborted`）而不是「已终止」（该页在
    `src/domain/commitments/code/ui.mjs`，不在本批可改面内）；**谁/何时/为什么三问已经齐**（§3）。
-3. **同一事件多个写者的键集不同**（逐字机检的第 ⑥ 类偏差，见 §6）：`src/domain/quote-prepare/tools/quote-sign.py`
-   与 `src/system/webui/tools/identity-mail-apply.py` 直接写的 `approval/requested` / `approval/granted`
-   只有 8–10 个键（`requested_by`/`submitted_at`/`summary`…），**没有** `payload_hash`/`approvers`/`timeout_s`/
-   `requested_at` ⇒ 这些门在队列里读不出「卡在谁 / 超时剩余」。两个文件都不在本批可改面内（`src/domain/**`、
-   `src/system/webui/tools/**`），据实登记。
-4. **`05-events.md` 只逐行声明了 6 个事件的 body 键集**：`approval/granted`/`denied`/`reminded`/`escalated`
-   仍只有家族级口径（同一写体），按本批机检口径算「未逐行声明」—— 待下一批按实现补齐（**不要**替它们猜）。
+3. **同一事件多个写者的键集不同**（逐字机检的「多写者形状不同」类偏差）：**P44 已把两个越界写者收回** ——
+   `src/domain/quote-prepare/tools/quote-sign.py` 与 `src/system/webui/tools/identity-mail-apply.py` 不再自己拼
+   `approval/requested` / `approval/granted` 的 body，改为**调 `ApprovalService.request()/decide()`**
+   （键集/门号/署名口径与队列、门对象页、`gate-actions.py` 同源）⇒ 由这条路开的门在队列里**答得出
+   「卡在谁 / 超时剩余」**。门号仍是**确定性派生**（同一份草稿/配置 ⇒ 同一个 `ap-NNNN`），做法是把服务的
+   计数器推到该号前一号，**不重造 id 生成器**、不改既有回执字段。
+   机检里**仍剩 3 条**「多写者形状不同」，逐条写清为何（写者不在本批可改面内，且事实本来就不同）：
+
+   | 事件 | 两个/三个写者 | 为什么留着 |
+   |---|---|---|
+   | `approval/aborted` | `ApprovalService.sweep()`（超时，12 键） / `tools/gate-actions.py`（人，`**上一行 body` + 8 键） | 超时作废**没有人类理由**（不写 `aborted_by`/`comment`），人的终止**有**（ADR-0023）——键集不同是事实；`gate-actions.py` 不在本批可改面内 |
+   | `approval/escalated` | `ApprovalService.sweep()`（超时，12 键） / `tools/gate-actions.py`（人的升级/委托，`**上一行 body` + 8 个追加键） | 同上；两边都不是新事件类型，读侧按缺省处理 |
+   | `quote/submitted` | `quote-sign.py` 提交行（多行带 `lines`） / `quote-sign.py` 承包商登记行（多 `supplier`） / `code/commitments.py#submit_quote`（9 键） | 后两个写者（`domain/commitments/code/**`）不在本批可改面内；三行的键集差异是**登记面 vs 事实面**的设计 |
+4. **`05-events.md` 的 body 声明**：**P44 已补齐** —— `approval/granted`/`denied`/`reminded`/`escalated` 现在逐行声明
+   （前三者 = 与 `approval/requested` **同一写体、同一键集** 12 键；`escalated` = 两个生产者的并集 20 键，逐条点名），
+   `quote/submitted`（16 键）、`quote/drafted`（14 键）、`evidence/retention-archived`（3 键）也从「计数式/散文式」
+   改成**逐条给键名**。判定口径 = 「声明 = 实现」，机检现在只剩上表那 3 条（**声明与实现的键集已经逐字对齐**）。
 5. **队列金额列 / 卡头按审批人算**：属于并发批次在改的同一文件（`src/system/approval/code/ui.mjs`），本页不表态。
 
 ## 6. 逐字机检：`docs/design/05-events.md` 的 body 声明 ↔ 实现
 
-脚本 `tmp/p42-shots/body-keys-audit.py`（只读、AST 解析落账写者）：输出 `tmp/p42-shots/body-keys-audit.txt`
-与机器可读 `body-keys-audit.json`。判据：声明侧只认表格行说明列里以 `body …` 开头的段（反引号键名，截到句末；
+脚本：**仓内固定位置** `src/system/repo-gate/tools/body-keys-audit.py`（只读、AST 解析落账写者；P44 从
+`tmp/p42-shots/` 搬进来，**判据一行未改**，只把输出改成可选 `--json PATH`）。复跑：
+
+```sh
+python3 src/system/repo-gate/tools/body-keys-audit.py            # stdout；rc=1 = 有偏差
+python3 src/system/repo-gate/tools/body-keys-audit.py --json /tmp/body-keys.json
+```
+
+判据：声明侧只认表格行说明列里以 `body …` 开头的段（反引号键名，截到句末；
 含 `/` 的反引号 token 是事件名不算键；写「与 `X` **同基底**」的行**继承** X 行声明的键，继承关系打印在输出里）；
 实现侧解析 `.append(<事件>, <body>)`（含模块常量事件名、局部变量与 `**` 展开、`Service._append` 原地重拼 body
 与「原样包装」两种形态）；偏差分四类：`未声明` / `声明了没写` / `写了没声明` / `多写者形状不同`。
 
-本批的偏差表（**本批只修与终止有关的那一行**；其余逐条登记为待办，不改判据、不猜键名）：
+**P44 对判据做过的唯一一处修正（准确性，不是放松）**：同名变量在**同一个函数里被赋值两次**时（`gate-actions.py`
+的 `body` 在 escalate 与 abort 两个分支各赋一次），原实现取「最后一次赋值」⇒ 会把 abort 那一支的键集算到
+`escalated` 头上（声明永远对不上实现）。现在按**调用点的行号取"该行之前最近的一次"赋值**。实测效果：只有
+`approval/escalated` 的键集从**错的 18** 变成**真的 20**（`approval/aborted` 及其它事件一字不变）；
+**偏差计数不因这处修正而变少**（它只让"声明了没写/写了没声明"两条真正归零）。
 
-| # | 事件 | 偏差 | 本批处置 |
+偏差表（P44 收口后，**13 条 → 3 条**）：
+
+| # | 事件 | 偏差 | 处置 |
 |---|---|---|---|
-| ① | `approval/aborted` | 文档**未声明** body 键集（实现 18 键，含本次新增的 `comment`） | **已补**：`05-events.md` 该行逐条声明（含「同基底」继承）+ ADR-0023 ⇒ 机检**声明 18 = 实现 18** |
-| ② | `approval/aborted`/`escalated` | 两个写者键集不同（`gate-actions.py` 8 键 / `Service._append` 12 键）——**同一事件两种形状**，读侧按并集兜底 | 登记（`sweep` 与人的动作本来就带不同事实；ADR-0023 已写清） |
-| ③ | `approval/granted`/`denied`/`reminded`/`escalated` | 文档未逐行声明 body 键集（实现 12–15 键） | 登记待办（见 §5.4） |
-| ④ | `approval/requested` | 写了没声明：`requested_by`/`submitted_at`/`summary`（来自非本仓基底的写者） | 登记待办（§5.3） |
-| ⑤ | `quote/submitted` | 声明「含 `rfq_rev`」但供应商侧那一行**没写** `rfq_rev`；且 3 个写者 3 种键集 | 不在本批可改面（`src/domain/**`） |
-| ⑥ | `quote/drafted` | 计数式声明（14 键）与实现一致；12 个键名未逐条声明 | 不在本批可改面 |
-| ⑦ | `evidence/retention-archived` | 只有散文式声明（「只出计数与哈希」），实现 = `target`/`sha256`/`bytes` | 不在本批可改面（`src/system/retention/**`） |
-| ⑧ | `gate/nudged` / `rfq/promised` | **无偏差**（声明 5/6 键，实现逐字一致） | 复核通过 |
+| ① | `approval/aborted` | 文档**未声明** body 键集 | **P42 已补**（18 键，含「同基底」继承）⇒ 归零 |
+| ② | `approval/aborted`/`escalated` | 两个写者键集不同（`gate-actions.py` 8/9 键 / `Service._append` 12 键） | **留着**（事实不同：人的动作 vs 超时；写者不在可改面）—— §5.3 逐条写清 |
+| ③ | `approval/granted`/`denied`/`reminded`/`escalated` | 文档未逐行声明 | **P44 已补**：逐行声明（12/12/12/20 键，按实现抄）⇒ 归零 |
+| ④ | `approval/requested` | 写了没声明：`requested_by`/`submitted_at`/`summary`（来自**自己拼 body** 的写者） | **P44 已收口**：那两个写者改成调 `ApprovalService` ⇒ 这三个键不再产生，`approval/requested` 只由服务写（12 键）= 声明 ⇒ 归零 |
+| ⑤ | `quote/submitted` | 多写者 3 种键集（声明侧另缺 13 键） | 声明**已补齐**（16 键）；形状差异留着（第三个写者不在可改面） |
+| ⑥ | `quote/drafted` | 计数式声明，12 个键名未逐条声明 | **P44 已补**：逐条给 14 键 + 计数仍是 14 ⇒ 归零 |
+| ⑦ | `evidence/retention-archived` | 只有散文式声明 | **P44 已补**：逐条给 3 键（写者 `src/system/retention/**` 不在可改面，声明侧照实现写）⇒ 归零 |
+| ⑧ | `gate/nudged` / `rfq/promised` | **无偏差**（声明 5/6 键，实现逐字一致） | 复核通过（**非空转对照**：判据真的在比键集） |
 
-机检当前读数：**13 条偏差**，其中与 `approval/aborted` 有关的只剩 ②（多写者形状，事实如此）；
-①已归零。完整逐条见 `tmp/p42-shots/body-keys-audit.txt`。
+机检当前读数：**3 条偏差**，全部是「多写者形状不同」，逐条理由见 §5.3；**没有任何一条**是
+「声明了没写 / 写了没声明 / 计数不符」。原始输出：`tmp/p44-shots/audit-after.txt`（修前 = `audit-before.txt`）。

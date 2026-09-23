@@ -4,9 +4,8 @@
      规则与口径真源仍是主文件；主文件同号小节是本文件该节的判据真源，本文件只放**细节**（字段形状、
      行级矩阵、路由清单、实测读数）。归档不是豁免区：受同一套 `tools/check-docs.py`（ID 完整性/预算/覆盖）。 -->
 
-为什么有这份文件：主文件受 28 KB 硬预算（`docs/design/12-documentation-standard.md` §1）。按仓规的减法顺序
-（删重复 → 删叙述 → 拆到归档 → 才考虑提预算），把**字段形状 / 逐条矩阵 / 路由清单 / 实测读数**逐字搬来，
-**主文件的判据与禁止一条未删**（每条在主文件里仍有「能力 / 判据 / 禁止 / 真源」四行）。搬进来的行逐字保留。
+为什么有这份文件：主文件受 28 KB 预算（`docs/design/12-documentation-standard.md` §1），**细节**按仓规的减法顺序
+（删重复 → 删叙述 → 拆到归档）搬来这里；主文件的判据与禁止一条未删，搬进来的行逐字保留。
 
 ## 7 台账与持久化的存储形状与拒绝码
 
@@ -145,12 +144,13 @@
    顶栏「命令」按钮是命令面板的**触控入口**（键名 `⌘K` 退到 tooltip 与副标题里）；动作条在窄屏是**单行可滑**
    （不再是一屏按钮墙）；工具条/标签页/状态栏在窄屏都是单行可滑（状态栏不再换行成 300px 高）。
 4. **键盘与屏幕阅读器**：省跳链接是第一个 Tab 站；弹层打开时给 `#q-app` 加 `inert` + `aria-labelledby`
-   （焦点陷阱与"背景读不到"都靠浏览器原生 inert）、Tab 在弹层内循环、**关闭后焦点回到打开它的元素**；
+   （焦点陷阱靠浏览器原生 inert）、Tab 在弹层内循环、**关闭后焦点回到打开它的元素**；
    `main`/`banner`/`contentinfo` 地标齐备；实测可访问性树里 118 个交互节点**零无名**。
 5. **对比度 ≥ WCAG AA**：主题 token 按 WCAG 2.1 算过（`--accent`/`--bad` 本批上调以过 `--accent-soft` 上的 4.5），
-   实测 390/1440 两宽度共 800+ 处可见文字**零不达标**（最低 5.5）。
+   实测两宽度共 858 处可见文字最低 5.5（**例外 1 处**：PO 对象页面包屑 `›` 1.51，2 个节点）—— 按缺口登记在
+   `docs/work/evidence/EV-193-claim-vs-impl-audit.md`（修法在外壳 `app.css`，本轮不改）。
 
-测量与复跑：`tmp/p7-a11y-out.txt` 与 `tmp/p7-report.md`（三宽度走查的命令写在报告内）。
+测量与复跑：`tmp/p7-a11y-out.txt`（三宽度走查读数；起服务的命令见 `tmp/p7-start.sh`）。
 
 ## 13 采购单的投递与回签 —— 逐条判据
 
@@ -226,7 +226,7 @@
 
 **窗口**：`/api/ui/panels?view=&w=1&only=<面板 id>&pq={kw,cols,sort,page,size,keys,edits,bucket}`（`/api/ui/object` 同构）；不带 `w`/`pq`/`only` ⇒ 整份下发；窗口里的行 = 全量 → 筛选 → 稳定全序排序 → 第 start..end 行；`共 N`/命中/小计/枚举候选/桶计数/跨页选中行键都在**全集**上算；`matched_keys` 按需给、超 5000 行**如实拒发**。
 
-**唯一写者闸门**（`app-shell.mjs` 的 `WRITER_GATE`/`writerGateTicket`/`writerGateTry`/`writerGateTakeSync`）：`writer.queue/` 的 **FIFO 票据** + `writer.lock` 的 **`wx` 原子争锁**，协议只有一处，主线程（动作级 `await` 轮询、不阻塞事件循环）与 worker（每次写者调用 `Atomics.wait` 同步等）共用；批量动作**不取动作级闸门**（防与 worker 互等死锁），退回主线程时才现取；等待阈值 `QUOTAGENT_UI_WRITER_WAIT_MS`（默认 120000）超时 ⇒ `writer-gate-timeout`（说清持有者与"本动作没有开始、账本零新增"）；免排队只在连续两次观察到"零写者"时给，未知一律按"要写"处理。**反证**：去掉闸门，50 份批量与另一客户端 `rfq.publish` 并发写 ⇒ 供应商账本重复 `seq 309`/断链 ⇒ 写者冻结账本（`ledger-frozen`，49/50 被拒），读数 `tmp/p21-shots/concurrent-broken-chain.json`。
+**唯一写者闸门**（`app-shell.mjs` 的 `WRITER_GATE`/`writerGateTicket`/`writerGateTry`/`writerGateTakeSync`）：`writer.queue/` 的 **FIFO 票据** + `writer.lock` 的 **`wx` 原子争锁**，协议只有一处，主线程（动作级 `await` 轮询、不阻塞事件循环）与 worker（每次写者调用 `Atomics.wait` 同步等）共用；批量动作**不取动作级闸门**（防与 worker 互等死锁），退回主线程时才现取；等待阈值 `QUOTAGENT_UI_WRITER_WAIT_MS`（默认 120000）超时 ⇒ `writer-gate-timeout`（说清持有者与"本动作没有开始、账本零新增"）；免排队只在连续两次观察到"零写者"时给，未知一律按"要写"处理。**反证**：去掉闸门，50 份批量与另一客户端 `rfq.publish` 并发写 ⇒ 供应商账本重复 `seq 309`/断链 ⇒ 写者冻结账本（`ledger-frozen`，49/50 被拒），读数 `tmp/p21-scale-run/webui/jobs.json`（含 `ledger-frozen` 与「哈希链校验失败: seq 309」）。
 
 **测量面与配置**：`/api/ui/surface` 的 `io.ledger`/`io.notify`/`io.admission`/`io.window`/`io.jobs`（字段清单见 `performance-under-concurrency.md` §3 与 `action-runtime-and-jobs.md`）；页面只读 `window.__Q_GUI_METRICS.last`。
 
@@ -242,7 +242,7 @@
 
 ## 21 §21 的实现细节（判据与禁止仍在主文件）
 
-* 旧只读页删除实现：`code/webui.mjs` 删净渲染器与 nav 入口（`RETIRED_SUBVIEWS` + 旧地址正则；advice/deadlines ~400 行、gates 96、authority 143）。
+* 旧只读页删除实现：`code/webui.mjs` 删净渲染器与 nav 入口（`RETIRED_SUBVIEWS` + 旧地址正则）。
 * 旧 UI 形态判据抓手：`refresh-ui-snapshots.py`、`ui-seed-pipeline.py`、`ui-mutate` 变异门、`AC-UXWEB-001` 旧判据（「三块第一屏锚点 + 0 内联脚本」+ 快照 hash）⇒ AC 资产 47→46。
 * 旧运维面登记标记：ap-0110 记录**保留**并标 `retired`（`pipeline-view`）；邮件域快照写入器搬进 `system/mail/tools/`。
 * 四个门（`advice`/`rfq-deadline`/`gates`/`authority`）：旧页存在类断言删除、等价或更强的判据接到 GUI，**插件层围栏判据一条没松**。

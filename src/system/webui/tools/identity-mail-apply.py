@@ -14,7 +14,9 @@
 3. 落一条 **0600 待处理项**（形状与 `config-view` 的提交面**逐字节同源**：`payload_sha256` / `bytes`
    用 `config-apply.py` 自己的 `payload_digest` / `canonical` 重算），并先落**人工门事实**
    （`approval/requested` → `approval/granted`，`scope=config.mail`、`actor=human:<会话身份>`，
-   时间用 `--now`，**不读墙钟**）拿到 `ap-NNNN` 引用；
+   时间用 `--now`，**不读墙钟**）拿到 `ap-NNNN` 引用 —— 这两行**调 `ApprovalService`**（不是自己拼
+   body）：键集与队列/门对象页同源，派分事实（`approvers`/`timeout_policy`/`timeout_s`/`requested_at`）
+   一个不少 ⇒ 由这条路开的门在队列里读得出「卡在谁 / 超时剩余」；
 4. 调既有唯一落盘者 `src/system/config/tools/config-apply.py`（`--approval-ref ap-NNNN --actor human:…`）
    把待处理项消费成 **YAML 事实 + 账本事实**。
 
@@ -184,21 +186,31 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                      "refusal": None, "note": "干跑：白名单与形状都过了；未落待办件、未落账本、未改文件"}, 0)
 
     # 门③：人工门事实（approval/requested → approval/granted）——**先本人在场，再落盘**
+    # **不由本脚本自己拼 body**：调 `ApprovalService.request()/decide()`（`src/system/approval/code/approval.py`）
+    # —— 键集（基底 7 键 + 派分事实 `approvers`/`timeout_policy`/`timeout_s`/`escalate_to`/`requested_at`）
+    # 与队列/门对象页/`gate-actions.py` **完全同源**。修前这里自己拼 8 键的小 body ⇒ 由这条路开的门
+    # 在队列里**读不出「卡在谁 / 超时剩余」**（P42/P43 实测登记的真缺陷）。
     sys.path.insert(0, str(ROOT / "src"))
     try:
         from quotagent.kernel.ledger import Ledger  # noqa: E402  （唯一写账本的地方就是这个类）
+        from quotagent.services.approval import ApprovalService  # noqa: E402  （唯一写 approval/* 的服务）
     except Exception as exc:  # noqa: BLE001
         return deny("tool-refused", f"账本内核装载失败：{exc}", "先修 src/quotagent/kernel/ledger.py 路径")
     ref = f"mail-config:{request_id}"
-    requested = {"approval_id": approval_id, "scope": SCOPE, "ref": ref, "status": "pending",
-                 "requested_by": session_human, "submitted_at": str(args.now),
-                 "timeout_policy": "remind",
-                 "summary": f"邮件配置变更（{len(keys)} 个键）"}
-    granted = {**requested, "status": "granted", "decided_by": session_human, "comment": "站点自助页签名"}
     try:
         ledger = Ledger(Path(ledger_file), realm=_realm_of(Path(ledger_file)))
-        ledger.append("approval/requested", requested, correlation_id=ref, actor=session_human, ts=str(args.now))
-        ledger.append("approval/granted", granted, correlation_id=ref, actor=session_human, ts=str(args.now))
+        approvals = ApprovalService(ledger=ledger, actor=session_human)
+        # 门号仍是**确定性派生**（同一份配置提交 ⇒ 同一个 `ap-NNNN`，`--approval-ref` 可对账）：
+        # 把服务的计数器推到该号的前一号 ⇒ 服务生成的号与上面算出来的逐字节相同（不重造 id 生成器）。
+        approvals._counter = max(int(approval_id[3:]) - 1, 0)     # noqa: SLF001
+        request_row = approvals.request(SCOPE, {"request_id": request_id, "payload_sha256": digest_hex,
+                                                "bytes": body_bytes, "keys": keys},
+                                        ref=ref, approvers=[session_human],
+                                        reason="邮件配置变更（运维本人在场）",
+                                        timeout_policy="remind", at=str(args.now))
+        approval_id = str(request_row["approval_id"])      # 以账本里那一行为准（不假设上面算出的号）
+        approvals.decide(approval_id, by=session_human, decision="granted",
+                         comment="站点自助页签名", at=str(args.now))
     except Exception as exc:  # noqa: BLE001
         return deny("ledger-frozen", f"账本不接受这次追加：{type(exc).__name__} {exc}",
                     "先修账本（本脚本不往校验不过的账本追加）", 1)

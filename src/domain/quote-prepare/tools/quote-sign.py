@@ -13,6 +13,12 @@
   · 本脚本落 `approval/requested` → `approval/granted` → `quote/submitted`（**签名动作**）。
     顺序不可颠倒：无批准记录的提交报价路径是 INV-005 的禁止项（AC-APPROVE-002）。
 
+那两行 `approval/*` **不由本脚本自己拼 body**：它调 `ApprovalService.request()/decide()`
+（`src/system/approval/code/approval.py`）—— 键集/门号/署名口径与队列、门对象页、`gate-actions.py`
+完全同源（`approvers`/`timeout_policy`/`timeout_s`/`escalate_to`/`requested_at` 一个不少），
+所以由这条路开的门在队列里**读得出「卡在谁 / 超时剩余」**。门号仍是确定性派生
+（`approval_id_for(draft_id)`）：只把服务的计数器推到该号前一号，不重造 id 生成器。
+
 **必须是人的三个门（各自给具体 code + next_action，拒绝时账本零新增）**：
   · `--actor` 必须以 `human:` 开头（`agent:`/空 ⇒ `human-required`，退出码 2，**连空账本都不创建**）；
   · `--draft-id` 必须真的在**供应商账本**里有一条 `quote/drafted`（否则 `draft-not-found`，退出码 1）；
@@ -44,6 +50,7 @@ ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / "src"))
 
 from quotagent.kernel.ledger import Ledger, LedgerError  # noqa: E402
+from quotagent.services.approval import ApprovalError, ApprovalService  # noqa: E402
 
 ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 DRAFT_RE = re.compile(r"^qd-[A-Za-z0-9-]+-[0-9a-f]{12}$")
@@ -304,29 +311,50 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     what = (f"{len(line_bodies)} 行：" + " / ".join(f"{row['item_id']} {row['unit_price_cents']} 分"
                                                    for row in line_bodies[:4])) if line_bodies \
         else f"行项目 {item_id}，{unit_price_cents} 分"
-    requested = {"approval_id": approval_id, "scope": SCOPE, "ref": quote_id, "status": "pending",
-                 "requested_by": str(args.actor), "submitted_at": args.now,
-                 "timeout_policy": str(args.timeout_policy),
-                 "summary": f"提交报价 {quote_id}（{what}）"}
-    granted = {**requested, "status": "granted", "decided_by": str(args.actor), "comment": str(args.comment)}
+
+    # ---- 人工门事实：**调 `ApprovalService` 本人来开这一扇门**（唯一口径）--------------------------
+    # 修前本脚本自己拼 `approval/requested` / `approval/granted` 的 body（8–10 键，缺
+    # `payload_hash`/`approvers`/`timeout_s`/`escalate_to`/`requested_at`）⇒ 由这条路开的门在队列里
+    # **读不出「卡在谁 / 超时剩余」**（几十轮前修好的根因回潮）。现在 body 的键集、门号口径与
+    # `actor` 口径一律由 `src/system/approval/code/approval.py#ApprovalService._append` **一份代码**
+    # 决定（`docs/design/05-events.md` 对这四个 `approval/*` 事件逐行声明同一键集）。
+    #
+    # 门号不变：仍是**确定性派生**（同一份草稿 ⇒ 同一个 `ap-NNNN`，幂等可对账）—— 做法是把服务的
+    # 计数器推到该号的前一号，服务生成的号与 `approval_id_for()` **逐字节相同**（不重造 id 生成器，
+    # 也不改既有回执字段）；`submitted["approval_id"]` 因此仍是这一个号。
+    def open_gate(handle) -> None:
+        """开这一扇门（`request` → `decide`，两行都走服务）。`handle=None` = 内存影子（干跑零落盘）。"""
+        approvals = ApprovalService(ledger=handle, actor=str(args.actor))
+        approvals._counter = max(int(approval_id[3:]) - 1, 0)   # noqa: SLF001 —— 见上面「门号不变」
+        request_row = approvals.request(SCOPE, {"quote_id": quote_id, "draft_id": str(args.draft_id),
+                                                "line_count": len(line_bodies) or 1},
+                                        ref=quote_id, approvers=[str(args.actor)],
+                                        reason=str(args.comment),
+                                        timeout_policy=str(args.timeout_policy),
+                                        summary=f"提交报价 {quote_id}（{what}）", at=args.now)
+        assert str(request_row["approval_id"]) == approval_id, "门号必须仍是确定性派生的那一个"
+        approvals.decide(approval_id, by=str(args.actor), decision="granted",
+                         comment=str(args.comment), at=args.now)
 
     applied: list[dict] = []
     ledger_added = 0
-    if not args.dry_run:
+    if args.dry_run:
+        open_gate(None)                      # 干跑：门走一遍，**一个字节都不落盘**
+    else:
         try:
-            ledger = Ledger(supplier_ledger, realm=supplier_realm)
-            ledger.append(EVENT_REQUESTED, requested, correlation_id=quote_id,
-                          actor=str(args.actor), ts=args.now)
-            ledger.append(EVENT_GRANTED, granted, correlation_id=quote_id,
-                          actor=str(args.actor), ts=args.now)
-            ledger.append(EVENT_SUBMITTED, submitted, correlation_id=quote_id,
-                          actor=str(args.actor), ts=args.now)
-            Ledger(contractor_ledger, realm=contractor_realm or "contractor:quote-sign").append(
-                EVENT_SUBMITTED, notification, correlation_id=quote_id,
-                actor=str(args.actor), ts=args.now)
+            supplier_handle = Ledger(supplier_ledger, realm=supplier_realm)
+            contractor_handle = Ledger(contractor_ledger, realm=contractor_realm or "contractor:quote-sign")
+            open_gate(supplier_handle)
+            supplier_handle.append(EVENT_SUBMITTED, submitted, correlation_id=quote_id,
+                                   actor=str(args.actor), ts=args.now)
+            contractor_handle.append(EVENT_SUBMITTED, notification, correlation_id=quote_id,
+                                     actor=str(args.actor), ts=args.now)
         except LedgerError as exc:
             return _usage_error("ledger-frozen", str(exc)[0:200],
                                 "先修账本（本脚本不往校验不过的账本追加任何行）")
+        except ApprovalError as exc:
+            return _usage_error("approval-refused", f"{type(exc).__name__}: {exc}"[0:200],
+                                "换合法超时策略（remind|abort）；escalate 必须点名上级，本脚本不提供那个入口")
         ledger_added = 4
     # 回执**可按 id 指认**（调用方要能核"这一份"是不是我签的，而不是猜 `applied[0]`）：
     # 每条 applied 都带 `draft_id` / `quote_id` / `approval_id` / `line_count`。

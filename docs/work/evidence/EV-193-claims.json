@@ -1,0 +1,2133 @@
+{
+ "note": "P45：docs/design/29-webui-gui-app.md（含 -archive）的「承诺 ↔ 实现」对账数据。每条 = 一个可检验承诺 + 1..n 个 probe（承接点）。probe 全部命中 ⇒ 承接；任一未命中 ⇒ 缺口；显式标 drift 的 ⇒ 漂移（必须带证据）。由 tmp/p45-shots/p45-scan.py run 消费。",
+ "claims": [
+  {
+   "id": "C01",
+   "section": "§0",
+   "claim": "用户原话（不是账本投影/只读路由，而是完整 GUI app）逐字留在主文件 §0",
+   "probes": [
+    {
+     "path": "docs/design/29-webui-gui-app.md",
+     "pattern": "账本投影或者只读路由，而是\\*\\*完整的 gui app\\*\\*"
+    }
+   ]
+  },
+  {
+   "id": "C02",
+   "section": "§0",
+   "claim": "归档 §0 保留另两条原话（Teams 对照判据 + 「人类可用、易用、功能完善的产品」）",
+   "probes": [
+    {
+     "path": "docs/design/29-webui-gui-app-archive.md",
+     "pattern": "microsoft teams"
+    },
+    {
+     "path": "docs/design/29-webui-gui-app-archive.md",
+     "pattern": "人类可用、易用、功能完善的产品"
+    }
+   ]
+  },
+  {
+   "id": "C03",
+   "section": "§1",
+   "claim": "判定标准「双方仅通过 GUI 走完全部业务流程」进了硬需求（FR/AC）",
+   "probes": [
+    {
+     "path": "docs/work/functional-requirements.md",
+     "pattern": "FR-UXWEB-00[12]"
+    },
+    {
+     "path": "docs/work/acceptance-criteria.md",
+     "pattern": "仅通过 GUI"
+    }
+   ]
+  },
+  {
+   "id": "C04",
+   "section": "§1",
+   "claim": "允许前端框架：交互能力来自真实前端资产（不再靠「零内联脚本」判据）",
+   "probes": [
+    {
+     "path": "docs/design/29-webui-gui-app.md",
+     "pattern": "允许前端框架"
+    },
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "addEventListener"
+    }
+   ]
+  },
+  {
+   "id": "C05",
+   "section": "§1",
+   "claim": "外壳给机制（面板/动作/通知/深链），业务功能由插件注册进来",
+   "probes": [
+    {
+     "path": "src/system/webui/code/ui-surface.mjs",
+     "pattern": "const action = \\(raw\\) => add\\('action'"
+    },
+    {
+     "path": "src/system/webui/code/ui-surface.mjs",
+     "pattern": "const panel = \\(raw\\) => add\\('panel'"
+    }
+   ]
+  },
+  {
+   "id": "C06",
+   "section": "§2",
+   "claim": "旧 UI 快照门（refresh-ui-snapshots.py）已删且不复活",
+   "probes": [
+    {
+     "glob": "**/refresh-ui-snapshots*.py",
+     "absent_file": true
+    }
+   ]
+  },
+  {
+   "id": "C07",
+   "section": "§2",
+   "claim": "旧 seed 门（ui-seed-pipeline.py）已删且不复活",
+   "probes": [
+    {
+     "glob": "**/ui-seed-pipeline*",
+     "absent_file": true
+    }
+   ]
+  },
+  {
+   "id": "C08",
+   "section": "§2",
+   "claim": "旧 ui-mutate 变异门已删且不复活",
+   "probes": [
+    {
+     "glob": "**/*ui-mutate*",
+     "absent_file": true
+    }
+   ]
+  },
+  {
+   "id": "C09",
+   "section": "§2",
+   "claim": "AC-UXWEB-001 已按 §1/§4 重建（旧的「三块第一屏锚点 + 0 内联脚本」判据删除）",
+   "probes": [
+    {
+     "path": "docs/work/acceptance-criteria.md",
+     "pattern": "AC-UXWEB-001.*重建"
+    }
+   ]
+  },
+  {
+   "id": "C10",
+   "section": "§3",
+   "claim": "外壳 = src/system/webui/code/ 的应用壳 + 动作总线（runAction → 插件服务端一半）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "const runActionInner"
+    }
+   ]
+  },
+  {
+   "id": "C11",
+   "section": "§3",
+   "claim": "写路径不可绕过：GUI 动作只发起，落账仍走唯一写者（host.writerReceipt 派生回执）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "writerReceipt"
+    },
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "host\\.writerReceipt\\(run\\)"
+    }
+   ]
+  },
+  {
+   "id": "C12",
+   "section": "§3",
+   "claim": "一切注册可撤销：插件卸载 ⇒ 其 UI 贡献被 dispose",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "collabSurface\\.dispose\\(\\)"
+    }
+   ]
+  },
+  {
+   "id": "C13",
+   "section": "§4",
+   "claim": "承包商流程可点：发包动作 rfq.publish",
+   "probes": [
+    {
+     "path": "src/domain/rfq/code/ui.mjs",
+     "pattern": "id: 'rfq\\.publish'"
+    }
+   ]
+  },
+  {
+   "id": "C14",
+   "section": "§4",
+   "claim": "承包商流程可点：比价权重（compare.save-weights）+ 排序建议",
+   "probes": [
+    {
+     "path": "src/domain/compare/code/ui.mjs",
+     "pattern": "id: 'compare\\.save-weights'"
+    }
+   ]
+  },
+  {
+   "id": "C15",
+   "section": "§4",
+   "claim": "人工门动作齐：批准 gate.grant / 驳回 gate.deny / 催办 gate.nudge / 升级 gate.escalate / 终止 gate.abort",
+   "probes": [
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "decideAction\\('gate\\.grant'"
+    },
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "decideAction\\('gate\\.deny'"
+    },
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "id: 'gate\\.nudge'"
+    },
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "stepAction\\('gate\\.escalate'"
+    },
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "stepAction\\('gate\\.abort'"
+    }
+   ]
+  },
+  {
+   "id": "C16",
+   "section": "§4",
+   "claim": "授标承诺（人签）动作 award.commit 在界面上",
+   "probes": [
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "'award\\.commit'"
+    }
+   ]
+  },
+  {
+   "id": "C17",
+   "section": "§4",
+   "claim": "发 PO 动作 po.issue（人签）在界面上",
+   "probes": [
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "id: 'po\\.issue'"
+    }
+   ]
+  },
+  {
+   "id": "C18",
+   "section": "§4",
+   "claim": "变更与价格让步动作在界面上（change 回应 / 让步人工门）",
+   "probes": [
+    {
+     "path": "src/domain/change/code/ui.mjs",
+     "pattern": "exchange\\.change-respond"
+    },
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "negotiate\\.price-concession"
+    }
+   ]
+  },
+  {
+   "id": "C19",
+   "section": "§4",
+   "claim": "审计与证据包可导出（evidence 插件 + host.report）",
+   "probes": [
+    {
+     "glob": "src/system/evidence/**",
+     "path": "src/system/evidence/code/ui.mjs",
+     "pattern": "surface\\."
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "REPORT_LIMITS"
+    }
+   ]
+  },
+  {
+   "id": "C20",
+   "section": "§4",
+   "claim": "供应商流程：看包 / 备报价草稿 / 一次提交整份",
+   "probes": [
+    {
+     "path": "src/domain/quote-prepare/code/ui.mjs",
+     "pattern": "quote\\.draft"
+    },
+    {
+     "path": "src/domain/quote-prepare/code/ui.mjs",
+     "pattern": "quote\\.submit-batch"
+    }
+   ]
+  },
+  {
+   "id": "C21",
+   "section": "§4",
+   "claim": "供应商流程：澄清提问 / 承诺交期（产能日历）/ 谈判",
+   "probes": [
+    {
+     "glob": "src/domain/clarify/code/ui.mjs",
+     "path": "src/domain/clarify/code/ui.mjs",
+     "pattern": "surface\\."
+    },
+    {
+     "glob": "src/domain/capacity/code/ui.mjs",
+     "path": "src/domain/capacity/code/ui.mjs",
+     "pattern": "surface\\."
+    },
+    {
+     "glob": "src/domain/negotiation/code/ui.mjs",
+     "path": "src/domain/negotiation/code/ui.mjs",
+     "pattern": "surface\\."
+    }
+   ]
+  },
+  {
+   "id": "C22",
+   "section": "§4",
+   "claim": "共同侧：审批队列 gate.queue / 授权区间 authority.bands / 截止看板 rfq.remind-board / 邮件通道 / 用户空间插件都有面板",
+   "probes": [
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "id: view === 'supplier' \\? 'gate\\.queue\\.supplier' : 'gate\\.queue'"
+    },
+    {
+     "path": "src/domain/authority-band/code/ui.mjs",
+     "pattern": "authority\\.bands"
+    },
+    {
+     "path": "src/domain/rfq/code/ui.mjs",
+     "pattern": "id: 'rfq\\.remind-board'"
+    },
+    {
+     "path": "src/system/mail/code/ui.mjs",
+     "pattern": "surface\\.panel"
+    },
+    {
+     "path": "src/system/user-plugin-manager/code/ui.mjs",
+     "pattern": "surface\\."
+    }
+   ]
+  },
+  {
+   "id": "C23",
+   "section": "§4",
+   "claim": "失败时给可复制的下一步（拒绝体一律带 next_action）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "next_action"
+    }
+   ]
+  },
+  {
+   "id": "C24",
+   "section": "§7",
+   "claim": "§7.1 /api/routes 的 auth 是真实值 + 给 auth_basis（按路径推导，不手抄）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "auth_basis"
+    },
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "const gateBusinessRoute"
+    }
+   ]
+  },
+  {
+   "id": "C25",
+   "section": "§7",
+   "claim": "§7.1 门拿 /api/routes 逐条反查 auth/basis（抄的会漂）",
+   "probes": [
+    {
+     "path": "src/domain/quote-prepare/tests/check-quote-draft-route.py",
+     "pattern": "auth_basis"
+    }
+   ]
+  },
+  {
+   "id": "C26",
+   "section": "§7",
+   "claim": "§7.2 偏好/已读/布局/筛选整份落服务端（按身份）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "/api/ui/notif-state"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "notifStateFilePath"
+    }
+   ]
+  },
+  {
+   "id": "C27",
+   "section": "§7",
+   "claim": "§7.3 邮件通道有界内入口 POST /mail/config/（ops 侧）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "add\\('POST', '/mail/config/'"
+    }
+   ]
+  },
+  {
+   "id": "C28",
+   "section": "§7",
+   "claim": "§7.3 链路 = identity-mail-apply.py（0600 待办件）→ config-apply.py 唯一落盘者",
+   "probes": [
+    {
+     "path": "src/system/webui/tools/identity-mail-apply.py",
+     "pattern": "config-apply"
+    },
+    {
+     "path": "src/system/config/tools/config-apply.py",
+     "pattern": "0600"
+    }
+   ]
+  },
+  {
+   "id": "C29",
+   "section": "§7",
+   "claim": "§7.3 凭据永不回显；/workspace/config.yaml 只读",
+   "probes": [
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "凭据"
+    }
+   ]
+  },
+  {
+   "id": "C30",
+   "section": "§7",
+   "claim": "§7.4 人签动作的服务端身份门：401 identity-required / 403 signer-mismatch",
+   "probes": [
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "'signer-mismatch'"
+    },
+    {
+     "path": "src/system/webui/tools/identity-sign.py",
+     "pattern": "signer-mismatch"
+    }
+   ]
+  },
+  {
+   "id": "C31",
+   "section": "§7",
+   "claim": "§7.5 一份报价 = 一次人签：单行报价 body 键集固定（12 键，逐字节不变）",
+   "probes": [
+    {
+     "path": "src/domain/quote-prepare/tools/quote-sign.py",
+     "pattern": "SUBMITTED_BODY_KEYS"
+    },
+    {
+     "path": "tools/verify.sh",
+     "pattern": "body 恰 12 键"
+    }
+   ]
+  },
+  {
+   "id": "C32",
+   "section": "§7",
+   "claim": "§7.5 缺行/改行有名拒绝三码（pending-tampered / line-item-not-found / draft-tampered）",
+   "probes": [
+    {
+     "path": "src/system/approval/tools/gate-actions.py",
+     "pattern": "\"pending-tampered\""
+    },
+    {
+     "path": "src/domain/quote-prepare/tools/quote-draft.py",
+     "pattern": "line-item-not-found"
+    },
+    {
+     "path": "src/domain/quote-prepare/tools/quote-sign.py",
+     "pattern": "draft-tampered"
+    }
+   ]
+  },
+  {
+   "id": "C33",
+   "section": "§8",
+   "claim": "§8.1 名册是权威取值处：<ui_shared>/people/roster.json（0600、按侧、不进账本）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/people.mjs",
+     "pattern": "roster.json"
+    },
+    {
+     "path": "src/system/webui/code/people.mjs",
+     "pattern": "0o600"
+    }
+   ]
+  },
+  {
+   "id": "C34",
+   "section": "§8",
+   "claim": "§8.2 @提及/指派/转交候选与校验同源 GET /api/people/suggest",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "api/people/suggest"
+    }
+   ]
+  },
+  {
+   "id": "C35",
+   "section": "§8",
+   "claim": "§8.2 未知名字 ⇒ unknown-colleague；跨侧 @ ⇒ cross-side-mentioned",
+   "probes": [
+    {
+     "path": "src/system/webui/code/collab.mjs",
+     "pattern": "unknown-colleague"
+    },
+    {
+     "path": "src/system/webui/code/collab.mjs",
+     "pattern": "cross-side-mentioned"
+    }
+   ]
+  },
+  {
+   "id": "C36",
+   "section": "§8",
+   "claim": "§8.2 登录即登记：第一次登录进名册、角色「待指派」（有名字没权限）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/people.mjs",
+     "pattern": "待指派"
+    }
+   ]
+  },
+  {
+   "id": "C37",
+   "section": "§8",
+   "claim": "§8.3 转交别人的活 ⇒ transfer-not-yours（服务端判据）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/collab.mjs",
+     "pattern": "transfer-not-yours"
+    }
+   ]
+  },
+  {
+   "id": "C38",
+   "section": "§8",
+   "claim": "§8.3 额度超我角色 ⇒ role-limit-exceeded（给出金额/额度/该找哪个角色）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/people.mjs",
+     "pattern": "role-limit-exceeded"
+    },
+    {
+     "path": "src/system/webui/code/people.mjs",
+     "pattern": "该找哪个角色"
+    }
+   ]
+  },
+  {
+   "id": "C39",
+   "section": "§8",
+   "claim": "§8.3 有管理员之后改人/改角色/改策略只有管理员（admin-required）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/people-ui.mjs",
+     "pattern": "admin-required"
+    }
+   ]
+  },
+  {
+   "id": "C40",
+   "section": "§8",
+   "claim": "§8.4 角色不改变签署权：额度/角色判据跑在「署名==会话身份」之后（只能否决）",
+   "probes": [
+    {
+     "path": "src/system/webui/requirements/README.md",
+     "pattern": "角色不改变签署权"
+    }
+   ]
+  },
+  {
+   "id": "C41",
+   "section": "§9",
+   "claim": "§9 notif-state.json 0700/0600、原子写、有界、坏形状如实计数 dropped",
+   "probes": [
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "notif-state\\.json"
+    }
+   ]
+  },
+  {
+   "id": "C42",
+   "section": "§9",
+   "claim": "§9 notif-state 路由登记为 auth: identity（读/写各一条，按会话身份隔离）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "api/ui/notif-state`, method: 'GET', auth: 'identity'"
+    }
+   ]
+  },
+  {
+   "id": "C43",
+   "section": "§9",
+   "claim": "§9 只读路由的方法围栏：非 GET ⇒ 405 + method-not-allowed + Allow: GET",
+   "probes": [
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "GET_ONLY_PATTERNS"
+    },
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "method-not-allowed"
+    }
+   ]
+  },
+  {
+   "id": "C44",
+   "section": "§10",
+   "claim": "§10.1 对象级附件按 (视图, 对象类) 声明形状 files（包/报价/PO/变更）",
+   "probes": [
+    {
+     "path": "src/system/attachments/code/ui.mjs",
+     "pattern": "KINDS_BY_VIEW"
+    },
+    {
+     "path": "src/system/attachments/code/ui.mjs",
+     "pattern": "kind: 'files'"
+    }
+   ]
+  },
+  {
+   "id": "C45",
+   "section": "§10",
+   "claim": "§10.1 url 只允许本服务相对路径；外站丢掉并计数 absolute-url-refused",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "absolute-url-refused"
+    }
+   ]
+  },
+  {
+   "id": "C46",
+   "section": "§10",
+   "claim": "§10.3 上传走原始字节，侧与署名只认会话",
+   "probes": [
+    {
+     "path": "src/system/attachments/code/index.mjs",
+     "pattern": "原始字节"
+    }
+   ]
+  },
+  {
+   "id": "C47",
+   "section": "§10",
+   "claim": "§10.3 下载按侧 + 身份（越侧 403 cross-side-attachment）",
+   "probes": [
+    {
+     "path": "src/system/attachments/code/attachments.mjs",
+     "pattern": "cross-side-attachment"
+    }
+   ]
+  },
+  {
+   "id": "C48",
+   "section": "§10",
+   "claim": "§10.3 附件 id 形状不对 ⇒ 400 attachment-id-invalid（含路径穿越）",
+   "probes": [
+    {
+     "path": "src/system/attachments/code/attachments.mjs",
+     "pattern": "attachment-id-invalid"
+    }
+   ]
+  },
+  {
+   "id": "C49",
+   "section": "§10",
+   "claim": "§10.2 附件不进账本（回执 ledger_added 恒 0）",
+   "probes": [
+    {
+     "path": "src/system/attachments/code/ui.mjs",
+     "pattern": "ledger_added"
+    }
+   ]
+  },
+  {
+   "id": "C50",
+   "section": "§10",
+   "claim": "§10.4 五条附件路由经注册面（uiRoutes）+ 只读路径带 POST 孪生 405 + Allow: GET",
+   "probes": [
+    {
+     "path": "src/system/attachments/code/index.mjs",
+     "pattern": "POST /api/attachments/list"
+    },
+    {
+     "path": "src/system/attachments/code/index.mjs",
+     "pattern": "uiRoutes?|ctx\\.inject"
+    }
+   ]
+  },
+  {
+   "id": "C51",
+   "section": "§10",
+   "claim": "§10.5 导出/打印：声明由插件给（report 贡献）、内容由插件生成 + host.report 序列化",
+   "probes": [
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "id: 'report\\.po'"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "REPORT_LIMITS.*max_rows: 5000"
+    }
+   ]
+  },
+  {
+   "id": "C52",
+   "section": "§10",
+   "claim": "§10.5 行带 ledger_seq 锚；打印走隐藏 iframe（打印文档而非界面）+ @media print 兜底",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "data-print-frame"
+    },
+    {
+     "path": "src/system/webui/code/assets/app.css",
+     "pattern": "@media print"
+    }
+   ]
+  },
+  {
+   "id": "C53",
+   "section": "§11",
+   "claim": "§11.2 沙盘把这一侧的读/写路径整体切到沙盘目录（withSandbox）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "const withSandbox = "
+    }
+   ]
+  },
+  {
+   "id": "C54",
+   "section": "§11",
+   "claim": "§11.1 场景由插件声明（surface.scenario）；外壳不认识业务步骤",
+   "probes": [
+    {
+     "path": "src/system/webui/code/ui-surface.mjs",
+     "pattern": "scenario"
+    },
+    {
+     "path": "src/domain/rfq/code/ui.mjs",
+     "pattern": "demo\\.procurement"
+    }
+   ]
+  },
+  {
+   "id": "C55",
+   "section": "§11",
+   "claim": "§11.3 入口是两个动作 sandbox.seed / sandbox.clear（沙盘无独立路由）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "id: 'sandbox\\.seed'"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "id: 'sandbox\\.clear'"
+    },
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "sandbox",
+     "absent": true
+    }
+   ]
+  },
+  {
+   "id": "C56",
+   "section": "§11",
+   "claim": "§11.2 状态落 <ui_shared>/sandbox/state.json（0700/0600、按会话身份分条）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "sandbox/state\\.json"
+    }
+   ]
+  },
+  {
+   "id": "C57",
+   "section": "§11",
+   "claim": "§11.3 工作台首屏第一块面板是沙盘（order -98），两侧视图底部各一块（98）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "panelFor\\('home', -98"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "panelFor\\(view, 98"
+    }
+   ]
+  },
+  {
+   "id": "C58",
+   "section": "§11",
+   "claim": "§11.4 optional:true 的步骤失败不算整条流程失败（记 optional_failures）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/ui-surface.mjs",
+     "pattern": "optional:true"
+    },
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "'po\\.acknowledge', as: \\{ side: 'supplier' \\}, optional: true"
+    }
+   ]
+  },
+  {
+   "id": "C59",
+   "section": "§12",
+   "claim": "§12.1 ≤560px 表格变卡片（带 data-label）+ q-keep-table 逃生门",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "data-label="
+    },
+    {
+     "path": "src/system/webui/code/assets/app.css",
+     "pattern": "q-keep-table"
+    }
+   ]
+  },
+  {
+   "id": "C60",
+   "section": "§12",
+   "claim": "§12.2 弹层在手机是全屏单页 + 按钮吸底（q-modal-body / q-modal-foot）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.css",
+     "pattern": "q-modal-foot"
+    }
+   ]
+  },
+  {
+   "id": "C61",
+   "section": "§12",
+   "claim": "§12.3 pointer: coarse 下可点目标 ≥44px（媒体查询在 CSS 里）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.css",
+     "pattern": "@media \\(pointer: coarse\\)"
+    }
+   ]
+  },
+  {
+   "id": "C62",
+   "section": "§12",
+   "claim": "§12.4 弹层打开给 #q-app 加 inert；关闭后焦点回到打开它的元素",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "inert"
+    }
+   ]
+  },
+  {
+   "id": "C63",
+   "section": "§12",
+   "claim": "§12.5 对比度 ≥ WCAG AA、实测零不达标（**漂移**：原始读数里 PO 对象页有 2 处不达标）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.css",
+     "pattern": "WCAG 2\\.1"
+    }
+   ],
+   "drift": "原始读数 `tmp/p7-a11y-out.txt` 的 `[390-PO对象页]` 段：228 处可见文字里 **2 处 AA-FAIL**（面包屑分隔符「›」1.51 on rgb(16,21,28)）；同文件工作台 390/1440 两宽度 858 处 0 不达标。已把主文件/归档的「零不达标」改成「工作台两宽度零不达标 + PO 对象页 1 处登记例外」。 处理：**已改**（29 主文件 §12 改「1 处例外已登记」+ 归档 §12.5 记例外与读数；CSS 属「不要改」面）。"
+  },
+  {
+   "id": "C64",
+   "section": "§12",
+   "claim": "§12.4 可访问性树里 118 个交互节点零无名（实测读数）",
+   "probes": [
+    {
+     "path": "tmp/p7-a11y-out.txt",
+     "pattern": "交互类节点 118 个 · \\*\\*没有名字\\*\\*的 0 个"
+    }
+   ]
+  },
+  {
+   "id": "C65",
+   "section": "§13",
+   "claim": "§13.1 唯一写者 commitment-apply.py --step po 落 po/issued 后两侧各写一条 po/distributed",
+   "probes": [
+    {
+     "path": "src/domain/commitments/tools/commitment-apply.py",
+     "pattern": "po/distributed"
+    }
+   ]
+  },
+  {
+   "id": "C66",
+   "section": "§13",
+   "claim": "§13.2 收件人判据在写之前（po-recipient-unknown / po-recipient-not-the-bidder）",
+   "probes": [
+    {
+     "path": "src/domain/commitments/tools/commitment-apply.py",
+     "pattern": "po-recipient-unknown"
+    },
+    {
+     "path": "src/domain/commitments/tools/commitment-apply.py",
+     "pattern": "po-recipient-not-the-bidder"
+    }
+   ]
+  },
+  {
+   "id": "C67",
+   "section": "§13",
+   "claim": "§13.3 供应商侧 po.inbox + 对象页 po.object-received / po.object-lines-received / po.prereqs",
+   "probes": [
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "id: 'po\\.inbox'"
+    },
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "id: 'po\\.object-received'"
+    },
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "id: 'po\\.object-lines-received'"
+    },
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "id: 'po\\.prereqs'"
+    }
+   ]
+  },
+  {
+   "id": "C68",
+   "section": "§13",
+   "claim": "§13.3/5 供应商侧导出 po.export-received + 声明 report.po-received",
+   "probes": [
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "id: 'po\\.export-received'"
+    },
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "id: 'report\\.po-received'"
+    }
+   ]
+  },
+  {
+   "id": "C69",
+   "section": "§13",
+   "claim": "§13.4 回签 = 人签人工门 po.acknowledge → --step acknowledge（幂等、不改 PO 行与价）",
+   "probes": [
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "id: 'po\\.acknowledge'"
+    },
+    {
+     "path": "src/domain/commitments/tools/commitment-apply.py",
+     "pattern": "\"acknowledge\""
+    }
+   ]
+  },
+  {
+   "id": "C70",
+   "section": "§13",
+   "claim": "§13.4 侧只能来自会话：不符 ⇒ cross-side-action（不拿 ctx.view 当权威）",
+   "probes": [
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "cross-side-action"
+    }
+   ]
+  },
+  {
+   "id": "C71",
+   "section": "§13",
+   "claim": "§13.6 po/distributed 与 po/acknowledged 登记进内核事件目录",
+   "probes": [
+    {
+     "path": "src/system/kernel/code/events.py",
+     "pattern": "\"po/acknowledged\""
+    },
+    {
+     "path": "src/system/kernel/code/events.py",
+     "pattern": "\"po/distributed\""
+    }
+   ]
+  },
+  {
+   "id": "C72",
+   "section": "§14",
+   "claim": "§14.1 注册面自动加只读 expected_version；比对跑在动作服务端一半之前",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "expected_version"
+    }
+   ]
+  },
+  {
+   "id": "C73",
+   "section": "§14",
+   "claim": "§14.1 受保护的三处对象类声明：quote-draft / change-response / compare-weights",
+   "probes": [
+    {
+     "path": "src/domain/quote-prepare/code/ui.mjs",
+     "pattern": "object_class: 'quote-draft'"
+    },
+    {
+     "path": "src/domain/change/code/ui.mjs",
+     "pattern": "object_class: 'change-response'"
+    },
+    {
+     "path": "src/domain/compare/code/ui.mjs",
+     "pattern": "object_class: 'compare-weights'"
+    }
+   ]
+  },
+  {
+   "id": "C74",
+   "section": "§14",
+   "claim": "§14.1 内容会变或版本对不上 ⇒ 拒绝 object-changed（附 conflict.since / conflict.mine）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "CONFLICT_CODE = 'object-changed'"
+    }
+   ]
+  },
+  {
+   "id": "C75",
+   "section": "§14",
+   "claim": "§14.2 分享动作 share.object（不写账本/不落文件/不发邮件，产出深链 + 需求清单 + 邮件正文）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "id: 'share\\.object'"
+    }
+   ]
+  },
+  {
+   "id": "C76",
+   "section": "§14",
+   "claim": "§14.3 导出列偏好落 export-prefs.json（0600 有界）；一列不剩 ⇒ report-columns-empty",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "export-prefs\\.json"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "report-columns-empty"
+    }
+   ]
+  },
+  {
+   "id": "C77",
+   "section": "§15",
+   "claim": "§15 业务动作的身份只认会话（human:<名字>），不再手填 actor",
+   "probes": [
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "human:"
+    }
+   ]
+  },
+  {
+   "id": "C78",
+   "section": "§15",
+   "claim": "§15 四个自助面路由齐：登录 / 待我处理 / 人签 / 我的插件（+ 邮件配置）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "add\\('POST', '/identity/login'"
+    },
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "add\\('GET', '/inbox/'"
+    },
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "add\\('POST', '/sign/quote'"
+    },
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "add\\('GET', '/plugins/'"
+    }
+   ]
+  },
+  {
+   "id": "C79",
+   "section": "§15",
+   "claim": "§15 身份路由 21 条（12 条字面 + 3 侧 × 2 条 inbox + 3 个插件操作 = 21）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "const views = \\(\\) => \\['contractor', 'supplier', 'ops'\\]"
+    },
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "add\\('(GET|POST)', ",
+     "min_count": 15
+    }
+   ]
+  },
+  {
+   "id": "C80",
+   "section": "§15",
+   "claim": "§15 负控：未登录 / 署名不符 / 替别人签 ⇒ 401/403/not-my-draft 且账本零新增",
+   "probes": [
+    {
+     "path": "src/system/webui/code/identity.mjs",
+     "pattern": "'not-my-draft'"
+    },
+    {
+     "path": "tmp/verify-identity.py",
+     "pattern": "identity-required"
+    }
+   ]
+  },
+  {
+   "id": "C81",
+   "section": "§15",
+   "claim": "§15 「49 条断言」（原写 48 —— 漂移，已改）",
+   "probes": [
+    {
+     "path": "docs/design/29-webui-gui-app.md",
+     "pattern": "49 条断言"
+    },
+    {
+     "path": "tmp/verify-identity/verify.out",
+     "pattern": "断言 49 条"
+    }
+   ],
+   "drift": "原文档写「48 条断言」，实测 **49**：`tmp/verify-identity/verify-result.json` 的 `checks` 长 49（`failures` 0）、`tmp/verify-identity/verify.out` 末行「结果：断言 49 条，失败 0 条」。处理：**29 主文件已改为 49**（本条 probe 即修后真值）；插件 doc `src/system/webui/docs/identity-and-selfservice.md:15` 同句**登记待定**（本轮允许面外）。"
+  },
+  {
+   "id": "C82",
+   "section": "§16",
+   "claim": "§16.1 协作状态落 <ui_shared>/collab/<侧>.json（0600、按侧分片、不进账本）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/collab.mjs",
+     "pattern": "0o600"
+    }
+   ]
+  },
+  {
+   "id": "C83",
+   "section": "§16",
+   "claim": "§16.4 往坏容器追加 ⇒ collab-shape-malformed（只读不回写）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/collab.mjs",
+     "pattern": "collab-shape-malformed"
+    }
+   ]
+  },
+  {
+   "id": "C84",
+   "section": "§16",
+   "claim": "§16.4 坏形状如实降级：跳过 + 计数 + 原样留在文件里（读不出来 ≠ 还没有）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/collab-ui.mjs",
+     "pattern": "读不出来"
+    },
+    {
+     "path": "src/system/webui/code/collab-ui.mjs",
+     "pattern": "已跳过，不是"
+    }
+   ]
+  },
+  {
+   "id": "C85",
+   "section": "§16",
+   "claim": "§16.5 卡头计数按本侧（没有会话就没有「本侧」⇒ 如实说明只算本侧）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/collab-ui.mjs",
+     "pattern": "卡头计数只算本侧"
+    }
+   ]
+  },
+  {
+   "id": "C86",
+   "section": "§16",
+   "claim": "§16 复跑读数：协作面 30 条断言（tmp/p13-shots/ux/shape-test.mjs）",
+   "probes": [
+    {
+     "path": "tmp/p13-shots/ux/shape-test.mjs",
+     "pattern": "\\bcheck\\(",
+     "min_count": 30
+    }
+   ]
+  },
+  {
+   "id": "C87",
+   "section": "§17",
+   "claim": "§17.1 w=1 才开窗口，且响应带 query（产出/命中/页数）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "windowed: true"
+    }
+   ]
+  },
+  {
+   "id": "C88",
+   "section": "§17",
+   "claim": "§17.1 不带 w 的调用一字不变（整份 + 上限 600）但回执带 stats.dropped（截断不再静默）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "NOTIF_CAP = 600"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "dropped: Math\\.max\\(0, total - kept\\.length\\)"
+    }
+   ]
+  },
+  {
+   "id": "C89",
+   "section": "§17",
+   "claim": "§17.2 跨插件去重：条目带 dedupe_key 才参与、先出现的赢、输者不丢信息",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "dedupe_key"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "dedupe_note"
+    }
+   ]
+  },
+  {
+   "id": "C90",
+   "section": "§17",
+   "claim": "§17.3 未读按身份算；未登录 ⇒ unread 不猜（known:false）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "known: false"
+    }
+   ]
+  },
+  {
+   "id": "C91",
+   "section": "§17",
+   "claim": "§17.4 邮件摘要偏好落 mail/notify-prefs.json（0600、默认关、按身份）",
+   "probes": [
+    {
+     "path": "src/system/mail/code/ui.mjs",
+     "pattern": "mail/notify-prefs\\.json"
+    }
+   ]
+  },
+  {
+   "id": "C92",
+   "section": "§17",
+   "claim": "§17.4 去重键 + 节流 retry_after_s=600（不写账本）",
+   "probes": [
+    {
+     "path": "src/system/mail/tools/mail-digest.py",
+     "pattern": "retry_after_s"
+    },
+    {
+     "path": "src/system/mail/docs/notification-digest.md",
+     "pattern": "retry_after_s"
+    }
+   ]
+  },
+  {
+   "id": "C93",
+   "section": "§17",
+   "claim": "§17 复跑读数：邮件摘要 16 条断言（tmp/p19-shots/verify-digest.py）",
+   "probes": [
+    {
+     "path": "tmp/p19-shots/verify-digest.py",
+     "pattern": "\\bcheck\\(",
+     "min_count": 16
+    }
+   ]
+  },
+  {
+   "id": "C94",
+   "section": "§18",
+   "claim": "§18.1 清单 <prefix>/manifest.webmanifest（display: standalone + 192/512 PNG）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/manifest.webmanifest",
+     "pattern": "\"display\": \"standalone\""
+    },
+    {
+     "path": "src/system/webui/code/assets/manifest.webmanifest",
+     "pattern": "icon-192"
+    }
+   ]
+  },
+  {
+   "id": "C95",
+   "section": "§18",
+   "claim": "§18.3 数据与身份/人签/待办/邮件/运维/管理面永不缓存；非 GET 完全不拦截",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/sw.js",
+     "pattern": "NEVER_CACHE"
+    },
+    {
+     "path": "src/system/webui/code/assets/sw.js",
+     "pattern": "非 `GET`"
+    }
+   ]
+  },
+  {
+   "id": "C96",
+   "section": "§18",
+   "claim": "§18.3 预缓存恰 6 个外壳条目",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/sw.js",
+     "pattern": "^\\s+(SHELL_URL|`\\$\\{BASE\\})",
+     "min_count": 6
+    }
+   ]
+  },
+  {
+   "id": "C97",
+   "section": "§18",
+   "claim": "§18.3 导航到根与 /app/** network-first；离线回退不含数据的壳 + x-q-offline: 1",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/sw.js",
+     "pattern": "x-q-offline"
+    }
+   ]
+  },
+  {
+   "id": "C98",
+   "section": "§18",
+   "claim": "§18.4 离线如实：横幅「离线：数据可能陈旧」+ 连接灯第四态 data-offline",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "离线：数据可能陈旧"
+    },
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "data-offline"
+    }
+   ]
+  },
+  {
+   "id": "C99",
+   "section": "§18",
+   "claim": "§18.2 装机机读判据：installability_errors = []（真读数文件）",
+   "probes": [
+    {
+     "path": "tmp/p19-shots/pwa-evidence.json",
+     "pattern": "\"installability_errors\": \\[\\]"
+    }
+   ]
+  },
+  {
+   "id": "C100",
+   "section": "§18",
+   "claim": "§18 复跑读数：PWA 9 条断言（tmp/p19-shots/verify-pwa.py）",
+   "probes": [
+    {
+     "path": "tmp/p19-shots/verify-pwa.py",
+     "pattern": "\\bcheck\\(",
+     "min_count": 9
+    }
+   ]
+  },
+  {
+   "id": "C101",
+   "section": "§19",
+   "claim": "§19.1 批量 = 逐条各跑一次唯一写者（无「一个动作落多条」旁路）",
+   "probes": [
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "id: 'gate\\.decide-batch'"
+    },
+    {
+     "path": "src/domain/quote-prepare/code/ui.mjs",
+     "pattern": "quote-submit-batch|quote\\.submit-batch"
+    }
+   ]
+  },
+  {
+   "id": "C102",
+   "section": "§19",
+   "claim": "§19.3 逐条回执 results[]（applied|duplicates|refused）+ 部分被拒 ⇒ batch-partial",
+   "probes": [
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "batch-partial"
+    }
+   ]
+  },
+  {
+   "id": "C103",
+   "section": "§19",
+   "claim": "§19.4 幂等（already-signed / already-applied）+ 一次上限 50（batch-too-large）+ 批量驳回必留理由",
+   "probes": [
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "batch-too-large"
+    },
+    {
+     "path": "src/system/webui/docs/approval-decisions-and-evidence.md",
+     "pattern": "already-signed"
+    }
+   ]
+  },
+  {
+   "id": "C104",
+   "section": "§19",
+   "claim": "§19.6 批量动作的服务端一半跑在动作运行时（worker 线程 ACTION_RUNTIME_ENTRY）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "const ACTION_RUNTIME_ENTRY"
+    }
+   ]
+  },
+  {
+   "id": "C105",
+   "section": "§19",
+   "claim": "§19.6 job_concurrency（默认 1）只排队、不拒动作",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "job_concurrency"
+    }
+   ]
+  },
+  {
+   "id": "C106",
+   "section": "§19",
+   "claim": "§19.7 jobs.json + 只读 GET /api/ui/jobs（按身份隔离）；上一进程 running ⇒ interrupted + pending_ids",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "jobs\\.json"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "pending_ids"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "interrupted"
+    }
+   ]
+  },
+  {
+   "id": "C107",
+   "section": "§19",
+   "claim": "§19 复跑读数：A–D 四组用例脚本在盘（tmp/p18-shots/verify.py）",
+   "probes": [
+    {
+     "path": "tmp/p18-shots/verify.py",
+     "pattern": "^  [ABCD] "
+    }
+   ]
+  },
+  {
+   "id": "C108",
+   "section": "§20",
+   "claim": "§20.1 窗口协议 w/pq/only：不带就整份下发（既有脚本一字不变）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "WINDOW_LIMITS"
+    },
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "windowSpec"
+    }
+   ]
+  },
+  {
+   "id": "C109",
+   "section": "§20",
+   "claim": "§20.2 派生计数在全集上算；matched_keys 按需给、超上限如实拒发",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "matched_keys_capped"
+    }
+   ]
+  },
+  {
+   "id": "C110",
+   "section": "§20",
+   "claim": "§20.4 账本只读备忘按 (路径, mtimeMs, size) 失效（不读旧值）",
+   "probes": [
+    {
+     "path": "src/system/kernel/code/ledger-view.mjs",
+     "pattern": "mtimeMs"
+    }
+   ]
+  },
+  {
+   "id": "C111",
+   "section": "§20",
+   "claim": "§20.4 通知聚合短 TTL（默认 5 s，可配）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "QUOTAGENT_UI_NOTIFY_CACHE_MS"
+    }
+   ]
+  },
+  {
+   "id": "C112",
+   "section": "§20",
+   "claim": "§20.4 渲染准入按真实事件循环滞后回 429 + Retry-After；动作/身份/偏好/健康不拒",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "exempt:true.*不参与拒绝|不参与拒绝"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "QUOTAGENT_UI_SHED_MS"
+    },
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "retry-after"
+    }
+   ]
+  },
+  {
+   "id": "C113",
+   "section": "§20",
+   "claim": "§20.5 唯一写者互斥：FIFO 票据 + wx 原子锁；超时 ⇒ writer-gate-timeout（说清持有者）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "export const WRITER_GATE"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "'writer-gate-timeout'"
+    }
+   ]
+  },
+  {
+   "id": "C114",
+   "section": "§20",
+   "claim": "§20.5 反证读数：去闸门 ⇒ 重复 seq 309 / ledger-frozen（**漂移**：归档指向的读数文件不存在）",
+   "probes": [
+    {
+     "path": "tmp/p21-scale-run/webui/jobs.json",
+     "pattern": "ledger-frozen"
+    }
+   ],
+   "drift": "归档 §20 写的路径 `tmp/p21-shots/concurrent-broken-chain.json` **不在盘上**（P36 tmp 清理后消失）；同一读数的现存原件是 `tmp/p21-scale-run/webui/jobs.json`（含 `\"code\": \"ledger-frozen\"` + 「哈希链校验失败: seq 309」）。已把归档指针改成现存路径。 处理：**已改**（归档 §20 指针换成在盘原件，并写明命中内容 `ledger-frozen` / `seq 309`）。"
+  },
+  {
+   "id": "C115",
+   "section": "§20",
+   "claim": "§20 中断恢复读数：30 份跑到第 4 份 SIGKILL ⇒ 读回 interrupted + pending 26（tmp/p23-shots/fixed-run.txt）",
+   "probes": [
+    {
+     "path": "tmp/p23-shots/fixed-run.txt",
+     "pattern": "interrupted total=30 done=4"
+    }
+   ]
+  },
+  {
+   "id": "C116",
+   "section": "§21",
+   "claim": "§21.1 旧只读页 retired：303 → /app/<view>/（不 404；写面与明细面保留）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "const RETIRED_SUBVIEWS"
+    },
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "303 → "
+    }
+   ]
+  },
+  {
+   "id": "C117",
+   "section": "§21",
+   "claim": "§21.1 旧路由共 16 条（4 个子视图 × 两侧 × 页面+JSON）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "^  (advice|deadlines|gates|authority):",
+     "min_count": 4
+    }
+   ]
+  },
+  {
+   "id": "C118",
+   "section": "§21",
+   "claim": "§21.3 旧运维面退役（pipeline-view 插件文件已删）",
+   "probes": [
+    {
+     "glob": "**/pipeline-view*",
+     "absent_file": true
+    }
+   ]
+  },
+  {
+   "id": "C119",
+   "section": "§21",
+   "claim": "§21.4 产品面 0 命中「回终端」文案（原 rfq 动作载荷里给了 `python3` 命令 —— 漂移，已改）",
+   "probes": [
+    {
+     "glob": "src/**/code/ui.mjs",
+     "pattern": "next_action:\\s+[`'\"][^\\n]*python3",
+     "absent": true
+    },
+    {
+     "glob": "src/**/code/ui.mjs",
+     "pattern": "next_action:\\s+[`'\"][^\\n]*(PYTHONPATH|终端)",
+     "absent": true
+    },
+    {
+     "glob": "src/**/code/ui.mjs",
+     "pattern": "next_action:\\s+[`'\"][^\\n]*(tools/verify\\.sh|--step)",
+     "absent": true
+    }
+   ],
+   "drift": "`src/domain/rfq/code/ui.mjs` 的**动作载荷**（不是注释）里有两处教用户回终端：周报降级分支的 `next_action`（`python3 …weekly-report.py …`）与 `report-render-missing` 分支的 CLI 复跑命令；这正是 §21.4 禁止的形态（其余命中都在源码注释里，不是产品面）。 处理：**已改**（两处都换成界内可点的下一步：换一周 / 换格式 / 看通知中心 / 转运维）；清单表保留 probe = 「插件 `code/ui.mjs` 里 0 处 `python3` 载荷」，注释命中仍会让它报红，供后续回归用。"
+  },
+  {
+   "id": "C120",
+   "section": "§21",
+   "claim": "§21.5 四个旧门（advice / rfq-deadline / gates / authority）仍在跑、判据接到 GUI",
+   "probes": [
+    {
+     "path": "tools/verify.sh",
+     "pattern": "^\\s*advice\\)"
+    },
+    {
+     "path": "tools/verify.sh",
+     "pattern": "^\\s*authority\\)"
+    },
+    {
+     "path": "tools/verify.sh",
+     "pattern": "^\\s*gates\\)"
+    },
+    {
+     "path": "tools/verify.sh",
+     "pattern": "^\\s*rfq-deadline\\)"
+    }
+   ]
+  },
+  {
+   "id": "C121",
+   "section": "§22",
+   "claim": "§22.2 回执落 <ui_shared>/receipts/deliveries.json（0600、聚合、去抖 60 s、有界）",
+   "probes": [
+    {
+     "path": "src/system/attachments/code/delivery-receipts.mjs",
+     "pattern": "DEDUPE_MS = 60_000"
+    },
+    {
+     "path": "src/system/attachments/code/delivery-receipts.mjs",
+     "pattern": "receipts/deliveries\\.json"
+    }
+   ]
+  },
+  {
+   "id": "C122",
+   "section": "§22",
+   "claim": "§22.1 收件方打开即留痕，侧与人只认会话（未登录 ⇒ identity-required）",
+   "probes": [
+    {
+     "path": "src/system/attachments/code/delivery-receipts.mjs",
+     "pattern": "identity-required"
+    },
+    {
+     "path": "src/domain/commitments/code/ui.mjs",
+     "pattern": "id: 'po\\.object-received'"
+    }
+   ]
+  },
+  {
+   "id": "C123",
+   "section": "§22",
+   "claim": "§22.3 回执不进账本、不是数据出口（投递与回签才是账本事实）",
+   "probes": [
+    {
+     "path": "src/system/attachments/code/delivery-receipts.mjs",
+     "pattern": "不进账本"
+    }
+   ]
+  },
+  {
+   "id": "C124",
+   "section": "§22",
+   "claim": "§22.4 周报只读、不取墙钟（as_of 缺省 = 账本最大 ts）",
+   "probes": [
+    {
+     "path": "src/domain/rfq/tools/weekly-report.py",
+     "pattern": "as_of"
+    },
+    {
+     "path": "src/domain/rfq/code/ui.mjs",
+     "pattern": "不取墙钟"
+    }
+   ]
+  },
+  {
+   "id": "C125",
+   "section": "§22",
+   "claim": "§22.5 算不出来的行进 gate_unmatched / amount_missing 并排除出小计（不拿 0 冒充）",
+   "probes": [
+    {
+     "path": "src/system/approval/code/ui.mjs",
+     "pattern": "amount_missing"
+    },
+    {
+     "path": "src/domain/rfq/code/ui.mjs",
+     "pattern": "gate_unmatched"
+    }
+   ]
+  },
+  {
+   "id": "C126",
+   "section": "§22",
+   "claim": "§22.5 导出与屏幕同源（同一份报表 + ledger_refs）；周报有 report 声明",
+   "probes": [
+    {
+     "path": "src/domain/rfq/code/ui.mjs",
+     "pattern": "id: 'report\\.weekly'"
+    }
+   ]
+  },
+  {
+   "id": "C127",
+   "section": "§22",
+   "claim": "§22 复跑脚本在盘（tmp/p26-verify.py）",
+   "probes": [
+    {
+     "path": "tmp/p26-verify.py",
+     "pattern": "p26"
+    }
+   ]
+  },
+  {
+   "id": "C128",
+   "section": "§23",
+   "claim": "§23.1 插件只声明两样：入参字段来源（actionNeedsOf）+ 引用字段兜底（REFERENCE_FIELD_RE）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/ui-surface.mjs",
+     "pattern": "export function actionNeedsOf"
+    },
+    {
+     "path": "src/system/webui/code/ui-surface.mjs",
+     "pattern": "export const REFERENCE_FIELD_RE"
+    }
+   ]
+  },
+  {
+   "id": "C129",
+   "section": "§23",
+   "claim": "§23.2 /api/ui/surface 给出机读形状：needs / action_entry / guides",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "action_entry:"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "guides:"
+    }
+   ]
+  },
+  {
+   "id": "C130",
+   "section": "§23",
+   "claim": "§23.3 工具栏只摆当前地址跑得起来的动作（partitionActions）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "partitionActions\\("
+    }
+   ]
+  },
+  {
+   "id": "C131",
+   "section": "§23",
+   "claim": "§23.3 缺上下文的动作进候选清单：contextCandidates / openActionEntry / rowPresetOf",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "function contextCandidates"
+    },
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "function rowPresetOf"
+    }
+   ]
+  },
+  {
+   "id": "C132",
+   "section": "§23",
+   "claim": "§23.4 空态判据 panelHasData（counts/rows/items 可指认行才算有数据），not_data 不算",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "function panelHasData|panelHasData\\("
+    },
+    {
+     "path": "src/system/projection/code/ui.mjs",
+     "pattern": "not_data: true"
+    }
+   ]
+  },
+  {
+   "id": "C133",
+   "section": "§23",
+   "claim": "§23.4 工作台叠 workbenchHasNothing（没有一条带 ref.kind+ref.id 的待办 ⇒ 没活）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "function workbenchHasNothing"
+    }
+   ]
+  },
+  {
+   "id": "C134",
+   "section": "§23",
+   "claim": "§23.5 待办聚合跳过降级（degraded）面板并把跳过几块写进 data-todo-degraded-panels",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "data-todo-degraded-panels="
+    }
+   ]
+  },
+  {
+   "id": "C135",
+   "section": "§23",
+   "claim": "§23.6 P31 实测读数与脚本在盘（tmp/p31-shots/REPORT.md + drive.py）",
+   "probes": [
+    {
+     "path": "tmp/p31-shots/REPORT.md",
+     "pattern": "."
+    },
+    {
+     "path": "tmp/p31-shots/drive.py",
+     "pattern": "."
+    }
+   ]
+  },
+  {
+   "id": "C136",
+   "section": "§12",
+   "claim": "§12 复跑指针指向**在盘**的读数（**漂移**：归档指向的 tmp/p7-report.md 不存在）",
+   "probes": [
+    {
+     "path": "tmp/p7-a11y-out.txt",
+     "pattern": "对比度实测"
+    }
+   ],
+   "drift": "归档 §12 末行「测量与复跑：`tmp/p7-a11y-out.txt` 与 `tmp/p7-report.md`」—— `tmp/p7-report.md` **不在盘上**（P36 tmp 清理后消失）。已把该行改指现存读数文件 + 本证据页。 处理：**已改**（归档 §12 末行改指在盘读数 + `tmp/p7-start.sh`）。"
+  },
+  {
+   "id": "C137",
+   "section": "§3",
+   "claim": "注册面五类贡献都在（panel/action/report/scenario/guide + 通知源/状态栏项）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/ui-surface.mjs",
+     "pattern": "return \\{ view, panel, action, shortcut, notificationSource, statusItem"
+    },
+    {
+     "path": "src/system/webui/code/ui-surface.mjs",
+     "pattern": "scenarios, guides, guidesFor"
+    }
+   ]
+  },
+  {
+   "id": "C138",
+   "section": "§3",
+   "claim": "注册面可撤销有实现：disposePlugin / dispose（卸载后贡献消失）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/ui-surface.mjs",
+     "pattern": "disposePlugin"
+    }
+   ]
+  },
+  {
+   "id": "C139",
+   "section": "§12",
+   "claim": "省跳链接是第一个 Tab 站（跳到主内容）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "q-skip.*跳到主内容"
+    }
+   ]
+  },
+  {
+   "id": "C140",
+   "section": "§18",
+   "claim": "离线不给「可写」：SW 没有后台同步/请求重放（无 sync 事件注册）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/sw.js",
+     "pattern": "addEventListener\\('sync'",
+     "absent": true
+    },
+    {
+     "path": "src/system/webui/code/assets/sw.js",
+     "pattern": "BackgroundSync|backgroundSync",
+     "absent": true
+    }
+   ]
+  },
+  {
+   "id": "C141",
+   "section": "§18",
+   "claim": "清单 URL 全相对（零外链）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/manifest.webmanifest",
+     "pattern": "http://|https://",
+     "absent": true
+    }
+   ]
+  },
+  {
+   "id": "C142",
+   "section": "§19",
+   "claim": "§19.2 动作运行时拿不到机制外的东西 ⇒ 主线程回退原样执行（io.jobs.inline_fallback 如实 +1）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "ioJobs\\.inline_fallback \\+= 1"
+    }
+   ]
+  },
+  {
+   "id": "C143",
+   "section": "§10",
+   "claim": "§10.3 拒绝一律零落盘（验证脚本用「逐文件 sha256 + journal 行数前后一致」断言）",
+   "probes": [
+    {
+     "path": "tmp/p6-verify.py",
+     "pattern": "journal"
+    }
+   ]
+  },
+  {
+   "id": "C144",
+   "section": "§20",
+   "claim": "§20.2 窗口行 = 全量→筛选→稳定全序排序→第 start..end 行（与全量逐行相同）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "稳定全序排序\\*\\*（同值按原始行序）"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "第 start\\.\\.end 行"
+    }
+   ]
+  },
+  {
+   "id": "C145",
+   "section": "§11",
+   "claim": "§11.2 沙盘隔离靠「路径整体切走」（effective() 一处解析 ⇒ 没有第二条路径）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "const effective = \\(\\) => \\{"
+    }
+   ]
+  },
+  {
+   "id": "C146",
+   "section": "§23",
+   "claim": "§23.3 命令面板（#q-palette-list）列全部动作",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "id=\"q-palette-list\""
+    }
+   ]
+  },
+  {
+   "id": "C147",
+   "section": "§21",
+   "claim": "§21.4 旧「回终端」文案替代物：GATE_ACTIONS（界面动作话术）而不是 GATE_COMMANDS",
+   "probes": [
+    {
+     "path": "src/domain/gate-timeline/code/gate-timeline.mjs",
+     "pattern": "export const GATE_ACTIONS"
+    }
+   ]
+  },
+  {
+   "id": "C148",
+   "section": "§22",
+   "claim": "§22/§18 复跑脚本与读数在盘（tmp/p26-verify.py / tmp/p19-shots/verify-pwa.py 覆盖清单与只读围栏）",
+   "probes": [
+    {
+     "path": "tmp/p26-verify.py",
+     "pattern": "import"
+    },
+    {
+     "path": "tmp/p19-shots/verify-pwa.py",
+     "pattern": "manifest\\.webmanifest"
+    }
+   ]
+  },
+  {
+   "id": "C149",
+   "section": "§16",
+   "claim": "§16.3 显示层口径：给人看的字符串去 `human:` 前缀（逻辑判据仍用原始值）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/collab.mjs",
+     "pattern": "replace\\(/human:\\(\\[a-z\\]"
+    }
+   ],
+   "note": "显示层去前缀散布在机制（collab.mjs:117 提及渲染）与各插件的 humanName()（如 domain/rfq/code/ui.mjs:98）"
+  },
+  {
+   "id": "C150",
+   "section": "§16",
+   "claim": "§16.3 时刻过显示层：带时区标签，不裸扔毫秒 ISO",
+   "probes": [
+    {
+     "path": "src/system/webui/code/collab.mjs",
+     "pattern": "服务进程所在时区的标签"
+    }
+   ]
+  },
+  {
+   "id": "C151",
+   "section": "§20",
+   "claim": "§20.3 四态互不冒充：错误态自成一种样子（绝不伪装成空列表）+ 可复制的下一步",
+   "probes": [
+    {
+     "path": "src/system/webui/code/assets/app.js",
+     "pattern": "\\*\\*错误态\\*\\*（③）"
+    }
+   ]
+  },
+  {
+   "id": "C152",
+   "section": "§19",
+   "claim": "§19.4 变更单逐行明细入口仍在（/<view>/changes/<id>/ + JSON），DEF-037 已闭合登记",
+   "probes": [
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "changes/<id>/`, method: 'GET'"
+    },
+    {
+     "path": "src/domain/change/code/ui.mjs",
+     "pattern": "DEF-037"
+    }
+   ]
+  },
+  {
+   "id": "C153",
+   "section": "§23",
+   "claim": "§23.6 P31 负控读数在盘：未登录 401 / 越侧 403 / 错署名 signer-mismatch 三个用例真跑过",
+   "probes": [
+    {
+     "path": "tmp/p31-shots/log.jsonl",
+     "pattern": "N3-错署名-signer-mismatch"
+    },
+    {
+     "path": "tmp/p31-shots/log.jsonl",
+     "pattern": "N1-未登录-401"
+    },
+    {
+     "path": "tmp/p31-shots/log.jsonl",
+     "pattern": "N2-越侧-403"
+    }
+   ]
+  },
+  {
+   "id": "C154",
+   "section": "§9",
+   "claim": "§9 只读路由围栏「先判方法、再判身份」（否则会先撞身份校验返 401 而不是 405）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "否则会先撞上处理器里的身份校验"
+    }
+   ]
+  },
+  {
+   "id": "C155",
+   "section": "§10",
+   "claim": "§10.4 外壳那个 16 KiB 读体夹取确实存在（插件因此必须自己读正文）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/webui.mjs",
+     "pattern": "if \\(data\\.length < 16384\\)"
+    },
+    {
+     "path": "src/system/attachments/code/index.mjs",
+     "pattern": "绝不截断成"
+    }
+   ]
+  },
+  {
+   "id": "C156",
+   "section": "§11",
+   "claim": "§11.3 sandbox.clear 只删该会话身份自己的沙盘目录（sandboxWipe(human)）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "const sandboxWipe = \\(human\\)"
+    },
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "sandboxWipe\\(who\\.human\\)"
+    }
+   ]
+  },
+  {
+   "id": "C157",
+   "section": "§17",
+   "claim": "§17.2 去重在开窗口之前（tally.deduped 在聚合阶段算，计数按合并后）",
+   "probes": [
+    {
+     "path": "src/system/webui/code/app-shell.mjs",
+     "pattern": "tally\\.deduped \\+= 1"
+    }
+   ]
+  }
+ ],
+ "runner_source": "#!/usr/bin/env python3\n\"\"\"P45：承诺↔实现对账 —— 承接点解析器（可重跑）。\n\n用法:\n  python3 tmp/p45-shots/p45-scan.py tokens            # 打印一批 token 的首个命中（勘察用）\n  python3 tmp/p45-shots/p45-scan.py run <claims.json> <out.md>   # 逐条判定 + 生成清单表\n\n判定口径（不许放宽）：\n  - 每条承诺 = 1..n 个 `probe`：{path_glob 或 path, pattern(正则)}；\n  - 全部 probe 都命中 ⇒ 状态 `承接`，逐条列 file:line（证据）；\n  - 任一 probe 未命中 ⇒ 状态 `缺口`（不许写成已实现）；\n  - 数据文件里显式标了 `drift` 的 ⇒ 状态 `漂移`（必须带证据行）。\n\"\"\"\nfrom __future__ import annotations\n\nimport fnmatch\nimport json\nimport re\nimport sys\nfrom pathlib import Path\n\nROOT = Path(__file__).resolve().parents[2]\nSKIP_DIRS = {\".git\", \".venv\", \"tmp\", \"node_modules\", \"__pycache__\", \"p45-shots\"}\n\n\ndef walk_all():\n    for p in ROOT.rglob(\"*\"):\n        if not p.is_file():\n            continue\n        parts = set(p.relative_to(ROOT).parts)\n        if parts & SKIP_DIRS:\n            continue\n        yield p\n\n\ndef scan(patterns: list[dict]):\n    \"\"\"按 token 列表勘察：返回 {pattern: [(relpath, lineno, text), ...]}\"\"\"\n    out: dict[str, list] = {p[\"pattern\"]: [] for p in patterns}\n    for path in walk_all():\n        try:\n            text = path.read_text(encoding=\"utf-8\")\n        except (UnicodeDecodeError, OSError):\n            continue\n        lines = text.splitlines()\n        rel = str(path.relative_to(ROOT))\n        for spec in patterns:\n            rx = re.compile(spec[\"pattern\"])\n            if rx.search(text) is None:\n                continue\n            for i, line in enumerate(lines, 1):\n                if rx.search(line):\n                    if len(out[spec[\"pattern\"]]) < spec.get(\"limit\", 3):\n                        out[spec[\"pattern\"]].append((rel, i, line.strip()[:160]))\n    return out\n\n\ndef probe_file(spec: dict) -> dict:\n    \"\"\"单个 probe：{path|glob, pattern, min_count?, absent?}\n\n    `absent:true` = **必须 0 命中**（用于\"已删且不得复活\"类承诺）；此时 ok = 无命中。\n    `min_count:N` = 命中行数至少 N（用于\"恰 6 条 / 12 键 / 21 路由\"这类数数承诺）。\n    \"\"\"\n    pat = spec.get(\"pattern\", \"\")\n    rx = re.compile(pat) if pat else None\n    if spec.get(\"absent_file\"):\n        found = []\n        for path in walk_all():\n            rel = str(path.relative_to(ROOT))\n            if fnmatch.fnmatch(rel, spec[\"glob\"]) or path.name == spec[\"glob\"]:\n                found.append({\"file\": rel, \"line\": 0, \"text\": \"(文件存在)\"})\n        return {\"spec\": spec, \"hits\": found, \"ok\": not found}\n    hits = []\n    need = int(spec.get(\"min_count\", 1))\n    cap = need if \"min_count\" in spec else spec.get(\"limit\", 1)\n    cands: list[Path] = []\n    if spec.get(\"path\"):\n        cands = [ROOT / spec[\"path\"]]\n    else:\n        cands = list(walk_all())\n    for path in cands:\n        if not path.exists() or not path.is_file():\n            continue\n        rel = str(path.relative_to(ROOT))\n        if spec.get(\"glob\") and not fnmatch.fnmatch(rel, spec[\"glob\"]):\n            continue\n        try:\n            lines = path.read_text(encoding=\"utf-8\").splitlines()\n        except (UnicodeDecodeError, OSError):\n            continue\n        for i, line in enumerate(lines, 1):\n            if rx and rx.search(line):\n                hits.append({\"file\": rel, \"line\": i, \"text\": line.strip()[:200]})\n                if len(hits) >= cap:\n                    break\n        if len(hits) >= cap:\n            break\n    if spec.get(\"absent\"):\n        return {\"spec\": spec, \"hits\": hits, \"ok\": not hits}\n    return {\"spec\": spec, \"hits\": hits, \"ok\": len(hits) >= need}\n\n\n\ndef run(claims_path: str, out_path: str) -> int:\n    data = json.loads(Path(claims_path).read_text(encoding=\"utf-8\"))\n    claims = data[\"claims\"]\n    rows = []\n    stats = {\"total\": 0, \"anchored\": 0, \"gap\": 0, \"drift\": 0}\n    by_section: dict[str, dict] = {}\n    for c in claims:\n        stats[\"total\"] += 1\n        results = [probe_file(p) for p in c[\"probes\"]]\n        ok = all(r[\"ok\"] for r in results)\n        if c.get(\"drift\"):\n            status = \"漂移（已改）\" if ok else \"漂移（待改）\"\n            stats[\"drift\"] += 1\n        elif ok:\n            status = \"承接\"\n            stats[\"anchored\"] += 1\n        else:\n            status = \"缺口\"\n            stats[\"gap\"] += 1\n        sec = c[\"section\"]\n        s = by_section.setdefault(sec, {\"total\": 0, \"anchored\": 0, \"gap\": 0, \"drift\": 0})\n        s[\"total\"] += 1\n        key = {\"承接\": \"anchored\", \"缺口\": \"gap\"}.get(status, \"drift\")\n        s[key] += 1\n        anchor = \"；\".join(\n            f\"{h['file']}:{h['line']}\" for r in results for h in r[\"hits\"][:2]\n        ) or \"—\"\n        missing = [r[\"spec\"].get(\"pattern\", \"(文件不存在)\") for r in results if not r[\"ok\"]]\n        rows.append({\n            \"id\": c[\"id\"], \"section\": sec, \"claim\": c[\"claim\"], \"status\": status,\n            \"anchor\": anchor, \"missing\": missing, \"note\": c.get(\"note\", \"\"),\n            \"drift\": c.get(\"drift\", \"\"),\n        })\n\n    lines = []\n    lines.append(f\"# P45 清单：29（含归档）承诺 ↔ 实现逐条对账（{stats['total']} 条）\")\n    lines.append(f\"# 生成：python3 tmp/p45-shots/p45-scan.py run \"\n                 f\"{claims_path} {out_path}\")\n    lines.append(f\"# 统计：承接 {stats['anchored']} / 缺口 {stats['gap']} / 漂移 {stats['drift']}\")\n    lines.append(\"# 列：id | § | 状态 | 承接点（file:line）| 可检验承诺 | 备注/漂移证据\")\n    for r in rows:\n        note = r[\"drift\"] or r[\"note\"] or \"\"\n        if r[\"status\"] == \"缺口\":\n            note = \"未命中 probe: \" + \", \".join(r[\"missing\"])\n        note = note.replace(\"\\t\", \" \").replace(\"\\n\", \" \")\n        claim = r[\"claim\"].replace(\"\\t\", \" \")\n        lines.append(f\"{r['id']}\\t{r['section']}\\t{r['status']}\\t{r['anchor']}\\t{claim}\\t{note}\")\n    Path(out_path).write_text(\"\\n\".join(lines) + \"\\n\", encoding=\"utf-8\")\n    resolved = {\"source\": claims_path, \"stats\": stats, \"by_section\": by_section, \"rows\": rows}\n    Path(out_path + \".resolved.json\").write_text(\n        json.dumps(resolved, ensure_ascii=False, indent=1), encoding=\"utf-8\")\n    print(json.dumps({\"stats\": stats, \"by_section\": by_section,\n                      \"gaps\": [r[\"id\"] for r in rows if r[\"status\"] == \"缺口\"],\n                      \"drifts\": [r[\"id\"] for r in rows if r[\"status\"].startswith(\"漂移\")],\n                      \"drift_fixed\": [r[\"id\"] for r in rows if r[\"status\"] == \"漂移（已改）\"],\n                      \"drift_open\": [r[\"id\"] for r in rows if r[\"status\"] == \"漂移（待改）\"]},\n                     ensure_ascii=False, indent=1))\n    return 0\n\n\n\ndef main() -> int:\n    if sys.argv[1] == \"tokens\":\n        pats = json.loads(Path(sys.argv[2]).read_text(encoding=\"utf-8\"))\n        res = scan(pats)\n        for p in pats:\n            hs = res[p[\"pattern\"]]\n            print(f\"--- {p['pattern']}\")\n            for f, i, t in hs:\n                print(f\"    {f}:{i}: {t}\")\n            if not hs:\n                print(\"    (0 命中)\")\n        return 0\n    if sys.argv[1] == \"run\":\n        return run(sys.argv[2], sys.argv[3])\n    raise SystemExit(__doc__)\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\n",
+ "rerun": "python3 -c \"import json;print(json.load(open('docs/work/evidence/EV-193-claims.json'))['runner_source'])\" > tmp/p45-shots/p45-scan.py && python3 tmp/p45-shots/p45-scan.py run docs/work/evidence/EV-193-claims.json docs/work/evidence/EV-193-claim-matrix.tsv"
+}

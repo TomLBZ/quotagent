@@ -1,0 +1,161 @@
+# P45 清单：29（含归档）承诺 ↔ 实现逐条对账（157 条）
+# 生成：python3 tmp/p45-shots/p45-scan.py run docs/work/evidence/EV-193-claims.json docs/work/evidence/EV-193-claim-matrix.tsv
+# 统计：承接 152 / 缺口 0 / 漂移 5
+# 列：id | § | 状态 | 承接点（file:line）| 可检验承诺 | 备注/漂移证据
+C01	§0	承接	docs/design/29-webui-gui-app.md:10	用户原话（不是账本投影/只读路由，而是完整 GUI app）逐字留在主文件 §0	
+C02	§0	承接	docs/design/29-webui-gui-app-archive.md:174；docs/design/29-webui-gui-app-archive.md:175	归档 §0 保留另两条原话（Teams 对照判据 + 「人类可用、易用、功能完善的产品」）	
+C03	§1	承接	docs/work/functional-requirements.md:111；docs/work/acceptance-criteria.md:108	判定标准「双方仅通过 GUI 走完全部业务流程」进了硬需求（FR/AC）	
+C04	§1	承接	docs/design/29-webui-gui-app.md:23；src/system/webui/code/assets/app.js:12	允许前端框架：交互能力来自真实前端资产（不再靠「零内联脚本」判据）	
+C05	§1	承接	src/system/webui/code/ui-surface.mjs:319；src/system/webui/code/ui-surface.mjs:287	外壳给机制（面板/动作/通知/深链），业务功能由插件注册进来	
+C06	§2	承接	—	旧 UI 快照门（refresh-ui-snapshots.py）已删且不复活	
+C07	§2	承接	—	旧 seed 门（ui-seed-pipeline.py）已删且不复活	
+C08	§2	承接	—	旧 ui-mutate 变异门已删且不复活	
+C09	§2	承接	docs/work/acceptance-criteria.md:108	AC-UXWEB-001 已按 §1/§4 重建（旧的「三块第一屏锚点 + 0 内联脚本」判据删除）	
+C10	§3	承接	src/system/webui/code/app-shell.mjs:3461	外壳 = src/system/webui/code/ 的应用壳 + 动作总线（runAction → 插件服务端一半）	
+C11	§3	承接	src/system/webui/code/app-shell.mjs:161；src/system/approval/code/ui.mjs:721	写路径不可绕过：GUI 动作只发起，落账仍走唯一写者（host.writerReceipt 派生回执）	
+C12	§3	承接	src/system/webui/code/app-shell.mjs:1935	一切注册可撤销：插件卸载 ⇒ 其 UI 贡献被 dispose	
+C13	§4	承接	src/domain/rfq/code/ui.mjs:731	承包商流程可点：发包动作 rfq.publish	
+C14	§4	承接	src/domain/compare/code/ui.mjs:318	承包商流程可点：比价权重（compare.save-weights）+ 排序建议	
+C15	§4	承接	src/system/approval/code/ui.mjs:632；src/system/approval/code/ui.mjs:635；src/system/approval/code/ui.mjs:780；src/system/approval/code/ui.mjs:900；src/system/approval/code/ui.mjs:909	人工门动作齐：批准 gate.grant / 驳回 gate.deny / 催办 gate.nudge / 升级 gate.escalate / 终止 gate.abort	
+C16	§4	承接	src/domain/commitments/code/ui.mjs:281	授标承诺（人签）动作 award.commit 在界面上	
+C17	§4	承接	src/domain/commitments/code/ui.mjs:642	发 PO 动作 po.issue（人签）在界面上	
+C18	§4	承接	src/domain/change/code/ui.mjs:204；src/system/webui/code/identity.mjs:64	变更与价格让步动作在界面上（change 回应 / 让步人工门）	
+C19	§4	承接	src/system/evidence/code/ui.mjs:58；src/system/webui/code/app-shell.mjs:465	审计与证据包可导出（evidence 插件 + host.report）	
+C20	§4	承接	src/domain/quote-prepare/code/ui.mjs:8；src/domain/quote-prepare/code/ui.mjs:689	供应商流程：看包 / 备报价草稿 / 一次提交整份	
+C21	§4	承接	src/domain/clarify/code/ui.mjs:21；src/domain/capacity/code/ui.mjs:4；src/domain/negotiation/code/ui.mjs:120	供应商流程：澄清提问 / 承诺交期（产能日历）/ 谈判	
+C22	§4	承接	src/system/approval/code/ui.mjs:336；src/domain/authority-band/code/ui.mjs:15；src/domain/rfq/code/ui.mjs:917；src/system/mail/code/ui.mjs:87；src/system/user-plugin-manager/code/ui.mjs:77	共同侧：审批队列 gate.queue / 授权区间 authority.bands / 截止看板 rfq.remind-board / 邮件通道 / 用户空间插件都有面板	
+C23	§4	承接	src/system/webui/code/app-shell.mjs:160	失败时给可复制的下一步（拒绝体一律带 next_action）	
+C24	§7	承接	src/system/webui/code/webui.mjs:3268；src/system/webui/code/identity.mjs:776	§7.1 /api/routes 的 auth 是真实值 + 给 auth_basis（按路径推导，不手抄）	
+C25	§7	承接	src/domain/quote-prepare/tests/check-quote-draft-route.py:467	§7.1 门拿 /api/routes 逐条反查 auth/basis（抄的会漂）	
+C26	§7	承接	src/system/webui/code/webui.mjs:2848；src/system/webui/code/app-shell.mjs:2501	§7.2 偏好/已读/布局/筛选整份落服务端（按身份）	
+C27	§7	承接	src/system/webui/code/identity.mjs:1108	§7.3 邮件通道有界内入口 POST /mail/config/（ops 侧）	
+C28	§7	承接	src/system/webui/tools/identity-mail-apply.py:5；src/system/config/tools/config-apply.py:2	§7.3 链路 = identity-mail-apply.py（0600 待办件）→ config-apply.py 唯一落盘者	
+C29	§7	承接	src/system/webui/code/identity.mjs:22	§7.3 凭据永不回显；/workspace/config.yaml 只读	
+C30	§7	承接	src/system/webui/code/identity.mjs:58；src/system/webui/tools/identity-sign.py:11	§7.4 人签动作的服务端身份门：401 identity-required / 403 signer-mismatch	
+C31	§7	承接	src/domain/quote-prepare/tools/quote-sign.py:67；tools/verify.sh:243	§7.5 一份报价 = 一次人签：单行报价 body 键集固定（12 键，逐字节不变）	
+C32	§7	承接	src/system/approval/tools/gate-actions.py:156；src/domain/quote-prepare/tools/quote-draft.py:181；src/domain/quote-prepare/tools/quote-sign.py:32	§7.5 缺行/改行有名拒绝三码（pending-tampered / line-item-not-found / draft-tampered）	
+C33	§8	承接	src/system/webui/code/people.mjs:17；src/system/webui/code/people.mjs:272	§8.1 名册是权威取值处：<ui_shared>/people/roster.json（0600、按侧、不进账本）	
+C34	§8	承接	src/system/webui/code/app-shell.mjs:4501	§8.2 @提及/指派/转交候选与校验同源 GET /api/people/suggest	
+C35	§8	承接	src/system/webui/code/collab.mjs:28；src/system/webui/code/collab.mjs:55	§8.2 未知名字 ⇒ unknown-colleague；跨侧 @ ⇒ cross-side-mentioned	
+C36	§8	承接	src/system/webui/code/people.mjs:41	§8.2 登录即登记：第一次登录进名册、角色「待指派」（有名字没权限）	
+C37	§8	承接	src/system/webui/code/collab.mjs:55	§8.3 转交别人的活 ⇒ transfer-not-yours（服务端判据）	
+C38	§8	承接	src/system/webui/code/people.mjs:53；src/system/webui/code/people.mjs:93	§8.3 额度超我角色 ⇒ role-limit-exceeded（给出金额/额度/该找哪个角色）	
+C39	§8	承接	src/system/webui/code/people-ui.mjs:333	§8.3 有管理员之后改人/改角色/改策略只有管理员（admin-required）	
+C40	§8	承接	src/system/webui/requirements/README.md:63	§8.4 角色不改变签署权：额度/角色判据跑在「署名==会话身份」之后（只能否决）	
+C41	§9	承接	src/system/webui/code/webui.mjs:454	§9 notif-state.json 0700/0600、原子写、有界、坏形状如实计数 dropped	
+C42	§9	承接	src/system/webui/code/webui.mjs:3183	§9 notif-state 路由登记为 auth: identity（读/写各一条，按会话身份隔离）	
+C43	§9	承接	src/system/webui/code/webui.mjs:142；src/system/webui/code/webui.mjs:135	§9 只读路由的方法围栏：非 GET ⇒ 405 + method-not-allowed + Allow: GET	
+C44	§10	承接	src/system/attachments/code/ui.mjs:32；src/system/attachments/code/ui.mjs:234	§10.1 对象级附件按 (视图, 对象类) 声明形状 files（包/报价/PO/变更）	
+C45	§10	承接	src/system/webui/code/app-shell.mjs:2254	§10.1 url 只允许本服务相对路径；外站丢掉并计数 absolute-url-refused	
+C46	§10	承接	src/system/attachments/code/index.mjs:9	§10.3 上传走原始字节，侧与署名只认会话	
+C47	§10	承接	src/system/attachments/code/attachments.mjs:16	§10.3 下载按侧 + 身份（越侧 403 cross-side-attachment）	
+C48	§10	承接	src/system/attachments/code/attachments.mjs:116	§10.3 附件 id 形状不对 ⇒ 400 attachment-id-invalid（含路径穿越）	
+C49	§10	承接	src/system/attachments/code/ui.mjs:165	§10.2 附件不进账本（回执 ledger_added 恒 0）	
+C50	§10	承接	src/system/attachments/code/index.mjs:11；src/system/attachments/code/index.mjs:3	§10.4 五条附件路由经注册面（uiRoutes）+ 只读路径带 POST 孪生 405 + Allow: GET	
+C51	§10	承接	src/domain/commitments/code/ui.mjs:2000；src/system/webui/code/app-shell.mjs:465	§10.5 导出/打印：声明由插件给（report 贡献）、内容由插件生成 + host.report 序列化	
+C52	§10	承接	src/system/webui/code/assets/app.js:2862；src/system/webui/code/assets/app.css:472	§10.5 行带 ledger_seq 锚；打印走隐藏 iframe（打印文档而非界面）+ @media print 兜底	
+C53	§11	承接	src/system/webui/code/app-shell.mjs:1091	§11.2 沙盘把这一侧的读/写路径整体切到沙盘目录（withSandbox）	
+C54	§11	承接	src/system/webui/code/ui-surface.mjs:651；src/domain/rfq/code/ui.mjs:1492	§11.1 场景由插件声明（surface.scenario）；外壳不认识业务步骤	
+C55	§11	承接	src/system/webui/code/app-shell.mjs:3949；src/system/webui/code/app-shell.mjs:3973	§11.3 入口是两个动作 sandbox.seed / sandbox.clear（沙盘无独立路由）	
+C56	§11	承接	src/system/webui/code/app-shell.mjs:1001	§11.2 状态落 <ui_shared>/sandbox/state.json（0700/0600、按会话身份分条）	
+C57	§11	承接	src/system/webui/code/app-shell.mjs:3947；src/system/webui/code/app-shell.mjs:3948	§11.3 工作台首屏第一块面板是沙盘（order -98），两侧视图底部各一块（98）	
+C58	§11	承接	src/system/webui/code/ui-surface.mjs:693；src/domain/commitments/code/ui.mjs:2032	§11.4 optional:true 的步骤失败不算整条流程失败（记 optional_failures）	
+C59	§12	承接	src/system/webui/code/assets/app.js:1713；src/system/webui/code/assets/app.css:375	§12.1 ≤560px 表格变卡片（带 data-label）+ q-keep-table 逃生门	
+C60	§12	承接	src/system/webui/code/assets/app.css:323	§12.2 弹层在手机是全屏单页 + 按钮吸底（q-modal-body / q-modal-foot）	
+C61	§12	承接	src/system/webui/code/assets/app.css:330	§12.3 pointer: coarse 下可点目标 ≥44px（媒体查询在 CSS 里）	
+C62	§12	承接	src/system/webui/code/assets/app.js:4342	§12.4 弹层打开给 #q-app 加 inert；关闭后焦点回到打开它的元素	
+C63	§12	漂移（已改）	src/system/webui/code/assets/app.css:16	§12.5 对比度 ≥ WCAG AA、实测零不达标（**漂移**：原始读数里 PO 对象页有 2 处不达标）	原始读数 `tmp/p7-a11y-out.txt` 的 `[390-PO对象页]` 段：228 处可见文字里 **2 处 AA-FAIL**（面包屑分隔符「›」1.51 on rgb(16,21,28)）；同文件工作台 390/1440 两宽度 858 处 0 不达标。已把主文件/归档的「零不达标」改成「工作台两宽度零不达标 + PO 对象页 1 处登记例外」。 处理：**已改**（29 主文件 §12 改「1 处例外已登记」+ 归档 §12.5 记例外与读数；CSS 属「不要改」面）。
+C64	§12	承接	tmp/p7-a11y-out.txt:21	§12.4 可访问性树里 118 个交互节点零无名（实测读数）	
+C65	§13	承接	src/domain/commitments/tools/commitment-apply.py:31	§13.1 唯一写者 commitment-apply.py --step po 落 po/issued 后两侧各写一条 po/distributed	
+C66	§13	承接	src/domain/commitments/tools/commitment-apply.py:397；src/domain/commitments/tools/commitment-apply.py:402	§13.2 收件人判据在写之前（po-recipient-unknown / po-recipient-not-the-bidder）	
+C67	§13	承接	src/domain/commitments/code/ui.mjs:768；src/domain/commitments/code/ui.mjs:817；src/domain/commitments/code/ui.mjs:871；src/domain/commitments/code/ui.mjs:895	§13.3 供应商侧 po.inbox + 对象页 po.object-received / po.object-lines-received / po.prereqs	
+C68	§13	承接	src/domain/commitments/code/ui.mjs:961；src/domain/commitments/code/ui.mjs:1019	§13.3/5 供应商侧导出 po.export-received + 声明 report.po-received	
+C69	§13	承接	src/domain/commitments/code/ui.mjs:928；src/domain/commitments/tools/commitment-apply.py:70	§13.4 回签 = 人签人工门 po.acknowledge → --step acknowledge（幂等、不改 PO 行与价）	
+C70	§13	承接	src/system/approval/code/ui.mjs:560	§13.4 侧只能来自会话：不符 ⇒ cross-side-action（不拿 ctx.view 当权威）	
+C71	§13	承接	src/system/kernel/code/events.py:156；src/system/kernel/code/events.py:155	§13.6 po/distributed 与 po/acknowledged 登记进内核事件目录	
+C72	§14	承接	src/system/webui/code/app-shell.mjs:2299	§14.1 注册面自动加只读 expected_version；比对跑在动作服务端一半之前	
+C73	§14	承接	src/domain/quote-prepare/code/ui.mjs:782；src/domain/change/code/ui.mjs:503；src/domain/compare/code/ui.mjs:324	§14.1 受保护的三处对象类声明：quote-draft / change-response / compare-weights	
+C74	§14	承接	src/system/webui/code/app-shell.mjs:62	§14.1 内容会变或版本对不上 ⇒ 拒绝 object-changed（附 conflict.since / conflict.mine）	
+C75	§14	承接	src/system/webui/code/app-shell.mjs:4108	§14.2 分享动作 share.object（不写账本/不落文件/不发邮件，产出深链 + 需求清单 + 邮件正文）	
+C76	§14	承接	src/system/webui/code/app-shell.mjs:1233；src/system/webui/code/app-shell.mjs:1307	§14.3 导出列偏好落 export-prefs.json（0600 有界）；一列不剩 ⇒ report-columns-empty	
+C77	§15	承接	src/system/webui/code/identity.mjs:12	§15 业务动作的身份只认会话（human:<名字>），不再手填 actor	
+C78	§15	承接	src/system/webui/code/identity.mjs:1035；src/system/webui/code/identity.mjs:1063；src/system/webui/code/identity.mjs:1101；src/system/webui/code/identity.mjs:1125	§15 四个自助面路由齐：登录 / 待我处理 / 人签 / 我的插件（+ 邮件配置）	
+C79	§15	承接	src/system/webui/code/identity.mjs:798；src/system/webui/code/identity.mjs:1022；src/system/webui/code/identity.mjs:1027	§15 身份路由 21 条（12 条字面 + 3 侧 × 2 条 inbox + 3 个插件操作 = 21）	
+C80	§15	承接	src/system/webui/code/identity.mjs:59；tmp/verify-identity.py:145	§15 负控：未登录 / 署名不符 / 替别人签 ⇒ 401/403/not-my-draft 且账本零新增	
+C81	§15	漂移（已改）	docs/design/29-webui-gui-app.md:125；tmp/verify-identity/verify.out:315	§15 「49 条断言」（原写 48 —— 漂移，已改）	原文档写「48 条断言」，实测 **49**：`tmp/verify-identity/verify-result.json` 的 `checks` 长 49（`failures` 0）、`tmp/verify-identity/verify.out` 末行「结果：断言 49 条，失败 0 条」。处理：**29 主文件已改为 49**（本条 probe 即修后真值）；插件 doc `src/system/webui/docs/identity-and-selfservice.md:15` 同句**登记待定**（本轮允许面外）。
+C82	§16	承接	src/system/webui/code/collab.mjs:392	§16.1 协作状态落 <ui_shared>/collab/<侧>.json（0600、按侧分片、不进账本）	
+C83	§16	承接	src/system/webui/code/collab.mjs:440	§16.4 往坏容器追加 ⇒ collab-shape-malformed（只读不回写）	
+C84	§16	承接	src/system/webui/code/collab-ui.mjs:52；src/system/webui/code/collab-ui.mjs:92	§16.4 坏形状如实降级：跳过 + 计数 + 原样留在文件里（读不出来 ≠ 还没有）	
+C85	§16	承接	src/system/webui/code/collab-ui.mjs:259	§16.5 卡头计数按本侧（没有会话就没有「本侧」⇒ 如实说明只算本侧）	
+C86	§16	承接	tmp/p13-shots/ux/shape-test.mjs:50；tmp/p13-shots/ux/shape-test.mjs:51	§16 复跑读数：协作面 30 条断言（tmp/p13-shots/ux/shape-test.mjs）	
+C87	§17	承接	src/system/webui/code/app-shell.mjs:2667	§17.1 w=1 才开窗口，且响应带 query（产出/命中/页数）	
+C88	§17	承接	src/system/webui/code/app-shell.mjs:2356；src/system/webui/code/app-shell.mjs:2613	§17.1 不带 w 的调用一字不变（整份 + 上限 600）但回执带 stats.dropped（截断不再静默）	
+C89	§17	承接	src/system/webui/code/app-shell.mjs:2130；src/system/webui/code/app-shell.mjs:2167	§17.2 跨插件去重：条目带 dedupe_key 才参与、先出现的赢、输者不丢信息	
+C90	§17	承接	src/system/webui/code/app-shell.mjs:115	§17.3 未读按身份算；未登录 ⇒ unread 不猜（known:false）	
+C91	§17	承接	src/system/mail/code/ui.mjs:27	§17.4 邮件摘要偏好落 mail/notify-prefs.json（0600、默认关、按身份）	
+C92	§17	承接	src/system/mail/tools/mail-digest.py:16；src/system/mail/docs/notification-digest.md:62	§17.4 去重键 + 节流 retry_after_s=600（不写账本）	
+C93	§17	承接	tmp/p19-shots/verify-digest.py:36；tmp/p19-shots/verify-digest.py:134	§17 复跑读数：邮件摘要 16 条断言（tmp/p19-shots/verify-digest.py）	
+C94	§18	承接	src/system/webui/code/assets/manifest.webmanifest:10；src/system/webui/code/assets/manifest.webmanifest:17	§18.1 清单 <prefix>/manifest.webmanifest（display: standalone + 192/512 PNG）	
+C95	§18	承接	src/system/webui/code/assets/sw.js:42；src/system/webui/code/assets/sw.js:7	§18.3 数据与身份/人签/待办/邮件/运维/管理面永不缓存；非 GET 完全不拦截	
+C96	§18	承接	src/system/webui/code/assets/sw.js:34；src/system/webui/code/assets/sw.js:35	§18.3 预缓存恰 6 个外壳条目	
+C97	§18	承接	src/system/webui/code/assets/sw.js:18	§18.3 导航到根与 /app/** network-first；离线回退不含数据的壳 + x-q-offline: 1	
+C98	§18	承接	src/system/webui/code/app-shell.mjs:4353；src/system/webui/code/assets/app.js:1028	§18.4 离线如实：横幅「离线：数据可能陈旧」+ 连接灯第四态 data-offline	
+C99	§18	承接	tmp/p19-shots/pwa-evidence.json:31	§18.2 装机机读判据：installability_errors = []（真读数文件）	
+C100	§18	承接	tmp/p19-shots/verify-pwa.py:26；tmp/p19-shots/verify-pwa.py:72	§18 复跑读数：PWA 9 条断言（tmp/p19-shots/verify-pwa.py）	
+C101	§19	承接	src/system/approval/code/ui.mjs:651；src/domain/quote-prepare/code/ui.mjs:689	§19.1 批量 = 逐条各跑一次唯一写者（无「一个动作落多条」旁路）	
+C102	§19	承接	src/system/approval/code/ui.mjs:763	§19.3 逐条回执 results[]（applied|duplicates|refused）+ 部分被拒 ⇒ batch-partial	
+C103	§19	承接	src/system/approval/code/ui.mjs:692；src/system/webui/docs/approval-decisions-and-evidence.md:73	§19.4 幂等（already-signed / already-applied）+ 一次上限 50（batch-too-large）+ 批量驳回必留理由	
+C104	§19	承接	src/system/webui/code/app-shell.mjs:3148	§19.6 批量动作的服务端一半跑在动作运行时（worker 线程 ACTION_RUNTIME_ENTRY）	
+C105	§19	承接	src/system/webui/code/app-shell.mjs:2820	§19.6 job_concurrency（默认 1）只排队、不拒动作	
+C106	§19	承接	src/system/webui/code/app-shell.mjs:2823；src/system/webui/code/app-shell.mjs:2993；src/system/webui/code/app-shell.mjs:2935	§19.7 jobs.json + 只读 GET /api/ui/jobs（按身份隔离）；上一进程 running ⇒ interrupted + pending_ids	
+C107	§19	承接	tmp/p18-shots/verify.py:7	§19 复跑读数：A–D 四组用例脚本在盘（tmp/p18-shots/verify.py）	
+C108	§20	承接	src/system/webui/code/app-shell.mjs:595；src/system/webui/code/webui.mjs:2776	§20.1 窗口协议 w/pq/only：不带就整份下发（既有脚本一字不变）	
+C109	§20	承接	src/system/webui/code/app-shell.mjs:876	§20.2 派生计数在全集上算；matched_keys 按需给、超上限如实拒发	
+C110	§20	承接	src/system/kernel/code/ledger-view.mjs:26	§20.4 账本只读备忘按 (路径, mtimeMs, size) 失效（不读旧值）	
+C111	§20	承接	src/system/webui/code/app-shell.mjs:2384	§20.4 通知聚合短 TTL（默认 5 s，可配）	
+C112	§20	承接	src/system/webui/code/app-shell.mjs:1430；src/system/webui/code/app-shell.mjs:1418；src/system/webui/code/webui.mjs:2792	§20.4 渲染准入按真实事件循环滞后回 429 + Retry-After；动作/身份/偏好/健康不拒	
+C113	§20	承接	src/system/webui/code/app-shell.mjs:293；src/system/webui/code/app-shell.mjs:451	§20.5 唯一写者互斥：FIFO 票据 + wx 原子锁；超时 ⇒ writer-gate-timeout（说清持有者）	
+C114	§20	漂移（已改）	tmp/p21-scale-run/webui/jobs.json:262	§20.5 反证读数：去闸门 ⇒ 重复 seq 309 / ledger-frozen（**漂移**：归档指向的读数文件不存在）	归档 §20 写的路径 `tmp/p21-shots/concurrent-broken-chain.json` **不在盘上**（P36 tmp 清理后消失）；同一读数的现存原件是 `tmp/p21-scale-run/webui/jobs.json`（含 `"code": "ledger-frozen"` + 「哈希链校验失败: seq 309」）。已把归档指针改成现存路径。 处理：**已改**（归档 §20 指针换成在盘原件，并写明命中内容 `ledger-frozen` / `seq 309`）。
+C115	§20	承接	tmp/p23-shots/fixed-run.txt:89	§20 中断恢复读数：30 份跑到第 4 份 SIGKILL ⇒ 读回 interrupted + pending 26（tmp/p23-shots/fixed-run.txt）	
+C116	§21	承接	src/system/webui/code/webui.mjs:115；src/system/webui/code/webui.mjs:111	§21.1 旧只读页 retired：303 → /app/<view>/（不 404；写面与明细面保留）	
+C117	§21	承接	src/system/webui/code/webui.mjs:116；src/system/webui/code/webui.mjs:117	§21.1 旧路由共 16 条（4 个子视图 × 两侧 × 页面+JSON）	
+C118	§21	承接	—	§21.3 旧运维面退役（pipeline-view 插件文件已删）	
+C119	§21	漂移（已改）	—	§21.4 产品面 0 命中「回终端」文案（原 rfq 动作载荷里给了 `python3` 命令 —— 漂移，已改）	`src/domain/rfq/code/ui.mjs` 的**动作载荷**（不是注释）里有两处教用户回终端：周报降级分支的 `next_action`（`python3 …weekly-report.py …`）与 `report-render-missing` 分支的 CLI 复跑命令；这正是 §21.4 禁止的形态（其余命中都在源码注释里，不是产品面）。 处理：**已改**（两处都换成界内可点的下一步：换一周 / 换格式 / 看通知中心 / 转运维）；清单表保留 probe = 「插件 `code/ui.mjs` 里 0 处 `python3` 载荷」，注释命中仍会让它报红，供后续回归用。
+C120	§21	承接	tools/verify.sh:169；tools/verify.sh:176；tools/verify.sh:188；tools/verify.sh:223	§21.5 四个旧门（advice / rfq-deadline / gates / authority）仍在跑、判据接到 GUI	
+C121	§22	承接	src/system/attachments/code/delivery-receipts.mjs:46；src/system/attachments/code/delivery-receipts.mjs:16	§22.2 回执落 <ui_shared>/receipts/deliveries.json（0600、聚合、去抖 60 s、有界）	
+C122	§22	承接	src/system/attachments/code/delivery-receipts.mjs:26；src/domain/commitments/code/ui.mjs:817	§22.1 收件方打开即留痕，侧与人只认会话（未登录 ⇒ identity-required）	
+C123	§22	承接	src/system/attachments/code/delivery-receipts.mjs:6	§22.3 回执不进账本、不是数据出口（投递与回签才是账本事实）	
+C124	§22	承接	src/domain/rfq/tools/weekly-report.py:24；src/domain/rfq/code/ui.mjs:258	§22.4 周报只读、不取墙钟（as_of 缺省 = 账本最大 ts）	
+C125	§22	承接	src/system/approval/code/ui.mjs:385；src/domain/rfq/code/ui.mjs:259	§22.5 算不出来的行进 gate_unmatched / amount_missing 并排除出小计（不拿 0 冒充）	
+C126	§22	承接	src/domain/rfq/code/ui.mjs:580	§22.5 导出与屏幕同源（同一份报表 + ledger_refs）；周报有 report 声明	
+C127	§22	承接	tmp/p26-verify.py:6	§22 复跑脚本在盘（tmp/p26-verify.py）	
+C128	§23	承接	src/system/webui/code/ui-surface.mjs:158；src/system/webui/code/ui-surface.mjs:149	§23.1 插件只声明两样：入参字段来源（actionNeedsOf）+ 引用字段兜底（REFERENCE_FIELD_RE）	
+C129	§23	承接	src/system/webui/code/app-shell.mjs:4477；src/system/webui/code/app-shell.mjs:4468	§23.2 /api/ui/surface 给出机读形状：needs / action_entry / guides	
+C130	§23	承接	src/system/webui/code/assets/app.js:2453	§23.3 工具栏只摆当前地址跑得起来的动作（partitionActions）	
+C131	§23	承接	src/system/webui/code/assets/app.js:3409；src/system/webui/code/assets/app.js:3462	§23.3 缺上下文的动作进候选清单：contextCandidates / openActionEntry / rowPresetOf	
+C132	§23	承接	src/system/webui/code/assets/app.js:2179；src/system/projection/code/ui.mjs:16	§23.4 空态判据 panelHasData（counts/rows/items 可指认行才算有数据），not_data 不算	
+C133	§23	承接	src/system/webui/code/assets/app.js:2201	§23.4 工作台叠 workbenchHasNothing（没有一条带 ref.kind+ref.id 的待办 ⇒ 没活）	
+C134	§23	承接	src/system/webui/code/assets/app.js:2348	§23.5 待办聚合跳过降级（degraded）面板并把跳过几块写进 data-todo-degraded-panels	
+C135	§23	承接	tmp/p31-shots/REPORT.md:1；tmp/p31-shots/drive.py:1	§23.6 P31 实测读数与脚本在盘（tmp/p31-shots/REPORT.md + drive.py）	
+C136	§12	漂移（已改）	tmp/p7-a11y-out.txt:13	§12 复跑指针指向**在盘**的读数（**漂移**：归档指向的 tmp/p7-report.md 不存在）	归档 §12 末行「测量与复跑：`tmp/p7-a11y-out.txt` 与 `tmp/p7-report.md`」—— `tmp/p7-report.md` **不在盘上**（P36 tmp 清理后消失）。已把该行改指现存读数文件 + 本证据页。 处理：**已改**（归档 §12 末行改指在盘读数 + `tmp/p7-start.sh`）。
+C137	§3	承接	src/system/webui/code/ui-surface.mjs:828；src/system/webui/code/ui-surface.mjs:830	注册面五类贡献都在（panel/action/report/scenario/guide + 通知源/状态栏项）	
+C138	§3	承接	src/system/webui/code/ui-surface.mjs:13	注册面可撤销有实现：disposePlugin / dispose（卸载后贡献消失）	
+C139	§12	承接	src/system/webui/code/assets/app.js:1440	省跳链接是第一个 Tab 站（跳到主内容）	
+C140	§18	承接	—	离线不给「可写」：SW 没有后台同步/请求重放（无 sync 事件注册）	
+C141	§18	承接	—	清单 URL 全相对（零外链）	
+C142	§19	承接	src/system/webui/code/app-shell.mjs:3612	§19.2 动作运行时拿不到机制外的东西 ⇒ 主线程回退原样执行（io.jobs.inline_fallback 如实 +1）	
+C143	§10	承接	tmp/p6-verify.py:190	§10.3 拒绝一律零落盘（验证脚本用「逐文件 sha256 + journal 行数前后一致」断言）	
+C144	§20	承接	src/system/webui/code/app-shell.mjs:657；src/system/webui/code/app-shell.mjs:952	§20.2 窗口行 = 全量→筛选→稳定全序排序→第 start..end 行（与全量逐行相同）	
+C145	§11	承接	src/system/webui/code/app-shell.mjs:1102	§11.2 沙盘隔离靠「路径整体切走」（effective() 一处解析 ⇒ 没有第二条路径）	
+C146	§23	承接	src/system/webui/code/assets/app.js:4457	§23.3 命令面板（#q-palette-list）列全部动作	
+C147	§21	承接	src/domain/gate-timeline/code/gate-timeline.mjs:127	§21.4 旧「回终端」文案替代物：GATE_ACTIONS（界面动作话术）而不是 GATE_COMMANDS	
+C148	§22	承接	tmp/p26-verify.py:21；tmp/p19-shots/verify-pwa.py:68	§22/§18 复跑脚本与读数在盘（tmp/p26-verify.py / tmp/p19-shots/verify-pwa.py 覆盖清单与只读围栏）	
+C149	§16	承接	src/system/webui/code/collab.mjs:117	§16.3 显示层口径：给人看的字符串去 `human:` 前缀（逻辑判据仍用原始值）	显示层去前缀散布在机制（collab.mjs:117 提及渲染）与各插件的 humanName()（如 domain/rfq/code/ui.mjs:98）
+C150	§16	承接	src/system/webui/code/collab.mjs:94	§16.3 时刻过显示层：带时区标签，不裸扔毫秒 ISO	
+C151	§20	承接	src/system/webui/code/assets/app.js:2541	§20.3 四态互不冒充：错误态自成一种样子（绝不伪装成空列表）+ 可复制的下一步	
+C152	§19	承接	src/system/webui/code/webui.mjs:3103；src/domain/change/code/ui.mjs:244	§19.4 变更单逐行明细入口仍在（/<view>/changes/<id>/ + JSON），DEF-037 已闭合登记	
+C153	§23	承接	tmp/p31-shots/log.jsonl:4；tmp/p31-shots/log.jsonl:2；tmp/p31-shots/log.jsonl:3	§23.6 P31 负控读数在盘：未登录 401 / 越侧 403 / 错署名 signer-mismatch 三个用例真跑过	
+C154	§9	承接	src/system/webui/code/webui.mjs:153	§9 只读路由围栏「先判方法、再判身份」（否则会先撞身份校验返 401 而不是 405）	
+C155	§10	承接	src/system/webui/code/webui.mjs:2596；src/system/attachments/code/index.mjs:100	§10.4 外壳那个 16 KiB 读体夹取确实存在（插件因此必须自己读正文）	
+C156	§11	承接	src/system/webui/code/app-shell.mjs:3775；src/system/webui/code/app-shell.mjs:3989	§11.3 sandbox.clear 只删该会话身份自己的沙盘目录（sandboxWipe(human)）	
+C157	§17	承接	src/system/webui/code/app-shell.mjs:2161	§17.2 去重在开窗口之前（tally.deduped 在聚合阶段算，计数按合并后）	

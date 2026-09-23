@@ -284,7 +284,9 @@ export async function register(surface, host) {
     if (run.json && typeof run.json === 'object') return { json: run.json, run }
     return { run, json: { ok: false, code: run.code ?? 'weekly-tool-failed',
       reason: run.reason || run.stderr || '只读汇总器没有输出 JSON',
-      next_action: `直接跑一次看原因：python3 ${WEEKLY_TOOL} --ledger <账本路径> --format text（账本零新增）` } }
+      // 产品面口径（29 §21.4）：**不教用户回终端** —— 失败要给界内可点的下一步。
+      next_action: '用面板上「往前一周 / 往后一周」换一周再试一次；还是失败就看「通知中心」里这条如实报错'
+        + '（哪个读数为空、为什么），并把这条转给运维（都在界面里，不必回终端；本次账本零新增）' } }
   }
   const WEEKLY_LABELS = [['packages_published', '① 发布包数'], ['quotes_received', '② 收报价数'],
     ['award_amount_cents', '③ 授标金额'], ['gate_avg_wait_seconds', '④ 人工门平均等待'],
@@ -504,7 +506,9 @@ export async function register(surface, host) {
         if (content === '') {
           return { ok: false, code: 'report-render-missing', ledger_added: 0,
             reason: `报表里没有 ${format} 渲染结果（工具版本可能比插件旧）`,
-            next_action: `用 CLI 复跑一次确认：python3 ${WEEKLY_TOOL} --ledger <账本> --format ${format}` }
+            // 产品面口径（29 §21.4）：不教用户回终端；界内可点 = 换格式 / 换一周 / 报运维。
+            next_action: '改用另一种格式（面板上的 txt / csv / 打印 HTML 三档都点得到）'
+              + '，或「往前一周 / 往后一周」换一周再试；两次都一样就把这条转给运维（本次账本零新增）' }
         }
         return { ok: true, code: 'weekly-exported', ledger_added: 0,
           note: `导出已生成（${format}，${json.week?.iso ?? ''}）：内容 = 只读汇总器对本侧账本的聚合结果`

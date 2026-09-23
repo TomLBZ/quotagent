@@ -1,0 +1,1715 @@
+{
+ "source": "docs/work/evidence/EV-193-claims.json",
+ "stats": {
+  "total": 157,
+  "anchored": 152,
+  "gap": 0,
+  "drift": 5
+ },
+ "by_section": {
+  "§0": {
+   "total": 2,
+   "anchored": 2,
+   "gap": 0,
+   "drift": 0
+  },
+  "§1": {
+   "total": 3,
+   "anchored": 3,
+   "gap": 0,
+   "drift": 0
+  },
+  "§2": {
+   "total": 4,
+   "anchored": 4,
+   "gap": 0,
+   "drift": 0
+  },
+  "§3": {
+   "total": 5,
+   "anchored": 5,
+   "gap": 0,
+   "drift": 0
+  },
+  "§4": {
+   "total": 11,
+   "anchored": 11,
+   "gap": 0,
+   "drift": 0
+  },
+  "§7": {
+   "total": 9,
+   "anchored": 9,
+   "gap": 0,
+   "drift": 0
+  },
+  "§8": {
+   "total": 8,
+   "anchored": 8,
+   "gap": 0,
+   "drift": 0
+  },
+  "§9": {
+   "total": 4,
+   "anchored": 4,
+   "gap": 0,
+   "drift": 0
+  },
+  "§10": {
+   "total": 11,
+   "anchored": 11,
+   "gap": 0,
+   "drift": 0
+  },
+  "§11": {
+   "total": 8,
+   "anchored": 8,
+   "gap": 0,
+   "drift": 0
+  },
+  "§12": {
+   "total": 8,
+   "anchored": 6,
+   "gap": 0,
+   "drift": 2
+  },
+  "§13": {
+   "total": 7,
+   "anchored": 7,
+   "gap": 0,
+   "drift": 0
+  },
+  "§14": {
+   "total": 5,
+   "anchored": 5,
+   "gap": 0,
+   "drift": 0
+  },
+  "§15": {
+   "total": 5,
+   "anchored": 4,
+   "gap": 0,
+   "drift": 1
+  },
+  "§16": {
+   "total": 7,
+   "anchored": 7,
+   "gap": 0,
+   "drift": 0
+  },
+  "§17": {
+   "total": 8,
+   "anchored": 8,
+   "gap": 0,
+   "drift": 0
+  },
+  "§18": {
+   "total": 9,
+   "anchored": 9,
+   "gap": 0,
+   "drift": 0
+  },
+  "§19": {
+   "total": 9,
+   "anchored": 9,
+   "gap": 0,
+   "drift": 0
+  },
+  "§20": {
+   "total": 10,
+   "anchored": 9,
+   "gap": 0,
+   "drift": 1
+  },
+  "§21": {
+   "total": 6,
+   "anchored": 5,
+   "gap": 0,
+   "drift": 1
+  },
+  "§22": {
+   "total": 8,
+   "anchored": 8,
+   "gap": 0,
+   "drift": 0
+  },
+  "§23": {
+   "total": 10,
+   "anchored": 10,
+   "gap": 0,
+   "drift": 0
+  }
+ },
+ "rows": [
+  {
+   "id": "C01",
+   "section": "§0",
+   "claim": "用户原话（不是账本投影/只读路由，而是完整 GUI app）逐字留在主文件 §0",
+   "status": "承接",
+   "anchor": "docs/design/29-webui-gui-app.md:10",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C02",
+   "section": "§0",
+   "claim": "归档 §0 保留另两条原话（Teams 对照判据 + 「人类可用、易用、功能完善的产品」）",
+   "status": "承接",
+   "anchor": "docs/design/29-webui-gui-app-archive.md:174；docs/design/29-webui-gui-app-archive.md:175",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C03",
+   "section": "§1",
+   "claim": "判定标准「双方仅通过 GUI 走完全部业务流程」进了硬需求（FR/AC）",
+   "status": "承接",
+   "anchor": "docs/work/functional-requirements.md:111；docs/work/acceptance-criteria.md:108",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C04",
+   "section": "§1",
+   "claim": "允许前端框架：交互能力来自真实前端资产（不再靠「零内联脚本」判据）",
+   "status": "承接",
+   "anchor": "docs/design/29-webui-gui-app.md:23；src/system/webui/code/assets/app.js:12",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C05",
+   "section": "§1",
+   "claim": "外壳给机制（面板/动作/通知/深链），业务功能由插件注册进来",
+   "status": "承接",
+   "anchor": "src/system/webui/code/ui-surface.mjs:319；src/system/webui/code/ui-surface.mjs:287",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C06",
+   "section": "§2",
+   "claim": "旧 UI 快照门（refresh-ui-snapshots.py）已删且不复活",
+   "status": "承接",
+   "anchor": "—",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C07",
+   "section": "§2",
+   "claim": "旧 seed 门（ui-seed-pipeline.py）已删且不复活",
+   "status": "承接",
+   "anchor": "—",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C08",
+   "section": "§2",
+   "claim": "旧 ui-mutate 变异门已删且不复活",
+   "status": "承接",
+   "anchor": "—",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C09",
+   "section": "§2",
+   "claim": "AC-UXWEB-001 已按 §1/§4 重建（旧的「三块第一屏锚点 + 0 内联脚本」判据删除）",
+   "status": "承接",
+   "anchor": "docs/work/acceptance-criteria.md:108",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C10",
+   "section": "§3",
+   "claim": "外壳 = src/system/webui/code/ 的应用壳 + 动作总线（runAction → 插件服务端一半）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:3461",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C11",
+   "section": "§3",
+   "claim": "写路径不可绕过：GUI 动作只发起，落账仍走唯一写者（host.writerReceipt 派生回执）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:161；src/system/approval/code/ui.mjs:721",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C12",
+   "section": "§3",
+   "claim": "一切注册可撤销：插件卸载 ⇒ 其 UI 贡献被 dispose",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:1935",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C13",
+   "section": "§4",
+   "claim": "承包商流程可点：发包动作 rfq.publish",
+   "status": "承接",
+   "anchor": "src/domain/rfq/code/ui.mjs:731",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C14",
+   "section": "§4",
+   "claim": "承包商流程可点：比价权重（compare.save-weights）+ 排序建议",
+   "status": "承接",
+   "anchor": "src/domain/compare/code/ui.mjs:318",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C15",
+   "section": "§4",
+   "claim": "人工门动作齐：批准 gate.grant / 驳回 gate.deny / 催办 gate.nudge / 升级 gate.escalate / 终止 gate.abort",
+   "status": "承接",
+   "anchor": "src/system/approval/code/ui.mjs:632；src/system/approval/code/ui.mjs:635；src/system/approval/code/ui.mjs:780；src/system/approval/code/ui.mjs:900；src/system/approval/code/ui.mjs:909",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C16",
+   "section": "§4",
+   "claim": "授标承诺（人签）动作 award.commit 在界面上",
+   "status": "承接",
+   "anchor": "src/domain/commitments/code/ui.mjs:281",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C17",
+   "section": "§4",
+   "claim": "发 PO 动作 po.issue（人签）在界面上",
+   "status": "承接",
+   "anchor": "src/domain/commitments/code/ui.mjs:642",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C18",
+   "section": "§4",
+   "claim": "变更与价格让步动作在界面上（change 回应 / 让步人工门）",
+   "status": "承接",
+   "anchor": "src/domain/change/code/ui.mjs:204；src/system/webui/code/identity.mjs:64",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C19",
+   "section": "§4",
+   "claim": "审计与证据包可导出（evidence 插件 + host.report）",
+   "status": "承接",
+   "anchor": "src/system/evidence/code/ui.mjs:58；src/system/webui/code/app-shell.mjs:465",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C20",
+   "section": "§4",
+   "claim": "供应商流程：看包 / 备报价草稿 / 一次提交整份",
+   "status": "承接",
+   "anchor": "src/domain/quote-prepare/code/ui.mjs:8；src/domain/quote-prepare/code/ui.mjs:689",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C21",
+   "section": "§4",
+   "claim": "供应商流程：澄清提问 / 承诺交期（产能日历）/ 谈判",
+   "status": "承接",
+   "anchor": "src/domain/clarify/code/ui.mjs:21；src/domain/capacity/code/ui.mjs:4；src/domain/negotiation/code/ui.mjs:120",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C22",
+   "section": "§4",
+   "claim": "共同侧：审批队列 gate.queue / 授权区间 authority.bands / 截止看板 rfq.remind-board / 邮件通道 / 用户空间插件都有面板",
+   "status": "承接",
+   "anchor": "src/system/approval/code/ui.mjs:336；src/domain/authority-band/code/ui.mjs:15；src/domain/rfq/code/ui.mjs:917；src/system/mail/code/ui.mjs:87；src/system/user-plugin-manager/code/ui.mjs:77",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C23",
+   "section": "§4",
+   "claim": "失败时给可复制的下一步（拒绝体一律带 next_action）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:160",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C24",
+   "section": "§7",
+   "claim": "§7.1 /api/routes 的 auth 是真实值 + 给 auth_basis（按路径推导，不手抄）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/webui.mjs:3268；src/system/webui/code/identity.mjs:776",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C25",
+   "section": "§7",
+   "claim": "§7.1 门拿 /api/routes 逐条反查 auth/basis（抄的会漂）",
+   "status": "承接",
+   "anchor": "src/domain/quote-prepare/tests/check-quote-draft-route.py:467",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C26",
+   "section": "§7",
+   "claim": "§7.2 偏好/已读/布局/筛选整份落服务端（按身份）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/webui.mjs:2848；src/system/webui/code/app-shell.mjs:2501",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C27",
+   "section": "§7",
+   "claim": "§7.3 邮件通道有界内入口 POST /mail/config/（ops 侧）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/identity.mjs:1108",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C28",
+   "section": "§7",
+   "claim": "§7.3 链路 = identity-mail-apply.py（0600 待办件）→ config-apply.py 唯一落盘者",
+   "status": "承接",
+   "anchor": "src/system/webui/tools/identity-mail-apply.py:5；src/system/config/tools/config-apply.py:2",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C29",
+   "section": "§7",
+   "claim": "§7.3 凭据永不回显；/workspace/config.yaml 只读",
+   "status": "承接",
+   "anchor": "src/system/webui/code/identity.mjs:22",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C30",
+   "section": "§7",
+   "claim": "§7.4 人签动作的服务端身份门：401 identity-required / 403 signer-mismatch",
+   "status": "承接",
+   "anchor": "src/system/webui/code/identity.mjs:58；src/system/webui/tools/identity-sign.py:11",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C31",
+   "section": "§7",
+   "claim": "§7.5 一份报价 = 一次人签：单行报价 body 键集固定（12 键，逐字节不变）",
+   "status": "承接",
+   "anchor": "src/domain/quote-prepare/tools/quote-sign.py:67；tools/verify.sh:243",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C32",
+   "section": "§7",
+   "claim": "§7.5 缺行/改行有名拒绝三码（pending-tampered / line-item-not-found / draft-tampered）",
+   "status": "承接",
+   "anchor": "src/system/approval/tools/gate-actions.py:156；src/domain/quote-prepare/tools/quote-draft.py:181；src/domain/quote-prepare/tools/quote-sign.py:32",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C33",
+   "section": "§8",
+   "claim": "§8.1 名册是权威取值处：<ui_shared>/people/roster.json（0600、按侧、不进账本）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/people.mjs:17；src/system/webui/code/people.mjs:272",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C34",
+   "section": "§8",
+   "claim": "§8.2 @提及/指派/转交候选与校验同源 GET /api/people/suggest",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:4501",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C35",
+   "section": "§8",
+   "claim": "§8.2 未知名字 ⇒ unknown-colleague；跨侧 @ ⇒ cross-side-mentioned",
+   "status": "承接",
+   "anchor": "src/system/webui/code/collab.mjs:28；src/system/webui/code/collab.mjs:55",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C36",
+   "section": "§8",
+   "claim": "§8.2 登录即登记：第一次登录进名册、角色「待指派」（有名字没权限）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/people.mjs:41",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C37",
+   "section": "§8",
+   "claim": "§8.3 转交别人的活 ⇒ transfer-not-yours（服务端判据）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/collab.mjs:55",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C38",
+   "section": "§8",
+   "claim": "§8.3 额度超我角色 ⇒ role-limit-exceeded（给出金额/额度/该找哪个角色）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/people.mjs:53；src/system/webui/code/people.mjs:93",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C39",
+   "section": "§8",
+   "claim": "§8.3 有管理员之后改人/改角色/改策略只有管理员（admin-required）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/people-ui.mjs:333",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C40",
+   "section": "§8",
+   "claim": "§8.4 角色不改变签署权：额度/角色判据跑在「署名==会话身份」之后（只能否决）",
+   "status": "承接",
+   "anchor": "src/system/webui/requirements/README.md:63",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C41",
+   "section": "§9",
+   "claim": "§9 notif-state.json 0700/0600、原子写、有界、坏形状如实计数 dropped",
+   "status": "承接",
+   "anchor": "src/system/webui/code/webui.mjs:454",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C42",
+   "section": "§9",
+   "claim": "§9 notif-state 路由登记为 auth: identity（读/写各一条，按会话身份隔离）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/webui.mjs:3183",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C43",
+   "section": "§9",
+   "claim": "§9 只读路由的方法围栏：非 GET ⇒ 405 + method-not-allowed + Allow: GET",
+   "status": "承接",
+   "anchor": "src/system/webui/code/webui.mjs:142；src/system/webui/code/webui.mjs:135",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C44",
+   "section": "§10",
+   "claim": "§10.1 对象级附件按 (视图, 对象类) 声明形状 files（包/报价/PO/变更）",
+   "status": "承接",
+   "anchor": "src/system/attachments/code/ui.mjs:32；src/system/attachments/code/ui.mjs:234",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C45",
+   "section": "§10",
+   "claim": "§10.1 url 只允许本服务相对路径；外站丢掉并计数 absolute-url-refused",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:2254",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C46",
+   "section": "§10",
+   "claim": "§10.3 上传走原始字节，侧与署名只认会话",
+   "status": "承接",
+   "anchor": "src/system/attachments/code/index.mjs:9",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C47",
+   "section": "§10",
+   "claim": "§10.3 下载按侧 + 身份（越侧 403 cross-side-attachment）",
+   "status": "承接",
+   "anchor": "src/system/attachments/code/attachments.mjs:16",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C48",
+   "section": "§10",
+   "claim": "§10.3 附件 id 形状不对 ⇒ 400 attachment-id-invalid（含路径穿越）",
+   "status": "承接",
+   "anchor": "src/system/attachments/code/attachments.mjs:116",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C49",
+   "section": "§10",
+   "claim": "§10.2 附件不进账本（回执 ledger_added 恒 0）",
+   "status": "承接",
+   "anchor": "src/system/attachments/code/ui.mjs:165",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C50",
+   "section": "§10",
+   "claim": "§10.4 五条附件路由经注册面（uiRoutes）+ 只读路径带 POST 孪生 405 + Allow: GET",
+   "status": "承接",
+   "anchor": "src/system/attachments/code/index.mjs:11；src/system/attachments/code/index.mjs:3",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C51",
+   "section": "§10",
+   "claim": "§10.5 导出/打印：声明由插件给（report 贡献）、内容由插件生成 + host.report 序列化",
+   "status": "承接",
+   "anchor": "src/domain/commitments/code/ui.mjs:2000；src/system/webui/code/app-shell.mjs:465",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C52",
+   "section": "§10",
+   "claim": "§10.5 行带 ledger_seq 锚；打印走隐藏 iframe（打印文档而非界面）+ @media print 兜底",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.js:2862；src/system/webui/code/assets/app.css:472",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C53",
+   "section": "§11",
+   "claim": "§11.2 沙盘把这一侧的读/写路径整体切到沙盘目录（withSandbox）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:1091",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C54",
+   "section": "§11",
+   "claim": "§11.1 场景由插件声明（surface.scenario）；外壳不认识业务步骤",
+   "status": "承接",
+   "anchor": "src/system/webui/code/ui-surface.mjs:651；src/domain/rfq/code/ui.mjs:1492",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C55",
+   "section": "§11",
+   "claim": "§11.3 入口是两个动作 sandbox.seed / sandbox.clear（沙盘无独立路由）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:3949；src/system/webui/code/app-shell.mjs:3973",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C56",
+   "section": "§11",
+   "claim": "§11.2 状态落 <ui_shared>/sandbox/state.json（0700/0600、按会话身份分条）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:1001",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C57",
+   "section": "§11",
+   "claim": "§11.3 工作台首屏第一块面板是沙盘（order -98），两侧视图底部各一块（98）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:3947；src/system/webui/code/app-shell.mjs:3948",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C58",
+   "section": "§11",
+   "claim": "§11.4 optional:true 的步骤失败不算整条流程失败（记 optional_failures）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/ui-surface.mjs:693；src/domain/commitments/code/ui.mjs:2032",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C59",
+   "section": "§12",
+   "claim": "§12.1 ≤560px 表格变卡片（带 data-label）+ q-keep-table 逃生门",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.js:1713；src/system/webui/code/assets/app.css:375",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C60",
+   "section": "§12",
+   "claim": "§12.2 弹层在手机是全屏单页 + 按钮吸底（q-modal-body / q-modal-foot）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.css:323",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C61",
+   "section": "§12",
+   "claim": "§12.3 pointer: coarse 下可点目标 ≥44px（媒体查询在 CSS 里）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.css:330",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C62",
+   "section": "§12",
+   "claim": "§12.4 弹层打开给 #q-app 加 inert；关闭后焦点回到打开它的元素",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.js:4342",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C63",
+   "section": "§12",
+   "claim": "§12.5 对比度 ≥ WCAG AA、实测零不达标（**漂移**：原始读数里 PO 对象页有 2 处不达标）",
+   "status": "漂移（已改）",
+   "anchor": "src/system/webui/code/assets/app.css:16",
+   "missing": [],
+   "note": "",
+   "drift": "原始读数 `tmp/p7-a11y-out.txt` 的 `[390-PO对象页]` 段：228 处可见文字里 **2 处 AA-FAIL**（面包屑分隔符「›」1.51 on rgb(16,21,28)）；同文件工作台 390/1440 两宽度 858 处 0 不达标。已把主文件/归档的「零不达标」改成「工作台两宽度零不达标 + PO 对象页 1 处登记例外」。 处理：**已改**（29 主文件 §12 改「1 处例外已登记」+ 归档 §12.5 记例外与读数；CSS 属「不要改」面）。"
+  },
+  {
+   "id": "C64",
+   "section": "§12",
+   "claim": "§12.4 可访问性树里 118 个交互节点零无名（实测读数）",
+   "status": "承接",
+   "anchor": "tmp/p7-a11y-out.txt:21",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C65",
+   "section": "§13",
+   "claim": "§13.1 唯一写者 commitment-apply.py --step po 落 po/issued 后两侧各写一条 po/distributed",
+   "status": "承接",
+   "anchor": "src/domain/commitments/tools/commitment-apply.py:31",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C66",
+   "section": "§13",
+   "claim": "§13.2 收件人判据在写之前（po-recipient-unknown / po-recipient-not-the-bidder）",
+   "status": "承接",
+   "anchor": "src/domain/commitments/tools/commitment-apply.py:397；src/domain/commitments/tools/commitment-apply.py:402",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C67",
+   "section": "§13",
+   "claim": "§13.3 供应商侧 po.inbox + 对象页 po.object-received / po.object-lines-received / po.prereqs",
+   "status": "承接",
+   "anchor": "src/domain/commitments/code/ui.mjs:768；src/domain/commitments/code/ui.mjs:817；src/domain/commitments/code/ui.mjs:871；src/domain/commitments/code/ui.mjs:895",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C68",
+   "section": "§13",
+   "claim": "§13.3/5 供应商侧导出 po.export-received + 声明 report.po-received",
+   "status": "承接",
+   "anchor": "src/domain/commitments/code/ui.mjs:961；src/domain/commitments/code/ui.mjs:1019",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C69",
+   "section": "§13",
+   "claim": "§13.4 回签 = 人签人工门 po.acknowledge → --step acknowledge（幂等、不改 PO 行与价）",
+   "status": "承接",
+   "anchor": "src/domain/commitments/code/ui.mjs:928；src/domain/commitments/tools/commitment-apply.py:70",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C70",
+   "section": "§13",
+   "claim": "§13.4 侧只能来自会话：不符 ⇒ cross-side-action（不拿 ctx.view 当权威）",
+   "status": "承接",
+   "anchor": "src/system/approval/code/ui.mjs:560",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C71",
+   "section": "§13",
+   "claim": "§13.6 po/distributed 与 po/acknowledged 登记进内核事件目录",
+   "status": "承接",
+   "anchor": "src/system/kernel/code/events.py:156；src/system/kernel/code/events.py:155",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C72",
+   "section": "§14",
+   "claim": "§14.1 注册面自动加只读 expected_version；比对跑在动作服务端一半之前",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:2299",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C73",
+   "section": "§14",
+   "claim": "§14.1 受保护的三处对象类声明：quote-draft / change-response / compare-weights",
+   "status": "承接",
+   "anchor": "src/domain/quote-prepare/code/ui.mjs:782；src/domain/change/code/ui.mjs:503；src/domain/compare/code/ui.mjs:324",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C74",
+   "section": "§14",
+   "claim": "§14.1 内容会变或版本对不上 ⇒ 拒绝 object-changed（附 conflict.since / conflict.mine）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:62",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C75",
+   "section": "§14",
+   "claim": "§14.2 分享动作 share.object（不写账本/不落文件/不发邮件，产出深链 + 需求清单 + 邮件正文）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:4108",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C76",
+   "section": "§14",
+   "claim": "§14.3 导出列偏好落 export-prefs.json（0600 有界）；一列不剩 ⇒ report-columns-empty",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:1233；src/system/webui/code/app-shell.mjs:1307",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C77",
+   "section": "§15",
+   "claim": "§15 业务动作的身份只认会话（human:<名字>），不再手填 actor",
+   "status": "承接",
+   "anchor": "src/system/webui/code/identity.mjs:12",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C78",
+   "section": "§15",
+   "claim": "§15 四个自助面路由齐：登录 / 待我处理 / 人签 / 我的插件（+ 邮件配置）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/identity.mjs:1035；src/system/webui/code/identity.mjs:1063；src/system/webui/code/identity.mjs:1101；src/system/webui/code/identity.mjs:1125",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C79",
+   "section": "§15",
+   "claim": "§15 身份路由 21 条（12 条字面 + 3 侧 × 2 条 inbox + 3 个插件操作 = 21）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/identity.mjs:798；src/system/webui/code/identity.mjs:1022；src/system/webui/code/identity.mjs:1027",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C80",
+   "section": "§15",
+   "claim": "§15 负控：未登录 / 署名不符 / 替别人签 ⇒ 401/403/not-my-draft 且账本零新增",
+   "status": "承接",
+   "anchor": "src/system/webui/code/identity.mjs:59；tmp/verify-identity.py:145",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C81",
+   "section": "§15",
+   "claim": "§15 「49 条断言」（原写 48 —— 漂移，已改）",
+   "status": "漂移（已改）",
+   "anchor": "docs/design/29-webui-gui-app.md:125；tmp/verify-identity/verify.out:315",
+   "missing": [],
+   "note": "",
+   "drift": "原文档写「48 条断言」，实测 **49**：`tmp/verify-identity/verify-result.json` 的 `checks` 长 49（`failures` 0）、`tmp/verify-identity/verify.out` 末行「结果：断言 49 条，失败 0 条」。处理：**29 主文件已改为 49**（本条 probe 即修后真值）；插件 doc `src/system/webui/docs/identity-and-selfservice.md:15` 同句**登记待定**（本轮允许面外）。"
+  },
+  {
+   "id": "C82",
+   "section": "§16",
+   "claim": "§16.1 协作状态落 <ui_shared>/collab/<侧>.json（0600、按侧分片、不进账本）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/collab.mjs:392",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C83",
+   "section": "§16",
+   "claim": "§16.4 往坏容器追加 ⇒ collab-shape-malformed（只读不回写）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/collab.mjs:440",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C84",
+   "section": "§16",
+   "claim": "§16.4 坏形状如实降级：跳过 + 计数 + 原样留在文件里（读不出来 ≠ 还没有）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/collab-ui.mjs:52；src/system/webui/code/collab-ui.mjs:92",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C85",
+   "section": "§16",
+   "claim": "§16.5 卡头计数按本侧（没有会话就没有「本侧」⇒ 如实说明只算本侧）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/collab-ui.mjs:259",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C86",
+   "section": "§16",
+   "claim": "§16 复跑读数：协作面 30 条断言（tmp/p13-shots/ux/shape-test.mjs）",
+   "status": "承接",
+   "anchor": "tmp/p13-shots/ux/shape-test.mjs:50；tmp/p13-shots/ux/shape-test.mjs:51",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C87",
+   "section": "§17",
+   "claim": "§17.1 w=1 才开窗口，且响应带 query（产出/命中/页数）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:2667",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C88",
+   "section": "§17",
+   "claim": "§17.1 不带 w 的调用一字不变（整份 + 上限 600）但回执带 stats.dropped（截断不再静默）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:2356；src/system/webui/code/app-shell.mjs:2613",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C89",
+   "section": "§17",
+   "claim": "§17.2 跨插件去重：条目带 dedupe_key 才参与、先出现的赢、输者不丢信息",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:2130；src/system/webui/code/app-shell.mjs:2167",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C90",
+   "section": "§17",
+   "claim": "§17.3 未读按身份算；未登录 ⇒ unread 不猜（known:false）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:115",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C91",
+   "section": "§17",
+   "claim": "§17.4 邮件摘要偏好落 mail/notify-prefs.json（0600、默认关、按身份）",
+   "status": "承接",
+   "anchor": "src/system/mail/code/ui.mjs:27",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C92",
+   "section": "§17",
+   "claim": "§17.4 去重键 + 节流 retry_after_s=600（不写账本）",
+   "status": "承接",
+   "anchor": "src/system/mail/tools/mail-digest.py:16；src/system/mail/docs/notification-digest.md:62",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C93",
+   "section": "§17",
+   "claim": "§17 复跑读数：邮件摘要 16 条断言（tmp/p19-shots/verify-digest.py）",
+   "status": "承接",
+   "anchor": "tmp/p19-shots/verify-digest.py:36；tmp/p19-shots/verify-digest.py:134",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C94",
+   "section": "§18",
+   "claim": "§18.1 清单 <prefix>/manifest.webmanifest（display: standalone + 192/512 PNG）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/manifest.webmanifest:10；src/system/webui/code/assets/manifest.webmanifest:17",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C95",
+   "section": "§18",
+   "claim": "§18.3 数据与身份/人签/待办/邮件/运维/管理面永不缓存；非 GET 完全不拦截",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/sw.js:42；src/system/webui/code/assets/sw.js:7",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C96",
+   "section": "§18",
+   "claim": "§18.3 预缓存恰 6 个外壳条目",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/sw.js:34；src/system/webui/code/assets/sw.js:35",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C97",
+   "section": "§18",
+   "claim": "§18.3 导航到根与 /app/** network-first；离线回退不含数据的壳 + x-q-offline: 1",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/sw.js:18",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C98",
+   "section": "§18",
+   "claim": "§18.4 离线如实：横幅「离线：数据可能陈旧」+ 连接灯第四态 data-offline",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:4353；src/system/webui/code/assets/app.js:1028",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C99",
+   "section": "§18",
+   "claim": "§18.2 装机机读判据：installability_errors = []（真读数文件）",
+   "status": "承接",
+   "anchor": "tmp/p19-shots/pwa-evidence.json:31",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C100",
+   "section": "§18",
+   "claim": "§18 复跑读数：PWA 9 条断言（tmp/p19-shots/verify-pwa.py）",
+   "status": "承接",
+   "anchor": "tmp/p19-shots/verify-pwa.py:26；tmp/p19-shots/verify-pwa.py:72",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C101",
+   "section": "§19",
+   "claim": "§19.1 批量 = 逐条各跑一次唯一写者（无「一个动作落多条」旁路）",
+   "status": "承接",
+   "anchor": "src/system/approval/code/ui.mjs:651；src/domain/quote-prepare/code/ui.mjs:689",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C102",
+   "section": "§19",
+   "claim": "§19.3 逐条回执 results[]（applied|duplicates|refused）+ 部分被拒 ⇒ batch-partial",
+   "status": "承接",
+   "anchor": "src/system/approval/code/ui.mjs:763",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C103",
+   "section": "§19",
+   "claim": "§19.4 幂等（already-signed / already-applied）+ 一次上限 50（batch-too-large）+ 批量驳回必留理由",
+   "status": "承接",
+   "anchor": "src/system/approval/code/ui.mjs:692；src/system/webui/docs/approval-decisions-and-evidence.md:73",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C104",
+   "section": "§19",
+   "claim": "§19.6 批量动作的服务端一半跑在动作运行时（worker 线程 ACTION_RUNTIME_ENTRY）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:3148",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C105",
+   "section": "§19",
+   "claim": "§19.6 job_concurrency（默认 1）只排队、不拒动作",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:2820",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C106",
+   "section": "§19",
+   "claim": "§19.7 jobs.json + 只读 GET /api/ui/jobs（按身份隔离）；上一进程 running ⇒ interrupted + pending_ids",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:2823；src/system/webui/code/app-shell.mjs:2993；src/system/webui/code/app-shell.mjs:2935",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C107",
+   "section": "§19",
+   "claim": "§19 复跑读数：A–D 四组用例脚本在盘（tmp/p18-shots/verify.py）",
+   "status": "承接",
+   "anchor": "tmp/p18-shots/verify.py:7",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C108",
+   "section": "§20",
+   "claim": "§20.1 窗口协议 w/pq/only：不带就整份下发（既有脚本一字不变）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:595；src/system/webui/code/webui.mjs:2776",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C109",
+   "section": "§20",
+   "claim": "§20.2 派生计数在全集上算；matched_keys 按需给、超上限如实拒发",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:876",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C110",
+   "section": "§20",
+   "claim": "§20.4 账本只读备忘按 (路径, mtimeMs, size) 失效（不读旧值）",
+   "status": "承接",
+   "anchor": "src/system/kernel/code/ledger-view.mjs:26",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C111",
+   "section": "§20",
+   "claim": "§20.4 通知聚合短 TTL（默认 5 s，可配）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:2384",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C112",
+   "section": "§20",
+   "claim": "§20.4 渲染准入按真实事件循环滞后回 429 + Retry-After；动作/身份/偏好/健康不拒",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:1430；src/system/webui/code/app-shell.mjs:1418；src/system/webui/code/webui.mjs:2792",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C113",
+   "section": "§20",
+   "claim": "§20.5 唯一写者互斥：FIFO 票据 + wx 原子锁；超时 ⇒ writer-gate-timeout（说清持有者）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:293；src/system/webui/code/app-shell.mjs:451",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C114",
+   "section": "§20",
+   "claim": "§20.5 反证读数：去闸门 ⇒ 重复 seq 309 / ledger-frozen（**漂移**：归档指向的读数文件不存在）",
+   "status": "漂移（已改）",
+   "anchor": "tmp/p21-scale-run/webui/jobs.json:262",
+   "missing": [],
+   "note": "",
+   "drift": "归档 §20 写的路径 `tmp/p21-shots/concurrent-broken-chain.json` **不在盘上**（P36 tmp 清理后消失）；同一读数的现存原件是 `tmp/p21-scale-run/webui/jobs.json`（含 `\"code\": \"ledger-frozen\"` + 「哈希链校验失败: seq 309」）。已把归档指针改成现存路径。 处理：**已改**（归档 §20 指针换成在盘原件，并写明命中内容 `ledger-frozen` / `seq 309`）。"
+  },
+  {
+   "id": "C115",
+   "section": "§20",
+   "claim": "§20 中断恢复读数：30 份跑到第 4 份 SIGKILL ⇒ 读回 interrupted + pending 26（tmp/p23-shots/fixed-run.txt）",
+   "status": "承接",
+   "anchor": "tmp/p23-shots/fixed-run.txt:89",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C116",
+   "section": "§21",
+   "claim": "§21.1 旧只读页 retired：303 → /app/<view>/（不 404；写面与明细面保留）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/webui.mjs:115；src/system/webui/code/webui.mjs:111",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C117",
+   "section": "§21",
+   "claim": "§21.1 旧路由共 16 条（4 个子视图 × 两侧 × 页面+JSON）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/webui.mjs:116；src/system/webui/code/webui.mjs:117",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C118",
+   "section": "§21",
+   "claim": "§21.3 旧运维面退役（pipeline-view 插件文件已删）",
+   "status": "承接",
+   "anchor": "—",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C119",
+   "section": "§21",
+   "claim": "§21.4 产品面 0 命中「回终端」文案（原 rfq 动作载荷里给了 `python3` 命令 —— 漂移，已改）",
+   "status": "漂移（已改）",
+   "anchor": "—",
+   "missing": [],
+   "note": "",
+   "drift": "`src/domain/rfq/code/ui.mjs` 的**动作载荷**（不是注释）里有两处教用户回终端：周报降级分支的 `next_action`（`python3 …weekly-report.py …`）与 `report-render-missing` 分支的 CLI 复跑命令；这正是 §21.4 禁止的形态（其余命中都在源码注释里，不是产品面）。 处理：**已改**（两处都换成界内可点的下一步：换一周 / 换格式 / 看通知中心 / 转运维）；清单表保留 probe = 「插件 `code/ui.mjs` 里 0 处 `python3` 载荷」，注释命中仍会让它报红，供后续回归用。"
+  },
+  {
+   "id": "C120",
+   "section": "§21",
+   "claim": "§21.5 四个旧门（advice / rfq-deadline / gates / authority）仍在跑、判据接到 GUI",
+   "status": "承接",
+   "anchor": "tools/verify.sh:169；tools/verify.sh:176；tools/verify.sh:188；tools/verify.sh:223",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C121",
+   "section": "§22",
+   "claim": "§22.2 回执落 <ui_shared>/receipts/deliveries.json（0600、聚合、去抖 60 s、有界）",
+   "status": "承接",
+   "anchor": "src/system/attachments/code/delivery-receipts.mjs:46；src/system/attachments/code/delivery-receipts.mjs:16",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C122",
+   "section": "§22",
+   "claim": "§22.1 收件方打开即留痕，侧与人只认会话（未登录 ⇒ identity-required）",
+   "status": "承接",
+   "anchor": "src/system/attachments/code/delivery-receipts.mjs:26；src/domain/commitments/code/ui.mjs:817",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C123",
+   "section": "§22",
+   "claim": "§22.3 回执不进账本、不是数据出口（投递与回签才是账本事实）",
+   "status": "承接",
+   "anchor": "src/system/attachments/code/delivery-receipts.mjs:6",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C124",
+   "section": "§22",
+   "claim": "§22.4 周报只读、不取墙钟（as_of 缺省 = 账本最大 ts）",
+   "status": "承接",
+   "anchor": "src/domain/rfq/tools/weekly-report.py:24；src/domain/rfq/code/ui.mjs:258",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C125",
+   "section": "§22",
+   "claim": "§22.5 算不出来的行进 gate_unmatched / amount_missing 并排除出小计（不拿 0 冒充）",
+   "status": "承接",
+   "anchor": "src/system/approval/code/ui.mjs:385；src/domain/rfq/code/ui.mjs:259",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C126",
+   "section": "§22",
+   "claim": "§22.5 导出与屏幕同源（同一份报表 + ledger_refs）；周报有 report 声明",
+   "status": "承接",
+   "anchor": "src/domain/rfq/code/ui.mjs:580",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C127",
+   "section": "§22",
+   "claim": "§22 复跑脚本在盘（tmp/p26-verify.py）",
+   "status": "承接",
+   "anchor": "tmp/p26-verify.py:6",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C128",
+   "section": "§23",
+   "claim": "§23.1 插件只声明两样：入参字段来源（actionNeedsOf）+ 引用字段兜底（REFERENCE_FIELD_RE）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/ui-surface.mjs:158；src/system/webui/code/ui-surface.mjs:149",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C129",
+   "section": "§23",
+   "claim": "§23.2 /api/ui/surface 给出机读形状：needs / action_entry / guides",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:4477；src/system/webui/code/app-shell.mjs:4468",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C130",
+   "section": "§23",
+   "claim": "§23.3 工具栏只摆当前地址跑得起来的动作（partitionActions）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.js:2453",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C131",
+   "section": "§23",
+   "claim": "§23.3 缺上下文的动作进候选清单：contextCandidates / openActionEntry / rowPresetOf",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.js:3409；src/system/webui/code/assets/app.js:3462",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C132",
+   "section": "§23",
+   "claim": "§23.4 空态判据 panelHasData（counts/rows/items 可指认行才算有数据），not_data 不算",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.js:2179；src/system/projection/code/ui.mjs:16",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C133",
+   "section": "§23",
+   "claim": "§23.4 工作台叠 workbenchHasNothing（没有一条带 ref.kind+ref.id 的待办 ⇒ 没活）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.js:2201",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C134",
+   "section": "§23",
+   "claim": "§23.5 待办聚合跳过降级（degraded）面板并把跳过几块写进 data-todo-degraded-panels",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.js:2348",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C135",
+   "section": "§23",
+   "claim": "§23.6 P31 实测读数与脚本在盘（tmp/p31-shots/REPORT.md + drive.py）",
+   "status": "承接",
+   "anchor": "tmp/p31-shots/REPORT.md:1；tmp/p31-shots/drive.py:1",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C136",
+   "section": "§12",
+   "claim": "§12 复跑指针指向**在盘**的读数（**漂移**：归档指向的 tmp/p7-report.md 不存在）",
+   "status": "漂移（已改）",
+   "anchor": "tmp/p7-a11y-out.txt:13",
+   "missing": [],
+   "note": "",
+   "drift": "归档 §12 末行「测量与复跑：`tmp/p7-a11y-out.txt` 与 `tmp/p7-report.md`」—— `tmp/p7-report.md` **不在盘上**（P36 tmp 清理后消失）。已把该行改指现存读数文件 + 本证据页。 处理：**已改**（归档 §12 末行改指在盘读数 + `tmp/p7-start.sh`）。"
+  },
+  {
+   "id": "C137",
+   "section": "§3",
+   "claim": "注册面五类贡献都在（panel/action/report/scenario/guide + 通知源/状态栏项）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/ui-surface.mjs:828；src/system/webui/code/ui-surface.mjs:830",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C138",
+   "section": "§3",
+   "claim": "注册面可撤销有实现：disposePlugin / dispose（卸载后贡献消失）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/ui-surface.mjs:13",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C139",
+   "section": "§12",
+   "claim": "省跳链接是第一个 Tab 站（跳到主内容）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.js:1440",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C140",
+   "section": "§18",
+   "claim": "离线不给「可写」：SW 没有后台同步/请求重放（无 sync 事件注册）",
+   "status": "承接",
+   "anchor": "—",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C141",
+   "section": "§18",
+   "claim": "清单 URL 全相对（零外链）",
+   "status": "承接",
+   "anchor": "—",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C142",
+   "section": "§19",
+   "claim": "§19.2 动作运行时拿不到机制外的东西 ⇒ 主线程回退原样执行（io.jobs.inline_fallback 如实 +1）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:3612",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C143",
+   "section": "§10",
+   "claim": "§10.3 拒绝一律零落盘（验证脚本用「逐文件 sha256 + journal 行数前后一致」断言）",
+   "status": "承接",
+   "anchor": "tmp/p6-verify.py:190",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C144",
+   "section": "§20",
+   "claim": "§20.2 窗口行 = 全量→筛选→稳定全序排序→第 start..end 行（与全量逐行相同）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:657；src/system/webui/code/app-shell.mjs:952",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C145",
+   "section": "§11",
+   "claim": "§11.2 沙盘隔离靠「路径整体切走」（effective() 一处解析 ⇒ 没有第二条路径）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:1102",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C146",
+   "section": "§23",
+   "claim": "§23.3 命令面板（#q-palette-list）列全部动作",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.js:4457",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C147",
+   "section": "§21",
+   "claim": "§21.4 旧「回终端」文案替代物：GATE_ACTIONS（界面动作话术）而不是 GATE_COMMANDS",
+   "status": "承接",
+   "anchor": "src/domain/gate-timeline/code/gate-timeline.mjs:127",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C148",
+   "section": "§22",
+   "claim": "§22/§18 复跑脚本与读数在盘（tmp/p26-verify.py / tmp/p19-shots/verify-pwa.py 覆盖清单与只读围栏）",
+   "status": "承接",
+   "anchor": "tmp/p26-verify.py:21；tmp/p19-shots/verify-pwa.py:68",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C149",
+   "section": "§16",
+   "claim": "§16.3 显示层口径：给人看的字符串去 `human:` 前缀（逻辑判据仍用原始值）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/collab.mjs:117",
+   "missing": [],
+   "note": "显示层去前缀散布在机制（collab.mjs:117 提及渲染）与各插件的 humanName()（如 domain/rfq/code/ui.mjs:98）",
+   "drift": ""
+  },
+  {
+   "id": "C150",
+   "section": "§16",
+   "claim": "§16.3 时刻过显示层：带时区标签，不裸扔毫秒 ISO",
+   "status": "承接",
+   "anchor": "src/system/webui/code/collab.mjs:94",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C151",
+   "section": "§20",
+   "claim": "§20.3 四态互不冒充：错误态自成一种样子（绝不伪装成空列表）+ 可复制的下一步",
+   "status": "承接",
+   "anchor": "src/system/webui/code/assets/app.js:2541",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C152",
+   "section": "§19",
+   "claim": "§19.4 变更单逐行明细入口仍在（/<view>/changes/<id>/ + JSON），DEF-037 已闭合登记",
+   "status": "承接",
+   "anchor": "src/system/webui/code/webui.mjs:3103；src/domain/change/code/ui.mjs:244",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C153",
+   "section": "§23",
+   "claim": "§23.6 P31 负控读数在盘：未登录 401 / 越侧 403 / 错署名 signer-mismatch 三个用例真跑过",
+   "status": "承接",
+   "anchor": "tmp/p31-shots/log.jsonl:4；tmp/p31-shots/log.jsonl:2；tmp/p31-shots/log.jsonl:3",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C154",
+   "section": "§9",
+   "claim": "§9 只读路由围栏「先判方法、再判身份」（否则会先撞身份校验返 401 而不是 405）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/webui.mjs:153",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C155",
+   "section": "§10",
+   "claim": "§10.4 外壳那个 16 KiB 读体夹取确实存在（插件因此必须自己读正文）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/webui.mjs:2596；src/system/attachments/code/index.mjs:100",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C156",
+   "section": "§11",
+   "claim": "§11.3 sandbox.clear 只删该会话身份自己的沙盘目录（sandboxWipe(human)）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:3775；src/system/webui/code/app-shell.mjs:3989",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  },
+  {
+   "id": "C157",
+   "section": "§17",
+   "claim": "§17.2 去重在开窗口之前（tally.deduped 在聚合阶段算，计数按合并后）",
+   "status": "承接",
+   "anchor": "src/system/webui/code/app-shell.mjs:2161",
+   "missing": [],
+   "note": "",
+   "drift": ""
+  }
+ ]
+}

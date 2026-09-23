@@ -15,8 +15,9 @@ Status: accepted
 3. **文档与实现两侧都没有把这件事说全**：`docs/design/05-events.md` 只声明显式给过键名的 6 个事件，
    `approval/aborted`/`granted`/`denied`/`escalated`/`reminded` 的 body 键集**一个都没声明**；
    既有的事件门（`tools/verify.sh events`）只比**事件名与 @mode**，body 键集漂移没有任何门会发现
-   （ADR-0022 §Problem 第 3 条已实测过这条）。本批的逐字机检（`tmp/p42-shots/body-keys-audit.py`）
-   把这条缺口量化成表：`approval/*` 全族「未声明」+ 同一事件多个写者给出不同键集。
+   （ADR-0022 §Problem 第 3 条已实测过这条）。本批的逐字机检（`tmp/p42-shots/body-keys-audit.py`；
+   P44 已搬到仓内固定位置 `src/system/repo-gate/tools/body-keys-audit.py`，判据未改 —— 只加了一个可选的
+   `--json PATH`）把这条缺口量化成表：`approval/*` 全族「未声明」+ 同一事件多个写者给出不同键集。
 
 ## Decision
 

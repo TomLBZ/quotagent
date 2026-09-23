@@ -107,6 +107,26 @@ def canonical(record: dict) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def bump_counter(approvals: ApprovalService, rows: list[dict]) -> int:
+    """把批准序号推到**账本里已用过的最大序号之后**（同一判据见 `change-apply.py` / `quote-review.py` /
+    `gate-actions.py` 里的同名函数）。
+
+    为什么需要：`ApprovalService.__init__` 在 `replay()` 之后无条件 `self._counter = 0`
+    （`src/system/approval/code/approval.py`）⇒ **每个新进程都从 `ap-0001` 起**，同一账本上会出现重号的
+    批准记录（P44 实测：本文件开的门拿到 `ap-0001`，而同一份账本里已经有另一个 `ap-0001`；门对象页按
+    `approval_id` 归并行 ⇒ 两扇门会串在一起）。这里不改服务（那是它的语义），只把计数器推到安全位置。
+    """
+    highest = 0
+    for row in rows:
+        if not str(row.get("type") or "").startswith("approval/"):
+            continue
+        suffix = str(body_of(row).get("approval_id") or "").rsplit("-", 1)[-1]
+        if suffix.isdigit():
+            highest = max(highest, int(suffix))
+    approvals._counter = highest                      # noqa: SLF001 —— 下一个 request 得到 ap-(highest+1)
+    return highest
+
+
 def rows_of(path: Path) -> tuple[list[dict] | None, str | None]:
     if not path.exists():
         return [], None
@@ -527,7 +547,12 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         if ledger is None:
             return deny(deny_["code"], deny_["reason"], deny_["next_action"], step, str(request))
         assert ledger is not None
-        approvals = ApprovalService(ledger=ledger)
+        # `actor` 必须传进来：`ApprovalService.request()` 把 `self.actor` 写成
+        # `approval/requested` 那一行的 `requested_by`（`_append` 的 `record["decided_by"] or self.actor`），
+        # 不传 ⇒ 请求人被记成服务默认值 `agent:approval`（P43 实测登记的真缺陷；真实面同样如此，
+        # 不是只有沙盘）。`actor` 在本文件上面已从待办件/`--actor` 解析出来。
+        approvals = ApprovalService(ledger=ledger, actor=actor)
+        bump_counter(approvals, c_rows)
         gate = CommitmentGate(approval=approvals, ledger=ledger, actor=actor)
         seeded = seed_gate(gate, c_rows)
         if args.dry_run:
@@ -651,12 +676,13 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         if ledger is None:
             return deny(deny_["code"], deny_["reason"], deny_["next_action"], step, str(request))
         assert ledger is not None
-        approvals = ApprovalService(ledger=ledger)
+        approvals = ApprovalService(ledger=ledger, actor=actor)   # `actor`：请求人不得被记成 agent:approval
+        bump_counter(approvals, c_rows)                           # 门号不与账本里已有的重号
         gate = CommitmentGate(approval=approvals, ledger=ledger, actor=actor)
         seeded = seed_gate(gate, c_rows)
         if args.dry_run:
             # 干跑用**内存影子栈**（`ledger=None`）：把三样门都走一遍，但一个字节都不落盘
-            shadow = CommitmentGate(approval=ApprovalService(ledger=None),
+            shadow = CommitmentGate(approval=ApprovalService(ledger=None, actor=actor),
                                     ledger=None, actor=actor)
             seed_gate(shadow, c_rows)
             shadow_request = shadow.approval.request(SCOPE_AWARD, {"intent_id": intent_id}, ref=intent_id,
@@ -810,13 +836,14 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     if ledger is None:
         return deny(deny_["code"], deny_["reason"], deny_["next_action"], step, str(request))
     assert ledger is not None
-    approvals = ApprovalService(ledger=ledger)
+    approvals = ApprovalService(ledger=ledger, actor=actor)   # `actor`：请求人不得被记成 agent:approval
+    bump_counter(approvals, c_rows)                           # 门号不与账本里已有的重号
     gate = CommitmentGate(approval=approvals, ledger=ledger, actor=actor)
     seeded = seed_gate(gate, c_rows)
     po_input = [{"ref_line": line["item_id"], "qty": line["qty"], "unit_price": line["unit_price"]}
                 for line in po_lines]
     if args.dry_run:
-        shadow = CommitmentGate(approval=ApprovalService(ledger=None), ledger=None, actor=actor)
+        shadow = CommitmentGate(approval=ApprovalService(ledger=None, actor=actor), ledger=None, actor=actor)
         seed_gate(shadow, c_rows)
         shadow_request = shadow.approval.request(SCOPE_PO, {"award_id": award_id}, ref=award_id,
                                                 approvers=[actor], reason=str(record.get("reason") or ""))

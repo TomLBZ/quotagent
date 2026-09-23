@@ -75,10 +75,10 @@
 | `quote/cost-built` | emit | ✔ | `ctx.costmodel` | 成本构成建立（账本只带私域工件哈希，明细不出 realm） |
 | `quote/deviation-captured` / `quote/deviation-quantified` | emit | ✔ | `ctx.deviation` | 偏差捕捉与影响量化（未标 impact 不进 TCO） |
 | `approval/requested` | emit | ✔ | `ctx.approval` | 人工门：请求。body = 7 个基底键（`approval_id`/`scope`/`ref`/`payload_hash`/`status`/`decided_by`/`comment`）**+ 门的派分事实**（追加键 `approvers`/`timeout_policy`/`timeout_s`/`escalate_to`/`requested_at`，ADR-0022）⇒「**卡在谁 / 超时策略与倒计时 / 该催谁**」**开单后即可由账本回读**（不再只有升级/委托之后才可读）；旧行缺这些键时读侧按缺省处理，语义不变。**载荷正文与摘要不进账本**（只出 `payload_hash`）；Flag/置信度只在 `queue_view` 的服务面，不落账 |
-| `approval/granted` | emit | ✔ | `ctx.approval` | 人工门：批准（只能由人产生，绝无自动批准） |
-| `approval/denied` | emit | ✔ | `ctx.approval` | 人工门：拒绝 |
-| `approval/reminded` | emit | ✔ | `ctx.approval` | 超时策略 `remind`：仍等待人类决定（不改状态） |
-| `approval/escalated` | emit | ✔ | `ctx.approval` | 超时策略 `escalate`：转上级继续等待 |
+| `approval/granted` | emit | ✔ | `ctx.approval` | 人工门：批准（只能由人产生，绝无自动批准）。body = 7 个基底键（`approval_id`/`scope`/`ref`/`payload_hash`/`status`/`decided_by`/`comment`）+ 派分事实（`approvers`/`timeout_policy`/`timeout_s`/`escalate_to`/`requested_at`）—— 与 `approval/requested` **同一写体、同一键集**（`ApprovalService._append`，ADR-0022）。载荷正文与摘要不进账本（只出 `payload_hash`）；`gate-actions.py` 的「批准」走的也是这个服务 |
+| `approval/denied` | emit | ✔ | `ctx.approval` | 人工门：拒绝。body = 7 个基底键（`approval_id`/`scope`/`ref`/`payload_hash`/`status`/`decided_by`/`comment`）+ 派分事实（`approvers`/`timeout_policy`/`timeout_s`/`escalate_to`/`requested_at`）—— 与 `approval/requested` **同一写体、同一键集**；拒绝也要留痕（`comment` 逐字），不改载荷 |
+| `approval/reminded` | emit | ✔ | `ctx.approval` | 超时策略 `remind`：仍等待人类决定（不改状态；**绝无自动批准**）。body = 7 个基底键（`approval_id`/`scope`/`ref`/`payload_hash`/`status`/`decided_by`/`comment`）+ 派分事实（`approvers`/`timeout_policy`/`timeout_s`/`escalate_to`/`requested_at`）—— 与 `approval/requested` **同一写体、同一键集**（唯一写者是 `ApprovalService.sweep()`） |
+| `approval/escalated` | emit | ✔ | `ctx.approval` | 超时策略 `escalate`：转上级继续等待（仍不批准）。body = 7 个基底键（`approval_id`/`scope`/`ref`/`payload_hash`/`status`/`decided_by`/`comment`）+ 派分事实（`approvers`/`timeout_policy`/`timeout_s`/`escalate_to`/`requested_at`）+ 升级/委托追加键（`action`/`policy`/`escalated_to`/`escalated_by`/`escalated_at`/`last_action_at`/`reason_sha256`/`note`）—— **两个生产者键集不同且都不是新事件类型**：超时那一支由 `ApprovalService.sweep()` 写（12 键）、人的升级/委托由 `tools/gate-actions.py` 写（`**上一行 body` + 上面那 8 个追加键）；读侧按缺省处理，旧行语义不变 |
 | `approval/aborted` | emit | ✔ | `ctx.approval`（超时） / `tools/gate-actions.py --step abort`（人） | 作废本次意图（需重新发起）。body = 与 `approval/requested` **同基底**（7 键 + 派分事实键）**+ 追加键**：`action`/`status`（值 = aborted）/`aborted_by`/`aborted_at`/`last_action_at`/`reason_sha256`/**`comment`（人写的理由正文逐字，ADR-0023）**/`note` —— **「谁、何时、为什么、依据哪一行」一律可由账本回读**。两个生产者键集不同且都不新造事件类型：**超时**作废那一支没有人类理由（`comment` 空、不写 `aborted_by`）⇒ 读侧如实说「没有人写过理由」；**旧行**只有 `reason_sha256` ⇒ 读侧如实说「正文在 0600 待办件里」（旧行一字不动） |
 | `gate/nudged` | emit | ✔ | `tools/gate-nudge.py` → 双侧结算 | 有人**催办**过某个待批门（body 恰 5 键：`gate_id`/`view`/`actor`/`reason_sha256`/`ok`）—— 只记"谁在什么时候催过哪个门"，**不改门的判定状态**、不含理由正文（催办 ≠ 批准） |
 | `quote/guard-check` | bail | durable | `ctx.guard` → approval | 异常低价/漏项/产能/条款/注入检测 |
@@ -86,9 +86,9 @@
 | `terms/applied` | emit | ✔ | `ctx.terms` | 默认条款补入缺失键（标 `library-default`） |
 | `terms/conflict` | emit | ✔ | `ctx.terms` | 条款冲突标注（并列双方值 + 提请人工，绝不自动选值） |
 | `quote/human-approved` | emit | ✔ | 人工 → qep | 批准记录（不可由 agent 产生） |
-| `quote/submitted` | emit | ✔ | `ctx.qep` → compare | 报价事实（含 `rfq_rev`）；**一份报价 = 一次人签**：多行报价的逐行真值在 `lines[]`（+ `line_count`），标量 `item_id`/`unit_price_cents` 为空串/`null`（多行没有「唯一那个行项目」） |
+| `quote/submitted` | emit | ✔ | `ctx.qep` → compare | 报价事实：body 恰 16 键 = `approval_id`/`approved_by`/`currency`/`item_id`/`lead_time_days`/`package_id`/`quote_id`/`quote_draft_id`/`source`/`submitted_at`/`unit_price_cents`/`supplier`/`rfq_rev`/`lines`/`proposal_ref`，多行报价再追加 `line_count`。**一份报价 = 一次人签**：多行报价的逐行真值在 `lines[]`，标量 `item_id`/`unit_price_cents` 为空串/`null`（多行没有「唯一那个行项目」）；三个写者（供应商侧提交行、承包商侧「供应商已提交」登记行、`commitments.submit_quote`）的键集不同，逐写者形状见 `src/system/repo-gate/tools/body-keys-audit.py` 的输出 |
 | `quote/superseded` | emit | ✔ | `ctx.quotes` | 包升版后基于旧版本的报价标记过期并可重报（FR-RFQ-006） |
-| `quote/drafted` | emit | ✔ | `host/modules/quote-prepare.mjs` → `tools/quote-draft.py`（**唯一落账本者**） | 报价草稿「已准备好」（**非签名动作**：不是 `quote/submitted`）；两侧登记（供应商自己的事实 + 承包商侧的「供应商已准备报价（待签署）」）；body 不含备注正文；**一份草稿 = 一整张表**：多行草稿 body 恰 14 键（多 `lines[]`+`line_count`），单行仍是 12 键 |
+| `quote/drafted` | emit | ✔ | `host/modules/quote-prepare.mjs` → `tools/quote-draft.py`（**唯一落账本者**） | 报价草稿「已准备好」（**非签名动作**：不是 `quote/submitted`）；两侧登记（供应商自己的事实 + 承包商侧的「供应商已准备报价（待签署）」）；body 不含备注正文；**一份草稿 = 一整张表**：body 恰 14 键 = `currency`/`item_id`/`lead_time_days`/`lines_sha256`/`note_sha256`/`ok`/`prepared_by`/`quote_draft_id`/`rfq_id`/`supplier`/`unit_price_cents`/`view`，多行草稿再追加 `lines`/`line_count`（单行草稿恰好前 12 键） |
 | `capacity/committed` | emit | ✔ | `ctx.capacity` | 交期/产能承诺建立与修订（含 binding 与 revision） |
 | `capacity/firm-change-refused` | emit | ✔ | `ctx.capacity` | `firm` 交期在有效期内被模型改动 → 拒绝留痕 |
 | `capacity/conflict` | emit | ✔ | `ctx.capacity` | 产能/交期不可行 → 只提请人工（不否决、不改交期） |
@@ -124,7 +124,7 @@
 | `sync/suspended` | emit | ✔ | `ctx.sync` | 承诺字段或矩阵未覆盖字段的冲突 → 条目挂起待人工 |
 | `sync/suggestion-raised` | emit | ✔ | `ctx.sync` | 对非权威字段的本地修改转为建议（不外发，03 §4.3） |
 | `evidence/pack-exported` | emit | ✔ | `ctx.evidence` | 审计包（含 Merkle 根） |
-| `evidence/retention-archived` | `emit` | 到期归档动作落痕（T-252；判定器只管计划，落痕由执行方做） | 逐条取证；body 只出计数与哈希，**不得复活已销毁数据** |
+| `evidence/retention-archived` | `emit` | 到期归档动作落痕（T-252；判定器只管计划，落痕由执行方做） | 逐条取证；body 恰 3 键 = `target`/`sha256`/`bytes`，只出计数与哈希，**不得复活已销毁数据** |
 | `admin/block-pending` | `emit` | 阻塞进入待处理（宿主已收到用户在 UI 内提交的解决材料）——由 Python 侧写者落痕（T-265） | 逐条取证；**凭据正文与私钥一律不进账本** |
 | `userplugin/created` | `emit` | 用户在 agent panel 提出需求后，一个用户空间插件被产出并登记（body 含 `source_prompt_digest` 与产物哈希；同哈希幂等） | 逐条取证；**凭据正文与私钥一律不进账本**（只出哈希与计数） |
 | `userplugin/loaded` | `emit` | 用户空间插件被装载（独立 Context/fiber；服务键 `&lt;ns&gt;.&lt;plugin&gt;.&lt;svc&gt;`） | 逐条取证；**凭据正文与私钥一律不进账本**（只出哈希与计数） |
