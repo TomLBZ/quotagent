@@ -25,6 +25,24 @@ export const plugin_id = 'domain/clarify'
 import { createHash } from 'node:crypto'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * 工作台的卡头那句「有 N 件需要你处理」**只该算本侧**（P13 可用性修）：卡片把两侧插件贡献的待办并在一起，
+ * 而"需要你处理"必须是**你能真去办**的 —— 对面侧的条目照旧列出来（带侧标），但降级成"信息"，
+ * 并说清"这一步由哪一侧的人办"。未登录 ⇒ 没有"本侧"，一律按"信息"算（协作面会在卡上留一条"先登录"）。
+ */
+const mySideOf = (ctx) => asText(ctx?.identity?.side)
+const sideScoped = (ctx, itemSide, item) => {
+  const mine = mySideOf(ctx)
+  if (mine === itemSide) return item
+  const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
+  const why = mine === ''
+    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
+    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+  const body = asText(item.body)
+  return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
+    body: `${body}${body ? ' ' : ''}${why}` }
+}
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const typeRows = (rows, ...types) => rows.filter((row) => types.includes(String(row?.type ?? '')))
 const prefixRows = (rows, prefix) => rows.filter((row) => String(row?.type ?? '').startsWith(prefix))
@@ -635,7 +653,7 @@ export async function register(surface, host) {
   // ================================================================== 工作台 / 通知 / 状态 / 快捷键
   out.push(surface.panel({ plugin_id: me, id: 'exchange.home-todo', title: '往来与结果：我今天要做什么',
     view: 'home', order: 15, kind: 'list',
-    data: () => {
+    data: (ctx) => {
       const supplierRows = host.rows('supplier')
       const contractorRows = host.rows('contractor')
       const items = []
@@ -643,40 +661,46 @@ export async function register(surface, host) {
       const acked = new Set(typeRows(supplierRows, 'rfq/acknowledged').map((row) => asText(bodyOf(row).package_id)))
       const tokens = packages.filter((entry) => !acked.has(entry.package_id))
       if (tokens.length) {
-        items.push({ level: 'warn', title: `供应商侧：${tokens.length} 个包还没认收`,
+        items.push(sideScoped(ctx, 'supplier', { level: 'warn',
+          title: `供应商侧：${tokens.length} 个包还没认收`,
           body: tokens.map((entry) => entry.package_id).join(' '),
-          next_action: '在「我收到的包」里点「我已收到 @revN」（对方据此知道你不是没看见）' })
+          next_action: '在「我收到的包」里点「我已收到 @revN」（对方据此知道你不是没看见）' }))
       }
       const openTickets = ticketsOf(host, 'supplier').filter((ticket) => ticket.status === 'open')
       if (openTickets.length) {
-        items.push({ level: 'warn', title: `供应商侧：${openTickets.length} 个澄清工单还没有答复`,
+        items.push(sideScoped(ctx, 'supplier', { level: 'warn',
+          title: `供应商侧：${openTickets.length} 个澄清工单还没有答复`,
           body: openTickets.map((ticket) => `${ticket.ticket_id}（${ticket.question.slice(0, 40)}）`).join('；'),
-          next_action: '看「我的澄清工单」；答复由承包商侧作答后镜像回来' })
+          next_action: '看「我的澄清工单」；答复由承包商侧作答后镜像回来' }))
       }
       const lost = outcomesOf(host).mine.filter((item) => asText(item.kind) === 'lost')
       if (lost.length) {
-        items.push({ level: 'info', title: `供应商侧：有 ${lost.length} 条落标告知（本次未中选）`,
+        items.push(sideScoped(ctx, 'supplier', { level: 'info',
+          title: `供应商侧：有 ${lost.length} 条落标告知（本次未中选）`,
           body: lost.map((item) => `${item.package_id}：${item.reason_category} — ${item.notice}`).join('；'),
-          next_action: '在「落标告知」里点「我知道了」（回执让对方知道已送达）' })
+          next_action: '在「落标告知」里点「我知道了」（回执让对方知道已送达）' }))
       }
       const outcomeOpen = outcomesOf(host).mine.filter((item) => asText(item.kind) === 'po-issued')
       if (outcomeOpen.length) {
-        items.push({ level: 'info', title: `${outcomeOpen.length} 张 PO 待确认收到`,
+        items.push(sideScoped(ctx, 'supplier', { level: 'info',
+          title: `供应商侧：${outcomeOpen.length} 张 PO 待确认收到`,
           body: outcomeOpen.map((item) => item.po_id).join(' '),
-          next_action: '在「我的授标与 PO」里人签确认收到 PO' })
+          next_action: '在「我的授标与 PO」里人签确认收到 PO' }))
       }
       const contractorTickets = ticketsOf(host, 'contractor').filter((ticket) => ticket.status === 'open')
       if (contractorTickets.length) {
-        items.push({ level: 'warn', title: `承包商侧：${contractorTickets.length} 个供应商提问待回答`,
+        items.push(sideScoped(ctx, 'contractor', { level: 'warn',
+          title: `承包商侧：${contractorTickets.length} 个供应商提问待回答`,
           body: contractorTickets.map((ticket) => `${ticket.ticket_id}（${ticket.package_id}）`).join('；'),
-          next_action: '在承包商道「供应商提问工单」里作答（必须以 human:<名字>）' })
+          next_action: '在承包商道「供应商提问工单」里作答（必须以 human:<名字>）' }))
       }
       const contractorAcks = typeRows(contractorRows, 'rfq/acknowledged').length
       const contractorPromises = typeRows(contractorRows, 'rfq/promised').length
       if (contractorAcks || contractorPromises) {
-        items.push({ level: 'ok', title: `承包商侧：收到 ${contractorAcks} 条认收 / ${contractorPromises} 条回文承诺`,
+        items.push(sideScoped(ctx, 'contractor', { level: 'ok',
+          title: `承包商侧：收到 ${contractorAcks} 条认收 / ${contractorPromises} 条回文承诺`,
           body: '「谁没回」名单与 due_ts 都来自这些事实（不是墙钟）',
-          next_action: '看「供应商的往来登记」' })
+          next_action: '看「供应商的往来登记」' }))
       }
       if (!items.length) {
         items.push({ level: 'info', title: '现在没有需要你处理的往来或结果',

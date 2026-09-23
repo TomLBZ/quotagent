@@ -51,6 +51,8 @@
     notif: store.get(KEYS.notif, { read: [], muted: [], minLevel: 'info' }),
     // ④ 对比模式：每个面板勾了哪几组列
     compare: {},
+    // **服务端忙**（P13）：服务端渲染准入回的 `ui-busy` 读数（含 Retry-After 与事件循环滞后）
+    busy: null, busyNoticed: false,
     results: [],
   }
   state.notif.read = new Set(Array.isArray(state.notif.read) ? state.notif.read : [])
@@ -946,7 +948,7 @@
     ? linkOf(ref.view || state.route.view, ref.kind, ref.id) : '')
   const refLabel = (ref) => (ref && ref.title ? ref.title : (ref ? `${ref.kind} ${ref.id}` : ''))
 
-  async function getJson(path) {
+  async function getJsonOnce(path) {
     try {
       const res = await fetch(API(path), { headers: { accept: 'application/json' } })
       try { return await res.json() } catch (err) { return { ok: false, code: 'bad-json', reason: String(err) } }
@@ -954,6 +956,42 @@
       return { ok: false, code: 'offline', reason: `请求 ${path} 失败：${String(err)}`,
         next_action: '确认本服务还在跑（状态栏的连接灯），然后点顶部「重载」' }
     }
+  }
+  /**
+   * **服务端忙（429 + Retry-After）** 的如实处理（P13）：服务端的渲染准入会明确回
+   * `code:'ui-busy'` 并给出 `retry_after_ms` —— 这时**不是**"读不到数据"，而是"还没轮到我们"。
+   * 于是：① 照实提示（含事件循环滞后/阈值这两个真读数）；② 等它说的时间再试；③ 试满仍被拒，
+   * 把服务端那句话原样交给调用方去渲染错误态（**不静默成空**，也不把上一次的行清掉）。
+   */
+  const BUSY_RETRIES = 2
+  const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  /** 服务端"忙"的读数落进状态栏（连接灯说"忙"，不冒充"正常"也不冒充"失败"）。 */
+  function paintBusy() { try { renderStatus() } catch (err) { /* 只为如实显示，不影响取数 */ } }
+  function noteBusy(out, waitMs) {
+    state.busy = { code: out.code, at: new Date().toISOString(), wait_ms: waitMs,
+      loop_lag_ms: out.loop_lag_ms ?? null, shed_ms: out.shed_ms ?? null }
+    if (state.busyNoticed === true) { paintBusy(); return }
+    state.busyNoticed = true
+    paintBusy()
+    toast('warn', '服务端忙（这一条没有开始跑）',
+      `已按它给的 Retry-After 等 ${waitMs}ms 再试一次`
+      + `${Number.isFinite(out.loop_lag_ms) ? `（事件循环滞后 ${out.loop_lag_ms}ms，阈值 ${out.shed_ms}ms）` : ''}`
+      + '；这一次没有读到半份数据，界面保留上一次的读数')
+  }
+  async function getJson(path) {
+    for (let attempt = 0; attempt <= BUSY_RETRIES; attempt += 1) {
+      const out = await getJsonOnce(path)
+      if (out && out.code === 'ui-busy' && attempt < BUSY_RETRIES) {
+        const waitMs = Math.min(8000, Math.max(300, Number(out.retry_after_ms) || 1000))
+        noteBusy(out, waitMs)
+        await sleepMs(waitMs)
+        continue
+      }
+      if (out && out.code !== 'ui-busy' && state.busy) { state.busy = null; state.busyNoticed = false; paintBusy() }
+      return out
+    }
+    return { ok: false, code: 'ui-busy', reason: '服务端连续忙（已按 Retry-After 试过）',
+      next_action: '等几秒再点「重载」；连续这样说明这台服务的渲染负载超过单进程上限' }
   }
   async function postJson(path, body) {
     try {
@@ -1159,7 +1197,13 @@
   function renderStatus() {
     const route = state.route
     const deep = route.kind && route.id ? linkOf(route.view, route.kind, route.id) : linkOf(route.view)
-    const conn = state.banners.some((item) => item.kind === 'bad') ? ['连接', '有请求失败', 'bad'] : ['连接', '正常', 'ok']
+    // **服务端忙**（P13）时连接灯说"忙"（不是"正常"，也不是"失败"）：这一次请求被服务端当场拒了、
+    // 界面正在按它给的 Retry-After 重试 —— 三个状态长得不一样，互不冒充。
+    const conn = state.busy
+      ? ['连接', `服务端忙（等 ${state.busy.wait_ms}ms 重试${Number.isFinite(state.busy.loop_lag_ms)
+        ? ` · 滞后 ${state.busy.loop_lag_ms}ms` : ''}）`, 'warn']
+      : (state.banners.some((item) => item.kind === 'bad')
+        ? ['连接', '有请求失败', 'bad'] : ['连接', '正常', 'ok'])
     const statusLine = (item) => `<span class="q-st ${item.level === 'ok' ? '' : item.level}">${esc(item.title)}：`
       + `${esc(item.text)}${item.level && item.level !== 'ok'
         ? ` ${badge(item.level, item.level === 'bad' ? 'bad' : 'warn')}` : ''}</span>`

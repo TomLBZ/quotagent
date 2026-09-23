@@ -19,6 +19,24 @@
 export const plugin_id = 'domain/capacity'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * 工作台的卡头那句「有 N 件需要你处理」**只该算本侧**（P13 可用性修）：卡片把两侧插件贡献的待办并在一起，
+ * 而"需要你处理"必须是**你能真去办**的 —— 对面侧的条目照旧列出来（带侧标），但降级成"信息"，
+ * 并说清"这一步由哪一侧的人办"。未登录 ⇒ 没有"本侧"，一律按"信息"算（协作面会在卡上留一条"先登录"）。
+ */
+const mySideOf = (ctx) => asText(ctx?.identity?.side)
+const sideScoped = (ctx, itemSide, item) => {
+  const mine = mySideOf(ctx)
+  if (mine === itemSide) return item
+  const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
+  const why = mine === ''
+    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
+    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+  const body = asText(item.body)
+  return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
+    body: `${body}${body ? ' ' : ''}${why}` }
+}
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const typeRows = (rows, ...types) => rows.filter((row) => types.includes(String(row?.type ?? '')))
 const daysBetween = (from, to) => {
@@ -283,27 +301,30 @@ export async function register(surface, host) {
   // ================================================================== 工作台 / 通知 / 状态 / 快捷键
   out.push(surface.panel({ plugin_id: me, id: 'exchange.capacity-home', title: '产能与交期：我今天要做什么',
     view: 'home', order: 18, kind: 'list',
-    data: () => {
+    data: (ctx) => {
       const state = stateOf(host, 'supplier')
       const items = []
       if (!state.calendar.size) {
-        items.push({ level: 'warn', title: '供应商侧：还没有产能日历',
+        items.push(sideScoped(ctx, 'supplier', { level: 'warn', title: '供应商侧：还没有产能日历',
           body: '没有日历就没有可行性试算（承诺交期时给不出"够不够"的结论）',
-          next_action: '用「设置产能日历」填几天的可用产量（私域，不外发）' })
+          next_action: '用「设置产能日历」填几天的可用产量（私域，不外发）' }))
       } else {
-        items.push({ level: 'ok', title: `供应商侧：产能日历已设置 ${state.calendar.size} 天`,
-          body: '承诺交期时会按窗口实时试算（需要量 vs 日历可用）', next_action: '去承诺交期' })
+        items.push(sideScoped(ctx, 'supplier', { level: 'ok',
+          title: `供应商侧：产能日历已设置 ${state.calendar.size} 天`,
+          body: '承诺交期时会按窗口实时试算（需要量 vs 日历可用）', next_action: '去承诺交期' }))
       }
       for (const conflict of state.conflicts) {
-        items.push({ level: 'warn', title: `供应商侧：承诺 ${asText(conflict.commitment_id)} 不可行（产能冲突）`,
+        items.push(sideScoped(ctx, 'supplier', { level: 'warn',
+          title: `供应商侧：承诺 ${asText(conflict.commitment_id)} 不可行（产能冲突）`,
           body: `需要 ${conflict.required}，日历可用 ${conflict.available}（缺口 ${conflict.shortfall}）`,
-          next_action: '去「冲突提醒」点进那个承诺：或缩量、或改期（firm 只能由人改期留痕）' })
+          next_action: '去「冲突提醒」点进那个承诺：或缩量、或改期（firm 只能由人改期留痕）' }))
       }
       const firm = state.commitments.filter((item) => asText(item.binding) === 'firm')
       if (firm.length) {
-        items.push({ level: 'info', title: `${firm.length} 条 firm（已定）交期`,
+        items.push(sideScoped(ctx, 'supplier', { level: 'info',
+          title: `供应商侧：${firm.length} 条 firm（已定）交期`,
           body: firm.map((item) => `${asText(item.commitment_id)} → ${asText(item.delivery_date)}`).join('；'),
-          next_action: '已定交期不可原地改；要改走「改期」（human:*，留痕）' })
+          next_action: '已定交期不可原地改；要改走「改期」（human:*，留痕）' }))
       }
       return { ok: true, kind: 'list', items }
     } }))

@@ -15,11 +15,54 @@
  * 协作数据只落 `<ui_shared>/collab/<side>.json`（0600），**不进账本、不进投影、不进模型输入**
  * （理由逐条写在 `collab.mjs` 文件头）。
  */
+// 显示口径（`@名字` / 人话时间）与协作存储**同一份实现**，别在这里再写一份（重复即漂移）。
+import { nameOf, atLabel, pretty } from './collab.mjs'
+
 export const COLLAB_PLUGIN_ID = 'system/collab'
 /** 对象页上面板顺序：排在业务面板之后（不抢对象页头，也不挡别人的表）。 */
 const OBJECT_PANEL_ORDER = 900
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * 显示口径与协作存储**同一份实现**（`collab.mjs` 里导出）：`human:limin` → `@limin`、
+ * 毫秒 ISO → `2026-09-23 08:50（UTC+08:00）`。**别在这里再写一份**（重复即漂移）。
+ * 为什么要这一层：P13 走查实测协作面板把 `human:limin` 与 `2026-09-23T00:48:52.624Z` 当人名/时间显示，
+ * 而同屏的「同事」行写的是漂亮的 `@limin（主管 · 在线）` ⇒ 同一屏两种口径，自相矛盾。
+ * **逻辑判据用原始值**（`by`/`to`/`watchers[]` 仍是 `human:<名字>`），只有**给人看的字符串**过这一层。
+ */
+const show = (value) => pretty(value)
+const at = (iso) => atLabel(iso)
+const who = (human) => `@${nameOf(human)}`
+
+/**
+ * 面板上"这块读得不完整"的**如实降级行** —— 不是静默空着。
+ * 一行一条、**值都短**（长句进 `next_action`）：值列在窄列里换行会难看，可读性也是这一条要求的一部分。
+ */
+const shapeItems = (shape) => {
+  if (!shape) return []
+  // kv 面板的**值列在窄屏上只有几十像素**（三列布局）：一长串会把字挤成一列一个字。
+  // 所以降级说明**不塞进值里**，而是走面板的 `note`（整行）+ `next_action`（整行）—— 两者都自然换行。
+  if (shape.broken) {
+    return [{ key: '⚠ 这份协作文件读不出来（不是"没有协作记录"）', code: true,
+      value: '原因与修法见下方提示' }]
+  }
+  return [{ key: `⚠ 有 ${shape.dropped_total} 处坏形状（已跳过，不是"没有"）`, code: true,
+    value: '逐条说明见下方提示' }]
+}
+/** 一句话摘要（进面板的 `note`，整行、可换行）。 */
+const shapeNote = (shape) => (shape
+  ? (shape.broken
+    ? `⚠ 协作文件读不出来（${shape.broken.code}）：${show(shape.broken.reason)}｜文件 ${shape.broken.file}`
+    : `⚠ 有 ${shape.dropped_total} 处坏形状（已跳过，不是"没有"）：`
+      + [...new Set((shape.problems ?? []).map((problem) => problem.field))].slice(0, 6).join('、')
+      + `${(shape.problems ?? []).length > 6 ? ' …' : ''}`)
+  : '')
+/** 面板 `next_action` 里那段**完整**的降级说明（逐条 why + 该长什么样 + 怎么修）。 */
+const shapeExplain = (shape) => (shape
+  ? `${(shape.problems ?? []).map((problem) => `${problem.field}：${show(problem.why)}（跳过 ${problem.dropped} 处）`).join('；')}`
+    + `${(shape.problems ?? []).length ? '｜' : ''}${show(shape.how_to_fix)}`
+  : '')
 
 /**
  * @param {object} options
@@ -68,12 +111,16 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
     }
     const assignment = data.assignment
     const watchers = data.watchers.map((item) => `@${item.name}${item.me ? '（你）' : ''}`)
+    const shape = data.shape ?? null
     const items = [
+      // 人名与时刻都走**同一套显示口径**（`@limin（你）· 由 @wanglei 指派 · 2026-09-23 08:50（UTC+08:00）`）：
+      // 原始值（`human:limin` / 毫秒 ISO）只留在回执与文件里，不上界面。
       { key: '当前指派', value: assignment
-        ? `${assignment.to}${assignment.to === me.human ? '（你）' : ''}（${assignment.by} 指派 @ ${assignment.at}）`
+        ? `${who(assignment.to)}${assignment.to === me.human ? '（你）' : ''}`
+          + `（由 ${who(assignment.by)} 指派 · ${at(assignment.at)}）`
         : '（未指派：还没有人把这件事交给谁）', code: Boolean(assignment) },
       { key: '为什么交办 / 截止', value: assignment
-        ? `${assignment.reason}${assignment.due ? `｜截止 ${assignment.due}` : '｜未写截止'}` : '—' },
+        ? `${show(assignment.reason)}${assignment.due ? `｜截止 ${at(assignment.due)}` : '｜未写截止'}` : '—' },
       { key: '关注这个对象的人', value: watchers.length
         ? `${watchers.join(' ')}（共 ${watchers.length} 人；${data.watching ? '你也在其中' : '你还没关注'}）`
         : '还没有人关注（关注只影响自己：关注后的新活动进你通知中心的「我的」）' },
@@ -91,11 +138,15 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
       { key: '协作数据落在哪', value: `${data.storage.file}（${data.storage.mode}；按侧隔离，不进账本）`,
         code: true },
     ]
+    items.push(...shapeItems(shape))        // ⚠ 如实降级：哪几个字段读不出来 + 该长什么样（修法在 next_action）
     return { ok: true, kind: 'kv', items, counts: data.counts,
-      degraded: data.found !== true,
-      reason: data.found === true ? null : 'no-collab-yet',
-      next_action: assignment ? '办完用「指派 / 转交」交给下一个人（附原因与截止），或「标为已读」'
-        : '工具栏「指派 / 转交」把这件事交给同侧同事（写清原因与截止）' }
+      degraded: data.found !== true || Boolean(shape),
+      note: shapeNote(shape),
+      reason: shape ? (shape.broken ? shape.broken.code : 'collab-shape-bad-fields')
+        : (data.found === true ? null : 'no-collab-yet'),
+      next_action: shape ? `${shape.broken ? show(shape.how_to_fix) : shapeExplain(shape)}｜${shape.next_action}`
+        : (assignment ? '办完用「指派 / 转交」交给下一个人（附原因与截止），或「标为已读」'
+          : '工具栏「指派 / 转交」把这件事交给同侧同事（写清原因与截止）') }
   }
 
   // ------------------------------------------------------------------ ② 对象页：评论与活动流（谁在什么时候做了什么）
@@ -116,25 +167,39 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
     }
     const items = []
     for (const comment of [...data.comments].reverse()) {
+      // **同屏一致**：这里显示 `@limin`（与左边的「同事」行同一口径），不是 `human:limin`
       items.push({ level: comment.mentions_me ? 'warn' : (comment.mine ? 'ok' : 'info'),
-        title: `${comment.by} 评论${comment.mentions_me ? '（@了你）' : ''}`
-          + `${comment.mentions.length ? `，@ ${comment.mentions.join(' ')}` : ''}`,
+        title: `${who(comment.by)} 评论${comment.mentions_me ? '（@了你）' : ''}`
+          + `${comment.mentions.length ? `，@ ${comment.mentions.map((human) => nameOf(human)).join(' ')}` : ''}`,
         body: comment.body, at: comment.at,
         next_action: comment.mine ? '' : '工具栏「评论 / @同事」回复（写 @<名字> 会再通知到他）' })
     }
     const words = { assigned: '指派', reassigned: '转交', watched: '开始关注', unwatched: '取消关注' }
     for (const event of data.events.slice(0, 40)) {
       if (event.type === 'commented') continue          // 评论已经单独列过了
-      items.push({ level: 'info', title: `${event.by}：${words[event.type] ?? event.type}`,
-        body: event.summary, at: event.at })
+      items.push({ level: 'info', title: `${who(event.by)}：${words[event.type] ?? event.type}`,
+        body: show(event.summary), at: event.at })
+    }
+    const shape = data.shape ?? null
+    if (shape?.broken) {
+      items.push({ level: 'bad', title: `协作记录读不出来（${shape.broken.code}）`,
+        body: `${show(shape.broken.reason)}｜文件 ${shape.broken.file}`,
+        next_action: shape.broken.next_action })
+    } else if (shape) {
+      items.push({ level: 'warn', title: `有 ${shape.dropped_total} 处协作记录的形状读不出来（已跳过，不是"没有"）`,
+        body: (shape.problems ?? []).slice(0, 5).map((problem) =>
+          `${problem.object} 的 ${problem.field}（${show(problem.why)}）`).join('；'),
+        next_action: shape.next_action })
     }
     return { ok: true, kind: 'list', items, reason: items.length ? null : 'no-collab-activity',
-      next_action: items.length ? '' : '还没有人在这里说过话：用工具栏「评论 / @同事」写第一句（同侧可见）',
+      degraded: Boolean(shape),
+      next_action: shape ? `${shape.broken ? show(shape.how_to_fix) : shapeExplain(shape)}｜${shape.next_action}`
+        : (items.length ? '' : '还没有人在这里说过话：用工具栏「评论 / @同事」写第一句（同侧可见）'),
       counts: { comments: data.counts.comments, events: data.counts.events,
         dropped_comments: data.counts.dropped_comments },
-      note: data.counts.dropped_comments
+      note: [shapeNote(shape), data.counts.dropped_comments
         ? `有界：单对象只留最近 200 条评论，更早的 ${data.counts.dropped_comments} 条已滚出（如实报数，不假装还在）`
-        : '' }
+        : ''].filter(Boolean).join('｜') }
   }
 
   // ------------------------------------------------------------------ ③ 工作台：我的 / 我指派的 / 全部
@@ -143,27 +208,45 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
     const me = meOf(ctx)
     if (!store) return { ok: true, kind: 'list', degraded: true, reason: 'collab-mechanism-missing', items: [] }
     if (!me) {
+      // **未登录**：工作台把两侧的待办并在一张卡上，卡头那句「有 N 件需要你处理」按本侧算 ——
+      // 没有会话身份就没有"本侧" ⇒ 别的面板在这条上都会降成"信息"，这里**只留一条 warn**：
+      // "先登录才知道哪些是你的"。这是**如实**的：没登录谁也办不了（业务动作一律被拒）。
       return { ok: true, kind: 'list', degraded: true, reason: 'identity-required',
         next_action: '顶栏「身份」→ 去登录：登录后这里按「我的 / 我指派的」列出同侧同事交给你的活',
-        items: [{ level: 'info', title: '协作（指派 / 关注 / 评论）只在同一侧登录的人之间发生',
+        items: [{ level: 'warn', title: '未登录：先登录才知道哪些待办属于你（这一侧的卡头计数只算本侧）',
           body: `当前地址：${ctx?.route?.view ?? view}；未登录时读不到任何人的指派`
-            + '（按会话侧隔离，不是"没有"）' }] }
+            + '，工作台上别的面板的待办也都只作为"信息"列出（按会话侧隔离，不是"没有"）',
+          next_action: '顶栏「身份」→ 去登录（human:<名字> + 属于哪一侧）' }] }
     }
     const data = store.hub({ side: me.side, actor: me.human })
     if (!data.ok) {
       return { ok: true, kind: 'list', degraded: true, reason: data.code, next_action: data.next_action, items: [] }
     }
-    return { ok: true, kind: 'list',
-      items: data.items.map((item) => ({ id: item.id, level: item.level, title: item.title, body: item.body,
-        next_action: item.next_action, ref: item.ref, action: item.action, label: item.label, at: item.at,
-        // 桶（过滤维度）：`mine`=我的、`assigned`=我指派的 ⇒ 界面出「我的 / 我指派的 / 全部」筛选片
-        bucket: item.bucket, bucket_label: item.bucket_label })),
+    const shape = data.shape ?? null
+    const items = data.items.map((item) => ({ id: item.id, level: item.level, title: item.title, body: item.body,
+      next_action: item.next_action, ref: item.ref, action: item.action, label: item.label, at: item.at,
+      // 桶（过滤维度）：`mine`=我的、`assigned`=我指派的 ⇒ 界面出「我的 / 我指派的 / 全部」筛选片
+      bucket: item.bucket, bucket_label: item.bucket_label }))
+    if (shape?.broken) {
+      items.push({ level: 'bad', title: `协作记录读不出来（${shape.broken.code}）——「我的」现在读不到任何一条`,
+        body: `${show(shape.broken.reason)}｜文件 ${shape.broken.file}`,
+        next_action: shape.broken.next_action })
+    } else if (shape) {
+      items.push({ level: 'warn', title: `有 ${shape.dropped_total} 处协作记录的形状读不出来（已跳过，不是"没有"）`,
+        body: (shape.problems ?? []).slice(0, 5).map((problem) =>
+          `${problem.object} 的 ${problem.field}（${show(problem.why)}）`).join('；'),
+        next_action: shape.next_action })
+    }
+    return { ok: true, kind: 'list', items,
+      degraded: Boolean(shape),
       buckets: data.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, count: bucket.count })),
-      counts: data.counts, reason: data.items.length ? null : 'no-collab-for-you',
-      next_action: data.items.length
-        ? '每一行的「打开」进对象页；「我的」= 别人交给你的活，「我指派的」= 你交出去的活现在怎么样了'
-        : '还没有协作项：打开一个对象页（包/报价/门/变更），用工具栏「指派 / 转交」把活交给同侧同事',
-      note: `协作存储：${data.storage.file}（0600，按侧隔离；不进账本）` }
+      counts: data.counts, reason: items.length ? null : 'no-collab-for-you',
+      next_action: shape ? `${shape.broken ? show(shape.how_to_fix) : shapeExplain(shape)}｜${shape.next_action}`
+        : (data.items.length
+          ? '每一行的「打开」进对象页；「我的」= 别人交给你的活，「我指派的」= 你交出去的活现在怎么样了'
+          : '还没有协作项：打开一个对象页（包/报价/门/变更），用工具栏「指派 / 转交」把活交给同侧同事'),
+      note: [shapeNote(shape), `协作存储：${data.storage.file}（0600，按侧隔离；不进账本）`]
+        .filter(Boolean).join('｜') }
   }
 
   // ------------------------------------------------------------------ 注册（可撤销 / 可对账）

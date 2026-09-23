@@ -5,6 +5,7 @@
 本页回答四件事：**长列表在规模下怎么用**（查询条 / 服务端窗口 / 窗口化渲染）、**机制的口径与声明**
 （插件要做什么、外壳做了什么、请求长什么样）、**可复跑的数字**（首屏字节数 / 行数 / 耗时 / DOM 节点数 /
 逐项对账 / 负控），以及**边界**。本批（P11）的原始读数与截图见 `tmp/p11-shots/`，复跑命令见 §7。
+**并发下**的表现（卡死定位 / 渲染背压 / 通知缓存 / 账本只读备忘）另见 `performance-under-concurrency.md`（P13）。
 
 ## 0. 一句话口径
 
@@ -161,7 +162,7 @@ GET /api/ui/object?view=<视图>&kind=<对象类>&id=<id>&w=1&pq=…
 
 ```bash
 python3 tmp/p10-seed.py                                     # 造规模（≥200 包 / ≥900 报价 / 7000+ 历史行）
-sh tmp/p11-start.sh 8396 /workspace/projects/quotagent/tmp/p11-run   # 起服务（数据目录 = tmp/p10-run 的副本）
+sh tmp/p11-start.sh 8396 $(pwd)/tmp/p11-run   # 起服务（数据目录 = tmp/p10-run 的副本）
 python3 tmp/p11-reconcile.py                                # HTTP 层对账（132 条，退出码 0 = 全过）
 python3 tmp/p11-negative.py                                 # 负控 11 条（未登录/越侧/账本零变化）
 # 浏览器侧（真点真量；在浏览器会话里 exec）：

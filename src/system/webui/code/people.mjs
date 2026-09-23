@@ -121,33 +121,155 @@ export function createPeopleStore({ root = '.', sharedDir, sessionsFile = '', si
 
   const emptyDoc = () => ({ schema: PEOPLE_SCHEMA, roles: DEFAULT_ROLES.map((role) => ({ ...role })),
     members: {}, policy: JSON.parse(JSON.stringify(DEFAULT_POLICY)), updated_at: '',
-    note: PEOPLE_WHY_NOT_LEDGER })
+    note: PEOPLE_WHY_NOT_LEDGER, sanitized: { counts: {}, problems: [], dropped_total: 0, fields: {},
+      read_only: true }, broken: null, policy_degraded: false })
+  /** 名册文件**整体**读不出来（JSON 坏了 / 顶层不是对象 / `members` 不是对象）时的**如实降级**读数。 */
+  const brokenDoc = (code, reason) => {
+    const doc = emptyDoc()
+    doc.broken = { code, reason, file: relative(resolve(String(root ?? '.')), file),
+      how_to_fix: '名册是**配置**（不是账本）：把它改回这份形状即可 —— '
+        + '`{"schema":"quotagent/people-roster/v1","roles":[…],"members":{"<名字>":{…}},"policy":{…}}`；'
+        + '名册面每次渲染都真读盘、**不缓存** ⇒ 改好下一次刷新就自动恢复（也可以直接删掉这个文件：会回到出厂角色表、0 成员）。',
+      next_action: `${relative(resolve(String(root ?? '.')), file)} 读不出来：修好它或删掉它（面板会自动恢复）` }
+    return doc
+  }
 
+  /**
+   * 读名册文件（**每次真读盘、不缓存** ⇒ 改对之后下一次渲染自动恢复）。
+   * 坏形状的字段：能读的照读、读不懂的**跳过并如实计数**（`doc.sanitized`）—— 绝不因为一个坏字段
+   * 把「人员名册与角色」面板打成异常，也绝不把"文件坏了"说成"名册是空的"（那是撒谎）。
+   */
   const load = () => {
+    let parsed = null
     try {
-      const parsed = JSON.parse(readFileSync(file, 'utf8'))
-      if (!plain(parsed)) return emptyDoc()
-      const doc = emptyDoc()
-      // `roles` 落盘是**数组**（顺序即展示顺序）；也接受对象形式（手改过/别的版本写过）——两种都读。
-      const rawRoles = Array.isArray(parsed.roles) ? parsed.roles
-        : (plain(parsed.roles) ? Object.values(parsed.roles) : [])
-      const roles = rawRoles.filter((role) => plain(role) && ROLE_ID_RE.test(text(role.id)))
-      if (roles.length) doc.roles = roles
-      if (plain(parsed.members)) doc.members = parsed.members
-      if (plain(parsed.policy)) doc.policy = { ...doc.policy, ...parsed.policy }
-      doc.updated_at = text(parsed.updated_at)
-      return doc
-    } catch (err) { return emptyDoc() }
+      parsed = JSON.parse(readFileSync(file, 'utf8'))
+    } catch (err) {
+      if (err && err.code === 'ENOENT') return emptyDoc()      // 还没写过：真的"还没有"
+      return brokenDoc('roster-file-unreadable', flat(err))
+    }
+    if (!plain(parsed)) {
+      return brokenDoc('roster-file-not-an-object',
+        `顶层不是对象（收到 ${Array.isArray(parsed) ? 'array' : typeof parsed}）`)
+    }
+    if (parsed.members !== undefined && !plain(parsed.members)) {
+      return brokenDoc('roster-members-not-an-object',
+        '`members` 不是对象（它要是「名字 → 一行成员」的键值表）')
+    }
+    const doc = emptyDoc()
+    const dropped = {}
+    const problems = []
+    let policyDegraded = false
+    const note = (field, why, count, container = false) => {
+      if (!count) return
+      dropped[field] = (dropped[field] ?? 0) + count
+      if (problems.length < 20) problems.push({ field, why, dropped: count, container })
+    }
+    // ---- 角色表：数组（顺序即展示顺序）或对象（手改过/别的版本写过）两种都收；坏行跳过并计数 ----------
+    if (parsed.roles !== undefined && !Array.isArray(parsed.roles) && !plain(parsed.roles)) {
+      note('roles', '不是数组也不是对象（已忽略，用出厂角色表）', 1, true)
+    }
+    const rawRoles = Array.isArray(parsed.roles) ? parsed.roles
+      : (plain(parsed.roles) ? Object.values(parsed.roles) : [])
+    const roles = []
+    for (const role of rawRoles) {
+      if (!plain(role) || !ROLE_ID_RE.test(text(role.id))) { note('roles', '角色行没有合法的 `id`（已跳过）', 1); continue }
+      const limit = role.approval_limit_cents
+      const asLimit = limit === null || limit === undefined || limit === '' ? null : Number(limit)
+      const okLimit = asLimit === null || (Number.isFinite(asLimit) && asLimit >= 0)
+      if (!okLimit) note('roles.approval_limit_cents', '额度不是整数分（**按 0 处理**：不批超额，而不是"不限"）', 1)
+      roles.push({ id: text(role.id), label: flat(role.label, MAX_TEXT) || text(role.id),
+        rank: Number.isFinite(Number(role.rank)) ? Number(role.rank) : 0,
+        approval_limit_cents: okLimit ? asLimit : 0, note: flat(role.note, MAX_NOTE) })
+    }
+    if (roles.length) doc.roles = roles
+    // ---- 成员表：一行一个人；形状不对的行**跳过并计数**（不把一行当成两个人、也不假装名册是空的） --------
+    for (const [key, member] of Object.entries(parsed.members ?? {})) {
+      if (!plain(member)) { note('members', `\`${key}\` 那一行不是对象（已跳过）`, 1); continue }
+      const name = text(member.name) || nameOf(key)
+      if (!NAME_RE.test(name)) { note('members', `\`${key}\` 的名字形状不合法（已跳过）`, 1); continue }
+      const rawReports = text(member.reports_to).replace(/^human:/, '')
+      if (rawReports !== '' && !NAME_RE.test(rawReports)) {
+        note('members.reports_to', `\`${key}\` 的直属上级不是名字（已置空）`, 1)
+      }
+      doc.members[name] = { name, side: text(member.side), role: text(member.role),
+        title: flat(member.title, MAX_TEXT), reports_to: NAME_RE.test(rawReports) ? rawReports : '',
+        active: member.active !== false, source: text(member.source) || 'roster',
+        first_at: text(member.first_at), last_at: text(member.last_at) }
+    }
+    // ---- 策略（偏好）：**逐块校验**；形状不对就回到出厂策略并如实计数（不把坏形状塞进判据里） ----------
+    const rawPolicy = plain(parsed.policy) ? parsed.policy : {}
+    if (parsed.policy !== undefined && !plain(parsed.policy)) {
+      note('policy', '不是对象（已用出厂策略）', 1, true)
+    }
+    if (rawPolicy.transfer !== undefined) {
+      if (!plain(rawPolicy.transfer)) {
+        note('policy.transfer', '不是对象（`{enabled, actions, override_roles}`）—— 已用出厂策略', 1, true)
+        policyDegraded = true
+      } else {
+        const raw = rawPolicy.transfer.override_roles
+        if (raw !== undefined && !Array.isArray(raw)) {
+          note('policy.transfer.override_roles', '不是数组（已忽略：**默认只有归我/我指派的能转交**）', 1, true)
+          policyDegraded = true
+        }
+        doc.policy.transfer = { ...doc.policy.transfer, enabled: rawPolicy.transfer.enabled !== false,
+          actions: Array.isArray(rawPolicy.transfer.actions) ? rawPolicy.transfer.actions.map(text).filter(Boolean)
+            : doc.policy.transfer.actions,
+          override_roles: Array.isArray(raw) ? raw.map(text).filter(Boolean) : [] }
+      }
+    }
+    if (rawPolicy.amount_limit !== undefined) {
+      if (!plain(rawPolicy.amount_limit)) {
+        note('policy.amount_limit', '不是对象（`{enabled, rules}`）—— 已用出厂策略', 1, true)
+        policyDegraded = true
+      } else {
+        const rawRules = rawPolicy.amount_limit.rules
+        if (rawRules !== undefined && !plain(rawRules)) {
+          note('policy.amount_limit.rules', '不是对象（已忽略：这些动作的额度检查现在**不生效**）', 1, true)
+          policyDegraded = true
+        }
+        const rules = {}
+        for (const [actionId, rule] of Object.entries(plain(rawRules) ? rawRules : {})) {
+          const fact = plain(rule) && plain(rule.fact) ? rule.fact : null
+          const unit = fact ? (text(fact.unit) || 'minor') : ''
+          const ok = plain(rule) && fact && text(rule.object_field) !== '' && text(fact.type) !== ''
+            && text(fact.id_field) !== '' && text(fact.amount_key) !== '' && ['major', 'minor'].includes(unit)
+          if (!ok) {
+            note('policy.amount_limit.rules', `规则 \`${actionId}\` 形状不对（已忽略：这个动作的额度检查不生效）`, 1)
+            policyDegraded = true
+            continue
+          }
+          rules[text(actionId)] = { object_field: text(rule.object_field), note: flat(rule.note, MAX_NOTE),
+            fact: { type: text(fact.type), id_field: text(fact.id_field), amount_key: text(fact.amount_key), unit } }
+        }
+        doc.policy.amount_limit = { ...doc.policy.amount_limit, enabled: rawPolicy.amount_limit.enabled !== false,
+          rules,
+          unknown_amount: ['refuse', 'allow'].includes(text(rawPolicy.amount_limit.unknown_amount))
+            ? text(rawPolicy.amount_limit.unknown_amount) : doc.policy.amount_limit.unknown_amount }
+      }
+    }
+    doc.updated_at = text(parsed.updated_at)
+    doc.sanitized = { counts: dropped, problems,
+      dropped_total: Object.values(dropped).reduce((sum, n) => sum + Number(n || 0), 0),
+      fields: { roles: '数组（每行 `{id, label, rank, approval_limit_cents, note}`）',
+        members: '对象：名字 → `{name, side, role, title, reports_to, active, source}`',
+        'policy.transfer': '对象 `{enabled, actions[], override_roles[]}`',
+        'policy.amount_limit': '对象 `{enabled, rules:{"<动作 id>":{object_field, fact:{type,id_field,amount_key,unit}}}}`' },
+      read_only: true }
+    doc.policy_degraded = policyDegraded
+    return doc
   }
   /** 原子写：临时文件 → `chmod 0600` → rename（不受 umask 影响；与身份会话同一口径）。 */
   const save = (doc) => {
     doc.schema = PEOPLE_SCHEMA
     doc.note = PEOPLE_WHY_NOT_LEDGER
+    // **派生读数不进文件**（`sanitized`/`broken`/`policy_degraded` 是这一次读的结论，不是配置）。
+    const clean = { schema: PEOPLE_SCHEMA, roles: doc.roles, members: doc.members, policy: doc.policy,
+      updated_at: text(doc.updated_at), note: PEOPLE_WHY_NOT_LEDGER }
     try {
       mkdirSync(dir, { recursive: true, mode: 0o700 })
       try { chmodSync(dir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
       const tmp = join(dir, `.${PEOPLE_FILE}.${process.pid}.tmp`)
-      writeFileSync(tmp, JSON.stringify(doc, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
+      writeFileSync(tmp, JSON.stringify(clean, null, 1) + '\n', { encoding: 'utf8', mode: 0o600 })
       chmodSync(tmp, 0o600)
       renameSync(tmp, file)
       return { ok: true, file: relative(resolve(String(root ?? '.')), file), mode: '0600' }
@@ -229,6 +351,15 @@ export function createPeopleStore({ root = '.', sharedDir, sessionsFile = '', si
     }
     return { schema: PEOPLE_SCHEMA, file: relative(resolve(String(root ?? '.')), file), mode: '0600',
       exists: existsSync(file), sides: allowedSides, per_side: rows,
+      // **读侧韧性**的如实读数（坏形状 / 整份读不出来 / 策略被降级）：面板据此如实说明，不假装"名册是空的"
+      shape: (doc.broken || doc.sanitized?.dropped_total) ? {
+        broken: doc.broken ?? null, counts: doc.sanitized?.counts ?? {}, problems: doc.sanitized?.problems ?? [],
+        dropped_total: doc.sanitized?.dropped_total ?? 0, fields: doc.sanitized?.fields ?? {},
+        policy_degraded: Boolean(doc.policy_degraded),
+        file: relative(resolve(String(root ?? '.')), file),
+        how_to_fix: doc.broken?.how_to_fix ?? '把上面列出的字段改回声明的形状（名册每次渲染都真读盘、不缓存 ⇒ 改好下一次刷新就自动恢复）',
+        next_action: doc.broken?.next_action ?? '修名册文件里列出的坏形状（面板上逐条给了"哪个字段、为什么读不出来、该长什么样"）',
+      } : null,
       roles: doc.roles.map((role) => ({ id: role.id, label: role.label, rank: role.rank,
         approval_limit_cents: role.approval_limit_cents ?? 0, note: text(role.note) })),
       policy: doc.policy, updated_at: text(doc.updated_at), why_not_ledger: PEOPLE_WHY_NOT_LEDGER,

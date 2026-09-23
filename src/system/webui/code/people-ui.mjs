@@ -14,11 +14,41 @@
  * （理由逐条写在 `people.mjs` 文件头）。**角色不改变签署权**：本文件注册的动作没有一个是人签动作，
  * 它们只改"配置"；人签仍由 `/api/action/<id>` 校验「署名 == 会话身份」。
  */
+// 显示口径（`@名字`）与协作面**同一份实现**（`collab.mjs` 导出）：`human:limin` 不上界面。
+import { nameOf } from './collab.mjs'
+
 export const PEOPLE_PLUGIN_ID = 'system/people'
 /** 面板顺序：名册排在协作面之前（先看"有谁、谁是主管"，再谈把活交给谁）。 */
 const ROSTER_PANEL_ORDER = 880
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * 名册文件"读得不完整"的**如实降级行**（P13：一个坏形状的名册/策略文件以前会把面板打成异常，
+ * 或者更坏 —— 被说成"名册是空的"）。这里给的是：哪个字段、为什么读不出来、该长什么样、怎么修。
+ */
+const shapeItems = (shape) => {
+  if (!shape) return []
+  // 同 `collab-ui.mjs`：说明走整行的 `note` + `next_action`，不塞进窄值列（那会挤成一列一个字）。
+  if (shape.broken) {
+    return [{ key: '⚠ 名册文件读不出来（不是"名册是空的"）', code: true, value: '原因与修法见下方提示' }]
+  }
+  return [{ key: `⚠ 名册有 ${shape.dropped_total} 处坏形状（已跳过，不是"没有"）`, code: true,
+    value: '逐条说明见下方提示' }]
+}
+/** 一句话摘要（进面板的 `note`，整行、可换行）。 */
+const shapeNote = (shape) => (shape
+  ? (shape.broken
+    ? `⚠ 名册文件读不出来（${shape.broken.code}）：${shape.broken.reason}｜文件 ${shape.broken.file}`
+    : `⚠ 名册有 ${shape.dropped_total} 处坏形状（已跳过，不是"没有"）：`
+      + [...new Set((shape.problems ?? []).map((problem) => problem.field))].slice(0, 6).join('、'))
+  : '')
+/** 面板 `next_action` 里那段**完整**的降级说明（逐条 why + 该长什么样 + 怎么修 + 策略降级的后果）。 */
+const shapeExplain = (shape) => (shape
+  ? `${(shape.problems ?? []).map((problem) => `${problem.field}：${problem.why}（跳过 ${problem.dropped} 处）`).join('；')}`
+    + `${(shape.problems ?? []).length ? '｜' : ''}${shape.how_to_fix}`
+    + `${shape.policy_degraded ? '｜**注意**：策略（偏好）被降级 ⇒ 读不出来的额度规则现在**不生效**（不是"放开了"）' : ''}`
+  : '')
 
 /**
  * @param {object} options
@@ -61,8 +91,10 @@ export function createPeopleSurface({ surface, host, views = [], log } = {}) {
     const role = people.roleOf(side, session.human)
     const mine = list.find((item) => item.human === session.human) ?? null
     const reports = list.filter((item) => item.reports_to === session.name)
+    const shape = people.describe().shape ?? null
     const items = [
-      { key: '我是谁 / 我的角色', value: `${session.human} · ${role.label}（${role.id}）`
+      // 显示口径：与协作面同一套（`@limin`，不是 `human:limin`）；原始值仍在 `/api/people/*` 的回执里
+      { key: '我是谁 / 我的角色', value: `@${nameOf(session.human)}（你） · ${role.label}（${role.id}）`
         + `｜额度 ${role.approval_limit_cents === null ? '不限'
           : `${(Number(role.approval_limit_cents) / 100).toFixed(2)} 元`}`
         + (mine ? '' : '｜**名册里还没有我**（登录即登记的登记失败？看服务日志）'), code: true },
@@ -77,13 +109,18 @@ export function createPeopleSurface({ surface, host, views = [], log } = {}) {
       { key: '名册文件', value: `${people.describe().file}（${people.describe().mode}；按侧隔离，不进账本；`
         + '它是**配置**：换角色、调额度立刻生效）', code: true },
     ]
+    items.push(...shapeItems(shape))          // ⚠ 如实降级：哪个字段读不出来 + 该长什么样（修法在 next_action）
     return { ok: true, kind: 'kv', items, counts: { members: list.length,
       online: list.filter((item) => item.logged_in).length },
-      reason: list.length ? null : 'roster-empty',
-      next_action: list.length
+      degraded: Boolean(shape),
+      note: shapeNote(shape),
+      reason: shape ? (shape.broken ? shape.broken.code : 'roster-shape-bad-fields')
+        : (list.length ? null : 'roster-empty'),
+      next_action: shape ? `${shape.broken ? shape.how_to_fix : shapeExplain(shape)}｜${shape.next_action}`
+        : (list.length
         ? '「@提及 / 指派 / 转交」的候选**只来自这份名册**：名字不在这里的人会被如实拒（unknown-colleague）；'
           + '要限动作（谁能批超额、谁能转交别人的活）用工具栏的「名册：策略」'
-        : '先用工具栏「名册：加人」把本侧的人加进来（角色决定他能执行哪些受额度限制的动作）' }
+          : '先用工具栏「名册：加人」把本侧的人加进来（角色决定他能执行哪些受额度限制的动作）') }
   }
 
   /** 名册表格（可逐行打开维护动作）：一眼看全 + 每行一个入口。 */
@@ -95,6 +132,7 @@ export function createPeopleSurface({ surface, host, views = [], log } = {}) {
         reason: people ? 'identity-required' : 'people-mechanism-missing',
         next_action: people ? '登录后这里列出本侧名册（按侧隔离：一侧的进程读不到另一侧的人）' : '外壳装配问题' }
     }
+    const shape = people.describe().shape ?? null
     const list = people.members(session.side)
     const rows = list.map((item) => ({ id: item.name, name: item.name, role_label: item.role_label,
       title: item.title, reports_to: item.reports_to ? `@${item.reports_to}` : '',
@@ -110,7 +148,11 @@ export function createPeopleSurface({ surface, host, views = [], log } = {}) {
         { key: 'state', label: '状态' }, { key: 'source', label: '进名册的方式' }],
       rows, row_actions: ['people.member-save', 'people.member-remove'],
       counts: { members: rows.length },
+      degraded: Boolean(shape),
+      reason: shape ? (shape.broken ? shape.broken.code : 'roster-shape-bad-fields') : null,
       note: `本侧（${session.side}）名册：${people.describe().file}（0600）。`
+        + `${shape ? `**读得不完整**：${shape.dropped_total} 处坏形状被跳过（${(shape.problems ?? []).map((problem) => problem.field).join(' / ')}）`
+          + ` —— ${shape.how_to_fix}。` : ''}`
         + '额度 = 这个角色**单独**能批到的金额上限（整数分；空 = 不限）；**角色不改变签署权** ——'
         + '人签仍要本人签（署名 == 会话身份）。',
       next_action: '行内「改角色 / 直属 / 在职」改这个人；「加人」加新成员；「策略」改越权转交与额度规则' }

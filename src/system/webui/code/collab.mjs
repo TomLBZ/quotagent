@@ -59,6 +59,205 @@ const flat = (value, limit = 200) => String(value ?? '').replace(/\s+/g, ' ').sl
 const refusal = (code, reason, next_action, extra = {}) => ({ ok: false, code, reason, next_action, ...extra })
 const keyOf = (kind, id) => `${kind}/${id}`
 
+// ------------------------------------------------------------------ 显示口径（**只影响给人看的文案**）
+/**
+ * 人话名字：`human:limin` → `limin`。`human:` 前缀只该出现在**原始回执/账本/文件**里；
+ * 界面上与同屏的 `@limin（主管 · 在线）` 一致（P13 走查实测：协作面板把 `human:limin` 当人名显示，
+ * 与同屏名册口径互相矛盾）。
+ */
+/** 界面层（`collab-ui.mjs`）用同一套显示口径 ⇒ 导出，别各写一份（重复即漂移）。 */
+export const nameOf = (human) => String(human ?? '').replace(/^human:/, '')
+/** 服务进程所在时区的标签（UTC 就写 `UTC`，别的写 `UTC+08:00`）—— 时间要**说明是哪个时区**，不裸扔 ISO。 */
+const TZ_LABEL = (() => {
+  const off = -new Date().getTimezoneOffset()          // 分钟；东为正
+  if (off === 0) return 'UTC'
+  const pad = (n) => String(Math.abs(n)).padStart(2, '0')
+  return `UTC${off > 0 ? '+' : '-'}${pad(Math.trunc(Math.abs(off) / 60))}:${pad(Math.abs(off) % 60)}`
+})()
+/** 时刻的人话：`2026-09-23T00:50:49.366Z` → `2026-09-23 08:50（UTC+08:00）`（毫秒与 `T`/`Z` 不进界面）。 */
+export const atLabel = (iso) => {
+  const raw = text(iso)
+  if (raw === '') return ''
+  const ms = Date.parse(raw)
+  if (!Number.isFinite(ms)) return raw                    // 解析不了就原样显示（不替它编一个时间）
+  const d = new Date(ms)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}（${TZ_LABEL}）`
+}
+/**
+ * 显示前把**存下来的原文**洗一遍：`human:<名>` → `@<名>`，毫秒 ISO → `atLabel`。
+ * 为什么需要：事件的 `summary`（如 `human:wanglei 把「…」指派给 human:limin`）是**存进文件的事实原文**，
+ * 逻辑判据要用（`by`/`to` 要是 `human:<名>`），但**显示**不该把内部标识裸给人看。
+ */
+export const pretty = (value) => String(value ?? '')
+  .replace(/human:([a-z][a-z0-9._-]{0,31})/g, '@$1')
+  .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})?/g, (found) => atLabel(found))
+
+/** 坏形状清单最多列这么多条（面板上够用了；总数另算，不丢）。 */
+const MAX_PROBLEMS = 20
+/** 模块级的 `human:<名字>` 归一（工厂里那个 `humanOf` 只在该作用域内可见；这里要独立的）。 */
+const asHuman = (value) => {
+  const raw = text(value)
+  if (raw === '') return ''
+  const name = raw.startsWith('human:') ? raw.slice(6) : raw
+  return NAME_RE.test(name) ? `human:${name}` : ''
+}
+
+// ------------------------------------------------------------------ 形状洗净（**读侧韧性**）
+const humanList = (value, max = MAX_WATCHERS) => {
+  if (value === undefined || value === null) return { list: [], dropped: 0 }
+  if (!Array.isArray(value)) return { list: [], dropped: 1, malformed: '不是数组' }
+  const list = []
+  let dropped = 0
+  for (const item of value) {
+    const human = typeof item === 'string' ? asHuman(item) : ''
+    if (human === '' || list.includes(human)) { dropped += 1; continue }
+    list.push(human)
+  }
+  if (list.length > max) { dropped += list.length - max; list.length = max }
+  return { list, dropped }
+}
+const plainRows = (value, clean) => {
+  if (value === undefined || value === null) return { list: [], dropped: 0 }
+  if (!Array.isArray(value)) return { list: [], dropped: 1, malformed: '不是数组' }
+  const list = []
+  let dropped = 0
+  for (const row of value) {
+    if (!plain(row)) { dropped += 1; continue }
+    const cleaned = clean(row)
+    if (cleaned === null) { dropped += 1; continue }
+    list.push(cleaned)
+  }
+  return { list, dropped }
+}
+/**
+ * 洗净**一个协作对象**（`objects["<kind>/<id>"]`）。
+ * 判据：能读的字段照读、读不懂的字段**跳过并如实计数**（既不当它不存在，也不抛异常）。
+ */
+const sanitizeObject = (key, row, problems, dropped) => {
+  /** 容器形状坏（整块读不出来）的字段名：写盘时原样带回文件，且**拒绝往它里面追加**（免得悄悄丢数据）。 */
+  const malformed = []
+  const note = (field, why, count, container = false) => {
+    if (container && !malformed.includes(field)) malformed.push(field)
+    if (!count) return
+    dropped[field] = (dropped[field] ?? 0) + count
+    if (problems.length < MAX_PROBLEMS) problems.push({ object: key, field, why, dropped: count })
+  }
+  const obj = { kind: text(row.kind), id: text(row.id), title: text(row.title),
+    assignment: null, watchers: [], comments: [], events: [], reads: {},
+    dropped_comments: Number(row.dropped_comments) > 0 ? Number(row.dropped_comments) : 0,
+    evicted: Number(row.evicted) > 0 ? Number(row.evicted) : 0,
+    created_at: text(row.created_at), touched_at: text(row.touched_at) }
+  // 指派：要么是一个对象（`{to, by, …}`），要么是 null；形状不对 ⇒ 当作"没有指派"并如实计数
+  if (row.assignment !== undefined && row.assignment !== null) {
+    if (!plain(row.assignment)) note('assignment', '不是 `{to, by, reason, due, at, status}` 对象', 1, true)
+    else {
+      const to = asHuman(row.assignment.to)
+      const by = asHuman(row.assignment.by)
+      if (to === '' || by === '') note('assignment', '`to`/`by` 不是 `human:<名字>`', 1)
+      else {
+        const history = plainRows(row.assignment.history, (item) => (plain(item)
+          ? { type: text(item.type), by: asHuman(item.by), to: asHuman(item.to), reason: text(item.reason),
+            due: text(item.due), at: text(item.at) } : null))
+        note('assignment', '`history` 里有读不懂的行（已跳过）', history.dropped)
+        if (history.malformed) note('assignment', '`history` 不是数组', 1, true)
+        obj.assignment = { to, by, reason: text(row.assignment.reason), due: text(row.assignment.due),
+          at: text(row.assignment.at), status: text(row.assignment.status) || 'open', history: history.list }
+      }
+    }
+  }
+  const watchers = humanList(row.watchers, MAX_WATCHERS)
+  note('watchers', watchers.malformed ?? '不是 `human:<名字>`（已跳过）', watchers.dropped, Boolean(watchers.malformed))
+  obj.watchers = watchers.list
+  const comments = plainRows(row.comments, (item) => (text(item.body) === '' && text(item.by) === ''
+    ? null : { cid: text(item.cid), by: asHuman(item.by) || `human:${nameOf(text(item.by))}`,
+      at: text(item.at), body: String(item.body ?? ''), bytes: Number(item.bytes) || 0,
+      mentions: humanList(item.mentions, 64).list, unresolved: humanList(item.unresolved, 64).list }))
+  note('comments', comments.malformed ?? '评论行形状不对（已跳过）', comments.dropped, Boolean(comments.malformed))
+  obj.comments = comments.list
+  const events = plainRows(row.events, (item) => ({ eid: text(item.eid), type: text(item.type),
+    by: asHuman(item.by) || text(item.by), to: asHuman(item.to) || text(item.to), at: text(item.at),
+    cid: text(item.cid), summary: flat(item.summary, 400),
+    mentions: humanList(item.mentions, 64).list }))
+  note('events', events.malformed ?? '活动行形状不对（已跳过）', events.dropped, Boolean(events.malformed))
+  obj.events = events.list
+  if (row.reads !== undefined && row.reads !== null && !plain(row.reads)) {
+    note('reads', '不是 `{"human:<名字>": "<时刻>"}` 对象', 1, true)
+  } else if (plain(row.reads)) {
+    let droppedReads = 0
+    for (const [human, at] of Object.entries(row.reads)) {
+      if (asHuman(human) === '' || text(at) === '') { droppedReads += 1; continue }
+      obj.reads[asHuman(human)] = text(at)
+    }
+    note('reads', '读不懂的已读记录（已跳过）', droppedReads)
+  }
+  return { obj, malformed }
+}
+
+/**
+ * 洗净整份协作文件（**只读；绝不回写文件**）。
+ * 返回 `{ doc, broken }`：`broken` 非空 = 这份文件**整体读不出来**（JSON 坏了/顶层不是对象）——
+ * 这时**不能假装"还没有协作记录"**，要把它原样报给界面（原因 + 怎么修）。
+ */
+const sanitizeDoc = (raw, side) => {
+  const doc = { schema: COLLAB_SCHEMA, side, objects: {}, people: {}, updated_at: '', note: COLLAB_WHY_NOT_LEDGER }
+  const dropped = {}
+  const problems = []
+  const byObject = {}                 // 对象键 → 容器形状坏的字段名（写盘时带回 + 拒绝追加）
+  doc.updated_at = text(raw.updated_at)
+  for (const [key, row] of Object.entries(plain(raw.objects) ? raw.objects : {})) {
+    if (!plain(row)) {
+      dropped.objects = (dropped.objects ?? 0) + 1
+      byObject[key] = ['(整条记录)']
+      if (problems.length < MAX_PROBLEMS) {
+        problems.push({ object: key, field: '(整条记录)', why: '不是一个对象', dropped: 1 })
+      }
+      continue
+    }
+    const cleaned = sanitizeObject(key, row, problems, dropped)
+    if (cleaned.malformed.length) byObject[key] = cleaned.malformed
+    doc.objects[key] = cleaned.obj
+  }
+  for (const [human, row] of Object.entries(plain(raw.people) ? raw.people : {})) {
+    if (!plain(row)) { dropped.people = (dropped.people ?? 0) + 1; continue }
+    doc.people[asHuman(human) || human] = { name: text(row.name) || nameOf(human),
+      first_at: text(row.first_at), last_at: text(row.last_at) }
+  }
+  if (raw.people !== undefined && !plain(raw.people)) dropped.people = (dropped.people ?? 0) + 1
+  doc.sanitized = { counts: dropped, problems, by_object: byObject,
+    dropped_total: Object.values(dropped).reduce((sum, n) => sum + Number(n || 0), 0),
+    fields: { watchers: 'human:<名字> 的**数组**', comments: '评论行数组（{by, at, body, mentions[]}）',
+      events: '活动行数组（{eid, type, by, at, summary}）', reads: '`{"human:<名字>": "<时刻>"}` 对象',
+      assignment: '`{to, by, reason, due, at, status}` 对象或 null', history: '`history` 里是数组' },
+    read_only: true }
+  return { doc, broken: null }
+}
+
+/**
+ * 文件里**容器形状坏、且内容没法按新形状重建**的字段（按对象 → 字段名）：写盘时**原样带回**，
+ * 免得一次正常保存把"读不懂但确实在文件里"的内容悄悄抹掉（不静默吞掉数据的另一半含义）。
+ * 只带这两类：**用户写的**关注名单与评论（我们没法替它重建）。`assignment`/`reads`/`events`
+ * 在写入时**本来就会被整体改写**（那正是那些人手改坏的地方）⇒ 按新形状重建并在回执里如实报 `shape_rebuilt`。
+ */
+const carryForward = (file) => {
+  const out = new Map()
+  let raw = null
+  try { raw = JSON.parse(readFileSync(file, 'utf8')) } catch (err) { return out }
+  if (!plain(raw) || !plain(raw.objects)) return out
+  for (const [key, row] of Object.entries(raw.objects)) {
+    if (!plain(row)) { out.set(key, { '(整条记录)': row }); continue }
+    const bad = {}
+    for (const field of ['watchers', 'comments']) {
+      const value = row[field]
+      if (value === undefined || value === null) continue
+      if (!Array.isArray(value)) bad[field] = value
+    }
+    if (Object.keys(bad).length) out.set(key, bad)
+  }
+  return out
+}
+
+
 /**
  * 建协作存储。
  * @param {object} options
@@ -93,21 +292,75 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
   }
 
   const emptyDoc = (side) => ({ schema: COLLAB_SCHEMA, side, objects: {}, people: {},
-    updated_at: '', note: COLLAB_WHY_NOT_LEDGER })
-
-  const load = (side) => {
-    try {
-      const parsed = JSON.parse(readFileSync(fileOf(side), 'utf8'))
-      if (!plain(parsed) || !plain(parsed.objects)) return emptyDoc(side)
-      parsed.people = plain(parsed.people) ? parsed.people : {}
-      parsed.side = side
-      return parsed
-    } catch (err) { return emptyDoc(side) }
+    updated_at: '', note: COLLAB_WHY_NOT_LEDGER, sanitized: { counts: {}, problems: [], dropped_total: 0,
+      fields: {}, read_only: true }, broken: null })
+  /** 文件**整体**读不出来时的**如实降级**读数（不是"还没有协作记录"）。 */
+  const brokenDoc = (side, code, reason) => {
+    const doc = emptyDoc(side)
+    doc.broken = { code, reason, file: relative(resolve(String(root ?? '.')), fileOf(side)),
+      how_to_fix: '这份协作文件（0600）是**配置**不是账本：把它改回 `{"schema":"quotagent/collab/v1",'
+        + '"objects":{},"people":{}}` 这份形状即可（也可以直接删掉它 —— 会被当成"还没有协作记录"）；'
+        + '协作面每次渲染都真读盘、不缓存 ⇒ **改好下一次刷新就自动恢复**。',
+      next_action: `${relative(resolve(String(root ?? '.')), fileOf(side))} 读不出来：修好这个文件，或删掉它重建（面板会自动恢复）` }
+    return doc
   }
-  /** 原子写：临时文件 → `chmod 0600` → rename（不受 umask 影响；与身份会话同一口径）。 */
+
+  /**
+   * 读一份协作文件（**每次都真读盘：不缓存** ⇒ 坏了的面板在文件改对后**下一次渲染自动恢复**）。
+   * 坏形状的字段：能读的照读、读不懂的**跳过并如实计数**（`doc.sanitized`）—— **绝不**因为一个坏字段
+   * 把整块面板打成 `TypeError`（实测：`watchers` 写成对象会让工作台整块红脸，人只看到"修插件的 data()"）。
+   * 文件整个读不出来：回 `doc.broken`（不是"没有协作记录"），界面据此说清原因与怎么修。
+   */
+  const load = (side) => {
+    let raw = null
+    try {
+      raw = JSON.parse(readFileSync(fileOf(side), 'utf8'))
+    } catch (err) {
+      if (err && err.code === 'ENOENT') return emptyDoc(side)      // 还没写过：这才是真的"还没有"
+      return brokenDoc(side, 'collab-file-unreadable', flat(err))
+    }
+    if (!plain(raw)) {
+      return brokenDoc(side, 'collab-file-not-an-object',
+        `顶层不是对象（收到 ${Array.isArray(raw) ? 'array' : typeof raw}）`)
+    }
+    if (raw.objects !== undefined && !plain(raw.objects)) {
+      return brokenDoc(side, 'collab-file-objects-not-an-object',
+        '`objects` 不是对象（它要是「`<对象类>/<id>` → 一条协作记录」的键值表）')
+    }
+    return sanitizeDoc({ ...raw, objects: raw.objects ?? {} }, side).doc
+  }
+  /**
+   * 原子写：临时文件 → `chmod 0600` → rename（不受 umask 影响；与身份会话同一口径）。
+   * 两件本批新做的事：① 派生读数（`sanitized`/`broken`）**不进文件**；② 容器形状坏、读不出来的字段
+   * **原样带回**（不因为一次正常保存就把文件里读不懂的内容抹掉），并在回执里如实报 `shape_carried`。
+   */
   const save = (side, doc) => {
     doc.updated_at = text(doc.updated_at)
-    const payload = JSON.stringify(doc, null, 1) + '\n'
+    const clean = { schema: COLLAB_SCHEMA, side, objects: {}, people: doc.people ?? {},
+      updated_at: text(doc.updated_at), note: COLLAB_WHY_NOT_LEDGER }
+    const carried = []
+    const rebuilt = []
+    const unreadable = carryForward(fileOf(side))
+    for (const [key, row] of Object.entries(doc.objects ?? {})) {
+      if (!plain(row)) continue
+      const badAll = unreadable.get(key) ?? {}
+      const bad = { ...badAll }
+      if (bad['(整条记录)'] !== undefined) { delete bad['(整条记录)']; rebuilt.push(`${key}:整条记录`) }
+      const out = { ...row }
+      for (const [field, value] of Object.entries(bad)) { out[field] = value; carried.push(`${key}.${field}`) }
+      clean.objects[key] = out
+      for (const field of doc.sanitized?.by_object?.[key] ?? []) {
+        if (field !== '(整条记录)' && bad[field] === undefined) rebuilt.push(`${key}.${field}`)
+      }
+    }
+    // 整条记录都读不懂、且本次没写它的：**原样留在文件里**（我们读不出来 ≠ 可以把它删掉）
+    for (const [key, value] of unreadable) {
+      if (value['(整条记录)'] !== undefined && clean.objects[key] === undefined) {
+        clean.objects[key] = value['(整条记录)']
+        carried.push(key)
+      }
+    }
+    const payload = JSON.stringify(clean, null, 1) + '\n'
     try {
       mkdirSync(dir, { recursive: true, mode: 0o700 })
       try { chmodSync(dir, 0o700) } catch (err) { /* FS 不支持时尽力而为 */ }
@@ -115,14 +368,58 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
       writeFileSync(tmp, payload, { encoding: 'utf8', mode: 0o600 })
       chmodSync(tmp, 0o600)
       renameSync(tmp, fileOf(side))
-      return { ok: true, file: relative(resolve(root ?? '.'), fileOf(side)), mode: '0600' }
+      return { ok: true, file: relative(resolve(root ?? '.'), fileOf(side)), mode: '0600',
+        shape_carried: carried, shape_rebuilt: rebuilt,
+        shape_note: (carried.length || rebuilt.length)
+          ? `注意：这份协作文件里有读不懂的形状 —— `
+            + `${carried.length ? `${carried.join(' / ')} **原样留在文件里**（没抹掉，面板上会继续如实说它读不出来）；` : ''}`
+            + `${rebuilt.length ? `${rebuilt.join(' / ')} 按本次写入的新形状**重建**（旧的读不懂的内容没法保留）；` : ''}`
+            + '把形状改对（面板上写了每个字段该长什么样）就不再提示'
+          : '' }
     } catch (err) {
       return refusal('collab-write-failed', flat(err),
         `先修 ${relative(resolve(root ?? '.'), dir)} 目录权限（协作文件必须 0600；写不进去时界面如实报，不假装成功）`)
     }
   }
 
-  // ------------------------------------------------------------------ 名单：本侧同事（**名册是真源**）
+  /**
+   * 这份文件"读得不完整"的**如实读数**（面板据此降级说明：哪几个字段读不出来、该长什么样、怎么修）。
+   * 没有坏形状时返回 `null`（面板不显示这一行）。**它不是账本、也不写任何东西**。
+   */
+  const shapeOf = (doc, side) => {
+    const broken = doc.broken ?? null
+    const counts = doc.sanitized?.counts ?? {}
+    const problems = doc.sanitized?.problems ?? []
+    const total = Number(doc.sanitized?.dropped_total ?? 0)
+    if (!broken && !total) return null
+    const fields = doc.sanitized?.fields ?? {}
+    const file = relative(resolve(String(root ?? '.')), fileOf(side))
+    return { broken, counts, problems, dropped_total: total, fields,
+      by_object: doc.sanitized?.by_object ?? {},
+      file,
+      how_to_fix: broken?.how_to_fix
+        ?? (`把 ${file} 里这些字段改回声明的形状（` + Object.entries(fields)
+          .map(([field, shape]) => `${field}=${shape}`).join('；') + '），'
+          + '或者把读不出来的那部分删掉；协作面**每次渲染都真读盘、不缓存** ⇒ 改好下一次刷新就自动恢复'),
+      next_action: broken?.next_action
+        ?? `修 ${file} 里列出的 ${total} 处坏形状（面板上逐条给的是"哪个对象、哪个字段、为什么读不出来"）` }
+  }
+  /**
+   * 写前的**形状门**：某个对象的某个字段"整块读不出来"时，往它里面追加会**下一次读盘就被跳过**
+   * （等于悄悄丢一次）⇒ 直接**如实拒绝**并说清怎么修（面板上那一行就是修法）。
+   */
+  const shapeBlocker = (doc, side, kind, id, field) => {
+    const bad = doc.sanitized?.by_object?.[keyOf(kind, id)] ?? []
+    if (!bad.includes(field)) return null
+    const file = relative(resolve(String(root ?? '.')), fileOf(side))
+    const shape = doc.sanitized?.fields?.[field] ?? '（见面板上的说明）'
+    return refusal('collab-shape-malformed',
+      `这份对象的 \`${field}\` 形状不对（整块读不出来），往里写会**下一次读盘就被跳过**`,
+      `先把 ${file} 里 \`${keyOf(kind, id)}\` 的 \`${field}\` 改成 ${shape}，或把这一项删掉；`
+        + '改好这一次什么都没写、下一次刷新就自动恢复（协作面不缓存）')
+  }
+
+
   /**
    * 会话里登录过的人（**只读**）：它现在**不再**决定"谁是同事"，只用来在名册那一行标注"今天登录过"。
    * 为什么改：旧口径下"同事 = 登录过的人"⇒ 名单取决于谁碰巧开过页面，单位里真实的人反而进不来。
@@ -265,7 +562,7 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
     return {
       ok: true, found: Boolean(obj), side: text(side), kind: text(kind), id: text(id),
       title: obj ? labelOf(obj) : '', assignment: obj?.assignment ?? null,
-      watchers: (obj?.watchers ?? []).map((human) => ({ human, name: human.replace(/^human:/, ''),
+      watchers: (obj?.watchers ?? []).map((human) => ({ human, name: nameOf(human),
         me: human === me })),
       comments, events: (obj?.events ?? []).slice(0, 50),
       read_at: readAtOf(obj, me), unread: unread.length,
@@ -274,6 +571,8 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
       colleagues: colleagues(side), me, colleague_source: rosterSource(),
       counts: { comments: comments.length, events: (obj?.events ?? []).length,
         watchers: (obj?.watchers ?? []).length, dropped_comments: obj?.dropped_comments ?? 0 },
+      // **读得不完整就如实说**（`broken` = 整份文件读不出来；`problems` = 哪几个字段读不出来 + 该长什么样）
+      shape: shapeOf(doc, side),
       storage: { file: relative(resolve(String(root ?? '.')), fileOf(side)), mode: '0600',
         why_not_ledger: COLLAB_WHY_NOT_LEDGER },
     }
@@ -292,7 +591,7 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
     if (!isColleague(side, target)) {
       const list = colleagues(side).map((person) => `@${person.name}`
         + (person.role_label ? `（${person.role_label}）` : '')).join(' ')
-      return refusal('unknown-colleague', `${target} 不在本侧（${side}）**名册**里`,
+      return refusal('unknown-colleague', `@${nameOf(target)} 不在本侧（${side}）**名册**里`,
         `协作只在**同侧在册成员**之间：本侧名册 ${list || '（还是空的）'}；`
         + '先把人加进名册（对方登录一次会自动登记为「待指派」），跨侧不能指派（跨侧只走 QEP 报文）',
         { roster: colleagues(side).map((person) => person.human) })
@@ -324,7 +623,7 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
       : { ok: true, role: 'roster-missing', role_label: '（名册未装配）' } : null
     if (before && before.to !== me && before.by !== me && !(transfer && transfer.ok)) {
       return refusal('transfer-not-yours',
-        `「${labelOf(obj)}」现在归 ${before.to}（由 ${before.by} 指派）：你既不是接手的人，也不是指派的人`
+        `「${labelOf(obj)}」现在归 @${nameOf(before.to)}（由 @${nameOf(before.by)} 指派）：你既不是接手的人，也不是指派的人`
           + `（你当前的角色是 ${transfer?.role_label ?? '未知'}）`,
         '只有**归我**（当前指派给我）或**我指派的**才能转交；要转交别人的活，'
           + `让有资格的角色来做（名册策略 \`transfer.override_roles\`，默认 supervisor / admin），`
@@ -348,7 +647,9 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
       file: saved.file, mode: saved.mode, history_depth: history.length,
       transfer: transfer ? { role: transfer.role, role_label: transfer.role_label,
         source: before ? ((before.to === me || before.by === me) ? 'mine' : 'role-override') : 'first' } : null,
-      next_action: `${target} 打开工作台/通知中心的「我的」就能看到这一条（同侧可见；对方侧看不到）` }
+      shape: shapeOf(doc, side), shape_note: saved.shape_note || null,
+      next_action: `@${nameOf(target)} 打开工作台/通知中心的「我的」就能看到这一条（同侧可见；对方侧看不到）`
+        + `${saved.shape_note ? `｜${saved.shape_note}` : ''}` }
   }
 
   /** 关注 / 取消关注（**每人一份**：我关注不影响别人，别人关注也不影响我）。 */
@@ -357,6 +658,8 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
     const bad = guard(side, me) ?? guardObject(kind, id)
     if (bad) return bad
     const doc = load(side)
+    const blocker = shapeBlocker(doc, side, kind, id, 'watchers')
+    if (blocker) return blocker
     const obj = ensureObject(doc, kind, id, title, at)
     const has = obj.watchers.includes(me)
     const next = want === null || want === undefined ? !has : want === true
@@ -374,8 +677,8 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
     const saved = save(side, doc)
     if (!saved.ok) return saved
     return { ok: true, code: next ? 'watching' : 'unwatched', watching: next,
-      watchers: obj.watchers.map((human) => ({ human, me: human === me })),
-      file: saved.file, mode: saved.mode,
+      watchers: obj.watchers.map((human) => ({ human, name: nameOf(human), me: human === me })),
+      file: saved.file, mode: saved.mode, shape: shapeOf(doc, side), shape_note: saved.shape_note || null,
       next_action: next
         ? '这个对象有新活动时会进你通知中心的「我的」（只影响你自己，不影响别人）'
         : '已取消关注：之后这个对象的活动不再进你的通知' }
@@ -411,10 +714,12 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
     }
     if (crossSide.length) {
       return refusal('cross-side-mentioned',
-        `${crossSide.join(' / ')} 属于**另一侧**，不能出现在本侧内部评论里`,
+        `${pretty(crossSide.join(' / '))} 属于**另一侧**，不能出现在本侧内部评论里`,
         '本侧评论只在本侧人类之间可见：要跟对方沟通走业务动作（答疑/广播/报价/变更），不走这里')
     }
     const doc = load(side)
+    const blocker = shapeBlocker(doc, side, kind, id, 'comments')
+    if (blocker) return blocker
     const obj = ensureObject(doc, kind, id, title, at)
     const row = { cid: `c-${obj.comments.length + 1}-${String(at).replace(/\D/g, '').slice(-6)}`, by: me, at,
       body: said, mentions, unresolved, bytes: Buffer.byteLength(said, 'utf8') }
@@ -431,10 +736,11 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
     const saved = save(side, doc)
     if (!saved.ok) return saved
     return { ok: true, code: 'commented', cid: row.cid, mentions, unresolved, file: saved.file, mode: saved.mode,
+      shape: shapeOf(doc, side), shape_note: saved.shape_note || null,
       next_action: mentions.length
-        ? `${mentions.join(' ')} 的通知中心会多一条「@我」（同侧可见；它不落账本、不影响合同事实）`
+        ? `${pretty(mentions.join(' '))} 的通知中心会多一条「@我」（同侧可见；它不落账本、不影响合同事实）`
         : (unresolved.length
-          ? `提醒：${unresolved.join(' ')} 不在本侧名单里，**没有**通知到任何人`
+          ? `提醒：${pretty(unresolved.join(' '))} 不在本侧名单里，**没有**通知到任何人`
           : '同侧的人随时能在对象页看到这条评论') }
   }
 
@@ -455,6 +761,7 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
       const saved = save(side, doc)
       if (!saved.ok) return saved
       return { ok: true, code: 'read-all', objects: marked, file: saved.file,
+        shape: shapeOf(doc, side), shape_note: saved.shape_note || null,
         next_action: `已把本侧 ${marked} 个对象的协作活动都标成你读过了（只影响你自己）` }
     }
     const badObject = guardObject(kind, id)
@@ -467,6 +774,7 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
     const saved = save(side, doc)
     if (!saved.ok) return saved
     return { ok: true, code: 'read', unread_before: unreadBefore, file: saved.file,
+      shape: shapeOf(doc, side), shape_note: saved.shape_note || null,
       next_action: '已读是你自己的标记（同侧别人不受影响，也不进账本）' }
   }
 
@@ -488,8 +796,8 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
       if (assignment && text(assignment.to) === me && assignment.status === 'open') {
         items.push({ id: `collab-mine-${obj.kind}-${obj.id}`, bucket: 'mine', bucket_label: '我的',
           level: 'warn', title: `指派给我：${labelOf(obj)}`,
-          body: `${assignment.by} 交给你办（原因：${assignment.reason}`
-            + `${assignment.due ? `；截止 ${assignment.due}` : '；未写截止'}）`
+          body: `@${nameOf(assignment.by)} 交给你办（原因：${pretty(assignment.reason)}`
+            + `${assignment.due ? `；截止 ${pretty(assignment.due)}` : '；未写截止'}）`
             + `${unread.length ? `｜这条上还有 ${unread.length} 条未读活动` : ''}`,
           next_action: '打开对象页：办完可以「指派 / 转交」给下一个人，或「标为已读」',
           ref, action: 'collab.comment', label: '评论 / @同事', at: assignment.at,
@@ -498,14 +806,14 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
       for (const event of mentioned.slice(0, 3)) {
         const who = text(event.by)
         items.push({ id: `collab-mention-${obj.kind}-${obj.id}-${event.eid}`, bucket: 'mine',
-          bucket_label: '我的', level: 'warn', title: `@我：${who} 在 ${labelOf(obj)} 上提到你`,
-          body: flat(event.summary, 160), next_action: '打开对象页回复（评论里写 @<名字> 会再通知到他）',
+          bucket_label: '我的', level: 'warn', title: `@我：@${nameOf(who)} 在 ${labelOf(obj)} 上提到你`,
+          body: pretty(flat(event.summary, 160)), next_action: '打开对象页回复（评论里写 @<名字> 会再通知到他）',
           ref, action: 'collab.comment', label: '回复', at: event.at })
       }
       if (watching && unread.length && !mentioned.length) {
         items.push({ id: `collab-watch-${obj.kind}-${obj.id}`, bucket: 'mine', bucket_label: '我的',
           level: 'info', title: `你关注的 ${labelOf(obj)} 有 ${unread.length} 条新活动`,
-          body: unread[0] ? flat(unread[0].summary, 160) : '', next_action: '打开对象页看活动流',
+          body: unread[0] ? pretty(flat(unread[0].summary, 160)) : '', next_action: '打开对象页看活动流',
           ref, action: 'collab.read', label: '标为已读', at: unread[0]?.at ?? '' })
       }
       if (assignment && text(assignment.by) === me && text(assignment.to) !== me && assignment.status === 'open') {
@@ -516,9 +824,9 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
           && event.type === 'commented')
         items.push({ id: `collab-assigned-${obj.kind}-${obj.id}`, bucket: 'assigned',
           bucket_label: '我指派的', level: later.length ? 'info' : 'ok',
-          title: `我指派给 ${assignment.to}：${labelOf(obj)}`,
-          body: `对方${theyRead ? '已读过' : '还没读'}｜截止 ${assignment.due || '未写'}`
-            + `${later.length ? `｜对方留了 ${later.length} 条评论：${flat(later[0].summary, 100)}` : ''}`,
+          title: `我指派给 @${nameOf(assignment.to)}：${labelOf(obj)}`,
+          body: `对方${theyRead ? '已读过' : '还没读'}｜截止 ${pretty(assignment.due) || '未写'}`
+            + `${later.length ? `｜对方留了 ${later.length} 条评论：${pretty(flat(later[0].summary, 100))}` : ''}`,
           next_action: theyRead ? '对方看过了：可以在对象页评论里催一句或追加说明'
             : '对方还没读：同侧可以在这里再 @ 他一次（评论里写 @<名字>）',
           ref, action: 'collab.comment', label: '评论 / 催一句', at: later[0]?.at ?? assignment.at,
@@ -549,6 +857,7 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
         watchers: new Set(Object.values(doc.objects)
           .flatMap((obj) => (plain(obj) && Array.isArray(obj.watchers) ? obj.watchers : []))).size },
       filter: text(bucket), items: picked, colleagues: colleagues(side), colleague_source: rosterSource(),
+      shape: shapeOf(doc, side),
       storage: { file: relative(resolve(String(root ?? '.')), fileOf(side)), mode: '0600',
         why_not_ledger: COLLAB_WHY_NOT_LEDGER } }
   }
@@ -562,7 +871,12 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
     if (bad) return []
     const me = text(actor)
     const doc = load(side)
-    const out = []
+    const shape = shapeOf(doc, side)
+    // **不静默**：协作文件整份读不出来 ⇒ 通知里也给一条（否则人以为"今天没有协作通知"）
+    const out = shape?.broken ? [{ id: `${side}:collab:store-broken`, level: 'warn',
+      title: `协作记录读不出来（${shape.broken.code}）`,
+      body: `${shape.broken.reason}｜文件 ${shape.broken.file}`,
+      next_action: shape.broken.next_action, at: '', tags: [] }] : []
     for (const obj of Object.values(doc.objects)) {
       if (!plain(obj)) continue
       const label = labelOf(obj)
@@ -571,22 +885,22 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
       const unread = unreadOf(obj, me)
       if (assignment && text(assignment.to) === me && assignment.status === 'open') {
         out.push({ id: `${side}:collab:assigned-to-me:${obj.kind}:${obj.id}`, level: 'warn',
-          title: `${assignment.by} 把 ${label} 指派给你`, tags: ['我的', '指派给我'],
-          body: `原因：${assignment.reason}${assignment.due ? `；截止 ${assignment.due}` : '；未写截止'}`,
+          title: `@${nameOf(assignment.by)} 把 ${label} 指派给你`, tags: ['我的', '指派给我'],
+          body: `原因：${pretty(assignment.reason)}${assignment.due ? `；截止 ${pretty(assignment.due)}` : '；未写截止'}`,
           next_action: '打开对象页看明细；办完用「指派 / 转交」交给下一个人',
           ref, action: 'collab.comment', preset: { kind: String(obj.kind), id: String(obj.id) }, at: assignment.at })
       }
       for (const event of unread.filter((item) => item.type === 'commented'
         && (item.mentions ?? []).includes(me)).slice(0, 5)) {
         out.push({ id: `${side}:collab:mention:${obj.kind}:${obj.id}:${event.eid}`, level: 'warn',
-          title: `${event.by} 在 ${label} 上 @了你`, tags: ['我的', '@我'],
-          body: flat(event.summary, 200), next_action: '打开对象页回复；评论里写 @<名字> 会再通知到他',
+          title: `@${nameOf(event.by)} 在 ${label} 上 @了你`, tags: ['我的', '@我'],
+          body: pretty(flat(event.summary, 200)), next_action: '打开对象页回复；评论里写 @<名字> 会再通知到他',
           ref, action: 'collab.comment', preset: { kind: String(obj.kind), id: String(obj.id) }, at: event.at })
       }
       if ((obj.watchers ?? []).includes(me) && unread.length) {
         out.push({ id: `${side}:collab:watching:${obj.kind}:${obj.id}`, level: 'info',
           title: `你关注的 ${label} 有 ${unread.length} 条新活动`, tags: ['我的', '我关注的'],
-          body: unread[0] ? flat(unread[0].summary, 200) : '', next_action: '打开对象页看活动流（谁在什么时候做了什么）',
+          body: unread[0] ? pretty(flat(unread[0].summary, 200)) : '', next_action: '打开对象页看活动流（谁在什么时候做了什么）',
           ref, action: 'collab.read', preset: { kind: String(obj.kind), id: String(obj.id) }, at: unread[0]?.at ?? '' })
       }
       if (assignment && text(assignment.by) === me && text(assignment.to) !== me && assignment.status === 'open') {
@@ -594,8 +908,8 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
         const later = unread.filter((event) => text(event.by) === text(assignment.to)
           && event.type === 'commented')
         out.push({ id: `${side}:collab:assigned-by-me:${obj.kind}:${obj.id}:${later.length}`, level: 'info',
-          title: `我指派给 ${assignment.to} 的 ${label} 有进展`, tags: ['我指派的'],
-          body: later.length ? flat(later[0].summary, 200) : `对方还没回话（截止 ${assignment.due || '未写'}）`,
+          title: `我指派给 @${nameOf(assignment.to)} 的 ${label} 有进展`, tags: ['我指派的'],
+          body: later.length ? pretty(flat(later[0].summary, 200)) : `对方还没回话（截止 ${pretty(assignment.due) || '未写'}）`,
           next_action: '打开对象页：可以在评论里 @他催一句', ref, action: 'collab.comment',
           preset: { kind: String(obj.kind), id: String(obj.id) }, at: later[0]?.at ?? assignment.at })
       }
@@ -609,9 +923,12 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
     if (!data.ok) return { ok: false, code: data.code, text: '协作：未登录（指派/评论只在同侧人类之间）',
       level: 'warn', next_action: data.next_action }
     return { ok: true, text: `我的 ${data.counts.mine} · 我指派的 ${data.counts.assigned}`
-      + ` · 未读 ${data.counts.unread} · 关注者 ${data.counts.watchers}`,
-      level: data.counts.mine ? 'warn' : 'ok', counts: data.counts, side, me: data.me,
-      next_action: data.counts.mine ? '在工作台按「我的」筛选，逐条打开对象页' : '' }
+      + ` · 未读 ${data.counts.unread} · 关注者 ${data.counts.watchers}`
+      + `${data.shape ? ` · **读得不完整**（${data.shape.broken ? data.shape.broken.code : `${data.shape.dropped_total} 处坏形状`}）` : ''}`,
+      level: data.shape ? 'bad' : (data.counts.mine ? 'warn' : 'ok'), counts: data.counts, side, me: data.me,
+      shape: data.shape,
+      next_action: data.shape ? data.shape.next_action
+        : (data.counts.mine ? '在工作台按「我的」筛选，逐条打开对象页' : '') }
   }
 
   /** 存储自述（**证据**：协作文件在哪、多大规模、为什么不在账本里）。 */
@@ -622,6 +939,8 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
       perSide[side] = { file: relative(resolve(String(root ?? '.')), fileOf(side)), mode: '0600',
         exists: existsSync(fileOf(side)), objects: Object.keys(doc.objects).length,
         people: Object.keys(doc.people).length,
+        // **读侧韧性**的如实读数：坏形状（哪几个字段、该长什么样）与"整份读不出来"都在这里
+        shape: shapeOf(doc, side),
         comments: Object.values(doc.objects).reduce((sum, obj) =>
           sum + (plain(obj) && Array.isArray(obj.comments) ? obj.comments.length : 0), 0),
         updated_at: text(doc.updated_at) }

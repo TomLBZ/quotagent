@@ -320,6 +320,14 @@ export function apply(ctx, config) {
   const projection = ctx.projection            // 投影服务（真源在 host/modules/projection.mjs）
   const rules = projection.rules
   const prefix = config.route_prefix.replace(/\/$/, '')
+  /**
+   * **账本只读备忘的读数**（P13；只为"前后可对账"）。
+   * `memo_hits` = 这次进程内"本视角的行"被问到几次、其中几次走了备忘（没有重新读文件）；
+   * `parses` = 真正读盘 + 逐行 JSON.parse 的次数；`ms` = 这些 parse 累计花的时间。
+   * 修前的实测形态：`parses` 与 `memo_hits+parses` 相等（每一次提问都真读一遍）；
+   * 修后：`parses` 只在账本真的变了（mtime/size）时才 +1。读数经 `/api/ui/surface` 的 `io` 暴露。
+   */
+  const ledgerStats = { memo_hits: 0, parses: 0, bytes: 0, ms: 0, paths: 0, projections: 0, projection_hits: 0 }
   // ---- 注入式 UI 注册面（**机制**） ------------------------------------------------
   // 本文件只做两件通用的事：① 把注册面 `uiSlots` 提供出去（谁都可以注册区块/路由声明）；
   // ② 在页面的**槽位**上把"别人注册的区块"按 `order` 拼进去。它**不知道**任何区块是什么、
@@ -350,6 +358,9 @@ export function apply(ctx, config) {
     // 宿主自己注入的服务句柄（机制：按名字取；外壳不知道它们的业务含义）
     services: { quotePrepare: ctx.quotePrepare, bidHeuristics: ctx.bidHeuristics, gateTimeline: ctx.gateTimeline,
       rfqDeadline: ctx.rfqDeadline, approvalDigest: ctx.approvalDigest, projection: ctx.projection },
+    // **账本只读备忘的读数**（本批新增，只为可对账）：`/api/ui/surface` 的 io 会把"这次渲染
+    // 真读了几遍账本 / 备忘命中几次"如实报出来 —— 修前修后的差别必须是可复跑的读数，不是形容词。
+    ledgerStats,
     log: (msg) => console.error(msg),
   })
   ctx.effect(() => () => shell.surface.dispose())
@@ -523,9 +534,77 @@ export function apply(ctx, config) {
       + `${bad.length ? `，其中失败 ${bad.map((row) => row.plugin_id).join(',')}` : '，全部成功'}`)
   }).catch((err) => console.error(`[webui] GUI 贡献装载异常：${String(err).slice(0, 160)}`))
   // 视角 → 账本：配了自有账本就用它（结构性隔离），否则退回注入的只读视图（fixture/单账本模式）
+  //
+  // ---- 账本只读**备忘**（P13：并发卡死定位到的热点就在这一行下面）------------------------------------
+  // 定位（真跑 `node --cpu-prof` 抓的 self time，原始读数 `tmp/p13-shots/cpu-before.json`）：
+  // 一次页面渲染的**忙时 CPU 有 ~87% 花在"把同一份账本重新读一遍 + 逐行 JSON.parse"**上 ——
+  //   `ledger-view.mjs:20`（JSON.parse 那一行）27.2% + `node:fs readFileSync` 22.9%
+  //   + `ledger-view.mjs:18 read` 4.2% + `readFileUtf8` 2.1%（另有 1.9% GC 是这些临时对象的账），
+  // 因为 `rowsOf(view)` 每次都被 `host.rows(view)` 重新调一遍：**每块面板、每个通知源、每个状态项
+  // 各一次**（`openLedger()` 每次都新建一个闭包，里面只有 `verify()` 有 mtime 缓存，`rows()` 没有）。
+  // 于是打开一页 = 把 1.6 MB 的账本读+parse 几十上百遍；而这一切**同步**跑在 Node 唯一的主线程上
+  // ⇒ 整个进程被占死：6 个并发客户端实测 notifications p50 34.6s / `/api/ui/status` 46s /
+  // 独立健康探针 44s 无响应（`tmp/p13-shots/concurrent-before.json`），与 P12 记录的"100% CPU、
+  // status 50s 无响应、只能 kill"同源。
+  //
+  // 修法（机制层，**不动内核**、不改任何语义、不限制功能）：按 **(路径, mtimeMs, size)** 备忘
+  // "投影后的行"，只有文件真的变了才重新读。账本是 append-only ⇒ 任何一次落账都会让 mtime/size 变，
+  // 所以备忘**不会读到旧值**；`rows()` 每次返回**新数组**（只是元素对象共用，而调用方拿到的都是
+  // 只读投影，仓库里没有任何一处就地改行对象或就地 sort 返回的数组）。字面量、字段、顺序与修前逐字节一致。
+  const ledgerMemo = new Map()            // 路径 → { stamp, rows, realms }
+  const ledgerStampOf = (path) => {
+    try {
+      const stat = statSync(path)
+      return `${stat.mtimeMs}:${stat.size}`
+    } catch (err) {
+      return `missing:${String(err?.code ?? 'unknown')}`
+    }
+  }
+  const memoLedger = (path, view) => {
+    const raw = openLedger(path)
+    const fresh = () => {
+      const stamp = ledgerStampOf(path)
+      const hit = ledgerMemo.get(path)
+      if (hit && hit.stamp === stamp) {
+        ledgerStats.memo_hits += 1
+        // 同一块面板一次渲染里会问好几次"本视角的行"：第 2 次起就走这里（这是本批性能的来源）
+        return hit
+      }
+      const started = Date.now()
+      const rows = raw.rows()
+      ledgerStats.parses += 1
+      ledgerStats.ms += Date.now() - started
+      try { ledgerStats.bytes += statSync(path).size } catch (err) { /* 读不到就不记账 */ }
+      const entry = { stamp, rows, realms: null }
+      ledgerMemo.set(path, entry)
+      return entry
+    }
+    return {
+      path, view,
+      rows: () => fresh().rows.slice(),
+      realms: () => {
+        const entry = fresh()
+        if (entry.realms === null) entry.realms = raw.realms()
+        return entry.realms.slice()
+      },
+      count: () => raw.count(),
+      byType: (prefix) => raw.byType(prefix),
+      verify: () => raw.verify(),
+    }
+  }
+  const ledgerViews = new Map()
+  const projectionMemo = new Map()       // (视角 + 账本戳 + 投递戳) → 投影结果（纯函数，可缓存）
   const ledgerOf = (view) => {
     const own = view === 'contractor' ? config.ledger_contractor : config.ledger_supplier
-    return own ? openLedger(own) : ctx.ledgerView
+    if (!own) return ctx.ledgerView      // 夹具/单账本模式：注入的只读视图（没有文件可 stamp，原样透传）
+    const key = resolve(own)
+    let memo = ledgerViews.get(key)
+    if (!memo) {
+      memo = memoLedger(own, view)
+      ledgerViews.set(key, memo)
+      ledgerStats.paths = ledgerViews.size
+    }
+    return memo
   }
 
   const rowsFor = (view) => projectionOf(view).publicRows
@@ -539,6 +618,10 @@ export function apply(ctx, config) {
    * 目录形态按**文件名排序**且有界（`RFQ_DELIVERY_MAX_FILES`）：同一批文件在任何时刻给出同一结果。
    */
   const RFQ_DELIVERY_MAX_FILES = 64
+  // 投递信封的**只读备忘**（同一件东西一次渲染只读一次）：按"目标路径 + 该文件的
+  // mtime/size"（目录时另加"目录 mtime + 文件数"）判有没有变。信封是**发送方写的文件**，
+  // 变了就重读 —— 不缓存"变化前"的内容。
+  const deliveryMemo = { key: '', value: null }
   const deliveryEnvelopes = () => {
     const target = String(config.rfq_delivery ?? '').trim()
     if (target === '') return []
@@ -553,6 +636,8 @@ export function apply(ctx, config) {
       console.error(`[webui] 投递信封目录不可读（按无投递处理）：${String(err).slice(0, 120)}`)
       return []
     }
+    const key = `${target}\u0000${files.map((file) => ledgerStampOf(file)).join('\u0000')}`
+    if (deliveryMemo.key === key && deliveryMemo.value) return deliveryMemo.value.slice()
     const out = []
     for (const file of files) {
       try {
@@ -562,7 +647,9 @@ export function apply(ctx, config) {
         console.error(`[webui] 投递信封不可解析（跳过，不猜）：${file}`)
       }
     }
-    return out
+    deliveryMemo.key = key
+    deliveryMemo.value = out
+    return out.slice()
   }
 
   /**
@@ -571,8 +658,19 @@ export function apply(ctx, config) {
    */
   const projectionOf = (view) => {
     const ledger = ledgerOf(view)
+    // 投影是**纯函数**（本视角账本行 + 发给本视角的投递信封 + realm + 上限）：输入没变就复用。
+    // 与账本备忘同一把尺子（mtime:size）⇒ 账本一变，投影立刻重算，不会给出旧白名单结果。
+    const stamp = typeof ledger.path === 'string' ? ledgerStampOf(ledger.path) : ''
+    const usesDelivery = (projection.deliveryViews ?? []).includes(view)
+    const cacheKey = `${view}\u0000${ledger.path ?? ''}\u0000${stamp}\u0000${usesDelivery ? 'delivery' : ''}`
+      + `\u0000${config.rfq_delivery_max ?? ''}`
+    const cached = ledger.path && projectionMemo.get(cacheKey)
+    if (cached) {
+      ledgerStats.projection_hits = (ledgerStats.projection_hits ?? 0) + 1
+      return { ...cached, publicRows: cached.publicRows.slice() }
+    }
     const realms = typeof ledger.realms === 'function' ? ledger.realms() : []
-    const deliveries = (projection.deliveryViews ?? []).includes(view) ? deliveryEnvelopes() : undefined
+    const deliveries = usesDelivery ? deliveryEnvelopes() : undefined
     const out = projection.projectWithAudit(view, ledger.rows(), { deliveries, realms,
       maxPackages: config.rfq_delivery_max })
     if (out.audit.length) {
@@ -582,7 +680,11 @@ export function apply(ctx, config) {
     for (const item of out.deliveries?.audit ?? []) {
       console.error(`[webui] ${view} 视角投递事实抑制：${item.reason}（package_id=${item.package_id}）`)
     }
-    return out
+    if (ledger.path) {
+      ledgerStats.projections = (ledgerStats.projections ?? 0) + 1
+      projectionMemo.set(cacheKey, out)
+    }
+    return { ...out, publicRows: out.publicRows.slice() }
   }
 
   const governor = ctx.governor
@@ -2754,7 +2856,26 @@ ${sortForm('events', '筛查事件')}
     // 外壳的机制层解析（`app-shell.mjs#parseWindowRequest`）——**没带参数就整份下发**（兼容既有调用方），
     // 带了就只回窗口 + 在全集上算出来的数字。参数解析失败不抛错：坏值丢掉并如实记在回执的 `window.notes` 里。
     const windowSpec = shell.windowSpec(url.searchParams)
+    /**
+     * **渲染准入（背压）**（P13）：跑"重读"之前问一次外壳 —— 事件循环已经滞后到阈值以上时，
+     * **这一条根本不开始跑**，直接回 429 + `Retry-After` + `code:'ui-busy'`（连带当场的滞后读数与
+     * "多久后重试"）。为什么不是"排着等"：修前的实测是所有人一起排到 50 s 无响应（`tmp/p13-shots/`），
+     * 拒绝 + 明确重试时间才能让客户端自己退避、让服务端把队列排空。
+     * 不参与拒绝的：动作（走 `/api/action/*`，在下面）、身份、偏好读写、健康与静态资源。
+     */
+    const shedIfBusy = () => {
+      const verdict = shell.admission()
+      if (verdict.shed !== true) return false
+      // 用 `send` 直发：要在响应头里带 `Retry-After`（`json()` 不带自定义头）
+      send(429, 'application/json; charset=utf-8', JSON.stringify({ ok: false, code: 'ui-busy', route: path,
+        ...verdict,
+        mechanism: '外壳的渲染准入：事件循环滞后 ≥ 阈值 ⇒ 新到的重读请求当场被拒（没有开始读、没有占用队列），'
+          + '并给出 Retry-After；客户端应等这么久再来（界面会照实说"服务端忙"，不是空列表）' }, null, 2) + '\n',
+      { 'retry-after': String(verdict.retry_after_s) })
+      return true
+    }
     if (path === '/api/ui/panels') {
+      if (shedIfBusy()) return undefined
       const view = String(url.searchParams.get('view') ?? 'home')
       if (!['home', ...config.views].includes(view)) {
         return json(400, { ok: false, code: 'unknown-view', view,
@@ -2777,6 +2898,7 @@ ${sortForm('events', '筛查事件')}
           + '服务端全量行集上算，客户端照抄（口径见 /api/ui/surface 的 io.window）' })
     }
     if (path === '/api/ui/object') {
+      if (shedIfBusy()) return undefined
       const view = String(url.searchParams.get('view') ?? 'home')
       if (!['home', ...config.views].includes(view)) {
         return json(400, { ok: false, code: 'unknown-view', view,
@@ -2791,7 +2913,10 @@ ${sortForm('events', '筛查事件')}
       return json(200, shell.objectOf(view, kind, id, whom, windowSpec))
     }
     if (path === '/api/ui/plugins') return json(200, shell.pluginsJson())
-    if (path === '/api/ui/notifications') return json(200, { ok: true, items: shell.notifications(whom) })
+    if (path === '/api/ui/notifications') {
+      if (shedIfBusy()) return undefined
+      return json(200, { ok: true, items: shell.notifications(whom) })
+    }
     // 通知偏好/已读的**服务端化**（0600 落盘，按会话身份）：GET 读、POST 写；未登录 ⇒ 401（不落盘）
     if (path === '/api/ui/notif-state' && method === 'POST') {
       return readBody((body) => {
@@ -2810,7 +2935,10 @@ ${sortForm('events', '筛查事件')}
       const out = notifStateOf(req)
       return json(out.status, out.body)
     }
-    if (path === '/api/ui/status') return json(200, { ok: true, items: shell.statusItems(whom) })
+    if (path === '/api/ui/status') {
+      if (shedIfBusy()) return undefined
+      return json(200, { ok: true, items: shell.statusItems(whom) })
+    }
     // ---- **同侧协作**（指派/转交、关注、评论与 @同事、活动流、已读）-------------------------------------
     // 三条只读自述/查询路由：**侧一律取会话**（请求体/查询串改不动它）⇒ 一侧的身份读不到另一侧的协作数据
     // （结构性隔离：一侧一个 0600 文件）。协作数据**不进账本**（理由见 `code/collab.mjs` 文件头）。

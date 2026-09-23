@@ -22,6 +22,24 @@ import { createHash } from 'node:crypto'
 export const plugin_id = 'system/approval'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * 工作台的卡头那句「有 N 件需要你处理」**只该算本侧**（P13 可用性修）：卡片把两侧插件贡献的待办并在一起，
+ * 而"需要你处理"必须是**你能真去办**的 —— 对面侧的条目照旧列出来（带侧标），但降级成"信息"，
+ * 并说清"这一步由哪一侧的人办"。未登录 ⇒ 没有"本侧"，一律按"信息"算（协作面会在卡上留一条"先登录"）。
+ */
+const mySideOf = (ctx) => asText(ctx?.identity?.side)
+const sideScoped = (ctx, itemSide, item) => {
+  const mine = mySideOf(ctx)
+  if (mine === itemSide) return item
+  const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
+  const why = mine === ''
+    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
+    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+  const body = asText(item.body)
+  return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
+    body: `${body}${body ? ' ' : ''}${why}` }
+}
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const hex64 = (text) => createHash('sha256').update(String(text), 'utf8').digest('hex')
 const RESOLVED = ['approval/granted', 'approval/denied', 'approval/aborted']
@@ -171,15 +189,19 @@ export async function register(surface, host) {
 
   out.push(surface.panel({ plugin_id: me, id: 'gate.todo', title: '要人决定的事（待人工门）', view: 'home',
     order: 15, kind: 'list',
-    data: () => {
+    data: (ctx) => {
       const items = []
       for (const view of ['contractor', 'supplier']) {
+        const label = view === 'supplier' ? '供应商侧' : '承包商侧'
         for (const gate of pendingRows(host.rows(view))) {
-          items.push({ level: gate.overdue ? 'warn' : 'info',
-            title: `[${view}] ${gate.approval_id} 等 ${gate.waited}：${gate.scope}（${gate.ref}）`,
-            body: `卡在 ${gate.who} · 已催 ${gate.nudge_count} 次${gate.last_nudged_at ? ` @${gate.last_nudged_at}` : ''}`
+          // 侧标写在标题里（`workbench-two-sides.md` 的纪律），**级别按本侧**（卡头计数只算本侧）。
+          items.push(sideScoped(ctx, view, { level: gate.overdue ? 'warn' : 'info',
+            title: `${label}：人工门 ${gate.approval_id} 等 ${gate.waited}：${gate.scope}（${gate.ref}）`,
+            // 人名与时刻不裸展示内部标识（`human:liangzi` / 毫秒 ISO）——与名册、协作面同一口径
+            body: `卡在 @${asText(gate.who).replace(/^human:/, '')} · 已催 ${gate.nudge_count} 次`
+              + `${gate.last_nudged_at ? ` @${gate.last_nudged_at}` : ''}`
               + ` · 超时策略 ${gate.policy_label}（${gate.timeout_left}）`,
-            next_action: `深链 ${host.prefix}/app/${view}/ → 「审批队列」卡片上点催办/升级/终止（人签）` })
+            next_action: `深链 ${host.prefix}/app/${view}/ → 「审批队列」卡片上点催办/升级/终止（人签）` }))
         }
       }
       if (!items.length) {

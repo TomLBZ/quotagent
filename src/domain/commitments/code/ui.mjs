@@ -28,6 +28,24 @@
 export const plugin_id = 'domain/commitments'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * 工作台的卡头那句「有 N 件需要你处理」**只该算本侧**（P13 可用性修）：卡片把两侧插件贡献的待办并在一起，
+ * 而"需要你处理"必须是**你能真去办**的 —— 对面侧的条目照旧列出来（带侧标），但降级成"信息"，
+ * 并说清"这一步由哪一侧的人办"。未登录 ⇒ 没有"本侧"，一律按"信息"算（协作面会在卡上留一条"先登录"）。
+ */
+const mySideOf = (ctx) => asText(ctx?.identity?.side)
+const sideScoped = (ctx, itemSide, item) => {
+  const mine = mySideOf(ctx)
+  if (mine === itemSide) return item
+  const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
+  const why = mine === ''
+    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
+    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+  const body = asText(item.body)
+  return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
+    body: `${body}${body ? ' ' : ''}${why}` }
+}
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const typeRows = (rows, type) => rows.filter((row) => String(row?.type ?? '') === type)
 
@@ -589,7 +607,7 @@ export async function register(surface, host) {
   // ---- 工作台（首屏「我今天要做什么」）：待人工门队列 + 待确认意向 --------------------------------
   out.push(surface.panel({ plugin_id: me, id: 'home.gates', title: '待人工门与待确认（必须人签的动作）',
     view: 'home', order: 30, kind: 'list',
-    data: () => {
+    data: (ctx) => {
       const cRows = host.rows('contractor')
       const last = new Map()
       for (const row of cRows) {
@@ -601,47 +619,51 @@ export async function register(surface, host) {
       const items = []
       for (const [id, gate] of last) {
         if (gate.type === 'approval/granted' || gate.type === 'approval/aborted') continue
-        items.push({ level: 'warn', title: `承包商侧：人工门 ${id} 还在等（${gate.scope}）`,
+        items.push(sideScoped(ctx, 'contractor', { level: 'warn',
+          title: `承包商侧：人工门 ${id} 还在等（${gate.scope}）`,
           body: `对象 ${gate.ref}`, next_action: '打开这条门看卡在哪/等多久；门本身的人签动作在「授标与订单」里，界面不代签',
           // 门自己也是一个**可协作的对象**（`/app/<view>/gate/<id>/`）：指派/关注/评论由外壳的协作面提供，
           // 这里只声明"门后面那个对象是哪一类"（scope→kind 是本插件的领域知识）。
           ref: { kind: 'gate', id, title: `审批门 ${id}` },
           action: gate.scope === 'change.approve' ? 'change.approve'
             : (gate.scope === 'award.commit' ? 'award.commit' : '') ,
-          label: gate.scope === 'change.approve' ? '去批准这条变更' : '去人签' })
+          label: gate.scope === 'change.approve' ? '去批准这条变更' : '去人签' }))
       }
       const intents = typeRows(cRows, 'award/intent-proposed').length
       const awards = typeRows(cRows, 'award/committed').length
       const pos = typeRows(cRows, 'po/issued').length
-      items.push({ level: awards ? 'ok' : 'info', title: `授标链：意向 ${intents} · 承诺 ${awards} · PO ${pos}`,
+      items.push(sideScoped(ctx, 'contractor', { level: awards ? 'ok' : 'info',
+        title: `承包商侧：授标链：意向 ${intents} · 承诺 ${awards} · PO ${pos}`,
         body: '承诺要三样门：意向 + 供应商确认 + 人工批准',
         action: awards ? 'po.issue' : 'award.propose',
-        label: awards ? '发 PO（人签）' : '先提授标意向' })
+        label: awards ? '发 PO（人签）' : '先提授标意向' }))
       const supplierIntents = typeRows(host.rows('supplier'), 'award/confirmed').length
       if (supplierIntents === 0) {
-        items.push({ level: 'info', title: '供应商侧：还没有确认过授标',
-          body: '发给供应商的意向在供应商道「发给我的授标意向」里', next_action: '让对方确认（人签）' })
+        items.push(sideScoped(ctx, 'supplier', { level: 'info', title: '供应商侧：还没有确认过授标',
+          body: '发给供应商的意向在供应商道「发给我的授标意向」里', next_action: '让对方确认（人签）' }))
       }
       // 采购单的**投递与回签**（本批 P8）：两侧各自读自己的账本，缺什么就说什么。
       const myPos = poDeliveries('contractor').map((item) => asText(item.po_id))
       const myAcks = acksOf('contractor')
       const unacked = myPos.filter((id) => !myAcks.has(id))
       if (myPos.length && unacked.length) {
-        items.push({ level: 'warn', title: `还有 ${unacked.length} 张采购单没等到对方回签`,
+        items.push(sideScoped(ctx, 'supplier', { level: 'warn',
+          title: `供应商侧：还有 ${unacked.length} 张采购单没等到回签（承包商已投递）`,
           body: `已投递：${myPos.join(' / ')} · 待回签：${unacked.join(' / ')}`,
           next_action: '对方在供应商道「发给我的采购单」里人签「确认收到采购单」；'
-            + '回签件（签章 PDF）由对方挂在这张 PO 的附件面板里' })
+            + '回签件（签章 PDF）由对方挂在这张 PO 的附件面板里' }))
       }
       const supplierPos = poDeliveries('supplier')
       const supplierAcks = acksOf('supplier')
       const supplierUnacked = supplierPos.filter((item) => !supplierAcks.has(asText(item.po_id)))
       if (supplierUnacked.length) {
-        items.push({ level: 'warn', title: `供应商侧：${supplierUnacked.length} 张采购单还没回签`,
+        items.push(sideScoped(ctx, 'supplier', { level: 'warn',
+          title: `供应商侧：${supplierUnacked.length} 张采购单还没回签`,
           body: `收到：${supplierUnacked.map((item) => asText(item.po_id)).join(' / ')}`,
           next_action: '在供应商道「发给我的采购单」里打开这张 PO，人签「确认收到采购单」'
             + '（署名 = 你的会话身份），回签件挂在同一页的「附件」面板',
           action: 'po.acknowledge', preset: { po_id: asText(supplierUnacked[0].po_id) },
-          label: '去回签这张 PO' })
+          label: '去回签这张 PO' }))
       }
       return { ok: true, kind: 'list', items }
     } }))

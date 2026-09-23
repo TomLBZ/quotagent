@@ -20,6 +20,7 @@ import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, chmodSync, 
   rmSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
+import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { join, relative, resolve } from 'node:path'
 import { createUiSurface, PANEL_KINDS } from './ui-surface.mjs'
 import { createCollabStore } from './collab.mjs'
@@ -761,7 +762,7 @@ export const windowDescribe = () => ({
  * @param {string[]} [options.sides] 允许的侧（由身份面传入；外壳不硬编码任何侧名）
  */
 export function createAppShell({ root, prefix, views, config, rowsOf, publicRowsOf, slots, services, log,
-  sessionsFile = '', sides = [] }) {
+  sessionsFile = '', sides = [], ledgerStats = null }) {
   const surface = createUiSurface({ slots: slots?.slots?.() ?? [], views })
   const sharedDir = resolve(root, String(config.ui_shared ?? 'tmp/ui-shared'))
   /**
@@ -1190,6 +1191,51 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const ioStats = { spawns: 0, read_spawns: 0, read_hits: 0, cache_clears: 0 }
   const say = (msg) => { if (typeof log === 'function') log(`[webui-shell] ${msg}`) }
 
+  /**
+   * **渲染准入与背压**（P13）。判据不是"猜"，而是**事件循环真的卡了多久**（`perf_hooks` 的
+   * `monitorEventLoopDelay`）：本进程是单线程 + 同步读盘/解析，一旦渲染的 CPU 请求量超过它的
+   * 服务速率，请求就只能在队列里排着 —— P12 实测到的形态是"`/api/ui/status` 50 s 无响应、
+   * 进程 100% CPU 37 分钟、只能 kill"（`tmp/p13-shots/concurrent-before.json` 里健康探针 44 s）。
+   *
+   * 口径（**不是**"把并发用户排成单道队列"，恰恰相反）：
+   *   ① 先让渲染便宜（账本备忘 + 通知备忘）—— 这是主修；
+   *   ② 万一还是过载，就**明确拒绝新到的重读请求**：429 + `Retry-After` + `code:'ui-busy'` +
+   *      当场的滞后读数，界面照实说"服务端忙、多久后重试"，**而不是让所有人都挂在那里**；
+   *   ③ 只对**重读**路由生效（panels/object/notifications/status）。动作（`/api/action/*`）、
+   *      身份、偏好读写、健康与静态资源**一律不拒** —— 不拿"限制功能"换稳定；
+   *   ④ 阈值可配可关：`config.shed_ms` / `QUOTAGENT_UI_SHED_MS`（**0 = 关闭**，默认 3000ms）。
+   *      默认值下只有真过载才会触发；健康检查/对账脚本在正常服务上看到的仍是 200。
+   */
+  const loopDelay = monitorEventLoopDelay({ resolution: 20 })
+  loopDelay.enable()
+  const shedEnvMs = Number(process.env.QUOTAGENT_UI_SHED_MS ?? '')
+  const shedMs = String(process.env.QUOTAGENT_UI_SHED_MS ?? '') !== '' && Number.isInteger(shedEnvMs)
+    ? shedEnvMs
+    : (Number.isInteger(config.shed_ms) ? config.shed_ms : 3000)
+  const admissionStats = { checks: 0, shed: 0, peak_lag_ms: 0, last_lag_ms: 0 }
+  /**
+   * 准入判定（每次调用读**并重置**直方图 ⇒ 看到的是"上一段窗口"的滞后，不是进程启动以来的最大值）。
+   * `exempt:true` = 这条路不参与拒绝（动作/身份/偏好/健康）。
+   */
+  const admission = ({ exempt = false } = {}) => {
+    const lagMs = Math.round(loopDelay.max / 1e6)
+    loopDelay.reset()
+    admissionStats.checks += 1
+    admissionStats.last_lag_ms = lagMs
+    admissionStats.peak_lag_ms = Math.max(admissionStats.peak_lag_ms, lagMs)
+    if (shedMs <= 0 || exempt || !Number.isFinite(lagMs) || lagMs < shedMs) {
+      return { shed: false, loop_lag_ms: lagMs, shed_ms: shedMs }
+    }
+    admissionStats.shed += 1
+    const retryAfterMs = Math.min(10000, Math.max(500, lagMs))
+    return { shed: true, loop_lag_ms: lagMs, shed_ms: shedMs, retry_after_ms: retryAfterMs,
+      code: 'ui-busy', retry_after_s: Math.ceil(retryAfterMs / 1000),
+      reason: `服务端正在处理上一批请求（事件循环滞后 ${lagMs}ms ≥ ${shedMs}ms）：这一条重读没有开始跑，`
+        + '没有读到半份数据，也没有占用队列位置',
+      next_action: `约 ${Math.ceil(retryAfterMs / 1000)} 秒后自动重试；连续被拒说明这台服务的渲染负载超过了单进程上限，`
+        + '先缩小窗口（每页行数/筛选）或减少同时在线的人数' }
+  }
+
   // ------------------------------------------------------------------ 机制：进程与代价可控的 IO
   /**
    * 跑 Python 侧工具（唯一写者或只读工具）：stdout **最后一行**必须是 JSON；rc≠0 也如实回报。
@@ -1243,8 +1289,11 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     return result
   }
 
-  /** 清空只读缓存（任何一次可能改变事实的动作前后都调它：界面绝不读旧值）。 */
+  /** 清空只读缓存（任何一次可能改变事实的动作前后都调它：界面绝不读旧值）。
+   *  P13：通知聚合的短 TTL 备忘**同一把开关** —— 动作/落待办件之后连它一起清，
+   *  免得"点了标已读、徽标还是旧的"这类陈旧读数。 */
   const clearReadCache = () => {
+    clearNotifyCache()
     if (readCache.size === 0) return
     readCache.clear()
     ioStats.cache_clears += 1
@@ -1997,7 +2046,39 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
    *     连"被截掉多少"一起放进 `io.notify` 与状态栏 —— 不静默截断。
    */
   const NOTIF_CAP = 600
-  const notifications = (who = null) => withSandbox(who, () => withRenderScope(() => {
+  /**
+   * **通知聚合的短 TTL 备忘**（P13）。为什么必须有：一次通知聚合要**逐个通知源**跑一遍
+   * （本批规模下 13 个来源、每个都要在 6865 行账本上筛一遍），是这一页里最贵的一次读——
+   * 修前单次 8.9–10.2 s（`tmp/p13-shots/routes.json` 与浏览器 Resource Timing 同值），
+   * 而且**每个在线的人每 15 s 都要拉一次**（`app.js` 的 `pollNotify`）⇒ 4 个人同时在线时
+   * 这 7–10 s 互相排队（P12 记录的"4 人首屏 38.6 s"）。
+   *
+   * 口径（不许拿来糊弄「别的东西也没变」）：
+   *   · 键 = **会话身份 + 沙盘目录**（通知源按人给 `我的/@我/我关注的` 标签，跨人复用一定错）；
+   *   · TTL 默认 5 s（`QUOTAGENT_UI_NOTIFY_CACHE_MS` / 配置 `notify_cache_ms` 可调，0 = 关）；
+   *   · **任何一次动作/落待办件/清只读缓存都会清掉它**（见 `clearReadCache`）—— 用户点完「标为已读」
+   *     或做完动作，下一次读到的**一定**是新状态；
+   *   · 命中与否、缓存龄都在 `ioStats.notify` 与状态栏里**如实记账**（界面不假装"刚刚算过"）。
+   */
+  const notifyEnvMs = Number(process.env.QUOTAGENT_UI_NOTIFY_CACHE_MS ?? '')
+  const notifyCacheTtlMs = String(process.env.QUOTAGENT_UI_NOTIFY_CACHE_MS ?? '') !== ''
+    && Number.isInteger(notifyEnvMs) ? notifyEnvMs
+    : (Number.isInteger(config.notify_cache_ms) ? config.notify_cache_ms : 5000)
+  const notifyCache = new Map()          // 身份+沙盘 → { at, items, stats }
+  const notifyCacheKey = (who) => {
+    const state = effective()
+    return `${normIdentity(who)?.human ?? 'anonymous'}\u0000${state.on ? state.dir : ''}`
+  }
+  const clearNotifyCache = () => { if (notifyCache.size) notifyCache.clear() }
+  const notifications = (who = null) => withSandbox(who, () => {
+    const cacheKey = notifyCacheKey(who)
+    const hit = notifyCache.get(cacheKey)
+    if (notifyCacheTtlMs > 0 && hit && Date.now() - hit.at <= notifyCacheTtlMs) {
+      ioStats.notify = { ...hit.stats, cache_hit: true, cache_age_ms: Date.now() - hit.at,
+        cache_ttl_ms: notifyCacheTtlMs }
+      return hit.items.slice()
+    }
+    return withRenderScope(() => {
     const lists = []
     const sources = surface.byKind('notification-source')
     for (const source of sources) {
@@ -2035,9 +2116,13 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     const items = [...mine, ...merged]
     ioStats.notify = { at: host.now(), sources: sources.length,
       per_source: sources.map((source, index) => ({ plugin_id: source.plugin_id, produced: lists[index].length })),
-      produced: merged.length, returned: Math.min(items.length, NOTIF_CAP), cap: NOTIF_CAP }
-    return items.slice(0, NOTIF_CAP)
-  }))
+      produced: merged.length, returned: Math.min(items.length, NOTIF_CAP), cap: NOTIF_CAP,
+      cache_hit: false, cache_age_ms: 0, cache_ttl_ms: notifyCacheTtlMs }
+    const kept = items.slice(0, NOTIF_CAP)
+    if (notifyCacheTtlMs > 0) notifyCache.set(cacheKey, { at: Date.now(), items: kept, stats: ioStats.notify })
+    return kept.slice()
+    })
+  })
 
   const statusItems = (who = null) => withSandbox(who, () => withRenderScope(() => {
     const out = []
@@ -2074,11 +2159,30 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       out.push({ id: 'shell.notify', title: '通知', level: dropped ? 'warn' : 'ok', plugin_id: 'system/webui',
         text: `来源 ${notify.sources} 个 · 产出 ${notify.produced} 条 · 返回 ${notify.returned} 条`
           + `（上限 ${notify.cap}${dropped ? `，截掉 ${dropped} 条` : ''}）`
-          + `${busiest ? ` · 产出最多：${busiest.plugin_id} ${busiest.produced} 条` : ''}`,
+          + `${busiest ? ` · 产出最多：${busiest.plugin_id} ${busiest.produced} 条` : ''}`
+          + `${notify.cache_hit ? ` · 这一条来自 ${notify.cache_age_ms}ms 前的聚合缓存（TTL ${notify.cache_ttl_ms}ms；`
+            + '任何动作都会立刻清掉它）' : ''}`,
         next_action: dropped
           ? '同一件事在多条时是"一次轮询的上限"：用关键字/筛选在通知中心里缩小范围，或按插件静音'
           : '' })
     }
+    // **账本只读备忘**（P13）：并发卡死的定位读数就在这一行 —— 同一份账本被读了几遍
+    if (ledgerStats) {
+      const asks = ledgerStats.memo_hits + ledgerStats.parses
+      out.push({ id: 'shell.ledger', title: '账本读取', level: 'ok', plugin_id: 'system/webui',
+        text: `被问到 ${asks} 次：真读盘 ${ledgerStats.parses} 次（累计 ${ledgerStats.ms}ms）、走备忘 `
+          + `${ledgerStats.memo_hits} 次；账本文件 ${ledgerStats.paths} 份`,
+        next_action: ledgerStats.parses > ledgerStats.memo_hits
+          ? '真读次数远多于备忘命中 ⇒ 渲染里有大量"重复读同一份账本"，先看 io.ledger' : '' })
+    }
+    // **渲染准入（背压）**（P13）：正在排队/heap 之外的那件事 —— 服务端忙到什么程度、拒了几条
+    out.push({ id: 'shell.admission', title: '渲染准入', level: admissionStats.shed ? 'warn' : 'ok',
+      plugin_id: 'system/webui',
+      text: `事件循环滞后 ${admissionStats.last_lag_ms}ms（峰值 ${admissionStats.peak_lag_ms}ms）· `
+        + `阈值 ${shedMs}ms${shedMs > 0 ? '' : '（已关闭）'} · 检查 ${admissionStats.checks} 次 · 被拒 `
+        + `${admissionStats.shed} 条${admissionStats.shed ? '（回的是 429 + Retry-After，不是挂着不动）' : ''}`,
+      next_action: admissionStats.shed
+        ? '界面会自动等 Retry-After 再试一次；连续被拒 ⇒ 这台服务的渲染负载超过单进程上限' : '' })
     return out
   }))
 
@@ -2828,6 +2932,14 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         + '刷新不丢、可复制分享；对方视角打开同一 id 只会在它自己的投影里找不到 ⇒ 如实未命中）' },
     io: { python_spawns: ioStats.spawns, python_read_spawns: ioStats.read_spawns,
       read_cache_hits: ioStats.read_hits, read_cache_ttl_ms: readCacheTtlMs, cache_clears: ioStats.cache_clears,
+      // **账本只读备忘**（P13）：`parses` = 真读盘 + 逐行 JSON.parse 的次数、`memo_hits` = 走备忘的次数。
+      // 这是"并发卡死"的定位与修复的可对账读数：修前每次提问都真读一遍（hits≈0），修后只读一次。
+      ledger: ledgerStats ? { ...ledgerStats } : null,
+      // **渲染准入与背压**（P13）：事件循环滞后读数 + 被拒次数（`shed_ms=0` 表示关闭）。
+      admission: { ...admissionStats, shed_ms: shedMs,
+        note: '事件循环滞后 ≥ shed_ms 时，新到的**重读**请求回 429 + Retry-After（code=ui-busy）并说明多久后重试；'
+          + '动作/身份/偏好/健康不受影响。真读数，不是估计值' },
+      notify_cache_ttl_ms: notifyCacheTtlMs,
       // **上一次页面渲染**的代价（本批新增）：`spawns` = 这一次 `/api/ui/panels` 起了几个 Python 进程。
       // 用途：长列表改造前后的"渲染耗时 / DOM 节点数 / Python spawn 次数"三件套里最后一件的前后对照。
       last_render: ioStats.last_render ?? null,
@@ -2914,6 +3026,8 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 
   return { surface, host, loadContributions, unload, loadPlugin, reloadPlugin, pluginsJson, runAction,
     panelsOf, objectOf, notifications, statusItems, normalizeRoute: normRoute, ioStats, clearReadCache,
+    // **渲染准入/背压**（P13）：路由在跑"重读"之前问一次 —— 过载时回 429 + Retry-After（如实报忙）。
+    admission, admissionStats, ledgerStats: ledgerStats ?? null, notifyCacheTtlMs,
     // **服务端窗口**（分页/筛选/排序/计数）：路由只调 `windowSpec`（解析请求）与 `windowDescribe`（自述）。
     windowSpec: parseWindowRequest, windowDescribe,
     surfaceJson, shellHtml, asset, scanContributions, runPython, stage,

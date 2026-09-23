@@ -16,6 +16,24 @@
 export const plugin_id = 'domain/rfq'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * 工作台的卡头那句「有 N 件需要你处理」**只该算本侧**（P13 可用性修）：卡片把两侧插件贡献的待办并在一起，
+ * 而"需要你处理"必须是**你能真去办**的 —— 对面侧的条目照旧列出来（带侧标），但降级成"信息"，
+ * 并说清"这一步由哪一侧的人办"。未登录 ⇒ 没有"本侧"，一律按"信息"算（协作面会在卡上留一条"先登录"）。
+ */
+const mySideOf = (ctx) => asText(ctx?.identity?.side)
+const sideScoped = (ctx, itemSide, item) => {
+  const mine = mySideOf(ctx)
+  if (mine === itemSide) return item
+  const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
+  const why = mine === ''
+    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
+    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+  const body = asText(item.body)
+  return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
+    body: `${body}${body ? ' ' : ''}${why}` }
+}
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const rowsOfType = (rows, prefix) => rows.filter((row) => String(row?.type ?? '').startsWith(prefix))
 
@@ -148,22 +166,22 @@ export async function register(surface, host) {
   // ---- 工作台（首屏「我今天要做什么」）----------------------------------------------------------
   out.push(surface.panel({ plugin_id: me, id: 'home.rfq-todo', title: '承包商侧：我今天要做什么',
     view: 'home', order: 20, kind: 'list',
-    data: () => {
+    data: (ctx) => {
       const rows = host.rows('contractor')
       const packages = rowsOfType(rows, 'rfq/published').map((row) => bodyOf(row))
       const quotes = rowsOfType(rows, 'quote/submitted').map((row) => bodyOf(row))
       const items = []
-      items.push({ level: packages.length ? 'info' : 'warn',
+      items.push(sideScoped(ctx, 'contractor', { level: packages.length ? 'info' : 'warn',
         title: packages.length ? `承包商侧：已发布 ${packages.length} 个包` : '承包商侧：还没有发布任何 RFQ',
         body: packages.slice(-1).map((row) => `${row.package_id} rev${row.rev}（截止 ${row.quote_by ?? '—'}）`).join(''),
         next_action: packages.length ? '点按钮看最新那一包的对象页（可复制分享）' : '用「发布 RFQ」发一包（不产生对外义务）',
         action: 'rfq.publish', label: packages.length ? '再发一包' : '发布 RFQ',
-        ref: packages.length ? { kind: 'package', id: asText(packages[packages.length - 1].package_id) } : null })
-      items.push({ level: quotes.length ? 'ok' : 'warn',
+        ref: packages.length ? { kind: 'package', id: asText(packages[packages.length - 1].package_id) } : null }))
+      items.push(sideScoped(ctx, 'contractor', { level: quotes.length ? 'ok' : 'warn',
         title: quotes.length ? `承包商侧：收到 ${quotes.length} 条报价登记` : '承包商侧：还没有收到报价',
         body: quotes.slice(0, 3).map((row) => `${row.quote_id}：${row.item_id} @ ${row.unit_price_cents} 分`).join('；'),
         next_action: quotes.length ? '去比价（可调权重，贡献可解释）→ 授标（人签）' : '等供应商人签提交',
-        action: quotes.length ? 'compare.rank' : '', label: '用当前权重排一次' })
+        action: quotes.length ? 'compare.rank' : '', label: '用当前权重排一次' }))
       return { ok: true, kind: 'list', items }
     } }))
 

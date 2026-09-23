@@ -45,6 +45,24 @@ const sha256 = (text) => createHash('sha256').update(String(text), 'utf8').diges
 export const plugin_id = 'domain/quote-prepare'
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * 工作台的卡头那句「有 N 件需要你处理」**只该算本侧**（P13 可用性修）：卡片把两侧插件贡献的待办并在一起，
+ * 而"需要你处理"必须是**你能真去办**的 —— 对面侧的条目照旧列出来（带侧标），但降级成"信息"，
+ * 并说清"这一步由哪一侧的人办"。未登录 ⇒ 没有"本侧"，一律按"信息"算（协作面会在卡上留一条"先登录"）。
+ */
+const mySideOf = (ctx) => asText(ctx?.identity?.side)
+const sideScoped = (ctx, itemSide, item) => {
+  const mine = mySideOf(ctx)
+  if (mine === itemSide) return item
+  const label = itemSide === 'contractor' ? '承包商侧' : '供应商侧'
+  const why = mine === ''
+    ? `（**未登录**：登录${label}之后这一条才算"需要你处理"）`
+    : `（**不是你要办的**：这一步由${label}的人做 —— 卡头「有 N 件需要你处理」只算本侧）`
+  const body = asText(item.body)
+  return { ...item, level: (item.level === 'warn' || item.level === 'bad') ? 'info' : item.level,
+    body: `${body}${body ? ' ' : ''}${why}` }
+}
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const typeRows = (rows, prefix) => rows.filter((row) => String(row?.type ?? '').startsWith(prefix))
 
@@ -657,7 +675,7 @@ export async function register(surface, host) {
   // ---- 工作台（首屏「我今天要做什么」）：只有"我现在该做什么"与一键入口，不是报告列表 -----------------
   out.push(surface.panel({ plugin_id: me, id: 'home.quote-todo', title: '供应商侧：我今天要做什么',
     view: 'home', order: 10, kind: 'list',
-    data: () => {
+    data: (ctx) => {
       const rows = host.rows('supplier')
       const drafts = new Map()
       for (const row of typeRows(rows, 'quote/drafted')) {
@@ -669,21 +687,21 @@ export async function register(surface, host) {
       const pending = [...drafts.entries()].filter(([id]) => !signed.has(id))
       const mine = myPackage(host, realmOf('supplier'))
       const items = []
-      items.push({ level: pending.length ? 'warn' : 'info',
+      items.push(sideScoped(ctx, 'supplier', { level: pending.length ? 'warn' : 'info',
         title: pending.length ? `供应商侧：${pending.length} 份草稿待供应商人签提交` : '供应商侧：没有待签署的草稿',
         body: '提交报价是对外承诺：要人签（human:<你的名字>）；**一份草稿签一次就提交整份**。'
           + '（这一条属于**供应商侧**：工作台把两侧的待办并在一张卡上，只有登录供应商侧的那个人能签。）',
         action: pending.length ? 'quote.submit' : 'quote.draft',
         label: pending.length ? '人签提交报价' : '备一份草稿',
         next_action: pending.length ? '点按钮直接开签名弹层（一次签完整份）；也可以在「我的草稿」里逐条签'
-          : '先把表里的单价与交期填完，再「备这份草稿」（整张表一次提交）' })
-      items.push({ level: mine.ok ? 'info' : 'warn',
+          : '先把表里的单价与交期填完，再「备这份草稿」（整张表一次提交）' }))
+      items.push(sideScoped(ctx, 'supplier', { level: mine.ok ? 'info' : 'warn',
         title: mine.ok ? `供应商侧：发给供应商的包（${(mine.envelope.spec?.items ?? []).length} 条行项目，rev${mine.envelope.rev}）`
           : '供应商侧：还没有发给供应商的 RFQ 包',
         body: mine.ok ? `报价截止 ${(mine.envelope.spec?.deadlines ?? {}).quote_by ?? '—'}` : mine.reason,
         action: mine.ok ? 'quote.draft' : '', label: '备这份草稿',
         next_action: mine.ok ? '去填单价与交期 → 备草稿' : (mine.next_action ?? ''),
-        ref: mine.ok ? { kind: 'package', id: String(mine.envelope.spec?.package_id ?? '') } : null })
+        ref: mine.ok ? { kind: 'package', id: String(mine.envelope.spec?.package_id ?? '') } : null }))
       return { ok: true, kind: 'list', items }
     } }))
 
