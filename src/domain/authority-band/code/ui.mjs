@@ -93,17 +93,31 @@ export const roleOptions = () => [...new Set(REGISTERED_ROLES.map((role) => `${r
 export const roleCell = (id) => (ROLE_TERMS[asText(id)] ? `${ROLE_TERMS[asText(id)]}（${asText(id)}）` : (asText(id) || '—'))
 
 /**
- * 受管配置文件的路径：与宿主**应**为同一处。
+ * 受管配置文件的路径（**P49：现在真的从宿主下传下来了**）。
  *
- * P41 主管走查实测：壳给的 `host.config` **不带** `config_file`（装配点 `host/cli.mjs` 的壳配置块里没有
- * 这个键），而服务进程里也**没有** `QUOTAGENT_UI_CONFIG` ⇒ 用 `--config-file` 起的服务，本面板读的其实是
- * `/workspace/config.yaml`：**面板说"未配置"，而宿主实际在用的受管配置里 `authority.bands.*` 是登记好的**。
- * 现在按「宿主给的路径 → 环境变量 → 缺省」取值（壳哪天把 `config_file` 传下来，这里立刻就对），
- * 并把**实际读的那个路径**写进面板（降级时也写在原因里）——用户能一眼看出它读的是哪一份文件。
+ * 历史：P41 主管走查实测：壳给的 `host.config` **不带** `config_file`（装配点 `host/cli.mjs` 的壳配置块
+ * 里当时没有这个键），而服务进程里也**没有** `QUOTAGENT_UI_CONFIG` ⇒ 用 `--config-file` 起的服务，
+ * 本面板读的其实是 `/workspace/config.yaml`：**面板说"未配置"，而宿主实际在用的受管配置里
+ * `authority.bands.*` 是登记好的** —— "这笔钱越没越界"界面上答不出。
+ *
+ * 现在：`src/system/webui/code/webui.mjs` 把**本进程真在用的那一份**解析出来（取值链见那边导出的
+ * `resolveManagedConfigFile`：宿主显式给 → 配置面 `configView.stats().config_file` → 本进程参数
+ * `--config-file` → `QUOTAGENT_UI_CONFIG` → 缺省），随 `host.config.config_file` 交给每个插件，
+ * 并**同时发布到进程级**（`webui.mjs` 的 `MANAGED_CONFIG_GLOBAL_KEY`）。
+ * 本文件仍保留"宿主给的路径 → 进程级事实 → 环境变量 → 缺省"的兜底，并把**实际读的那个路径**写进面板
+ * （降级时也写在原因里）——用户能一眼看出它读的是哪一份文件。
+ *
+ * **为什么必须有"进程级"这一层**（P49 实测的真因）：`authoritySnapshot()` 也被 `system/approval` 的
+ * `code/ui.mjs`（审批队列的「越界？」列）import，而装载面按 `<file>?v=<mtime>` 重复 import 插件代码 ⇒
+ * 两边拿到的是**两个模块实例**，模块级变量不共享：队列那一份读到空路径 ⇒ 退回 `/workspace/config.yaml`
+ * ⇒ 面板说"buyer 限额 500000"，队列同一笔钱仍说"未配置"。进程级只读事实让两处读同一份文件。
  */
 let hostConfigFile = ''
+/** 进程级那份受管配置路径（宿主下传；`webui.mjs` 发布、disposer 删除）。 */
+const MANAGED_CONFIG_GLOBAL_KEY = '__QUOTAGENT_MANAGED_CONFIG_FILE'
+const processConfigFile = () => asText(globalThis[MANAGED_CONFIG_GLOBAL_KEY])
 const configPath = (configFile = '') => asText(configFile) || asText(hostConfigFile)
-  || asText(process.env[CONFIG_ENV]) || CONFIG_DEFAULT
+  || processConfigFile() || asText(process.env[CONFIG_ENV]) || CONFIG_DEFAULT
 
 /**
  * 只读配置快照（**按 mtime 备忘**：面板每次渲染都会调 `data()`，9KB 的 YAML 解析一次够了）。
@@ -209,6 +223,12 @@ export async function register(surface, host) {
     plugin_id: me, id: view === 'supplier' ? 'authority.bands.supplier' : 'authority.bands',
     title: '授权区间（谁能批到多少 / 越界找谁）', view, order, kind: 'table',
     actions: ['authority.check', 'authority.escalate'],
+    // **这块面板读的是哪一份受管 YAML 必须随时看得见**（P49）：登记/未登记两种状态都要能答
+    // 「你现在按哪份文件算」。降级时它写在 reason 里；一切正常时写在这里（`hint` 在界面上是可展开的那句
+    // "这块怎么用"）。路径由宿主下传（见本文件头与 `webui.mjs#resolveManagedConfigFile`）。
+    hint: `这一页按受管配置里的 authority.bands.<角色> 算「这一笔钱谁能批」：`
+      + `本面板读的受管配置 = ${configPath()}（只读那一段；越界只是提示，改判定永远在审批队列里由人签）。`
+      + `承包商侧可以直接在这一页登记/改某一档（行内「登记 / 改这一档的授权区间」，人签；写的是同一份文件）。`,
     data: () => {
       const { snapshot, reason, path } = authoritySnapshot()
       const meta = { unit: MONEY_UNIT, registered_roles: [...REGISTERED_ROLES] }
@@ -233,10 +253,12 @@ export async function register(surface, host) {
             + `；本页读的受管配置：${path}`
           : '',
         next_action: unset
-          ? '这一页的限额还没登记：登记 `authority.bands.<角色>`（整数分）之后本页立刻按它算。'
-            + `登记处在：${plain(probe.config_where)}；`
-            + '先不改配置也能干活：用下面的「按金额查该谁批」算一笔，越界就点「提交给下一角色审批」开人工门'
-          : '按金额查该谁批（表单），越界就一键开人工门；改判定永远在审批队列里由人签批准/驳回',
+          ? `这一页的限额还没登记：登记 authority.bands.<角色>（整数分）之后本页立刻按它算。`
+            + `界面上就能登记：点这一行行内的「登记 / 改这一档的授权区间」那颗按钮（动作 authority.bands.set，`
+            + `人签；人工门事实 → 0600 待办件 → 唯一落盘者落受管 YAML，写的就是上面那一份 ${path}）；`
+            + `先不改配置也能干活：用下面的「按金额查该谁批」算一笔，越界就点「提交给下一角色审批」开人工门`
+          : '按金额查谁批（表单），越界就一键开人工门；改判定永远在审批队列里由人签批准/驳回；'
+            + '要改某一档的限额就点行内「登记 / 改这一档的授权区间」（人签，落受管 YAML）',
         columns: [
           { key: 'role', label: '角色（人话 + 内部 id）', type: 'code' },
           { key: 'limit_cents', label: '限额（整数分）', filter: 'number' },
@@ -244,7 +266,11 @@ export async function register(surface, host) {
           { key: 'band_key', label: '配置键（人工专属）', type: 'code' },
         ],
         rows,
-        row_actions: ['authority.check', 'authority.escalate'],
+        // 行内入口：**承包商侧**（主管）那一屏多一颗「登记 / 改这一档的授权区间」（人签 + 落受管 YAML）；
+        // 供应商侧的同一块面板是**看**的那一面（改限额不是投标方的事）。
+        row_actions: view === 'contractor'
+          ? ['authority.bands.set', 'authority.check', 'authority.escalate']
+          : ['authority.check', 'authority.escalate'],
         counts: { registered_roles: rows.length, configured: configured.length },
         // 口径常数（`MONEY_NOTE`/`UNCONFIGURED_NOTE`）自带 markdown 星号 —— 外壳把文案当**纯文本**渲染，
         // 原样贴上去用户会读到 `**整数分**`（P41 登记的同一类"机制噪音"）⇒ 过一遍 `plain()`。
@@ -276,6 +302,105 @@ export async function register(surface, host) {
   out.push(panel('supplier', 8))
 
   // ------------------------------------------------------------------ 动作
+  /**
+   * **界内登记入口**（P49）：主管在界面上登记/修改 `authority.bands.<角色>`（"这一笔钱谁能批"）。
+   *
+   * 缺陷原话（P47 §4.2）：界面上**只有看、没有登记** —— "这笔钱越没越界"这一问，观察到区间没登记时
+   * 界面只能回一句"未配置"，没有任何地方能把它登记上（于是每次都要回终端改 YAML）。
+   *
+   * 写路径**不是新的**：人工门事实（`ApprovalService.request()/decide()`，本人在场）→ **0600 待办件**
+   * → **唯一落盘者** `src/system/config/tools/config-apply.py` 落受管 YAML。宿主侧那两行只是把
+   * 会话身份、署名、路径传下去（取路径从 `configView` 句柄取，**不自己拼**）。
+   *
+   * 它**不改任何判定**：限额登记完，越界结论仍由 `checkOf` 算、批准仍只在审批队列里由人签（本插件不能批准）。
+   * 这条门记录的是"**谁改的**"，请求人与批准人是同一人（本人在场自助，与邮件配置那条路同一口径）——
+   * 界面上把这句话写出来，不把它说成双人复核。
+   */
+  const bandsApplyTool = 'src/system/config/tools/authority-bands-apply.py'
+  out.push(surface.action({ plugin_id: me, id: 'authority.bands.set',
+    title: '登记 / 改这一档的授权区间（谁能批到多少）',
+    views: ['contractor'], group: '审批', order: 4, permission: 'human-signature',
+    confirm: { required: true, message: '这条改的是受管配置里「这一笔钱谁能批」的限额：'
+      + '人工门事实（approval/requested → granted，本人在场）→ 0600 待办件 → 唯一落盘者 '
+      + 'config-apply.py 落受管 YAML。确认以你的署名提交？' },
+    hint: '限额一律整数分（500000 = 5000.00 元；不折算、不四舍五入）。写的是受管配置文件那一段 '
+      + '`authority.bands.<角色>`：登记完「授权区间」面板与审批队列的「越界？」列下一次读就按它算'
+      + '（同一个文件、同一份口径）。这条动作不能批准任何事 —— 越界的出路仍是人工门。',
+    input: { fields: [
+      { name: 'role', label: '角色（登记哪一档）', type: 'select', options: roleOptions(), required: true,
+        help: '键是受管 YAML 的 authority.bands.<角色>；这里给人话名，括号里是机读面的角色 id（两种写法都认）' },
+      { name: 'limit_cents', label: '这一档的限额（整数分）', type: 'number', required: true,
+        min: 0, max: AMOUNT_MAX,
+        help: '500000 = 5000.00 元。整数分：把「元」当「分」写，数字会大 100 倍并被判越界' },
+      { name: 'signature', label: '署名（人签）', type: 'signature', required: true,
+        help: 'human:<你的名字> —— 服务端要求它等于会话身份；登记人是谁会进账本（谁改的）' },
+    ] },
+    server: async (ctx, input) => {
+      const view = String(ctx?.view ?? 'contractor')
+      const side = asText(ctx?.identity?.side)
+      if (side !== '' && side !== view) {
+        return { ok: false, code: 'cross-side-action',
+          reason: `你的会话是 ${side} 侧，却在 ${view} 侧登记授权区间：侧只认会话`,
+          next_action: `在 ${side} 侧自己的「授权区间」面板里登记` }
+      }
+      const signature = asText(input.signature)
+      if (!signature) {
+        return { ok: false, code: 'human-required', reason: '登记授权区间要有人认领：署名不能空',
+          next_action: '署名写 human:<你的名字>（服务端要求它等于会话身份）' }
+      }
+      const role = roleIdOf(input.role)
+      if (role === '' || !REGISTERED_ROLES.includes(role)) {
+        return { ok: false, code: 'unknown-band-role',
+          reason: `授权区间的角色只有 ${REGISTERED_ROLES.join(' / ')}（收到 ${JSON.stringify(input.role)}）`,
+          next_action: '从下拉里挑一个登记过的角色（新增角色要先改配置键登记表，不是在这里编）' }
+      }
+      const cents = Number(input.limit_cents)
+      if (!Number.isInteger(cents) || cents < 0 || cents > AMOUNT_MAX) {
+        return { ok: false, code: 'limit-not-integer',
+          reason: `限额必须是 [0, ${AMOUNT_MAX}] 内的整数分（收到 ${JSON.stringify(input.limit_cents)}）`,
+          next_action: '写整数分（500000 = 5000.00 元）：本页不折算、不四舍五入' }
+      }
+      // **配置面的句柄**（机制给的服务；插件不自己拼路径）：受管 YAML 的路径 / 0600 待办件目录 / 配置账本
+      const configView = host.service('configView')
+      const stats = configView && typeof configView.stats === 'function' ? configView.stats() : null
+      if (!stats) {
+        return { ok: false, code: 'config-service-missing',
+          reason: '本进程没有配置面（configView）句柄：拿不到受管配置文件与待办件目录',
+          next_action: '确认 system/config 插件已装载（本页不做第二条写路径、也不自己猜路径）' }
+      }
+      const configFile = asText(stats.config_file) || asText(host.config?.config_file)
+      const inbox = asText(stats.config_inbox)
+      const ledger = asText(stats.config_ledger)
+      if (configFile === '' || inbox === '' || ledger === '') {
+        return { ok: false, code: 'config-surface-unconfigured',
+          reason: `配置面缺路径（config_file=${configFile || '（空）'} · config_inbox=${inbox || '（空）'} · `
+            + `config_ledger=${ledger || '（空）'}）`,
+          next_action: '让服务端把 configView 的这三个路径配上（宿主侧未挂时不假装成功）' }
+      }
+      const run = host.runPython(bandsApplyTool, ['--session-human', asText(ctx?.identity?.human) || signature,
+        '--actor', signature, '--now', host.now(), '--role', role, '--limit-cents', String(cents),
+        '--file', configFile, '--inbox', inbox, '--ledger', ledger])
+      const json = run.json ?? {}
+      const ok = Boolean(run.ok && json.ok === true)
+      const refusal = json.refusal ?? null
+      return { ok, code: refusal?.code ?? (ok ? 'band-registered' : 'writer-failed'),
+        reason: refusal?.reason ?? (ok ? '' : (run.reason ?? '唯一落盘者没给出 JSON')),
+        next_action: refusal?.next_action ?? (ok
+          ? `已写进受管配置 ${json.config_file ?? configFile}（受管文件 sha256 `
+            + `${String(json.config_sha256_before ?? '').slice(7, 19)} → ${String(json.config_sha256_after ?? '').slice(7, 19)}`
+            + `，账本 +${Number(json.ledger_added ?? 0)} 行）；去「授权区间」面板看新限额，`
+            + '越界的那笔仍在「审批队列」里由人签批准/驳回'
+          : '看 result.stdout / 落盘者回执定位后重提（本页账本零新增）'),
+        result: { role, role_label: roleTerm(role), band_key: `${BAND_PREFIX}${role}`, limit_cents: cents,
+          config_file: json.config_file ?? configFile, config_sha256_before: json.config_sha256_before ?? '',
+          config_sha256_after: json.config_sha256_after ?? '', persisted: json.persisted === true,
+          approval_id: json.approval_id ?? '', approval_ref_kind: json.approval_ref_kind ?? '',
+          self_approval_note: '这条门记录的是「谁改的」：请求人与批准人是同一人（本人在场自助），不是双人复核',
+          item_file: json.item_file ?? '', item_mode: json.item_mode ?? '',
+          ledger_added: Number(json.ledger_added ?? 0), applied: json.applied ?? [], refused: json.refused ?? [],
+          writer: json.writer ?? '', stdout: run.stdout ? run.stdout.slice(-400) : '' } }
+    } }))
+
   out.push(surface.action({ plugin_id: me, id: 'authority.check', title: '按金额查该谁批（只读，账本零新增）',
     views: ['contractor', 'supplier'], group: '审批', order: 5, permission: 'none', inline: true,
     confirm: { required: false },

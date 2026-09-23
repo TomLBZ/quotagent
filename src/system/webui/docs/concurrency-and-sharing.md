@@ -34,6 +34,12 @@
 **版本形状** = `{rev, fingerprint, at, by, label, fields}`（`host.versions.current(side, class, id)` 给的就是它）；
 面板用 `version_for` 说明"这一版是给哪个动作用的"，行用 `version` 说明"这一行的那一版"。
 
+**P49 补的一条（教训，不是新机制）**：版本源必须与"动作所需的行字段"**同处一地** —— 否则那个动作的
+"最小上下文集"永远凑不齐（P47 §4.1：`compare.save-weights` 要 `package_id` **且**要这一版，而声明
+`version_for` 的「比价排名」面板的行里没有 `package_id`）。两处修法：让那块面板的行**自己带上**
+所需字段（`package_id` 变成一列 + 行内按钮），并让**也需要它的对象页**面板声明同一份 `version_for`。
+读数与复跑见 `entry-policy-and-empty-state.md` §6/§7。
+
 ### 1.3 判据（**不后写覆盖前写、也不静默吞掉**）
 
 保存前在**动作的服务端一半执行之前**比对（拒绝 ⇒ 账本与待办件**零新增**）：

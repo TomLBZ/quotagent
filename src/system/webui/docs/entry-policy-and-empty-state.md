@@ -125,3 +125,46 @@ sh tmp/p33-shots/start-8453.sh &        # 工作树（修后）；start-8454-hea
 ```
 
 原始读数与截图落 `tmp/p33-shots/`（报告 `tmp/p33-shots/REPORT.md`）。
+
+## 6. 最小上下文集**必须能被一行满足**（P49：`compare.save-weights` 的四条入口）
+
+**判据（新增一条，与 §2 的三条入口是同一条纪律的加强版）**：一个动作声明的**全部**上下文需求
+（`needs.row` / `needs.route` / `needs.selection`，以及由机制带上的 `expected_version`），必须**能被
+同一行**（或同一条对象 / 同一次勾选）**同时满足**；否则"引导区"能给出一条候选、表单也开得出来，但那一行
+**永远凑不齐**，动作在全视图里等于 0 个可用入口。**版本源（`version_for`）必须落在"能给出所需字段的那一行
+所在的那块面板"上，或让那块面板的行自己带上那些字段。**
+
+**实测的那条**（P47 §4.1 登记、P49 修）：`compare.save-weights` 要 `package_id`（引用标识兜底 ⇒ `needs.row`）
+**且**受版本保护（机制自动加 `expected_version`）。版本源挂在「比价排名」面板上（`version_for: 'compare.save-weights'`），
+而那块面板的行只有 `quote_id`/`supplier`/`score`… ⇒ **没有任何一行同时给出这两样**：
+
+| 地址 | 修前 | 修后 |
+|---|---|---|
+| 承包商视图（本侧数据里有报价） | 候选 10 条，**没有一条来自版本源那块面板**（`compare.ranking` 不在候选里） | 候选 8~11 条，**含 `compare.ranking`**（那一行给出 `package_id`，版本由同一块面板的 `version_for` 带上） |
+| 报价对象页 `/app/<view>/quote/<id>/` | 候选 **0 条** ⇒「现在这一页没有可挑的（不是坏了）`no-context-candidate`」，表单开不出 | 候选 **1 条**（该页的「报价逐行明细」面板的行现在带 `package_id`，并声明同一份权重版本） |
+
+**修法（两处，都在插件自己的 `code/ui.mjs` 里）**：
+① 只读复算（`src/domain/compare/tools/compare-rank.py`）把**本包 id / 包版本逐行复述**，面板把 `package_id`
+当**一列**摆出来（它本来就是"这一行属于哪个包"的事实），并在行上挂同一份动作（`row_actions`）⇒ 行内那颗
+按钮 = 按整行预填（包 id 来自行、「你看到的那一版」来自本面板的 `version_for`）；
+② 报价对象页的「报价逐行明细」行也带上 `package_id`（它自己早就读到了 `bagOf.package_id`），并声明
+`version: host.versions.current('contractor','compare-weights','current')` + `version_for` ⇒ 那一页的候选
+**带着真版本**进表单（否则会带一个空版本，服务端只能按安全默认判）。
+
+**读数（复跑见 §7）**：`window.__Q_GUI_ENTRY.{needs,missingHere,candidates,toolbar}` 与
+`/api/ui/surface` 的 `actions[].needs` 是**同一份**判定；入口的有无**不看 DOM**（DOM 里同一动作还有
+`data-pick-action`（引导区）/`data-row-action`（行内）/命令面板条目三种形态，只按前两种数会数成 0）。
+
+## 7. 复跑（P49）
+
+```bash
+# 修前 = git archive HEAD（/tmp/p49-before/tree）；修后 = 工作树
+sh tmp/p49-shots/start.sh <树根> 8586 <数据目录> <受管YAML> before   # 修改前后用同一份数据目录的副本
+sh tmp/p49-shots/start.sh <仓库根> 8587 tmp/p49-run/shared tmp/p49-run/managed-config.yaml after
+# 浏览器（人类身份 human:limin，承包商道）逐条读：
+#   JSON.stringify(window.__Q_GUI_ENTRY.candidates('compare.save-weights'))
+#   引导区 → 挑「比价排名」那一行 ⇒ 表单里 package_id 已预填、expected_version 是**真版本**
+#   真保存：账本 +1 行；把只读版本字段改回上一版再提交 ⇒ 明确拒 object-changed（逐字段差异 + 三个出口）
+```
+
+原始读数与截图落 `tmp/p49-shots/REPORT.md`（§1/§4）。

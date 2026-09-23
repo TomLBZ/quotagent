@@ -11,7 +11,7 @@ from typing import Any
 
 from ..kernel.events import EventBus
 from ..kernel.ledger import Ledger, utc_now
-from .approval import ApprovalRequired, ApprovalService
+from .approval import ApprovalRequired, ApprovalService, verify_signoff
 from .pricing import PriceNotConfirmed
 
 QUOTE_SUBMITTED_EVENT = "quote/submitted"
@@ -99,7 +99,13 @@ class CommitmentGate:
 
     # --- 2. 授标承诺 -------------------------------------------------------
     def commit_award(self, intent: dict | str, *, supplier_confirmed: bool,
-                     approval_id: str | None = None) -> dict:
+                     approval_id: str | None = None, allow_self_approval: bool = False) -> dict:
+        """授标承诺（对外义务）。`approval_id` / `allow_self_approval` = 消费哪一扇门、是否允许自签自批。
+
+        **人门判据在服务层**（P48）：拿到批准记录之后还要过 `verify_signoff` —— 批的人必须是人、
+        必须不是这次署名的人（除非显式 `allow_self_approval=True`，默认 False）、开单时点名了审批人
+        时还必须就是点名的那位。这样「谁批的 ≠ 谁签的」这条不只活在 GUI 的写者里，任何调用方都绕不过。
+        """
         if isinstance(intent, str):
             registry_entry = self._intents.get(intent)
             if registry_entry is None:
@@ -118,6 +124,9 @@ class CommitmentGate:
                 "授标承诺需要供应商确认（award/confirmed）：意向可撤回，承诺不可凭空产生（FR-AWARD-002）")
         approval = self.approval.require(scope=SCOPE_AWARD_COMMIT, ref=intent_id,
                                          approval_id=approval_id)
+        # 人门判据（P48）：批的人必须另有其人（默认），且是他被点名批的那一条 —— 见 `verify_signoff`。
+        verify_signoff(approval, scope=SCOPE_AWARD_COMMIT, ref=intent_id, signer=self.actor,
+                       allow_self_approval=allow_self_approval)
         award_id = f"aw-{len(self._awards) + 1:04d}"
         record = {"award_id": award_id, "intent_id": intent_id,
                   "package_id": intent.get("package_id"), "quote_id": intent.get("quote_id"),
@@ -134,7 +143,7 @@ class CommitmentGate:
 
     # --- 3. 发 PO（只能由承诺派生） ---------------------------------------
     def issue_po(self, award_id: str, lines: list[dict], *,
-                 approval_id: str | None = None) -> dict:
+                 approval_id: str | None = None, allow_self_approval: bool = False) -> dict:
         """PO 只能由承诺派生（FR-AWARD-003）：**先判派生依据，再判批准**——首条错误指向最可行动的下一步。"""
         award = self._awards.get(award_id)
         if award is None:
@@ -171,6 +180,9 @@ class CommitmentGate:
                            "basis": f"{award.get('quote_id')}#{ref}:unit_price",
                            "trace": trace_mode})
         approval = self.approval.require(scope=SCOPE_PO_ISSUE, ref=award_id, approval_id=approval_id)
+        # 人门判据（P48）：发 PO 与承诺同一条 —— 批的人必须另有其人（默认），且是他被点名批的那一条。
+        verify_signoff(approval, scope=SCOPE_PO_ISSUE, ref=award_id, signer=self.actor,
+                       allow_self_approval=allow_self_approval)
         self._po_counter += 1
         record = {"po_id": f"po-{self._po_counter:04d}", "award_id": award_id,
                   "intent_id": award.get("intent_id"), "quote_id": award.get("quote_id"),

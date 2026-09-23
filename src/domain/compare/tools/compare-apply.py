@@ -484,10 +484,20 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                  "matrix_counts": matrix["counts"]}
 
     archived = archive(inbox, request) if request.resolve().parent == inbox.resolve() else ""
-    hint = ("权重已存成插件配置（%s）并落了一条 compare/rank-computed；下次打开比价页会读回这组权重。"
-            % str(config_path) if step == "weights" else
-            "已导出三份文件（排名表 CSV + 同一行项目内的比较矩阵 CSV + 人读正文 TXT）并落了一条 compare/table-exported；"
-            "页脚写了 source=eval:<id> 与行数，可与账本逐行核对。")
+    # **回执文案与账本增量同源**（P49）：同一份评估已经登记过时 `ledger_added == 0`（幂等：账本去重命中），
+    # 那就**不能**说"落了一条事实" —— 修前这句话是无条件写的，与同一份回执里的 `ledger_added: 0` 打架
+    # （用户会以为又落了一条，也无法解释为什么账本没长）。
+    if step == "weights":
+        hint = (("权重已存成插件配置（%s），并落了一条 compare/rank-computed；下次打开比价页会读回这组权重。"
+                 % str(config_path)) if ledger_added else
+                ("权重已存成插件配置（%s）；这一份评估（evaluation_id=%s）**已经在账本里**，"
+                 "本次账本零新增（幂等：同一评估不重复登记）—— 这组权重下次打开比价页会读回。"
+                 % (str(config_path), evaluation["evaluation_id"])))
+    else:
+        hint = ("已导出三份文件（排名表 CSV + 同一行项目内的比较矩阵 CSV + 人读正文 TXT）"
+                + ("并落了一条 compare/table-exported；" if ledger_added
+                   else "；这一份评估的导出记录**已经在账本里**，本次账本零新增（幂等）；")
+                + "页脚写了 source=eval:<id> 与行数，可与账本逐行核对。")
     return emit({"ok": True, "step": step, "event": applied[-1]["event"], "applied": applied,
                  "duplicates": [] if ledger_added else [{"reason": "idempotent-rank", "evaluation_id": evaluation["evaluation_id"]}],
                  "ledger_added": ledger_added, "refusal": None, "request": str(request), "archived": archived,

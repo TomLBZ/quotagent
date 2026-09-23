@@ -329,7 +329,13 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         ranking = []
         for position, row in enumerate(evaluation["ranking"], start=1):
             entry = next((item for item in prepared if item["quote_id"] == row["quote_id"]), {})
+            # **每一行都带上它属于哪个包/哪一版**（P49）：界面的「比价排名」表要把 `package_id` 当**行里的
+            # 一列**摆出来，否则「保存权重」这类**同时**需要 `package_id` + 「你看到的那一版」的动作
+            # **没有任何一行能同时给出这两样**（最小上下文集在整视图里 0 入口，P47 §4.1 的实测）。
+            # 这里只是把**已经在上游算出来的**事实（本包的 id 与 rev，同一个循环的入参）逐行复述一遍，
+            # 不新增任何判定、不改名次与分数（版本语义一个字未动）。
             ranking.append({"rank": position, "quote_id": row["quote_id"], "score": row["score"],
+                            "package_id": package_id, "package_rev": rev,
                             "tco_total": row["tco_total"], "supplier": entry.get("supplier", ""),
                             "lead_time_days": entry.get("lead_time_days"),
                             "total_amount": entry.get("total_amount"),

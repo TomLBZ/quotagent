@@ -27,6 +27,12 @@
  *              object_kind?, input:{fields:[{name,label,type,required,min,max,pattern,options,help}]},
  *              permission:'none'|'human-signature', confirm:{required,message}, server(ctx, input)}`
  *              —— `server` 就是**动作的服务端一半**（插件自己的实现；外壳只负责调用与回执）；
+ *              · **只读派发可以在回执上声明 `readonly: true`**（`{ok, code, reason, next_action, result, readonly}`）：
+ *                含义是"**这一次**派发是只读的"（由插件自己说；界面**自己**在页面加载时发的那种读取就该这么说，
+ *                例：`export.columns` 的只读模式）。外壳据此**不把它记进动作流水/通知中心**（未读不被读操作污染），
+ *                前提是**真的没跑任何唯一写者且账本零新增** —— 跑过写者、或写者回执与响应不一致时照旧进流水
+ *                （见 `app-shell.mjs#runActionInner`）。与 `result.ok` 无关：只读分支被判拒（未登录等）时也仍是只读。
+ *                保存类派发**不要**声明它（否则就是把一条真实变更从流水里抹掉）。
  *              · `placement`（归属位置，闭合集合 `PLACEMENTS`）：**这个动作摆在哪里**是插件的声明，
  *                外壳照它摆，不再"能摆哪儿就摆哪儿"。缺省 `['toolbar']`；
  *              · **所需上下文**由 `input.fields` 的**来源声明**给出（见下面的「字段来源」段）：

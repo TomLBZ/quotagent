@@ -120,7 +120,7 @@ curl -s -X POST http://127.0.0.1:8099/quotagent/supplier/deadlines/promise \
 
 ```
 $ PYTHONPATH=src python3 -m quotagent.g1side supplier tmp/manual 3
-[contractor] 缺少对方产物: /workspace/projects/quotagent/tmp/manual/contractor/08-award-intent.json
+[contractor] 缺少对方产物: <仓库根>/tmp/manual/contractor/08-award-intent.json
 ```
 
 即：告诉**采购员**去跑**供应商侧**的第 3 相位；而该相位要先有**承包商侧**第 4 相位写出的文件。这不是「一个动作一条命令」的产品 CLI，是有强阶段耦合的走查脚本（`contractor_1..4` × `supplier_1..3`，每个相位读上一步写进共享目录的 JSON）。采购员在网页上点不出 `change/proposed`。

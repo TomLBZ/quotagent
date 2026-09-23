@@ -19,14 +19,14 @@
       门：意向必须真的在**承包商账本**里，且该 `quote_id` 在本侧账本里有自己的 `quote/submitted`（只确认自己那份）。
       落：自己账本 `award/confirmed` + 承包商账本一条同名登记（与 `quote-sign.py` 的双向登记同一模式）。
   · `commit`（承包商侧，**人签**：`--actor` 必须 `human:`）
-      门①：意向存在且仍 `proposed`；门②：**有供应商确认**（`award/confirmed`，FR-AWARD-002）；门③：人工门
-      （`approval/requested` → `approval/granted`，`scope=award.commit`，签发人 `human:`）——三样齐备才落
-      `award/committed`（承诺类事件）。
+      门①：意向存在且仍 `proposed`；门②：**有供应商确认**（`award/confirmed`，FR-AWARD-002）；门③：**人门**——
+      **消费一扇已经 granted 的门**（`scope=award.commit`、`ref=<intent_id>`，见下「人门怎么算数」）。
+      三样齐备才落 `award/committed`（承诺类事件）。
   · `po`（承包商侧，**人签**：`--actor` 必须 `human:`）
       门①：**PO 只能由承诺派生**（`award/committed` 的 `award_id` 必须存在）；门②：逐行引用中标条目、不得改价
-      （既有 `CommitmentGate.issue_po` 的 `po-line-not-derived` / `po-line-price-mismatch`）；门③：人工门
-      （`scope=po.issue`）；门④：**投递**——收件人（供应商侧 realm）与中标报价的提交者必须对得上
-      （`po-recipient-*`，账本零新增）。
+      （既有 `CommitmentGate.issue_po` 的 `po-line-not-derived` / `po-line-price-mismatch`）；门③：**人门**——
+      **消费一扇已经 granted 的门**（`scope=po.issue`、`ref=<award_id>`）；门④：**投递**——收件人（供应商侧
+      realm）与中标报价的提交者必须对得上（`po-recipient-*`，账本零新增）。
       落：`po/issued`（带 `po → award → intent → quote` 的追溯链）+ **投递两条登记**
       （承包商账本 `po/distributed`（谁在何时收到哪个 `po_id`，与 `rfq/distributed` 同形）+
       供应商账本 `po/distributed`（收件人侧那条：本侧收到的采购单与逐行）+ 共享交换目录的**投递信封**）。
@@ -34,6 +34,21 @@
       门①：这条 PO 必须真的**投递到了本侧**（本侧账本里有 `po/distributed` 且 `po_id` 对上）——
       只确认投递给自己的那份；门②：承包商账本里该 `po_id` 的 `po/issued` 必须在（两侧对得上，不凭空回签）。
       落：自己账本 `po/acknowledged` + 承包商账本一条同名登记（与 `award/confirmed` 的双向登记同一模式）。
+
+**人门怎么算数（P48，唯一判定在 `src/system/approval/code/approval.py#signoff_verdict`）**：
+承诺 / 发 PO **不再**在同一次落账里自己开单、自己批准（修前正是这样：主管没有否决权，四问一屏查到的
+「谁批的」就是署名者本人）。现在只**消费**本侧账本里已经存在的那一扇门，且必须满足：① `scope`+`ref` 对得上；
+② 状态是 `granted`；③ 批的人是人（`decided_by` 以 `human:` 开头）；④ **批的人不是这次署名的人**；
+⑤ 开单时点名了审批人（`approvers`）⇒ 批的人必须是点名的那位。任一不满足 ⇒ **具名拒**
+（`approval-required` / `approval-not-granted` / `approval-denied` / `approval-aborted` /
+`approver-must-differ` / `approver-not-named` / `approver-not-human`）+ `next_action`（去哪儿开单、该找谁批），
+**账本零新增**（这条判据跑在任何写动作之前）。
+
+**自签自批是显式开关（默认关闭）**：`<ui-shared>/commitments/policy.json` 里
+`{"allow_self_approval": true}`（普通文件、0600、键必须是真布尔）。**文件不存在 = 关闭**（默认）；
+开关打开时，若没有可消费的门，本脚本才按老办法自行开单+批准，并在回执与界面上**如实写出**
+「本次批准来自你本人署名（自签自批：显式开关已开）」。形状不合法的开关文件 ⇒ `policy-malformed`（rc 2），
+不当作「关闭」处理（那会让人误以为开关开着）。
 
 纪律（与 `quote-draft.py` / `quote-sign.py` / `rfq-publish.py` 同规格）：
   · 用法/环境错误在**构造 Ledger 之前**返回（拒绝时连空账本文件都不创建）；
@@ -57,7 +72,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / "src"))
 
-from quotagent.services.approval import ApprovalService  # noqa: E402
+from quotagent.services.approval import ApprovalService, SignoffRequired, select_signoff  # noqa: E402
 from quotagent.services.commitments import CommitmentGate  # noqa: E402
 from quotagent.kernel.ledger import Ledger, LedgerError  # noqa: E402
 
@@ -77,6 +92,11 @@ EVENT_PO_DISTRIBUTED = "po/distributed"
 EVENT_PO_ACKNOWLEDGED = "po/acknowledged"
 SCOPE_AWARD = "award.commit"
 SCOPE_PO = "po.issue"
+#: 自签自批的**运营开关**（默认关闭）：`<ui-shared>/commitments/policy.json` 里的这个键。
+#: 为什么不是界面上的一个勾选框：那样任何人都能点一下把自己批过去 —— 人门就等于没有；
+#: 显式的、默认关闭的配置 + 回执/界面如实写出，才是「业务确实需要」时的正确姿势（ADR-0024）。
+POLICY_REL = ("commitments", "policy.json")
+SELF_APPROVAL_KEY = "allow_self_approval"
 
 
 def emit(payload: dict, code: int = 0) -> int:
@@ -125,6 +145,108 @@ def bump_counter(approvals: ApprovalService, rows: list[dict]) -> int:
             highest = max(highest, int(suffix))
     approvals._counter = highest                      # noqa: SLF001 —— 下一个 request 得到 ap-(highest+1)
     return highest
+
+
+def self_approval_policy(ui_shared: Path) -> tuple[bool, str, dict | None]:
+    """**自签自批的运营开关**（默认关闭）：`<ui-shared>/commitments/policy.json` 的 `allow_self_approval`。
+
+    返回 `(是否允许, 给人看的一行口径, 拒绝)`；拒绝非空 ⇒ 调用方**在任何写动作之前**具名拒（rc 2）。
+
+    为什么长这样（ADR-0024）：承诺 / 发 PO 的人门必须**另有其人**才有否决权；「同一人既署名又批准」
+    若业务上确实需要（沙盘、单人演示…），只能是**显式的、默认关闭的**配置，并且必须在回执与界面上
+    如实写出——所以这里**只认一个 0600 普通文件**、只认真布尔，**文件不存在 = 关闭**（默认）；
+    形状不合法**不当作关闭**（静默忽略一个坏开关 = 让人以为开关开着，属于撒谎）。
+    """
+    path = ui_shared.joinpath(*POLICY_REL)
+    if not path.exists():
+        return False, f"关闭（默认）：没有 {path}", None
+    try:
+        info = path.stat()
+    except OSError as exc:
+        return False, "", refusal("policy-unreadable", f"{path} 读不出来：{exc}",
+                                  "修这个文件的权限/存在性（本次不接受「当关闭处理」）")
+    if not stat.S_ISREG(info.st_mode):
+        return False, "", refusal("policy-not-regular", f"{path} 不是普通文件",
+                                  "开关必须是普通文件（不接受符号链接/目录）")
+    mode = stat.S_IMODE(info.st_mode)
+    if mode != 0o600:
+        return False, "", refusal("policy-insecure-mode", f"{path} 权限 {oct(mode)} 不是 0600",
+                                  "chmod 600 之后再重提（开关文件只给运营看）")
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        return False, "", refusal("policy-malformed", f"{path} 不是合法 JSON：{exc}",
+                                  "改成 {\"allow_self_approval\": true|false} 后重提")
+    if not isinstance(doc, dict):
+        return False, "", refusal("policy-malformed", f"{path} 不是对象（收到 {type(doc).__name__}）",
+                                  "改成 {\"allow_self_approval\": true|false} 后重提")
+    value = doc.get(SELF_APPROVAL_KEY, False)
+    if isinstance(value, bool):
+        allowed = value
+    elif str(value).strip().lower() in ("true", "false"):
+        allowed = str(value).strip().lower() == "true"
+    else:
+        return False, "", refusal("policy-malformed",
+                                  f"{path} 的 {SELF_APPROVAL_KEY} 不是布尔：{value!r}",
+                                  "只写 true 或 false（写在 JSON 里）")
+    state = "打开" if allowed else "关闭"
+    return allowed, f"{state}（显式配置 {path} 的 {SELF_APPROVAL_KEY}={str(allowed).lower()}）", None
+
+
+def gate_receipt(record: dict | None, *, signer: str, self_approved: bool,
+                 switch_on: bool) -> dict:
+    """**人门回执**（给界面/回执如实写）：谁批的、谁签的、是不是同一个人、门有没有真被用上。
+
+    · 消费了别人的门 ⇒ `gate_consumed=True`、`approver != signer`（谁批的 ≠ 谁签的）；
+    · 走了自签自批开关 ⇒ `self_approved=True`（界面必须写「本次批准来自你本人署名」）；
+    · 一扇门都没有（只在开关打开时可能）⇒ `gate_consumed=False`。
+    """
+    approver = str((record or {}).get("decided_by") or "")
+    named = [str(who) for who in ((record or {}).get("approvers") or []) if str(who).strip()]
+    unrecorded = bool(record) and not named
+    return {
+        "approval_id": str((record or {}).get("approval_id") or ""),
+        "approver": approver,
+        "signer": signer,
+        "approver_is_signer": bool(approver) and approver == signer,
+        "approver_named_in_gate": bool(approver) and approver in named,
+        "gate_approvers_named_at_request": named,
+        "gate_approvers_unrecorded": unrecorded,
+        "gate_consumed": bool(record) and not self_approved,
+        "self_approved": bool(self_approved),
+        "self_approval_switch": bool(switch_on),
+    }
+
+
+def gate_receipt_note(receipt: dict) -> str:
+    """人门回执的一句话（人话口径，界面直接照抄；不许写成「已过人工门」了事）。"""
+    if receipt.get("self_approved"):
+        return ("本次批准来自**你本人署名**（自签自批：显式开关 allow_self_approval 已开，"
+                "默认关闭）—— 这不算「另一个人批过」")
+    if not receipt.get("gate_consumed"):
+        return "本次落账没有消费任何人工门（只在自签自批开关打开时可能）"
+    extra = "（开单时未点名审批人：只按 scope/ref 对账）" if receipt.get("gate_approvers_unrecorded") else ""
+    if receipt.get("approver_is_signer"):
+        return f"门 {receipt.get('approval_id')} 是同一人批的（批准人 == 署名）{extra}"
+    return (f"门 {receipt.get('approval_id')} 由 {receipt.get('approver')} 批准，"
+            f"署名的是 {receipt.get('signer')}：**谁批的 ≠ 谁签的**{extra}")
+
+
+def select_gate(approvals: ApprovalService, *, scope: str, ref: str, actor: str,
+                switch_on: bool) -> tuple[dict | None, bool, dict | None]:
+    """承诺 / 发 PO 的**人门入口**：只消费账本里已经 granted 的、**别人**批的那一扇门（P48）。
+
+    三种结果互斥：① 有可消费的门 ⇒ `(记录, False, None)`；② 没有可消费的门且**开关打开** ⇒
+    `(None, True, None)`（调用方自行开单+批准，回执里如实标成自签自批）；③ 没有可消费的门且
+    开关关闭（**默认**）⇒ `(None, False, 具名拒)`（调用方在任何写动作之前拒，账本零新增）。
+    """
+    record, refusal = select_signoff(approvals.records(), scope=scope, ref=ref, signer=actor,
+                                     allow_self_approval=switch_on)
+    if record is not None:
+        return record, False, None
+    if switch_on:
+        return None, True, None
+    return None, False, refusal
 
 
 def rows_of(path: Path) -> tuple[list[dict] | None, str | None]:
@@ -507,6 +629,14 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         return deny(deny_["code"], deny_["reason"], deny_["next_action"], step, str(request))
     assert lines is not None
 
+    # 自签自批的**运营开关**（默认关闭）：只在两个承诺动作上读；形状不合法 ⇒ 在任何写动作之前 rc 2
+    # （不当作「关闭」处理 —— 静默忽略一个坏开关会让人以为开关开着）。
+    policy_on, policy_note, policy_deny = (False, "关闭（默认）", None)
+    if step in ("commit", "po"):
+        policy_on, policy_note, policy_deny = self_approval_policy(ui_shared)
+        if policy_deny is not None:
+            return usage_error(policy_deny["code"], policy_deny["reason"], policy_deny["next_action"])
+
     # ------------------------------------------------------------------ propose
     if step == "propose":
         quote_id = str(record.get("quote_id") or "").strip()
@@ -680,44 +810,86 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         bump_counter(approvals, c_rows)                           # 门号不与账本里已有的重号
         gate = CommitmentGate(approval=approvals, ledger=ledger, actor=actor)
         seeded = seed_gate(gate, c_rows)
+        # ---- 人门（P48）：先挑一扇**已经 granted、别人批的**门；挑不到且开关关闭 ⇒ 具名拒（零新增）----
+        gate_row, self_approved, gate_deny = select_gate(approvals, scope=SCOPE_AWARD, ref=intent_id,
+                                                        actor=actor, switch_on=policy_on)
+        if gate_deny is not None:
+            return deny(gate_deny["code"], gate_deny["reason"], gate_deny["next_action"], step,
+                        str(request))
         if args.dry_run:
-            # 干跑用**内存影子栈**（`ledger=None`）：把三样门都走一遍，但一个字节都不落盘
-            shadow = CommitmentGate(approval=ApprovalService(ledger=None, actor=actor),
-                                    ledger=None, actor=actor)
+            # 干跑用**内存影子栈**（`ledger=None`）：门判据与真实路径同一处（`select_gate`），
+            # 只是把落账换成内存，一个字节都不落盘。
+            shadow_approvals = ApprovalService(ledger=None, actor=actor)
+            shadow_approvals._records = dict(approvals._records)   # noqa: SLF001 —— 账本重放出来的门照用
+            shadow_approvals._order = list(approvals._order)       # noqa: SLF001
+            shadow = CommitmentGate(approval=shadow_approvals, ledger=None, actor=actor)
             seed_gate(shadow, c_rows)
-            shadow_request = shadow.approval.request(SCOPE_AWARD, {"intent_id": intent_id}, ref=intent_id,
-                                                     approvers=[actor], reason=str(record.get("reason") or ""))
-            shadow.approval.decide(shadow_request["approval_id"], by=actor, decision="granted",
-                                   comment=str(record.get("comment") or ""))
-            committed = shadow.commit_award(intent, supplier_confirmed=True,
-                                            approval_id=shadow_request["approval_id"])
+            if gate_row is not None:
+                committed = shadow.commit_award(intent, supplier_confirmed=True,
+                                                approval_id=gate_row["approval_id"])
+                dry_note = f"干跑：消费已批准的门 {gate_row['approval_id']}（批的人 {gate_row['decided_by']}）"
+            else:
+                shadow_request = shadow_approvals.request(SCOPE_AWARD, {"intent_id": intent_id},
+                                                          ref=intent_id, approvers=[actor],
+                                                          reason=str(record.get("reason") or ""))
+                shadow_approvals.decide(shadow_request["approval_id"], by=actor, decision="granted",
+                                        comment=str(record.get("comment") or ""))
+                committed = shadow.commit_award(intent, supplier_confirmed=True,
+                                                approval_id=shadow_request["approval_id"],
+                                                allow_self_approval=True)
+                dry_note = ("干跑：没有可消费的门，开关开着 ⇒ 会自签自批"
+                            f"（{shadow_request['approval_id']}，批准人 == 署名）")
             return emit({"ok": True, "step": step, "dry_run": True, "applied": [], "duplicates": [],
                          "ledger_added": 0, "refusal": None, "seeded": seeded,
-                         "award_id": committed["award_id"],
-                         "note": "干跑：三样门（意向 / 供应商确认 / 人工批准）都过，账本零新增"}, 0)
+                         "award_id": committed["award_id"], "self_approval_switch": policy_on,
+                         "self_approval_policy": policy_note,
+                         "note": f"{dry_note}；三样门（意向 / 供应商确认 / 人门）都过，账本零新增"}, 0)
         try:
-            request_row = approvals.request(SCOPE_AWARD, {"intent_id": intent_id}, ref=intent_id,
-                                            approvers=[actor], reason=str(record.get("reason") or "APP 人工门"))
-            approvals.decide(request_row["approval_id"], by=actor, decision="granted",
-                             comment=str(record.get("comment") or ""))
-            committed = gate.commit_award(intent, supplier_confirmed=True,
-                                          approval_id=request_row["approval_id"])
+            if gate_row is not None:
+                committed = gate.commit_award(intent, supplier_confirmed=True,
+                                              approval_id=gate_row["approval_id"],
+                                              allow_self_approval=policy_on)
+                spent = 1
+                gate_used = gate_row
+            else:                       # 开关打开且没有可消费的门 ⇒ 显式自签自批（回执如实写出）
+                request_row = approvals.request(SCOPE_AWARD, {"intent_id": intent_id}, ref=intent_id,
+                                                approvers=[actor],
+                                                reason=str(record.get("reason") or "APP 人工门"))
+                approvals.decide(request_row["approval_id"], by=actor, decision="granted",
+                                 comment=str(record.get("comment") or ""))
+                committed = gate.commit_award(intent, supplier_confirmed=True,
+                                              approval_id=request_row["approval_id"],
+                                              allow_self_approval=True)
+                spent = 3
+                gate_used = approvals.get(request_row["approval_id"])
+        except SignoffRequired as exc:            # 服务层的人门判据（与选择器同一处口径）
+            return deny(exc.code, exc.reason, exc.next_action, step, str(request))
         except LedgerError as exc:
             return deny("ledger-frozen", str(exc)[0:200], "先修账本（本脚本不往坏账本追加）", step, str(request))
         except Exception as exc:  # noqa: BLE001 —— 服务的门就是门：拒就如实报，不兜底落账
             return deny("commitment-refused", f"{type(exc).__name__}: {exc}",
-                        "按上面的原因补齐（人工批准 / 供应商确认），再重提", step, str(request))
+                        "按上面的原因补齐（人门 / 供应商确认），再重提", step, str(request))
+        receipt = gate_receipt(gate_used, signer=actor, self_approved=self_approved, switch_on=policy_on)
         archived = archive(inbox, request) if request.resolve().parent == inbox.resolve() else ""
-        return emit({"ok": True, "step": step, "applied": [
-            {"event": "approval/requested", "approval_id": request_row["approval_id"], "scope": SCOPE_AWARD},
-            {"event": "approval/granted", "approval_id": request_row["approval_id"], "decided_by": actor},
-            {"event": "award/committed", "award_id": committed["award_id"], "intent_id": intent_id,
-             "quote_id": intent.get("quote_id"), "approved_by": actor}],
-            "duplicates": [], "ledger_added": 3, "refusal": None, "request": str(request),
-            "archived": archived, "intent_id": intent_id, "award_id": committed["award_id"],
-            "approval_id": request_row["approval_id"], "seeded": seeded,
-            "next_action": f"发 PO：APP 承包商道「发 PO」（award_id={committed['award_id']}，另一次人签）",
-            "note": "承诺已成立（承诺类事件）：award/committed 只由本脚本落，且必须有人工批准记录"}, 0)
+        applied = ([{"event": "approval/requested", "approval_id": gate_used["approval_id"],
+                     "scope": SCOPE_AWARD}] if self_approved else []) \
+            + ([{"event": "approval/granted", "approval_id": gate_used["approval_id"],
+                 "decided_by": actor}] if self_approved else []) \
+            + [{"event": "award/committed", "award_id": committed["award_id"], "intent_id": intent_id,
+                "quote_id": intent.get("quote_id"), "approved_by": receipt["approver"] or actor}]
+        return emit({"ok": True, "step": step, "applied": applied,
+                     "duplicates": [], "ledger_added": spent, "refusal": None, "request": str(request),
+                     "archived": archived, "intent_id": intent_id, "award_id": committed["award_id"],
+                     "approval_id": gate_used["approval_id"], "seeded": seeded,
+                     "approver": receipt["approver"], "signer": actor, "gate": receipt,
+                     "approver_is_signer": receipt["approver_is_signer"],
+                     "gate_consumed": receipt["gate_consumed"], "self_approved": self_approved,
+                     "self_approval_switch": policy_on, "self_approval_policy": policy_note,
+                     "gate_note": gate_receipt_note(receipt),
+                     "next_action": f"发 PO：APP 承包商道「发 PO」（award_id={committed['award_id']}，"
+                                    f"另一次人签，且同样要**另一个人**批过 po.issue 的门）",
+                     "note": f"承诺已成立（承诺类事件）：{gate_receipt_note(receipt)}；"
+                             f"自签自批开关：{policy_note}"}, 0)
 
     # ------------------------------------------------------------------ acknowledge（供应商侧回签）
     # 这一段必须在**发 PO 那一段之前**：发 PO 的代码假定 `record` 里有 `award_id`（回签请求里没有）。
@@ -842,30 +1014,61 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     seeded = seed_gate(gate, c_rows)
     po_input = [{"ref_line": line["item_id"], "qty": line["qty"], "unit_price": line["unit_price"]}
                 for line in po_lines]
+    # ---- 人门（P48）：与承诺同一条 —— 只消费**已经 granted、别人批的** po.issue 门（ref=award_id）----
+    gate_row, self_approved, gate_deny = select_gate(approvals, scope=SCOPE_PO, ref=award_id,
+                                                    actor=actor, switch_on=policy_on)
+    if gate_deny is not None:
+        return deny(gate_deny["code"], gate_deny["reason"], gate_deny["next_action"], step, str(request))
     if args.dry_run:
-        shadow = CommitmentGate(approval=ApprovalService(ledger=None, actor=actor), ledger=None, actor=actor)
+        shadow_approvals = ApprovalService(ledger=None, actor=actor)
+        shadow_approvals._records = dict(approvals._records)   # noqa: SLF001 —— 账本重放出来的门照用
+        shadow_approvals._order = list(approvals._order)       # noqa: SLF001
+        shadow = CommitmentGate(approval=shadow_approvals, ledger=None, actor=actor)
         seed_gate(shadow, c_rows)
-        shadow_request = shadow.approval.request(SCOPE_PO, {"award_id": award_id}, ref=award_id,
-                                                approvers=[actor], reason=str(record.get("reason") or ""))
-        shadow.approval.decide(shadow_request["approval_id"], by=actor, decision="granted",
-                               comment=str(record.get("comment") or ""))
-        shadow_po = shadow.issue_po(award_id, po_input, approval_id=shadow_request["approval_id"])
+        if gate_row is not None:
+            shadow_po = shadow.issue_po(award_id, po_input, approval_id=gate_row["approval_id"])
+            dry_aid = str(gate_row["approval_id"])
+            dry_note = f"干跑：消费已批准的门 {gate_row['approval_id']}（批的人 {gate_row['decided_by']}）"
+        else:
+            shadow_request = shadow_approvals.request(SCOPE_PO, {"award_id": award_id}, ref=award_id,
+                                                      approvers=[actor], reason=str(record.get("reason") or ""))
+            shadow_approvals.decide(shadow_request["approval_id"], by=actor, decision="granted",
+                                    comment=str(record.get("comment") or ""))
+            shadow_po = shadow.issue_po(award_id, po_input, approval_id=shadow_request["approval_id"],
+                                       allow_self_approval=True)
+            dry_aid = str(shadow_request["approval_id"])
+            dry_note = ("干跑：没有可消费的门，开关开着 ⇒ 会自签自批"
+                        f"（{shadow_request['approval_id']}，批准人 == 署名）")
         return emit({"ok": True, "step": step, "dry_run": True, "applied": [], "duplicates": [],
                      "ledger_added": 0, "refusal": None, "seeded": seeded,
-                     "approval_id": shadow_request["approval_id"], "lines": len(po_lines),
+                     "approval_id": dry_aid,
+                     "lines": len(po_lines), "self_approval_switch": policy_on,
+                     "self_approval_policy": policy_note,
                      "trace_mode": shadow_po["trace_mode"], "delivered_to": [s_realm],
-                     "note": "干跑：派生依据、人工门与投递收件人都过，账本零新增（信封也未写）"}, 0)
+                     "note": f"{dry_note}；派生依据、人门与投递收件人都过，账本零新增（信封也未写）"}, 0)
     try:
-        request_row = approvals.request(SCOPE_PO, {"award_id": award_id}, ref=award_id, approvers=[actor],
-                                        reason=str(record.get("reason") or "APP 人工门"))
-        approvals.decide(request_row["approval_id"], by=actor, decision="granted",
-                         comment=str(record.get("comment") or ""))
-        issued = gate.issue_po(award_id, po_input, approval_id=request_row["approval_id"])
+        if gate_row is not None:
+            issued = gate.issue_po(award_id, po_input, approval_id=gate_row["approval_id"],
+                                   allow_self_approval=policy_on)
+            spent = 1
+            gate_used = gate_row
+        else:                           # 开关打开且没有可消费的门 ⇒ 显式自签自批（回执如实写出）
+            request_row = approvals.request(SCOPE_PO, {"award_id": award_id}, ref=award_id,
+                                            approvers=[actor], reason=str(record.get("reason") or "APP 人工门"))
+            approvals.decide(request_row["approval_id"], by=actor, decision="granted",
+                             comment=str(record.get("comment") or ""))
+            issued = gate.issue_po(award_id, po_input, approval_id=request_row["approval_id"],
+                                   allow_self_approval=True)
+            spent = 3
+            gate_used = approvals.get(request_row["approval_id"])
+    except SignoffRequired as exc:            # 服务层的人门判据（与选择器同一处口径）
+        return deny(exc.code, exc.reason, exc.next_action, step, str(request))
     except LedgerError as exc:
         return deny("ledger-frozen", str(exc)[0:200], "先修账本（本脚本不往坏账本追加）", step, str(request))
     except Exception as exc:  # noqa: BLE001
         return deny("po-refused", f"{type(exc).__name__}: {exc}",
                     "PO 行必须引用中标条目、且不得改价（改价要走变更单 + 人工门）", step, str(request))
+    receipt = gate_receipt(gate_used, signer=actor, self_approved=self_approved, switch_on=policy_on)
     # 投递：**签发之后立刻投给中标供应商**（两侧账本各一条 `po/distributed` + 交换面的投递信封）。
     # 判据已在上面预检过（同一处判据、`deliver_po` 里再跑一遍）；这里失败只会是账本写不进去。
     po_body = issued_po_in(c_rows, str(issued["po_id"])) or {
@@ -873,7 +1076,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         "quote_id": issued.get("quote_id"), "package_id": issued.get("package_id"),
         "lines": issued.get("lines") or [], "total_amount": issued.get("total_amount"),
         "chain": issued.get("chain"), "trace_mode": issued.get("trace_mode"),
-        "approved_by": actor, "issued_at": issued.get("issued_at")}
+        "approved_by": receipt["approver"] or actor, "issued_at": issued.get("issued_at")}
     delivery, deny_ = deliver_po(po_body=po_body, led_contractor=led_contractor, c_rows=c_rows,
                                 led_supplier=led_supplier, s_rows=s_rows, delivery_out=delivery_out,
                                 now=args.now, actor=actor, premises=record)
@@ -881,23 +1084,30 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         return deny(deny_["code"], deny_["reason"], deny_["next_action"], step, str(request))
     assert delivery is not None
     archived = archive(inbox, request) if request.resolve().parent == inbox.resolve() else ""
-    return emit({"ok": True, "step": step, "applied": [
-        {"event": "approval/requested", "approval_id": request_row["approval_id"], "scope": SCOPE_PO},
-        {"event": "approval/granted", "approval_id": request_row["approval_id"], "decided_by": actor},
+    gate_rows_applied = ([{"event": "approval/requested", "approval_id": gate_used["approval_id"],
+                           "scope": SCOPE_PO}] if self_approved else []) \
+        + ([{"event": "approval/granted", "approval_id": gate_used["approval_id"],
+             "decided_by": actor}] if self_approved else [])
+    return emit({"ok": True, "step": step, "applied": gate_rows_applied + [
         {"event": "po/issued", "po_id": issued["po_id"], "award_id": award_id,
          "trace_mode": issued["trace_mode"], "total_amount": issued["total_amount"],
-         "chain": issued["chain"]}] + delivery["applied"],
-        "duplicates": [], "ledger_added": 3 + delivery["ledger_added"], "refusal": None,
+         "chain": issued["chain"], "approved_by": receipt["approver"] or actor}] + delivery["applied"],
+        "duplicates": [], "ledger_added": spent + delivery["ledger_added"], "refusal": None,
         "request": str(request),
         "archived": archived, "po_id": issued["po_id"], "award_id": award_id,
-        "approval_id": request_row["approval_id"], "seeded": seeded,
+        "approval_id": gate_used["approval_id"], "seeded": seeded,
+        "approver": receipt["approver"], "signer": actor, "gate": receipt,
+        "approver_is_signer": receipt["approver_is_signer"], "gate_consumed": receipt["gate_consumed"],
+        "self_approved": self_approved, "self_approval_switch": policy_on,
+        "self_approval_policy": policy_note, "gate_note": gate_receipt_note(receipt),
         "trace_mode": issued["trace_mode"], "total_amount": issued["total_amount"],
         "chain": issued["chain"], "delivered_to": [delivery["recipient"]],
         "delivery": delivery["envelope"], "premises": delivery["premises"],
         "next_action": "PO 已投给中标供应商（对方侧「发给我的采购单」里逐行、含追溯链；可下载/打印/挂回签件）；"
                        "等对方在 APP 供应商道「确认收到采购单（人签）」回签",
-        "note": "PO 逐行可追溯（ref_line → 中标条目 → 报价）：行与价都由承诺派生，不由界面自由输入；"
-                "投递是**账本事实**（两侧各一条 po/distributed），不是界面副作用"}, 0)
+        "note": f"PO 逐行可追溯（ref_line → 中标条目 → 报价）：行与价都由承诺派生，不由界面自由输入；"
+                f"{gate_receipt_note(receipt)}；自签自批开关：{policy_note}；"
+                f"投递是**账本事实**（两侧各一条 po/distributed），不是界面副作用"}, 0)
 
 
 

@@ -33,10 +33,10 @@ admin-route 的 python 半边（HEAD 干净副本 → 本树）: 搬前 rc=0 13/
 ## 三、③ 内核：旧导入路径仍可用的实测行（原文）
 
 ```text
-运行中的 Ledger.append 的 co_filename = /workspace/projects/quotagent/src/system/kernel/code/ledger.py
-运行中的 EventBus.emit  的 co_filename = /workspace/projects/quotagent/src/system/kernel/code/events.py
+运行中的 Ledger.append 的 co_filename = <仓库根>/src/system/kernel/code/ledger.py
+运行中的 EventBus.emit  的 co_filename = <仓库根>/src/system/kernel/code/events.py
 模块 __doc__ 首行 = ctx.events：五模式事件分发（`docs/design/05-events.md`）。
-模块 __file__（导入面） = /workspace/projects/quotagent/src/quotagent/kernel/events.py
+模块 __file__（导入面） = <仓库根>/src/quotagent/kernel/events.py
 ```
 
 实体字节守恒（搬前 = `git show HEAD:`，搬后 = 新位置）：

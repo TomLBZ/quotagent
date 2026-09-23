@@ -19,7 +19,7 @@
 ## 接手指令（人做，30 秒看懂）
 
 ```sh
-cd /workspace/projects/quotagent
+cd <仓库根>
 tools/verify.sh v                      # 看当前状态：12 条都在，全部 open（待人工）
 tools/v-kit.sh V-002                   # 打包某条 V 的材料 → tmp/v-kit/V-002/
 tools/v-kit.sh --all                   # 打包全部 12 条

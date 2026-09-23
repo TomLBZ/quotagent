@@ -324,7 +324,8 @@ table.q-table td.q-editing { box-shadow: inset 2px 0 0 var(--accent); }
   border-top: 1px solid var(--line); padding: 8px 0 2px; margin-top: 8px; }
 body.q-modal-open { overflow: hidden; }
 /* P21（D7）：弹层打开时，**新**提示进弹层正文（见 `assets/app.js#toast` 里的 `.q-toasts-inline`）；
-   浮层那份临时隐身，免得压住全屏弹层的标题（P20 实测：导出预览的标题被两条通知盖住）。 */
+   浮层那份**降到遮罩之下**（见下面 `body.q-modal-open .q-toasts`）—— 既不压住全屏弹层的标题，
+   也不冒充"本次动作的回执"（P49：修前会把上一条动作的提示搬进新开的弹层，见 `assets/app.js#openModal`）。 */
 
 /* ---- ② 触控命中区：粗指针设备（手机/平板）一律 ≥44px ---- */
 @media (pointer: coarse) {
@@ -631,10 +632,14 @@ tr.q-row-picked > td { background: color-mix(in srgb, var(--accent) 12%, transpa
 .q-batch-next { border-top: 1px dashed var(--line); padding-top: 8px; }
 #q-modal[data-kind="q-batch-receipt"] .q-card { width: min(860px, 94vw); }
 
-/* ---- D7：弹层打开时提示条**让位**——新提示（与已在屏幕上的）都进弹层正文（`.q-toasts-inline`）----
-   P20 实测：全屏弹层的标题被两条通知压住。让位 ≠ 丢掉：提示仍然显示，只是显示在弹层里、不覆盖标题。 */
+/* ---- D7：弹层打开时提示条**让位**（P49 口径）----
+   ① **新**提示（本次动作的回执）进弹层正文（`.q-toasts-inline`，由 `assets/app.js#toast` 放进去）；
+   ② 浮层那份（上一条动作的提示）**降到弹层遮罩之下**（`z-index` 20 < `#q-modal` 的 40）：
+      不压住标题、不盖住吸底按钮，也不出现在弹层正文里冒充当次回执；弹层关掉后回到最上层（仍是 60）。
+   修前用的是「把浮层那几条搬进新弹层」（会让上一次动作的回执看起来像这一次的）。 */
 .q-toasts-inline { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }
 .q-toasts-inline .q-toast { max-width: none; }
+body.q-modal-open .q-toasts { z-index: 20; }
 
 /* ---- D3 + D4：手机（≤560px）---- */
 @media (max-width: 560px) {

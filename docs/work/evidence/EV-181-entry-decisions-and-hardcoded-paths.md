@@ -81,10 +81,10 @@ rc=1、stdout 无 JSON ⇒ 断言 ④/⑥ 判红。
 扫描面 = `src/**`、`host/**`、`tools/**`、任意 `*.sh`；判据 = "以 `quotagent` 为**末段目录**的绝对路径字面量"。
 本批命中 4 处（**原始行**）：
 
-    src/system/webui/tools/mutate-ui-views.py:16: ROOT = Path('/workspace/projects/quotagent')
-    src/system/ui-feedback/tools/ui-feedback-tick.sh:11: ROOT=/workspace/projects/quotagent
-    src/system/ui-feedback/tools/ui-feedback-monitor.sh:10: ROOT="${QUOTAGENT_ROOT:-/workspace/projects/quotagent}"
-    tools/manual-check.py:15: ROOT = Path('/workspace/projects/quotagent')
+    src/system/webui/tools/mutate-ui-views.py:16: ROOT = Path('<仓库根>')
+    src/system/ui-feedback/tools/ui-feedback-tick.sh:11: ROOT=<仓库根>
+    src/system/ui-feedback/tools/ui-feedback-monitor.sh:10: ROOT="${QUOTAGENT_ROOT:-<仓库根>}"
+    tools/manual-check.py:15: ROOT = Path('<仓库根>')
 
 修法（一律由**文件/脚本自身位置**推导，不引入新配置；`QUOTAGENT_ROOT` 覆盖语义保留，AC-USREQ-006 ② 仍成立）：
 `.py` 两处改 `ROOT = Path(__file__).resolve().parents[4]` / `parents[1]`；两个 `.sh` 改

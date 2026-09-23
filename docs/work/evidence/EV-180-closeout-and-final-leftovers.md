@@ -9,7 +9,7 @@
 
 ```
 $ env -u QUOTAGENT_PLUGIN_CONTROL_TOKEN tools/verify.sh audit        # 修前
-  "detail": "OSError: [Errno 8] Exec format error: '/workspace/projects/quotagent/tools/audit-verify.py'"
+  "detail": "OSError: [Errno 8] Exec format error: '<仓库根>/tools/audit-verify.py'"
   FAIL 执行异常 — OSError: [Errno 8] Exec format error: …            （exit_code 2）
 ```
 

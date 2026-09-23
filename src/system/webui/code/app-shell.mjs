@@ -3690,8 +3690,31 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       plugin_id: action.plugin_id, action: action.id,
       // 动作流水**按会话身份隔离**：同侧别人做的事不该出现在你的通知中心里（多人在同一侧时的隐私与噪声）
       actor: actor ? actor.human : '', writer: { verdict: writer.verdict, rows_written: writer.rows_written } }
-    actionLog.unshift(entry)
-    if (actionLog.length > 100) actionLog.length = 100
+    /**
+     * **只读探测：不进动作流水**（P49）。
+     *
+     * 动作流水是通知中心里的一类条目（见 `notifyAggregate`：`actionLog` 里「自己的」那些变成通知），
+     * 而**界面自己**在页面加载时也会派发一些**只读**动作（例：`export.columns` 的只读模式 —— 把
+     * 「我这套列选择」读回来）。修前这些自发的读会在未读里留下一条（`ok`），未登录时还留下一条
+     * `identity-required` —— 用户什么都没点，未读数却被读操作搞脏（P47 §4.5 实测）。
+     *
+     * 判据（**三条同时成立才跳过**，任何一条不成立都照旧进流水）：
+     *   ① 插件在**这次派发的回执**上声明 `readonly: true`（「这一次是只读的」，由插件自己说；
+     *      与 `result.ok` 无关：只读分支被判拒（如未登录）时也仍然是只读的）；
+     *   ② **真的没有跑任何唯一写者**（`writer.verdict === 'no-writer-run'`）—— 跑过写者一律进流水；
+     *   ③ 账本新增**为 0**（写者回执求和；只读路径不可能有别的新增）。
+     * ⇒ 它**不可能**遮住任何「写发生了」或「写者与响应不一致」的差异（那两类不满足②）。
+     * 被跳过的这一条**照旧在宿主日志里留一行**（不静默），界面侧自己的提示条/面板读数也不受影响。
+     */
+    const readonlyProbe = result.readonly === true && writer.verdict === 'no-writer-run'
+      && Number(writer.rows_written ?? 0) === 0
+    if (readonlyProbe) {
+      say(`只读探测不进动作流水（未读不被自发读取污染）：${action.id}`
+        + `（${result.ok === true ? 'ok' : (result.code ?? 'refused')}；账本 +0 行）`)
+    } else {
+      actionLog.unshift(entry)
+      if (actionLog.length > 100) actionLog.length = 100
+    }
     clearReadCache()   // 动作可能改了事实（写者刚跑过）⇒ 只读缓存作废：下一屏读到的一定是新状态
     return { ok: result.ok === true, action: action.id, code: result.code ?? null, reason: result.reason ?? null,
       next_action: result.next_action ?? null, result: result.result ?? null, note: result.note ?? null,
@@ -4159,8 +4182,12 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         server: async (ctx, input) => {
           const who = ctx.identity
           const reportId = String(input.report_id ?? '').trim()
+          // `readonly: true` = **这次派发是只读的**（`report_id` 留空 = 界面自己在页面加载时读回「我这套列选择」）：
+          // 外壳据此**不把它记进动作流水/通知中心**（未读不被自发读取污染；判据见 `app-shell.mjs#runActionInner`）。
+          // 保存类派发（给了 report_id）**没有**这个声明 ⇒ 照旧进流水、照旧在通知中心里留痕。
+          const readonly = reportId === ''
           if (!who || !who.human) {
-            return { ok: false, code: 'identity-required', ledger_added: 0,
+            return { ok: false, code: 'identity-required', ledger_added: 0, readonly,
               reason: '列选择要按**你的身份**存（0600 文件）：当前请求没有会话身份',
               next_action: `先去 ${prefix}/identity/?next=${prefix}/ 登录，再挑列 —— 这一次什么都没写` }
           }
@@ -4169,7 +4196,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
           if (reportId === '') {
             const reports = surface.reports().map((item) => ({ id: item.id, title: item.title,
               columns: (item.columns ?? []).map((column) => column.key), views: item.views, formats: item.formats }))
-            return { ok: true, code: 'export-columns-read', ledger_added: 0,
+            return { ok: true, code: 'export-columns-read', ledger_added: 0, readonly,
               note: '只读：没有写任何东西（这一条不落账本、也不改你的偏好）',
               result: { export_prefs_all: exportPrefsApi.all(who.side, who.human), reports,
                 file: exportPrefsFile(), mode: '0600' } }

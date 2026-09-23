@@ -2755,6 +2755,11 @@
    * 把"我这一套列选择"读回来（机制）：面板有那块 `export_prefs` 就直接用；没有（例如在**对象页**上，
    * 那块面板按对象类过滤掉了）就问服务端一次 —— `export.columns` 的**只读模式**（`report_id` 留空）。
    * 于是「列…」按钮上的 `N/M` 与勾选状态在任何页面上都对；换浏览器也一样（0600 按身份）。
+   *
+   * **未登录不发这一次探测**（P49）：列选择是**按身份**存的（0600），没有身份时这次调用只可能被
+   * 服务端如实拒（`identity-required`），而它是**界面自己在页面加载时**发的、不是用户点的 ——
+   * 那条回执会进动作流水/通知中心，把未读数搞脏（P47 实测）。这里先判身份：没有身份就不发
+   * （那一屏的面板本来就会如实写「未登录 ⇒ 列选择不是你的」）。用户**自己**点保存时照旧发（照旧可被拒）。
    */
   async function hydrateExportPrefs() {
     const reports = (state.surface.reports || []).filter((item) => (item.columns || []).length)
@@ -2766,6 +2771,7 @@
     }
     state.exportPrefs = fromPanels
     if (Object.keys(fromPanels).length) return false
+    if (!state.identity?.human) return false            // 未登录：这次探测只可能被拒（且是界面自发的）
     const action = actionOf('export.columns')
     if (!action) return false
     const out = await postJson(`/api/action/${encodeURIComponent(action.id)}`,
@@ -4365,17 +4371,12 @@
     modal.setAttribute('aria-labelledby', titled ? 'q-modal-title' : '')
     if (id) modal.dataset.kind = id
     modal.innerHTML = `<div class="q-card" role="document">${withId}</div>`
-    // **D7：弹层打开时，已经在屏幕上的提示条**也搬进弹层正文（不是让它们消失）—— 固定浮层会压住
-    // 全屏弹层的标题；搬进去之后提示仍然看得见（跟着正文滚），标题与吸底按钮都不被盖。
-    const floatBox = el('q-toasts')
-    const inlineBox = modal.querySelector('.q-modal-body')
-    if (floatBox && inlineBox && floatBox.children.length) {
-      const host = document.createElement('div')
-      host.className = 'q-toasts-inline'
-      host.setAttribute('data-toast-host', '1')
-      inlineBox.prepend(host)
-      while (floatBox.firstChild) host.appendChild(floatBox.firstChild)
-    }
+    // **D7（P49 修正）：弹层里只显示「本次动作的回执」** —— 弹层打开时**不**把浮层里那几条提示搬进来。
+    // 修前这里会把屏幕上所有提示（通常是**上一条动作**的回执，6–12 s 内还没消失）整批搬进这个弹层
+    // ⇒ 打开一个动作表单，正文最上面挂着上一条动作的「已受理…」，用户会以为那是**这次**的回执
+    // （P47 实测）。搬迁本来是为了「不让固定浮层压住弹层标题」，那条改用 CSS 解决：弹层打开期间
+    // 浮层降到遮罩之下（`body.q-modal-open .q-toasts`），关闭后回到最上层 —— 提示不丢、也不冒充本次回执。
+    // **本次动作**的提示仍进弹层正文：见 `toast()`（`#q-modal .q-modal-body` 里那份 `[data-toast-host]`）。
     modal.addEventListener('click', (ev) => { if (ev.target === modal) closeModal() })
     modal.addEventListener('keydown', (ev) => { if (ev.key === 'Tab') trapTab(ev, modal) })
     // 背景 inert：Tab 与辅助技术都停在弹层里（浏览器原生 inert，不需要自己数元素）

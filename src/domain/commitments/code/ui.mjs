@@ -277,35 +277,124 @@ export async function register(surface, host) {
   out.push(surface.view({ plugin_id: me, id: 'award.workspace', title: '授标与订单', order: 30,
     view: 'contractor', hint: '意向 → 供应商确认 → 人签承诺 → 人签发 PO（逐行可追溯）' }))
 
+  /**
+   * **人门（P48）的只读判据**：这条业务引用（`scope` + `ref`）上，账本里有没有一扇**可以消费的门**。
+   *
+   * 与写者的判定**同一处口径**（`src/system/approval/code/approval.py#signoff_verdict`）：门要在账本里、
+   * 状态 `granted`、批的人是人、**不是这次署名的人**、开单点名了审批人时还必须就是那位。这里只把它
+   * **读出来**摆在面板上（「门未被真正用上时不要装作有」）——**判定与拒绝永远在写者里**，界面不改判据。
+   * 未登录（会话身份为空）时判不出「批的人是不是你」：如实说判不出来，不猜。
+   */
+  const GATE_RESOLVED = ['approval/granted', 'approval/denied', 'approval/aborted']
+  const gateName = (who) => asText(who.replace(/^human:/, ''))
+  const gateStateOf = (rows, scope, ref, signer) => {
+    const byId = new Map()
+    for (const row of rows) {
+      if (!String(row?.type ?? '').startsWith('approval/')) continue
+      const body = bodyOf(row)
+      if (asText(body.scope) !== scope || asText(body.ref) !== ref) continue
+      const id = asText(body.approval_id)
+      if (!id) continue
+      const seen = byId.get(id) ?? { id, status: 'pending', decided_by: '', approvers: [], comment: '' }
+      const type = String(row.type)
+      byId.set(id, {
+        ...seen,
+        status: GATE_RESOLVED.includes(type)
+          ? (asText(body.status) || (type === 'approval/granted' ? 'granted' : 'denied')) : seen.status,
+        decided_by: asText(body.decided_by) || seen.decided_by,
+        approvers: Array.isArray(body.approvers) ? body.approvers.map(asText).filter(Boolean) : seen.approvers,
+        comment: asText(body.comment) || seen.comment })
+    }
+    const gates = [...byId.values()]
+    if (!gates.length) {
+      return { ok: false, code: 'approval-required', gate: null,
+        label: `没有这扇门（${scope}）：提交会被**具名拒**（approval-required）—— 先在「提交人工门」开单`
+          + `（scope=${scope}、ref=${ref}、审批人写另一个人），请那位在审批队列里批` }
+    }
+    const usable = gates.filter((gate) => gate.status === 'granted'
+      && gate.decided_by.startsWith('human:') && gate.decided_by !== signer
+      && (!gate.approvers.length || gate.approvers.includes(gate.decided_by)))
+    if (usable.length) {
+      const gate = usable[usable.length - 1]
+      return { ok: true, code: 'approval-ok', gate,
+        label: `可提交：门 ${gate.id} 由 ${gateName(gate.decided_by)} 批准`
+          + `${gate.approvers.length ? '' : '（开单时未点名审批人：只按 scope/ref 对账）'}`
+          + ` —— 谁批的（${gateName(gate.decided_by)}）≠ 谁签的${signer === '' ? '（未登录：判不出是不是你）'
+            : `（你 ${gateName(signer)}）`}` }
+    }
+    const gate = gates[gates.length - 1]
+    if (gate.status === 'granted' && signer !== '' && gate.decided_by === signer) {
+      return { ok: false, code: 'approver-must-differ', gate,
+        label: `门 ${gate.id} 是**你自己**批的（自签自批）⇒ 提交会被**具名拒**（approver-must-differ）：`
+          + `让另一个人开单点名并批准这扇门（或运营侧显式打开自签自批开关，默认关闭）` }
+    }
+    if (gate.status === 'granted' && gate.approvers.length && !gate.approvers.includes(gate.decided_by)) {
+      return { ok: false, code: 'approver-not-named', gate,
+        label: `门 ${gate.id} 由 ${gateName(gate.decided_by)} 批准，但开单点名的是 `
+          + `${gate.approvers.map(gateName).join('、')} ⇒ 会被**具名拒**（approver-not-named）` }
+    }
+    const statusLabel = { pending: '还在等', denied: '已被驳回', aborted: '已被终止' }[gate.status] ?? gate.status
+    return { ok: false, code: gate.status === 'pending' ? 'approval-not-granted'
+        : (gate.status === 'denied' ? 'approval-denied' : 'approval-aborted'), gate,
+      label: `门 ${gate.id} ${statusLabel}`
+        + `${gate.approvers.length ? `（卡在 ${gate.approvers.map(gateName).join('、')}）` : ''}`
+        + ` ⇒ 还没批：提交会被**具名拒**（${gate.status === 'pending' ? 'approval-not-granted' : `approval-${gate.status}`}）`
+        + `${gate.status === 'pending' ? ' —— 让点名的那位在「审批队列」里点「批准」' : ' —— 重新开一个门并请人批'}` }
+  }
+  /** 已落账的承诺 / PO 的「谁签的 vs 谁批的」（**从账本行算**：署名取行 `actor`，批准人取 body `approved_by`）。 */
+  const signoffLabelOf = (row, body) => {
+    const signer = asText(row?.actor) || '（未记录署名）'
+    const approver = asText(body?.approved_by) || '（未记录批准人）'
+    if (signer !== approver && approver !== '' && approver !== '（未记录批准人）') {
+      return `署名 ${gateName(signer)} · 批准人 ${gateName(approver)} —— **不是同一个人**（谁批的 ≠ 谁签的）`
+    }
+    return `署名 ${gateName(signer)} · 批准人 ${gateName(approver)} —— **同一个人**`
+      + `（自签自批：本批之前写入的旧行是这个形状）`
+  }
+
   out.push(surface.panel({ plugin_id: me, id: 'award.chain', title: '授标链（四种事实行一屏）',
     view: 'contractor', order: 40, kind: 'table', actions: ['award.commit', 'po.issue'],
-    data: () => {
+    data: (ctx) => {
       const rows = host.rows('contractor')
+      const me_ = asText(ctx?.identity?.human)          // 人门判据里的「署名的人」= 会话身份
       const intents = typeRows(rows, 'award/intent-proposed').map((row) => bodyOf(row))
       const confirmed = new Map(typeRows(rows, 'award/confirmed').map((row) => [asText(bodyOf(row).intent_id), bodyOf(row)]))
-      const awards = typeRows(rows, 'award/committed').map((row) => bodyOf(row))
-      const pos = typeRows(rows, 'po/issued').map((row) => bodyOf(row))
+      const awardRows = typeRows(rows, 'award/committed')
+      const awards = awardRows.map((row) => bodyOf(row))
+      const poRows = typeRows(rows, 'po/issued')
+      const pos = poRows.map((row) => bodyOf(row))
       const table = []
       for (const intent of intents) {
         const intentId = asText(intent.intent_id)
         const award = awards.find((item) => asText(item.intent_id) === intentId)
+        const awardRow = awardRows.find((row) => asText(bodyOf(row).intent_id) === intentId) ?? null
         const po = award ? pos.find((item) => asText(item.award_id) === asText(award.award_id)) : null
         const supplierConfirmed = confirmed.has(intentId)
+        // **人门那两列（P48）**：账本里这条业务引用上有没有一扇**可以消费的门**（判据与写者同一处）——
+        // 门没被真正用上时**不装作有**：写的是"没有这扇门 / 是你自己批的 / 还在等谁"。
+        const commitGate = gateStateOf(rows, 'award.commit', intentId, me_)
+        const poGate = award ? gateStateOf(rows, 'po.issue', asText(award.award_id), me_) : null
         // **行内动作按这一行的状态给**（P28 空账本走查登记的可点性缺陷）：修前这一行上永远长着
         // 「授标承诺（人签）」和「发 PO（人签）」两颗按钮 —— 供应商还没确认时点「发 PO」，
         // 必然被唯一写者拒 `supplier-confirmation-required`（用户白填一遍表单，还以为是界面坏了）。
         //
-        // 判据与写者（`commitment-apply.py`）**一字不差**，界面只决定"摆不摆这颗按钮"，
-        // 不放宽任何一条承诺判据：承诺要「意向 + 供应商确认」；发 PO 要「已承诺」（PO 只能由承诺派生）。
-        // 缺什么、该谁办 ⇒ 写在「下一步」列里（人话），而不是让用户去撞一次拒绝。
+        // 判据与写者（`commitment-apply.py`）**一字不差**，界面只决定"摆不摆这颗按钮"，不放宽任何一条
+        // 承诺判据：承诺要「意向 + 供应商确认」；发 PO 要「已承诺」（PO 只能由承诺派生）。
+        // **人门不在这里拦**（`approval-required` 那类拒因由写者给、`next_action` 指到开单处）：
+        // 门要别人去批，属于"下一步该谁办"，写在「人门」列里，而不是把按钮藏掉（§23：不把缺上下文做成隐藏）。
         const canCommit = supplierConfirmed && !award
         const canIssue = Boolean(award)
         table.push({ id: intentId, intent_id: intentId, quote_id: intent.quote_id ?? '',
           package_id: intent.package_id ?? '', lines: (intent.lines ?? []).length,
           confirmed: supplierConfirmed
-            ? `${asText(confirmed.get(intentId).confirmed_by)} @ ${confirmed.get(intentId).confirmed_at}`
+            ? `${asText(confirmed.get(intentId).confirmed_by)} @ ${asText(confirmed.get(intentId).confirmed_at)}`
             : '未确认',
-          award_id: award?.award_id ?? '', approved_by: award?.approved_by ?? '',
+          award_id: award?.award_id ?? '',
+          approved_by: award
+            ? `${asText(award.approved_by)} · ${awardRow ? signoffLabelOf(awardRow, award) : ''}`
+            : '',
+          gate_commit: commitGate.label,
+          gate_po: poGate ? poGate.label : (award ? '（本行还没发 PO）' : ''),
           po_id: po?.po_id ?? '', chain: po?.chain ?? '',
           next_step: po ? '整条链已成立（行内可「追溯这条 PO」）'
             : (award ? '这一行现在可以「发 PO（人签）」'
@@ -324,13 +413,17 @@ export async function register(surface, host) {
       return { ok: true, kind: 'table',
         columns: [{ key: 'intent_id', label: '意向', type: 'code' }, { key: 'quote_id', label: '报价', type: 'code' },
           { key: 'lines', label: '条目', filter: 'number' }, { key: 'confirmed', label: '供应商确认' },
-          { key: 'award_id', label: '承诺', type: 'code' }, { key: 'approved_by', label: '承诺批准人', type: 'code' },
+          { key: 'gate_commit', label: '人门：承诺（谁批的 / 能不能提交）' },
+          { key: 'award_id', label: '承诺', type: 'code' }, { key: 'approved_by', label: '承诺：谁签的 / 谁批的' },
+          { key: 'gate_po', label: '人门：发 PO（谁批的 / 能不能提交）' },
           { key: 'po_id', label: 'PO', type: 'code' }, { key: 'chain', label: '追溯链' },
           { key: 'next_step', label: '下一步' }],
         rows: table, counts: { intents: intents.length, awards: awards.length, po: pos.length },
         note: '承诺与 PO 两列只有在人签并过人工门之后才会有值（没签就是空 —— 不假装已承诺）；'
           + '行内按钮只在这一行**现在真能落账**时才出现：供应商还没确认 ⇒ 既不摆「授标承诺」也不摆「发 PO」'
-          + '（缺什么、下一步该谁办，写在「下一步」列里）—— 不摆按下去必被拒的按钮。' }
+          + '（缺什么、下一步该谁办，写在「下一步」列里）—— 不摆按下去必被拒的按钮。'
+          + '**人门两列**（P48）读的是账本：有没有一扇 `granted` 的、**由别人批过**的门（写者只消费这种门）——'
+          + '没有就说没有、是你自己批的就说是你自己批的、还在等就写卡在谁；门是别人的活，界面不代签也不隐藏按钮' }
     } }))
 
   /**
@@ -613,7 +706,10 @@ export async function register(surface, host) {
   out.push(surface.action({ plugin_id: me, id: 'award.commit', title: '授标承诺（人签）', views: ['contractor'],
     group: '授标', order: 20, permission: 'human-signature', object_kind: 'award',
     confirm: { required: true, message: '授标承诺＝对外义务：确认以你的署名承诺？' },
-    hint: '三样门齐备才落账：意向 + 供应商确认 + 人工批准（approval/requested → granted → award/committed）',
+    hint: '三样门齐备才落账：意向 + 供应商确认 + **一扇已经批准的人门**（`scope=award.commit`、`ref=<意向>`）。'
+      + '人门必须是**别人**批的（批准人不得是署名者本人）——没有这样的门 ⇒ 具名拒（approval-required / '
+      + 'approver-must-differ）+ 下一步，账本零新增；自签自批只在运营侧显式打开开关时才行（默认关闭，'
+      + '回执会如实写「本次批准来自你本人署名」）',
     input: { fields: [
       { name: 'intent_id', label: '意向 id', type: 'text', required: true, from_route: true,
         help: '从「授标链」表里复制（awin-…）；在授标对象页上会自动填当前这一条' },
@@ -630,19 +726,32 @@ export async function register(surface, host) {
         ['--step', 'commit', '--request', staged.path, '--ui-shared', host.sharedDir,
           '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(), '--now', host.now()])
       const json = cleanJson(run)
+      // 「谁批的 ≠ 谁签的」（P48）：写者回执里的人门那段**原样**抬到回执最外层 —— 界面上要能直接读到，
+      // 而不是只藏一份 `result` 里。自签自批那种（只在运营侧开了开关时可能）如实写「来自你本人署名」。
+      const gateNote = asText(json.gate_note)
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'committed' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action
-          ?? (json.ok === true ? '已成立：' + (json.award_id ?? 'aw-…') + ' 已落账（授权人 = 你的会话身份）。下一步：在「授标链」行内点「发 PO（人签）」逐行派生采购单'
+          ?? (json.ok === true
+            ? `已成立：${json.award_id ?? 'aw-…'} 已落账。人门：${gateNote || '（账本里的门）'}。`
+              + '下一步：在「授标链」行内点「发 PO（人签）」逐行派生采购单'
+              + '（发 PO 也要另一个人批过 po.issue 的门）'
             : (json.next_action ?? '看 result / stdout 定位唯一写者的输出（这条路才是失败）')),
         result: { award_id: json.award_id ?? null, approval_id: json.approval_id ?? null,
+          approver: json.approver ?? null, signer: json.signer ?? null, gate: json.gate ?? null,
+          gate_note: gateNote || null, gate_consumed: json.gate_consumed ?? false,
+          self_approved: json.self_approved ?? false,
+          self_approval_switch: json.self_approval_switch ?? false,
+          self_approval_policy: json.self_approval_policy ?? null,
           applied: json.applied ?? [], ledger_added: json.ledger_added ?? 0, duplicates: json.duplicates ?? [] } }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'po.issue', title: '发 PO（人签）', views: ['contractor'],
     group: '授标', order: 30, permission: 'human-signature', object_kind: 'award',
     confirm: { required: true, message: '发 PO 是承诺类动作：确认以你的署名发出并投递给中标供应商？' },
-    hint: 'PO 只能由承诺派生；行与价都从中标条目派生（不得在界面上自由改价）；发出即同步投递给中标供应商（两侧账本各一条投递登记）',
+    hint: 'PO 只能由承诺派生；行与价都从中标条目派生（不得在界面上自由改价）；发出即同步投递给中标供应商'
+      + '（两侧账本各一条投递登记）。人门与承诺同一条：要**一扇已经批准**的 `scope=po.issue`、`ref=<承诺>` 的门，'
+      + '且**批准人不得是署名者本人**（没有 ⇒ 具名拒 + 下一步，账本零新增）',
     input: { fields: [
       { name: 'award_id', label: '承诺 id', type: 'text', required: true, from_route: true,
         help: '从「授标链」表里复制（aw-…）；在授标对象页上会自动填当前这一条' },
@@ -666,17 +775,24 @@ export async function register(surface, host) {
           '--ledger-contractor', ledgerC(), '--ledger-supplier', ledgerS(),
           '--delivery-out', deliveryFile(), '--now', host.now()])
       const json = cleanJson(run)
+      const gateNote = asText(json.gate_note)
       return { ok: run.ok && json.ok === true, code: json.refusal?.code ?? (json.ok ? 'issued' : 'writer-failed'),
         reason: json.refusal?.reason ?? run.reason ?? '',
         next_action: json.refusal?.next_action
           ?? (json.ok === true ? '已签发并投递：' + (json.po_id ?? 'po-…') + '（追溯模式 ' + (json.trace_mode ?? '—')
-            + '，投给 ' + (json.delivered_to ?? []).join('/') + '）。下一步：对方在供应商道「发给我的采购单」里回签'
+            + '，投给 ' + (json.delivered_to ?? []).join('/') + '）。人门：' + (gateNote || '（账本里的门）')
+            + '。下一步：对方在供应商道「发给我的采购单」里回签'
             + '(人签)；你也可以点行内「追溯这条 PO」看四段链路'
             : (json.next_action ?? '看 result / stdout 定位唯一写者的输出（这条路才是失败）')),
         result: { po_id: json.po_id ?? null, award_id: json.award_id ?? null, chain: json.chain ?? null,
           trace_mode: json.trace_mode ?? null, total_amount: json.total_amount ?? null,
           delivered_to: json.delivered_to ?? [], delivery: json.delivery ?? null,
           premises: json.premises ?? {},
+          approver: json.approver ?? null, signer: json.signer ?? null, gate: json.gate ?? null,
+          gate_note: gateNote || null, gate_consumed: json.gate_consumed ?? false,
+          self_approved: json.self_approved ?? false,
+          self_approval_switch: json.self_approval_switch ?? false,
+          self_approval_policy: json.self_approval_policy ?? null,
           applied: json.applied ?? [], ledger_added: json.ledger_added ?? 0 } }
     } }))
 
@@ -793,7 +909,8 @@ export async function register(surface, host) {
         .slice(0, 1).join('')
       return { ok: true, kind: 'table',
         columns: [{ key: 'po_id', label: 'PO', type: 'code' }, { key: 'lines', label: '行数', filter: 'number' },
-          { key: 'total_amount', label: '金额（元）', filter: 'number' }, { key: 'approved_by', label: '签发人', type: 'code' },
+          { key: 'total_amount', label: '金额（元）', filter: 'number' },
+          { key: 'approved_by', label: '门的批准人（人门；≠ 署名者）', type: 'code' },
           { key: 'issued_at', label: '签发时刻', filter: 'date' }, { key: 'delivered_at', label: '投递时刻', filter: 'date' },
           { key: 'chain', label: '追溯链' }, { key: 'ack', label: '回签' }],
         rows: delivered.map((item) => {
@@ -844,7 +961,8 @@ export async function register(surface, host) {
           facts: [
             { key: '金额（元）', value: String(item.total_amount ?? '') },
             { key: '行数', value: String((item.lines ?? []).length) },
-            { key: '签发人（承包商侧人签）', value: asText(item.approved_by), code: true },
+            // P48：「签发」是承包商侧署名的（账本行 actor），这个字段是**门的批准人**（谁批的）——两者不同才对
+            { key: '门的批准人（承包商侧，谁批的）', value: asText(item.approved_by), code: true },
             { key: '投递对象', value: (item.recipients ?? []).join(' / '), code: true },
             { key: '包 / 报价', value: `${asText(item.package_id)} / ${asText(item.quote_id)}`, code: true },
           ],
@@ -992,7 +1110,7 @@ export async function register(surface, host) {
           { key: '承诺（award）', value: asText(item.award_id) },
           { key: '意向（intent）', value: asText(item.intent_id) },
           { key: '我的报价（quote）', value: asText(item.quote_id) },
-          { key: '签发人（承包商侧人签）', value: asText(item.approved_by) },
+          { key: '门的批准人（承包商侧，谁批的）', value: asText(item.approved_by) },
           { key: '签发时刻', value: asText(item.issued_at) },
           { key: '投递时刻（本侧收到的时刻）', value: asText(item.sent_at) },
           { key: '追溯链', value: asText(item.chain) },
@@ -1298,10 +1416,22 @@ export async function register(surface, host) {
       comment: gateWhy, comment_label: gateWhyLabel,
       requested_by: gateFirst ? (asText(bodyOf(gateFirst).requested_by) || asText(gateFirst.actor)) : '',
       requested_at: gateFirst ? (asText(bodyOf(gateFirst).requested_at) || String(gateFirst.ts ?? '')) : '' }
+    // **谁批的 vs 谁签的**（P48）：署名取**这条 PO 的账本行**的 `actor`，批准人取这一段的门的
+    // `decided_by` —— 两个都从账本读，界面不推断；两者相同（旧行）就如实标「自签自批」。
+    const poSigner = asText((rows.find((row) => String(row?.type ?? '') === 'po/issued'
+      && asText(bodyOf(row).po_id) === asText(poId)) ?? {}).actor)
+    const signoff = {
+      signer: poSigner, approver: gateWho,
+      differs: Boolean(poSigner) && Boolean(gateWho) && poSigner !== gateWho,
+      label: !gateWho
+        ? `这条 PO 的署名是 ${poSigner || '（未记录）'}；门还没决定（谁批的还答不出）`
+        : (poSigner && poSigner !== gateWho
+          ? `**谁批的（${gateWho}）≠ 谁签的（${poSigner}）**`
+          : `**谁批的 == 谁签的**（${gateWho || '（未记录）'}：自签自批，本批之前写入的旧行是这个形状）`) }
     return {
       po_id: po.po_id, chain: po.chain, trace_mode: po.trace_mode, total_amount: po.total_amount,
       approved_by: po.approved_by, issued_at: po.issued_at, approval_id: po.approval_id,
-      award_id: po.award_id, intent_id: po.intent_id, quote_id: po.quote_id, gate,
+      award_id: po.award_id, intent_id: po.intent_id, quote_id: po.quote_id, gate, signoff,
       segments: [
         { kind: 'po', id: po.po_id, label: `PO ${po.po_id}`, where: '承包商道 › 授标与订单 › 采购单',
           fact: `${(po.lines ?? []).length} 行 · 金额 ${po.total_amount} 元 · ${po.issued_at}`,
@@ -1319,7 +1449,8 @@ export async function register(surface, host) {
         ...(gateRows.length ? [{ kind: 'gate', id: gate.approval_id, label: `人工门 ${gate.approval_id}`,
           where: '承包商道 › 审批队列 › 已决定的门',
           fact: `${gate.status || '还在等'} · 谁批的 ${gate.decided_by || '（还没批）'}`
-            + ` · 什么时候 ${gate.decided_at || '（还没决定）'} · 为什么 ${gate.comment_label}`,
+            + ` · 什么时候 ${gate.decided_at || '（还没决定）'} · 为什么 ${gate.comment_label}`
+            + ` · ${signoff.label}`,
           href: `${base}gate/${encodeURIComponent(gate.approval_id)}/` }] : []),
       ],
       lines: readRows(po.lines).rows.map((line) => ({ ref_line: line?.ref_line, qty: line?.qty,
@@ -1350,7 +1481,8 @@ export async function register(surface, host) {
           { key: 'po_id', label: 'PO', type: 'code' }, { key: 'award_id', label: '承诺', type: 'code' },
           { key: 'intent_id', label: '意向', type: 'code' }, { key: 'quote_id', label: '报价', type: 'code' },
           { key: 'line_count', label: '行数', filter: 'number' }, { key: 'trace_mode', label: '追溯模式', filter: 'enum' },
-          { key: 'total_amount', label: '金额（元）', filter: 'number' }, { key: 'approved_by', label: '签发人', type: 'code' },
+          { key: 'total_amount', label: '金额（元）', filter: 'number' },
+          { key: 'approved_by', label: '门的批准人（≠ 署名者）', type: 'code' },
           { key: 'chain', label: '链路' }, { key: 'issued_at', label: '签发时刻', filter: 'date' },
           { key: 'delivered', label: '投递' }, { key: 'ack', label: '对方回签' },
         ],
@@ -1501,12 +1633,17 @@ export async function register(surface, host) {
           facts: [
             { key: '金额（元）', value: String(trace.total_amount) },
             { key: '行数', value: String((trace.lines ?? []).length) },
-            { key: '签发人（人签）', value: trace.approved_by, code: true },
+            // **署名与批准人是两件事**（P48）：署名取这条 PO 的账本行 `actor`，批准人取门的 `decided_by`
+            { key: '署名（人签，账本行 actor）', value: trace.signoff?.signer || '（未记录）', code: true },
+            { key: '门的批准人（人门）', value: trace.approved_by, code: true },
             { key: '人工门', value: trace.approval_id, code: true },
             // **一屏内回答三问**（主管/审批人回溯）：谁批的、什么时候、为什么（意见逐字来自账本）
             { key: '人工门（谁批 / 何时 / 为什么）', value: `${trace.gate?.status || '还在等'} · `
               + `谁批的 ${trace.gate?.decided_by || '（还没批）'} · 什么时候 ${trace.gate?.decided_at || '（还没决定）'}`
               + ` · 为什么 ${trace.gate?.comment_label || '（还没决定）'}` },
+            // **谁批的 vs 谁签的**（P48）：产品主张「承诺/发 PO 必须由别人批过」——这一行就是那句主张的读数，
+            // 两个值都从账本取（署名 = 这条 PO 的账本行 actor、批准人 = 门的 decided_by），界面不推断。
+            { key: '谁批的 vs 谁签的（人门成立吗）', value: trace.signoff?.label || '（读不出来）' },
             { key: '报价', value: trace.quote_id, code: true },
           ],
           links: (trace.segments ?? []).filter((seg) => seg.kind !== 'po'),
@@ -1581,7 +1718,7 @@ export async function register(surface, host) {
         + ` · 为什么 ${trace.gate?.comment_label || '（还没决定）'}`
       return { ok: true, kind: 'html', html: `<p class="q-hint"><b>${trace.chain}</b> · 追溯模式 `
         + `<code>${trace.trace_mode}</code> · 金额 ${trace.total_amount} 元 · 签发 ${trace.issued_at}`
-        + ` · 人工门 ${gateSeg ? `<a href="${escHtml(gateSeg.href)}" title="进门的对象页（结论 / 谁批的 / 意见）"><code>${escHtml(trace.approval_id)}</code></a>` : `<code>${escHtml(trace.approval_id)}</code>`}（${escHtml(trace.approved_by)}）</p>`
+        + ` · 人工门 ${gateSeg ? `<a href="${escHtml(gateSeg.href)}" title="进门的对象页（结论 / 谁批的 / 意见）"><code>${escHtml(trace.approval_id)}</code></a>` : `<code>${escHtml(trace.approval_id)}</code>`}（门的批准人 ${escHtml(trace.approved_by)}）</p>`
         + `<p class="q-hint">${escHtml(gateLine)}</p>`
         + `<ol class="q-list">${(trace.segments ?? []).map(seg).join('')}</ol>`
         + `<div class="q-scroll"><table class="q-table"><thead><tr><th>PO 行</th><th>量</th><th>单价</th>`
@@ -1630,7 +1767,8 @@ export async function register(surface, host) {
           step('① 意向', true, `已提出（${intent.proposed_at ?? '—'}）`),
           step('② 供应商确认', Boolean(confirmed), confirmed
             ? `${confirmed.confirmed_by} @ ${confirmed.confirmed_at}` : '还没确认（对方要在它自己的界面确认）'),
-          step('③ 人签承诺', Boolean(award), award ? `${award.award_id} · ${award.approved_by}` : '还没承诺'),
+          step('③ 人签承诺', Boolean(award),
+            award ? `${award.award_id} · 门的批准人 ${award.approved_by}` : '还没承诺'),
           step('④ 发 PO', Boolean(po), po ? `${po.po_id}` : '还没签发'),
         ],
         note: `承诺与 PO 都必须人签且要过人工门（INV-005）；这一页只读。`
@@ -2007,24 +2145,74 @@ export async function register(surface, host) {
       { key: 'quote_id', label: '来源报价' }],
     hint: '逐行带单价基准与来源报价；表头给四段追溯链与账本行号' }))
 
-  // ---- **沙盘场景**：演示流程的第 ④ 段 = **授标（人签）→ 发 PO（人签）→ 供应商回签** --------------
-  // 5 步：承包商提意向 → 供应商人签确认 → 承包商人签承诺 → 承包商人签发 PO（发出即投递）→ 供应商人签回签。
-  // 门与写者一个字都没改：沙盘的差别只在**账本路径与署名来自机制生成的演示身份**（见 app-shell 沙盘段）。
-  out.push(surface.scenario({ plugin_id: me, id: 'scenario.award-po', scenario: 'demo.procurement',
-    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签', title: '④ 授标（人签）→ 发 PO（人签）→ 回签',
-    view: 'contractor', order: 40,
-    hint: '意向 → 供应商确认 → 授标承诺 → 逐行派生 PO（同步投递给供应商）→ 供应商人签回签；'
-      + '每一道人签都由对应那一侧的演示身份签',
+  // ---- **沙盘场景**：演示流程的第 ④ 段 = 授标（人签）→ 发 PO（人签）→ 供应商回签 --------------
+  // **七段贡献**（同一场景 `demo.procurement`，按 `order` 与其他插件交错成一条链）。为什么拆得这么细：
+  // 人门（P48 / ADR-0024）要求承诺与发 PO **消费一扇「另一个人」已经批过的门**，所以演示里必须真的走
+  // 「开单 → 另一个人批 → 再署名」；而沙盘的演示身份是机制**按档位**生成的（每档一个 `demo-<档位>`，
+  // 见 app-shell 的 `actors` 段），档位 = 产品的视图档（`home` / `contractor` / `supplier`，不新造视图）。
+  // 于是：**开单与署名**用 `contractor` 档（会话身份就是那一侧的人），**「另一个人」**借 `home` 档
+  // 生成 `demo-home`（沙盘不建名册 ⇒ 只能借档位造出同侧的第二个人；真实面里批门的是承包商侧名册里
+  // 角色为 `supervisor` 的那个人 —— 沙盘演示不假装它建了名册）。
+  out.push(surface.scenario({ plugin_id: me, id: 'scenario.award-propose', scenario: 'demo.procurement',
+    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',
+    title: '④ 授标意向 + 供应商确认（人签）', view: 'contractor', order: 40,
+    hint: '意向（不产生义务）→ 供应商人签确认；承诺与发 PO 各要一扇**别人批过的**人工门（下一步就是开单）',
     steps: [
       { action: 'award.propose', capture: 'intent', input: { package_id: 'DEMO-PKG-001',
         quote_id: '$cap.q1.quote_id', item_id: 'L-001', qty: 120, unit_price_cents: 8600,
         reason: '沙盘演示：按比价第一名提意向' } },
       { action: 'award.confirm', as: { side: 'supplier' },
         input: { intent_id: '$cap.intent.intent_id', signature: '$actor', note: '沙盘演示：供应商确认',
-          confirm_ack: '1' } },
-      { action: 'award.commit', capture: 'award', input: { intent_id: '$cap.intent.intent_id',
-        signature: '$actor', reason: '沙盘演示：人工批准（三样门齐备）', comment: '沙盘演示',
-        confirm_ack: '1' } },
+          confirm_ack: '1' } }] }))
+
+  out.push(surface.scenario({ plugin_id: me, id: 'scenario.award-gate-request', scenario: 'demo.procurement',
+    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',
+    title: '⑤ 开承诺的人门（请另一个人批）', view: 'contractor', order: 42,
+    hint: '承包商开单（`scope=award.commit`、`ref=<意向>`）、开单时点名审批人；这一条会进审批队列',
+    steps: [{ action: 'gate.request',
+      input: { scope: 'award.commit', ref: '$cap.intent.intent_id', approvers: 'human:demo-home',
+        summary: '沙盘演示：授标承诺要人批', signature: '$actor',
+        note: '沙盘演示：请另一个演示身份批这条承诺门', confirm_ack: '1' } }] }))
+
+  out.push(surface.scenario({ plugin_id: me, id: 'scenario.award-gate-grant', scenario: 'demo.procurement',
+    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',
+    title: '⑥ 另一个人批准（人签，改判定）', view: 'home', order: 43,
+    hint: '由**不是署名者**的那个演示身份批准（谁批的 ≠ 谁签的）；沙盘只有每档一个演示身份，'
+      + '所以这一档就是「另一个批门的人」',
+    steps: [{ action: 'gate.grant', as: { side: 'home' },
+      input: { gate_id: '$last.approval_id', signature: '$actor', confirm_ack: '1',
+        comment: '沙盘演示：另一个人批准（之后承诺才成立）' } }] }))
+
+  out.push(surface.scenario({ plugin_id: me, id: 'scenario.award-commit', scenario: 'demo.procurement',
+    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',
+    title: '⑦ 授标承诺（人签，消费那扇门）', view: 'contractor', order: 44,
+    hint: '三样门齐备才落账：意向 + 供应商确认 + **别人批过的人门**（没有门 ⇒ 具名拒、账本零新增）',
+    steps: [{ action: 'award.commit', capture: 'award', input: { intent_id: '$cap.intent.intent_id',
+      signature: '$actor', reason: '沙盘演示：人工批准（三样门齐备）', comment: '沙盘演示',
+      confirm_ack: '1' } }] }))
+
+  out.push(surface.scenario({ plugin_id: me, id: 'scenario.po-gate-request', scenario: 'demo.procurement',
+    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',
+    title: '⑧ 开 PO 的人门（请另一个人批）', view: 'contractor', order: 46,
+    hint: '发 PO 与承诺同一条人门：`scope=po.issue`、`ref=<承诺>`，同样要另一个人批',
+    steps: [{ action: 'gate.request',
+      input: { scope: 'po.issue', ref: '$cap.award.award_id', approvers: 'human:demo-home',
+        summary: '沙盘演示：发 PO 要人批', signature: '$actor',
+        note: '沙盘演示：请另一个演示身份批这条发 PO 门', confirm_ack: '1' } }] }))
+
+  out.push(surface.scenario({ plugin_id: me, id: 'scenario.po-gate-grant', scenario: 'demo.procurement',
+    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',
+    title: '⑨ 另一个人批准发 PO（人签）', view: 'home', order: 47,
+    hint: '与承诺那扇门同一条判定：署名者必须另有其人',
+    steps: [{ action: 'gate.grant', as: { side: 'home' },
+      input: { gate_id: '$last.approval_id', signature: '$actor', confirm_ack: '1',
+        comment: '沙盘演示：另一个人批准发 PO' } }] }))
+
+  out.push(surface.scenario({ plugin_id: me, id: 'scenario.po-issue-ack', scenario: 'demo.procurement',
+    scenario_title: '演示：包 → 报价 → 比价 → 授标 → PO → 回签',
+    title: '⑩ 发 PO（人签，消费那扇门）+ 供应商回签', view: 'contractor', order: 50,
+    hint: '逐行派生 PO（同步投递给供应商）→ 供应商人签回签',
+    steps: [
       { action: 'po.issue', capture: 'po', input: { award_id: '$cap.award.award_id', signature: '$actor',
         reason: '沙盘演示：发 PO（同步投递）', comment: '沙盘演示',
         delivery_window: '沙盘演示：2026-10-08 前到货', ship_to: '沙盘演示：苏州工业园区 A 区 3 号库',

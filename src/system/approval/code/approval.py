@@ -66,6 +66,32 @@ class UnknownApproval(ApprovalError):
     """批准记录不存在。"""
 
 
+class SignoffRequired(ApprovalRequired):
+    """**没有可消费的已批准门**（P48 的人门判据）：门不存在 / 还没批 / 被驳回 · 被终止 /
+    **自签自批**（批的人 == 署名的人）/ 批的人不是开单时点名的那位。
+
+    为什么要有它（而不是沿用 `ApprovalRequired` 一句「缺少人工批准记录」）：承诺与发 PO 这两条主链
+    修前是**自签自批**——写者在自己这一次落账里先 `request()` 再 `decide(decision='granted')`，
+    于是「有批准记录」成立、主管却从来没有否决权（他不批，承包商照样能签）；而查到的「谁批的」
+    就是署名者本人。判据换成**消费一扇已批准的门**之后，拒因必须逐条可区分，界面才答得出
+    「去哪儿开单、该找谁批」。`code` / `reason` / `next_action` 三个键就是写者与界面要的具名拒。
+    """
+
+    def __init__(self, code: str, reason: str, next_action: str) -> None:
+        super().__init__(f"[{code}] {reason}")
+        self.code = code
+        self.reason = reason
+        self.next_action = next_action
+
+
+#: 人门选择/校验共用的一套具名拒（写者与界面直接照抄，不另起一套词）。
+NEXT_OPEN_GATE = ("在「审批队列 / 提交人工门」按这一条开单：scope 与 ref 填上面给的业务引用、"
+                  "审批人写**另一个人**（主管）的名字；对方在审批队列里点「批准」之后回来重提")
+NEXT_SWITCH = ("若业务上确实需要本人批准，只能在运营侧显式打开自签自批开关"
+               "（`<ui-shared>/commitments/policy.json` 的 `allow_self_approval: true`，**默认关闭**"
+               "且界面不提供开关）——打开后本次批准会如实标成「批准人 == 署名者本人」")
+
+
 class ApprovalService:
     def __init__(self, *, ledger: Ledger | None = None, events: EventBus | None = None,
                  actor: str = "agent:approval") -> None:
@@ -320,6 +346,21 @@ class ApprovalService:
                 f"承诺类动作必须先经 ctx.approval 并由人批准（INV-005 / AGENTS.md 规则 3）")
         return found
 
+    def signoff(self, *, scope: str, ref: str, signer: str,
+                allow_self_approval: bool = False) -> dict:
+        """**消费一扇已批准的门**（P48）：在账本重放出的记录里挑一扇，挑不到就抛 `SignoffRequired`。
+
+        与 `require()` 的分工：`require()` 只答「有没有一条适用于这个 ref 的批准记录」；
+        本方法答的是产品真正要的那一问 ——「**这一扇门是被谁批的、他是不是本该批的人、他是不是
+        就是署名者本人**」。承诺 / 发 PO 两条主链走这一条（判据见 `signoff_verdict` 的 ①–⑤）。
+        """
+        record, refusal = select_signoff(self.records(), scope=scope, ref=ref, signer=signer,
+                                         allow_self_approval=allow_self_approval)
+        if record is None:
+            assert refusal is not None
+            raise SignoffRequired(refusal["code"], refusal["reason"], refusal["next_action"])
+        return record
+
     def _append(self, event: str, record: dict, *, correlation_id: str | None,
                 ts: str | None = None) -> None:
         if self.ledger is None:
@@ -341,6 +382,118 @@ class ApprovalService:
         if self.events is not None:
             self.events.emit(event, {"approval_id": record["approval_id"], "scope": record["scope"],
                                      "status": record["status"]})
+
+
+def is_human(who: object) -> bool:
+    """批准记录只能由人产生（`by` 以 `human:` 开头）——旧行也照这一条核。"""
+    return str(who or "").startswith(HUMAN_PREFIX)
+
+
+def named_approvers(record: dict) -> list[str]:
+    """开单时**点名**的审批人（ADR-0022 的 `approvers` 派分事实；旧行没有这个键 ⇒ 空表）。"""
+    return [str(who).strip() for who in (record.get("approvers") or []) if str(who).strip()]
+
+
+def signoff_verdict(record: dict, *, scope: str, ref: str, signer: str,
+                    allow_self_approval: bool = False) -> dict | None:
+    """**人门判据**（唯一一处判定，P48）：一条批准记录是否可以被 `signer` 这次署名消费。
+
+    返回 `None` = 可以消费；否则返回具名拒 `{code, reason, next_action}`。判据（缺一不可）：
+
+      ① 引用对得上：`scope` 与 `ref` 都与被批的业务对象一致（FR-APPROVE-002，不可跨动作复用）；
+      ② 已 granted（还在等 / 被驳回 / 被终止的门都不能消费）；
+      ③ 批的人是人（`decided_by` 以 `human:` 开头）；
+      ④ **批的人不是署名的人**（`allow_self_approval=False`，默认）——修前的写法在同一次落账里
+         自己开单自己批，主管没有否决权；
+      ⑤ 开单时**点名**了审批人（`approvers` 非空）⇒ 批的人必须是点名的那位（旧行没点名 ⇒ 只按
+         ①②③④ 对账，并在回执里如实标「开单时未点名审批人」）。
+    """
+    scope, ref = str(scope), str(ref)
+    if str(record.get("scope")) != scope or str(record.get("ref")) != ref:
+        return {"code": "approval-ref-mismatch",
+                "reason": f"批准 {record.get('approval_id')} 不适用于 scope={scope!r} ref={ref!r}"
+                          f"（这条门是 scope={record.get('scope')!r} ref={record.get('ref')!r}）",
+                "next_action": NEXT_OPEN_GATE}
+    approval_id = str(record.get("approval_id") or "")
+    status = str(record.get("status") or "pending")
+    by = str(record.get("decided_by") or "")
+    named = named_approvers(record)
+    if status != "granted":
+        if status == "pending":
+            return {"code": "approval-not-granted",
+                    "reason": f"门 {approval_id} 还在等（卡在 {'、'.join(named) or '（开单时没点名）'}）："
+                              f"没人批之前不许承诺（谁批的必须另有其人）",
+                    "next_action": NEXT_OPEN_GATE}
+        if status == "denied":
+            return {"code": "approval-denied",
+                    "reason": f"门 {approval_id} 已被 {by or '（未记录署名）'} 驳回"
+                              f"（{record.get('comment') or '账本没留意见正文'}）：驳回就是否决，不能当批准用",
+                    "next_action": "按驳回理由改完再重新开一个门（原门不会被\"再批一次\"翻案）"}
+        if status == "aborted":
+            return {"code": "approval-aborted",
+                    "reason": f"门 {approval_id} 已被终止（作废本次意图）：作废不是批准",
+                    "next_action": "重新开一个门并请人批准（终止的门不可再批）"}
+        return {"code": "approval-required", "reason": f"门 {approval_id} 的状态是 {status}：不可消费",
+                "next_action": NEXT_OPEN_GATE}
+    if not is_human(by):
+        return {"code": "approver-not-human",
+                "reason": f"门 {approval_id} 的署名不是人（decided_by={by or '（空）'}）：agent 不得代批（P8）",
+                "next_action": "让人来自行批准（批准记录只能由人产生）"}
+    if by == str(signer):
+        if not allow_self_approval:
+            return {"code": "approver-must-differ",
+                    "reason": f"门 {approval_id} 是**你自己**批的（decided_by={by} == 你的署名 {signer}）："
+                              f"自签自批不算人门 —— 主管（或任何一个别人）不批，你照样能签",
+                    "next_action": NEXT_SWITCH}
+        return None
+    if named and by not in named:
+        return {"code": "approver-not-named",
+                "reason": f"门 {approval_id} 是 {by} 批的，但开单时点名的是 {'、'.join(named)}："
+                          f"审批权在开单那一刻就定了，没点名的人批不了这一条",
+                "next_action": "让点名的那位本人批（或先把门升级 / 委托给他，再回来重提）"}
+    return None
+
+
+def verify_signoff(record: dict, *, scope: str, ref: str, signer: str,
+                   allow_self_approval: bool = False) -> dict:
+    """把**已经拿到**的一扇批准记录按人门判据再核一遍；不通过 ⇒ 抛 `SignoffRequired`。
+
+    服务层的结构性入口（`CommitmentGate.commit_award` / `issue_po` 都调它）：这样判据不只活
+    在 GUI 的那一个写者里，任何调用方（测试、其它写者、以后的通道）都绕不过。
+    """
+    verdict = signoff_verdict(record, scope=scope, ref=ref, signer=signer,
+                              allow_self_approval=allow_self_approval)
+    if verdict is not None:
+        raise SignoffRequired(verdict["code"], verdict["reason"], verdict["next_action"])
+    return record
+
+
+def select_signoff(records: list[dict], *, scope: str, ref: str, signer: str,
+                   allow_self_approval: bool = False) -> tuple[dict | None, dict | None]:
+    """**在已有批准记录里挑一扇可以消费的门**（承诺 / 发 PO 的唯一入口）。
+
+    挑法：先按 `scope` + `ref` 取这一条业务引用上的全部门（账本顺序），在其中挑**最后一扇**
+    `signoff_verdict` 通过的（= 最近一次真正通过的人门）；一扇都没有 ⇒ 用**最后一扇门**的状态
+    给出最可行动的具名拒（没人开单 / 还在等 / 被驳回 / 自签自批 / 批的人不是点名的那位）。
+    """
+    scope, ref = str(scope), str(ref)
+    candidates = [item for item in records
+                  if str(item.get("scope")) == scope and str(item.get("ref")) == ref]
+    if not candidates:
+        return None, {"code": "approval-required",
+                      "reason": f"账本里没有这扇门（scope={scope} ref={ref}）："
+                                f"承诺与发 PO 必须**消费一扇已批准的门**，"
+                                f"不能在同一次落账里自己开单、自己批准",
+                      "next_action": NEXT_OPEN_GATE}
+    eligible = [item for item in candidates
+                if signoff_verdict(item, scope=scope, ref=ref, signer=signer,
+                                   allow_self_approval=allow_self_approval) is None]
+    if eligible:
+        return eligible[-1], None
+    return None, signoff_verdict(candidates[-1], scope=scope, ref=ref, signer=signer,
+                                 allow_self_approval=allow_self_approval) or {
+        "code": "approval-required", "reason": f"门（scope={scope} ref={ref}）不可消费",
+        "next_action": NEXT_OPEN_GATE}
 
 
 def _summarize(payload: dict, *, limit: int = 120) -> str:

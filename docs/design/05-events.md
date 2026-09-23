@@ -147,6 +147,13 @@
 | `evolve/canary-exited` | serial | ✔ | canary 路由 → journal | 退出 canary；**自动回滚不需要人工批准**（安全动作），带 `reason` 与 `samples_seen` |
 | `evolve/rolled-back` | serial | ✔ | 门 → journal | 回滚：dispose 回收 effect + journal 只撤自己拥有的键 |
 
+**门的「消费」是读侧判据，不是新事件（ADR-0024）**：`approval/granted` 只说明**有**一扇门被批过；
+「这扇门算不算数」由**下游那一行怎么引用它**决定 —— 承诺 / 发 PO 只**消费**一扇已 `granted`、`scope`+`ref`
+对得上、**批的人不是署名者本人**（且开单点名时必须就是那位）的门（判据唯一一处：
+`src/system/approval/code/approval.py#signoff_verdict`）；消费关系由**下游事实自带**的 `approval_id` 表达
+（`award/committed` / `po/issued` 的 `approval_id` 与那一行的 `actor`），**不新增事件、不加 body 键**。
+`approvers` 是**开单时**的派分事实（ADR-0022），旧行没有它 ⇒ 只按 `scope`/`ref` + 「批的人 ≠ 署名的人」对账。
+
 ## 4. Agent 侧事件（live）
 
 | 事件 | @mode | 说明 |

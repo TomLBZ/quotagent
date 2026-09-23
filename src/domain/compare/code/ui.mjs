@@ -91,24 +91,36 @@ export async function register(surface, host) {
         columns: [
           { key: 'rank', label: '名次' },
           { key: 'quote_id', label: '报价', type: 'code' },
+          // **包 id 是一列普通列**（P49）：它是「保存权重」这类动作的必填入参之一，而最小上下文集
+          // 必须能被**某一行**满足（否则该动作在全视图里 0 入口）。行里有这一列 ⇒ 引导区/命令面板
+          // 挑一条就把它预填进表单（不必回去手抄包 id）。
+          { key: 'package_id', label: '包（挂这条事实的包 id）', type: 'code' },
           { key: 'supplier', label: '供应商', type: 'code' },
           { key: 'score', label: '得分（越小越前，minmax 口径）', filter: 'number' },
           { key: 'components', label: '分量贡献（谁拉高了 / 拉低了）' },
           { key: 'citations', label: '引用链' },
         ],
-        rows: ranking.map((row) => ({ id: row.quote_id, quote_id: row.quote_id, supplier: row.supplier,
-          rank: row.rank, score: row.score,
+        rows: ranking.map((row) => ({ id: row.quote_id, quote_id: row.quote_id,
+          // 包 id / 包版本逐行来自只读复算的上游（`compare-rank.py` 把本包 id 与 rev 逐行复述）
+          package_id: row.package_id ?? '', package_rev: row.package_rev ?? '',
+          supplier: row.supplier, rank: row.rank, score: row.score,
           components: Object.entries(row.components ?? {}).map(([key, comp]) =>
             `${LABELS[key] ?? key}=${comp.value}`).join(' · '),
           citations: (row.citations ?? []).slice(0, 4).join(' ') })),
         bulk: 'compare.rank',
+        // **行内入口**（P49）：同一份动作也挂在行上 —— 点某一行那颗按钮 = 按那一行预填（包 id 来自行、
+        // 「你看到的那一版」来自本面板的 `version_for`）。缺上下文靠"摆到能填的地方"解决，不靠藏。
+        row_actions: ['compare.save-weights'],
         counts: { ranked: ranking.length, ...(json.counts ?? {}) },
         // **乐观并发**：页面上声明"这一版权重是给哪个动作用的" ⇒ 打开「保存权重」时界面自动带上它
+        // （行里另有 `package_id`：那份动作要的**最小上下文集**因此能被**一行**满足 —— 见 29 §23 与
+        // `src/system/webui/docs/entry-policy-and-empty-state.md` §6）。
         version: host.versions.current('contractor', 'compare-weights', 'current'),
         version_for: 'compare.save-weights',
         note: `本次权重：${weightsText(weights)}（归一由服务保证；同权重下与 Python 侧 services/compare.py 同名次）`
           + ` · 选中若干行再点「用这组权重重排」= 只排这几家`
-          + ` · 「保存权重」受版本保护：别人先改过就会被明确拒绝并给出差异` }
+          + ` ·「保存权重」需要「包 id + 你看到的那一版」：包 id 就在这一列里（行内那颗按钮会把整行带入），`
+          + `版本见「保存权重」表单里的只读字段（别人先改过就会被明确拒绝并给出差异）` }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'compare.rank', title: '用这组权重排一次', views: ['contractor'],
@@ -334,7 +346,8 @@ export async function register(surface, host) {
       { name: 'w_payment', label: '权重：付款条件', type: 'number', min: 0, max: 1, default: DEFAULTS.payment },
       { name: 'w_warranty', label: '权重：质保', type: 'number', min: 0, max: 1, default: DEFAULTS.warranty },
       { name: 'w_deviation', label: '权重：偏差计数', type: 'number', min: 0, max: 1, default: DEFAULTS.deviation },
-      { name: 'package_id', label: '包 id', type: 'text', required: true, help: '要针对哪个包存这组权重' },
+      { name: 'package_id', label: '包 id', type: 'text', required: true, from_row: true,
+        help: '要针对哪个包存这组权重（它就是「比价排名」表里的「包」那一列；行内那颗按钮会把整行带入）' },
       { name: 'actor', label: '发言人', type: 'text', required: true, identity: true, help: 'human:<你的名字>' },
     ] },
     server: async (ctx, input) => {

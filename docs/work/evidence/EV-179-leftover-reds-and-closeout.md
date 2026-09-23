@@ -40,7 +40,7 @@ config-route 22/22、mail-transport 27/27、mail 20/20、ui-seed 17/17、quote-d
 retention 22/22、pipeline-route 18/18、invariants 22/22、wiring 5/5、events rc=0、evolution rc=0、evolve-module 61/61、
 run-once rc=0、**ui-mutate 4/4 且 rc=0**、ac-registry rc=0 —— **全部相同**。`g1` 两树都 rc=1（**HEAD 即红**：
 `tools/audit-verify.py` 被直接 exec 而无执行位 ⇒ `Exec format error`；与本批无关、未改）。
-> ui-mutate 对拍：该文件里 `ROOT` 是**硬编码** `/workspace/projects/quotagent`（既有不可移植缺陷）⇒ HEAD 侧对拍前
+> ui-mutate 对拍：该文件里 `ROOT` 是**硬编码** `<仓库根>`（既有不可移植缺陷）⇒ HEAD 侧对拍前
 > 只把这一行指到基线树（产品语义未动），两边各跑 4 处变异，**M1–M4 全红且还原一致**。
 
 ## ③ 补承载 4 个（53 → 57/63）

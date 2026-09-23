@@ -425,6 +425,47 @@ export async function register(surface, host) {
   const basisLabelOf = (gate) => `#${gate.ledger_seq ?? '—'} ${gate.last_event}`
     + `${gate.row_actor ? ` · actor=${gate.row_actor}` : ''}`
 
+  /**
+   * **这扇门被谁消费**（P48）：哪一条下游事实引用了它（`body.approval_id` 同值）、署名的是谁 ——
+   * 与「谁批的」一对照就答出**批准人是不是署名的人**（产品主张「谁批的 ≠ 谁签的」就靠这一列成立）。
+   *
+   * 为什么必须有这一列：四问（谁决定的 / 什么时候 / 为什么 / 依据哪一行）答的是**门自己**的事实；
+   * 修前的缺陷恰恰出在门与下游的关系上 —— 写者在同一次落账里自己开单自己批，于是「有批准记录」
+   * 成立而主管没有否决权，界面上还看不出来。这一列**从账本算**：没有下游事实引用它 ⇒ 如实写
+   * 「批了但没被用上」（不假装它撑住了什么）；署名与批准人同一个人 ⇒ 如实标「自签自批」。
+   */
+  const CONSUME_KIND = { 'award/committed': '授标承诺', 'po/issued': '发 PO', 'quote/submitted': '提交报价',
+    'change/approved': '批准变更', 'negotiate/round-submitted': '提交谈判轮次', 'po/acknowledged': '回签 PO',
+    'award/confirmed': '确认授标' }
+  const consumerOf = (rows, gate) => {
+    const id = asText(gate.approval_id)
+    const hits = rows.filter((row) => !String(row?.type ?? '').startsWith('approval/')
+      && asText(bodyOf(row).approval_id) === id)
+    if (!hits.length) return null
+    const row = hits[hits.length - 1]
+    return { type: String(row.type ?? ''), signer: asText(row.actor), seq: row.seq ?? null,
+      when: String(row.ts ?? '') }
+  }
+  const consumerLabelOf = (gate, consumer) => {
+    if (consumer === null) {
+      return gate.status === 'granted'
+        ? '还没有下游事实引用这扇门 —— 批了但没被用上（谁也没拿它签过什么）'
+        : '没有被下游消费（这扇门不是 granted）'
+    }
+    const kind = `${CONSUME_KIND[consumer.type] ?? consumer.type}（${consumer.type}）`
+    const who = consumer.signer || '（未记录署名）'
+    const approved = asText(gate.decided_by) || asText(gate.aborted_by)
+    if (gate.status !== 'granted') {
+      return `${kind} 署名 ${who} —— 消费它的那条门是 ${gate.status}，不是批准`
+    }
+    if (approved !== '' && approved === consumer.signer) {
+      return `${kind} 署名 ${who} —— **批准人就是署名人**（自签自批：要么是本批之前写入的旧行，`
+        + '要么是运营侧显式打开了自签自批开关；现在这条链默认会被具名拒 approver-must-differ）'
+    }
+    return `${kind} 署名 ${who} —— 批准人 ${approved || '（未记录）'} **不是同一个人**（谁批的 ≠ 谁签的）`
+      + ` #${consumer.seq ?? '—'}`
+  }
+
   /** 已决定的门：批准 / 驳回 / **终止** 留痕可回读（谁决定的、什么时候、为什么、依据哪一行）。 */
   const decidedPanel = (view, order) => surface.panel({
     plugin_id: me, id: view === 'supplier' ? 'gate.decided.supplier' : 'gate.decided',
@@ -441,6 +482,7 @@ export async function register(surface, host) {
           decided_at_label: whenLabelOf(gate) || '（账本行没带时刻）',
           reason_label: whyLabelOf(gate),
           basis_label: basisLabelOf(gate),
+          consumer_label: consumerLabelOf(gate, consumerOf(rows, gate)),
           comment: asText(gate.comment) || '' }))
       if (!decided.length) {
         return { ok: true, kind: 'table', degraded: true,
@@ -457,6 +499,7 @@ export async function register(surface, host) {
           { key: 'decided_by_label', label: '谁决定的（账本署名）', type: 'code' },
           { key: 'decided_at_label', label: '决定时刻（账本事实）', filter: 'date' },
           { key: 'reason_label', label: '为什么（账本 comment / 如实说明）' },
+          { key: 'consumer_label', label: '被谁消费（下游署名 vs 谁批的）' },
           { key: 'basis_label', label: '依据（账本行）', type: 'code' },
           { key: 'decision', label: '落账事件', type: 'code' },
         ],
@@ -464,13 +507,24 @@ export async function register(surface, host) {
         counts: { decided: decided.length,
           granted: decided.filter((gate) => gate.status === 'granted').length,
           denied: decided.filter((gate) => gate.status === 'denied').length,
-          aborted: decided.filter((gate) => gate.status === 'aborted').length },
+          aborted: decided.filter((gate) => gate.status === 'aborted').length,
+          // 「谁批的 ≠ 谁签的」的门数（P48）：从账本算，不看界面状态
+          approver_differs: decided.filter((gate) => {
+            const consumer = consumerOf(rows, gate)
+            return gate.status === 'granted' && consumer !== null && asText(gate.decided_by) !== ''
+              && consumer.signer !== '' && asText(gate.decided_by) !== consumer.signer
+          }).length,
+          not_consumed: decided.filter((gate) => gate.status === 'granted'
+            && consumerOf(rows, gate) === null).length },
         note: `事实时刻 ${moment || '—'}；每一行的结论都来自账本里这条门最后一次写入的行`
           + '（`approval/granted` / `approval/denied` / `approval/aborted`），不是界面记的状态；'
           + '「谁决定的」批准/驳回取 `decided_by`、终止取 `aborted_by`（旧行缺就如实写未记录署名）；'
           + '「为什么」逐字取账本 `comment` —— 终止的人写理由现在也逐字进这一行（ADR-0023）；'
           + '旧行只有 `reason_sha256` 时如实说"账本只有哈希、正文在 0600 待办件里"，超时自动作废则说'
-          + '"没有人写过理由"，都不编；「依据」给出该门最后一行账本行的 `seq` 与事件名，可逐行对账' }
+          + '"没有人写过理由"，都不编；「依据」给出该门最后一行账本行的 `seq` 与事件名，可逐行对账。'
+          + '「被谁消费」= 账本里**引用了这扇门**（`approval_id` 同值）的那一条下游事实及其署名：'
+          + '与「谁决定的」一对照就是产品主张的那一条 —— **谁批的 ≠ 谁签的**；批准人正是署名人 ⇒ 如实标'
+          + '「自签自批」；一扇 granted 的门没有任何下游引用 ⇒ 如实写「批了但没被用上」，不假装它撑住了什么' }
     } })
 
   out.push(surface.view({ plugin_id: me, id: 'gate.workspace', title: '审批队列', order: 5, view: 'contractor',

@@ -62,6 +62,12 @@ export const Config = object({
   // 只读工具调用的**缓存窗口**（毫秒；机制层）：同一组 `(工具, 参数)` 的只读调用在这个窗口内只 spawn 一次。
   // 插件要显式声明 `host.runPython(tool, args, { read: true })` 才会进缓存；任何一次动作/落待办件都会清空缓存。
   python_cache_ms: number().default(3000),
+  // **受管配置文件（YAML）的绝对路径**：宿主显式给的那一份（`host/cli.mjs` 的 `--config-file`）。
+  // 留空 = 走取值链（见 `resolveManagedConfigFile`）：配置面（`configView`，它是**唯一落盘者**的入口）
+  // → 本进程参数 `--config-file` → `QUOTAGENT_UI_CONFIG` → 缺省 `MANAGED_CONFIG_DEFAULT`。
+  // 解析出来的值随 `host.config.config_file` **下传给每个插件**（P49：修前面板只会读缺省值，
+  // 用 `--config-file` 换了受管 YAML 的面板照旧写"我读的是 /workspace/config.yaml"）。
+  config_file: string().default(''),
   // 注入式 UI 的槽位闭合集合（机制层）：插件只能注册到这些槽位；新增槽位改 host/lib/ui-slot.mjs。
   ui_slots: array(string()).default([...UI_SLOTS]),
 })
@@ -374,6 +380,61 @@ authority.escalation_note ← 越界升级时给办理人看的一句话（空 =
 }
 
 
+/**
+ * **受管配置路径的进程级事实**（P49）：装载面按 `<file>?v=<mtime>` 重复 import 同一份插件代码
+ * （见 `app-shell.mjs#moduleVersionOf`）⇒ **模块级变量在不同实例之间不共享**：`domain/authority-band`
+ * 的 `code/ui.mjs` 与 `system/approval` 的 `code/ui.mjs`（它 `import` 同一个函数）会各自拿到一份模块实例，
+ * 于是"队列的「越界？」列"读到的是**空路径**⇒ 退回缺省 `/workspace/config.yaml`，而"授权区间"面板读的是
+ * 宿主下传的那一份 —— 同一笔钱两处结论不一致（P49 实测：面板说 buyer=500000，队列仍说"未配置"）。
+ *
+ * 所以这一份**只读事实**放在进程级：任何实例读到的都是同一个值。它不是注册面、不是状态机、也不可变
+ * （同一进程内宿主只解析一次；`apply` 的 disposer 会把它删干净 —— 零残留，AGENTS.md 规则 1）。
+ */
+export const MANAGED_CONFIG_GLOBAL_KEY = '__QUOTAGENT_MANAGED_CONFIG_FILE'
+
+/**
+ * **受管配置文件（YAML）的缺省路径**：与上手页文案、`config-view` 的默认值同一处口径
+ * （`src/system/config/code/config-view.mjs#Config.config_file`）。一处常数、三处引用。
+ */
+export const MANAGED_CONFIG_DEFAULT = '/workspace/config.yaml'
+
+/** 进程参数里的 `--<name> <值>` / `--<name>=<值>`（`host/cli.mjs` 取的**就是同一个** argv）。 */
+const argvFlagValue = (name) => {
+  const argv = Array.isArray(process.argv) ? process.argv : []
+  const prefix = `--${name}=`
+  for (let index = 0; index < argv.length; index += 1) {
+    const item = String(argv[index] ?? '')
+    if (item === `--${name}`) return String(argv[index + 1] ?? '').trim()
+    if (item.startsWith(prefix)) return item.slice(prefix.length).trim()
+  }
+  return ''
+}
+
+/**
+ * **受管配置路径的取值链**（P49 的「真下传」；返回的永远是**一个绝对/相对路径字符串**，不返回空）：
+ *
+ *   ① `declared`      = 宿主显式给 webui 模块的那一份（`Config.config_file`，可留空）；
+ *   ② `fromConfigView`= **配置面**（`configView.stats().config_file`）读的那一份 —— 它是**唯一落盘者**
+ *      （`src/system/config/tools/config-apply.py`）的入口，所以"写哪儿"以它为准；`host/cli.mjs` 的
+ *      `--config-file` / `QUOTAGENT_UI_CONFIG` 也是先到它那里；
+ *   ③ 本进程参数 `--config-file`（`host/cli.mjs webui --config-file …`：它与 ② 同一份，② 缺席时的兜底）；
+ *   ④ 环境 `QUOTAGENT_UI_CONFIG`（同上）；
+ *   ⑤ 缺省 `MANAGED_CONFIG_DEFAULT`。
+ *
+ * 纪律：**只有一个真源**（②优先于③④），否则界面会"读一份、写另一份"——那正是修前的缺陷形态。
+ * 返回值会随 `host.config.config_file` 下传给每个插件（面板/动作据此读同一个文件，并把**实际读的路径**
+ * 写在界面上，用户能一眼看出它读的是哪一份）。
+ */
+export const resolveManagedConfigFile = ({ declared = '', fromConfigView = '' } = {}) => {
+  const chain = [declared, fromConfigView, argvFlagValue('config-file'),
+    process.env.QUOTAGENT_UI_CONFIG, MANAGED_CONFIG_DEFAULT]
+  for (const item of chain) {
+    const text = String(item ?? '').trim()
+    if (text !== '') return text
+  }
+  return MANAGED_CONFIG_DEFAULT
+}
+
 export function apply(ctx, config) {
   const projection = ctx.projection            // 投影服务（真源在 host/modules/projection.mjs）
   const rules = projection.rules
@@ -403,19 +464,45 @@ export function apply(ctx, config) {
   // 外壳自己**零业务语义**：它只把注册面（`ui-surface.mjs`）上的贡献装配成可点的界面，并把动作请求交给
   // 插件自己的**服务端一半**。写动作仍只能由 Python 侧唯一写者落账本（外壳只落 0600 待办件 + spawn）。
   const repoRoot = new URL('../../../..', import.meta.url).pathname
+  // ---- **受管配置路径下传到插件**（P49）--------------------------------------------------------
+  // 修前：插件的面板/动作只能自己猜受管 YAML 在哪（`host.config` 里根本没有这个键，进程环境里也没有）
+  // ⇒ 用 `--config-file` 起的服务，界面照旧写"我读的是 /workspace/config.yaml"，而**队列的「越界？」列
+  // 与 `authority.check` 都按那份文件的区间算** —— 界面上答不出"这笔钱越没越界"（P41/P47 实测）。
+  // 现在：外壳把**本进程真在用的那一份**解析出来（取值链见 `resolveManagedConfigFile`），随
+  // `host.config.config_file` 交给每一个插件（面板/动作据此读同一个文件，并把实际路径写在界面上）。
+  const configViewFile = (() => {
+    const service = ctx.configView ?? null        // 配置面（唯一落盘者的入口）；拿不到就按取值链往下走
+    try {
+      const stats = service && typeof service.stats === 'function' ? service.stats() : null
+      return String(stats?.config_file ?? '')
+    } catch (err) { return '' }
+  })()
+  const managedConfigFile = resolveManagedConfigFile({ declared: config.config_file,
+    fromConfigView: configViewFile })
+  console.error(`[webui] 受管配置：${managedConfigFile}`
+    + (configViewFile && configViewFile !== managedConfigFile ? `（配置面读的是 ${configViewFile}）` : ''))
+  // 同一个值**发布到进程级**（原因见上面 `MANAGED_CONFIG_GLOBAL_KEY` 的注释：插件模块会被按 `?v=`
+  // 重复 import，模块级变量不跨实例）。disposer 里删干净 ⇒ 不留全局状态（AGENTS.md 规则 1）。
+  globalThis[MANAGED_CONFIG_GLOBAL_KEY] = managedConfigFile
+  ctx.effect(() => () => { delete globalThis[MANAGED_CONFIG_GLOBAL_KEY] })
+  // 交给外壳的**有效配置**：其余键一字未动，只补上 `config_file`（插件拿到的就是它）。
+  const shellConfig = { ...config, config_file: managedConfigFile }
   const shell = createAppShell({
     root: repoRoot,
     prefix,
     views: ['home', ...config.views],
-    config,
+    config: shellConfig,
     // 本视角**账本行**（结构性隔离：每个视角只读自己的账本；与 webui.mjs 既有各特性同一口径）+
     // **公开投影行**（白名单在 projection 插件）—— 两者都交给插件，由插件按自己领域知识挑字段。
     rowsOf: (view) => (rules[view] ? ledgerOf(view).rows() : []),
     publicRowsOf: (view) => (rules[view] ? projectionOf(view).publicRows : []),
     slots: uiSlots,
-    // 宿主自己注入的服务句柄（机制：按名字取；外壳不知道它们的业务含义）
+    // 宿主自己注入的服务句柄（机制：按名字取；外壳不知道它们的业务含义）。
+    // `configView`：**配置面的读写入口**（受管 YAML 的路径 / 0600 待办件目录 / 配置账本）——
+    // 插件要提交一条配置变更（例：登记授权区间）时从它取那几个路径，**不自己拼路径**（同一份真源）。
     services: { quotePrepare: ctx.quotePrepare, bidHeuristics: ctx.bidHeuristics, gateTimeline: ctx.gateTimeline,
-      rfqDeadline: ctx.rfqDeadline, approvalDigest: ctx.approvalDigest, projection: ctx.projection },
+      rfqDeadline: ctx.rfqDeadline, approvalDigest: ctx.approvalDigest, projection: ctx.projection,
+      configView: ctx.configView },
     // **账本只读备忘的读数**（本批新增，只为可对账）：`/api/ui/surface` 的 io 会把"这次渲染
     // 真读了几遍账本 / 备忘命中几次"如实报出来 —— 修前修后的差别必须是可复跑的读数，不是形容词。
     ledgerStats,

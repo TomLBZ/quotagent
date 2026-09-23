@@ -53,9 +53,11 @@ surface.scenario({ plugin_id: me, id: 'scenario.rfq-publish', scenario: 'demo.pr
 - `steps[].capture = '<名字>'`：把这一步的回执留下，后面的步骤用 `$cap.<名字>.<字段>` 取；
   `$last.<字段>` 取**上一步**的；`$actor` = 这一步的演示身份。
 - `steps[].optional = true`：这一步失败**不算整条流程失败**（照旧往下跑，失败原样记进回执的
-  `optional_failures` 并在面板上如实说明）。本仓把 `compare.save-weights` 标成可选项，因为它当前会被
-  compare 的写者按 `item_id` 拒（多行报价没有"唯一那个行项目"，见 29 §7.5）—— 这是既有能力的缺口，
-  不是沙盘的问题：**演示照旧走完，缺口如实留在回执里**。
+  `optional_failures` 并在面板上如实说明）。**本仓的演示流程里没有 `optional` 步骤**：P40 修掉写者
+  只认单行报价形状的根因（`prepared_of` 按 29 §7.5 认 `lines[]`）之后，`compare.save-weights` 在
+  多行报价的沙盘里也**真能落一条 `compare/rank-computed`** —— 它现在是**必过**的一步，失败就是真失败
+  （照实报，不吞）。P49 又补了一件事：它在**界面上**的入口（引导区/行内/命令面板）也真的能开出来了
+  —— 见 `entry-policy-and-empty-state.md` §6。
 - 步骤的 `input` 里**不要**写死人名：一律用 `$actor`（HTTP 面上没人能替你签，沙盘里机制也不接受乱填的署名）。
 
 ## 4. 自述与复跑
@@ -64,13 +66,14 @@ surface.scenario({ plugin_id: me, id: 'scenario.rfq-publish', scenario: 'demo.pr
   （每个场景的步骤、声明者、`optional`）/ `why_not_ledger` / `http.note`（沙盘**没有独立路由**，
   入口就是 `sandbox.seed`、`sandbox.clear` 两个动作）。
 - 机检：`python3 tmp/p7-sandbox-verify.py`（真起服务、真 cookie 会话、真写者；断言未登录被拒、
-  **步数与顺序 = `/api/ui/surface` 里插件声明的场景（当前 12 步：包→报价×2→比价+落评估→授标链→PO→回签）
+  **步数与顺序 = `/api/ui/surface` 里插件声明的场景（P48 起 **16 步**：包→报价×2→比价+落评估→授标链→
+  **开承诺门→另一个人批→承诺**→**开 PO 门→另一个人批**→PO→回签；两道门是真门，见 §6）
   且每一步都 ok**、沙盘账本含 8 类事件、**真实账本 sha256 前后一致**、面板只出沙盘数据、权限 0600/0700、
   清空后目录消失且真实账本仍逐字节一致）。退出码 0 = 全通过（本轮修前 11/23、修后 23/23）。
 
 ## 4b. 两条机制级前提（沙盘"一键造数据"必须有的，缺一条就卡死或被拒）
 
-沙盘是**外壳机制**，它把 12 步丢回**同一个动作总线** —— 这条"动作里再 dispatch 动作"的路，把两条
+沙盘是**外壳机制**，它把整条场景丢回**同一个动作总线** —— 这条"动作里再 dispatch 动作"的路，把两条
 既有机制逼出了必须显式处理的情形（都不是判据放松，而是把口径说清）：
 
 1. **唯一写者闸门按"异步链"可重入**（`code/app-shell.mjs` 的 `WRITER_GATE_CHAIN`）：
@@ -104,3 +107,16 @@ surface.scenario({ plugin_id: me, id: 'scenario.rfq-publish', scenario: 'demo.pr
   `沙盘已打开（N 条可用场景）` 并给出沙盘目录与演示身份；关着时是 `沙盘未打开（你现在看的是真实数据）`。
 - 程序化核对：`host.sandbox`（插件侧）给出 `{on, actors, human, dir}`；
   `GET /api/ui/surface` → `sandbox` 段给出存储自述。
+
+## 6. 人门在沙盘里的样子（P48：演示身份只有「每档一个」）
+
+承诺与发 PO 现在**只消费一扇别人批过的门**（判据见 `identity-and-selfservice.md` §人门）。沙盘的演示身份是
+机制**按档位**生成的（`actors[side]`，档位 = 产品真有的视图档），**不建名册** ⇒ 同侧造不出第二个人。所以
+第 ⑤–⑨ 段这么做：**开单与署名**用 `contractor` 档（会话身份，就是你自己），**批门的人**借 `home` 档生成
+`demo-home`（沙盘面板的步骤表里写「（home 侧）」）—— 真实面里批门的是承包商侧名册角色为 `supervisor` 的那个人。
+
+演示出来的读数与真实面**同形**：`approval/requested`（requested_by = 会话身份）→ `approval/granted`
+（`decided_by = human:demo-home`，`approvers` 开单时点名）→ `award/committed` / `po/issued`
+（`actor = 会话身份`、`approved_by = human:demo-home`）⇒ 授标链与「已决定的门」都写「**谁批的 ≠ 谁签的**」。
+沙盘**不放宽任何判据**：没有门、或批的人就是署名者 ⇒ 写者照样具名拒（`approval-required` /
+`approver-must-differ`），账本零新增。

@@ -622,9 +622,18 @@ export async function register(surface, host) {
         // **逐行读数**（收件箱 JSON 由只读工具给；数组里混坏行 ⇒ 好行照列 + 逐条计数，不打崩面板）
         rows: lines.rows.filter((row) => isRow(row)).map((line) => {
           const id = asText(line.item_id)
+          // 行里带上**这一行属于哪个包**（P49）：比价那边的「保存权重」要「包 id + 你看到的那一版」，
+          // 而「最小上下文集」必须能被**一行**满足（否则在**这一页**上它 0 入口，见 29 §23）。
+          // 包 id 是本面板自己已经读到的 `bagOf.package_id`（不新增查询、不猜）。
           return { ...(id ? { id } : {}), item_id: id || '（无 id）', qty: line.qty,
-            unit_price_cents: line.unit_price_cents, lead_time_days: line.lead_time_days }
+            unit_price_cents: line.unit_price_cents, lead_time_days: line.lead_time_days,
+            package_id: asText(bagOf.package_id), package_rev: bagOf.rev ?? '' }
         }),
+        // **这一页也声明「你看到的那一版」**（同一份比价权重版本）：对象页上没有「比价排名」那块面板，
+        // 若不在这里声明，从这一页打开的「保存权重」就会**带上一个空版本**（服务端只能按安全默认判：
+        // 会覆盖别人的改动就拒）—— 那不是"按钮必被拒"，但会让人白填一次。声明后两处入口同一条路。
+        version: host.versions.current('contractor', 'compare-weights', 'current'),
+        version_for: 'compare.save-weights',
         counts: { lines: lines.rows.length, quoted_items: lines.all, dropped: lines.dropped },
         note: '受理 / 退回 / 要求补件是人工门：本页工具栏上的那个动作直接对这份报价发起（id 已按地址预填，'
           + '不必手抄）；逐行单价与量的对账口径见「报价收件箱」面板的备注'
