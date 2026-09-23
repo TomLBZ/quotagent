@@ -110,12 +110,38 @@ def check() -> list[Assertion]:
     out.append(Assertion("① 零写面 / 不读账本 / 不联网 / 无墙钟与随机数（非注释源码静态扫描）",
                          not hits, f"命中={hits}"))
 
-    # 路由与入口：页面零内联脚本；四道页面子导航有入口
-    routes = ('/advice/' in wsrc and '/api/advice' in wsrc and 'data-advice-link' in wsrc)
-    out.append(Assertion("① 路由与子导航入口齐备（`<view>/advice/` + `<view>/api/advice` + `data-advice-link`）；"
-                         "建议页模板里无内联脚本 / 无内联事件属性",
+    # 路由与入口：**旧只读建议页已退役**（`docs/design/29-webui-gui-app.md` §2 / §21.1：`/advice/` 与
+    # `/api/advice` 现为 303 → `/app/<view>/`，渲染器与 nav 入口删净、不留副本）。
+    # 旧判据里的 `data-advice-link` 是"入口存在"那一条：按 AGENTS.md 规则 12 把它**改指新位置**
+    # （判据不弱于原、只换目标）——
+    #   ① 旧地址仍在路由表里且**退役响应带 `data-retired-subview`**、303 落在同侧 GUI 视图页
+    #      （`RETIRED_SUBVIEWS` 里确实有 `advice` 键 ⇒ 退役是"登记的"，不是"删页跑路"）；
+    #   ② 承接"决策建议"这件事的 **GUI 面板真由插件注册**（`surface.panel(...)` + 面板 id 逐条：
+    #      rfq.remind-board / compare.ranking / gate.queue / mail.channel —— 与
+    #      `check-advice-route.py` 在真 HTTP 上量到的那组承接面板同一份）。
+    # 页面模板 0 内联脚本 / 0 内联事件那半条一字未改（旧页没了，退役响应体与建议载荷仍零脚本）。
+    retired = {
+        'advice_key': bool(re.search(r"'advice':", wsrc)) or bool(re.search(r'^\s*advice:', wsrc, re.M)),
+        'retired_body': 'data-retired-subview' in wsrc,
+        'gui_target': '/app/${view}/' in wsrc and bool(re.search(r'\b303\b', wsrc)),
+        'old_routes': '/advice/' in wsrc and '/api/advice' in wsrc,
+    }
+    carriers = {}
+    for panel_id, rel in (('rfq.remind-board', 'src/domain/rfq/code/ui.mjs'),
+                          ('compare.ranking', 'src/domain/compare/code/ui.mjs'),
+                          ('gate.queue', 'src/system/approval/code/ui.mjs'),
+                          ('mail.channel', 'src/system/mail/code/ui.mjs')):
+        path = ROOT / rel
+        text = path.read_text(encoding='utf-8') if path.is_file() else ''
+        carriers[panel_id] = f"'{panel_id}'" in text and 'surface.panel(' in text
+    routes = all(retired.values()) and all(carriers.values())
+    out.append(Assertion("① 旧建议页退役登记齐备（旧地址仍在 + 303 → `<前缀>/app/<view>/` + "
+                         "`data-retired-subview`）；**承接这件事的 GUI 面板真由插件注册**"
+                         "（`rfq.remind-board` / `compare.ranking` / `gate.queue` / `mail.channel`）；"
+                         "退役响应体与建议载荷 0 内联脚本 / 0 内联事件",
                          routes and '<script' not in chk_code and not re.search(r'\son[a-z]+=', chk_code),
-                         f"routes={routes} script={chk_code.count('<script')}"))
+                         f"routes={routes} retired={retired} carriers={carriers} "
+                         f"script={chk_code.count('<script')}"))
 
     gm = {k: (k in gate) for k in ('确定性', '哨兵', '变异', '还原', '空数据', '可溯源')}
     out.append(Assertion("① 围栏门含确定性/哨兵/变异自证/字节还原/空数据不编/basis 溯源（不是空壳门）",

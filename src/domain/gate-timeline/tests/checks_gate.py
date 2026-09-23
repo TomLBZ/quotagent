@@ -368,13 +368,30 @@ def check_detail() -> list[Assertion]:
                          '扫描器非空转：对照样本必须命中 ≥3）',
                          not hits and len(self_test) >= 3, f'产物命中={hits}；对照样本命中={self_test}'))
 
-    routes = ('/changes/' in webui and '/api/changes/' in webui and 'change_detail' in webui
-              and 'data-change-detail-link' in webui)
-    out.append(Assertion('① 宿主侧契约：两条新路由 + 变更单列表每行链到明细页（`data-change-detail-link`）+ '
-                         '页面模板 0 内联脚本 / 0 内联事件',
-                         routes and '<script' not in _code_only(webui)
+    # 宿主侧契约：两条明细路由仍在 + **变更单列表"点得进明细页"的入口在 GUI 上**（判据按 AGENTS.md
+    # 规则 12 改指新位置：旧页 `/gates/` 与它的 `data-change-detail-link` 已按 29 §2/§21.1 退役，
+    # 明细页**保留**；入口由插件自己的 GUI 贡献补回 —— DEF-037，见 29 §19.5）：
+    #   · 承包商侧：`domain/commitments` 的面板 `change.detail-links`
+    #   · 供应商侧：`domain/change` 的面板 `exchange.change-detail-links`
+    # 两个面板都必须**真由插件注册**（`surface.panel(...)`）且每条链到 `/<侧>/changes/<id>/`。
+    # 「每一行链到自己的明细页」这条要求一个没少：现在逐条断言**两侧**都有这个入口（原判据只要求
+    # 宿主模板里有一个抓手）。
+    detail_link_files = (('change.detail-links', 'src/domain/commitments/code/ui.mjs'),
+                         ('exchange.change-detail-links', 'src/domain/change/code/ui.mjs'))
+    gui_links = {}
+    for panel_id, rel in detail_link_files:
+        path = ROOT / rel
+        text = path.read_text(encoding='utf-8') if path.is_file() else ''
+        gui_links[panel_id] = (f"'{panel_id}'" in text and 'surface.panel(' in text
+                               and '/changes/${encodeURIComponent(id)}/' in text)
+    routes = ('/changes/' in webui and '/api/changes/' in webui and 'change_detail' in webui)
+    out.append(Assertion('① 宿主侧契约：两条明细路由仍在 + **变更单逐行明细入口由插件注册在 GUI 上**'
+                         '（`change.detail-links` / `exchange.change-detail-links`，每条链到 '
+                         '`/<侧>/changes/<id>/`）+ 页面模板 0 内联脚本 / 0 内联事件',
+                         routes and all(gui_links.values())
+                         and '<script' not in _code_only(webui)
                          and not re.search(r'\son[a-z]+=', _code_only(webui)),
-                         f'routes={routes} script={_code_only(webui).count("<script")}'))
+                         f'routes={routes} gui_links={gui_links} script={_code_only(webui).count("<script")}'))
     gm = {k: (k in gate_src) for k in ('手算', '缺依据', '哨兵', '变异', '还原', 'degraded', '未纳入小计')}
     out.append(Assertion('① 围栏门含手算表 / 缺依据不入小计 / 哨兵两面扫 / 变异自证 / 字节还原（不是空壳门）',
                          sum(gm.values()) >= 6, f'marks={gm}'))

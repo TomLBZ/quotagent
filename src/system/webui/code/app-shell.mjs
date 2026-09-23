@@ -19,6 +19,7 @@
 import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, chmodSync, renameSync, writeFileSync,
   openSync, closeSync, unlinkSync,
   rmSync } from 'node:fs'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { Worker } from 'node:worker_threads'
@@ -282,6 +283,9 @@ export function pendingPayload(kind, record, { name = '' } = {}) {
  *   · **每个写者调用各自领票**（不是"整批独占"）⇒ 批量进行中，另一个人的单条写只需等到**当前这一条**写完
  *     （实测 p50 ≈ 一条写者的时间），而不是等整批（P20 的形态是整批期间全部冻结）。
  *   · 等不到就**如实拒**（`writer-gate-timeout`），绝不"跳过闸门直接写"（那正是账本断链的来源）。
+ *     例外只有一种：**同一条异步链上已经持有同一把锁**（`WRITER_GATE_CHAIN`，如外层 `sandbox.seed`
+ *     持锁、`runScenario` 把 11 步逐个 dispatch 回同一个动作总线）⇒ 内层只标记 `reentrant`，
+ *     **不取票、不放锁**（不是"跳过闸门"：它就在闸门里面跑，放开由最外层那次做）。
  *
  * 把协议实现放在**一处**（`writerGateTicket/writerGateTry/writerGateReleaseSync`），两个执行面各写自己的
  * 驱动循环：主线程用 `await`（不阻塞事件循环），worker 用 `Atomics.wait`（等的不是主线程）。
@@ -294,6 +298,23 @@ export const WRITER_GATE = {
   dir: (sharedDir) => join(sharedDir, 'webui', 'writer.queue'),
   lock: (sharedDir) => join(sharedDir, 'webui', 'writer.lock'),
 }
+
+/**
+ * **同一执行链上的重入登记**（`AsyncLocalStorage`：绑在**异步链**上，不是进程级计数器）。
+ *
+ * 为什么必须有它：动作的**服务端一半可以再 dispatch 另一个动作** —— 演示沙盘就是一例
+ * （外层 `sandbox.seed` 持闸门，`runScenario` 按插件声明顺序把 11 步逐个丢回**同一个动作总线**）。
+ * 内层动作若再取同一把锁 = **自己等自己**：持有者是本进程（`process.kill(pid, 0)` 说它还活着）、
+ * 锁又不够陈旧 ⇒ 一直等到 `writer-gate-timeout`（P21 引入的实测回归：第 1 步 `rfq.publish`
+ * 挂 120 s、账本零新增 —— 见 `tmp/p37-shots/before-writer.lock.json`：锁的 `action` 是
+ * `sandbox.seed`，队列里那张票的 `action` 是 `rfq.publish`，同一个 pid）。
+ *
+ * 判据：**这条异步链上已经持有同一把锁** ⇒ 只标记 `reentrant`，**不取票、不放锁**（放开由最外层那次做）。
+ * 用 `AsyncLocalStorage` 而不是调用计数：并发请求各在自己的异步链上，**不会**被误判成"已持锁"
+ * 而绕过互斥 —— 互斥一字未改：别的事务/请求仍被同一把文件锁挡在外面，而嵌套的写者是在**外层持锁期间**
+ * 串行跑的（`await` 一步接一步，同刻只有一个写者）。
+ */
+const WRITER_GATE_CHAIN = new AsyncLocalStorage()
 
 const gateTicketName = (kind) => `${String(Date.now()).padStart(15, '0')}-${createHash('sha1')
   .update(`${process.pid}:${kind}:${Math.random()}`).digest('hex').slice(0, 8)}.json`
@@ -2817,7 +2838,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const jobFile = () => join(sharedDir, 'webui', 'jobs.json')
   // ---- **唯一写者闸门（主线程侧的异步版）**：见文件头 `WRITER_GATE` 段 ------------------------
   const gateStats = { took: 0, waited_ms: 0, peak_wait_ms: 0, timeouts: 0, released: 0, stale_dropped: 0,
-    skipped_free: 0, held_now: 0 }
+    skipped_free: 0, held_now: 0, reentrant: 0 }
   const gateWaitEnv = jobEnvInt('QUOTAGENT_UI_WRITER_WAIT_MS', 0)
   const gateWaitMs = gateWaitEnv > 0 ? gateWaitEnv : 120000
   /** 动作是否可能需要写者：**未知的一律按"要写"处理**（安全侧）；连续两次观察到"零写者"才免排队。 */
@@ -2827,10 +2848,17 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     if (ranWriter) writerFree.set(actionId, 0)
     else writerFree.set(actionId, Math.min(2, writerFreeCount(actionId) + 1))
   }
-  /** 异步取闸门（主线程**不阻塞事件循环**：等的时候让出，别人的翻页照常；协议本体在 `writerGateTry`）。 */
+  /** 异步取闸门（主线程**不阻塞事件循环**：等的时候让出，别人的翻页照常；协议本体在 `writerGateTry`）。
+   *  **可重入**：这条异步链上已经持有同一把锁 ⇒ 直接放行（`reentrant:true`，不取票/不放锁；
+   *  场景 runner 在外层动作的闸门里 dispatch 步骤就是这种情形 —— 见 `WRITER_GATE_CHAIN`）。 */
   const writerGateAcquire = async (action, meta = {}) => {
     const lock = WRITER_GATE.lock(sharedDir)
     const dir = WRITER_GATE.dir(sharedDir)
+    const chain = WRITER_GATE_CHAIN.getStore()
+    if (chain && chain.has(lock)) {
+      gateStats.reentrant += 1
+      return { ok: true, file: lock, waited_ms: 0, reentrant: true, held_by: 'this-chain' }
+    }
     const started = Date.now()
     const full = { thread: 'main', action: action.id, ...meta }
     const ticket = writerGateTicket({ dir, meta: full })
@@ -2846,7 +2874,12 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         gateStats.held_now += 1
         gateStats.waited_ms += waited
         gateStats.peak_wait_ms = Math.max(gateStats.peak_wait_ms, waited)
-        return { ok: true, file: lock, waited_ms: waited }
+        // 登记到**这条异步链**上：链上再 dispatch 的动作（场景步骤 / 插件转调）取同一把锁时
+        // 走重入分支（`reentrant:true`），不会自己等自己。
+        const next = new Set(chain ?? [])
+        next.add(lock)
+        WRITER_GATE_CHAIN.enterWith(next)
+        return { ok: true, file: lock, waited_ms: waited, reentrant: false }
       }
       if (step.code) {
         writerGateDropTicket(ticket)
@@ -2868,9 +2901,19 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   }
   const writerGateRelease = (gate) => {
     if (!gate?.ok) return
+    // 重入的那一层**不放锁**（它没取锁）：放开由最外层那次做 —— 否则内层一放手，
+    // 链上剩下的步骤就在没有闸门的情况下写账本了。
+    if (gate.reentrant) return
     writerGateReleaseSync(gate.file)
     gateStats.released += 1
     gateStats.held_now = Math.max(0, gateStats.held_now - 1)
+    // 链上这条锁的登记也撤掉（同一条链后面若再跑动作，要重新老老实实排队）。
+    const chain = WRITER_GATE_CHAIN.getStore()
+    if (chain && chain.has(gate.file)) {
+      const next = new Set(chain)
+      next.delete(gate.file)
+      WRITER_GATE_CHAIN.enterWith(next)
+    }
   }
   const ioJobs = { started: 0, done: 0, failed: 0, interrupted: 0, offloaded_items: 0,
     running: 0, peak_running: 0, inline_fallback: 0, concurrency: jobConcurrency }
@@ -3393,7 +3436,11 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
 
   const runAction = async (actionId, request, who = null) => withSandbox(who, () => runActionInner(actionId, request, who))
 
-  const runActionInner = async (actionId, request, who = null) => {
+  /**
+   * `options.chainSeeded` = **这次派发是演示沙盘场景里的一步**（`runScenario` 传的）：
+   * 见下面「沙盘场景的步骤」那一段 —— 只多一件""把这一链读到的版本填进 `expected_version`"。
+   */
+  const runActionInner = async (actionId, request, who = null, options = {}) => {
     const action = surface.findAction(actionId)
     if (!action) {
       return { ok: false, code: 'unknown-action', reason: `注册面里没有动作 ${actionId}`,
@@ -3440,6 +3487,23 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     // （`identity`/`view` 也在这里：`host.report()` 要按"谁在导出"套**个人列选择偏好**）
     const scope = { action_id: action.id, staged: [], runs: [], identity: ctx.identity, view: ctx.view }
     // ---- **乐观并发**（机制）：保存前比对对象版本；对不上 ⇒ **明确拒绝**并给差异（不后写覆盖前写）----
+    // ---- 沙盘场景的步骤：先把"这一链读到的版本"填进 `expected_version` ---------------------------
+    // 同一条纪律（29 §14）：**界面**把"你看到的那一版"填进 `expected_version` 再保存。场景 runner 就是
+    // 演示流程的"客户端"：它读的是**当前那一版**（沙盘里只有这条链在写，而且它整段握着写者闸门
+    // ⇒ "读到"与"派发"之间插不进别人的写）。不填就要撞乐观并发闸 —— 演示里"另一家候选"的第二次
+    // `quote.draft` 打的是**同一个对象**（`quote-draft` = 我方对这份包的草稿），会被判 `object-changed`：
+    // 这正是 P14 起演示沙盘第 4 步一直红的真因（不是写者闸门的问题，也不是判据该松）。
+    // 只对 `options.chainSeeded` 生效：**HTTP 入口一个字都不变**（界面该怎么带版本还怎么带）。
+    if (options.chainSeeded && action.concurrency && String(input?.[action.concurrency.expected_field] ?? '').trim() === '') {
+      const spec = action.concurrency
+      try {
+        const objectId = spec.object_id ? String(spec.object_id(ctx, input) ?? '').trim()
+          : String(input?.[spec.id_field] ?? '').trim()
+        const seen = objectId === '' ? null
+          : versionCurrent(ctx.identity && ctx.identity.side ? ctx.identity.side : '', spec.object_class, objectId)
+        if (seen) input[spec.expected_field] = seen.fingerprint
+      } catch (err) { /* 算不出对象 id ⇒ 交给 `versionGuard` 按原口径拒（错误码更具体） */ }
+    }
     let pendingVersion = null
     if (action.concurrency) {
       const verdict = versionGuard({ action, ctx, input })
@@ -3742,6 +3806,14 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     }
     const sessionSide = String(who?.side ?? '')
     const owner = humanOf(who)
+    // ---- **每次都从零开始**（面板上就是这么承诺的：`sandbox-and-demo.md` §1/§2）-------------------------
+    // seed 前先把**这个身份自己的**沙盘目录清干净。不清就会在上一轮的沙盘上叠加（P37 实测：只清一次、
+    // 连点两次「造一组演示数据」就复现）：`quote.draft` 报幂等 `drafted +0`、`award.propose` 也不再
+    // 产生新 intent ⇒ 第 9 步 `award.confirm` 的 `$cap.intent.intent_id` 是空的、整条演示断在半路
+    // （回执里只有一句空 reason 的 `validation-failed`）。**真实账本/待办件一字未动** —— 删的只是
+    // 该身份自己的沙盘目录（与 `sandbox.clear` 同一处机制）。
+    const reset = sandboxWipe(owner)
+    if (reset.ok === false) return { ...reset, ledger_added: 0, steps: [] }
     const actors = {}
     for (const side of new Set([sessionSide, ...group.steps.map((step) => step.as?.side).filter(Boolean)]).values())
       if (side !== '') actors[side] = side === sessionSide ? String(who?.human ?? '') : SANDBOX_DEMO_ACTOR(side)
@@ -3761,7 +3833,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
         const input = deref(step.input ?? {}, { actor, last, caps })
         /* eslint-disable no-await-in-loop */
         const out = await withSandboxActor(actor, () => runActionInner(step.action,
-          { view: step.view || actorSide, input }, { human: actor, side: actorSide }))
+          { view: step.view || actorSide, input }, { human: actor, side: actorSide }, { chainSeeded: true }))
         done.push({ action: step.action, declared_by: step.declared_by, as: actor, view: step.view || actorSide,
           ok: out?.ok === true, code: out?.code ?? null, reason: out?.reason ?? null,
           content: out?.content ?? null, next_action: out?.next_action ?? null,
@@ -3781,12 +3853,14 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       return { ok: failed === null, code: failed ? (failed.code ?? 'step-failed') : 'sandbox-seeded',
         reason: failed ? `第 ${done.indexOf(failed) + 1} 步（${failed.action}）失败：${failed.reason ?? ''}` : '',
         steps: done, actors, scenario, sandbox_dir: sandboxDirFor(owner),
+        reset: { existed: reset.existed === true, removed_dir: reset.removed_dir ?? '' },
         optional_failures: optionalFailed.map((item) => ({ action: item.action, code: item.code,
           reason: item.reason })),
         ledger_added: done.reduce((sum, item) => sum + (item.ledger_added || 0), 0),
         next_action: failed ? `按上面的原因修这一步的入参/前置事实后重跑；沙盘数据可以「清空沙盘」从零再来`
-          : ('沙盘已就绪：切到「供应商」看报价、切回「承包商」看比价/授标/PO —— 这些都是**演示数据**，'
-            + '真实账本零新增；看完点「清空沙盘」一键回到真实面'
+          : ('沙盘已就绪（这就是**从零造出来**的一组演示数据：上一轮的沙盘目录已先清掉，'
+            + '真实账本零新增）：切到「供应商」看报价、切回「承包商」看比价/授标/PO；'
+            + '看完点「清空沙盘」一键回到真实面'
             + (optionalFailed.length ? `（有 ${optionalFailed.length} 步是可选项、这次没成，'
               + '回执里列了原因：${optionalFailed.map((item) => `${item.action}:${item.code}`).join('、')}）` : '')) }
     })

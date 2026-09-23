@@ -149,8 +149,8 @@
   {
    "name": "retention-view",
    "proposal_id": "sha256:11498b54d7f9e217788e0434a368a4e267ce3673fdbb95b52bf43901a530678f",
-   "artifact_hash": "96a1dda2c6f2f1ea9fa2cc5837b280bd66e95f2cd437d22d42ffc66595dbf81f",
-   "bytes": 10158,
+   "artifact_hash": "a1ba578651b2f107635c87c88b29a26f7d7380a366c13c97758bf9813756cb99",
+   "bytes": 11283,
    "approval_ref": "ap-0109",
    "gate": "passed",
    "fixture": {
@@ -160,7 +160,18 @@
    "produced_by": "tools/evolve-module.mjs",
    "ledger": "/workspace/projects/quotagent/tmp/evolve/ledger.jsonl",
    "evidence": null,
-   "artifact_path": "src/system/retention/code/retention-view.mjs"
+   "artifact_path": "src/system/retention/code/retention-view.mjs",
+   "revised": [
+    {
+     "at": "2026-09-23T07:21:40Z",
+     "commit": "663a387",
+     "by": "P31/P32（webui 批）",
+     "what": "P32「裸读行数组」收口：retention-view 的条目读数改走唯一读数入口（坏行跳过并计数、好行照列、不静默丢），+1125 B",
+     "prev_artifact_hash": "96a1dda2c6f2f1ea9fa2cc5837b280bd66e95f2cd437d22d42ffc66595dbf81f",
+     "prev_bytes": 10158,
+     "why_recorded_later": "P31/P32 改了产物但没同步本日志 ⇒ `tools/verify.sh evolve-module` 红（哈希/字节数对不上）。仓规要求产出日志的哈希与**进树字节**一致 ⇒ 登记当前产物（**不回退产物、不改回旧 sha**）。"
+    }
+   ]
   },
   {
    "name": "pipeline-view",
