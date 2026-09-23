@@ -47,6 +47,30 @@ const prefixRows = (rows, prefix) => rows.filter((row) => String(row?.type ?? ''
 const sha = (text) => createHash('sha256').update(String(text ?? ''), 'utf8').digest('hex')
 const REV_EVENTS = ['rfq/published', 'rfq/distributed', 'rfq/amended']
 
+/** 「行」的最小形状：非 null 的**对象**（数组不是行）。 */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+/**
+ * **行数组的唯一读数入口**（`lines[]`：坏行逐条计数、好行照列）。
+ * 为什么必须有它（P27 实测的根因）：数组里混进一条 `null`/字符串时 `line.ref_line` 就抛 `TypeError`，
+ * 而外壳对 `panel.data()` 抛错的处理是**整块面板判 `data-failed`** —— 一条坏行打崩一整块。
+ */
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, all: 0, rows: [], dropped: 0 }
+  const rows = value.filter((row) => isRow(row))
+  return { list: true, all: value.length, rows, dropped: value.length - rows.length }
+}
+/**
+ * 逐行文本：`read` 由 `readRows(...)` 给（**调用口径：把 `readRows(...)` 写在参数上**，读取处一眼可见）；
+ * `max > 0` 时超过就截断并**带上省略号**（不静默截断 —— 少掉的字用 `…` 说出来）。
+ */
+const linesTextOf = (read, render, { sep = '；', max = 0 } = {}) => {
+  if (!read.list) return ''
+  const text = read.rows.map(render).join(sep)
+  const clipped = max > 0 && text.length > max ? `${text.slice(0, max)}…` : text
+  if (!read.dropped) return clipped
+  return `${clipped || '（没有行明细）'}${clipped ? ' · ' : ''}另有 ${read.dropped} 条读不出来（形状异常，已跳过并计数）`
+}
+
 /** 与唯一写者 `quote-draft.py` 的 `canonical_lines()` 逐字节一致的行项目规范化 JSON。 */
 const canonicalLines = (record) => JSON.stringify({ currency: String(record.currency ?? ''),
   item_id: String(record.item_id ?? ''), lead_time_days: record.lead_time_days,
@@ -202,8 +226,8 @@ export async function register(surface, host) {
           const response = responded.get(changeId)
           return { id: changeId, change_id: changeId, package_id: asText(body.package_id),
             quote_id: asText(body.quote_id),
-            lines: (body.lines ?? []).map((line) => `${line.ref_line}: ${line.old_qty} → ${line.new_qty}`
-              + `（单价基准 ${line.old_unit_price} 元，行差额 ${Number(line.line_delta).toFixed(2)}）`).join('；').slice(0, 240),
+            lines: linesTextOf(readRows(body.lines), (line) => `${line.ref_line}: ${line.old_qty} → ${line.new_qty}`
+              + `（单价基准 ${line.old_unit_price} 元，行差额 ${Number(line.line_delta).toFixed(2)}）`, { max: 240 }),
             delta_amount: body.delta_amount ?? '—',
             status: approved.has(changeId) ? '已生效' : (response ? '已回应' : '待我回应'),
             response: response ? `${asText(response.decision) === 'accept' ? '接受' : '异议'}：${asText(response.note)}`
@@ -314,7 +338,7 @@ export async function register(surface, host) {
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'exchange.prefill', title: '按最新 rev 重报：预填值（我看到的）',
-    view: 'supplier', order: 23, kind: 'kv', placement: 'side',
+    view: 'supplier', order: 23, kind: 'kv', placement: 'side', not_data: true,
     data: () => {
       const history = revHistory(host, 'supplier')
       const quotes = quotesOf(host, 'supplier')
@@ -325,8 +349,10 @@ export async function register(surface, host) {
         items.push({ key: `包 ${packageId} @rev${latest.rev}`, value: `我的报价：${mine.length
           ? mine.map((quote) => `${quote.item_id}@${quote.unit_price_cents}分/${quote.lead_time_days}天`).join('、')
           : '（还没有报价）'}`, code: true })
-        items.push({ key: ' 该版行项目（数量）', value: latest.items.map((item) => `${item.item_id}×${item.qty}${item.unit ?? ''}`)
-          .join('、') || '—' })
+        // 这一版的行项目（`revHistory` 已归一化：只留带 `item_id` 的对象行）—— 就地取名，读取处看得见来源
+        const latestItems = latest.items
+        items.push({ key: ' 该版行项目（数量）', value: latestItems.map((item) =>
+          `${item.item_id}×${item.qty}${item.unit ?? ''}`).join('、') || '—' })
       }
       for (const quote of quotes) {
         items.push({ key: `旧单价 ${quote.quote_id}/${quote.item_id}`, value: `${quote.unit_price_cents} 分`
@@ -362,8 +388,8 @@ export async function register(surface, host) {
           const changeId = asText(entry.change_id)
           const response = responded.get(changeId)
           return { id: changeId, change_id: changeId, quote_id: asText(entry.quote_id),
-            lines: (entry.lines ?? entry.delta ?? []).map((line) => `${line.ref_line ?? line.item_id}: `
-              + `${line.old_qty} → ${line.new_qty}`).join('；'),
+            lines: linesTextOf(readRows(entry.lines ?? entry.delta), (line) => `${line.ref_line ?? line.item_id}: `
+              + `${line.old_qty} → ${line.new_qty}`),
             delta_amount: priced.get(changeId)?.delta_amount ?? entry.delta_amount ?? '—',
             status: approved.has(changeId) ? '已批准（生效）' : (response ? '供应商已回应' : '待供应商回应'),
             response: response ? `${asText(response.decision) === 'accept' ? '接受' : '异议'} @${asText(response.at)}`
@@ -665,7 +691,7 @@ export async function register(surface, host) {
 
   // ================================================================== 工作台 / 通知 / 状态 / 快捷键
   out.push(surface.panel({ plugin_id: me, id: 'exchange.change-home', title: '变更与改报：我今天要做什么',
-    view: 'home', order: 17, kind: 'list',
+    view: 'home', order: 17, kind: 'list', not_data: true,
     data: (ctx) => {
       const items = []
       const sRows = host.rows('supplier')
@@ -723,10 +749,11 @@ export async function register(surface, host) {
         const list = history.get(quote.package_id) ?? []
         const latest = list.length ? list[list.length - 1] : null
         if (latest === null || basedOnRev(list, quote.submitted_at) >= latest.rev) continue
+        const latestItems = latest.items
         items.push({ id: `stale:${quote.quote_id}`, level: 'warn', at: latest.ts,
           title: `报价 ${quote.quote_id} 已被 rev${latest.rev} 作废`,
           body: `它基于 rev${basedOnRev(list, quote.submitted_at)}；新版数量：`
-            + latest.items.map((item) => `${item.item_id}×${item.qty}`).join('、'),
+            + latestItems.map((item) => `${item.item_id}×${item.qty}`).join('、'),
           next_action: '点「按最新 rev 重报」（预填 → 生成草稿 → 人签提交）',
           ref: { view: 'supplier', kind: 'quote', id: String(quote.quote_id), title: `报价 ${quote.quote_id}` } })
       }

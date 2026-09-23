@@ -205,7 +205,7 @@ export async function register(surface, host) {
 
   // ---- 面板：**我个人现在是什么状态**（开关 / 地址域名 / 上一次 / 文件在哪）-----------------------------
   out.push(surface.panel({ plugin_id: me, id: 'mail.notify', title: '邮件摘要：有事等你时发一封到你邮箱',
-    view: 'home', order: 41, kind: 'table',
+    view: 'home', order: 41, kind: 'table', not_data: true,
     actions: ['mail.notify.send'], hint: '行内「改摘要偏好」按这一行的值预填；「发一份摘要」立刻按当前条目发一封',
     data: (ctx) => {
       const who = ctx?.identity ?? null

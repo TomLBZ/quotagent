@@ -163,11 +163,14 @@ export function createPeopleSurface({ surface, host, views = [], log } = {}) {
     const made = []
     push(made, surface.panel({ plugin_id: me, id: `people.roster-${view}`, title: '人员名册与角色（本侧）',
       view, order: view === 'home' ? 18 : ROSTER_PANEL_ORDER, kind: 'kv',
+      // **运营配置**（名册/角色/额度）：它不算"这一屏有没有业务数据"—— 刚登录时这里总有你自己那一条，
+      // 若把它算成数据，空态（说人话 + 2–3 个下一步）就永远不出现。面板照旧渲染、照旧有内容。
+      not_data: true,
       actions: ['people.member-add', 'people.role-set', 'people.policy-set'],
       hint: '名册是权威取值处：「@提及 / 指派 / 转交」的候选与校验都从它来；它是**配置**（可改、不进账本）',
       data: rosterPanelData() }))
     push(made, surface.panel({ plugin_id: me, id: `people.table-${view}`, title: '名册表（逐行可改）',
-      view, order: (view === 'home' ? 18 : ROSTER_PANEL_ORDER) + 1, kind: 'table',
+      view, order: (view === 'home' ? 18 : ROSTER_PANEL_ORDER) + 1, kind: 'table', not_data: true,
       actions: ['people.member-add', 'people.member-save'],
       hint: '每行一个人：角色、额度、职务、直属上级、在职状态；行内动作按名字预填',
       data: rosterTableData() }))

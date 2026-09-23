@@ -45,6 +45,14 @@ export const VISIBILITY_OPTIONS = [
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/** 「行」的最小形状 + 行数组读数（附件表的行数组：坏行逐条计数、好行照列 —— 一条坏行不打崩整页）。 */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const readRows = (value) => {
+  const list = Array.isArray(value) ? value : []
+  const rows = list.filter((row) => isRow(row))
+  return { list: Array.isArray(value), rows, dropped: list.length - rows.length }
+}
 const humanBytes = (value) => {
   const bytes = Number(value) || 0
   if (bytes < 1024) return `${bytes} B`
@@ -230,7 +238,9 @@ export async function register(surface, host) {
           const listed = side === ''
             ? { ok: false, files: [], counts: { total: 0, live: 0, deleted: 0, mine: 0 } }
             : store.list({ side, kind, id })
-          const files = (listed.files ?? []).map((row) => ({ ...row, url: fileUrl(row.id),
+          const listedRead = readRows(listed.files)
+          const listedRows = listedRead.rows
+          const files = listedRows.map((row) => ({ ...row, url: fileUrl(row.id),
             bytes_label: humanBytes(row.bytes), sha256_short: String(row.sha256 ?? '').slice(0, 19),
             // **多版本**与**预览**的界面声明（文件表本身按六列渲染；这两个字段给「预览与版本」面板与脚本用）
             version_label: `v${row.version ?? 1}${row.is_latest ? '（最新）' : ''}`,
@@ -248,7 +258,8 @@ export async function register(surface, host) {
             ok: true, kind: 'files', object: { kind, id },
             found: visible, identity: side ? { side, human: ctx.identity.human } : null,
             files, upload, row_actions: ['attach.delete'],
-            counts: { ...(listed.counts ?? {}), visible_ids: (seen.ids[kind] ?? new Set()).size },
+            counts: { ...(listed.counts ?? {}), visible_ids: (seen.ids[kind] ?? new Set()).size,
+              unreadable: listedRead.dropped },
             degraded: reason !== '',
             reason,
             visibility_rule: '下载与删除都要会话身份（未登录 401）；跨侧只在「交付件 + 对方是该对象当事方」'

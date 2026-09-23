@@ -47,6 +47,36 @@ const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== nul
 const typeRows = (rows, ...types) => rows.filter((row) => types.includes(String(row?.type ?? '')))
 const prefixRows = (rows, prefix) => rows.filter((row) => String(row?.type ?? '').startsWith(prefix))
 const truthy = (value) => value === true || value === 'true' || value === '1'
+/** 「行」的最小形状：非 null 的**对象**（数组不是行）。 */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+/**
+ * **行数组的唯一读数入口**（`lines[]` / 包的行项目：坏行逐条计数、好行照列）。
+ * 为什么必须有它（P27 实测的根因）：数组里混进一条 `null`/字符串时读 `line.item_id` 就抛 `TypeError`，
+ * 而外壳对 `panel.data()` 抛错的处理是**整块面板判 `data-failed`** —— 一条坏行打崩一整块。
+ */
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, all: 0, rows: [], dropped: 0 }
+  const rows = value.filter((row) => isRow(row))
+  return { list: true, all: value.length, rows, dropped: value.length - rows.length }
+}
+/**
+ * 逐行文本：`read` 由 `readRows(...)` 给（**调用口径：把 `readRows(...)` 写在参数上**）；
+ * `max > 0` 时超长截断并**带省略号**（不静默截断）。
+ */
+const linesTextOf = (read, render, { sep = '、', max = 0 } = {}) => {
+  if (!read.list) return ''
+  const text = read.rows.map(render).join(sep)
+  const clipped = max > 0 && text.length > max ? `${text.slice(0, max)}…` : text
+  if (!read.dropped) return clipped
+  return `${clipped || '（没有行明细）'}${clipped ? ' · ' : ''}另有 ${read.dropped} 条读不出来（形状异常，已跳过并计数）`
+}
+/**
+ * 名单字段（`delivered_to` 这类"给谁"的标量列表）：**不是数组 ⇒ 空名单**（不猜、不抛）。
+ * 修前是 `(item.delivered_to ?? []).map(String)`：`item` 是 `null` 时直接 TypeError，
+ * 整块面板判 `data-failed`（P30 坏行注入实测：意向信封里混一条 `null` 就把面板打崩）。
+ */
+const nameListOf = (value) => (Array.isArray(value) ? value : [])
+  .filter((item) => item !== null && item !== undefined).map(String)
 const PACKAGE_TYPES = ['rfq/published', 'rfq/distributed', 'rfq/amended']
 
 /** 投递信封（首页「我收到的包」用的同一份；文件或目录，插件的只读来源）。 */
@@ -161,14 +191,15 @@ const ticketsOf = (host, view) => {
 const outcomesOf = (host) => {
   const path = `${host.sharedDir}/exchange/award-outcomes.json`
   const raw = host.readJson(path)
-  const items = Array.isArray(raw) ? raw : (Array.isArray(raw?.outcomes) ? raw.outcomes : [])
+  const read = readRows(Array.isArray(raw) ? raw : (Array.isArray(raw?.outcomes) ? raw.outcomes : []))
+  const items = read.rows
   const realm = realmOf(host, 'supplier')
   const mine = items.filter((item) => {
-    const delivered = (item.delivered_to ?? []).map(String)
+    const delivered = nameListOf(item.delivered_to)
     return delivered.length === 0 || realm === '' || delivered.includes(realm)
   })
   const mismatch = mine.length === 0 && items.length > 0
-  return { items, mine, mismatch, path }
+  return { items, mine, mismatch, path, dropped: read.dropped, all: read.all }
 }
 
 /** 授标意向信封（`exchange/award-intents.json`；既有通道，承包商提意向时写）。
@@ -177,15 +208,16 @@ const outcomesOf = (host) => {
 const intentsOf = (host) => {
   const path = `${host.sharedDir}/exchange/award-intents.json`
   const raw = host.readJson(path)
-  const items = Array.isArray(raw) ? raw : []
+  const read = readRows(Array.isArray(raw) ? raw : [])
+  const items = read.rows
   const realm = realmOf(host, 'supplier')
   const mine = ownQuoteIds(host)
   const visible = items.filter((item) => {
-    const delivered = (item.delivered_to ?? []).map(String)
+    const delivered = nameListOf(item.delivered_to)
     return mine.has(asText(item.quote_id)) || (delivered.length > 0 && realm && delivered.includes(realm))
   })
   const mismatch = visible.length === 0 && items.length > 0
-  return { items, mine: visible, mismatch, path }
+  return { items, mine: visible, mismatch, path, dropped: read.dropped, all: read.all }
 }
 
 /** 我自己提交过的报价 id（本侧 `quote/submitted` 事实）。 */
@@ -269,7 +301,8 @@ export async function register(surface, host) {
             // （外壳的预填机制就是「按字段名在行里取值」：名字对不上 = 表单空白。）
             seen_rev: rev ?? '', rfq_rev: rev ?? '',
             items: entry.items.length,
-            qty: entry.items.map((item) => `${item.item_id}×${item.qty}${item.unit ?? ''}`).join('、').slice(0, 120),
+            qty: linesTextOf(readRows(entry.items), (item) =>
+              `${item.item_id}×${item.qty}${item.unit ?? ''}`, { max: 120 }),
             quote_by: entry.quote_by || '—',
             ack: ack ? `${asText(ack.acknowledged_by)} @ rev${ack.seen_rev}` : '未认收',
             promise: promise ? `${asText(promise.due_at)}（${asText(promise.actor)}）` : '未承诺',
@@ -335,7 +368,7 @@ export async function register(surface, host) {
         const poId = po ? asText(po.po_id) : ''
         return { id: intentId, intent_id: intentId, package_id: asText(intent.package_id),
           quote_id: asText(intent.quote_id),
-          lines: (intent.lines ?? []).map((line) => `${line.item_id}×${line.qty}@${money(line.unit_price_cents)}`).join(' '),
+          lines: linesTextOf(readRows(intent.lines), (line) => `${line.item_id}×${line.qty}@${money(line.unit_price_cents)}`, { sep: ' ' }),
           confirmed: record ? `已确认（${asText(record.confirmed_by)}，能否按期=${
             record.can_meet_due === true ? '能' : (record.can_meet_due === false ? '不能' : '未声明')}）` : '待确认',
           // `po_id` 留空（缺 PO 时）而不是填 "—"：行内动作按**同名字段**预填，填 "—" 会把一个占位符
@@ -359,7 +392,14 @@ export async function register(surface, host) {
           { key: 'confirmed', label: '我确认了吗' }, { key: 'po', label: 'PO', type: 'code' },
           { key: 'po_ack', label: 'PO 确认' }],
         rows: table, row_actions: ['exchange.confirm-award', 'exchange.confirm-po'],
-        counts: { intents: table.length, confirmed: confirmed.size, po: poNotices.length },
+        counts: { intents: table.length, confirmed: confirmed.size, po: poNotices.length,
+          dropped: intents.dropped + outcomes.dropped },
+        // **坏形状如实降级**（信封数组里混进不是对象的值）：好行照列、坏行逐条计数，不静默丢
+        ...(intents.dropped + outcomes.dropped
+          ? { degraded: true,
+            reason: `award-envelope-partly-unreadable：意向/结果信封里有 ${intents.dropped + outcomes.dropped}`
+              + ' 条读不出来（形状异常：不是对象）—— 好行照常列出，坏行已跳过并计数' }
+          : {}),
         note: '确认中标要声明「能否按期」；不能按期时备注必填（避免确认了又交不了货）。'
           + 'PO 确认只表示"我收到这张单"，不改变任何金额；没有 PO 的行不会长出「确认收到 PO」按钮' }
     } }))
@@ -656,7 +696,7 @@ export async function register(surface, host) {
 
   // ================================================================== 工作台 / 通知 / 状态 / 快捷键
   out.push(surface.panel({ plugin_id: me, id: 'exchange.home-todo', title: '往来与结果：我今天要做什么',
-    view: 'home', order: 15, kind: 'list',
+    view: 'home', order: 15, kind: 'list', not_data: true,
     data: (ctx) => {
       const supplierRows = host.rows('supplier')
       const contractorRows = host.rows('contractor')

@@ -300,7 +300,7 @@ export async function register(surface, host) {
 
   // ================================================================== 工作台 / 通知 / 状态 / 快捷键
   out.push(surface.panel({ plugin_id: me, id: 'exchange.capacity-home', title: '产能与交期：我今天要做什么',
-    view: 'home', order: 18, kind: 'list',
+    view: 'home', order: 18, kind: 'list', not_data: true,
     data: (ctx) => {
       const state = stateOf(host, 'supplier')
       const items = []

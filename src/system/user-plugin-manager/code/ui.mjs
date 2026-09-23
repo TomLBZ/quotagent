@@ -84,7 +84,7 @@ export async function register(surface, host) {
 
   const panel = (view, order) => surface.panel({
     plugin_id: me, id: view === 'supplier' ? 'userspace.mine.supplier' : 'userspace.mine',
-    title: '我的插件（用户空间：自建视图 / 动作）', view, order, kind: 'html',
+    title: '我的插件（用户空间：自建视图 / 动作）', view, order, kind: 'html', not_data: true,
     data: (ctx) => {
       const who = ctx?.identity ?? null
       const name = asText(who?.name)

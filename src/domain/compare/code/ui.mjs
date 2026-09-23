@@ -18,6 +18,20 @@ const LABELS = { price: '单价', delivery: '交期', payment: '付款条件', w
 const asText = (value) => (typeof value === 'string' ? value.trim() : '')
 const NOTE_KEY = 'weights'
 
+/** 「行」的最小形状：非 null 的**对象**（数组不是行）。 */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+/**
+ * **外部行数组的唯一读数入口**（工具 JSON 的 `matrix.items` / `item.cells` 走这里）。
+ * 为什么必须有它（P27 实测的根因）：数组里混进一条 `null`/字符串时读 `item.item_id` 就抛 `TypeError`，
+ * 而外壳对 `panel.data()` 抛错的处理是**整块面板判 `data-failed`** —— 一条坏行打崩一整块。
+ * 坏行**逐条计数**（返回值里的 `dropped`），调用方把它如实报出来、不静默丢。
+ */
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, all: 0, rows: [], dropped: 0 }
+  const rows = value.filter((row) => isRow(row))
+  return { list: true, all: value.length, rows, dropped: value.length - rows.length }
+}
+
 export async function register(surface, host) {
   const me = plugin_id
   const out = []
@@ -179,8 +193,15 @@ export async function register(surface, host) {
           columns: [{ key: 'item_id', label: '行项目' }], rows: [] }
       }
       const rows = []
-      for (const item of matrix.items ?? []) {
-        for (const cell of item.cells ?? []) {
+      // **外部行数组（工具 JSON 的 `matrix.items` / `item.cells`）走唯一入口**：坏行逐条计数、好行照列
+      const matrixRead = readRows(matrix.items)
+      const matrixRows = matrixRead.rows
+      let droppedCells = 0
+      for (const item of matrixRows) {
+        const cellRead = readRows(item.cells)
+        droppedCells += cellRead.dropped
+        const cellRows = cellRead.rows
+        for (const cell of cellRows) {
           rows.push({ id: `${item.item_id}:${cell.quote_id}`, item_id: item.item_id, qty: item.qty,
             item_min_cents: item.min_unit_price_cents, spread_pct: item.spread_pct,
             quote_id: cell.quote_id, supplier: cell.supplier,
@@ -207,11 +228,13 @@ export async function register(surface, host) {
           { key: 'contribution', label: '本行对本家价格分的贡献' },
           { key: 'cheapest', label: '本行最便宜' },
         ],
-        rows, bulk: 'compare.rank', counts: { ...(matrix.counts ?? {}) },
+        rows, bulk: 'compare.rank',
+        counts: { ...(matrix.counts ?? {}), dropped: (matrixRead.dropped + droppedCells) },
         note: '单元格口径：`_minmax(价, 本行最低, 本行最高)`（per-item 归一）——'
           + '不同行项目之间不比（量纲不同）；量从本侧包快照的清单取；缺报的行明确标「未报此行」。'
           + '全局名次仍是跨报价 minmax 的口径（上方排名表），两者不混算。'
-          + ` 当前权重来源：${weightsSource()}` }
+          + ` 当前权重来源：${weightsSource()}`
+          + (droppedCells ? ` 另有 ${droppedCells} 个单元格读不出来（形状异常：不是对象）—— 已跳过并计数，不静默丢。` : '') }
     } }))
 
   // ---- ④ 并排对比（宽表：行=同一行项目，列=各家报价的一组列；勾 2–3 家进对比模式） ----------------

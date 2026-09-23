@@ -42,6 +42,23 @@ const sideScoped = (ctx, itemSide, item) => {
 }
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const rowsOfType = (rows, prefix) => rows.filter((row) => String(row?.type ?? '').startsWith(prefix))
+/** 「行」的最小形状：非 null 的**对象**（数组不是行）。 */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+/**
+ * **外部行数组的唯一读数入口**（工具 JSON 的 `evidence.*`、账本行里的 `lines[]` 一律走这里）。
+ *
+ * 为什么必须有它（P27 实测的根因）：面板直接 `for (const item of json.evidence.x ?? [])` 再读
+ * `item.seq` 时，数组里**只要有一条不是对象**（`null` / 字符串 / 数字）就抛 `TypeError`；外壳对
+ * `panel.data()` 抛错的处理是**整块面板判 `data-failed`** —— 一条坏行把一整块面板打崩。
+ *
+ * 返回 `{list, all, rows, dropped}`：坏行**逐条计数**（`dropped`，调用方如实报出来、不静默丢），
+ * `list=false` 表示"源本身不是数组"（那与"一条都没有"是两回事）。
+ */
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, all: 0, rows: [], dropped: 0 }
+  const rows = value.filter((row) => isRow(row))
+  return { list: true, all: value.length, rows, dropped: value.length - rows.length }
+}
 
 /** 表单里的「行项目」文本 → items[]：每行 `item_id,描述,单位,数量`（逗号分隔；空行忽略）。 */
 const parseItems = (text) => {
@@ -367,13 +384,16 @@ export async function register(surface, host) {
           object: item.quote_id, amount_cents: '',
           detail: `包 ${item.package_id} · ${item.line_count} 行 · ${item.supplier}` })
       }
-      for (const item of evidence.award_amount_cents ?? []) {
-        for (const line of item.lines ?? []) {
+      const awarded = readRows(evidence.award_amount_cents)
+      for (const item of awarded.rows) {
+        // 行数组同样走唯一入口：坏行逐条计数、好行照列（`line.item_id` 不再裸读）
+        const lineRows = readRows(item.lines).rows
+        for (const line of lineRows) {
           rows.push({ id: `aw-${item.seq}-${line.item_id}`, metric: '③ 授标金额', seq: item.seq, ts: item.ts,
             event: 'award/committed', object: `${item.award_id}:${line.item_id}`, amount_cents: line.amount_cents,
             detail: line.basis })
         }
-        if (!(item.lines ?? []).length) {
+        if (!lineRows.length) {
           rows.push({ id: `aw-${item.seq}-none`, metric: '③ 授标金额', seq: item.seq, ts: item.ts,
             event: 'award/committed', object: item.award_id, amount_cents: 0,
             detail: '这份承诺没有可算的行（见下方「对不上」）' })
@@ -414,9 +434,10 @@ export async function register(surface, host) {
           { key: 'ts', label: '事实时刻', filter: 'date' }, { key: 'event', label: '事件' },
           { key: 'object', label: '对象', type: 'code' }, { key: 'amount_cents', label: '金额（分）', filter: 'number' },
           { key: 'detail', label: '口径 / 明细' }],
-        rows, counts: { rows: rows.length, metrics: WEEKLY_LABELS.length },
+        rows, counts: { rows: rows.length, metrics: WEEKLY_LABELS.length, dropped: awarded.dropped },
         note: '`seq` 就是账本行号（append-only 账本里那一行的位置）—— 拿它回账本逐行核即可；'
-          + '金额一律整数分；「对不上」的行走的是同一条口径说明，没有被算进任何小计。' }
+          + '金额一律整数分；「对不上」的行走的是同一条口径说明，没有被算进任何小计。'
+          + (awarded.dropped ? ` 另有 ${awarded.dropped} 条授标行读不出来（形状异常：不是对象）—— 已跳过并计数，不静默丢。` : '') }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'rfq.weekly-week', title: '看哪一周（周报往前挪几周）',
@@ -614,7 +635,7 @@ export async function register(surface, host) {
 
   // ---- 工作台（首屏「我今天要做什么」）----------------------------------------------------------
   out.push(surface.panel({ plugin_id: me, id: 'home.rfq-todo', title: '承包商侧：我今天要做什么',
-    view: 'home', order: 20, kind: 'list',
+    view: 'home', order: 20, kind: 'list', not_data: true,
     data: (ctx) => {
       const rows = host.rows('contractor')
       const packages = rowsOfType(rows, 'rfq/published').map((row) => bodyOf(row))
@@ -707,7 +728,10 @@ export async function register(surface, host) {
     hint: '行项目一行一条：`item_id,描述,单位,数量`；邀请对象写 realm（如 supplier:g1）',
     input: { fields: [
       { name: 'package_id', label: '包 id', type: 'text', required: true, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$',
-        help: '字母数字开头，可含 . _ -' },
+        // **`new_value`**（机制声明）：这个 id 是**人自己起的新名字**（要新建的就是这一包），不是引用已有对象 ——
+        // 不声明的话外壳会按"引用标识"算（`*_id` 的必填字段默认要有上下文），把这一颗从工具栏上摘下去。
+        new_value: true,
+        help: '字母数字开头，可含 . _ -（自己起一个，例如 pkg-2026-001）' },
       { name: 'subject', label: '标题', type: 'text', required: true, help: '一句话说明这一包是什么' },
       { name: 'currency', label: '币种', type: 'text', default: 'CNY' },
       { name: 'quote_by', label: '报价截止（ISO8601）', type: 'text', required: true,
@@ -943,7 +967,7 @@ export async function register(surface, host) {
       { name: 'signature', label: '催报人（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
     ] },
     server: async (ctx, input) => {
-      const recipients = String(input.recipients ?? '').split(/[,\s]+/).map((item) => item.trim()).filter(Boolean)
+      const recipients = String(input.recipients ?? '').split(/[,\s]+/).map((piece) => piece.trim()).filter(Boolean)
       const letter = String(input.letter ?? '')
       if (letter.trim() === '') {
         return { ok: false, code: 'empty-note', reason: '催报正文为空：对方要能看懂你要他做什么',
@@ -1135,7 +1159,7 @@ export async function register(surface, host) {
       { name: 'signature', label: '发言人（人签）', type: 'signature', required: true },
     ] },
     server: async (ctx, input) => {
-      const to = String(input.to ?? '').split(/[,\s]+/).map((item) => item.trim()).filter(Boolean)
+      const to = String(input.to ?? '').split(/[,\s]+/).map((piece) => piece.trim()).filter(Boolean)
       const staged = host.stage('clarify-apply', { kind: 'clarify-apply', action: 'broadcast',
         view: String(ctx.view ?? 'contractor'), ticket_id: asText(input.ticket_id), to,
         actor: asText(input.signature), note: '' })
@@ -1471,6 +1495,17 @@ export async function register(surface, host) {
         quote_by: '2026-12-31T00:00:00Z', clarify_by: '2026-12-20T00:00:00Z',
         items: 'L-001,DN100 管道,m,120\nL-002,法兰,m,40', invited: 'supplier:g1',
         note: '沙盘演示数据（不含真实合同内容）', actor: '$actor', confirm_ack: '1' } }] }))
+
+  // ---- **起步指引**（机制：`surface.guide`，见 `ui-surface.mjs`）------------------------------------
+  // 空态（这一屏一块有数据的面板都没有）时摆在第一屏：**一句人话**（这一屏是干什么的）+ 最多 3 步
+  // **真能做的下一步**（点了真开那个动作的表单）。话是插件自己写的 —— 外壳不认识"包/报价"是什么。
+  out.push(surface.guide({ plugin_id: me, id: 'guide.contractor-start', view: 'contractor', order: 10,
+    title: '承包商：从哪一步开始',
+    summary: '这条道是承包商的活：发 RFQ 给供应商 → 收报价 → 比价排序 → 提出授标意向 → 供应商确认 →'
+      + '授标承诺（人签）→ 发 PO。现在什么数据都还没有，下面这些就是能开工的下一步。',
+    hint: '每一步落账都走唯一写者（界面只发起）；对外承诺一律要人签（署名 = 你的会话身份）',
+    steps: [{ action: 'rfq.publish', label: '发布第一个 RFQ（发包）',
+      note: '要填：包 id（自己起名）、标题、报价截止、行项目、受邀 realm（例如 supplier:g1）' }] }))
 
   return out
 }

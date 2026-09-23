@@ -70,6 +70,14 @@ const ID_RE = /^fb-[A-Za-z0-9-]+-[0-9a-f]{12}$/
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
+/** 「行」的最小形状 + 行数组读数（待办件/机制给的行数组：坏行逐条计数、好行照列）。 */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const readRows = (value) => {
+  const list = Array.isArray(value) ? value : []
+  const rows = list.filter((row) => isRow(row))
+  return { list: Array.isArray(value), rows, dropped: list.length - rows.length }
+}
+
 const sha256 = (text) => createHash('sha256').update(text, 'utf8').digest('hex')
 
 /** 版本号 → 数字（认不出就是 0：**不猜**）。 */
@@ -346,12 +354,20 @@ export function apply(ctx, config) {
   const opsPage = () => {
     const snap = snapshot()
     // 深链：每条待办件都能从观察面点到「这条到哪一步」（回执在**本视图**的反馈页上；不需要脚本）
-    const items = snap.queue.items.map((item) => `<tr><td><code>${esc(item.id)}</code></td>`
+    // 待办件表走**行数组读数**：坏行逐条计数（下一行如实报出来），好行照列 —— 一条坏行不打崩这一页
+    const queueRead = readRows(snap.queue.items)
+    const queueItems = queueRead.rows
+    const items = queueItems.map((item) => `<tr><td><code>${esc(item.id)}</code></td>`
       + `<td>${esc(item.view)}</td><td>${item.bytes < 0 ? '（读不到）' : item.bytes}</td>`
       + `<td><code>${esc(item.text_sha256).slice(0, 19)}…</code></td>`
       + (views.includes(item.view)
         ? `<td><a data-ui-feedback="receipt-link" href="${prefix}/${esc(item.view)}/feedback?id=${esc(item.id)}">这条到哪一步</a></td>`
         : '<td>（视图名不在配置里：不给链接）</td>') + '</tr>').join('')
+      // **坏行如实报出来**（不静默丢、也不假装"就这么多"）：跳过的是形状读不出来的条目
+      + (queueRead.dropped
+        ? `<tr data-ui-feedback="pending-unreadable"><td colspan="5">另有 ${queueRead.dropped} 条待办件`
+          + '读不出来（形状异常：不是对象）—— 已跳过并计数，不静默丢</td></tr>'
+        : '')
     const last = snap.last_applied
     const viewRows = views.map((view) => `<tr><td>${esc(view)}</td>`
       + `<td><code>${esc(revisionOf(view))}</code></td></tr>`).join('')

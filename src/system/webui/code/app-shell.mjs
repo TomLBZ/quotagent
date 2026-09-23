@@ -25,7 +25,7 @@ import { Worker } from 'node:worker_threads'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { join, dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createUiSurface, PANEL_KINDS } from './ui-surface.mjs'
+import { createUiSurface, PANEL_KINDS, PLACEMENTS } from './ui-surface.mjs'
 import { createCollabStore } from './collab.mjs'
 import { createCollabSurface, COLLAB_PLUGIN_ID } from './collab-ui.mjs'
 import { createPeopleStore } from './people.mjs'
@@ -2179,7 +2179,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     const prepared = withRenderScope(() => picked.map((panel) => {
       const base = { id: panel.id, title: panel.title, plugin_id: panel.plugin_id, order: panel.order,
         panel_kind: panel.panel_kind, placement: panel.placement, actions: panel.actions, hint: panel.hint,
-        object_kind: panel.object_kind, wide: panel.placement === 'wide' }
+        object_kind: panel.object_kind, wide: panel.placement === 'wide',
+        // **不参与空态判断**（说明类/运营配置类；口径见 `ui-surface.mjs` 的 panel 段）
+        not_data: panel.not_data === true }
       try {
         if (panel.when && panel.when(ctx) !== true) return { panel, base, visible: false, data: null }
       } catch (err) {
@@ -3788,6 +3790,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
   const syncSandbox = () => {
     const panelFor = (view, order, title) => surface.panel({ plugin_id: SANDBOX_PLUGIN_ID,
       id: `sandbox.${view}`, title, view, order, kind: 'list',
+      // 这块是**说明类**面板（怎么造演示数据 / 现在开着没），不参与"这一屏有没有数据"的判断：
+      // 否则它会永远把空态挤掉（刚打开时它自己也总有"未打开"那条）。
+      not_data: true,
       hint: '沙盘把这一侧的读/写路径整体切到 <ui_shared>/sandbox/<你的名字>/：'
         + '账本、待办件、投递信封全是沙盘自己那一份 —— 真实账本零新增，看完一键清空',
       data: (ctx) => {
@@ -3851,6 +3856,9 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       } }))
     out.push(surface.action({ plugin_id: SANDBOX_PLUGIN_ID, id: 'sandbox.clear', title: '清空沙盘（回真实面）',
       views: ['home', 'contractor', 'supplier'], group: '沙盘', icon: '🧹',
+      // **归属位置**（声明）：清空是"看完演示之后的收尾"，它不该跟'现在能干的活'挤在同一排工具栏上 ——
+      // 命令面板里照旧找得到，沙盘面板上的「清空沙盘」按钮也照旧在（`placement` 只管工具栏那一排）。
+      placement: ['command', 'inline'],
       confirm: { required: true, message: '删掉沙盘目录（演示账本 + 待办件 + 信封）并关掉沙盘？真实账本不受影响。' },
       input: { fields: [] },
       hint: '只删 <ui_shared>/sandbox/<你的名字>/，并把沙盘关掉；真实账本、真实待办件一个字节都不动',
@@ -3870,6 +3878,20 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
           result: { sandbox: { on: false }, removed_dir: out.dir, existed: out.removed,
             was_open: Boolean(before), note: '清空只发生在沙盘目录里；真实账本零新增、零改动' } }
       } }))
+    // **起步指引**（`guide` 贡献，空态用）：这一屏一块有数据的面板都没有时，外壳把 summary 与最多 3 步
+    // 摆在第一屏（而不是几十块空面板铺成一面墙）。这一条是机制自己的：给"想看一整条流转"的人一步到位。
+    // 话是机制自己写的（它只讲沙盘这件事，不认识任何业务名词）。
+    const stepGuide = (view, order) => surface.guide({ plugin_id: SANDBOX_PLUGIN_ID,
+      id: `sandbox.start-${view}`, title: '起步：造一组演示数据', view, order,
+      summary: view === 'home'
+        ? '这一屏还没有任何数据（不是坏了）。想先看一遍完整流转，就让沙盘按插件声明的顺序真跑一遍 ——'
+          + '真动作、真账本事件，只是落在沙盘目录里，真实账本零新增，随时清空。'
+        : '这一屏还没有任何数据（不是坏了）。想先看一遍这条道上的完整流转，就让沙盘真跑一遍 ——'
+          + '真动作、真账本事件，只是落在沙盘目录里；看完一键清空，真实账本零新增。',
+      hint: '沙盘：把这一侧的读/写路径整体切到 <ui_shared>/sandbox/<你>/；人签用机制生成的演示身份',
+      steps: [{ action: 'sandbox.seed', label: '造一组演示数据（几秒看到完整流转）',
+        note: '按插件声明的顺序跑一遍，每一步都是同一个动作总线上的真动作' }] })
+    for (const view of views) out.push(stepGuide(view, view === 'home' ? -97 : 97))
     return out
   }
   const sandboxContributions = syncSandbox()
@@ -4093,7 +4115,7 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       if (wanted === '' || exportPanelViews.has(wanted)) continue
       exportPanelViews.add(wanted)
       out.push(surface.panel({ plugin_id: EXPORT_PLUGIN_ID, id: `export.prefs-${wanted}`,
-        title: '导出模板（列选择是**你的**个人偏好）', view: wanted, order: 92, kind: 'table',
+        title: '导出模板（列选择是**你的**个人偏好）', view: wanted, order: 92, kind: 'table', not_data: true,
         actions: ['export.columns'], row_actions: ['export.columns'],
         hint: '勾掉不要的列 ⇒ 这份导出以后只出你选的列；偏好按会话身份落 0600（换浏览器/换设备仍在）',
         data: (ctx) => {
@@ -4275,11 +4297,27 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
       note: '只读工具调用（插件声明 read:true）按「工具+参数」缓存 TTL；任何一次动作/落待办件都会清空缓存；'
         + '`last_render`/`notify` 是"上一次渲染"的读数（只为可对账，不影响结果）' },
     registries: surface.snapshot(),
+    // **入口策略（机制自述）**：外壳怎么决定"哪个动作摆在哪儿"。判据全在注册面的声明上，
+    // 不是外壳猜的 —— 逐条见 `ui-surface.mjs` 文件头的「字段来源」段。
+    placement_policy: { placements: PLACEMENTS,
+      rule: '动作只摆进它 `placement` 里声明的位置；工具栏那一排**只摆当前地址上跑得起来的**'
+        + '（每个必填项都能算出来：对象地址 / 那一行 / 已选集合 / 会话身份 / 机制版本 / 人自己填）。',
+      context_sources: ['from_route', 'from_route_kind', 'from_row', 'from_selection', 'identity',
+        'version_field', 'new_value(人自己起的新名字)'],
+      reference_rule: '名字形如 *_id / id 的**必填**字段默认按"引用某个已存在的对象/某一行"算'
+        + '（由人自己起名的要声明 `new_value: true`）：人抄不出这种值 ⇒ 缺上下文时外壳不摆那颗按钮，'
+        + '而是引导到能填的地方（对象页 / 从候选行里挑一条预填），命令面板里仍能找到全部',
+      where_else: '缺上下文的动作改摆进同一页的「这些动作要先有一个对象」区（写明它该在哪跑：'
+        + '在哪块面板的行里 / 得在对象页上），点一下就从候选里挑一条、预填带入再开表单',
+      empty_state: '一屏一块有数据的面板都没有时：先摆插件写的起步指引（`guide` 的 summary + 最多 3 步'
+        + '真能跑的动作），面板墙收进一个可展开的 details（一块不少，只是不再铺一面墙）' },
     actions: surface.byKind('action').map((action) => ({ id: action.id, title: action.title,
       views: action.views, group: action.group, icon: action.icon, placement: action.placement,
       inline: action.inline, context_menu: action.context_menu, shortcut: action.shortcut,
       input: action.input, permission: action.permission, confirm: action.confirm, hint: action.hint,
       object_kind: action.object_kind, plugin_id: action.plugin_id,
+      // **所需上下文**（机制从字段来源声明算出；界面按同一份形状判定"摆哪里/能不能跑"）
+      needs: action.needs,
       // **乐观并发声明**（元数据；`state`/`object_id` 是插件自己的实现，不进接口）：
       // 有它 ⇒ 这个动作保存的是"哪个可编辑对象"，界面把"你看到的那一版"填进 `expected_version`。
       concurrency: action.concurrency
@@ -4301,6 +4339,28 @@ export function createAppShell({ root, prefix, views, config, rowsOf, publicRows
     reports_note: '导出/打印是**声明**：内容由声明的那个动作（插件自己的服务端一半）生成 —— 外壳不生成内容、'
       + '也不解读它导出的是什么；插件的两个一半都在这里（谁的事实谁导出）。`columns` 是**列元数据**：'
       + '界面拿它做「列选择」（个人偏好，按身份落 0600 ⇒ 换浏览器/换设备仍在，见本 JSON 的 `export_prefs`）。',
+    // **起步指引**（`guide` 贡献，空态说人话）：这一屏"是干什么的 + 从哪一步开始"由插件写，
+    // 外壳在"一块有数据的面板都没有"时把它摆到第一屏（summary + 最多 3 步真能跑的动作）。
+    guides: surface.guides().map((item) => ({ id: item.id, title: item.title, view: item.view,
+      order: item.order, summary: item.summary, hint: item.hint, plugin_id: item.plugin_id,
+      steps: item.steps.map((step) => ({ action: step.action, label: step.label, note: step.note,
+        input: step.input })) })),
+    guides_note: '空态不是面板墙：`summary` 是人话（插件写的），`steps[].action` 是注册面里真能跑的动作 ——'
+      + '界面按 id 查表后**真开表单**（查不到就如实略过，不摆按不动的按钮）。',
+    // **对每个动作的入口判定**（机制算好的读数，界面与对账脚本照抄同一套判据）：
+    // `ready_in_toolbar` = 这个动作在当前视图的**视图级工具栏**上跑得起来（必填项不依赖对象地址/某一行/已选集合）；
+    // `affinity` = 插件自己声明/实际用它当行内动作的那些面板（"它该在哪跑"的证据，不猜）。
+    action_entry: surface.byKind('action').map((action) => ({ id: action.id,
+      toolbar_in_view: (action.views || []).filter((view) => action.placement.includes('toolbar')
+        && !action.object_kind && !action.inline
+        && action.needs.route.length === 0 && action.needs.row.length === 0
+        && action.needs.selection.length === 0 && !action.needs.bulk),
+      needs_context: action.needs.route.length + action.needs.row.length + action.needs.selection.length
+        > 0 || action.needs.bulk,
+      affinity: surface.byKind('panel').filter((panel) => (panel.actions || []).includes(action.id)
+        && (action.views || []).includes(panel.view)).map((panel) => `${panel.view}/${panel.id}`),
+      steps_in_guides: surface.guides().filter((guide) => guide.steps.some((step) => step.action === action.id))
+        .map((guide) => `${guide.view}/${guide.id}`) })),
     shortcuts: surface.shortcuts().map((item) => ({ keys: item.keys, action: item.action, title: item.title,
       plugin_id: item.plugin_id })),
     shell_shortcuts: SHELL_SHORTCUTS,

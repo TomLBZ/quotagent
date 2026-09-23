@@ -871,19 +871,30 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
     }
     return null
   }
-  /** 人话的键值摘要（账本行的**原文**键值，最多 4 个短标量：不替它编一句话）。 */
+  /**
+   * 人话的键值摘要（账本行的**原文**键值，最多 4 个短标量：不替它编一句话）。
+   *
+   * **截断必须说出来**（P28 空账本走查登记的显示缺陷）：修前这里是 `flat(String(value), 32)` 之后
+   * 再用一个恒不成立的 `shown.length > 32` 跳过 —— 结果是取值超过 32 字就被**静默截断**，界面上看到
+   * 的是一句话**中途断掉、没有省略号**（用户既不知道少了字，也不知道少在哪）。
+   * 现在：超过上限 ⇒ 截到上限并**带 `…`**，同时把"截了几处"一并交出去（调用方写进正文，不静默丢）。
+   */
+  const DETAIL_VALUE_MAX = 32
   const feedRowDetail = (row) => {
     const body = rowBody(row)
     const parts = []
+    let truncated = 0
     for (const [key, value] of Object.entries(body)) {
       if (parts.length >= 4) break
       if (value === null || value === undefined) continue
       if (typeof value === 'object') continue
-      const shown = flat(String(value), 32)
-      if (shown === '' || shown.length > 32) continue
-      parts.push(`${key}=${shown}`)
+      const raw = flat(String(value), DETAIL_VALUE_MAX + 1)
+      if (raw === '') continue
+      const clipped = raw.length > DETAIL_VALUE_MAX
+      if (clipped) truncated += 1
+      parts.push(`${key}=${clipped ? `${raw.slice(0, DETAIL_VALUE_MAX)}…` : raw}`)
     }
-    return parts.join(' · ')
+    return { text: parts.join(' · '), truncated }
   }
 
   /**
@@ -965,6 +976,7 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
       const type = text(row?.type)
       if (when === '' || type === '') return
       const unread = watermark !== '' && laterThan(when, watermark)
+      const detail = feedRowDetail(row)
       items.push({ id: `feed-fact-${side}-${text(row?.seq) || at}`,
         source: 'ledger', feed_kind: 'fact', feed_kind_label: '事实',
         type, type_label: type, at: when, at_day: when.slice(0, 10), at_label: atLabel(when),
@@ -973,7 +985,9 @@ export function createCollabStore({ root = '.', sharedDir, sessionsFile = '', pe
         object_unresolved: object === null,
         who, who_label: who === '' ? '' : pretty(who),
         summary: `${type}${object ? `（${label}）` : ''}`,
-        body: [feedRowDetail(row), text(row?.class) === 'fact' ? '账本事实' : ''].filter(Boolean).join(' · '),
+        // **截断的说法**：取值超过上限的写 `…`，并在这一条里如实报出截了几处（不静默截断）
+        body: [detail.text, detail.truncated ? `（${detail.truncated} 处取值过长，已截到 ${DETAIL_VALUE_MAX} 字并标 …）` : '',
+          text(row?.class) === 'fact' ? '账本事实' : ''].filter(Boolean).join(' · '),
         next_action: object ? '' : '这一行里没有本侧声明的对象类能认出的 id：只有本侧账本行号，没有深链',
         unread, mine, watermark, ledger_seq: Number(row?.seq) || null,
         ref: object ? { kind: object.kind, id: object.id, view: side, title: label } : null,

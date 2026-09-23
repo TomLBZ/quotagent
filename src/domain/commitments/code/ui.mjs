@@ -52,6 +52,39 @@ const sideScoped = (ctx, itemSide, item) => {
 }
 const bodyOf = (row) => (row && typeof row.body === 'object' && row.body !== null ? row.body : {})
 const typeRows = (rows, type) => rows.filter((row) => String(row?.type ?? '') === type)
+/** 值的**形状名**（只用于如实报出"读不出来的是什么形状"，不做任何补值/猜测）。 */
+const shapeOf = (value) => (value === undefined ? 'missing' : value === null ? 'null'
+  : Array.isArray(value) ? 'array' : typeof value)
+/** 「行」的最小形状：非 null 的**对象**（数组不是行）。 */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+
+/**
+ * **行数组的唯一读数入口**（`lines[]` / `items[]` / 外部 JSON 里的行数组一律走这里）。
+ *
+ * 为什么必须有它（P27 实测的根因）：面板直接在**行数组的元素**上读属性（`line.item_id` 这种写法）时，
+ * 数组里**只要有一条不是对象**（`null` / 字符串 / 数字），读 `.item_id` 就抛 `TypeError`；而外壳对
+ * `panel.data()` 抛错的处理是**整块面板判 `data-failed`** —— 一条坏行把一整块面板打崩。
+ *
+ * 返回 `{list, all, rows, dropped, shape}`：`rows` = 能当行用的对象，`dropped` = 读不成对象的条数
+ * （**逐条计数、不静默丢**），`list` = 源本身是不是数组（不是 ⇒ 另外说"读不出来"，不当成"空"）。
+ */
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, all: 0, rows: [], dropped: 0, shape: shapeOf(value) }
+  const rows = value.filter((row) => isRow(row))
+  return { list: true, all: value.length, rows, dropped: value.length - rows.length, shape: 'array' }
+}
+
+/**
+ * 逐行文本（`render` 由调用方给）+ **坏行逐条计数**。
+ * 调用口径：把 `readRows(...)` 写在参数上（`linesTextOf(readRows(x.lines), render)`）——
+ * 这样"这一行是外部数组里的元素"在读取处一眼可见，不必去追上游变量。
+ */
+const linesTextOf = (read, render, { sep = ' ', empty = '' } = {}) => {
+  if (!read.list) return ''
+  const text = read.rows.map(render).join(sep)
+  if (!read.dropped) return text
+  return `${text || empty}${text ? ` · ` : ''}（另有 ${read.dropped} 条读不出来：形状异常，已跳过并计数）`
+}
 /** `html` 面板里逐段转义（面板的 html 是原样注入的 ⇒ 值必须自己转义；只转义，不解读）。 */
 const escHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -185,11 +218,29 @@ export async function register(surface, host) {
         const intentId = asText(intent.intent_id)
         const award = awards.find((item) => asText(item.intent_id) === intentId)
         const po = award ? pos.find((item) => asText(item.award_id) === asText(award.award_id)) : null
+        const supplierConfirmed = confirmed.has(intentId)
+        // **行内动作按这一行的状态给**（P28 空账本走查登记的可点性缺陷）：修前这一行上永远长着
+        // 「授标承诺（人签）」和「发 PO（人签）」两颗按钮 —— 供应商还没确认时点「发 PO」，
+        // 必然被唯一写者拒 `supplier-confirmation-required`（用户白填一遍表单，还以为是界面坏了）。
+        //
+        // 判据与写者（`commitment-apply.py`）**一字不差**，界面只决定"摆不摆这颗按钮"，
+        // 不放宽任何一条承诺判据：承诺要「意向 + 供应商确认」；发 PO 要「已承诺」（PO 只能由承诺派生）。
+        // 缺什么、该谁办 ⇒ 写在「下一步」列里（人话），而不是让用户去撞一次拒绝。
+        const canCommit = supplierConfirmed && !award
+        const canIssue = Boolean(award)
         table.push({ id: intentId, intent_id: intentId, quote_id: intent.quote_id ?? '',
           package_id: intent.package_id ?? '', lines: (intent.lines ?? []).length,
-          confirmed: confirmed.has(intentId) ? `${asText(confirmed.get(intentId).confirmed_by)} @ ${confirmed.get(intentId).confirmed_at}` : '未确认',
+          confirmed: supplierConfirmed
+            ? `${asText(confirmed.get(intentId).confirmed_by)} @ ${confirmed.get(intentId).confirmed_at}`
+            : '未确认',
           award_id: award?.award_id ?? '', approved_by: award?.approved_by ?? '',
           po_id: po?.po_id ?? '', chain: po?.chain ?? '',
+          next_step: po ? '整条链已成立（行内可「追溯这条 PO」）'
+            : (award ? '这一行现在可以「发 PO（人签）」'
+              : (supplierConfirmed
+                ? '这一行现在可以「授标承诺（人签）」（还要过人工门）'
+                : '等供应商在它自己的界面点「确认授标」—— 确认之前既不能承诺、也不能发 PO（承诺不可凭空产生）')),
+          row_actions: [...(canCommit ? ['award.commit'] : []), ...(canIssue ? ['po.issue'] : [])],
           ref: { kind: 'award', id: award?.award_id ?? intentId,
             title: award ? `授标 ${award.award_id}` : `意向 ${intentId}` } })
       }
@@ -202,25 +253,41 @@ export async function register(surface, host) {
         columns: [{ key: 'intent_id', label: '意向', type: 'code' }, { key: 'quote_id', label: '报价', type: 'code' },
           { key: 'lines', label: '条目', filter: 'number' }, { key: 'confirmed', label: '供应商确认' },
           { key: 'award_id', label: '承诺', type: 'code' }, { key: 'approved_by', label: '承诺批准人', type: 'code' },
-          { key: 'po_id', label: 'PO', type: 'code' }, { key: 'chain', label: '追溯链' }],
+          { key: 'po_id', label: 'PO', type: 'code' }, { key: 'chain', label: '追溯链' },
+          { key: 'next_step', label: '下一步' }],
         rows: table, counts: { intents: intents.length, awards: awards.length, po: pos.length },
-        note: '承诺与 PO 两列只有在人签并过人工门之后才会有值（没签就是空 —— 不假装已承诺）' }
+        note: '承诺与 PO 两列只有在人签并过人工门之后才会有值（没签就是空 —— 不假装已承诺）；'
+          + '行内按钮只在这一行**现在真能落账**时才出现：供应商还没确认 ⇒ 既不摆「授标承诺」也不摆「发 PO」'
+          + '（缺什么、下一步该谁办，写在「下一步」列里）—— 不摆按下去必被拒的按钮。' }
     } }))
 
   out.push(surface.action({ plugin_id: me, id: 'award.propose', title: '提出授标意向（不产生义务）',
     views: ['contractor'], group: '授标', order: 10,
     hint: '意向可撤回、可重提；承诺不可凭空产生（FR-AWARD-001/002）',
     input: { fields: [
-      { name: 'package_id', label: '包', type: 'text', required: true },
-      { name: 'quote_id', label: '报价', type: 'text', required: true, help: '本侧账本里已收到的报价 id' },
-      { name: 'item_id', label: '行项目', type: 'text', help: '批量（选中多行）时每行自带' },
-      { name: 'qty', label: '数量', type: 'number', min: 1, help: '批量时每行自带' },
-      { name: 'unit_price_cents', label: '中标单价（整数分）', type: 'number', min: 1, help: '批量时每行自带' },
+      { name: 'package_id', label: '包', type: 'text', required: true, from_row: true,
+        help: '从「比价排名 / 收到的报价」那一行带入（行内点「提出授标意向」会自动填）' },
+      { name: 'quote_id', label: '报价', type: 'text', required: true, from_row: true,
+        help: '本侧账本里已收到的报价 id（在那一行的「提出授标意向」里自动带上；'
+          + '工具栏/命令面板里点它会先让你挑一条报价）' },
+      { name: 'item_id', label: '行项目', type: 'text', from_row: true, help: '批量（选中多行）时每行自带' },
+      { name: 'qty', label: '数量', type: 'number', min: 1, from_row: true, help: '批量时每行自带' },
+      { name: 'unit_price_cents', label: '中标单价（整数分）', type: 'number', min: 1, from_row: true,
+        help: '批量时每行自带' },
       { name: 'reason', label: '理由（进意向正文）', type: 'text' },
     ] },
     server: async (ctx, input) => {
-      const lines = Array.isArray(input.rows) && input.rows.length
-        ? input.rows.map((row) => ({ item_id: asText(row.item_id ?? row.id), qty: Number(row.qty),
+      // **批量行也是外部来的数组**：坏形状不再静默变成 `undefined`（修前 `row.item_id` 直接 TypeError，
+      // 整个"提意向"崩掉）—— 先把不是对象的行**逐条计数**，有一条就具名拒（整批不落盘）。
+      const bulkRows = Array.isArray(input.rows) ? input.rows.filter((row) => isRow(row)) : []
+      const malformed = (Array.isArray(input.rows) ? input.rows.length : 0) - bulkRows.length
+      if (malformed) {
+        return { ok: false, code: 'row-malformed',
+          reason: `选中的行里有 ${malformed} 条形状读不出来（不是对象）：批量提意向的每一行都必须是行对象`,
+          next_action: '在「收到的报价」表里按行内的「提出授标意向」重选（表格行永远是行对象）' }
+      }
+      const lines = bulkRows.length
+        ? bulkRows.map((row) => ({ item_id: asText(row.item_id ?? row.id), qty: Number(row.qty),
           unit_price_cents: Number(row.unit_price_cents ?? input.unit_price_cents) }))
         : [{ item_id: asText(input.item_id), qty: Number(input.qty),
           unit_price_cents: Number(input.unit_price_cents) }]
@@ -329,7 +396,7 @@ export async function register(surface, host) {
           next_action: '等承包商在 APP 里提出授标意向（意向本身不产生义务）',
           columns: [{ key: 'intent_id', label: '意向' }], rows: [] }
       }
-      const mine = all.filter((item) => !realm || !(item.delivered_to ?? []).length
+      const mine = readRows(all).rows.filter((item) => !realm || !(item.delivered_to ?? []).length
         || (item.delivered_to ?? []).map(String).includes(realm))
       const confirmedIds = new Set(typeRows(host.rows('supplier'), 'award/confirmed')
         .map((row) => asText(bodyOf(row).intent_id)))
@@ -339,7 +406,8 @@ export async function register(surface, host) {
           { key: 'reason', label: '对方理由' }, { key: 'confirmed', label: '我确认了吗' }],
         rows: mine.map((item) => ({ id: String(item.intent_id), intent_id: item.intent_id,
           package_id: item.package_id, quote_id: item.quote_id,
-          lines: (item.lines ?? []).map((line) => `${line.item_id}×${line.qty}@${line.unit_price_cents ?? line.unit_price}`).join(' '),
+          // 逐行文本走唯一入口（`readRows` 写在参数上）：坏行逐条计数、好行照列
+          lines: linesTextOf(readRows(item.lines), (line) => `${line.item_id}×${line.qty}@${line.unit_price_cents ?? line.unit_price}`),
           reason: item.reason ?? '', confirmed: confirmedIds.has(asText(item.intent_id)) ? '已确认' : '待确认' })),
         row_actions: ['award.confirm'], counts: { intents: mine.length },
         note: '确认是你自己的动作（只确认自己那份报价对应的意向）；确认不等于承诺' }
@@ -365,8 +433,9 @@ export async function register(surface, host) {
     confirm: { required: true, message: '确认这份意向（不是承诺，但对方要凭它才能承诺）：确认？' },
     hint: '写自己账本 award/confirmed + 承包商账本一条同名登记（双向登记）',
     input: { fields: [
-      { name: 'intent_id', label: '意向 id', type: 'text', required: true,
-        help: '从「发给我的授标意向」里复制（或点通知中心那条「去处理」自动带上）' },
+      { name: 'intent_id', label: '意向 id', type: 'text', required: true, from_row: true,
+        help: '从「发给我的授标意向」里复制（或点通知中心那条「去处理」自动带上）；'
+          + '工具栏/命令面板里点它会先让你从收到的意向里**挑一条**' },
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
       { name: 'note', label: '备注', type: 'text' },
     ] },
@@ -512,17 +581,20 @@ export async function register(surface, host) {
         return { ok: true, kind: 'table', degraded: true, reason: 'po-not-delivered-to-you',
           columns: [{ key: 'ref_line', label: '行项目' }], rows: [] }
       }
+      // 投递登记里的行数组走唯一入口：坏行逐条计数（`counts.dropped`），好行照列
+      const lines = readRows(item.lines)
       return { ok: true, kind: 'table',
         columns: [{ key: 'ref_line', label: '行项目', type: 'code' }, { key: 'qty', label: '量', filter: 'number' },
           { key: 'unit_price', label: '单价', filter: 'number' }, { key: 'amount', label: '行金额', filter: 'number' },
           { key: 'basis', label: '单价基准（中标报价条目）', type: 'code' },
           { key: 'trace', label: '追溯模式' }],
-        rows: (item.lines ?? []).map((line) => ({ id: String(line.ref_line), ref_line: line.ref_line,
-          qty: line.qty, unit_price: line.unit_price,
-          amount: Number(line.qty ?? 0) * Number(line.unit_price ?? 0),
-          basis: line.basis, trace: line.trace })),
-        counts: { lines: (item.lines ?? []).length },
-        note: '每一行的 `basis` 指向中标报价里的条目（本侧提交的那份报价）；量×单价 = 行金额，可逐行核' }
+        rows: lines.rows.map((line) => ({ id: String(line?.ref_line), ref_line: line?.ref_line,
+          qty: line?.qty, unit_price: line?.unit_price,
+          amount: Number(line?.qty ?? 0) * Number(line?.unit_price ?? 0),
+          basis: line?.basis, trace: line?.trace })),
+        counts: { lines: lines.all, dropped: lines.dropped },
+        note: '每一行的 `basis` 指向中标报价里的条目（本侧提交的那份报价）；量×单价 = 行金额，可逐行核'
+          + '（读不出来的行已跳过并计数，不静默丢）' }
     } }))
 
   out.push(surface.panel({ plugin_id: me, id: 'po.prereqs', title: '执行前提（送货地址 / 交期窗口 / 截止）',
@@ -536,14 +608,15 @@ export async function register(surface, host) {
       }
       const packageId = asText(item.package_id)
       const delivery = poDeliveries('supplier').find((row) => asText(row.po_id) === poId) ?? {}
-      const rfq = typeRows(host.rows('supplier'), 'rfq/distributed').map((row) => bodyOf(row))
+      const rfq = readRows(typeRows(host.rows('supplier'), 'rfq/distributed')).rows.map(bodyOf)
         .find((row) => asText(row.package_id) === packageId) ?? {}
       const window = asText(delivery.delivery_window)
       const shipTo = asText(delivery.ship_to)
       const items = [
         { key: '送货地址', value: shipTo || '承包商在这张 PO 上没有给（不是我没有权限看）' },
         { key: '交期窗口', value: window || '承包商在这张 PO 上没有给' },
-        { key: '行项目与数量', value: (item.lines ?? []).map((line) => `${line.ref_line}×${line.qty}`).join(' · ') },
+        { key: '行项目与数量', value: linesTextOf(readRows(item.lines),
+          (line) => `${line.ref_line}×${line.qty}`, { sep: ' · ' }) },
         { key: '币种', value: asText(rfq.currency) || '（本侧账本里没有这个包的投递登记）' },
         { key: '报价截止（本侧包事实）', value: asText(rfq.quote_by) || '（同上）' },
         { key: '包 / 版本', value: packageId ? `${packageId}${rfq.rev ? ` @rev${rfq.rev}` : ''}` : '—' },
@@ -660,7 +733,7 @@ export async function register(surface, host) {
 
   // ---- 工作台（首屏「我今天要做什么」）：待人工门队列 + 待确认意向 --------------------------------
   out.push(surface.panel({ plugin_id: me, id: 'home.gates', title: '待人工门与待确认（必须人签的动作）',
-    view: 'home', order: 30, kind: 'list',
+    view: 'home', order: 30, kind: 'list', not_data: true,
     data: (ctx) => {
       const cRows = host.rows('contractor')
       const last = new Map()
@@ -871,8 +944,8 @@ export async function register(surface, host) {
           fact: `${(intent.lines ?? []).length} 行快照`,
           href: `${base}quote/${encodeURIComponent(asText(po.quote_id))}/` },
       ],
-      lines: (po.lines ?? []).map((line) => ({ ref_line: line.ref_line, qty: line.qty,
-        unit_price: line.unit_price, basis: line.basis, trace: line.trace,
+      lines: readRows(po.lines).rows.map((line) => ({ ref_line: line?.ref_line, qty: line?.qty,
+        unit_price: line?.unit_price, basis: line?.basis, trace: line?.trace,
         quote_id: po.quote_id, href: `${base}quote/${encodeURIComponent(asText(po.quote_id))}/` })),
       note: '链路四段都能点（每段给出所在页面与事实摘要）；行内 `basis` 指向中标报价条目，'
         + '点报价段进「报价收件箱/比价」页核对',
@@ -1014,7 +1087,8 @@ export async function register(surface, host) {
     views: ['contractor'], group: '授标', order: 40, inline: true, object_kind: 'po',
     hint: '只读：把 po → 承诺 → 意向 → 报价 的链路与逐行 basis 摊开（账本零新增）',
     input: { fields: [
-      { name: 'po_id', label: 'PO id', type: 'text', required: true, help: '从 PO 列表行里取（po-…）' },
+      { name: 'po_id', label: 'PO id', type: 'text', required: true, from_route: true,
+        help: '从 PO 列表行里取（po-…）；在 PO 对象页上会自动填当前这一条' },
     ] },
     server: async (ctx, input) => {
       const poId = asText(input.po_id) || asText(ctx.route?.id)
@@ -1088,12 +1162,14 @@ export async function register(surface, host) {
         return { ok: true, kind: 'table', degraded: true, reason: 'po-not-in-my-view',
           columns: [{ key: 'ref_line', label: 'PO 行' }], rows: [] }
       }
+      // 追溯链里的行数组走唯一入口（坏行逐条计数 ⇒ `counts.dropped`）
+      const lines = readRows(trace.lines)
       return { ok: true, kind: 'table',
         columns: [{ key: 'ref_line', label: 'PO 行', type: 'code' }, { key: 'qty', label: '量', filter: 'number' },
           { key: 'unit_price', label: '单价' }, { key: 'basis', label: '单价基准（中标报价条目）', type: 'code' },
           { key: 'trace', label: '追溯模式' }],
-        rows: (trace.lines ?? []).map((line) => ({ id: String(line.ref_line), ...line })),
-        counts: { lines: (trace.lines ?? []).length },
+        rows: lines.rows.map((line) => ({ id: String(line?.ref_line), ...line })),
+        counts: { lines: lines.rows.length, dropped: lines.dropped },
         note: '每一行的 `basis` 指向中标报价里的条目；缺基准的行不会出现在 PO 里（`po-line-not-derived` 会拒绝签发）' }
     } }))
 
@@ -1112,10 +1188,10 @@ export async function register(surface, host) {
       }
       const seg = (item) => `<li><a href="${item.href}" title="去 ${item.where}">${item.label}</a>`
         + ` —— <code>${item.id}</code><br><small>${item.where} · ${item.fact}</small></li>`
-      const lines = (trace.lines ?? []).map((line) => `<tr><td><code>${line.ref_line}</code></td>`
-        + `<td>${line.qty}</td><td>${line.unit_price}</td>`
-        + `<td><a href="${line.href}" title="去报价收件箱/比价核对这条基准"><code>${line.basis}</code></a></td>`
-        + `<td>${line.trace}</td></tr>`).join('')
+      const lines = readRows(trace.lines).rows.map((line) => `<tr><td><code>${escHtml(line?.ref_line)}</code></td>`
+        + `<td>${escHtml(line?.qty)}</td><td>${escHtml(line?.unit_price)}</td>`
+        + `<td><a href="${escHtml(line?.href)}" title="去报价收件箱/比价核对这条基准"><code>${escHtml(line?.basis)}</code></a></td>`
+        + `<td>${escHtml(line?.trace)}</td></tr>`).join('')
       return { ok: true, kind: 'html', html: `<p class="q-hint"><b>${trace.chain}</b> · 追溯模式 `
         + `<code>${trace.trace_mode}</code> · 金额 ${trace.total_amount} · 签发 ${trace.issued_at}`
         + ` · 人工门 <code>${trace.approval_id}</code>（${trace.approved_by}）</p>`
@@ -1186,6 +1262,8 @@ export async function register(surface, host) {
           next_action: '这条变更单不在承包商侧投影里：回「变更与价格让步」列表，点行内「打开 →」用真实存在的深链' },
           columns: [{ key: 'change_id', label: '变更' }], rows: [] }
       }
+      const changeLineRead = readRows(change.lines)
+      const changeLineRows = changeLineRead.rows
       const decision = changeDecisions(rows).get(asText(change.change_id))
       const status = change.status === 'approved' ? '已批准（生效）'
         : (decision?.decision === 'denied' ? `已驳回（${decision.by}）` : '待批（未生效，不计金额）')
@@ -1201,11 +1279,14 @@ export async function register(surface, host) {
             .filter((link) => link.id !== '') },
         columns: [{ key: 'ref_line', label: '行', type: 'code' }, { key: 'old_qty', label: '原量', filter: 'number' },
           { key: 'new_qty', label: '新量', filter: 'number' }, { key: 'old_unit_price', label: '原单价（只读）', filter: 'number' }],
-        rows: (change.lines ?? []).map((line, index) => ({ id: `${line.ref_line ?? line.item_id ?? index}`,
+        rows: changeLineRows.map((line, index) => ({ id: `${line.ref_line ?? line.item_id ?? index}`,
           ref_line: line.ref_line ?? line.item_id, old_qty: line.old_qty, new_qty: line.new_qty,
           old_unit_price: line.old_unit_price ?? '' })),
-        counts: { lines: (change.lines ?? []).length },
-        note: '未批准的变更一分钱都不计；批准/驳回都是人工门（在列表行内点，或本页工具栏的动作）' }
+        counts: { lines: changeLineRows.length, dropped: changeLineRead.dropped },
+        note: '未批准的变更一分钱都不计；批准/驳回都是人工门（在列表行内点，或本页工具栏的动作）'
+          + (changeLineRead.dropped
+            ? ` · 另有 ${changeLineRead.dropped} 条行明细读不出来（形状异常：不是对象）—— 已跳过并计数，不静默丢`
+            : '') }
     } }))
 
   // ------------------------------------------------------------------ 变更与价格让步（DEF-018）
@@ -1285,9 +1366,9 @@ export async function register(surface, host) {
           const status = change.status === 'approved' ? '已批准（生效）'
             : (decision?.decision === 'denied' ? `已驳回（${decision.by}）` : '待批（未生效，不计金额）')
           return { id: change.change_id, change_id: change.change_id, quote_id: change.quote_id,
-            lines: (change.lines ?? []).map((line) => `${line.ref_line ?? line.item_id}: `
+            lines: linesTextOf(readRows(change.lines), (line) => `${line.ref_line ?? line.item_id}: `
               + `${line.old_qty}→${line.new_qty}`
-              + `${line.old_unit_price === undefined ? '' : ` @ ${line.old_unit_price}`}`).join(' · '),
+              + `${line.old_unit_price === undefined ? '' : ` @ ${line.old_unit_price}`}`, { sep: ' · ' }),
             delta_amount: change.delta_amount, status_label: status,
             approved_by: change.approved_by ?? '', reason: change.reason, proposed_at: change.proposed_at,
             reject_comment: decision?.decision === 'denied' ? decision.comment : '',
@@ -1357,8 +1438,8 @@ export async function register(surface, host) {
           { key: 'status_label', label: '状态' }, { key: 'reason', label: '对方理由' }],
         rows: changes.map((change) => ({ id: change.change_id, change_id: change.change_id,
           quote_id: change.quote_id,
-          lines: (change.lines ?? []).map((line) => `${line.ref_line ?? line.item_id}: `
-            + `${line.old_qty}→${line.new_qty}`).join(' · '),
+          lines: linesTextOf(readRows(change.lines), (line) => `${line.ref_line ?? line.item_id}: `
+            + `${line.old_qty}→${line.new_qty}`, { sep: ' · ' }),
           delta_amount: change.delta_amount,
           status_label: change.status === 'approved' ? '已批准（生效）'
             : (asText(change.status) === 'rejected' ? '已驳回' : '待回应 / 待批'),
@@ -1380,9 +1461,11 @@ export async function register(surface, host) {
       { name: 'signature', label: '提出人（人签）', type: 'signature', required: true },
     ] },
     server: async (ctx, input) => {
-      const lines = String(input.lines ?? '').split('\n').map((line) => line.trim()).filter(Boolean)
-        .map((line) => {
-          const [itemId, qty] = line.split(',').map((piece) => piece.trim())
+      // `input.lines` 是**多行文本**（每行 `item_id,新数量`），不是行数组 ⇒ 变量名用 `piece`：
+      // `line` 在本仓一律指"外部数组里的一行"，这里容易看错（逐行读属性那一类风险）
+      const lines = String(input.lines ?? '').split('\n').map((piece) => piece.trim()).filter(Boolean)
+        .map((piece) => {
+          const [itemId, qty] = piece.split(',').map((cell) => cell.trim())
           return { item_id: itemId, new_qty: Number(qty) }
         })
       if (!lines.length) {

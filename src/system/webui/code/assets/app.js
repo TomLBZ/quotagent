@@ -1348,10 +1348,13 @@
     })
   }
 
-  function navigate(view, kind, id, { replace = false, quiet = false } = {}) {
+  function navigate(view, kind, id, { replace = false, quiet = false, thenAction = '' } = {}) {
     const next = { view: view || 'home', kind: kind || '', id: id || '' }
     state.route = next; state.edits = {}; state.editOrigin = {}
     state.selected = {}; state.selectedRows = {}; state.picked = {}; state.selectedAll = {}
+    // **在这条地址上接着开某个动作**（机制）：缺上下文的动作被引导到"能填的地方"（那条对象的页面）时，
+    // 到了地方就自动把这个动作的表单打开 —— 用户不必再找一次那颗按钮（`loadAll` 收尾时消费它）。
+    state.thenAction = thenAction || ''
     const url = routeUrl(next)
     if (replace) history.replaceState(next, '', url)
     else history.pushState(next, '', url)
@@ -2096,6 +2099,80 @@
       + `${action.permission === 'human-signature' ? ' ✍' : ''}</button>`).join('') + '</div>'
   }
 
+  // ---------------------------------------------------------------- 空态：先说人话 + 2–3 个真能做的下一步
+  /**
+   * **这块面板有没有"业务数据"**（机制，只看通用形状与声明 —— 外壳不认识任何业务）：
+   * `table.rows` / `list.items` / `kv.items` / `files.files`（活的）非空，或插件自己报的 `counts` 里有非零。
+   * 两条**例外**（都是声明，不是外壳猜的）：
+   *   · `panel.not_data === true`（说明类/运营配置类：沙盘入口、名册与角色、导出偏好…）**不参与**这个判断
+   *     —— 它照旧渲染、照旧有数据，只是不把空态挤掉；
+   *   · **降级（`degraded`）不算有数据**：降级只是"读不到/还没轮到它"。
+   * `html`（说明）与 `metrics`（读数，零也常显示）也不当作"有数据"。
+   */
+  function panelHasData(panel) {
+    if (!panel || panel.not_data === true) return false
+    const data = panel.data || {}
+    if (data.degraded === true) return false
+    if (Array.isArray(data.rows) && data.rows.length) return true
+    if (Array.isArray(data.items) && data.items.length) return true
+    if (Array.isArray(data.files) && data.files.some((file) => file && file.deleted !== true)) return true
+    if (data.counts && Object.values(data.counts).some((value) => Number(value) > 0)) return true
+    return false
+  }
+  /** 这一屏**一块有业务数据的面板都没有**（P28 实测：承包商的墙是 39 块空面板）—— 空态判据。
+   *  返回 `withData`（哪几块算有数据）也是给对账用的：一眼能看出"为什么这一屏不算空"。 */
+  function viewEmptiness() {
+    const list = orderedPanels().list.map((item) => item.panel)
+    const withData = list.filter(panelHasData)
+    return { total: list.length, withData, empty: list.length > 0 && withData.length === 0 }
+  }
+  const viewIsEmpty = () => viewEmptiness().empty
+  /** 空态/非空态都要留一个**机器可读**的读数（截图之外还能逐条对账）。 */
+  function emptinessMark() {
+    const { total, withData, empty } = viewEmptiness()
+    return `<div class="q-emptiness" data-view-emptiness="${empty ? 'empty' : 'has-data'}"`
+      + ` data-panels-total="${total}" data-panels-with-data="${attr(withData.map((panel) => panel.id).join(','))}"`
+      + ` hidden></div>`
+  }
+  /**
+   * **起步块**（空态）：人话由**插件**写（`guide` 贡献的 `summary`），按钮由**注册面的动作**来 ——
+   * 最多 3 步，每一步点了就真开那个动作的表单（`input` 是插件给的预填）。查不到的动作**如实略过并计数**，
+   * 绝不摆一颗按不动的按钮。这一块还写明"下面那 N 块面板为什么是空的"（它们是等活的面板，不是坏了）。
+   */
+  function startBlock({ heading = '这一屏还是空的（不是坏了）', empty = true } = {}) {
+    const guides = (state.surface.guides || []).filter((guide) => guide.view === state.route.view)
+      .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+    const summaries = guides.map((guide) => guide.summary).filter((text) => String(text || '').trim() !== '')
+    const steps = []
+    let missing = 0
+    for (const guide of guides) {
+      for (const step of (guide.steps || [])) {
+        if (steps.length >= 3) break
+        const action = actionOf(step.action)
+        if (!action) { missing += 1; continue }
+        steps.push({ guide, step, action })
+      }
+    }
+    const list = orderedPanels().list.map((item) => item.panel)
+    return `<section class="q-start" data-start-block="1" data-start-steps="${steps.length}">
+  <h2>${esc(heading)}</h2>
+  ${summaries.map((text) => `<p class="q-start-summary">${esc(text)}</p>`).join('')
+    || '<p class="q-start-summary">还没有插件为这一屏写"这里是干什么的"——下面是现在真能做的下一步。</p>'}
+  ${steps.length ? `<div class="q-actions q-start-steps">${steps.map((item, index) =>
+    `<button class="primary" data-guide-action="${attr(item.action.id)}" data-guide-index="${attr(index)}"`
+    + ` title="${attr(item.action.hint || '')}">${esc(item.step.label || item.action.title)}`
+    + `${item.action.permission === 'human-signature' ? ' ✍' : ''}</button>`).join('')}</div>
+    <ul class="q-start-notes">${steps.map((item) => item.step.note
+      ? `<li>${esc(item.step.note)}</li>` : '').join('')}</ul>` : ''}
+  <p class="q-hint" data-start-wall="1">${empty
+    ? `这一屏现在有 <b>${list.length}</b> 块面板，它们都还没有数据 —— 它们是"等活"的面板（谁注册的就在谁名下），不是坏了。`
+      + `${missing ? `另有 ${missing} 个起步按钮指向的动作当前没装（如实略过，不摆按不动的按钮）。` : ''}`
+      + '想看完整流转也可以点上面的演示数据。'
+    : `眼下没有卡住你的事：这一屏有 <b>${list.length}</b> 块面板（读数、配置与对账面），收在下面那一栏里，点开就能看。`
+      + `${missing ? `另有 ${missing} 个起步按钮指向的动作当前没装（如实略过）。` : ''}`}</p>
+</section>`
+  }
+
   // ---------------------------------------------------------------- 工作台：「你现在该做什么」
   /**
    * 待办聚合（机制）：把这一页上各面板报的条目汇到一起，按级别排（急的在前）。
@@ -2172,8 +2249,7 @@
       data-todo-urgent="${wantedCount}" data-todo-windowed="${tally.windowed ? 1 : 0}">
   <div class="q-todo-head">
     <h2>你现在该做什么</h2>
-    <p>${esc(headline)}${current === '' && tally.total && wantedCount
-      ? `（另有 ${tally.total - wantedCount} 条信息）` : ''}</p>
+    <p>${esc(headline)}</p>
     <button class="q-link" data-open="palette">搜全部动作（点这里；键盘 <kbd>Ctrl/⌘+K</kbd>）</button>
   </div>
   ${bucketBar('workbench', buckets, current, items, { '': tally.total, ...tally.bucketTotal })}
@@ -2230,6 +2306,7 @@
     return state.surface.actions
       .filter((action) => action.object_kind === kind && (action.views || []).includes(view))
   }
+
   /** 视图级动作里**声明了按当前对象地址预填**的那些（`from_route` / `from_route_kind` 字段）：
    *  这类动作对**任何对象类**都成立（协作类的「指派 / 转交」「关注」「评论 / @同事」「标为已读」就是这样）
    *  ⇒ 也摆进对象页主工具栏；否则它们会被折叠进「本视图的其它动作」，等于对象页上没有入口。 */
@@ -2272,6 +2349,10 @@
           + ` data-k="${attr(link.kind)}" data-id="${attr(link.id)}">${esc(link.title || `${link.kind} ${link.id}`)} →</a>`
           ).join('')}</div>` : ''])
     const laid = orderedPanels()
+    // **入口策略**（机制）：对象页页头工具栏只摆**这个地址上跑得起来**的动作（对象地址已就位 ⇒
+    // 声明了 `from_route` 的那些一键可开）；缺上下文的收进「要先有一个对象」区（写明该在哪跑）。
+    const headBar = partitionActions([...objectActions(), ...objectRouteActions()], { route: true })
+    const others = partitionActions(viewActions({ excludeRoutePrefilled: true }), { route: true })
     el('q-view').innerHTML = html([
       `<div class="q-viewhead"><nav class="q-crumbs" aria-label="面包屑">${crumbs}</nav>`
       + `<button class="q-link" data-copy="${attr(linkOf(route.view, route.kind, route.id))}">复制这条深链</button>`
@@ -2280,14 +2361,16 @@
         + `「链接 + 对方需要什么身份/侧 + 邮件正文」，直接发给同事">分享（含邮件正文）</button>` : ''}`
       + `<button class="q-link" data-tab-pin="1" title="把这条对象地址固定成一个标签页，方便来回切">钉成标签页</button></div>`,
       head,
-      toolbarHtml([...objectActions(), ...objectRouteActions()], `${route.view}/${route.kind}`),
+      toolbarHtml(headBar.ready, `${route.view}/${route.kind}`),
+      needsContextBlock(headBar.need, `${route.view}/${route.kind}`),
       reportBar(state.object?.reports || [], `${route.view}/${route.kind}`),
       layoutBar(laid.list.length),
       `<div class="q-panels">${laid.list.map((item) => panelSection(item.panel, item.collapsed)).join('')}</div>`,
-      toolbarHtml(viewActions({ excludeRoutePrefilled: true }), `${route.view}（视图级动作）`)
+      others.ready.length || others.need.length
         ? `<details class="q-mech q-more-actions">`
-        + `<summary>本视图的其它动作（${viewActions({ excludeRoutePrefilled: true }).length} 个）</summary>`
-        + toolbarHtml(viewActions({ excludeRoutePrefilled: true }), `${route.view}（视图级动作）`) + '</details>' : '',
+        + `<summary>本视图的其它动作（${others.ready.length + others.need.length} 个）</summary>`
+        + toolbarHtml(others.ready, `${route.view}（视图级动作）`)
+        + needsContextBlock(others.need, `${route.view}（视图级动作）`) + '</details>' : '',
       `<div data-ui-blocks="${attr(`page.${route.view}`)}"></div>`])
     bindPanels()
     bindInteractions()
@@ -2296,22 +2379,43 @@
   }
 
   function renderViewPage() {
-    const actions = viewActions()
     const isHome = state.route.view === 'home'
     const laid = orderedPanels()
+    // **入口策略**（机制）：工具栏只摆**这个地址上跑得起来**的动作；缺上下文的收进
+    // 「这些动作要先有一个对象」区（点一下从候选里挑一条、预填带入，而不是按下去撞「必填」）。
+    const bar = partitionActions(viewActions(), {})
+    // **空态**（机制）：这一屏一块有业务数据的面板都没有时 —— 先说人话 + 给 2–3 个真能做的下一步，
+    // 面板墙收进一个可展开的 details（一块不少，只是不再铺一面墙）。
+    const empty = viewIsEmpty()
+    // 工作台（home）另有一条：**眼下没有卡住你的事**（紧急待办 = 0）时，也把面板墙收成一栏 ——
+    // 首屏是那张卡（说人话 + 下一步），不是一面墙；面板一块不少，点开就在（`data-todo-urgent` 是读数）。
+    const quiet = isHome && todoItems().urgent === 0
+    const foldWall = empty || quiet
+    const wall = laid.list.map((item) => panelSection(item.panel, item.collapsed)).join('')
     el('q-view').innerHTML = html([
       `<div class="q-viewhead"><h1>${esc(viewTitle(state.route.view))}</h1>`
       + `<p>${isHome ? '我今天要做什么' : `${state.panels.length} 块面板`} · 深链 `
       + `<button class="q-link" data-copy="${attr(linkOf(state.route.view))}">复制</button>`
       + `<code>${esc(linkOf(state.route.view))}</code>`
       + `<button class="q-link" data-tab-pin="1">钉成标签页</button></p></div>`,
+      emptinessMark(),
+      empty ? startBlock({ empty: true })
+        : (quiet ? startBlock({ heading: '眼下没有卡住你的事：下面这些是能开工的下一步', empty: false }) : ''),
       isHome ? workbenchHtml() : '',
-      toolbarHtml(actions, state.route.view),
+      toolbarHtml(bar.ready, state.route.view),
+      needsContextBlock(bar.need, state.route.view),
       reportBar((state.surface.reports || []).filter((item) => !item.object_kind
         && (item.views || []).includes(state.route.view)), state.route.view),
       layoutBar(laid.list.length),
-      `<div class="q-panels${isHome ? ' q-panels-home' : ''}">${laid.list.map((item) =>
-        panelSection(item.panel, item.collapsed)).join('')}</div>`,
+      empty
+        ? `<details class="q-wall" data-panel-wall="1"><summary>这一屏的 ${laid.list.length} 块面板现在都还没有数据`
+          + `（不是坏了）—— 点开逐块看它们在等什么</summary>`
+          + `<div class="q-panels${isHome ? ' q-panels-home' : ''}">${wall}</div></details>`
+        : (foldWall
+          ? `<details class="q-wall" data-panel-wall="1"><summary>眼下没有卡住你的事（紧急待办 0）—— `
+            + `${laid.list.length} 块面板收在这里，点开逐块看</summary>`
+            + `<div class="q-panels q-panels-home">${wall}</div></details>`
+          : `<div class="q-panels${isHome ? ' q-panels-home' : ''}">${wall}</div>`),
       `<div data-ui-blocks="${attr(`page.${state.route.view}`)}"></div>`])
     bindPanels()
     bindInteractions()
@@ -2756,12 +2860,28 @@
     root.querySelectorAll('[data-action]').forEach((node) => node.addEventListener('click', () => {
       let preset = {}
       try { preset = JSON.parse(node.dataset.preset || '{}') } catch (err) { preset = {} }
-      openAction(node.dataset.action, preset, null, { panel: panelOf(node) })
+      // **带预填的入口**（工作台待办卡 / 通知中心 / 面板里的按钮：插件自己给了 preset）直接开表单；
+      // **裸入口**（工具栏那些）走一遍可跑性判定 —— 缺上下文就摆候选清单，不摆空表单。
+      const hasPreset = Object.keys(preset).length > 0
+      if (hasPreset) return openAction(node.dataset.action, preset, null, { panel: panelOf(node) })
+      return openActionEntry(node.dataset.action)
     }))
     root.querySelectorAll('[data-row-action]').forEach((node) => node.addEventListener('click', () => {
       let row = {}
       try { row = JSON.parse(node.dataset.row) } catch (err) { row = {} }
       openAction(node.dataset.rowAction, row, null, { panel: panelOf(node) })
+    }))
+    // **入口策略**（机制）：缺上下文的动作点进「先挑一条」的候选清单（不是空表单）；
+    // 空态「起步」块里的按钮 = 插件写的下一步，点了真开那个动作的表单。
+    root.querySelectorAll('[data-pick-action]').forEach((node) =>
+      node.addEventListener('click', () => openActionEntry(node.dataset.pickAction)))
+    root.querySelectorAll('[data-guide-action]').forEach((node) => node.addEventListener('click', () => {
+      const guides = (state.surface.guides || []).filter((guide) => guide.view === state.route.view)
+        .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+      const steps = guides.flatMap((guide) => guide.steps || []).filter((step) => actionOf(step.action))
+      const step = steps[Number(node.dataset.guideIndex)]
+      if (!step) return
+      openActionEntry(step.action, step.input || null)
     }))
     root.querySelectorAll('[data-open-object]').forEach((node) => node.addEventListener('click', (ev) => {
       if (ev.metaKey || ev.ctrlKey) return
@@ -3106,6 +3226,236 @@
 
   // ---------------------------------------------------------------- 动作表单（客户端校验 + 界内确认）
   const actionOf = (id) => state.surface.actions.find((action) => action.id === id) || null
+
+  // ================================================================ 入口策略（机制）：动作摆哪儿、缺上下文去哪
+  /**
+   * **"点了没用"的总根因**（P28 走查实测三处）：工具栏把那一个视角的**全部**动作平铺，其中包括
+   * "必须先有某个对象/某一行才成立"的对象级、行级动作；它们在工具栏上没有上下文可预填 ⇒ 按下去只会
+   * 得到「必填」。真正能用的是表格行内那颗按钮（行内把整行当预填）。
+   *
+   * 机制（**判据全在注册面的声明上，不是外壳猜的**）：
+   *   ① 所需上下文由动作的 `needs` 给出（`/api/ui/surface` 里每个动作都带；口径见 `ui-surface.mjs`
+   *      文件头「字段来源」段）：`route`（对象地址）/ `row`（那一行）/ `selection`（已选集合）/ `bulk`；
+   *   ② 外壳据此**只把当前地址上跑得起来的动作摆进工具栏**：缺上下文的那批摆进同一页的
+   *      「这些动作要先有一个对象」区，逐条写明**它该在哪跑**（在哪块面板的行里 / 得在对象页上），
+   *      点一下就从候选里挑一条、**预填带入**再开表单；
+   *   ③ 命令面板里**仍能找到全部**动作（一个不少），但缺上下文时进去的是**候选清单**，
+   *      而不是一个空表单让人撞「必填」；一个候选都没有时如实说"现在没有可挑的"并给下一步。
+   */
+  const needsOf = (action) => action?.needs
+    || { route: [], row: [], selection: [], session: [], version: [], user: [], new_value: [], bulk: false }
+  const fieldOf = (action, name) => (action?.input?.fields || []).find((field) => field.name === name) || null
+  const onObjectPage = () => Boolean(state.route.kind && state.route.id)
+  /** 行里给这个字段的值：`row_field` 指了另一列就取那一列，没指就取同名列（既有约定）。 */
+  const rowValueFor = (action, name, row) => {
+    if (!row || typeof row !== 'object') return ''
+    const key = String(fieldOf(action, name)?.row_field || name)
+    const value = row[key]
+    return value === undefined || value === null || String(value).trim() === '' ? '' : value
+  }
+  /**
+   * 这个动作在**这个地址**上缺什么上下文？（空数组 = 现在就跑得起来）
+   * `ctx.route` = 当前正站在对象页上（且对象类对得上）；`ctx.row` = 从哪一行进来的；`ctx.selection` = 有勾选。
+   */
+  function contextMissing(action, ctx = {}) {
+    const needs = needsOf(action)
+    const routeReady = Boolean(ctx.route) && onObjectPage()
+      && (!action.object_kind || action.object_kind === state.route.kind)
+    const rowValues = [ctx.row, ...(Array.isArray(ctx.rows) ? ctx.rows : [])].filter(Boolean)
+    const out = []
+    for (const [group, names] of [['route', needs.route], ['row', needs.row], ['selection', needs.selection]]) {
+      if (!names.length) continue
+      const pending = names.filter((name) => {
+        if (group === 'route' && routeReady) return false
+        if (group === 'selection' && ctx.selection) return false
+        // 对象地址 / 那一行 / 已选集合可以互相顶替：手里任何一处给出了同名列的值就算数（同一条约定）
+        return !rowValues.some((row) => rowValueFor(action, name, row) !== '')
+      })
+      if (pending.length) out.push({ group, fields: pending })
+    }
+    if (needs.bulk && !ctx.selection) out.push({ group: 'selection', fields: [] })
+    return out
+  }
+  const placeOf = (action) => (Array.isArray(action.placement) && action.placement.length
+    ? action.placement : ['toolbar'])
+  /**
+   * 工具栏分区（机制）：能在这个地址上跑的 → 摆按钮；缺上下文的 → 收进「要先有一个对象」区。
+   * `placement` 是插件的声明：没声明 `toolbar` 的动作**不进工具栏**（它该在行内/命令面板里，不被搬走）。
+   */
+  function partitionActions(actions, ctx = {}) {
+    const ready = []
+    const need = []
+    for (const action of actions) {
+      if (!placeOf(action).includes('toolbar')) continue
+      const missing = contextMissing(action, ctx)
+      if (missing.length) need.push({ action, missing })
+      else ready.push(action)
+    }
+    return { ready, need }
+  }
+  /** 这个动作"该在哪跑"的候选（机制，按字段名与既有约定取值；外壳不认识任何业务名词）：
+   *   · `rows`    = 这一页的面板里，**给得出它要的那些字段名**的行（挑一条就能预填带入）；
+   *   · `objects` = 带对象深链（`row.ref`）的行 —— 需要"对象地址"的动作要站在那个对象的页面上才成立。
+   *  去重按（面板 + 标签），最多各 12 条（挑一条不是让你在几百行里翻）。 */
+  function contextCandidates(action) {
+    const needs = needsOf(action)
+    const wanted = [...needs.route, ...needs.row, ...needs.selection]
+    const rows = []
+    const objects = []
+    const seen = new Set()
+    /** 一条候选在界面上怎么称呼（用行自己给的名字；都没有就拿第一列的值；再没有就按序号）。 */
+    const labelOf = (panel, row, index) => {
+      const first = (panel.data && panel.data.columns && panel.data.columns[0]) || null
+      const named = row.label || row.title || row.name || row.intent_id || row.package_id || row.quote_id
+        || row.po_id || row.gate_id || row.id || (first && first.key ? row[first.key] : '')
+      return String(named === undefined || named === null || named === '' ? `第 ${index + 1} 行` : named)
+    }
+    for (const panel of state.panels) {
+      const data = panel.data || {}
+      const list = Array.isArray(data.rows) ? data.rows : []
+      for (let index = 0; index < list.length; index += 1) {
+        const row = list[index]
+        if (!row || typeof row !== 'object') continue
+        const tag = String((row.ref && row.ref.title) || labelOf(panel, row, index))
+        if (row.ref && row.ref.kind && row.ref.id) {
+          const key = `obj:${panel.id}:${row.ref.kind}:${row.ref.id}`
+          if (!seen.has(key)) { seen.add(key); objects.push({ panel, row, label: tag }) }
+        }
+        if (!wanted.length) continue
+        let complete = true
+        for (const name of wanted) {
+          if (rowValueFor(action, name, row) === '') { complete = false; break }
+        }
+        if (!complete) continue
+        const key = `row:${panel.id}:${tag}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        rows.push({ panel, row, label: tag })
+      }
+    }
+    return { rows: rows.slice(0, 12), objects: objects.slice(0, 12) }
+  }
+  /** 从候选行/对象取这次要预填的入参（只填它真给得出的那些字段名 —— 不编值）。 */
+  function rowPresetOf(action, row) {
+    const preset = {}
+    for (const field of (action.input?.fields || [])) {
+      const value = rowValueFor(action, field.name, row)
+      if (value !== '') preset[field.name] = value
+    }
+    return preset
+  }
+  /** 缺什么、该去哪跑 —— 一句人话（依据是**插件自己声明的行内归属**与候选，不猜）。 */
+  const affinityOf = (action) => (state.surface.action_entry || [])
+    .find((item) => item.id === action.id)?.affinity || []
+  function whereText(action, missing) {
+    const groups = missing.map((item) => item.group)
+    const panels = affinityOf(action).map((item) => item.split('/').slice(1).join('/'))
+    const titles = panels.map((id) => (state.panels.find((panel) => panel.id === id) || {}).title || id)
+    const bits = []
+    if (groups.includes('row') || groups.includes('selection')) {
+      bits.push(titles.length
+        ? `它在「${titles.slice(0, 2).join('」「')}」这张表的**行内**能跑（行里那颗按钮会把整行带入）`
+        : '它要**某一行**的数据（在带这个对象的表里、行内那颗按钮上跑）')
+    }
+    if (groups.includes('route')) {
+      bits.push(titles.length ? `要在「${titles.slice(0, 2).join('」「')}」里那**一条对象**的页面上跑`
+        : '要在**那条对象的页面**上跑（页头工具栏）')
+    }
+    if (groups.includes('selection')) bits.push('先在带勾选的表里勾几行，表头会出现批量按钮')
+    return bits.join('；') || '先挑一条'
+  }
+  /**
+   * **缺上下文时的入口**（机制）：不摆空表单，先让人挑一条 ——
+   *   · 有"给得出这些字段"的行 ⇒ 挑一条，按那行**预填**开表单（与行内那颗按钮同一条路）；
+   *   · 只有对象行（`ref`）⇒ 打开那条对象的页面，并在那一页上**自动打开**这个动作（对象地址会预填）；
+   *   · 一条候选都没有 ⇒ 如实说"现在没有可挑的"，并给出**能做的下一步**（起步指引里的真动作）。
+   */
+  function openActionEntry(id, presets = null) {
+    const action = actionOf(id)
+    if (!action) {
+      return toast('bad', '动作不存在', `注册面里没有 ${id}（插件卸载后它的入口会消失：刷新页面看当前可用的动作）`)
+    }
+    const ctx = { route: onObjectPage() }
+    const missing = contextMissing(action, ctx)
+    if (!missing.length) return openAction(id, presets)
+    const { rows, objects } = contextCandidates(action)
+    const steps = (state.surface.guides || []).filter((guide) => guide.view === state.route.view)
+      .flatMap((guide) => guide.steps || []).filter((step) => actionOf(step.action)).slice(0, 3)
+    const item = (payload, text) => `<li>${payload} <span class="q-hint">${esc(text)}</span></li>`
+    const body = html([
+      `<h2 id="q-action-title">${esc(action.title)}：先挑一条</h2>`,
+      `<p class="q-src">这一步要有上下文才成立：<code>${esc(missing.flatMap((item) => item.fields).join('、') || '已选集合')}</code>`
+      + ` —— 外壳不摆一个空表单让人撞「必填」，而是把你带到能填的地方。</p>`,
+      action.hint ? `<p class="q-hint">${esc(action.hint)}</p>` : '',
+      `<p class="q-hint">${esc(whereText(action, missing))}</p>`,
+      rows.length ? `<h3>从这一页的表里挑一条（会把那一行带入表单）</h3><ul class="q-entry-list">${
+        rows.map((item2, index) => item(`<button data-entry-row="${attr(index)}">${esc(item2.label)}</button>`,
+          `在「${esc(item2.panel.title)}」里`)).join('')}</ul>` : '',
+      objects.length ? `<h3>或打开一条对象，在它自己的页面上跑</h3><ul class="q-entry-list">${
+        objects.map((item2, index) => item(`<button data-entry-object="${attr(index)}">打开 ${esc(item2.label)} →</button>`,
+          `对象类 ${esc(item2.row.ref.kind)}｜在那一页上这个动作会自动打开`)).join('')}</ul>` : '',
+      !rows.length && !objects.length
+        ? `<div class="q-state info" data-state="empty" data-state-reason="no-context-candidate">`
+          + `<b>现在这一页没有可挑的（不是坏了）</b> <code>no-context-candidate</code>`
+          + `<div class="q-hint">这一步要的那条对象还不存在 —— 先让它存在，再回来点这个动作。</div></div>`
+        : '',
+      steps.length ? `<h3>现在真能做的下一步</h3><ul class="q-entry-list">${
+        steps.map((step, index) => item(`<button class="primary" data-entry-step="${attr(index)}">${
+          esc(step.label || actionOf(step.action).title)}</button>`, '注册面里的真动作：点了就开它的表单')).join('')}</ul>`
+        : '<p class="q-hint">下一步：用 <kbd>Ctrl/⌘+K</kbd> 搜别的动作，或先在上面两步里造出这条对象。</p>',
+      `<div class="q-actions q-modal-foot"><button data-close="1">关闭</button></div>`])
+    openModal(body, 'q-entry-modal')
+    const modal = el('q-modal')
+    modal.querySelector('[data-close]').addEventListener('click', closeModal)
+    modal.querySelectorAll('[data-entry-row]').forEach((node) => node.addEventListener('click', () => {
+      const picked = rows[Number(node.dataset.entryRow)]
+      if (!picked) return
+      closeModal()
+      openAction(action.id, { ...(presets || {}), ...rowPresetOf(action, picked.row) }, null, { panel: picked.panel })
+    }))
+    modal.querySelectorAll('[data-entry-object]').forEach((node) => node.addEventListener('click', () => {
+      const picked = objects[Number(node.dataset.entryObject)]
+      if (!picked) return
+      closeModal()
+      navigate(picked.row.ref.view || state.route.view, picked.row.ref.kind, picked.row.ref.id,
+        { thenAction: action.id })
+    }))
+    modal.querySelectorAll('[data-entry-step]').forEach((node) => node.addEventListener('click', () => {
+      const step = steps[Number(node.dataset.entryStep)]
+      if (!step) return
+      closeModal()
+      openAction(step.action, step.input || {})
+    }))
+  }
+
+  /** 只读对账面（机制）：入口策略的判定读数 —— 验证脚本按它逐条核对"这个动作在哪摆、缺什么"。
+   *  它**不改任何状态**（只调上面那几个纯函数）。 */
+  window.__Q_GUI_ENTRY = {
+    needs: (id) => { const action = actionOf(id); return action ? needsOf(action) : null },
+    missingHere: (id) => { const action = actionOf(id); return action ? contextMissing(action, { route: onObjectPage() }) : null },
+    candidates: (id) => {
+      const action = actionOf(id)
+      if (!action) return null
+      const found = contextCandidates(action)
+      return { rows: found.rows.map((item) => `${item.panel.id}:${item.label}`),
+        objects: found.objects.map((item) => `${item.panel.id}:${item.label}`) }
+    },
+    toolbar: () => partitionActions(viewActions(), {}).ready.map((action) => action.id),
+    needsContext: () => partitionActions(viewActions(), {}).need.map((item) => ({
+      id: item.action.id, missing: item.missing.map((one) => `${one.group}:${one.fields.join(',')}`) })),
+    emptiness: () => { const out = viewEmptiness(); return { empty: out.empty, total: out.total,
+      with_data: out.withData.map((panel) => panel.id) } } }
+
+  /** 「这些动作要先有一个对象」区（机制）：**不是把功能藏起来** —— 逐条写明它该在哪跑，点一下就挑一条。 */
+  function needsContextBlock(list, label) {
+    if (!list.length) return ''
+    return `<details class="q-need-context" data-need-context="${attr(label)}">`
+      + `<summary>这些动作要先有一个对象（${list.length} 个）—— 点一下从候选里挑一条，或去它该在的地方跑</summary>`
+      + `<ul>` + list.map((item) => `<li><button class="q-link" data-pick-action="${attr(item.action.id)}">${
+        esc(item.action.title)}${item.action.permission === 'human-signature' ? ' ✍' : ''}</button>`
+        + `<div class="q-hint">${esc(whereText(item.action, item.missing))}｜缺：<code>${
+          esc(item.missing.flatMap((one) => one.fields).join('、') || '已选集合')}</code></div></li>`).join('') + '</ul></details>'
+  }
 
   // ---------------------------------------------------------------- 乐观并发：把"你看到的那一版"填进表单
   /**
@@ -3887,10 +4237,18 @@
         if (found) navigate(item.view, item.kind, found.ref.id)
         else navigate(item.view, '', '')
       } })),
-    ...actions.map((action) => ({ kind: 'action', id: action.id,
-      title: `${action.title}${action.permission === 'human-signature' ? ' ✍' : ''}`,
-      hint: `${action.id} · ${(action.views || []).join('/')}${action.object_kind ? ` · ${action.object_kind}` : ''}`,
-      run: () => openAction(action.id, null) }))]
+    // **动作**：命令面板里**永远能找到全部动作**（一个不少）。但缺上下文的那些**进去不是空表单** ——
+    // 先让你挑一条（候选行 / 那条对象的页面），口径见本文件「入口策略」段的第 ③ 条。
+    ...actions.map((action) => {
+      const missing = contextMissing(action, { route: onObjectPage() })
+      const verdict = missing.length
+        ? `要先挑一条（${missing.flatMap((one) => one.fields).join('、') || '已选集合'}）` : '就绪：点了就开表单'
+      return { kind: 'action', id: action.id,
+        title: `${action.title}${action.permission === 'human-signature' ? ' ✍' : ''}`,
+        hint: `${action.id} · ${(action.views || []).join('/')}${action.object_kind ? ` · ${action.object_kind}` : ''}`
+          + ` · ${verdict}`,
+        run: () => openActionEntry(action.id) }
+    })]
   }
 
   function openPalette() {
@@ -4454,7 +4812,7 @@
       if (target) { navigate(target.id, '', ''); return }
     }
     const plugin = (state.surface.shortcuts || []).find((item) => item.keys === key)
-    if (plugin) { ev.preventDefault(); openAction(plugin.action, null) }
+    if (plugin) { ev.preventDefault(); openActionEntry(plugin.action) }
   })
 
   // ---------------------------------------------------------------- 加载
@@ -4592,6 +4950,12 @@
     // **导出列选择**（机制）：把"我这一套列"读回来（面板有就用面板的；否则问一次只读动作），
     // 读完若拿到了新东西就再画一遍 —— 「列…」按钮上的 N/M 在任何页面上都对。
     hydrateExportPrefs().then((changed) => { if (changed) renderMain() }).catch(() => {})
+    // **接着开那个动作**（入口策略）：被引导到"能填的地方"（那条对象的页面）之后，到了就自动开表单。
+    if (state.thenAction) {
+      const wanted = state.thenAction
+      state.thenAction = ''
+      if (actionOf(wanted)) openAction(wanted, null)
+    }
   }
 
   async function loadSurface() {

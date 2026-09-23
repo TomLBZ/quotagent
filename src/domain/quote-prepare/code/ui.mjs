@@ -122,6 +122,48 @@ const scalarListOf = (value) => {
 }
 
 /**
+ * **草稿在包表里的逐行回显**（P28 空账本走查登记的缺陷）：`quote/drafted` 的多行形态只写 `lines[]`，
+ * 标量键（`item_id` / `unit_price_cents` / `lead_time_days`）**只有首行那一条**；照旧按标量键建索引时，
+ * 表里别的行读不到草稿 ⇒ 单价/交期两列显示空、行合计算成 `0`（看着像"零价"，而草稿里明明有价）。
+ *
+ * 逐行取值口径：① `lines[]` 里按 `item_id` 取这一行（多行形态的真值）；② 没有 `lines[]` 的老形状
+ * （单行草稿）才用标量键兜底。**读不出来就留空**，不补 0、不借用别行的价。
+ */
+const draftCellsOf = (draftBodies) => {
+  const byItem = new Map()
+  for (const body of draftBodies) {
+    const draftId = asText(body.quote_draft_id) || asText(body.item_id)
+    const lines = readRows(body.lines)
+    for (const line of lines.rows.filter((row) => isRow(row))) {
+      const itemId = asText(line.item_id)
+      if (itemId === '' || byItem.has(itemId)) continue
+      byItem.set(itemId, { draft_id: draftId, unit_price_cents: line.unit_price_cents,
+        lead_time_days: line.lead_time_days })
+    }
+    const itemId = asText(body.item_id)
+    if (lines.all === 0 && itemId !== '' && !byItem.has(itemId)) {
+      byItem.set(itemId, { draft_id: draftId, unit_price_cents: body.unit_price_cents,
+        lead_time_days: body.lead_time_days })
+    }
+  }
+  return byItem
+}
+
+/**
+ * **「首行」几列的取值口径**（P28 空账本走查登记的缺陷）：`quote/submitted` / `quote/drafted` 的多行形态
+ * 只写 `lines[]`，标量键（`item_id` / `unit_price_cents` / `lead_time_days`）是**首行那一条**、甚至是空的
+ * （账本里就是 `item_id: ""` / `unit_price_cents: null`）⇒ 照旧直读标量键时那几列空着、行合计显示成 `0`，
+ * 看着像"这份报价没有价"。
+ *
+ * 口径：标量键**读得出来就用它**（单行形状的真值）；读不出来回落到 `lines[0]`（多行形状的真值）；
+ * 都读不出来**留空**（不补 0、不借用别行的价）。`read` 是 `readRows(...)` 的结果（行数组的唯一读数入口）。
+ */
+const firstLineReader = (body, read) => {
+  const first = (read && read.rows[0]) ?? null
+  return (key) => (cellText(body[key]) !== '' ? body[key] : (first ? (first[key] ?? '') : ''))
+}
+
+/**
  * 投递信封里的**行项目**（`spec.items`）—— 本插件唯一读它的地方。
  *
  * 三种源形状必须**分得开**（P27：修前它们长得一模一样，都是「空表 + 自称健康」）：
@@ -135,7 +177,9 @@ const packageItemsOf = (spec) => {
   const read = readRows(holder.items)
   const rows = []
   let withoutId = 0
-  for (const row of read.rows) {
+  // **行数组的唯一读数入口**：坏行已由 `readRows` 逐条计数、好行照列；这里再 `filter((row) => isRow(row))`
+  // 是同一入口上的就地设防（读属性的那一行不再裸奔 —— 外壳对 `data()` 抛错的处理是整块面板判 `data-failed`）。
+  for (const row of read.rows.filter((row) => isRow(row))) {
     const id = asText(row.item_id)
     if (id === '') { withoutId += 1; continue }
     rows.push({ ...row, item_id: id })
@@ -351,8 +395,8 @@ export async function register(surface, host) {
       const spec = envelope.spec && typeof envelope.spec === 'object' ? envelope.spec : {}
       // **行项目读数（唯一入口）**：数组里混坏行 ⇒ 好行照列 + 逐条计数；不是数组 ⇒ 不是"零行项目"（见 `packageItemsOf`）
       const items = packageItemsOf(spec)
-      const drafts = new Map(typeRows(host.rows('supplier'), 'quote/drafted')
-        .map((row) => [asText(bodyOf(row).item_id), bodyOf(row)]))
+      const draftCells = draftCellsOf(typeRows(host.rows('supplier'), 'quote/drafted')
+        .map((row) => bodyOf(row)))
       const packageId = String(spec.package_id ?? '')
       // **已读回执**：你打开这一页 = 发包方那边多一条「谁在何时看过这个包」（0600 痕迹，不进账本）
       const receipt = recordPackageReceipt(ctx, packageId, 'quote.package')
@@ -374,12 +418,12 @@ export async function register(surface, host) {
             ...(referenceable ? { editable: true } : {}), type: 'number' },
           { key: 'draft', label: '已备草稿' },
         ],
-        rows: items.rows.map((item) => {
-          const draft = drafts.get(asText(item.item_id))
+        rows: items.rows.filter((row) => isRow(row)).map((item) => {
+          const draft = draftCells.get(asText(item.item_id))
           return { id: asText(item.item_id), item_id: asText(item.item_id), description: item.description ?? '',
             qty: item.qty, unit: item.unit,
             unit_price_cents: draft?.unit_price_cents ?? '', lead_time_days: draft?.lead_time_days ?? '',
-            draft: draft ? `${draft.quote_draft_id}（待签署）` : '' }
+            draft: draft ? `${draft.draft_id}（待签署）` : '' }
         }),
         // 实时小计（外壳在编辑时立刻重算：Σ 单价×数量）；Tab/Enter 走格、Esc 还原、Ctrl+Enter 提交
         totals: [{ label: '报价小计（整数分）', key: 'unit_price_cents', factor: 'qty', unit: '分' },
@@ -393,7 +437,7 @@ export async function register(surface, host) {
               // **乐观并发**：把"你打开这一页时看到的这一版草稿"交给界面（保存时带回 `expected_version`）。
               // 对象 = 这份包 + 这一组行项目（与 `quote.draft` 的 concurrency 同一口径，逐字对齐）。
               version: host.versions.current('supplier', 'quote-draft',
-                draftSlotOf({ rfq_id: packageId, rows: items.rows.map((item) => ({ item_id: item.item_id })) })),
+                draftSlotOf({ rfq_id: packageId, rows: items.rows.filter((row) => isRow(row)).map((item) => ({ item_id: item.item_id })) })),
               version_for: 'quote.draft' }
           : { degraded: true, reason: 'package-not-in-visible-facts',
               next_action: `本侧事实认得的包 id 目录已到上限（${LIMITS.max_items} 个${known.capped ? '，已满' : ''}）：`
@@ -455,11 +499,11 @@ export async function register(surface, host) {
       const items = packageItemsOf(spec)
       // **已读回执**（对象页 = 真正「打开了这个包」）：给发包方留一条「谁在何时看过这个包」
       const receipt = recordPackageReceipt(ctx, packageId, 'package.mine')
-      const drafts = new Map(typeRows(host.rows('supplier'), 'quote/drafted')
-        .map((row) => [asText(bodyOf(row).item_id), bodyOf(row)]))
+      const draftCells = draftCellsOf(typeRows(host.rows('supplier'), 'quote/drafted')
+        .map((row) => bodyOf(row)))
       // **乐观并发**：这一页上保存动作要带的"你看到的那一版"（与 `quote.draft` 的 concurrency 同一口径）
       const myDraftVersion = host.versions.current('supplier', 'quote-draft',
-        draftSlotOf({ rfq_id: packageId, rows: items.rows.map((item) => ({ item_id: item.item_id })) }))
+        draftSlotOf({ rfq_id: packageId, rows: items.rows.filter((row) => isRow(row)).map((item) => ({ item_id: item.item_id })) }))
       // 这一页也是"备报价"的入口之一 ⇒ **同一条预填判据**（见 `referenceablePackages` 的注释）：
       // 包不在本侧事实的目录里 ⇒ 不预填、不给备报价入口（提交必被拒）。
       const known = referenceablePackages(host)
@@ -480,7 +524,10 @@ export async function register(surface, host) {
             ...(items.list ? [{ key: '信封声明的条数', value: String(items.all) }] : []),
             { key: '版本 rev', value: String(mine.envelope.rev ?? '—') },
             { key: '澄清截止', value: String((spec.deadlines ?? {}).clarify_by ?? '—') },
-            { key: '已备草稿', value: `${drafts.size} / ${items.rows.length}` },
+            // **已备草稿**按**逐行数量**算（多行草稿一行一条）：只数得清"这一行有没有草稿"，
+            // 不拿"草稿份数"冒充"备了几行"（P28 走查：多行草稿曾显示 1 / 2，像有一行没备）
+            { key: '已备草稿', value: `${items.rows.filter((row) => isRow(row))
+              .filter((item) => draftCells.has(asText(item.item_id))).length} / ${items.rows.length}` },
             // 「能不能当 RFQ 引用」是备报价的前置判据 ⇒ 明写在对象页上（不在目录里就说不在）
             { key: '可作 RFQ 引用', value: referenceable
               ? '是（在本侧事实的包目录里）'
@@ -511,12 +558,12 @@ export async function register(surface, host) {
             ...(referenceable ? { editable: true } : {}), type: 'number' },
           { key: 'draft', label: '已备草稿' },
         ],
-        rows: items.rows.map((item) => {
-          const draft = drafts.get(asText(item.item_id))
+        rows: items.rows.filter((row) => isRow(row)).map((item) => {
+          const draft = draftCells.get(asText(item.item_id))
           return { id: asText(item.item_id), item_id: asText(item.item_id), description: item.description ?? '',
             qty: item.qty, unit: item.unit,
             unit_price_cents: draft?.unit_price_cents ?? '', lead_time_days: draft?.lead_time_days ?? '',
-            draft: draft ? `${draft.quote_draft_id}（待签署）` : '' }
+            draft: draft ? `${draft.draft_id}（待签署）` : '' }
         }),
         totals: [{ label: '报价小计（整数分）', key: 'unit_price_cents', factor: 'qty', unit: '分' },
           { label: '已填条数', key: 'unit_price_cents', count: true, skip_empty: true }],
@@ -573,7 +620,7 @@ export async function register(surface, host) {
         columns: [{ key: 'item_id', label: '行项目', type: 'code' }, { key: 'qty', label: '量', filter: 'number' },
           { key: 'unit_price_cents', label: '单价（整数分）', filter: 'number' }, { key: 'lead_time_days', label: '交期（天）', filter: 'number' }],
         // **逐行读数**（收件箱 JSON 由只读工具给；数组里混坏行 ⇒ 好行照列 + 逐条计数，不打崩面板）
-        rows: lines.rows.map((line) => {
+        rows: lines.rows.filter((row) => isRow(row)).map((line) => {
           const id = asText(line.item_id)
           return { ...(id ? { id } : {}), item_id: id || '（无 id）', qty: line.qty,
             unit_price_cents: line.unit_price_cents, lead_time_days: line.lead_time_days }
@@ -610,9 +657,12 @@ export async function register(surface, host) {
         // **逐行读数（唯一入口）**：`lines` 里混着 null/字符串/数字时，修前 `line.item_id` 直接 TypeError
         // ⇒ 整块「我的草稿」面板 data-failed（一条坏行把面板打崩）；现在好行照列、坏行逐条计数。
         const lines = readRows(body.lines)
+        // 「首行」三列的口径见 `firstLineReader`：标量键优先，读不出来回落到 `lines[0]`
+        const first = firstLineReader(body, lines)
         drafts.set(id, { id, quote_draft_id: id, draft_id: id, rfq_id: body.rfq_id ?? body.package_id ?? '',
-          item_id: body.item_id ?? '', unit_price_cents: body.unit_price_cents ?? '',
-          lead_time_days: body.lead_time_days ?? '', prepared_by: body.prepared_by ?? '',
+          // **首行三列同样回落到 `lines[0]`**（与「已提交的报价」同一口径：多行形态的标量键只有首行）
+          item_id: first('item_id'), unit_price_cents: first('unit_price_cents'),
+          lead_time_days: first('lead_time_days'), prepared_by: body.prepared_by ?? '',
           line_count: lines.all || 1,
           lines_text: lines.rows.length > 1 ? lines.rows.map(lineLabelOf).join(' ')
             + (lines.dropped ? `（+${lines.dropped} 条读不出来）` : '')
@@ -665,8 +715,12 @@ export async function register(surface, host) {
           { key: 'approval_id', label: '人工门', type: 'code' }, { key: 'submitted_at', label: '提交时刻', filter: 'date' }],
         rows: rows.map((row) => {
           const lines = readRows(row.lines)
+          // **标量三列回落到首行**：多行形态的 `item_id` / `unit_price_cents` / `lead_time_days` 在账本里
+          // 就是 `""` / `null`（真值在 `lines[]` 里）—— P28 走查实测：那两列空着，像"这份报价没有单价"
+          const first = firstLineReader(row, lines)
           return { id: row.quote_id, ...row, line_count: lines.all || 1,
             item_id: asText(row.item_id) || asText(lines.rows[0]?.item_id),
+            unit_price_cents: first('unit_price_cents'), lead_time_days: first('lead_time_days'),
             lines_text: lines.rows.length > 1 ? lines.rows.map(lineLabelOf).join(' ')
               + (lines.dropped ? `（+${lines.dropped} 条读不出来）` : '')
               : (lines.dropped ? `（有 ${lines.dropped} 条行读不出来）` : ''),
@@ -674,7 +728,8 @@ export async function register(surface, host) {
         }),
         counts: { quotes: rows.length },
         note: '每一行都对应一次人签的人工门（approval/requested → granted → quote/submitted，顺序不可颠倒）；'
-          + '一份报价 = 一次人签：行数 > 1 的报价是一次签完整份的（逐行在 `lines` 里，标量列只是首行）' }
+          + '一份报价 = 一次人签：行数 > 1 的报价是一次签完整份的（逐行在 `lines` 里）；'
+          + '「首行项目 / 首行单价 / 首行交期」三列**在标量键为空时回落到 `lines[0]`**（多行形态的标量键本来就只有首行）' }
     } }))
 
   // ---- **对象页**：`/app/supplier/quote/<q-…>/`（我提交的那份报价的全链事实） ----
@@ -682,7 +737,7 @@ export async function register(surface, host) {
     view: 'supplier', order: 31, kind: 'kv', object_kind: 'quote',
     data: (ctx) => {
       const wanted = asText(ctx.route?.id)
-      const rows = typeRows(host.rows('supplier'), 'quote/submitted').map((row) => bodyOf(row))
+      const rows = readRows(typeRows(host.rows('supplier'), 'quote/submitted')).rows.map(bodyOf)
       const quote = rows.find((row) => asText(row.quote_id) === wanted)
       if (!quote) {
         return { ok: true, kind: 'kv', object: { found: false, title: `报价 ${wanted}`,
@@ -690,7 +745,7 @@ export async function register(surface, host) {
           next_action: '这份报价不在供应商侧账本里：回「已提交的报价」面板，点行内「打开 →」用真实存在的深链' },
           items: [] }
       }
-      const gates = typeRows(host.rows('supplier'), 'approval/').map((row) => bodyOf(row))
+      const gates = readRows(typeRows(host.rows('supplier'), 'approval/')).rows.map(bodyOf)
         .filter((row) => asText(row.ref) === wanted)
       // **逐行读数（唯一入口）**：`lines` 里混着 null/字符串/数字时，修前 `${line.item_id}` 直接 TypeError
       // ⇒ 整个「我的报价」对象页打不开（data-failed）；现在好行照列、坏行逐条计数。
@@ -888,8 +943,10 @@ export async function register(surface, host) {
       + '服务端会校验署名 == 会话身份，不一致一律拒（`signer-mismatch`，账本零新增）；'
       + '落账本的是唯一写者 tools/quote-sign.py（界面不代签、不写账本）',
     input: { fields: [
-      { name: 'draft_id', label: '草稿 id', type: 'text', required: true,
-        pattern: '^qd-[A-Za-z0-9-]+-[0-9a-f]{12}$', help: '从「我的草稿」一列复制（qd-supplier-…）' },
+      { name: 'draft_id', label: '草稿 id', type: 'text', required: true, from_row: true,
+        pattern: '^qd-[A-Za-z0-9-]+-[0-9a-f]{12}$',
+        help: '从「我的草稿」一列复制（qd-supplier-…）；在那一行点「人签提交报价」会自动带上，'
+          + '工具栏/命令面板里点它也会先让你从草稿里**挑一条**（缺上下文不摆空表单）' },
       { name: 'signature', label: '署名（人签）', type: 'signature', required: true, help: 'human:<你的名字>' },
       { name: 'comment', label: '批注（进批准记录，不进报价正文）', type: 'text' },
       { name: 'timeout_policy', label: '超时策略', type: 'select', options: ['remind', 'escalate', 'abort'],
@@ -1122,7 +1179,7 @@ export async function register(surface, host) {
 
   // ---- 工作台（首屏「我今天要做什么」）：只有"我现在该做什么"与一键入口，不是报告列表 -----------------
   out.push(surface.panel({ plugin_id: me, id: 'home.quote-todo', title: '供应商侧：我今天要做什么',
-    view: 'home', order: 10, kind: 'list',
+    view: 'home', order: 10, kind: 'list', not_data: true,
     data: (ctx) => {
       const rows = host.rows('supplier')
       const drafts = new Map()
@@ -1175,7 +1232,7 @@ export async function register(surface, host) {
 
   // 字段与校验规则的只读自述（让人在界面上能看到规则，而不是靠猜）
   out.push(surface.panel({ plugin_id: me, id: 'quote.rules', title: '草稿字段与校验规则（自述）',
-    view: 'supplier', order: 40, kind: 'kv', placement: 'side',
+    view: 'supplier', order: 40, kind: 'kv', placement: 'side', not_data: true,
     data: () => {
       // 金额单位：`prepare()` 在没有事实可读时会抛错 —— 自述面板不该因此整块变红（如实降级成 'cents'）
       let moneyUnit = 'cents'
@@ -1408,6 +1465,16 @@ export async function register(surface, host) {
         input: { draft_id: '$last.applied.0.quote_draft_id', signature: '$actor',
           comment: '沙盘演示：第二家候选提交（交期更短、价更高）', timeout_policy: 'remind',
           confirm_ack: '1' } }] }))
+
+  // ---- **起步指引**（机制：`surface.guide`）：空态那一屏说什么、从哪一步开始 ---------------------------
+  // 供应商这一侧的"第一步"依赖对方先发包 —— 所以这里**只写人话**（这条路怎么走），按钮由机制那一条
+  // （演示数据）与到手后的行内动作提供：外壳不会为了凑按钮去摆一颗跑不了的。
+  out.push(surface.guide({ plugin_id: me, id: 'guide.supplier-start', view: 'supplier', order: 10,
+    title: '供应商：这条活怎么走',
+    summary: '这条道是供应商的活：收到 RFQ 包 → 填单价与交期 → 备一份报价草稿 → 人签提交（人工门）→'
+      + '等对方的授标意向 → 确认授标 → 收到采购单并回签。现在还没有发给你的包 —— 等对方发包，'
+      + '或者先点演示数据看一遍完整流转。',
+    hint: '一份报价签一次就提交整份；署名 = 你的会话身份（界面不代签、账本零新增）' }))
 
   return out
 }

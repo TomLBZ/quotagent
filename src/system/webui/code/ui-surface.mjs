@@ -23,10 +23,16 @@
  *              外壳只比较字符串；同一块面板内部的重复不动。为什么要这条：同一批人工门被两块面板各列一遍，会让
  *              「有 N 件需要你处理」的计数翻倍（口径见 `app-shell.mjs#foldPanelDuplicates` 与
  *              `docs/scale-and-performance.md`）；
- *   ③ `action` 动作/命令：`{plugin_id, id, title, views, group?, order?, inline?, icon?,
- *              input:{fields:[{name,label,type,required,min,max,pattern,options,help}]},
+ *   ③ `action` 动作/命令：`{plugin_id, id, title, views, group?, order?, inline?, icon?, placement?,
+ *              object_kind?, input:{fields:[{name,label,type,required,min,max,pattern,options,help}]},
  *              permission:'none'|'human-signature', confirm:{required,message}, server(ctx, input)}`
  *              —— `server` 就是**动作的服务端一半**（插件自己的实现；外壳只负责调用与回执）；
+ *              · `placement`（归属位置，闭合集合 `PLACEMENTS`）：**这个动作摆在哪里**是插件的声明，
+ *                外壳照它摆，不再"能摆哪儿就摆哪儿"。缺省 `['toolbar']`；
+ *              · **所需上下文**由 `input.fields` 的**来源声明**给出（见下面的「字段来源」段）：
+ *                外壳据此判断"这个地址上必填项能不能算出来"，算不出来的动作**不摆进工具栏**
+ *                （改摆进同一页的「这些动作要先有一个对象」区，点一下就从候选里挑一条、预填带入），
+ *                命令面板里仍能找到它，但进去时先让人**挑一条**（而不是摆一个空表单让人撞"必填"）。
  *              可选 `concurrency`（**乐观并发**声明：这个动作保存的是哪一个「可编辑对象」，
  *              以及这次保存后那个对象的新状态长什么样）—— 形状见 `CONCURRENCY` 段落；
  *   ④ `shortcut` 键盘快捷键：`{plugin_id, keys, action, title}`
@@ -38,6 +44,28 @@
  *              **以及这份导出有哪些列**；**内容由 `action`（插件自己的服务端一半）生成**，外壳既不懂语义
  *              也不生成内容（谁的事实谁导出）。`columns` 只是**元数据**：界面拿它做「列选择」
  *              （个人偏好按身份落 0600，跨浏览器仍在；口径见 `app-shell.mjs` 的导出偏好段）。
+ *   ⑨ `guide`   **起步指引**（空态说人话）：`{plugin_id, id, title, view, order?, summary?, steps?, hint?}`
+ *              —— `summary` = 这一屏是干什么的（一句人话，插件自己写，外壳不认识里面的名词）；
+ *              `steps` = **真能做的下一步**（`[{action, label?, input?, note?}]`：`action` 是已注册的动作 id，
+ *              外壳按注册面查表后**真开表单**）。这一屏一块有数据的面板都没有时，外壳把它摆在第一屏
+ *              （最多 3 步），而不是把几十块空面板铺成一面墙。
+ *
+ * **字段来源**（`input.fields[].…` = "这个值从哪儿来"）：外壳按它判定**这个地址上必填项能不能算出来** ——
+ *   · `from_route`      = 当前对象地址的 id（`/app/<view>/<kind>/<id>/`）⇒ 对象页工具栏上的一键入口；
+ *   · `from_route_kind` = 当前对象地址的对象类（与 `from_route` 配对 ⇒ 一份视图级动作对所有对象类成立）；
+ *   · `from_row`        = **那一行/选中行**里的值（`row_field: '<行里的列名>'` 可指定另一列；同名不必写）
+ *                         —— 这是行内动作那条既有约定（"动作要 `draft_id`，行就要给 `draft_id`"）的**声明版**；
+ *   · `from_selection`  = **已选集合**（表格多选；`input.bulk='ids'` 的动作自动按这条算）；
+ *   · `identity:true` / `type:'signature'` = 当前会话身份；
+ *   · `version_field`   = 机制带上的对象版本（乐观并发）；
+ *   · `new_value:true`  = **人自己起的新名字**（例如"这一步要新建的那个包的 id"）：声明后外壳不当它是
+ *                         "引用已有对象"（见下一条），仍按普通输入预填/让人填；
+ *   · **未声明**的必填字段 = 人自己填（标题/金额/理由/条款这类业务输入）。
+ *   **引用标识（机制兜底，`REFERENCE_FIELD_RE`）**：名字形如 `*_id`/`id` 的**必填**字段、且没声明
+ *   `new_value` 时，按"引用某个已存在的对象/某一行"算 —— 这种值人抄不出来（P28 走查实测：工具栏上那颗
+ *   按钮必然只回报"必填"）。外壳据此**不把缺上下文的动作摆进工具栏**：改摆进同一页的
+ *   「这些动作要先有一个对象」区（写着它该在哪跑），点了就从候选里挑一条、**预填带入**再开表单；
+ *   命令面板里仍能找到全部动作（`placement` 里出现的位置一个不少），但进去时先让人挑，而不是摆空表单。
  *
  * **乐观并发（可编辑对象的版本/指纹）** —— 声明在外壳、判据在服务端，插件只说"这是什么对象、写进去的是什么"：
  *
@@ -112,6 +140,42 @@ export const PERMISSIONS = ['none', 'human-signature']
 
 /** 动作出现在哪里（placement）：工具栏 / 面板内联 / 命令行 / 右键菜单 / 快捷键。 */
 export const PLACEMENTS = ['toolbar', 'inline', 'command', 'context', 'shortcut']
+
+/**
+ * **引用标识**（机制兜底判据）：名字形如 `*_id` / `ids` / `id` 的**必填**字段，默认按"引用某个已存在的
+ * 对象 / 某一行"算 —— 这种值人抄不出来（P28 走查实测：工具栏上那颗按钮必然只回报"必填"）。
+ * 由人自己起的新名字（例如要新建的那个包的 id）要声明 `new_value: true` 才会被排除在这条之外。
+ */
+export const REFERENCE_FIELD_RE = /(^|_)ids?$/
+
+/**
+ * 动作的**所需上下文**（从字段来源声明算出；`/api/ui/surface` 与界面按同一份形状判定"摆哪里/能不能跑"）。
+ *
+ * 返回 `{route, row, selection, session, version, user, new_value, bulk}`：前三个是**必须有上下文**才算得出来
+ * 的字段（对象地址 / 那一行 / 已选集合），`user` 是人自己填的，`bulk` = 这个动作要"已选集合"才成立。
+ * 它**不认识任何业务名词**：只看字段的形状与声明。
+ */
+export function actionNeedsOf(fields = [], { bulk = null, objectKind = '' } = {}) {
+  const needs = { object: text(objectKind), route: [], row: [], selection: [], session: [], version: [],
+    user: [], new_value: [], bulk: bulk === 'ids' }
+  for (const field of Array.isArray(fields) ? fields : []) {
+    const name = text(field?.name)
+    if (name === '') continue
+    const declared = field.from_route === true || field.from_route_kind === true ? 'route'
+      : field.from_row === true ? 'row'
+        : field.from_selection === true ? 'selection'
+          : (field.identity === true || field.type === 'signature') ? 'session'
+            : field.version_field === true ? 'version'
+              : field.new_value === true ? 'new_value' : null
+    // 引用标识兜底：必填的 `*_id` / `id` 且没声明"这是新名字" ⇒ 必须有上下文（见 REFERENCE_FIELD_RE）。
+    const reference = field.required === true && field.new_value !== true && REFERENCE_FIELD_RE.test(name)
+    if (declared === null && reference) needs.row.push(name)
+    else if (declared === 'new_value') needs.new_value.push(name)
+    else if (declared === null) { if (field.required === true) needs.user.push(name) }
+    else needs[declared].push(name)
+  }
+  return needs
+}
 
 export const ID_RE = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/
 export const PLUGIN_ID_RE = /^(system|domain|userspace)\/[a-z][a-z0-9-]{0,31}(\/[a-z][a-z0-9-]{0,31})?$/
@@ -244,7 +308,11 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       order: orderOf(entry.order), view: text(entry.view), panel_kind: text(entry.kind),
       placement: text(entry.placement) || 'main', data: entry.data,
       when: typeof entry.when === 'function' ? entry.when : null, object_kind: objectKind,
-      hint: text(entry.hint), actions: Array.isArray(entry.actions) ? entry.actions.map(text) : [] } }
+      hint: text(entry.hint), actions: Array.isArray(entry.actions) ? entry.actions.map(text) : [],
+      // `not_data: true` = **这块面板不参与"这一屏有没有数据"的判断**（说明类/运营配置类：沙盘入口、
+      // 邮件通道说明、名册与角色、导出偏好…）。它照旧渲染、照旧有数据 —— 只是不把空态挤掉（口径见
+      // `app.js#panelHasData`：一屏一块"业务数据"面板都没有时，外壳先说人话 + 给 2–3 个下一步）。
+      not_data: entry.not_data === true } }
   })
 
   /** 动作/命令：**含服务端一半**（`server`），权限与确认策略都是声明。 */
@@ -291,6 +359,15 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
         // 配对使用 ⇒ 一份**视图级动作**（不带 `object_kind`）对任何对象类都成立：对象类由插件声明，
         // 声明 `from_route`/`from_route_kind` 字段的动作在对象页上也进主工具栏（客户端按这条声明摆位）。
         from_route_kind: field.from_route_kind === true,
+        // `from_row: true` = 这个字段的值来自**那一行 / 选中行**（行内动作、批量、右键菜单）：
+        // 行里同名列就是它的值；`row_field` 可以指定行里的另一列（例如动作要 `rfq_id`、行给的是
+        // `package_id`）。声明后外壳知道"这个动作缺那一行就跑不了"⇒ 不摆进工具栏，而是引导到能填的地方。
+        from_row: field.from_row === true,
+        row_field: text(field.row_field),
+        // `from_selection: true` = 这个字段的值来自**已选集合**（表格多选那一批）。
+        from_selection: field.from_selection === true,
+        // `new_value: true` = 这个字段是**人自己起的新名字**（不是引用已有对象/行）—— 见 REFERENCE_FIELD_RE。
+        new_value: field.new_value === true,
         // `identity: true` = 这个字段由**当前会话身份**预填（`human:<名字>`；机制只知道"会话里是谁"，
         // 不知道这个字段在业务上叫什么）。人签动作的 `signature` 字段自动按这条处理。
         identity: field.identity === true,
@@ -393,6 +470,9 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
         object_id: typeof raw.object_id === 'function' ? raw.object_id : null,
         expected_field: expectedField, state: raw.state }
     }
+    // **所需上下文**（机制）：从字段来源声明 + 引用标识兜底算出 —— 外壳据此决定这个动作"摆哪里"、
+    // 在某个地址上"能不能跑"（口径见文件头「字段来源」段）。
+    const needs = actionNeedsOf(outFields, { bulk: text(entry.input?.bulk) || null, objectKind })
     return { entry: { kind: 'action', plugin_id: text(entry.plugin_id), id: text(entry.id), title: entry.title,
       order: orderOf(entry.order), views: viewsOf, view: viewsOf[0] ?? '', group: text(entry.group) || '通用',
       icon: text(entry.icon), placement, inline: entry.inline === true,
@@ -400,7 +480,7 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       shortcut: text(entry.shortcut) || null,
       input: { fields: outFields, bulk: text(entry.input?.bulk) || null },
       permission, confirm, server: entry.server, hint: text(entry.hint),
-      panel: text(entry.panel) || null, concurrency } }
+      panel: text(entry.panel) || null, concurrency, needs } }
   })
 
   /** 快捷键：`{plugin_id, keys, action, title}`（`keys` 形如 `g c` / `mod+k` / `p`）。 */
@@ -525,7 +605,50 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
   })
 
   /**
-   * ⑨ `scenario` —— **沙盘/演示场景的步骤声明**（机制；外壳不认识任何业务）。
+   * ⑨ **`guide` 起步指引**（空态说人话）：`{plugin_id, id, title, view, order?, summary?, steps?, hint?}`。
+   *
+   * 为什么要有它：新用户打开一屏时会看到几十块**空**面板（P28 实测：承包商道 39 块）——那是一面墙，
+   * 不是"下一步"。空态要的是**两句话 + 2–3 个真能做的下一步**，而"这一屏是干什么的、从哪一步开始"只有
+   * 插件自己说得清（外壳不认识任何业务名词）。所以：**话由插件写，按钮由注册面查表得来**。
+   *
+   *   · `summary` = 一句人话（这一屏是干什么的；外壳只当文本摆出来，不解读）；
+   *   · `steps[]` = `{action, label?, input?, note?}` —— `action` 必须是动作 id 形状（`ID_RE`）；
+   *     外壳**运行时**按注册面查表：查得到就渲染成**真能点的按钮**（点了真开那个动作的表单，`input` 预填），
+   *     查不到（插件没装/被卸载）就**如实略过并计数**（`missing_action`），不摆按不动的按钮；
+   *   · `view` = 这一屏（外壳的视图 id）；同一插件可以给多个视图各写一条（id 自己起，别重复）。
+   *
+   * 机制只做四件事：校验形状、登记、列举（`snapshot()`/`guidesFor()`）、可撤销（disposer）。
+   * 它**不生成任何数据**、不读账本、不写文件 —— 步骤跑起来走的还是同一个动作总线。
+   */
+  const guide = (raw) => add('guide', raw, (entry) => {
+    if (!plainObject(entry) || text(entry.view) === '') {
+      return { error: code('unknown-view', 'guide 贡献必须声明 view（这一屏起步指引属于哪个视图）',
+        '给 `view: "<视图 id>"`（取自配置 views）') }
+    }
+    const steps = []
+    for (const step of (Array.isArray(entry.steps) ? entry.steps : [])) {
+      if (!plainObject(step) || !ID_RE.test(text(step.action))) {
+        return { error: code('unknown-action', `guide.steps 里这一步的形状不合法：${JSON.stringify(step ?? null)}`,
+          '每步给 `{action: "<已注册动作 id>", label?: "<按钮上写什么>", input?: {...}}`') }
+      }
+      steps.push({ action: text(step.action), label: text(step.label), input: plainObject(step.input) ? step.input : {},
+        note: text(step.note) })
+    }
+    if (steps.length > 3) {
+      return { error: code('invalid-input', `guide.steps 最多 3 步（现在是 ${steps.length} 步）`,
+        '空态是"两句话 + 2–3 个真能做的下一步"；其余步骤写进面板的 next_action 或场景里') }
+    }
+    const summary = text(entry.summary)
+    if (summary === '' && steps.length === 0) {
+      return { error: code('invalid-input', 'guide 至少要给 summary（一句人话）或一个 step（真能做的下一步）',
+        'summary: "这一屏是干什么的"；steps: [{action: "<动作 id>", label: "…"}]') }
+    }
+    return { entry: { kind: 'guide', plugin_id: text(entry.plugin_id), id: text(entry.id), title: entry.title,
+      order: orderOf(entry.order), view: text(entry.view), summary, steps, hint: text(entry.hint) } }
+  })
+
+  /**
+   * ⑩ `scenario` —— **沙盘/演示场景的步骤声明**（机制；外壳不认识任何业务）。
    *
    * 形状：`{plugin_id, id, scenario, scenario_title, title, view?, order, steps:[{action, input?, as?}], hint?}`
    *   · `scenario` 是**场景分组键**（ID_RE）：多个插件各自贡献**自己那一段**步骤，外壳按 `order` 把它们
@@ -593,6 +716,10 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
     && item.object_kind === String(objectKind ?? ''))
   /** 全部导出声明（`/api/ui/surface` 用它把「谁能导出什么」摆出来，含注册者与格式）。 */
   const reports = () => byKind('report')
+  /** 某个视图的**起步指引**（空态用）：按 order 排，外壳把 summary 与最多 3 步摆到第一屏。 */
+  const guidesFor = (viewId) => byKind('guide').filter((item) => item.view === viewId)
+  /** 全部起步指引（`/api/ui/surface` 用它自述"空态会说什么、按钮指向哪个动作"）。 */
+  const guides = () => byKind('guide')
 
   /**
    * **沙盘场景**（`scenario` 贡献）：按场景分组键聚合 ⇒ 一条可一键跑完的流程。
@@ -634,11 +761,13 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
     if (entry.kind === 'view') return { ...base, view: entry.view, hint: entry.hint, when: Boolean(entry.when) }
     if (entry.kind === 'panel') return { ...base, view: entry.view, panel_kind: entry.panel_kind,
       placement: entry.placement, actions: entry.actions, hint: entry.hint, when: Boolean(entry.when),
-      object_kind: entry.object_kind }
+      object_kind: entry.object_kind, not_data: entry.not_data }
     if (entry.kind === 'action') return { ...base, views: entry.views, group: entry.group, icon: entry.icon,
       placement: entry.placement, inline: entry.inline, context_menu: entry.context_menu,
       shortcut: entry.shortcut, input: entry.input, permission: entry.permission, confirm: entry.confirm,
       hint: entry.hint, panel: entry.panel, object_kind: entry.object_kind,
+      // **所需上下文**（机制从字段来源声明算出：哪些字段必须有对象地址/那一行/已选集合才算得出来）
+      needs: entry.needs,
       // **乐观并发声明**（只给元数据：函数型的一半不进快照 —— 与 data/server/poll 同一口径）
       concurrency: entry.concurrency
         ? { object_class: entry.concurrency.object_class, label: entry.concurrency.label,
@@ -651,6 +780,10 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
     if (entry.kind === 'validator') return { ...base, actions: entry.actions }
     if (entry.kind === 'report') return { ...base, views: entry.views, formats: entry.formats,
       action: entry.action, object_kind: entry.object_kind, columns: entry.columns, hint: entry.hint }
+    if (entry.kind === 'guide') return { ...base, view: entry.view, summary: entry.summary, hint: entry.hint,
+      step_count: entry.steps.length,
+      steps: entry.steps.map((step) => ({ action: step.action, label: step.label, note: step.note,
+        input_keys: Object.keys(step.input) })) }
     if (entry.kind === 'scenario') return { ...base, scenario: entry.scenario,
       scenario_title: entry.scenario_title, view: entry.view, step_count: entry.steps.length,
       steps: entry.steps.map((step) => ({ action: step.action, as: step.as, input_keys: Object.keys(step.input) })),
@@ -671,7 +804,7 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
       views: [...allowedViews],
       counts: { total: entries.size, by_kind: Object.fromEntries(
         ['view', 'panel', 'action', 'shortcut', 'notification-source', 'status-item', 'validator', 'report',
-          'scenario'].map((kind) => [kind, byKind(kind).length])) },
+          'guide', 'scenario'].map((kind) => [kind, byKind(kind).length])) },
       plugins: Object.entries(plugins).sort(([left], [right]) => (left < right ? -1 : 1))
         .map(([plugin_id, contributions]) => ({ plugin_id, contributions })),
       entries: [...entries.values()].map(snapshotOf).sort((left, right) =>
@@ -692,9 +825,9 @@ export function createUiSurface({ slots = [], views = [] } = {}) {
 
   const dispose = () => { disposed = true; entries.clear() }
 
-  return { view, panel, action, shortcut, notificationSource, statusItem, validator, report, scenario,
+  return { view, panel, action, shortcut, notificationSource, statusItem, validator, report, scenario, guide,
     findAction, panelsOf, panelsFor, actionsFor, objectKindsFor, shortcuts, validatorsFor, reportsFor, reports,
-    scenarios,
+    scenarios, guides, guidesFor,
     byKind, snapshot, disposePlugin, dispose, get entries() { return [...entries.values()] },
     get size() { return entries.size }, get disposed() { return disposed } }
 }

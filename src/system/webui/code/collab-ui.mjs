@@ -36,6 +36,22 @@ const show = (value) => pretty(value)
 const at = (iso) => atLabel(iso)
 const who = (human) => `@${nameOf(human)}`
 
+/** 「行」的最小形状：非 null 的**对象**（数组不是行）。 */
+const isRow = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+/**
+ * **机制给的行数组的唯一读数入口**（`hub()` / `feed()` 的 `items[]` 走这里）：坏行逐条计数、好行照列。
+ * 为什么必须有它（P27 实测的根因）：数组里混进一条 `null`/字符串时读 `item.id` 就抛 `TypeError`，
+ * 而外壳对 `panel.data()` 抛错的处理是**整块面板判 `data-failed`** —— 一条坏行打崩一整块。
+ */
+const readRows = (value) => {
+  if (!Array.isArray(value)) return { list: false, all: 0, rows: [], dropped: 0 }
+  const rows = value.filter((row) => isRow(row))
+  return { list: true, all: value.length, rows, dropped: value.length - rows.length }
+}
+/** 坏行**逐条计数**的如实说明（调用方把它当成一条 warn/info 明写出来，不静默丢）。 */
+const droppedNote = (dropped, read) => `有 ${dropped} 条读不出来（形状异常：不是对象）—— 已跳过并计数，`
+  + `不是"一条都没有"（机制声明了 ${read.all} 条）`
+
 /**
  * 「我的今日」（跨对象活动流）面板的**列声明**：前三个是给人看/给关键字搜的正文列，
  * 后面是**筛选维度**（`filter` 只影响界面上的筛选控件；判据仍在服务端，见 `windowFiltered`）：
@@ -250,7 +266,9 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
       return { ok: true, kind: 'list', degraded: true, reason: data.code, next_action: data.next_action, items: [] }
     }
     const shape = data.shape ?? null
-    const items = data.items.map((item) => ({ id: item.id, level: item.level, title: item.title, body: item.body,
+    const itemRead = readRows(data.items)
+    const itemRows = itemRead.rows
+    const items = itemRows.map((item) => ({ id: item.id, level: item.level, title: item.title, body: item.body,
       next_action: item.next_action, ref: item.ref, action: item.action, label: item.label, at: item.at,
       // 桶（过滤维度）：`mine`=我的、`assigned`=我指派的 ⇒ 界面出「我的 / 我指派的 / 全部」筛选片
       bucket: item.bucket, bucket_label: item.bucket_label }))
@@ -264,12 +282,19 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
           `${problem.object} 的 ${problem.field}（${show(problem.why)}）`).join('；'),
         next_action: shape.next_action })
     }
+    // 坏行**逐条计数**、如实报出来（不静默丢；也不让"读不出来"被当成"没有"）
+    if (itemRead.dropped) {
+      items.push({ level: 'warn', title: `这一屏有 ${itemRead.dropped} 条读不出来（已跳过并计数）`,
+        body: droppedNote(itemRead.dropped, itemRead),
+        next_action: '按面板底部的「协作存储」路径看那份文件：坏条目留在文件里没被删，修好形状后重新加载即可' })
+    }
     return { ok: true, kind: 'list', items,
-      degraded: Boolean(shape),
+      degraded: Boolean(shape) || itemRead.dropped > 0,
       buckets: data.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, count: bucket.count })),
-      counts: data.counts, reason: items.length ? null : 'no-collab-for-you',
+      counts: { ...(data.counts ?? {}), dropped: itemRead.dropped },
+      reason: items.length ? null : 'no-collab-for-you',
       next_action: shape ? `${shape.broken ? show(shape.how_to_fix) : shapeExplain(shape)}｜${shape.next_action}`
-        : (data.items.length
+        : (itemRead.rows.length || itemRead.dropped
           ? '每一行的「打开」进对象页；「我的」= 别人交给你的活，「我指派的」= 你交出去的活现在怎么样了'
           : '还没有协作项：打开一个对象页（包/报价/门/变更），用工具栏「指派 / 转交」把活交给同侧同事'),
       note: [shapeNote(shape), `协作存储：${data.storage.file}（0600，按侧隔离；不进账本）`]
@@ -337,7 +362,9 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
         next_action: out.next_action, items: [] }
     }
     const shape = out.shape ?? null
-    const items = out.items.map((item) => ({
+    const itemRead = readRows(out.items)
+    const itemRows = itemRead.rows
+    const items = itemRows.map((item) => ({
       id: item.id,
       // 时间线是**信息**：未读用正文里的「未读」+ 标已读入口表达，不冒充待办。
       // 工作台那一块（`infoOnly`）**一律 info** —— 它要计入「另有 N 条信息」，但不能改
@@ -374,7 +401,14 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
           `${problem.object} 的 ${problem.field}（${show(problem.why)}）`).join('；'),
         next_action: shape.next_action })
     }
-    const counts = out.counts
+    // 机制给的时间线行**坏形状如实计数**（不静默丢；也不让"读不出来"冒充"今天没有事"）
+    if (itemRead.dropped) {
+      items.unshift({ id: `${viewId}-feed-dropped`, level: 'warn',
+        title: `这一屏有 ${itemRead.dropped} 条读不出来（已跳过并计数）`,
+        body: droppedNote(itemRead.dropped, itemRead),
+        next_action: '坏条目留在协作文件/账本里没被删：修好形状后重新加载这一页即可（这条不是"没有数据"）' })
+    }
+    const counts = { ...(out.counts ?? {}), dropped_rows: itemRead.dropped }
     // 面板被**限定在某一档时间**上（工作台那一块只讲"今天"）时，筛选片也只留那一档 ——
     // 否则片上的数字会与这张列表里能看到的条数对不上（数字与它筛的东西必须同源）。
     const buckets = window === '' ? out.buckets
@@ -389,6 +423,7 @@ export function createCollabSurface({ surface, host, views = [], log } = {}) {
           + ` · 跨 ${counts.objects} 个对象`,
         counts.unresolved ? `有 ${counts.unresolved} 条没解析出对象（只给账本行号，没有深链 —— 不编地址）` : '',
         counts.dropped ? `超出上限的 ${counts.dropped} 条没有下发（有界，如实报数）` : '',
+        counts.dropped_rows ? `另有 ${counts.dropped_rows} 条的形状读不出来（已跳过并计数，不是"没有"）` : '',
         shapeNote(shape)].filter(Boolean).join('｜'),
       ledger_added: 0,
       next_action: shape ? `${shape.broken ? show(shape.how_to_fix) : shapeExplain(shape)}｜${shape.next_action}`
