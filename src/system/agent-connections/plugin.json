@@ -1,0 +1,8 @@
+{
+  "name": "agent-connections",
+  "version": "1.0.0",
+  "layer": "system",
+  "entry": "code/index.mjs",
+  "provides": ["connections"],
+  "description": "Account-owned MCP and A2A connections, remote capability discovery, reviewed calls, task follow-up, and ledger-backed results."
+}
