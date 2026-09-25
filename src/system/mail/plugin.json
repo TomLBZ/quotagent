@@ -1,17 +1,10 @@
 {
   "name": "mail",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "layer": "system",
+  "entry": "code/product.mjs",
   "provides": [
-    "mailView"
+    "mail"
   ],
-  "entry": "code/index.mjs",
-  "description": "system 插件「mail」：邮件域 —— 真收发在 Python 侧（`code/mail.py`/`code/mail_transport.py`），宿主侧只有**只读运维视图**（`code/mail-view.mjs`，零写面、不联网、不起子进程）。本批（接上 `entry`）：`entry` = `code/index.mjs`，只重导出既有宿主实体 `code/mail-view.mjs` ⇒ 合法清单（`valid:true`），`provides` 改写为实体自述的 `['mailView']`；Python 服务不是宿主插件，不造空壳包装。",
-  "migration": {
-    "stage": 4.2,
-    "mode": "entity-moved-and-wrapper",
-    "impl": "src/system/mail/code/mail-view.mjs",
-    "from": "host/modules/mail-view.mjs",
-    "moves_in_stage": 4.2
-  }
+  "description": "Account-owned IMAP inbox and sent-folder synchronization, SMTP connection testing, editable email drafts, attachment ingestion and human-reviewed outbound sending."
 }
