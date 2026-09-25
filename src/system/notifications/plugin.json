@@ -1,0 +1,1 @@
+{"name":"notifications","version":"1.0.0","layer":"system","entry":"code/index.mjs","provides":["notifications"],"description":"Account activity inbox with read state, linked actions and disposable notification listeners."}
