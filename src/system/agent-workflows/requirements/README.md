@@ -33,11 +33,16 @@ Multiple specialist questions remain queued. Answers and feedback enter retained
 Pause and cancel abort provider requests and discard late results. Incomplete tool responses
 are explicitly marked interrupted before a transcript is resumed. Completed reports remain.
 An unloaded or interrupted active run recovers as paused and requires explicit user resume.
+Human controls serialize per run and block relaunch until the control write is durable.
+Background transitions validate their execution signal and current status inside the same
+write queue as trace events. Startup appends a correction for historical cancelled runs that
+retain unfinished task states; it never restarts those tasks.
 
 Additive events use `workflows/`: `created`, `state-changed`, `planning-started`,
 `plan-created`, `awaiting-plan`, `agent-started`, `tool-result`, `human-question`,
 `waiting-input`, `human-answered`, `human-feedback`, `paused`, `resumed`, `cancelled`,
-`synthesis-started`, `completed`, `failed`, `recovered`, `suspended`.
+`synthesis-started`, `completed`, `failed`, `recovered`, `suspended`,
+`cancellation-reconciled` (unfinished task states aligned with a saved human cancellation).
 Memory events: `agent-memory/saved`, `agent-memory/archived`; suggestions and decisions use
 existing action-center events. Record append/replay behavior is the existing store contract.
 
@@ -54,6 +59,14 @@ limit consequences rather than asserting perfect prompt-injection prevention.
 approval/history/isolation, human checkpoints, simultaneous independent contexts, provider
 input memory/feedback, cancellation, unload/recovery and dependency validation. This is not
 claimed as live model evidence.
+
+`node src/system/agent-workflows/tests/cancellation.mjs` holds storage writes at the
+cancel/abort-completion boundary and the next-worker transition. It verifies no late agent
+start/provider call, completed-report preservation, and append-only startup reconciliation.
+
+`node src/system/agent-workflows/tests/recovery-browser.mjs start`, an actual process restart,
+then `node src/system/agent-workflows/tests/recovery-browser.mjs verify` exercise public GUI
+recovery, explicit resume, cancellation, delayed task-state and reload checks.
 
 `BASE_URL=https://novara.remoteblossom.com/quotagent EVIDENCE_DIR=tmp/product-evidence/workroom/public node src/system/agent-workflows/tests/browser.mjs`
 uses the configured real provider and visible GUI controls for a complex quotation analysis,
