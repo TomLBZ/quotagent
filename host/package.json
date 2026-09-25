@@ -3,24 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "quotagent P1 宿主层：直接依赖 cordis（组合/插件/事件），不重复造轮子（ADR-0012）",
+  "description": "Quotagent native Cordis product composition and React build",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12"
   },
   "dependencies": {
     "cordis": "4.0.0-rc.10",
-    "react": "latest",
-    "react-dom": "latest",
-    "lucide-react": "latest",
-    "yaml": "latest"
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "yaml": "2.9.1"
   },
   "scripts": {
     "build": "vite build --config ../src/system/webui/client/vite.config.mjs",
     "start": "node product.mjs"
   },
   "devDependencies": {
-    "vite": "latest",
-    "@vitejs/plugin-react": "latest",
-    "playwright": "latest"
+    "playwright": "1.63.0",
+    "vite": "8.3.1"
   }
 }
