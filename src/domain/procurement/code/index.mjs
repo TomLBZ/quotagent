@@ -11,8 +11,21 @@ const item = object({ id: string('RFQ item ID, e.g. item-1'), description: strin
   unitPrice: { type: 'number', description: 'Quoted unit price, up to two decimal places' },
   cost: { type: 'number', description: 'Optional PRIVATE supplier unit cost; never sent to buyer' } }, ['description', 'quantity', 'unit'])
 
-export function apply(ctx) {
+export async function apply(ctx) {
   const procurement = createProcurement({ store: ctx.store, accounts: ctx.accounts })
+  // The advertised demo opens on useful, labelled data. Seed only the built-in
+  // identities; the existing idempotent action preserves their later work.
+  const demoAccounts = [
+    ['contractor-demo', 'contractor@demo.local', 'contractor'],
+    ['supplier-demo', 'supplier@demo.local', 'supplier'],
+    ['supplier2-demo', 'supplier2@demo.local', 'supplier'],
+  ].map(([id, email, role]) => {
+    const account = ctx.accounts.get(id)
+    return account?.email === email && account.role === role && !account.disabled ? account : null
+  })
+  if (demoAccounts.every(Boolean) && !demoAccounts[0].permissions?.includes('workspace:read-only')) {
+    await procurement.execute(demoAccounts[0], 'seed-demo')
+  }
   ctx.provide('procurement', procurement)
   ctx.effect(() => ctx.web.route('GET', '/workspace', ({ user }) => procurement.snapshot(user)))
   ctx.effect(() => ctx.web.route('GET', '/workspace/export', ({ user, query, res }) => {

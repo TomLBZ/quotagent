@@ -12,10 +12,13 @@ mkdirSync(resolve('tmp'), { recursive: true })
 const root = mkdtempSync(resolve('tmp/procurement-smoke-'))
 const context = new Context()
 const users = [
-  { id: 'contractor-demo', name: 'Buyer', company: 'Builder', role: 'contractor', email: 'contractor@demo.local', preferences: { secret: 'buyer-private' } },
-  { id: 'supplier-demo', name: 'Supplier', company: 'Supply Co', role: 'supplier', email: 'supplier@demo.local', preferences: { secret: 'supplier-private' } },
-  { id: 'supplier2-demo', name: 'Second', company: 'Second Co', role: 'supplier', email: 'supplier2@demo.local', preferences: {} },
+  { id: 'smoke-contractor', name: 'Buyer', company: 'Builder', role: 'contractor', email: 'buyer@example.test', preferences: { secret: 'buyer-private' } },
+  { id: 'smoke-supplier', name: 'Supplier', company: 'Supply Co', role: 'supplier', email: 'supplier@example.test', preferences: { secret: 'supplier-private' } },
+  { id: 'smoke-second', name: 'Second', company: 'Second Co', role: 'supplier', email: 'second@example.test', preferences: {} },
   { id: 'admin-demo', name: 'Admin', role: 'admin', email: 'admin@demo.local', preferences: {} },
+  { id: 'contractor-demo', name: 'Demo buyer', company: 'Northstar', role: 'contractor', email: 'contractor@demo.local', preferences: {} },
+  { id: 'supplier-demo', name: 'Demo supplier', company: 'Summit', role: 'supplier', email: 'supplier@demo.local', preferences: {} },
+  { id: 'supplier2-demo', name: 'Demo second', company: 'Atlas', role: 'supplier', email: 'supplier2@demo.local', preferences: {} },
 ]
 const routes = [], navigation = [], tools = []
 const push = (list, entry) => { list.push(entry); return () => list.splice(list.indexOf(entry), 1) }
@@ -25,10 +28,16 @@ const foundation = await context.plugin({ name: 'smoke-foundation', apply(ctx) {
   ctx.provide('assistant', { tool: entry => push(tools, entry) })
 } })
 const storeFiber = await context.plugin(storePlugin, { root })
-const fiber = await context.plugin(procurementPlugin)
+let fiber = await context.plugin(procurementPlugin)
 try {
   const service = context.procurement
   const [buyer, supplier, second] = users
+  const demoBuyer = users.find(user => user.id === 'contractor-demo')
+  const demoData = service.snapshot(demoBuyer)
+  assert.equal(demoData.rfqs.length, 2, 'Built-in demo opens with lighting and cabling RFQs')
+  assert.equal(demoData.comparison.length, 2, 'Built-in demo opens with two supplier bids')
+  assert.ok(demoData.rfqs.every(rfq => rfq.demo && rfq.title.startsWith('[Demo]')))
+  assert.equal(service.snapshot(buyer).rfqs.length, 0, 'Ordinary accounts start empty')
   const create = await service.execute(buyer, 'create-rfq', { title: 'Smoke account-owned quotation', description: 'Real QEP journey',
     currency: 'USD', supplierIds: [supplier.id, second.id], items: [{ id: 'x', description: 'Decimal quantity', quantity: 1.5, unit: 'm' }] })
   const rfq = create.rfq
@@ -94,6 +103,12 @@ try {
   assert.equal(navigation.length, 0)
   assert.equal(tools.length, 0)
   console.log('Cordis disposal: routes, navigation and tools removed.')
+  const eventCounts = users.map(user => context.store.events(user.id).length)
+  fiber = await context.plugin(procurementPlugin)
+  assert.deepEqual(users.map(user => context.store.events(user.id).length), eventCounts, 'Remount must not seed again or alter existing work')
+  assert.deepEqual(context.procurement.snapshot(demoBuyer).rfqs, demoData.rfqs)
+  assert.equal(context.procurement.snapshot(buyer).orders[0].total, 2.6, 'Remount preserves existing commitments')
+  console.log('Startup demo: two bids immediately available; new accounts empty; remount appends no events and preserves orders.')
 } finally {
   await fiber.dispose()
   await storeFiber.dispose()
