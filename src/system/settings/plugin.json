@@ -1,0 +1,1 @@
+{"name":"settings","version":"1.0.0","layer":"system","entry":"code/index.mjs","provides":["settings"],"description":"Schema-owned plugin configuration, account overrides, persistent credentials and synchronized effective settings."}

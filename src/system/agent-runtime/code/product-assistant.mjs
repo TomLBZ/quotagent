@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto'
 export const name = 'product-assistant'
-export const inject = ['web','store','accounts','ai']
+export const inject = ['web','store','accounts','ai','settings']
 export function apply(ctx) {
+  ctx.effect(()=>ctx.settings.define({id:'assistant',name:'AI assistant preferences',scope:'user',
+    description:'These preferences guide every conversation and saved workflow in this account.',
+    fields:[{key:'language',label:'Response language',type:'select',options:[{value:'auto',label:'Match my message'},{value:'en',label:'English'},{value:'zh',label:'中文'}]},
+      {key:'responseLength',label:'Response length',type:'select',options:[{value:'brief',label:'Brief and actionable'},{value:'balanced',label:'Balanced'},{value:'detailed',label:'Detailed'}]},
+      {key:'instructions',label:'Working preferences',type:'textarea',description:'For example: prioritize complete scope and 30-day payment terms.'}],
+    defaults:{language:'auto',responseLength:'brief',instructions:''}}))
   const tools = new Map(), busy = new Set()
   let procurement = null
   ctx.inject(['procurement'], child => { procurement=child.procurement; child.effect(()=>()=>{procurement=null}) })
@@ -11,7 +17,7 @@ export function apply(ctx) {
     return ()=>tools.delete(definition.name)
   }
   const messagesFor = user => ctx.store.list(user.id,'chat').sort((a,b)=>a.createdAt.localeCompare(b.createdAt))
-  const state = user => ({messages:messagesFor(user),preferences:ctx.accounts.get(user.id)?.preferences || {},provider:ctx.ai.status()})
+  const state = user => ({messages:messagesFor(user),preferences:ctx.accounts.get(user.id)?.preferences || {},provider:ctx.ai.status(user)})
   const chat = async (user,{message,rfqId} = {}) => {
     if (ctx.accounts.can && !ctx.accounts.can(user,'assistant:use')) throw new Error('Your administrator has disabled the assistant for this account')
     const text = String(message || '').trim()
@@ -25,6 +31,7 @@ export function apply(ctx) {
       await ctx.store.put(user.id,'chat',userMessage,{actor:`human:${user.id}`})
       const current=ctx.accounts.get(user.id) || user
       const snapshot=procurement && user.role!=='admin' ? procurement.snapshot(current) : null
+      const preferences=ctx.settings.get(user,'assistant')
       const allowed=[...tools.values()].filter(t=>!t.roles || t.roles.includes(user.role))
       const system=`You are Quotagent, a hands-on ${user.role} assistant for construction procurement. You help people save time reading requirements, comparing offers fairly, preparing quotes, negotiating and completing work.\n`+
         `Be concise, practical and friendly. Use the user's language. Ground all factual claims and amounts in the supplied account data or tool results. Name source RFQs and suppliers; never invent received bids, sent messages or completed actions. Mention missing details clearly.\n`+
@@ -33,6 +40,7 @@ export function apply(ctx) {
         `Current UTC time: ${new Date().toISOString()}. Interpret deadlines against this time; a date without a time does not specify an exact cutoff.\n`+
         `For supplier accounts, only that supplier's own quotations are visible. Do not infer a competitive ranking, cheapest status, or competitors' prices from this view.\n`+
         `Negotiation drafts must not invent the supplier's costs, margins or difficulty of a concession. Do not call a supplier preferred, promise an order, imply an award decision or promise quick confirmation unless the user explicitly authorized that wording. Ask for revised terms conditionally and keep the buyer's decision open.\n`+
+        `User assistant preferences: ${JSON.stringify(preferences)}. Follow requested language and length; brief means a concise next action, detailed allows a full explanation.\n`+
         `Current account: ${JSON.stringify({id:current.id,name:current.name,company:current.company,role:current.role,preferences:current.preferences})}\n`+
         `Selected RFQ: ${rfqId || 'none'}\nAccount workspace: ${JSON.stringify(snapshot)}`
       const prior=ctx.store.list(user.id,'agent-turns').sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).slice(-8).flatMap(turn=>turn.messages)
@@ -56,7 +64,7 @@ export function apply(ctx) {
         }
       }
       if (!final) { final=await ctx.ai.complete(user,{messages:[...wire,{role:'user',content:'Summarize the completed work and next human review step now. Do not call more tools.'}],purpose:'workspace-summary'});turnWire.push(final) }
-      const reply={id:turnId+'-assistant',role:'assistant',content:final.content || 'Your drafts are ready to review.',createdAt:new Date().toISOString(),tools:results,actions,model:ctx.ai.status().model}
+      const reply={id:turnId+'-assistant',role:'assistant',content:final.content || 'Your drafts are ready to review.',createdAt:new Date().toISOString(),tools:results,actions,model:ctx.ai.status(user).model}
       await ctx.store.put(user.id,'agent-turns',{id:turnId,createdAt,messages:turnWire},{actor:`agent:${user.id}`})
       await ctx.store.put(user.id,'chat',reply,{actor:`agent:${user.id}`})
       return {message:reply,actions,toolResults:results}
