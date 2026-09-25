@@ -52,6 +52,8 @@ export function useResource(path, initial = {}) {
 }
 
 const paths = {
+  bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4',
+  mail: 'M3 5h18v14H3z M3 5l9 7 9-7',
   grid: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
   file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M8 13h8 M8 17h5',
   quote: 'M5 3h14v18l-3-2-4 2-4-2-3 2z M8 8h8 M8 12h8',

@@ -25,7 +25,7 @@ export async function apply(ctx){
   if(!executors.has(input.kind))fail('The plugin for this action is not available.',409)
   if(input.idempotencyKey){const old=list(user).find(row=>row.idempotencyKey===input.idempotencyKey);if(old)return old}
   if(!input.input||typeof input.input!=='object'||Array.isArray(input.input))fail('An action needs structured input.')
-  const action={id:randomUUID(),kind:input.kind,title:String(input.title||executors.get(input.kind).label||input.kind).slice(0,180),summary:String(input.summary||'').slice(0,4000),input:copy(input.input),source:copy(input.source||null),runId:input.runId||null,idempotencyKey:input.idempotencyKey||null,status:'pending',createdAt:now(),proposedBy:input.source&&!['human','human-retry'].includes(input.source.kind)?'agent':'user',decision:null,result:null,error:null}
+  const action={id:randomUUID(),kind:input.kind,kindLabel:executors.get(input.kind).label||'Review action',title:String(input.title||executors.get(input.kind).label||input.kind).slice(0,180),summary:String(input.summary||'').slice(0,4000),input:copy(input.input),source:copy(input.source||null),runId:input.runId||null,idempotencyKey:input.idempotencyKey||null,status:'pending',createdAt:now(),proposedBy:input.source&&!['human','human-retry'].includes(input.source.kind)?'agent':'user',decision:null,result:null,error:null}
   const saved=await save(user,action,'actions/proposed')
   await notify(user,{type:'review',title:'Ready for your review',body:action.title,sourceId:action.id,dedupeKey:'review:'+action.id,link:{view:'approvals',actionId:action.id}})
   return saved
