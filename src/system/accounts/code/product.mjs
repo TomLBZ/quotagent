@@ -139,7 +139,9 @@ export function apply(ctx, config = {}) {
   }
   ctx.provide('accounts', {
     resolve, get: id => publicProfile(getRaw(id)),
-    list: () => state.accounts.filter(account => !account.disabled).map(publicProfile), update, can,
+    list: () => state.accounts.filter(account => !account.disabled).map(account => ({
+      id: account.id, email: account.email, name: account.name, company: account.company, role: account.role,
+    })), update, can,
   })
   const route = (method, path, handler, options) => ctx.effect(() => ctx.web.route(method, path, handler, options))
   route('POST', '/auth/login', ({ body, req, res }) => {
