@@ -202,6 +202,7 @@ export function apply(ctx, config = {}) {
     return task
   }
   ctx.provide('plugins', { register, enabled, list, setEnabled })
+  ctx.effect(() => ctx.web.contribute({ id: 'plugins', label: 'Application plugins', icon: 'puzzle', roles: ['admin'], order: 20 }))
   ctx.effect(() => ctx.web.route('GET', '/plugins', ({ user }) => ({ plugins: list(user),
     generatedPlugins: { owner: 'plugin-studio', section: 'extensions', note: 'Generated account and global plugins are managed in Plugin Studio.' },
   }), { admin: true }))

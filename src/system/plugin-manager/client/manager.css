@@ -1,0 +1,20 @@
+/* Manager plugin presentation. */
+.studio-catalog-intro{display:flex;align-items:center;gap:32px;margin-bottom:23px}
+.studio-catalog-intro>div:first-child{flex:1}
+.studio-catalog-intro p{font-size:12px;color:#7e96a1;line-height:1.8;margin-top:8px;max-width:680px}
+.studio-catalog-count{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:85px}
+.studio-catalog-count strong{font-family:Manrope,sans-serif;font-size:32px;letter-spacing:-1px;color:#597b66}
+.studio-catalog-count span{font-size:10px;color:#8da194;white-space:nowrap}
+.studio-catalog-list{display:flex;flex-direction:column;gap:12px}
+.studio-catalog-plugin{display:flex;align-items:center;gap:17px;padding:20px}
+.studio-catalog-description{flex:1;min-width:0}
+.studio-catalog-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.studio-catalog-title h3{font-size:14px;overflow-wrap:anywhere}
+.studio-catalog-description p{font-size:11px;color:#7d96a2;margin-top:6px;line-height:1.8}
+.studio-catalog-description small{display:block;font-size:10px;color:#9cafb8;margin-top:7px}
+.studio-catalog-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;max-width:270px}
+.studio-catalog-actions .button{font-size:11px;min-height:35px;padding:8px 11px}
+.studio-catalog-actions .text-button{font-size:11px}
+.studio-catalog-reason{font-size:12px;color:#839b8e;background:#f4f8f4;border-radius:8px;padding:14px}
+@media(max-width:940px){.studio-catalog-plugin{flex-wrap:wrap;gap:13px}.studio-catalog-description{min-width:220px}.studio-catalog-actions{margin-left:59px;max-width:none;justify-content:flex-start}.studio-catalog-intro{gap:20px}}
+@media(max-width:600px){.studio-catalog-intro{align-items:flex-start;gap:15px;padding:20px 17px}.studio-catalog-intro h2{font-size:17px}.studio-catalog-count{min-width:50px}.studio-catalog-count strong{font-size:27px}.studio-catalog-count span{font-size:8px}.studio-catalog-intro p{font-size:11px}.studio-catalog-plugin{padding:18px 16px}.studio-catalog-plugin>.extension-icon{width:35px;height:35px;border-radius:9px}.studio-catalog-description{min-width:185px}.studio-catalog-title h3{font-size:13px}.studio-catalog-title .badge{font-size:8px}.studio-catalog-actions{margin-left:48px}.studio-catalog-description p{font-size:11px}.studio-catalog-actions .button{font-size:10px}.studio-catalog-description small{font-size:9px}}

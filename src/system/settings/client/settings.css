@@ -1,0 +1,24 @@
+/* Settings plugin presentation. */
+.studio-saved{display:flex;align-items:center;gap:8px;background:#eff8f0;border:1px solid #d7eadb;color:#5f8a6b;font-size:12px;padding:12px 14px;border-radius:8px;margin-bottom:22px}
+.studio-color-control{display:flex;align-items:center;gap:9px;width:100%;min-height:42px}
+.studio-color-control input[type=color]{height:42px;width:52px;padding:4px;flex-shrink:0;cursor:pointer}
+.studio-color-control input:not([type=color]){font-family:ui-monospace,SFMono-Regular,monospace;max-width:230px}
+.studio-settings-intro{margin-bottom:23px}
+.studio-settings-intro h2{font-size:19px}
+.studio-settings-intro p{font-size:12px;color:#7d939e;margin-top:8px;max-width:700px}
+.studio-settings-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.studio-settings-cards .card{display:flex;flex-direction:column}
+.studio-settings-cards h3{font-size:16px}
+.studio-settings-cards p{font-size:12px;color:#8299a5;line-height:1.8;margin:9px 0 17px}
+.studio-settings-cards .button{align-self:flex-start;margin-top:auto}
+.studio-setting-summary{display:flex;gap:15px;align-items:center;flex-wrap:wrap;margin-bottom:22px;font-size:10px;color:#93a69c}
+.studio-setting-summary>span{display:flex;align-items:center;gap:4px}
+.studio-settings-fields{display:flex;flex-direction:column;gap:4px}
+.studio-boolean-field{display:flex;align-items:flex-start;gap:11px;border:1px solid #e5ece8;border-radius:8px;padding:14px;margin-bottom:16px;background:#fbfdfb;cursor:pointer}
+.studio-boolean-field input{width:16px;height:16px;accent-color:var(--accent);margin:3px 0 0;flex-shrink:0}
+.studio-boolean-field strong{display:block;font-size:12px;color:#698375;font-weight:600}
+.studio-boolean-field small{display:block;font-size:11px;color:#94a69a;line-height:1.7;margin-top:5px}
+.studio-secret-clear{display:flex;align-items:center;gap:7px;color:#9d7d71;font-size:11px;margin:-5px 0 22px;cursor:pointer}
+.studio-secret-clear input{width:14px;height:14px;accent-color:#b1806f}
+.studio-settings-fields>.field:last-child{margin-bottom:0}
+@media(max-width:600px){.studio-settings-cards{grid-template-columns:1fr}.studio-color-control input:not([type=color]){max-width:none}.studio-settings-fields .field>span{font-size:12px}.studio-settings-intro h2{font-size:18px}.studio-boolean-field{padding:13px}}

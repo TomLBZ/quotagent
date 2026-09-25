@@ -28,8 +28,10 @@ export function apply(ctx) {
   const defaults = definition => clone(typeof definition.defaults === 'function' ? definition.defaults() : definition.defaults || {})
   const get = (user,id) => {
     const definition = schema(id), target = realm(user,definition)
-    return { ...defaults(definition), ...stored(GLOBAL,id), ...(secrets[GLOBAL]?.[id] || {}),
-      ...(target !== GLOBAL ? stored(target,id) : {}), ...(target !== GLOBAL ? secrets[target]?.[id] || {} : {}) }
+    const globalValues={...defaults(definition),...stored(GLOBAL,id),...(secrets[GLOBAL]?.[id] || {})}
+    const overrides=target!==GLOBAL ? {...stored(target,id),...(secrets[target]?.[id] || {})} : {}
+    const values={...globalValues,...overrides}
+    return definition.resolve ? definition.resolve(values,{user,globalValues,overriddenKeys:Object.keys(overrides)}) : values
   }
   const view = (user,id) => {
     const definition=schema(id);authorize(user,definition)
@@ -63,7 +65,7 @@ export function apply(ctx) {
       if(value === '' || !Number.isFinite(number) || field.min!==undefined && number<field.min || field.max!==undefined && number>field.max) fail(`Enter a valid ${field.label.toLowerCase()}${field.min!==undefined?` (minimum ${field.min})`:''}${field.max!==undefined?` (maximum ${field.max})`:''}.`)
       return number
     }
-    const text=String(value??'').trim()
+    const text=field.type==='select' ? String(value??'') : String(value??'').trim()
     if(text.length>(field.maxLength || 16000))fail(`${field.label} is too long.`)
     if(field.required && !text)fail(`${field.label} is required.`)
     if(field.type==='color' && !/^#[\da-f]{6}$/i.test(text))fail(`${field.label} must be a six-digit color.`)
@@ -98,6 +100,7 @@ export function apply(ctx) {
   }
   const list = user => [...schemas.values()].filter(definition=>definition.scope!=='admin' || user?.role==='admin').map(definition=>view(user,definition.id))
   ctx.provide('settings',{define,get,view,list,save})
+  ctx.effect(()=>ctx.web.contribute({id:'plugin-settings',label:'Plugin settings',icon:'settings',roles:['contractor','supplier','admin'],order:70}))
   ctx.effect(()=>ctx.web.route('GET','/settings',({user})=>({settings:list(user)})))
   ctx.effect(()=>ctx.web.route('GET','/settings/:id',({user,params})=>view(user,params.id)))
   ctx.effect(()=>ctx.web.route('PATCH','/settings/:id',({user,params,body})=>save(user,params.id,body)))

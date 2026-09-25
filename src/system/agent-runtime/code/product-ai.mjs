@@ -18,21 +18,27 @@ export function apply(ctx, config = {}) {
       effort:llm.reasoning_effort,extra:{...llm.extra_body,...entry.extra_body},timeout:Number(llm.timeout_s || 180)*1000}
   }
   ctx.effect(()=>ctx.settings.define({id:'ai',name:'AI model connection',scope:'user',
-    description:'Use the shared model connection or provide your own. Credentials are stored privately; leave the key blank to keep it.',
+    description:'Use the shared model connection or provide your own. A different provider or endpoint requires your own API key. Leave an existing key blank to keep it.',
     fields:[{key:'provider',label:'Provider name',type:'text',required:true},{key:'model',label:'Model',type:'text'},
       {key:'baseUrl',label:'API base URL',type:'text',required:true,description:'OpenAI-compatible endpoint, including /v1 when required.'},
       {key:'apiKey',label:'API key',type:'password'},
       {key:'timeoutSeconds',label:'Request timeout (seconds)',type:'number',min:5,max:300}],
     defaults:()=>{const s=legacySettings();return {provider:s.provider,model:s.model,baseUrl:s.baseUrl,apiKey:s.key,timeoutSeconds:s.timeout/1000}},
+    resolve:(values,{user,globalValues,overriddenKeys})=>{
+      const changed=values.provider!==globalValues.provider || values.baseUrl.replace(/\/$/,'')!==globalValues.baseUrl.replace(/\/$/,'')
+      return user && user.role!=='admin' && changed && !overriddenKeys.includes('apiKey') ? {...values,apiKey:''} : values
+    },
     validate:values=>{let url;try{url=new URL(values.baseUrl)}catch{throw new Error('Enter a valid model API base URL.')}
       if(!['https:','http:'].includes(url.protocol))throw new Error('Model connections require an HTTP or HTTPS URL.')},
   }))
-  const settings = user => {const legacy=legacySettings(),configured=ctx.settings.get(user,'ai');return {...legacy,
-    provider:configured.provider,model:configured.model,baseUrl:configured.baseUrl,key:configured.apiKey,timeout:configured.timeoutSeconds*1000}}
+  const settings = user => {const legacy=legacySettings(),configured=ctx.settings.get(user,'ai')
+    const sameConnection=configured.provider===legacy.provider && configured.baseUrl.replace(/\/$/,'')===legacy.baseUrl.replace(/\/$/,'')
+    return {...legacy,extra:sameConnection?legacy.extra:{},effort:sameConnection?legacy.effort:undefined,
+      provider:configured.provider,model:configured.model,baseUrl:configured.baseUrl,key:configured.apiKey,timeout:configured.timeoutSeconds*1000}}
   const status = user => { const s = settings(user); return {available:!!(s.key && s.model),provider:s.provider,model:s.model} }
   const complete = async (user,{messages,tools,purpose='assistant'}) => {
     const s = settings(user)
-    if (!s.key || !s.model) throw new Error('AI provider is not configured. Ask your administrator to connect a model.')
+    if (!s.key || !s.model) throw new Error('Open Plugin settings → AI model connection to add a model and API key, or restore the shared defaults.')
     const request = {model:s.model,messages,stream:false,...s.extra}
     if (tools?.length) { request.tools=tools; request.tool_choice='auto' }
     if (s.effort && !['none','off','disabled'].includes(String(s.effort))) request.reasoning_effort=s.effort
