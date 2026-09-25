@@ -1,0 +1,8 @@
+{
+  "name": "accounts",
+  "version": "1.0.0",
+  "layer": "system",
+  "entry": "code/index.mjs",
+  "provides": ["accounts"],
+  "description": "Persistent account login, client role settings, and separate administrator account management."
+}
