@@ -8,9 +8,16 @@
     "node": ">=22.12"
   },
   "dependencies": {
+    "@kenjiuno/msgreader": "1.28.0",
     "cordis": "4.0.0-rc.10",
+    "csv-parse": "7.0.2",
+    "html-to-text": "10.0.1",
+    "mailparser": "3.9.28",
+    "mammoth": "1.12.3",
+    "pdfjs-dist": "6.3.289",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "xlsx": "0.18.5",
     "yaml": "2.9.1"
   },
   "scripts": {

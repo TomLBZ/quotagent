@@ -1,0 +1,1 @@
+{"name":"ingestion-engines","version":"1.0.0","layer":"domain","entry":"code/index.mjs","provides":[],"description":"Independently disposable email, Excel, CSV/TSV, document and optional live AI ingestion engines."}
