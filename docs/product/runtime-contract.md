@@ -1,7 +1,8 @@
 # Product runtime contract
 <!-- budget: 16384 bytes, hard -->
 
-Status: implementation contract; acceptance below is pending until browser evidence exists.
+Status: delivered demo; public acceptance is recorded in [evidence](../work/evidence/product-2026-09-25/README.md)
+and [independent evaluation](evaluation.md).
 Source: user goal objective supplied 2026-09-25; ADR-0027. This contract supersedes
 side-switching administration and the old panel-catalogue demo experience.
 
@@ -9,8 +10,8 @@ side-switching administration and the old panel-catalogue demo experience.
 
 `host/product.mjs` composes actual Cordis plugins; no business code in the host.
 Existing Python ledger and QEP kernels retain their semantics and are reused by a
-persistent Python adapter. The previous CLI runtime remains a development reference
-until the new composition has complete public workflow evidence.
+persistent Python adapter. The previous CLI runtime is a historical development reference; `./run` and the
+public workspace service launch this product composition.
 
 | Plugin | Requirements and behavior |
 |---|---|
@@ -84,7 +85,8 @@ Actions:
 - `award` `{quoteId,confirmed:true}` human approves award and issues order, delivers to supplier.
 - `acknowledge-order` `{id,confirmed:true}` supplier acknowledges order.
 - `propose-change` `{orderId,title,description,amount}`; `approve-change` `{id,confirmed:true}`.
-- `seed-demo` explicitly loads a labelled shared demo with actual account-owned records; idempotent.
+- `seed-demo` loads labelled account-owned sample records idempotently. Startup initializes
+  the built-in demo accounts; ordinary new accounts remain empty.
 `GET /workspace/export?rfqId=...` downloads a comparison CSV.
 
 Assistant: `GET /assistant` => `{messages,preferences,provider:{available,model}}`;
@@ -110,8 +112,10 @@ assistant turn; human commitments still require review. Admin can promote global
 
 ## Acceptance from user viewpoint
 
-Browser command: `node tools/product-e2e.mjs` with `BASE_URL=https://novara.remoteblossom.com/quotagent`.
-Evidence is saved locally under `tmp/product-evidence/` and summarized in docs when executed.
+Browser commands: `node tools/product-e2e.mjs`, `node tools/product-agent-e2e.mjs`,
+`node tools/product-studio-e2e.mjs` with `BASE_URL=https://novara.remoteblossom.com/quotagent`.
+Raw screenshots remain under `tmp/product-evidence/`; selected reports and screenshots
+are versioned with the [acceptance evidence](../work/evidence/product-2026-09-25/README.md).
 
 1. Account login exposes one client's navigation only; admin has separate management.
 2. Contractor can create/publish RFQ; supplier sees it, prepares/submits quote;

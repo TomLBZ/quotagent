@@ -1,9 +1,9 @@
 # 29 WebUI = 完整的 GUI 应用（**不是**账本投影，也不是只读路由）
 
-<!-- budget: 28 KB（`docs/design/*.md` 行）。**细节**（形状 / 矩阵 / 路由 / 读数）在
-     `29-webui-gui-app-archive.md` 的**同号小节**；本文件的判据与禁止一条未删，规则真源仍是本文件。 -->
-<!-- 规则由用户 2026-09-22 的指令确立；与 `27-plugin-architecture.md` §6 同源。禁止再按旧口径描述 WebUI。
-     承诺↔实现对账：`docs/work/evidence/EV-193-claim-vs-impl-audit.md`；两支审计尺子见 §24。 -->
+<!-- budget: 28 KB -->
+本文件记录旧版 GUI 的设计与验收历史。当前产品入口、插件边界与行为契约见
+[产品契约](../product/runtime-contract.md) 和 [ADR-0027](adr/0027-agentic-product-composition.md)。
+下列用户诉求继续成立；旧路由、旧判据与历史完成状态不代表当前产品验收。
 
 ## 0. 用户原话（规则真源，逐字保留）
 

@@ -1,9 +1,13 @@
 # Product plugin events
 <!-- budget: 8192 bytes, hard -->
 
-All events below append through existing `quotagent.kernel.ledger.Ledger`; this is
-an additive plugin event catalogue under ADR-0027, not a change to existing events.
-The source adapter is `src/system/workspace-store/code/bridge.py`.
+All events below append through existing `quotagent.kernel.ledger.Ledger`. The
+additive product event catalogue follows ADR-0027/0028 and preserves existing event
+semantics. Sources: [adapter](../../src/system/workspace-store/code/bridge.py),
+[projection reader](../../src/system/workspace-store/code/index.mjs),
+[assistant/provider](../../src/system/agent-runtime/code/product-assistant.mjs),
+[procurement](../../src/domain/procurement/code/service.mjs), and
+[studio](../../src/system/plugin-studio/code/product.mjs).
 
 | Event | Body | Owner |
 |---|---|---|
@@ -13,11 +17,35 @@ The source adapter is `src/system/workspace-store/code/bridge.py`.
 | agent/model-completed | callId, response (complete provider response) | agent-runtime |
 | agent/model-failed | callId, error | agent-runtime |
 | agent/tool-completed | callId, tool, arguments, result | agent-runtime |
+| account/preferences-updated | preferences (current private account preferences) | accounts |
+| procurement/human-approved | action, recordId, confirmed, humanId, scope (reviewed record), approvedAt | procurement |
+| studio/skill-ran | pluginId, name; conversation and model events retain the complete execution | plugin-studio |
+| studio/tool-ran | pluginId, name, input, result; generated source lives in the plugin record | plugin-studio |
 
-Other plugin-specific record events use the same versioned record body and are
-listed in their plugin code. Projection readers only accept schema
-`quotagent/workspace-record/v1`; unrelated historical event formats are not reinterpreted.
+Record events have body `{schema:'quotagent/workspace-record/v1',collection,record}`.
+Local record event families are:
+
+| Local event names | Collection | Owner |
+|---|---|---|
+| procurement/rfq-drafted, rfq-published, rfq-awarded | rfqs | procurement |
+| procurement/quote-drafted, quote-submitted, quote-superseded, quote-awarded | quotes | procurement |
+| procurement/order-issued, order-acknowledged, order-revised | orders | procurement |
+| procurement/message-sent | messages | procurement |
+| procurement/change-proposed, change-approved | changes | procurement |
+| procurement/demo-rfq-created, demo-quote-created, demo-loaded | rfqs, quotes, demo-seeds respectively | procurement |
+| studio/plugin-created, plugin-installed, plugin-promoted, plugin-loaded, plugin-unloaded, plugin-published, plugin-deleted | studio-plugins in system realm | plugin-studio |
+| workspace/record-saved | chat, agent-turns and other records without an explicit local event name | workspace-store |
+
+Names after the first comma retain the row's `procurement/` or `studio/` prefix.
+The `exchange` adapter uses QEP type `workspace/record-exchanged` for recipient
+records. Caller labels such as `procurement/quote-received` do not create additional
+recipient event types. Projection readers only accept the record schema above;
+unrelated historical event formats are not reinterpreted.
+
 QEP kernel `kernel/qep-sent` and `kernel/qep-received` retain their existing shapes.
 Each account pair has its own ordered QEP participant stream, backed by the same
 account ledger; inbound cursor recovery reads durable receipts. Private fields
-never enter the public record selected by the procurement plugin.
+are excluded by the public-record serializers in the procurement plugin. Account
+credentials and sessions are local account-store data, not ledger events. Model
+requests/responses, preferences and generated-utility execution results remain in
+the calling account's realm.

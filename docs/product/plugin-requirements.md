@@ -1,21 +1,53 @@
 # Functional requirements grouped by plugin
 <!-- budget: 24576 bytes, hard -->
 
-Source: definition rows in `docs/work/functional-requirements*.md` and each plugin's `requirements/README.md`; inspected 2026-09-25. This ownership inventory is not a claim that the modern UI already implements every historic requirement. The runtime contract defines current product acceptance.
+Source: definition rows in `docs/work/functional-requirements*.md` and each plugin's
+`requirements/README.md`; inspected 2026-09-25. Ownership coverage is **166/166**,
+with zero missing, undefined or multiply assigned historical IDs. This inventory
+records responsibility; the [runtime contract](runtime-contract.md) defines current
+product behavior and acceptance, independently of older completion statuses.
 
 ## New product requirements
 
 | User requirement | Sole functional owner | Acceptance |
 |---|---|---|
 | Agent helps both sides read, extract, compare, negotiate and remember preferences | system/agent-runtime | Runtime contract 3 |
-| Reusable modern framework UI and accessible navigation | system/webui | Runtime contract 6 |
-| Real Cordis composition and effects | system/runtime | Inspect host/product.mjs, unload lifecycle |
+| Reusable modern framework UI and accessible navigation | system/webui | FR-UX-005, Runtime contract 6 |
+| Real Cordis composition and effects | system/runtime | FR-USREQ-003, Inspect host/product.mjs, unload lifecycle |
 | Persistent account type; separate server administration | system/accounts | Runtime contract 1 |
-| Natural-language extensions, skills, market and promotion | system/plugin-studio | Runtime contract 4–5 |
+| Natural-language themes/widgets, actual generated utility code, skills, market and promotion | system/plugin-studio | Runtime contract 4–5; ADR-0028; generated-utility-live.json |
 | Complete quotation process and differentiated user experience | domain/procurement | Runtime contract 2, 7 |
 | Account facts and model context reconstructible from ledger; public QEP exchange | system/workspace-store | Replay and public workflow evidence |
 | Public experience evaluation | system/eval | Independent evaluation evidence |
 | Recoverability, documentation, individual commit/push batches | system/repo-gate | Ignored state/handover; versioned specs and git refs |
+
+The first AI level assists the customer's quotation work through account context,
+real model calls and domain tools. The second creates personal capabilities: runtime
+UI extensions, executable pure JavaScript utilities and reusable assistant skills.
+Both have explicit plugin owners. Sources: [agent runtime](../../src/system/agent-runtime/code/product.mjs),
+[domain tools](../../src/domain/procurement/code/index.mjs), and
+[studio](../../src/system/plugin-studio/code/product.mjs).
+
+## Current product integration groups
+
+The current [host](../../host/product.mjs) combines capabilities into the following
+product plugins. Historical providers listed below retain the detailed requirement
+ownership in the following table; listing a family here does not mount its old code
+or assert that every advanced historical behavior has been reimplemented.
+
+| Current product owner | Historical capability families grouped into its product experience | Current implementation boundary |
+|---|---|---|
+| domain/procurement | RFQ/intake, quotes/pricing/costs, compare, clarify/negotiation, commitments/change, export | Structured drafts and shared workflow, private supplier costs, comparisons, messages, orders/changes and CSV; advanced capacity/sourcing/term-library engines retain historical ownership |
+| system/agent-runtime | Context, memory, harness and client decision assistance | Real provider, tool loop, explicit preference memory, pasted-text extraction, business drafts and contextual advice |
+| system/plugin-studio | User plugins, market and personal evolution | Themes/reference widgets, model-authored pure utility functions, on-demand workflow skills, install/unload/publish/global promotion; no arbitrary system-code mutation |
+| system/accounts | Client identity and server administration | One client role, separate admin accounts, current-account settings and functional capability permissions |
+| system/workspace-store | Ledger/QEP, projections and cross-account delivery | Existing Python kernels, account record replay and explicit public record exchange |
+| system/webui | GUI, reusable controls and client navigation | Generic React shell/registry and HTTP transport; feature pages remain owned by their plugins |
+
+Launcher/composition belongs to system/runtime. Evaluation and repository-operation
+requirements remain owned by system/eval and system/repo-gate. Historical mail,
+retention, capacity and similar specialized plugins are not automatically part of
+the new product host; their previous checks are not current product evidence.
 
 ## Existing requirements (all owned)
 
@@ -71,13 +103,18 @@ Source: definition rows in `docs/work/functional-requirements*.md` and each plug
 | system/relay | FR-INTEG-002 |
 | system/repo-gate | FR-USREQ-007 |
 | system/retention | FR-EVIDENCE-004 |
-| system/runtime | FR-PLUGIN-001, FR-PLUGIN-002, FR-PLUGIN-003, FR-RUNTIME-001, FR-RUNTIME-002 |
+| system/runtime | FR-USREQ-003, FR-PLUGIN-001, FR-PLUGIN-002, FR-PLUGIN-003, FR-RUNTIME-001, FR-RUNTIME-002 |
 | system/storage | FR-STORAGE-001, FR-STORAGE-004, FR-STORAGE-006 |
 | system/timeline | FR-RUNTIME-008 |
 | system/ui-feedback | FR-UIFB-001, FR-USREQ-006 |
 | system/user-plugin-manager | FR-USERPLUG-001, FR-USERPLUG-002, FR-USERPLUG-003, FR-USERPLUG-004, FR-USERPLUG-005, FR-USERPLUG-006, FR-USERPLUG-007, FR-USERPLUG-008, FR-USERPLUG-009, FR-USERPLUG-010, FR-USERPLUG-011, FR-USERPLUG-012 |
-| system/webui | FR-PLUGIN-005, FR-USREQ-001, FR-USREQ-002, FR-USREQ-004, FR-USREQ-005, FR-USREQ-011, FR-UXWEB-001, FR-UXWEB-002 |
+| system/webui | FR-UX-005, FR-PLUGIN-005, FR-USREQ-001, FR-USREQ-002, FR-USREQ-004, FR-USREQ-005, FR-USREQ-011, FR-UXWEB-001, FR-UXWEB-002 |
 
-All 166 historic FR definitions inspected. 164 have explicit plugin ownership above.
+The definition-row audit reads 73 IDs from
+[`functional-requirements.md`](../work/functional-requirements.md), 47 from
+[`functional-requirements-archive.md`](../work/functional-requirements-archive.md), and
+46 from [`functional-requirements-archive-b.md`](../work/functional-requirements-archive-b.md).
+All **166 distinct historical IDs** have exactly one owner above; no assignment
+references an undefined ID. This count is not a passed-acceptance count.
 
 The current product supersedes the client elevation/all-side-switch semantics of FR-ADMIN-002 and FR-ADMIN-003 with a separate administrator account (ADR-0027). Historical source documents describe earlier implementations; this inventory preserves ownership without treating old completed checks as current product proof.

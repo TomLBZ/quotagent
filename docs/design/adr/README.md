@@ -32,6 +32,8 @@
 | ADR-0024 | 承诺 / 发 PO 必须**消费**一扇别人批过的门（不得自签自批） | accepted |
 | ADR-0025 | 授权区间变更必须**另一个人**批过才生效（不得自提自批） | accepted |
 | ADR-0026 | GUI 外壳共享、**数据按会话侧隔离**（`/app/<侧>/**` 与 `/api/ui/panels\|object` 的侧门） | accepted |
+| ADR-0027 | Native Cordis product composition and separate administrator accounts | accepted |
+| ADR-0028 | Model-authored personal utility code with reversible callable effects | accepted |
 
 ## 格式
 
