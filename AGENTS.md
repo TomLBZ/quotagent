@@ -2,14 +2,14 @@
 
 <!-- budget: 4096 bytes, hard. 校验: tools/verify.sh agents-md (P1 起) -->
 
-本仓库面向 agent：人类定约束，agent 做实现与在线自进化。**规则只在本文件**；README 讲怎么用，
-`docs/` 讲是什么，`.agents/` 存机器可读状态与技能。不要把规则文本复制到别处——重复即漂移。
+**规则只在本文件**；README 讲用法，`docs/` 存设计，`.agents/` 存状态与技能。
 
 ## 当前阶段
 
-设计期（无 `src/`）：产出全部为文档。**实现自 P0 mock 起，且先有 FR/AC 再写代码**。
-FR 见 `docs/work/functional-requirements.md`，AC 见 `docs/work/acceptance-criteria.md`，
-进度见 `docs/work/progress-checklist.md`；接手先读 `docs/work/handover.md`。
+P2 产品实现期：当前入口 `host/product.mjs`，产品契约见 `docs/product/runtime-contract.md`。
+需求归属见 `docs/product/plugin-requirements.md`。
+接手先读本地 `docs/work/handover.md`；目标 `.agents/goal-objective.md`，进度 `.agents/product-progress.md`。
+这些恢复文件与 `.agents/state.json` 均不跟踪；不存在时从产品文档与 git 历史重建。
 
 ## 规则
 
@@ -22,14 +22,14 @@ FR 见 `docs/work/functional-requirements.md`，AC 见 `docs/work/acceptance-cri
 4. **数据主权**：供应商成本模型、承包商标底与内部评分永不出各自 realm；交换只走 QEP 报文。
 5. **未验证不断言**：文档中的事实性断言须标来源——代码路径、论文/规范，或标记 `[假设]`（待现场验证）。
 6. **每条验收标准要有可执行证据**：命令 + 输出摘要落 `docs/work/evidence/`，AC 才能置为 passed。
-7. **一轮一批**：更新 progress 与 handover → commit → push → 读回远端 refs 确认，缺一不可。
+7. **一轮一批**：更新本地 progress 与 handover → commit → push → 读回远端 refs 确认，缺一不可。
 8. **协议与账本格式变更必须新增 ADR**（`docs/design/adr/`），不得原地改语义。
 9. **文档预算**：文件头声明预算；`AGENTS.md` ≤ 4096 B，`handover.md` ≤ 1024 B，其余见
    `docs/design/12-documentation-standard.md`。超预算先删冗余，不加长度。
 10. **不碰内核语义**：自进化只能发生在插件/配置/提示词/策略层；账本与 QEP 版本语义不可自改。
 11. **WebUI = 完整 GUI 应用**（不是账本投影、不是只读路由）：插件注册 **UI 元素/交互方式/动作与命令/
     业务逻辑钩子/通知与状态**贡献任意功能；**双方必须仅通过 GUI 完成全部业务流程**（含写操作），允许前端
-    框架。真源 `docs/design/29-webui-gui-app.md`；禁止再按旧口径描述它，也禁止新增只冻旧形态的 UI 判据
+    框架。真源 `docs/product/runtime-contract.md`；禁止再按旧口径描述它，也禁止新增只冻旧形态的 UI 判据
     （旧 UI 快照/seed/ui-mutate 门按 29 §2 删除）。
 12. **业务功能优先**：推进真实业务功能是唯一重要的事；门禁与测试只是安全带 —— 与需求冲突或只冻旧形态的
     测试/门直接删除（存在不等于合理），不得为「门全绿」牺牲功能推进。
@@ -50,7 +50,7 @@ docs/work/       路线图、功能需求、验收标准、进度清单、交接
 
 每轮次结束（完成、上下文压缩前、崩溃前最后一次成功动作后）都写 `docs/work/handover.md`：
 当前阶段、最后验证命令与结果、**下一步唯一动作**、不变量、阻塞。恢复顺序：
-`handover.md` → `.agents/state.json` → `progress-checklist.md` → 动手。
+`handover.md` → `.agents/state.json` → `.agents/product-progress.md` → 动手。
 
 ## 提交
 

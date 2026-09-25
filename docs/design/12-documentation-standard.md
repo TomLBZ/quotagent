@@ -54,7 +54,7 @@
 |---|---|---|
 `FR-<域>-<NNN>` | 功能需求 | `docs/work/functional-requirements.md` + 同目录 `functional-requirements-archive*.md`（主文件 + 归档 = 门的 FR 定义集合；归档不豁免任何断言；`V-` 只认主文件） |
 `AC-<域>-<NNN>` | 验收标准（含可执行命令） | `docs/work/acceptance-criteria.md` + 同目录 `acceptance-criteria-archive*.md`（主文件 + 归档 = 门的 AC 定义集合；归档不豁免任何断言） |
-`T-<NNN>` | 实现任务 | `docs/work/progress-checklist.md` + 同目录 `progress-checklist-archive*.md`（主文件 + 归档 = 门的 T 定义集合；归档不豁免任何断言） |
+`T-<NNN>` | 历史实现任务 | `docs/work/progress-checklist-archive*.md`；本地 `progress-checklist.md` 存在时一并读取，当前进度不跟踪（ADR-0027） |
 `V-<NNN>` | 待现场验证的假设 | `docs/work/functional-requirements.md` §验证清单 |
 `INV-<NNN>` | 系统不变量（可机检断言） | `docs/design/04-services-catalog.md` §6 |
 `ADR-<NNNN>` | 架构决策 | `docs/design/adr/` |
@@ -63,12 +63,11 @@
 
 引用一律写 ID 或相对路径链接（可机检），不写"见上文"。
 
-**归档集合（口径，唯一真源是各门脚本里的常量）**：下表之外还有三处"文档集合 = 主文件 + 同目录 `*-archive*.md`"——
+**归档集合（口径，唯一真源是各门脚本里的常量）**：下表之外还有两处"文档集合 = 主文件 + 同目录 `*-archive*.md`"——
 `docs/design/14-plugin-inventory.md` + `14-plugin-inventory-archive*.md`（门 `tools/verify.sh plugins`）、
-`docs/design/15-requirements-coverage.md` + `15-requirements-coverage-archive*.md`（门 `tools/verify.sh coverage`）、
-`docs/work/handover.md` + `handover-archive*.md`（门 `tools/verify.sh docs`；这是一个**指针型**集合：判据是主文件里
-每个 `§N` 指针在归档里有**对应小节且小节非空**）。集合内的归档**不是豁免区**：搬进去的行受同一套断言约束，
-"归档 0 条定义行 / 0 节"是硬失败。**超预算时的减法顺序**：删重复 → 删叙述 → 拆到归档 → 才考虑提高预算
+`docs/design/15-requirements-coverage.md` + `15-requirements-coverage-archive*.md`（门 `tools/verify.sh coverage`）。
+当前交接与进度为本地恢复文件（ADR-0027），不要求历史归档指针；交接仍限 1024 B。
+定义归档仍受 ID、预算与覆盖检查约束，归档 0 条定义行是失败。**超预算时的减法顺序**：删重复 → 删叙述 → 拆到归档 → 才考虑提高预算
 （提高预算需在提交信息里说明，且既有文件的**具体路径**预算行只能收紧不能放宽）。
 
 **用户诉求的落点**（本仓不靠"记住"）：用户原话对应的需求 = `docs/work/functional-requirements.md` §6.1 的
