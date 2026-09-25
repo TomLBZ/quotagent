@@ -1,0 +1,1 @@
+{"name":"agent-workflows","version":"1.0.0","layer":"system","entry":"code/index.mjs","provides":["workflows","memory"],"description":"Durable multi-agent quotation workroom with real planning, separate specialist contexts, human checkpoints, visible traces, restart recovery and reviewed account memory."}
