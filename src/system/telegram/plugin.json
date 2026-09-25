@@ -1,0 +1,1 @@
+{"name":"telegram","version":"1.0.0","layer":"system","entry":"code/product.mjs","provides":["telegram"],"description":"Account-owned Telegram bot conversations, durable inbound updates, editable drafts and human-reviewed outbound messages."}
