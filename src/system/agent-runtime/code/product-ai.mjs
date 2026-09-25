@@ -36,7 +36,7 @@ export function apply(ctx, config = {}) {
     return {...legacy,extra:sameConnection?legacy.extra:{},effort:sameConnection?legacy.effort:undefined,
       provider:configured.provider,model:configured.model,baseUrl:configured.baseUrl,key:configured.apiKey,timeout:configured.timeoutSeconds*1000}}
   const status = user => { const s = settings(user); return {available:!!(s.key && s.model),provider:s.provider,model:s.model} }
-  const complete = async (user,{messages,tools,purpose='assistant'}) => {
+  const complete = async (user,{messages,tools,purpose='assistant',signal}) => {
     const s = settings(user)
     if (!s.key || !s.model) throw new Error('Open Plugin settings → AI model connection to add a model and API key, or restore the shared defaults.')
     const request = {model:s.model,messages,stream:false,...s.extra}
@@ -47,6 +47,8 @@ export function apply(ctx, config = {}) {
     const callId = randomUUID()
     await ctx.store.append(user.id,'agent/model-requested',{callId,purpose,provider:s.provider,endpoint,request},{actor:`agent:${user.id}`})
     const controller = new AbortController(); controllers.add(controller)
+    const abort=()=>controller.abort(signal?.reason)
+    if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true})
     const timer = setTimeout(()=>controller.abort(),s.timeout)
     try {
       const response = await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${s.key}`},body:JSON.stringify(request),signal:controller.signal})
@@ -57,10 +59,10 @@ export function apply(ctx, config = {}) {
       if (!message) throw new Error('The model returned no response. Please try again.')
       return message
     } catch(error) {
-      const message = error.name === 'AbortError' ? 'The model took too long. Please try again.' : error.message.replaceAll(s.key,'[redacted]')
+      const message = error.name === 'AbortError' ? (signal?.aborted?'This agent task was cancelled.':'The model took too long. Please try again.') : error.message.replaceAll(s.key,'[redacted]')
       await ctx.store.append(user.id,'agent/model-failed',{callId,error:message},{actor:`agent:${user.id}`})
       throw new Error(message)
-    } finally { clearTimeout(timer); controllers.delete(controller) }
+    } finally { clearTimeout(timer);signal?.removeEventListener('abort',abort);controllers.delete(controller) }
   }
   ctx.provide('ai',{complete,status})
   ctx.effect(()=>()=>{ for(const controller of controllers) controller.abort(); controllers.clear() })

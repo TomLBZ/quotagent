@@ -108,6 +108,12 @@ export async function apply(ctx, config = {}) {
     return result
   }
   let disposed = false
+  let actions = null
+  ctx.inject(['actions'], child => {
+    actions=child.actions
+    child.effect(()=>()=>{actions=null})
+    child.effect(()=>child.actions.register({kind:'studio.generate',label:'Create personal plugin',execute:async(user,input)=>{const result=await generate(user,input);return{...result,action:{type:'navigate',label:'Open plugin studio',input:{view:'extensions'}}}}))
+  })
   let assistant = null
   let procurement = null
   let utilities = null
@@ -353,7 +359,12 @@ export async function apply(ctx, config = {}) {
       ['create_personal_plugin', 'Design, implement and load a personal theme, reference widget or executable utility/calculator from the user’s request. For custom tools, the model writes actual JavaScript implementation and input fields. The result is a real Cordis plugin visible in Plugin studio.', false],
       ['create_workflow_skill', 'Create and save a reusable workflow skill for process automation. The user can run it from Plugin studio.', true],
     ]) {
-      child.effect(() => child.assistant.tool({ name: toolName, description,
+      child.effect(() => child.assistant.tool({ name: toolName, description, effect:'write',
+        propose:async(user,args,context)=>{
+          if(!actions)throw new Error('Enable Human action review to create a plugin from external source content.')
+          const action=await actions.propose(user,{kind:'studio.generate',title:forceSkill?'Create a workflow skill':'Create a personal plugin',summary:args.prompt,input:{prompt:`${forceSkill?'Create a reusable workflow skill (kind=skill). ':''}${args.prompt}`},source:{kind:'assistant',tool:toolName},runId:context.runId})
+          return{ok:true,message:'Review this source-assisted plugin request before creating it.',action:{type:'navigate',label:'Review plugin request',input:{view:'approvals',actionId:action.id}}}
+        },
         roles: ['contractor', 'supplier', 'admin'],
         parameters: { type: 'object', properties: { prompt: { type: 'string', description: 'Complete description of the desired plugin or repeatable workflow.' } }, required: ['prompt'], additionalProperties: false },
         execute: async (user, args) => {
