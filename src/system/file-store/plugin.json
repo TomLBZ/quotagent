@@ -1,0 +1,1 @@
+{"name":"file-store","version":"1.0.0","layer":"system","entry":"code/index.mjs","provides":["files"],"description":"Account-owned uploaded files, immutable content, download and ledger-backed file metadata."}
