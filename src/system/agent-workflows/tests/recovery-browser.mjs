@@ -1,0 +1,25 @@
+// Run start, restart the actual application, then run verify. GUI-only mutations.
+import {chromium} from '../../../../host/node_modules/playwright/index.mjs'
+import {mkdirSync,writeFileSync,readFileSync} from 'node:fs'
+const base=(process.env.BASE_URL||'https://novara.remoteblossom.com/quotagent').replace(/\/$/,'')+'/'
+const out=process.env.EVIDENCE_DIR||'tmp/product-evidence/workroom/recovery';mkdirSync(out,{recursive:true})
+const mode=process.argv[2]||'start',browser=await chromium.launch({headless:true,executablePath:'/opt/hermes/.playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell',args:['--no-sandbox']})
+const report=mode==='start'?{base,startedAt:new Date().toISOString(),checks:[],account:'supplier2@demo.local'}:JSON.parse(readFileSync(out+'/report.json','utf8'))
+let state
+try{
+ const page=await browser.newPage({viewport:{width:1512,height:1000}});page.setDefaultTimeout(30000);page.on('response',async response=>{if(response.request().method()==='GET'&&/\/api\/workflows\/[^/]+$/.test(response.url()))try{state=(await response.json()).run}catch{}})
+ await page.goto(base);await page.getByLabel('Email address').fill(report.account);await page.getByLabel('Password',{exact:true}).fill('demo1234');await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Agent workroom',exact:true}).click()
+ if(mode==='start'){
+  report.objective=`[Recovery check ${Date.now()}] Review all my open opportunities and current private quotes with separate scope, commercial, delivery and source-integrity specialists. Read the actual RFQ and offer records, examine available source documents, and prepare a detailed quotation-readiness brief. List missing information; do not ask me questions or take external actions.`
+  await page.getByRole('button',{name:'New agent run',exact:true}).click();await page.getByLabel('Agent team objective',{exact:true}).fill(report.objective);await page.getByRole('dialog').locator('input[type=checkbox]').uncheck();await page.getByRole('button',{name:'Create agent plan',exact:true}).click();await page.getByRole('button',{name:'Pause run',exact:true}).waitFor()
+  for(let i=0;i<40&&!state;i++)await page.waitForTimeout(100)
+  if(state?.status!=='running')throw new Error('Need an active run before restart')
+  report.runId=state.id;report.beforeRestart=state;report.checks.push('Started actual provider-backed run before restart');await page.screenshot({path:out+'/01-before-restart.png'});report.waitingForRestart=true
+ }else{
+  await page.locator('.workroom-run-card').filter({hasText:report.objective}).click();await page.getByRole('button',{name:'Resume run',exact:true}).waitFor()
+  for(let i=0;i<40&&state?.id!==report.runId;i++)await page.waitForTimeout(100)
+  if(state?.status!=='paused')throw new Error('Interrupted run must recover paused: '+state?.status)
+  if(state.steps.some(step=>step.status==='running'))throw new Error('Recovered run contains a stale working state')
+  report.afterRestart=state;report.checks.push('Actual application restart preserves the run as paused with no agent silently restarted');await page.screenshot({path:out+'/02-recovered-paused.png'});await page.getByRole('button',{name:'Resume run',exact:true}).click();await page.getByRole('button',{name:'Pause run',exact:true}).waitFor();report.checks.push('Human can explicitly resume the recovered run through its GUI');await page.getByRole('button',{name:'Cancel run',exact:true}).click();await page.locator('.workroom-run-summary').getByText('Cancelled',{exact:true}).waitFor();report.checks.push('Human can cancel the resumed run; no external commitment is made');await page.screenshot({path:out+'/03-cancelled-after-recovery.png'});report.ok=true;report.waitingForRestart=false
+ }
+}catch(error){report.ok=false;report.failure=error.message;process.exitCode=1}finally{report.updatedAt=new Date().toISOString();writeFileSync(out+'/report.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify({mode,runId:report.runId,ok:report.ok,waitingForRestart:report.waitingForRestart,failure:report.failure,checks:report.checks},null,2));await browser.close()}

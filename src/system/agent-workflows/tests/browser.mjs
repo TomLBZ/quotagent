@@ -1,10 +1,11 @@
 // All mutations below are visible GUI interactions. Real configured model is used.
 import {chromium} from '../../../../host/node_modules/playwright/index.mjs'
-import {mkdirSync,writeFileSync} from 'node:fs'
+import {mkdirSync,writeFileSync,readFileSync} from 'node:fs'
 import {resolve} from 'node:path'
 const base=(process.env.BASE_URL||'https://novara.remoteblossom.com/quotagent').replace(/\/$/,'')+'/'
 const out=resolve(process.env.EVIDENCE_DIR||'tmp/product-evidence/workroom/public');mkdirSync(out,{recursive:true})
-const report={base,startedAt:new Date().toISOString(),checks:[],pageErrors:[],snapshots:[],screenshots:[]}
+const report=process.env.RESUME_REPORT?JSON.parse(readFileSync(process.env.RESUME_REPORT,'utf8')):{base,startedAt:new Date().toISOString(),checks:[],pageErrors:[],snapshots:[],screenshots:[]}
+if(report.failure){report.previousAttempts=[...(report.previousAttempts||[]),{failure:report.failure,at:report.finishedAt}];delete report.failure;delete report.ok}
 const persist=()=>writeFileSync(out+'/report.json',JSON.stringify(report,null,2)+'\n')
 const browser=await chromium.launch({headless:true,executablePath:'/opt/hermes/.playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell',args:['--no-sandbox','--disable-dev-shm-usage']})
 let page,lastRun
@@ -16,8 +17,9 @@ try{
  page.on('response',async response=>{if(response.request().method()==='GET'&&/\/api\/workflows\/[^/]+$/.test(response.url()))try{const payload=await response.json();if(payload.run){lastRun=payload.run;if(report.snapshots.at(-1)?.revision!==lastRun.revision)report.snapshots.push({id:lastRun.id,status:lastRun.status,phase:lastRun.phase,revision:lastRun.revision,steps:lastRun.steps.map(({id,status,agentId,startedAt,completedAt})=>({id,status,agentId,startedAt,completedAt})),question:lastRun.question,at:new Date().toISOString()})}}catch{}})
  await page.goto(base);await page.getByLabel('Email address').fill(process.env.TEST_ACCOUNT||'contractor@demo.local');await page.getByLabel('Password',{exact:true}).fill('demo1234');await page.getByRole('button',{name:'Sign in',exact:true}).click()
  const nav=page.getByRole('navigation',{name:'Main navigation'});await nav.getByRole('button',{name:'Agent workroom',exact:true}).click()
+ const memoryName=report.memoryName||`[Workroom check] Payment preference ${Date.now().toString().slice(-6)}`;report.memoryName=memoryName
+ if(!report.runId){
  await page.getByRole('button',{name:/^Account memory/}).click();await page.getByRole('button',{name:'Add memory',exact:true}).click()
- const memoryName=`[Workroom check] Payment preference ${Date.now().toString().slice(-6)}`;report.memoryName=memoryName
  await page.getByRole('dialog').getByLabel('Memory name',{exact:true}).fill(memoryName);await page.getByRole('dialog').getByLabel('Fact or preference',{exact:true}).fill('Prefer net 30 payment terms. Flag full prepayment for human review. Never assume the lowest total has complete scope.')
  await page.getByRole('dialog').getByRole('button',{name:'Save memory',exact:true}).click();await page.getByRole('heading',{name:memoryName,exact:true}).waitFor()
  check(true,'Human can create explicit account memory through the workroom GUI')
@@ -29,7 +31,8 @@ try{
  const focus=page.getByRole('dialog').getByLabel('Focus on a request (optional)',{exact:true});await focus.waitFor();if(await focus.count()){const options=await focus.locator('option').allTextContents();const title=options.find(value=>/^\[Demo\] Riverside office lighting$/.test(value));if(title)await focus.selectOption({label:title})}
  await page.getByRole('dialog').getByRole('button',{name:'Create agent plan',exact:true}).click();await page.getByRole('button',{name:'Pause run',exact:true}).waitFor();await page.getByRole('button',{name:'Pause run',exact:true}).click();await waitRun(run=>run.status==='paused');report.runId=lastRun.id
  check(true,'A user can pause a live run before agents proceed')
- await page.reload();await nav.getByRole('button',{name:'Agent workroom',exact:true}).click();const runCard=page.locator('.workroom-run-card').filter({hasText:'Analyze the [Demo] Riverside office lighting quotations'}).first();if(await runCard.count())await runCard.click();await page.getByRole('button',{name:'Resume run',exact:true}).click()
+ }
+ await page.reload();await nav.getByRole('button',{name:'Agent workroom',exact:true}).click();const runCard=page.locator('.workroom-run-card').filter({hasText:'Analyze the [Demo] Riverside office lighting quotations'}).first();await runCard.click();await page.getByRole('button',{name:'Resume run',exact:true}).click()
  await waitRun(run=>run.status==='awaiting-plan')
  check(lastRun.steps.length>=2&&lastRun.steps.every(step=>step.status==='queued'),'Real model planner creates distinct role tasks and waits for human plan approval',{steps:lastRun.steps.map(({id,title,role,dependsOn})=>({id,title,role,dependsOn}))})
  check(lastRun.context.memory.some(entry=>entry.key===memoryName),'Explicit reviewed memory is included in the recorded planning context')
