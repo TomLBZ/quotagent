@@ -24,4 +24,6 @@ os.chdir(ROOT)
 node = shutil.which('node')
 if not node:
     raise RuntimeError('Node.js is required; activate the workspace runtime first.')
+if os.environ.get('WS_PID_FILE'):
+    Path(os.environ['WS_PID_FILE']).write_text(str(os.getpid()) + '\n')
 os.execvpe(node, [node, str(ROOT / 'host/product.mjs')], os.environ)
