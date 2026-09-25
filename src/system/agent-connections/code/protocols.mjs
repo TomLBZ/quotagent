@@ -64,7 +64,7 @@ export async function openMcp(connection, credentials, signal) {
         capabilities.prompts ? pages(client, 'listPrompts', 'prompts') : [],
         capabilities.resources ? pages(client, 'listResourceTemplates', 'resourceTemplates') : [],
       ])
-      return json({ server: client.getServerVersion(), capabilities, tools, resources, prompts, resourceTemplates })
+      return json({ server: client.getServerVersion(), protocolVersion: client.getNegotiatedProtocolVersion(), era: client.getProtocolEra(), capabilities, tools, resources, prompts, resourceTemplates })
     },
     async invoke(operation, input, requestSignal) {
       const options = { signal: requestSignal, timeout: 60000 }

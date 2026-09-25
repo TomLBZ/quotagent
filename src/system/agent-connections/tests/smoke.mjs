@@ -21,6 +21,7 @@ try {
   const create = async (protocol, path, transport) => (await ctx.connections.save(buyer, { name: `${protocol}-${transport || 'auto'}`, protocol, transport, url: fixture.baseUrl + path, credentials: { bearerToken: fixture.token } })).connection
   const modern = await create('mcp', '/mcp', 'streamable-http')
   const discovery = await ctx.connections.discover(buyer, modern.id)
+  assert.equal(discovery.connection.discovery.protocolVersion, '2026-07-28'); assert.equal(discovery.connection.discovery.era, 'modern')
   assert.equal(discovery.connection.discovery.tools.length, 2); assert.equal(discovery.connection.discovery.resources.length, 1); assert.equal(discovery.connection.discovery.prompts.length, 1)
   const resource = await ctx.connections.run(buyer, modern.id, { operation: 'resource', input: { uri: 'fixture://delivery-guide' } }); assert.match(resource.result.contents[0].text, /3 working days/)
   const prompt = await ctx.connections.run(buyer, modern.id, { operation: 'prompt', input: { name: 'quote-checklist', arguments: { project: 'Warehouse' } } }); assert.match(prompt.result.messages[0].content.text, /Warehouse/)
@@ -32,7 +33,7 @@ try {
   await ctx.actions.approve(buyer, proposal.approval.id, { confirmed: true }); assert.equal(fixture.calls.length, 1, 'Repeated approval does not repeat remote call')
   const refusal = await ctx.connections.run(buyer, modern.id, { operation: 'tool', input: { name: 'refuse', arguments: {} } })
   assert.equal((await ctx.actions.approve(buyer, refusal.approval.id, { confirmed: true })).status, 'failed')
-  const legacy = await create('mcp', '/sse', 'sse'); await ctx.connections.discover(buyer, legacy.id)
+  const legacy = await create('mcp', '/sse', 'sse'); const legacyDiscovery = await ctx.connections.discover(buyer, legacy.id); assert.equal(legacyDiscovery.connection.discovery.era, 'legacy')
   const legacyCall = await ctx.connections.run(buyer, legacy.id, { operation: 'tool', input: { name: 'landed_cost', arguments: { quantity: 2, unitPrice: 10, freight: 5 } } })
   assert.equal((await ctx.actions.approve(buyer, legacyCall.approval.id, { confirmed: true })).result.result.structuredContent.total, 25)
   const a2a = await create('a2a', '', 'auto'), card = await ctx.connections.discover(buyer, a2a.id)
