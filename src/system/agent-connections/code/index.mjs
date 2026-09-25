@@ -10,7 +10,7 @@ export async function apply(ctx) {
   const sessions = new Map(), schemas = new Map(), controllers = new Set()
   let disposed = false
   const records = user => ctx.store.list(user.id, 'agent-connections').filter(row => !row.deleted)
-  const get = (user, id) => { const row = ctx.store.get(user.id, 'agent-connections', id); if (!row || row.deleted || row.ownerId !== user.id) fail('Connection not found.', 404); return row }
+  const get = (user, id, { includeDeleted = false } = {}) => { const row = ctx.store.get(user.id, 'agent-connections', id); if (!row || (row.deleted && !includeDeleted) || row.ownerId !== user.id) fail('Connection not found.', 404); return row }
   const write = (user, row, event) => ctx.store.put(user.id, 'agent-connections', { ...row, updatedAt: now() }, { actor: user.id, event })
   const close = async id => { const session = sessions.get(id); sessions.delete(id); if (session) await session.then(value => value.close()).catch(() => {}) }
   const registerSchema = row => {
@@ -137,7 +137,7 @@ export async function apply(ctx) {
     return ['resource', 'prompt', 'query'].includes(operation) ? invoke(user, id, operation, input) : propose(user, id, operation, input)
   }
   const remove = async (user, id) => { const row = get(user, id); await close(id); await ctx.settings.save(user, row.configurationId, { reset: true }); await write(user, { ...row, enabled: false, deleted: true }, 'connections/deleted'); schemas.get(id)?.(); schemas.delete(id); return { ok: true } }
-  const detail = (user, id) => ({ connection: get(user, id), calls: ctx.store.list(user.id, 'connection-calls').filter(row => row.connectionId === id).sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 50), tasks: ctx.store.list(user.id, 'connection-tasks').filter(row => row.connectionId === id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) })
+  const detail = (user, id) => ({ connection: get(user, id, { includeDeleted: true }), calls: ctx.store.list(user.id, 'connection-calls').filter(row => row.connectionId === id).sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 50), tasks: ctx.store.list(user.id, 'connection-tasks').filter(row => row.connectionId === id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) })
   ctx.provide('connections', { list, get, save, discover, run, propose, remove, detail })
   ctx.effect(() => ctx.web.contribute({ id: 'connections', label: 'Agent connections', icon: 'puzzle', roles: ['contractor', 'supplier', 'admin'], order: 55 }))
   for (const [method, path, handler, options] of [
