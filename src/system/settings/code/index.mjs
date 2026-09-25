@@ -18,9 +18,10 @@ export function apply(ctx) {
     renameSync(temporary, secretFile); secrets = next
   }
   const schema = id => { const value=schemas.get(id); if(!value) fail('This plugin has not registered editable settings.',404); return value }
-  const realm = (user, definition) => !user || user.role === 'admin' || definition.scope === 'admin' ? GLOBAL : user.id
+  const realm = (user, definition) => definition.scope==='account' ? user?.id : !user || user.role === 'admin' || definition.scope === 'admin' ? GLOBAL : user.id
   const authorize = (user, definition, write = false) => {
     if(!user) fail('Please sign in.',401)
+    if(definition.ownerId && definition.ownerId!==user.id) fail('These connection settings belong to another account.',403)
     if(definition.scope === 'admin' && user.role !== 'admin') fail('Only administrators can configure this application plugin.',403)
     if(write && user.role !== 'admin' && !ctx.accounts.can(user,'plugins:manage')) fail('Your administrator has disabled plugin configuration.',403)
   }
@@ -28,7 +29,8 @@ export function apply(ctx) {
   const defaults = definition => clone(typeof definition.defaults === 'function' ? definition.defaults() : definition.defaults || {})
   const get = (user,id) => {
     const definition = schema(id), target = realm(user,definition)
-    const globalValues={...defaults(definition),...stored(GLOBAL,id),...(secrets[GLOBAL]?.[id] || {})}
+    if(definition.ownerId || definition.scope==='account')authorize(user,definition)
+    const globalValues=definition.scope==='account' ? defaults(definition) : {...defaults(definition),...stored(GLOBAL,id),...(secrets[GLOBAL]?.[id] || {})}
     const overrides=target!==GLOBAL ? {...stored(target,id),...(secrets[target]?.[id] || {})} : {}
     const values={...globalValues,...overrides}
     return definition.resolve ? definition.resolve(values,{user,globalValues,overriddenKeys:Object.keys(overrides)}) : values
@@ -88,7 +90,8 @@ export function apply(ctx) {
         else values[key]=value
       }
       for(const key of input.clearSecrets || []) {if(known.get(key)?.type!=='password')fail('Only credential fields can be cleared.');nextSecrets[target][id][key]=''}
-      const next={...defaults(definition),...stored(GLOBAL,id),...(nextSecrets[GLOBAL]?.[id] || {}),...values,...nextSecrets[target][id]}
+      const inherited=definition.scope==='account' ? {} : {...stored(GLOBAL,id),...(nextSecrets[GLOBAL]?.[id] || {})}
+      const next={...defaults(definition),...inherited,...values,...nextSecrets[target][id]}
       if(definition.validate)await definition.validate(next,{user,previous:before})
       const record={id,values,updatedAt:new Date().toISOString(),changedBy:user.id}
       await ctx.store.put(target,'plugin-settings',record,{actor:user.id,event:'settings/config-saved'})
@@ -98,7 +101,7 @@ export function apply(ctx) {
     }
     const result=pending.then(operation);pending=result.catch(()=>{});return result
   }
-  const list = user => [...schemas.values()].filter(definition=>definition.scope!=='admin' || user?.role==='admin').map(definition=>view(user,definition.id))
+  const list = user => [...schemas.values()].filter(definition=>(definition.scope!=='admin' || user?.role==='admin') && (!definition.ownerId || definition.ownerId===user?.id)).map(definition=>view(user,definition.id))
   ctx.provide('settings',{define,get,view,list,save})
   ctx.effect(()=>ctx.web.contribute({id:'plugin-settings',label:'Plugin settings',icon:'settings',roles:['contractor','supplier','admin'],order:70}))
   ctx.effect(()=>ctx.web.route('GET','/settings',({user})=>({settings:list(user)})))

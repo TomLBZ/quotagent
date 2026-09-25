@@ -13,3 +13,9 @@ Current integration: AI provider credentials/model/endpoint/timeout, assistant l
 response length and working preferences, WebUI refresh/upload limits and ingestion
 preferences. `node src/system/settings/tools/live-check.mjs` verifies masking, inheritance,
 provider consumption and account separation against a running product instance.
+
+Connection schemas use `scope:'account'`: built-in defaults plus only this account's
+values and private secrets, including for an administrator. They never inherit an
+administrator's mailbox/token. Dynamic schemas may declare `ownerId`; list/view/get/save
+then enforce that owner. Existing `scope:'user'` retains shared defaults for AI settings.
+Evidence: `node src/system/action-center/tests/state.mjs`, and connection GUI journeys.
