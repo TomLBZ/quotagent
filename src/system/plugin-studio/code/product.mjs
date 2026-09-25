@@ -84,8 +84,8 @@ function parseDescriptor(message) {
  * removes the registration. Its source is persisted and returned for review. */
 export function moduleSource(plugin) {
   const descriptor = { id: plugin.id, name: plugin.name, description: plugin.description,
-    kind: plugin.kind, spec: plugin.spec, ownerId: plugin.ownerId, global: plugin.global,
-    enabled: true, createdAt: plugin.createdAt }
+    kind: plugin.kind, spec: plugin.spec, lineageId: plugin.lineageId || plugin.originId || plugin.id, ownerId: plugin.ownerId, global: plugin.global,
+    enabled: true, createdAt: plugin.createdAt, updatedAt: plugin.updatedAt || plugin.createdAt }
   const scope = plugin.global ? '*' : plugin.ownerId
   return `// Generated from your requested plugin descriptor. Loaded by Cordis.\n`
     + `export const name = ${JSON.stringify(plugin.id)};\n`
@@ -101,6 +101,12 @@ export async function apply(ctx, config = {}) {
   const root = join(config.root ?? ctx.store.root, 'plugin-artifacts')
   mkdirSync(root, { recursive: true, mode: 0o700 })
   const mounted = new Map()
+  let pending = Promise.resolve()
+  const serialize = task => {
+    const result = pending.then(task)
+    pending = result.catch(() => {})
+    return result
+  }
   let disposed = false
   let assistant = null
   let procurement = null
@@ -115,6 +121,16 @@ export async function apply(ctx, config = {}) {
     child.effect(() => () => { procurement = null })
   })
   const records = () => ctx.store.list('system', COLLECTION).filter(plugin => !plugin.deleted)
+  const lineage = plugin => {
+    let current=plugin;const seen=new Set()
+    while(current?.originId && !seen.has(current.id)) {seen.add(current.id);const parent=ctx.store.get('system',COLLECTION,current.originId);if(!parent)return current.originId;current=parent}
+    return current?.id || plugin.id
+  }
+  const newestFirst = (a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''))
+    || String(b.id).localeCompare(String(a.id))
+  const isActive = plugin => !!plugin.enabled && mounted.has(plugin.id)
+  const activeFirst = (a, b) => Number(isActive(b)) - Number(isActive(a)) || newestFirst(a, b)
+  const scopeKey = plugin => `${plugin.global ? '*' : plugin.ownerId}:${lineage(plugin)}`
   const lookup = id => {
     const plugin = ctx.store.get('system', COLLECTION, id)
     if (!plugin || plugin.deleted) fail('Plugin not found.', 404)
@@ -141,14 +157,25 @@ export async function apply(ctx, config = {}) {
     }
     return { source, file: join(dir, 'index.mjs') }
   }
-  const mount = async plugin => {
+  const mount = async (plugin, actor = 'system:plugin-studio') => {
+    plugin={...plugin,lineageId:lineage(plugin)}
     if (disposed) fail('Plugin studio is restarting. Please retry.', 503)
     const previous = mounted.get(plugin.id)
     if (previous) { await previous.dispose(); mounted.delete(plugin.id) }
     const { file } = writeArtifact(plugin)
     const module = await import(`${pathToFileURL(file).href}?v=${randomUUID()}`)
     const fiber = await ctx.plugin(module)
+    if (fiber.state !== 2) {
+      await fiber.dispose()
+      fail('The plugin could not activate. Please review its configuration.', 409)
+    }
     mounted.set(plugin.id, fiber)
+    // Replace older instances in this exact account/global scope, retaining their records and artifacts.
+    for (const previous of records().filter(row => row.id !== plugin.id && scopeKey(row) === scopeKey(plugin)
+      && (row.enabled || mounted.has(row.id)))) {
+      await unmount(previous.id)
+      await save({ ...previous, enabled: false }, actor, 'studio/plugin-unloaded')
+    }
     return fiber
   }
   const unmount = async id => {
@@ -156,21 +183,38 @@ export async function apply(ctx, config = {}) {
     if (fiber) await fiber.dispose()
     mounted.delete(id)
   }
-  const publicPlugin = plugin => {
+  const publicPlugin = (plugin,user) => {
     const visible = copy(plugin)
     delete visible.generationPrompt
-    return { ...visible, source: moduleSource(plugin),
-      loaded: mounted.has(plugin.id), ownerName: ctx.accounts.get(plugin.ownerId)?.name ?? 'Community',
+    return { ...visible, lineageId:lineage(plugin),scope:plugin.global?'global':'personal',canManage:!!user && (user.role==='admin' || !plugin.global && plugin.ownerId===user.id), source: moduleSource({...plugin,lineageId:lineage(plugin)}),
+      enabled: isActive(plugin), loaded: mounted.has(plugin.id), ownerName: ctx.accounts.get(plugin.ownerId)?.name ?? 'Community',
       artifact: `${plugin.id}/index.mjs`, ...(plugin.kind === 'skill' ? { skillFile: `${plugin.id}/SKILL.md` } : {}) }
   }
   const list = user => {
-    const all = records()
-    const mine = all.filter(plugin => plugin.ownerId === user.id || plugin.global)
-    return {
-      plugins: (user.role === 'admin' ? all : mine).map(publicPlugin),
-      market: all.filter(plugin => plugin.published || plugin.global).map(publicPlugin),
-      skills: mine.filter(plugin => plugin.kind === 'skill').map(publicPlugin),
+    const all=records(), groups=new Map()
+    for(const plugin of all) {const key=lineage(plugin);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(plugin)}
+    const choose = rows => [...rows].sort((a,b)=>{
+      const priority=p=>p.ownerId===user.id&&!p.global?(isActive(p)?0:2):p.global?(isActive(p)?1:3):(isActive(p)?4:5)
+      return priority(a)-priority(b)||newestFirst(a,b)
+    })[0]
+    const plugins=[],market=[]
+    for(const [key,instances] of groups) {
+      const visible=instances.filter(p=>user.role==='admin'||p.ownerId===user.id||p.global)
+      if(visible.length) {
+        const selected=choose(visible)
+        plugins.push({...publicPlugin(selected,user),scopeLabels:visible.map(p=>p.global?'Global default':`Personal · ${ctx.accounts.get(p.ownerId)?.name || 'User'}`),
+          instances:visible.sort(activeFirst).map(p=>publicPlugin(p,user))})
+      }
+      const published=instances.filter(p=>p.published || p.global)
+      if(published.length) {
+        const source=published.find(p=>p.id===key)||published.find(p=>!p.global)||published[0]
+        const installed=choose(instances.filter(p=>p.ownerId===user.id&&!p.global||p.global))
+        market.push({...publicPlugin(source,user),installed:!!installed,installedId:installed?.id || null,installedEnabled:!!installed&&isActive(installed),
+          installationScope:installed?(installed.global?'global':installed.id===key?'owner':'personal'):null})
+      }
     }
+    const order=(a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))
+    return {plugins:plugins.sort(order),market:market.sort(order),skills:plugins.filter(p=>p.kind==='skill')}
   }
   const canManage = (user, plugin) => {
     if (plugin.global && user.role !== 'admin') fail('Only administrators manage global plugins.', 403)
@@ -188,10 +232,10 @@ export async function apply(ctx, config = {}) {
     const plugin = { id: idOf(), ...descriptor, ownerId: user.id, enabled: true,
       published: false, global: false, createdAt: now(), generationPrompt: prompt }
     writeArtifact(plugin)
-    await mount(plugin)
+    await mount(plugin, user.id)
     try {
       const saved = await save(plugin, user.id, 'studio/plugin-created')
-      return { ok: true, plugin: publicPlugin(saved), ...list(user) }
+      return { ok: true, plugin: publicPlugin(saved,user), ...list(user) }
     } catch (error) {
       await unmount(plugin.id)
       throw error
@@ -229,51 +273,65 @@ export async function apply(ctx, config = {}) {
     await ctx.store.append(user.id, 'studio/skill-ran', { pluginId: id, name: plugin.name }, { actor: user.id })
     return { ok: true, ...result }
   }
-  const execute = async (user, id, action, input = {}) => {
+  const perform = async (user, id, action, input = {}) => {
     if (!ctx.accounts.can(user, 'plugins:manage')) fail('Plugin management is disabled for this account.', 403)
     const plugin = lookup(id)
     if (action === 'run') return run(user, id, input)
     if (action === 'install') {
       if (!plugin.published && !plugin.global && plugin.ownerId !== user.id) fail('This plugin has not been published.', 403)
-      const existing = records().find(row => row.ownerId === user.id && row.originId === plugin.id && !row.global)
-      if (existing) return execute(user, existing.id, 'load')
-      if (plugin.ownerId === user.id && !plugin.global) return execute(user, id, 'load')
+      const existing = records().filter(row => row.ownerId === user.id && lineage(row) === lineage(plugin) && !row.global).sort(activeFirst)[0]
+      if (existing) return perform(user, existing.id, 'load')
+      if (plugin.ownerId === user.id && !plugin.global) return perform(user, id, 'load')
       const installed = { ...plugin, id: idOf(), ownerId: user.id, originId: plugin.id,
         enabled: true, global: false, published: false, createdAt: now() }
       delete installed.generationPrompt
-      await mount(installed)
+      await mount(installed, user.id)
       const saved = await save(installed, user.id, 'studio/plugin-installed')
-      return { ok: true, plugin: publicPlugin(saved), ...list(user) }
+      return { ok: true, plugin: publicPlugin(saved,user), ...list(user) }
     }
     if (action === 'promote') {
       if (user.role !== 'admin') fail('Only administrators can make a plugin a global default.', 403)
-      if (plugin.global) return execute(user, id, 'load')
-      const existing = records().find(row => row.global && row.originId === plugin.id)
-      if (existing) return execute(user, existing.id, 'load')
+      if (plugin.global) return perform(user, id, 'load')
+      const existing = records().filter(row => row.global && lineage(row) === lineage(plugin)).sort(activeFirst)[0]
+      if (existing) return perform(user, existing.id, 'load')
       const promoted = { ...plugin, id: idOf(), ownerId: user.id, originId: plugin.id,
         enabled: true, published: true, global: true, createdAt: now() }
-      await mount(promoted)
+      await mount(promoted, user.id)
       const saved = await save(promoted, user.id, 'studio/plugin-promoted')
-      return { ok: true, plugin: publicPlugin(saved), ...list(user) }
+      return { ok: true, plugin: publicPlugin(saved,user), ...list(user) }
     }
     canManage(user, plugin)
     let next
     if (action === 'load') {
-      await mount(plugin)
+      await mount(plugin, user.id)
       next = await save({ ...plugin, enabled: true }, user.id, 'studio/plugin-loaded')
     } else if (action === 'unload') {
       await unmount(id)
       next = await save({ ...plugin, enabled: false }, user.id, 'studio/plugin-unloaded')
     } else if (action === 'publish') {
       next = await save({ ...plugin, published: true }, user.id, 'studio/plugin-published')
+    } else if (action === 'configure') {
+      const descriptor=parseDescriptor({content:JSON.stringify({name:input.name ?? plugin.name,description:input.description ?? plugin.description,
+        kind:plugin.kind,spec:{...plugin.spec,...input.spec}})})
+      const updated={...plugin,...descriptor}
+      if(plugin.enabled) {
+        try {await mount(updated, user.id)} catch(error) {await mount(plugin, user.id);throw error}
+      } else writeArtifact(updated)
+      next=await save(updated,user.id,'studio/plugin-configured')
     } else if (action === 'delete') {
       await unmount(id)
       next = await save({ ...plugin, enabled: false, published: false, deleted: true }, user.id, 'studio/plugin-deleted')
     } else fail('Unknown studio action.', 404)
-    return { ok: true, plugin: publicPlugin(next), ...list(user) }
+    return { ok: true, plugin: publicPlugin(next,user), ...list(user) }
   }
+  const execute = (user, id, action, input = {}) => action === 'run' ? run(user, id, input)
+    : serialize(() => perform(user, id, action, input))
   ctx.provide('studio', { list, generate, execute, run })
-  for (const plugin of records().filter(row => row.enabled)) {
+  const restoredScopes = new Set()
+  for (const plugin of records().filter(row => row.enabled).sort(newestFirst)) {
+    const scope = scopeKey(plugin)
+    if (restoredScopes.has(scope)) continue
+    restoredScopes.add(scope)
     try { await mount(plugin) } catch (error) {
       console.error(`[studio] Could not restore ${plugin.id}: ${error.message}`)
     }
