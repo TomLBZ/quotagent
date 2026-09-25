@@ -1,0 +1,92 @@
+{
+  "ok": true,
+  "ledger": "tmp/product-data/ledgers/contractor-demo.jsonl",
+  "runId": "6f88639b-d63d-4aff-a922-febe25822142",
+  "ownerId": "contractor-demo",
+  "status": "completed",
+  "steps": [
+    {
+      "id": "scope",
+      "title": "Quote scope and quantity reconciliation",
+      "role": "Scope analyst",
+      "agentId": "5e0b343e-c47d-44a5-bbde-15a563bcac5f",
+      "status": "completed",
+      "startedAt": "2026-09-25T10:33:42.463Z",
+      "completedAt": "2026-09-25T10:34:12.732Z"
+    },
+    {
+      "id": "commercial",
+      "title": "Pricing, currency and payment-terms check",
+      "role": "Commercial analyst",
+      "agentId": "f4a0f2d7-2957-4d7a-aaed-71449572510e",
+      "status": "completed",
+      "startedAt": "2026-09-25T10:33:42.464Z",
+      "completedAt": "2026-09-25T10:34:01.641Z"
+    },
+    {
+      "id": "schedule",
+      "title": "Delivery-date gated lead-time assessment",
+      "role": "Scheduling analyst",
+      "agentId": "88ed2c0e-4385-4f3e-8b5f-a4c6658395dc",
+      "status": "completed",
+      "startedAt": "2026-09-25T10:33:42.464Z",
+      "completedAt": "2026-09-25T10:34:06.013Z"
+    }
+  ],
+  "providerRequests": 14,
+  "providerReplies": 11,
+  "providerFailures": [
+    {
+      "seq": 345,
+      "error": "This agent task was cancelled."
+    },
+    {
+      "seq": 456,
+      "error": "This agent task was cancelled."
+    },
+    {
+      "seq": 457,
+      "error": "This agent task was cancelled."
+    }
+  ],
+  "models": [
+    "deepseek-flash"
+  ],
+  "stages": {
+    "planner": 2,
+    "scope:agent": 4,
+    "commercial:agent": 3,
+    "schedule:agent": 4,
+    "synthesis": 1
+  },
+  "traceCount": 31,
+  "traceEvents": [
+    "created",
+    "planning-started",
+    "paused",
+    "resumed",
+    "plan-created",
+    "agent-started",
+    "tool-result",
+    "human-question",
+    "human-answered",
+    "agent-completed",
+    "synthesis-started",
+    "completed"
+  ],
+  "toolNames": [
+    "procurement_workspace",
+    "compare_quotes",
+    "ingestion_list",
+    "mail_list",
+    "account_memory"
+  ],
+  "memoryVisibleToModel": true,
+  "humanAnswerVisibleToModel": true,
+  "externalActions": [],
+  "ledgerSequence": {
+    "first": 344,
+    "last": 484
+  },
+  "recordedAt": "2026-09-25T10:34:40.898Z"
+}

@@ -26,6 +26,12 @@ public workspace service launch this product composition.
 | system/file-store | Account-owned content-addressed upload/download and durable metadata |
 | domain/ingestion | Upload, preview, mapping, line review and private RFQ/quote import |
 | domain/ingestion-engines | Individually mounted email, Excel, CSV/TSV, document and optional live AI engines |
+| system/mail | Account IMAP inbox/sent sync, SMTP send review, attachments, draft/reply and assistant tools |
+| system/telegram | Bot messages, attachments, reviewed replies and optional generic activity reminders |
+| system/agent-connections | Account MCP HTTP/SSE servers and A2A agents, discovery, reviewed operations and task continuation |
+| system/action-center | Durable human decisions, frozen requests, execution receipts and uncertain-delivery recovery |
+| system/notifications | Account activity inbox, unread/read state and disposable notification listeners |
+| system/agent-workflows | Live multi-agent planning, parallel specialists, synthesis, human questions, durable traces and editable reviewed memory |
 
 All new functionality belongs to these plugins. Existing detailed requirements are
 mapped to capability groups in `plugin-requirements.md`; no global functional owner.
@@ -130,6 +136,17 @@ explicit credential clearing or reset. `GET /plugins` is admin inventory;
 sources and available engines. `POST /ingestion/upload|parse`,
 `PATCH /ingestion/:id`, and `POST /ingestion/:id/extract|import` drive the owned GUI.
 Source: [ingestion routes](../../src/domain/ingestion/code/index.mjs).
+
+## Connected services and multi-agent work
+
+The [connected-agent contract](connected-agent-contract.md) extends this composition
+with mail, messaging, external tools/agents, durable action review and a multi-agent
+workroom. Its plugin-owned requirements define exact protocols, settings, API surfaces,
+events and limitations. Chat and specialist workers use the same enforced tool policy;
+external content is recorded source data. Memories have provenance, revision history,
+edit/archive controls and explicit acceptance for model suggestions. Account connection
+credentials never inherit from another account. Workroom state survives process restart;
+interrupted activity resumes only after a human decision.
 
 ## Acceptance from user viewpoint
 

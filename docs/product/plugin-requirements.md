@@ -25,6 +25,13 @@ product behavior and acceptance, independently of older completion statuses.
 | Immutable account uploads and downloads | system/file-store | Plugin workspace contract; retained provenance and account ownership |
 | Source review, mapping and private draft import | domain/ingestion | Plugin workspace contract; contractor RFQ and supplier quote from real files |
 | Traditional format parsers and optional AI extraction | domain/ingestion-engines | Plugin workspace contract; email/Excel/CSV/document fixtures and real model |
+| Account IMAP/SMTP inbox, attachments and reviewed sending | system/mail | Connected-agent contract; protocol fixtures and public inbox journey |
+| Bot messaging and opted-in external reminders | system/telegram | Connected-agent contract; Bot API fixture and public chat journey |
+| MCP tools/resources/prompts and A2A task interaction | system/agent-connections | Connected-agent contract; official SDK servers and public GUI |
+| Durable human review and action execution | system/action-center | Connected-agent contract; decisions, receipts and restart recovery |
+| Account activity inbox and unread state | system/notifications | Connected-agent contract; incoming-message and review notifications |
+| Multi-agent runs, human checkpoints, traceable state and explicit memory | system/agent-workflows | Connected-agent contract; actual model workroom and memory evidence |
+| Runtime tool effect enforcement and source-data boundaries | system/agent-runtime | Connected-agent contract; effect checks and live hostile-source probe |
 | Public experience evaluation | system/eval | Independent evaluation evidence |
 | Recoverability, documentation, individual commit/push batches | system/repo-gate | Ignored state/handover; versioned specs and git refs |
 
@@ -57,8 +64,7 @@ or assert that every advanced historical behavior has been reimplemented.
 | domain/ingestion-engines | Email/table/document intake and information extraction | Individual email/Excel/CSV/document parsers and optional actual model extraction |
 
 Launcher/composition belongs to system/runtime. Evaluation and repository-operation
-requirements remain owned by system/eval and system/repo-gate. Historical mail,
-retention, capacity and similar specialized plugins are not automatically part of
+requirements remain owned by system/eval and system/repo-gate. Historical retention, capacity and similar specialized plugins are not automatically part of
 the new product host; their previous checks are not current product evidence.
 
 ## Existing requirements (all owned)

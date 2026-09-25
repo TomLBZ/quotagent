@@ -1,0 +1,38 @@
+YOUR SERVICES
+Agent connections
+
+Connect your own tools and specialist agents. Discover their capabilities, review what you share, and keep task results with your work.
+
+Add connection
+
+Viewing recorded connection history.
+
+Local protocol 10:28:54 MCP
+
+http://127.0.0.1:8621/mcp
+
+Removed
+
+This connection was removed. Its credentials and remote access were cleared. Saved activity and task results remain available below.
+
+Activity history (4)
+tool · completed · 9/25/2026, 10:33:38 AM
+Input
+{
+  "arguments": {
+    "freight": 120,
+    "quantity": 30,
+    "unitPrice": 80
+  },
+  "name": "landed_cost"
+}
+Result
+
+Landed cost: 2520
+
+{
+  "total": 2520
+}
+tool · completed · 9/25/2026, 10:28:57 AM
+prompt · completed · 9/25/2026, 10:28:57 AM
+resource · completed · 9/25/2026, 10:28:56 AM

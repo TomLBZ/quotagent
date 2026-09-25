@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "fixture": "http://127.0.0.1:8621",
+  "names": {
+    "mcp": "Local protocol 10:28:54 MCP",
+    "a2a": "Local protocol 10:28:54 A2A"
+  },
+  "checks": [
+    "MCP connection creation and real discovery from GUI",
+    "Saved credential is masked in account settings",
+    "Resource reading and prompt arguments return real remote content",
+    "Reviewed MCP tool invocation produces 2520 and durable receipt",
+    "A2A input-required status, real query, reviewed same-task reply and artifact",
+    "A2A task cancellation requires review and changes remote task state",
+    "Supplier account cannot see contractor connections"
+  ],
+  "jsErrors": [],
+  "checkedAt": "2026-09-25T10:29:05.236Z"
+}

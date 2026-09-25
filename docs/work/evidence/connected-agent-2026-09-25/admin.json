@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "url": "https://novara.remoteblossom.com/quotagent/#plugin-settings",
+  "checks": [
+    "Administrator has native plugin inventory",
+    "New connection and workroom pages appear in navigation",
+    "Admin settings expose own-account connections"
+  ],
+  "navigation": "Agent workroom\nApplication plugins\nAgent connections\nReview actions\nPlugin studio\nNotifications\nPlugin settings",
+  "settings": "YOUR PLUGIN PREFERENCES\nPlugin settings\n\nSet the options that make your plugins work for you.\n\nApplication and account settings\n\nManage shared defaults and your own account connections. Connection credentials belong only to the signed-in account.\n\nUsing defaults\nWebUI application\n\nShared presentation and upload transport settings for this application.\n\n2 settings\nConfigure\nUsing defaults\nNotifications\n\nChoose how new activity appears in your workspace.\n\n1 settings\nConfigure\nUsing defaults\nAI model connection\n\nUse the shared model connection or provide your own. A different provider or endpoint requires your own API key. Leave an existing key blank to keep it.\n\n5 settings\nCredentials configured\nConfigure\nUsing defaults\nAI assistant preferences\n\nThese preferences guide every conversation and saved workflow in this account.\n\n3 settings\nConfigure\nUsing defaults\nUploaded files\n\nConfigure the way this plugin works for you.\n\n1 settings\nConfigure\nUsing defaults\nDocument ingestion\n\nConfigure the way this plugin works for you.\n\n5 settings\nConfigure\nUsing defaults\nEmail connection\n\nConnect your own inbox using IMAP and send reviewed messages using SMTP. Use your provider’s app password or access token. Credentials are masked and are never shared between accounts. Testing connects and authenticates without sending mail.\n\n20 settings\nConfigure\nUsing defaults\nTelegram bot connection\n\nCreate a bot with Telegram’s @BotFather and paste its token here. Start a chat with the bot before syncing. The bot connects only to your account; a bot token should have one polling consumer. Existing webhooks must be removed by the bot owner before polling. No message is sent until you approve a review request.\n\n8 settings\nConfigure\nUsing defaults\nAgent workroom\n\nChoose how the agent team coordinates work. Plans and task progress remain visible in your workroom.\n\n2 settings\nConfigure",
+  "errors": []
+}

@@ -1,7 +1,8 @@
 # Connected services and agent workroom
 <!-- budget: 12288 bytes, hard -->
 
-Status: implementation in progress; no acceptance claimed yet.
+Status: delivered. [Public GUI/protocol/actual-model evidence](../work/evidence/connected-agent-2026-09-25/README.md)
+and [independent evaluation](connected-evaluation.md) record observed results and limits.
 Source: user objective 2026-09-25, extending the [runtime contract](runtime-contract.md).
 User chose local protocol test services for first verification. Real credentials are
 entered through the product GUI; public tests must not contact unrelated recipients.
@@ -76,7 +77,8 @@ attachments. Reconnect, failures and last sync are visible. Sending records reci
 subject/body/attachments and delivery receipt; external text cannot request sending by
 itself. Draft content is editable before a review action is proposed.
 
-Telegram settings cover bot token, configured chat, endpoint and polling preferences.
+Telegram settings cover bot token, configured chat and polling preferences. The normal
+endpoint is Telegram Bot API; the host has a fixture-only API override for testing.
 Updates persist before cursor acknowledgment. Show the configured bot, conversations,
 received content and send outcome. Polling is bounded/abortable; webhook conflicts and
 rate-limit responses are visible. A bot token is not a user-account login or permission
@@ -84,9 +86,9 @@ to receive arbitrary personal chats. Supported attachment handling must be docum
 
 MCP uses the current official SDK for Streamable HTTP and an explicit SSE option.
 Connection settings include endpoint and credentials; discover real server capabilities.
-Tools/resources/prompts remain account-owned external content. Read-only annotations
-alone are not authority to execute arbitrary outbound operations; the chosen connection
-policy determines what can run automatically and what needs review. No automatic full
+Tools/resources/prompts remain account-owned external content. Resources, prompts and
+task status can be read directly. MCP tool calls and A2A sends/cancellations require
+human review; read-only server annotations cannot bypass it. No automatic full
 workspace or private-cost export to remote services. Local stdio process launch is not
 required for this external-server surface and must not be implied by the UI.
 

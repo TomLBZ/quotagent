@@ -1,0 +1,24 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "phase": "all",
+  "at": "2026-09-25T10:28:57.930Z",
+  "transport": "fictitious loopback IMAP/SMTP/Telegram API; never forwards",
+  "checks": [
+    "Configured account IMAP/SMTP through GUI, tested auth without sending, synchronized actual IMAP fixture email and attached XLSX.",
+    "Attachment became editable line items. Reply draft/proposal sent nothing; explicit approval delivered exactly one email to loopback SMTP.",
+    "Configured/tested bot through GUI; received text/document over fixture HTTP API, extracted CSV, then sent one reply only after human approval."
+  ],
+  "screenshots": [
+    "01-inbox-with-real-mime-attachment.png",
+    "02-email-attachment-to-editable-items.png",
+    "03-email-human-review-before-send.png",
+    "04-email-smtp-receipt.png",
+    "05-telegram-received-text-and-document.png",
+    "06-telegram-document-to-items.png",
+    "07-telegram-human-review-before-send.png",
+    "08-telegram-send-receipt.png",
+    "09-in-app-notifications.png"
+  ],
+  "browserErrors": [],
+  "ok": true
+}

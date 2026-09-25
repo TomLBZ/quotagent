@@ -3,8 +3,7 @@
 
 A React and Cordis quotation workspace for contractors and suppliers. [Open the demo](https://novara.remoteblossom.com/quotagent/).
 
-Contractors request, compare and order. Suppliers quote, clarify and acknowledge. Each account sees one business role; a separate admin
-manages users, permissions and global extensions.
+Each account has one business role. A separate admin manages users and global extensions.
 [Architecture and source map](docs/product/architecture.md).
 
 ## Try it
@@ -28,28 +27,31 @@ Use the login page’s demo buttons. All demo passwords are **`demo1234`**.
 5. Open **Ingest documents**, upload an email, Excel/CSV sheet or document, review
    the extracted lines and create a private RFQ or quote. Use **Extract with AI** for
    unstructured source text. Drafts remain editable before any commitment.
-6. Configure credentials and preferences in **Plugin settings**. Admins can inspect
-   all application plugins, manage optional engines or promote a shared extension.
+6. Open **Email**, **Telegram** or **Agent connections** to configure your own mailbox,
+   bot, MCP servers and A2A agents. Read, draft and review sends without leaving the app.
+7. In **Agent workroom**, delegate a quotation comparison to specialists. Review the
+   plan, answer questions, inspect traces and manage account memory. **Review actions**
+   holds proposed sends, remote calls and commitments until you approve them.
 
-Demo accounts have labelled samples. New accounts start empty; choose one client role
-in Settings.
+Demo accounts have labelled samples. New accounts start empty.
 
 ## Two levels of AI
 
 **Business assistance:** real model calls use the account’s RFQs, quotes, messages
-and remembered preferences. The agent extracts pasted requirements, creates editable
-RFQ/quote drafts, compares offers and drafts negotiation messages for review.
+and editable account memory. The agent reads incoming mail, extracts requirements,
+creates drafts, compares offers and prepares reviewed actions. Multi-agent runs retain
+plans, specialist context, human feedback and a synthesized decision brief.
 
 **Dynamic customization:** the agent generates personal themes, reference widgets,
 workflow skills and executable utilities. Utilities contain generated JavaScript, inputs and callable Cordis effects.
 Users load, unload, publish and install extensions. Admin promotion creates an
 independent global copy. Skills save a `SKILL.md` and execute through the assistant.
 
-Extraction accepts pasted text and uploaded EML/MBOX/MSG, XLSX/XLS, CSV/TSV, DOCX,
-text PDF, TXT, HTML and JSON files. Email attachments are parsed too. Skills run on demand. Generated utilities
-are bounded pure functions with number/text inputs, JSON output and the caller’s
-workspace context. OCR, live inbox sync, scheduled skills and arbitrary server integrations
-are outside this composition. See [current scope](docs/product/runtime-contract.md).
+Files and mail attachments enter the ingestion workspace for editable line extraction.
+Generated utilities are bounded pure functions; skills run on demand. OCR, scheduled
+skills and arbitrary generated server code remain outside this composition.
+[Connection setup and limits](docs/product/connected-agent-contract.md) include IMAP/SMTP,
+Telegram Bot API, MCP HTTP/SSE and A2A. OAuth consent and MCP stdio are not implemented.
 
 ## Run locally
 
@@ -78,11 +80,9 @@ api_keys:
     base_url: https://api.openai.com/v1
 ```
 
-Plugin settings saves global/personal model credentials. Personal endpoints need
-personal keys. Environment credentials also work. `QUOTAGENT_AI_MODEL`
-and `QUOTAGENT_AI_URL` override model/endpoint. Manual procurement works without AI
-configuration. [Provider implementation](src/system/agent-runtime/code/product-ai.mjs).
+**Plugin settings** stores model defaults/preferences and account connection credentials.
+Personal model endpoints need personal keys. `QUOTAGENT_AI_MODEL` and
+`QUOTAGENT_AI_URL` override model/endpoint. Manual procurement works without AI.
 
-[Plugin ownership](docs/product/plugin-requirements.md) maps all **166 historical
-requirements** to owners; ownership does not imply feature parity. Current scope: [product contract](docs/product/runtime-contract.md).
+[Plugin ownership](docs/product/plugin-requirements.md) and [current scope](docs/product/runtime-contract.md).
 Rules: [AGENTS.md](AGENTS.md).

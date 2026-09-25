@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "account": "supplier2@demo.local",
+  "model": "deepseek-flash",
+  "tools": [
+    "draft_message"
+  ],
+  "actionId": "c2ec99a4-f9b4-469b-be28-32dd4de29dea",
+  "preview": "[Demo] Riverside office lighting\n\nSend project message\n\nRecipient\nNorthstar Construction\nHello Alex,\n\nRegarding \"[Demo] Riverside office lighting\" (deadline 2026-10-02), could you please confirm before we finalize anything:\n\n1. Preferred delivery window — earliest acceptable date and required completion date for the 36 W LED panels (120 each) and ceiling occupancy sensors (24 each). Our quoted lead time is 35 days.\n2. Unloading instructions for the delivery — delivery point/site access, whether a loading dock or forklift is available, who receives the goods, and any site hours or booking requirements.\n\nThis is a clarification request only; it does not change our submitted quote, price or terms. Any revision would be confirmed separately in writing.\n\nThank you,\nTaylor Chen — Atlas Materials\n\nApproval applies these reviewed details. If the underlying project or quotation changes, prepare a new review. Supplier costs and internal notes remain private.",
+  "decision": "rejected; nothing sent",
+  "jsErrors": [],
+  "checkedAt": "2026-09-25T10:30:17.437Z"
+}

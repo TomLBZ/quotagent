@@ -106,3 +106,10 @@ input-required continuation, artifacts and cancellation, private credentials,
 notification creation, restoration and plugin disposal. It is protocol evidence,
 not a claim of interoperability with every hosted provider. Source:
 [smoke](../tests/smoke.mjs), [fixtures](../tests/fixtures.mjs).
+
+Removed connections clear their credentials and disappear from normal discovery. Their
+owner can still open an old review receipt to inspect recorded calls/tasks, with a
+Removed explanation and no remote operation controls. Source: `detail()` in
+`code/index.mjs` and `ConnectionDetail` in `client/connections.jsx`. Protocol smoke
+covers tombstone history, credential removal, restart and other-account rejection;
+`tests/removed-history-browser.mjs` exercises the public read-only return link.

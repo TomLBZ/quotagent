@@ -2,7 +2,7 @@
 <!-- budget: 8192 bytes, hard -->
 
 All events below append through existing `quotagent.kernel.ledger.Ledger`. The
-additive product event catalogue follows ADR-0027/0028 and preserves existing event
+additive product event catalogue follows ADR-0027/0028/0030 and preserves existing event
 semantics. Sources: [adapter](../../src/system/workspace-store/code/bridge.py),
 [projection reader](../../src/system/workspace-store/code/index.mjs),
 [assistant/provider](../../src/system/agent-runtime/code/product-assistant.mjs),
@@ -49,3 +49,23 @@ are excluded by the public-record serializers in the procurement plugin. Account
 credentials and sessions are local account-store data, not ledger events. Model
 requests/responses, preferences and generated-utility execution results remain in
 the calling account's realm.
+
+## Connected services and agent work
+
+The connected composition adds account-local event families; exact names and bodies are
+owned by the plugin implementation/requirements rather than new kernel semantics.
+
+| Family | Durable facts | Owner/source |
+|---|---|---|
+| actions/* | Frozen proposal, decision, execution receipt, failure or uncertain outcome | [action-center](../../src/system/action-center/requirements.md) |
+| notifications/* | Content/link/source, deduplication key, read timestamp, delivery failure | [notifications](../../src/system/notifications/requirements.md) |
+| mail/* | Received MIME/file references, draft versions, sync state and SMTP receipts | [mail](../../src/system/mail/requirements/product.md) |
+| telegram/* | Updates/cursor, messages/files, drafts and send/reminder outcomes | [Telegram](../../src/system/telegram/requirements/README.md) |
+| connections/* | Connection discovery, MCP operations, A2A task/context/artifacts and reviews | [connections](../../src/system/agent-connections/requirements/functional.md) |
+| workflows/* | Run/step/agent context, plan, questions, human answers, results, recovery and traces | [workroom](../../src/system/agent-workflows/requirements/README.md) |
+| agent-memory/* | Active/archive state, revisions and human/agent/legacy provenance | [memory](../../src/system/agent-workflows/code/memory.mjs) |
+| agent-policy/* | Tool refusals and external-source provenance/warnings | [policy](../../src/system/agent-runtime/code/product-policy.mjs) |
+
+Full model calls retain `agent/model-requested`, `model-completed`, `model-failed`.
+Shared tool completion adds optional runId/stepId/agentId to existing tool facts.
+Credentials stay outside ledger facts; they are not model inputs.

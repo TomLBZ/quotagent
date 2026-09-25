@@ -68,6 +68,10 @@ start/provider call, completed-report preservation, and append-only startup reco
 then `node src/system/agent-workflows/tests/recovery-browser.mjs verify` exercise public GUI
 recovery, explicit resume, cancellation, delayed task-state and reload checks.
 
+`node src/system/agent-workflows/tests/cancellation-browser.mjs` checks visible correction
+of the earlier cancelled run, then cancels a fresh real four-specialist run and verifies
+terminal task states and trace ordering after a delay and full page reload.
+
 `BASE_URL=https://novara.remoteblossom.com/quotagent EVIDENCE_DIR=tmp/product-evidence/workroom/public node src/system/agent-workflows/tests/browser.mjs`
 uses the configured real provider and visible GUI controls for a complex quotation analysis,
 manual memory, pause/resume, plan review, specialist question/answer, parallel task trace,

@@ -3,8 +3,7 @@
 
 The current product is composed by [host/product.mjs](../../host/product.mjs) from
 native Cordis plugins. Plugins own routes, services, assistant tools and frontend components. React renders a generic shell and registered feature pages.
-Implementation scope is described here; public-browser acceptance is recorded
-separately against the [runtime contract](runtime-contract.md).
+Public acceptance follows the [runtime contract](runtime-contract.md).
 
 ## Source map
 
@@ -22,138 +21,49 @@ separately against the [runtime contract](runtime-contract.md).
 | `domain/ingestion` | [service](../../src/domain/ingestion/code/index.mjs), [workspace](../../src/domain/ingestion/client/ingestion.jsx) | Upload, source preview, column mapping, editable extracted lines and private procurement draft import |
 | `domain/ingestion-engines` | [engines](../../src/domain/ingestion-engines/code/index.mjs) | Five individually mounted parsers: email, Excel, CSV/TSV, documents and optional live AI extraction |
 
-The [launcher](../../run) owns process startup, shutdown, build, status and diagnostics.
-The host contains plugin composition rather than procurement behavior. Dependency
-versions and frontend build scripts are in [host/package.json](../../host/package.json).
-The [client composition](../../host/client.mjs) imports plugin-owned React pages into
-the shell's component registry. These bundled pages build with Vite. User-generated
-extensions register runtime descriptors and utility code through Cordis; they do not
-rewrite the bundled frontend source.
+| `system/mail` | [service](../../src/system/mail/code/product.mjs), [transport](../../src/system/mail/code/product-transport.mjs), [inbox](../../src/system/mail/client/mail.jsx) | Account IMAP sync, SMTP, drafts/replies, attachments and agent tools |
+| `system/telegram` | [service](../../src/system/telegram/code/product.mjs), [client](../../src/system/telegram/client/telegram.jsx) | Bot messages/files, reviewed sending and opted-in generic activity reminders |
+| `system/agent-connections` | [service](../../src/system/agent-connections/code/index.mjs), [protocols](../../src/system/agent-connections/code/protocols.mjs), [client](../../src/system/agent-connections/client/connections.jsx) | MCP discovery/tools/resources/prompts and A2A tasks/messages/artifacts |
+| `system/action-center` | [service](../../src/system/action-center/code/index.mjs), [client](../../src/system/action-center/client/actions.jsx) | Frozen proposals, human decisions, durable receipts and uncertain execution recovery |
+| `system/notifications` | [service](../../src/system/notifications/code/index.mjs), [client](../../src/system/notifications/client/notifications.jsx) | Account activity inbox, header indicator, linked navigation and listeners |
+| `system/agent-workflows` | [engine](../../src/system/agent-workflows/code/engine.mjs), [memory](../../src/system/agent-workflows/code/memory.mjs), [workroom](../../src/system/agent-workflows/client/workroom.jsx) | Actual planner/specialist/synthesis calls, human input, durable run state, traces and explicit memory |
 
-## Accounts, data and business actions
+The [launcher](../../run) owns process startup, build and diagnostics. [host/client.mjs](../../host/client.mjs) imports plugin React contributions for Vite. User-generated extensions register runtime descriptors and utility code through actual Cordis fibers. Dependencies are pinned in [host/package.json](../../host/package.json).
 
-The accounts plugin stores password hashes and sessions outside the ledger. Public
-contact listings contain identity fields; private preferences stay on the account.
-Settings select one client type. The separate administrator account manages users,
-capability restrictions and global extensions. Account permission flags are resolved
-through `accounts.can(user, capability)`; generic routes consume capability metadata.
-Source: [accounts service](../../src/system/accounts/code/product.mjs).
+## Accounts, data and reviewed actions
 
-Business plugins append records through `store.put()` and reconstruct their current
-state from ledger events. Each account ID is its own realm. Explicit public records
-travel through `store.exchange()`; supplier costs and private notes are excluded
-before exchange. The adapter imports the existing
-[Ledger](../../src/system/kernel/code/ledger.py) and
-[QEP](../../src/system/kernel/code/qep.py) implementations. It does not change their
-format or protocol semantics. Sources: [adapter](../../src/system/workspace-store/code/bridge.py)
-and [procurement service](../../src/domain/procurement/code/service.mjs).
+Each account has one client role; a separate admin manages accounts and global extensions. Generic routes consume capability metadata from `accounts.can`. Source: [accounts service](../../src/system/accounts/code/product.mjs).
 
-The procurement service owns both HTTP actions and assistant-facing tools. Tools can
-save private drafts and prepare review actions. The user confirms external business
-commitments through the corresponding client workflow; an assistant tool does not
-confirm them. Sources: [tools](../../src/domain/procurement/code/index.mjs) and
-[action implementation](../../src/domain/procurement/code/service.mjs).
+The [store adapter](../../src/system/workspace-store/code/bridge.py) reuses existing Python Ledger/QEP kernels without changing their semantics. Account IDs are realms. Plugins append complete versions through `store.put`; explicit public procurement records cross realms through QEP. [Procurement serializers](../../src/domain/procurement/code/service.mjs) exclude supplier costs and private notes.
 
-The signed-in user's confirmation appends `procurement/human-approved` before business
-writes; this does not implement the historical multi-approver queue. Negotiation messages are nonbinding context;
-changed commercial terms become effective through an approved quote/order workflow.
+Manual procurement commitments require human confirmation and append `procurement/human-approved`. Agent proposals use the action center: immutable request, originating run, decision, executor outcome and destination link. Plugin-owned preview slots make exact requests readable. A stale draft or commitment is refused by its owning executor. Concurrent/repeated approval does not repeat a completed action; interrupted delivery becomes uncertain without automatic retry. Sources: action-center and procurement modules above.
 
-## Operational assistant
+## Operational agents and memory
 
-The provider reads the configured chat-completions endpoint and issues actual model
-requests. It appends the complete request, response or failure to the user's ledger.
-The assistant includes the current account's workspace and preferences, then runs
-registered tools in a bounded conversation loop. Conversations and tool results are
-durable, and explicit preference updates are reflected in future turns. Sources:
-[provider](../../src/system/agent-runtime/code/product-ai.mjs),
-[assistant](../../src/system/agent-runtime/code/product-assistant.mjs), and
-[accounts](../../src/system/accounts/code/product.mjs).
+The provider issues real chat-completions requests and records complete model input/output in the account ledger. Chat and workroom specialists share [assistant.invoke](../../src/system/agent-runtime/code/product-assistant.mjs) and [agent policy](../../src/system/agent-runtime/code/product-policy.mjs). Tool definitions carry effect and source metadata. Delegates receive read/private-draft/proposal tools; they have no approval tool. Unknown writes remain unavailable to delegates. Chat writes derived from external source content use an explicitly registered proposal callback or are refused.
 
-This is the first AI benefit: understanding information and preparing useful work
-inside the procurement process. It depends on provider availability. No deterministic
-rule result is presented as an actual model response.
+Trusted app instructions are separate from account/source data. External mail, documents, remote prompts and tool/agent results retain their provenance and are treated as data. Effect checks, human action execution and memory acceptance are code boundaries. Suspicious-text warnings aid review; this does not assert model immunity to all prompt injection.
 
-Extraction consumes pasted text and uploaded files. Traditional engines preserve rows,
-text and email attachments; the optional AI engine uses the actual source and records
-its extraction request/output. Users review and edit lines before creating a private
-RFQ or quote. Supplier imports reconcile RFQ item identity, quantities, units and
-currency; costs stay private. See the [ingestion contract](plugin-workspace-contract.md).
-Saved skills run on demand. Live inbox sync, scheduled skills and scanned-document
-OCR are outside the [current composition](../../host/product.mjs).
+The workroom calls a real planner, preserves distinct specialist conversations, runs ready independent tasks concurrently and synthesizes their reports. Users review a plan, answer queued questions, pause/resume/cancel and give feedback. Ledger records retain runs, agent identities, task states, tool results, reports and decisions. Interrupted runs recover paused; incomplete tool turns are repaired before explicit resume. Visible traces expose inputs/results rather than hidden chain-of-thought. Source: workroom engine above.
 
-## Personal extensions and reusable skills
+The memory service owns inspectable, editable and archivable facts/preferences with source and revision history. Model suggestions wait for human review. Existing preferences are imported with legacy provenance and stable IDs; archiving prevents re-import. Only active explicit memory enters later assistant/workroom context. Account settings renders a plugin-owned memory card. Source: memory and workroom client above.
 
-The second AI benefit is customization. The studio asks the real provider for a
-descriptor of one supported type:
+## Connected services and information intake
 
-| Type | Current supported behavior |
-|---|---|
-| Theme | Accent, background, surface, text colors and corner radius |
-| Reference widget | Personal title, body and optional reference list; it does not invent live metrics |
-| Workflow skill | Saved instructions and steps, executed as a new assistant turn with current account context |
-| Executable utility (`calculator`) | Model-authored JavaScript function with number/text inputs and JSON results; can calculate, transform text or read the caller's account snapshot |
+Mail uses ImapFlow and Nodemailer for real IMAP/SMTP. It retains source MIME, deduplicates by connection/mailbox/UID identity and saves attachments through file-store. Telegram uses Bot API polling with durable update cursor, reviewed sends and optional generic notifications to a user-configured chat. Their settings are account scoped, including for admin, with masked credentials and no shared-token inheritance. Polling/sockets/listeners abort on unload. SMTP acceptance is not a delivery/read guarantee.
 
-The descriptor is compiled into an executable `.mjs` module whose `apply(ctx)`
-registers `ctx.web.extension(accountId, descriptor)` through `ctx.effect()`. A real
-Cordis child fiber owns the effect. Unload disposes it; startup reconstructs enabled
-plugins from stored records. Artifacts live beneath the runtime data directory;
-skills additionally have `SKILL.md`. Source:
-[studio generation and lifecycle](../../src/system/plugin-studio/code/product.mjs).
+Agent connections uses official MCP and A2A SDKs. Supported MCP transports are Streamable HTTP and explicit legacy SSE; tools/resources/prompts are discoverable and available to chat. Remote operations create exact-input review proposals by default. A2A retains task/context/message IDs and supports input-required continuation, status/artifacts and cancellation. Discovery/metadata remain external data. [Connection requirements](../../src/system/agent-connections/requirements/functional.md) specify verified protocol versions and limits; no stdio launching, OAuth consent, gRPC or push-webhook subscription is implied.
 
-For a utility, the model supplies the entire JavaScript implementation in `spec.code`.
-Its Cordis artifact also registers that function with `studioRuntime` through a second
-effect. The runtime executes the generated source against user inputs and a copy of
-the calling account's current procurement snapshot in `node:vm` with a time limit.
-The platform contains no calculator formulas. Execution is synchronous and returns
-JSON; the runtime supplies no filesystem, network, or business-write interface. The
-default execution limit is 750 ms, with up to 24 number/text input fields. Runtime
-errors are surfaced to the user; generated formulas are reviewable source rather
-than a claim of guaranteed correctness. Sources:
-[utility execution](../../src/system/plugin-studio/code/tool-runtime.mjs).
+Files and attachments enter the [ingestion workspace](../../src/domain/ingestion/code/index.mjs). Traditional parsers preserve rows/text; optional live AI extracts unstructured sources. Users review editable lines before private RFQ/quote import. Supplier imports reconcile item identities and retain private costs. OCR and scheduled skills are outside this composition.
 
-Publishing makes a descriptor available in the marketplace. Installing makes an
-independent personal copy. Administrator promotion makes an independent global copy,
-so the author's original extension retains its own lifecycle. Origin lineage is the
-identity for installed state and UI selection. One instance per account/global scope
-is active; enabled personal copies take precedence over global defaults. Older duplicate
-records are retained and unloaded. Editable theme colors, widget content, utility inputs
-and skill instructions remount their effects through Cordis. Client accounts cannot
-make system-wide changes. Pure utility code can implement new calculations and data
-transformations; adding arbitrary frontend dependencies or server integrations is
-outside the supported generation surface.
+## Personal extensions and plugin management
 
-## Plugin settings, inventory and files
+The studio's real model generates themes, reference widgets, reusable skills and executable utilities. Artifacts register account-specific UI/effects through Cordis and survive restart. Skills execute a new assistant turn; generated utilities are bounded pure JavaScript with number/text inputs, JSON outputs and caller workspace context. The utility runtime offers no filesystem, network or business-write interface. Source: [studio](../../src/system/plugin-studio/code/product.mjs) and [utility runtime](../../src/system/plugin-studio/code/tool-runtime.mjs).
 
-The configuration plugin owns schema forms and persistence. Non-secret values append
-`settings/config-saved` to the appropriate realm. Credentials live in its private file,
-are masked in UI responses and do not enter model prompts. Account overrides inherit
-global defaults; changing a personal AI endpoint requires an account-owned key. The
-provider consumes effective settings on every request. Settings and admin inventory have
-independent navigation, so disabling Studio does not remove its re-enable controls.
-Sources: [settings](../../src/system/settings/code/index.mjs),
-[provider](../../src/system/agent-runtime/code/product-ai.mjs),
-[manager](../../src/system/plugin-manager/code/index.mjs).
+Publishing, independent personal installation and independent global promotion preserve source and lineage. One active instance per account/global scope is selected; personal copies take precedence. Unload disposes effects, while reconfiguration remounts them. Client accounts cannot change global plugins. Arbitrary generated server integrations are outside this generation surface.
 
-The manager lists mounted native fibers and their named children. Repository manifests
-that are not mounted are explicitly labelled repository-only; historical mail transport
-is not presented as a running inbox. Email file ingestion is an active, separate engine.
-File bytes are account-owned, content-addressed and checked against their recorded hash.
-Parsed source and reviewed results are ledger facts; deletion from the library preserves
-prior provenance. Source: [file store](../../src/system/file-store/code/index.mjs).
+Settings schemas own their fields and validators. Ordinary user schemas can inherit admin defaults; account connection schemas use only built-in defaults and the current account's values/secrets. Credentials do not enter model context. Dynamic schemas can restrict ownership. Sources: [settings](../../src/system/settings/code/index.mjs), [plugin inventory](../../src/system/plugin-manager/code/index.mjs). Inventory exposes actual native fibers/children, dependencies and enable/disable controls; unmounted historical manifests are labelled repository-only.
 
-## Current scope and historical requirements
+## Scope and evidence
 
-[ADR-0027](../design/adr/0027-agentic-product-composition.md) records the new composition
-and separate administrator experience; [ADR-0028](../design/adr/0028-generated-personal-utility-code.md)
-adds model-authored pure utility code. The [requirements map](plugin-requirements.md)
-retains ownership of earlier requirements without asserting feature parity. Historical
-`docs/design/`, `docs/work/` and old runtime evidence explain earlier stages, including
-the previous panel UI and deterministic harness. Those checks are not evidence for
-the new React experience.
-
-The requirements map assigns all 166 historical definitions to owners; mounted
-capabilities and acceptance are recorded separately.
-
-Current acceptance is the public workflow in [runtime-contract.md](runtime-contract.md).
-Real-provider and lifecycle smoke evidence is local under `tmp/product-evidence/`;
-it does not substitute for the independent end-to-end browser evaluation.
+[ADR-0027](../design/adr/0027-agentic-product-composition.md), [ADR-0028](../design/adr/0028-generated-personal-utility-code.md), [ADR-0029](../design/adr/0029-configurable-plugin-workspace.md) and [ADR-0030](../design/adr/0030-connected-agent-workflows.md) record the composition changes. The [requirements map](plugin-requirements.md) preserves all 166 historical owners without claiming feature parity. Historical runtime/panel tests are not evidence for the React product. Current acceptance is defined by the [runtime](runtime-contract.md), [plugin workspace](plugin-workspace-contract.md) and [connected agent](connected-agent-contract.md) contracts and their public GUI evidence.

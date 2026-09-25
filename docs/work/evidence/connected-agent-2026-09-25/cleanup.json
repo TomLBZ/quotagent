@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "schema": "mail",
+      "configuredSecrets": [],
+      "hasOverrides": false
+    },
+    {
+      "schema": "telegram",
+      "configuredSecrets": [],
+      "hasOverrides": false
+    }
+  ],
+  "errors": [],
+  "at": "2026-09-25T10:36:48.199Z"
+}

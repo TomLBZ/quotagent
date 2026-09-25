@@ -1,0 +1,53 @@
+[
+  {
+    "command": "node src/system/agent-workflows/tests/cancellation.mjs",
+    "exitCode": 0,
+    "output": {
+      "ok": true,
+      "checks": [
+        "Delayed cancellation write cannot relaunch the aborted job or leave any worker active",
+        "Cancellation at the next-worker transition retains completed reports and prevents provider execution",
+        "Startup reconciles historical cancelled task states without replaying work or losing reports"
+      ]
+    }
+  },
+  {
+    "command": "node src/system/agent-workflows/tests/state.mjs",
+    "exitCode": 0,
+    "output": {
+      "ok": true,
+      "checks": [
+        "Legacy preference migration is idempotent and preserves archive tombstones",
+        "Memory requires explicit approval and preserves provenance/history",
+        "Account isolation and archived memory exclusion",
+        "Human plan and question checkpoints",
+        "Independent agents overlap in separate contexts",
+        "Human feedback and reviewed memory enter model inputs",
+        "Cancellation prevents completion; unload retains recoverable task state",
+        "Invalid task dependencies rejected"
+      ],
+      "maxParallel": 2,
+      "modelCalls": 12,
+      "ledgerRecords": 57
+    }
+  },
+  {
+    "command": "node src/system/agent-connections/tests/smoke.mjs",
+    "exitCode": 0,
+    "output": {
+      "ok": true,
+      "root": "/workspace/projects/quotagent/tmp/connections-smoke-50Vhuy",
+      "checks": [
+        "official SDK MCP2026 StreamableHTTP SSE responses and legacy SSE",
+        "tools/resources/prompts discovery and real calls",
+        "review-before-call and no duplicate approval",
+        "tool errors fail actions",
+        "A2A1.0 card, send, query, input-required reply, artifacts, cancel",
+        "private connection settings and credential-free ledger",
+        "removed connection history is owner-readable with no remote operations",
+        "notifications, restart recovery, complete effect disposal"
+      ],
+      "remoteCalls": 6
+    }
+  }
+]

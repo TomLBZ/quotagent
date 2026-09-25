@@ -1,0 +1,13 @@
+{
+  "fixtureCredentialsCleared": true,
+  "telegramFixtureOverrideRemoved": true,
+  "publicHttpStatus": 200,
+  "pid": 1837963,
+  "fixtureAndLocalPortsClosed": {
+    "8620": true,
+    "8621": true,
+    "45143": true,
+    "42477": true,
+    "37919": true
+  }
+}

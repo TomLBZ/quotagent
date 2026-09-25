@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "connection": "Local protocol 10:28:54 MCP",
+  "model": "deepseek-flash",
+  "tools": [
+    "list_agent_connections",
+    "discover_agent_connection",
+    "propose_agent_connection_call"
+  ],
+  "approvedResult": 2520,
+  "exactOutboundArguments": {
+    "quantity": 30,
+    "unitPrice": 80,
+    "freight": 120
+  },
+  "checkedAt": "2026-09-25T10:33:38.720Z"
+}

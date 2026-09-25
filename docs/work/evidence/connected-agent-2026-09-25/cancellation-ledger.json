@@ -1,0 +1,67 @@
+{
+  "ok": true,
+  "ledger": "tmp/product-data/ledgers/supplier2-demo.jsonl",
+  "runId": "d5a01c0a-1903-40fa-a457-aa637274c485",
+  "finalStatus": "cancelled",
+  "steps": [
+    {
+      "id": "scope",
+      "status": "cancelled",
+      "startedAt": "2026-09-25T10:46:05.372Z"
+    },
+    {
+      "id": "commercial",
+      "status": "cancelled",
+      "startedAt": "2026-09-25T10:46:05.372Z"
+    },
+    {
+      "id": "delivery",
+      "status": "cancelled",
+      "startedAt": "2026-09-25T10:46:05.372Z"
+    },
+    {
+      "id": "source-integrity",
+      "status": "cancelled"
+    }
+  ],
+  "cancelSeq": 188,
+  "providerRequests": [
+    {
+      "seq": 167,
+      "purpose": "workflow:d5a01c0a-1903-40fa-a457-aa637274c485:planner",
+      "model": "deepseek-flash"
+    },
+    {
+      "seq": 179,
+      "purpose": "workflow:d5a01c0a-1903-40fa-a457-aa637274c485:scope:agent",
+      "model": "deepseek-flash"
+    },
+    {
+      "seq": 181,
+      "purpose": "workflow:d5a01c0a-1903-40fa-a457-aa637274c485:commercial:agent",
+      "model": "deepseek-flash"
+    },
+    {
+      "seq": 183,
+      "purpose": "workflow:d5a01c0a-1903-40fa-a457-aa637274c485:delivery:agent",
+      "model": "deepseek-flash"
+    }
+  ],
+  "workerStartSequences": [
+    {
+      "seq": 178,
+      "stepId": "scope"
+    },
+    {
+      "seq": 180,
+      "stepId": "commercial"
+    },
+    {
+      "seq": 182,
+      "stepId": "delivery"
+    }
+  ],
+  "modelCallsAfterCancellation": 0,
+  "workerStartsAfterCancellation": 0,
+  "checkedAt": "2026-09-25T10:46:55.642Z"
+}

@@ -1,0 +1,51 @@
+YOUR SERVICES
+Agent connections
+
+Connect your own tools and specialist agents. Discover their capabilities, review what you share, and keep task results with your work.
+
+Add connection
+
+Viewing recorded connection history.
+
+Local protocol 10:28:54 A2A
+
+http://127.0.0.1:8621/
+
+Removed
+
+This connection was removed. Its credentials and remote access were cleared. Saved activity and task results remain available below.
+
+Recorded tasks
+Task 376b8274-14d0-
+canceled
+canceled
+
+Updated 9/25/2026, 10:29:04 AM
+Conversation and artifacts
+Task de91bf95-aaa3-
+completed
+completed
+
+Confirmed delivery location: London. Estimated freight: 120 USD.
+
+Freight estimate
+
+Confirmed delivery location: London. Estimated freight: 120 USD.
+
+Updated 9/25/2026, 10:29:01 AM
+Conversation and artifacts
+Activity history (5)
+cancel · completed · 9/25/2026, 10:29:04 AM
+Input
+{
+  "contextId": "815768db-b3aa-4eb1-9df8-c36a07c516b7",
+  "remoteTaskId": "376b8274-14d0-4407-9ffd-63757c62c4bd",
+  "taskId": "dcedb914-d780-4143-9c43-5ea277cad8f7"
+}
+Result
+canceled
+
+send · completed · 9/25/2026, 10:29:03 AM
+send · completed · 9/25/2026, 10:29:01 AM
+query · completed · 9/25/2026, 10:29:01 AM
+send · completed · 9/25/2026, 10:28:59 AM

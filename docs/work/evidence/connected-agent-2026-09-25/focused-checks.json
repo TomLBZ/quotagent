@@ -1,0 +1,49 @@
+{
+  "shared-state": {
+    "command": "node src/system/action-center/tests/state.mjs",
+    "result": "PASS",
+    "observed": [
+      "account credentials and dynamic schemas isolated including admin",
+      "concurrent proposal/approval exactly one execution",
+      "cross-account and unconfirmed action refused",
+      "durable notification read state",
+      "delegated write and model confirmation refused",
+      "external data provenance and warnings",
+      "interrupted execution uncertain without retry",
+      "notification failure cannot change successful execution",
+      "trusted source-assisted proposal callback replaces direct write"
+    ]
+  },
+  "mail-telegram-protocol": {
+    "command": "node src/system/mail/tests/product-smoke.mjs",
+    "result": "PASS",
+    "observed": [
+      "actual loopback IMAP/SMTP authentication and MIME sync/send",
+      "actual local Telegram HTTP updates/files/send",
+      "attachment ingestion",
+      "proposals send nothing; approval sends once",
+      "stale draft refused",
+      "notification failure preserves send receipt",
+      "explicit generic reminder opt-in excludes private content",
+      "account settings masking/isolation and disposal"
+    ]
+  },
+  "procurement": {
+    "command": "node src/domain/procurement/code/smoke.mjs",
+    "result": "PASS",
+    "observed": [
+      "real ledger and QEP account workflow",
+      "human-reviewed frozen commitments and stale record refusal",
+      "private costs retained in supplier realm",
+      "drafts, messages, order/change progression",
+      "disposal and idempotent demo startup"
+    ]
+  },
+  "frontend": {
+    "command": "npm --prefix host run build",
+    "result": "PASS",
+    "observed": [
+      "Vite8.3.1, React41modules"
+    ]
+  }
+}

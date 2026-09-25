@@ -1,0 +1,36 @@
+{
+  "ok": true,
+  "pages": [
+    {
+      "name": "Agent workroom",
+      "width": 390,
+      "document": 390
+    },
+    {
+      "name": "Email",
+      "width": 390,
+      "document": 390
+    },
+    {
+      "name": "Telegram",
+      "width": 390,
+      "document": 390
+    },
+    {
+      "name": "Agent connections",
+      "width": 390,
+      "document": 390
+    },
+    {
+      "name": "Review actions",
+      "width": 390,
+      "document": 390
+    },
+    {
+      "name": "Notifications",
+      "width": 390,
+      "document": 390
+    }
+  ],
+  "errors": []
+}

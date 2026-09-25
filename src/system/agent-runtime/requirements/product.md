@@ -27,7 +27,7 @@ service. Approved active memories enter later model inputs; model suggestions ca
 silently become active. Full tool results carry run/step/agent identifiers. Provider
 calls support cancellation and record model input/output; workers retain distinct
 contexts. Events: `agent-policy/tool-refused`, `agent-policy/external-content`,
-`agent/tool-completed`, plus existing `agent/llm-request`, `agent/llm-response` and chat
+`agent/tool-completed`, plus existing `agent/model-requested`, `agent/model-completed` and chat
 records. Acceptance: action-center state checks, workroom actual-model GUI journeys,
 and external-source injection probes in the connected-agent evidence report.
 
