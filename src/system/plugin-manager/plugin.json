@@ -1,0 +1,8 @@
+{
+  "name": "plugin-manager",
+  "version": "1.0.0",
+  "layer": "system",
+  "entry": "code/index.mjs",
+  "provides": ["plugins"],
+  "description": "Admin inventory of native Cordis plugins and repository manifests, real load/unload lifecycle, and persisted runtime enablement."
+}
