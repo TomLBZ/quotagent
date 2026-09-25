@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as storePlugin from '../../../system/workspace-store/code/index.mjs'
 import * as procurementPlugin from './index.mjs'
+import * as actionsPlugin from '../../../system/action-center/code/index.mjs'
 
 const require = createRequire(new URL('../../../../host/package.json', import.meta.url))
 const { Context } = require('cordis')
@@ -23,14 +24,18 @@ const users = [
 const routes = [], navigation = [], tools = []
 const push = (list, entry) => { list.push(entry); return () => list.splice(list.indexOf(entry), 1) }
 const foundation = await context.plugin({ name: 'smoke-foundation', apply(ctx) {
-  ctx.provide('accounts', { list: () => structuredClone(users), get: id => structuredClone(users.find(user => user.id === id)) })
+  ctx.provide('accounts', { list: () => structuredClone(users), get: id => structuredClone(users.find(user => user.id === id)), can: (user, capability) => !(capability === 'workspace:write' && user.permissions?.includes('workspace:read-only')) })
   ctx.provide('web', { route: (...args) => push(routes, args), contribute: entry => push(navigation, entry) })
   ctx.provide('assistant', { tool: entry => push(tools, entry) })
 } })
 const storeFiber = await context.plugin(storePlugin, { root })
+const actionsFiber = await context.plugin(actionsPlugin)
+const baseRoutes = routes.length, baseNavigation = navigation.length
 let fiber = await context.plugin(procurementPlugin)
 try {
   const service = context.procurement
+  const prepare = (user, input, metadata = {}) => tools.find(tool => tool.name === 'prepare_commitment').execute(user, input, metadata)
+  const approve = async (user, proposal) => { const decision = await context.actions.approve(user, proposal.proposal.id, { confirmed: true }); assert.equal(decision.status, 'succeeded', decision.error); return decision.result }
   const [buyer, supplier, second] = users
   const demoBuyer = users.find(user => user.id === 'contractor-demo')
   const demoData = service.snapshot(demoBuyer)
@@ -53,7 +58,14 @@ try {
   await assert.rejects(service.execute({ ...buyer, permissions: ['workspace:read-only'] }, 'create-rfq', { id: rfq.id }, { agent: true }), /read-only/)
   assert.equal(service.snapshot(supplier).rfqs.length, 0, 'Draft must stay private')
   await assert.rejects(service.execute(buyer, 'publish-rfq', { id: rfq.id }), /confirm/)
-  await service.execute(buyer, 'publish-rfq', { id: rfq.id, confirmed: true })
+  const outdated = await prepare(buyer, { action: 'publish-rfq', id: rfq.id }, { source: 'workflow', runId: 'procurement-review-run', stepId: 'publish' })
+  assert.equal(outdated.proposal.runId, 'procurement-review-run'); assert.equal(outdated.action.type, 'navigate'); assert.equal(outdated.action.input.view, 'approvals')
+  assert.equal(service.snapshot(supplier).rfqs.length, 0, 'Preparing review never sends the RFQ')
+  await service.execute(buyer, 'create-rfq', { id: rfq.id, description: 'Reviewed scope has changed' })
+  const refused = await context.actions.approve(buyer, outdated.proposal.id, { confirmed: true })
+  assert.equal(refused.status, 'failed'); assert.match(refused.error, /changed after/)
+  assert.equal(service.snapshot(supplier).rfqs.length, 0, 'A stale review cannot publish changed scope')
+  await approve(buyer, await prepare(buyer, { action: 'publish-rfq', id: rfq.id }))
   await assert.rejects(service.execute(buyer, 'create-rfq', { id: rfq.id, title: 'Edit published' }), /unpublished/)
   assert.equal(service.snapshot(supplier).rfqs[0].id, rfq.id)
   assert.equal(service.snapshot(second).rfqs[0].id, rfq.id)
@@ -61,7 +73,9 @@ try {
     items: [{ id: 'x', unitPrice: 0.33, cost: 0.12 }], leadDays: 14, paymentTerms: 'Net 30', privateNotes: 'supplier-private-note' })
   assert.equal(draft.quote.total, 0.5, 'Round 1.5 × 0.33 once to cents')
   assert.equal(service.snapshot(buyer).quotes.length, 0, 'Quote draft must stay private')
-  await service.execute(supplier, 'submit-quote', { id: draft.quote.id, confirmed: true })
+  const quoteProposal = await prepare(supplier, { action: 'submit-quote', id: draft.quote.id })
+  assert.equal(quoteProposal.proposal.input.preview.items[0].cost, undefined)
+  await approve(supplier, quoteProposal)
   const buyerData = service.snapshot(buyer)
   assert.equal(buyerData.comparison[0].total, 0.5)
   assert.equal(buyerData.quotes[0].items[0].cost, undefined)
@@ -76,15 +90,15 @@ try {
   assert.equal(service.snapshot(buyer).comparison.length, 1, 'Only latest submitted revision is ranked')
   assert.equal(service.snapshot(buyer).comparison[0].total, 0.45)
   await assert.rejects(service.execute(buyer, 'award', { quoteId: revised.quote.id, confirmed: true }, { agent: true }), /cannot commit/)
-  const { order } = await service.execute(buyer, 'award', { quoteId: revised.quote.id, confirmed: true })
+  const { order } = await approve(buyer, await prepare(buyer, { action: 'award', quoteId: revised.quote.id }))
   assert.equal(service.snapshot(supplier).orders[0].id, order.id)
   assert.equal(service.snapshot(supplier).quotes.find(row => row.id === revised.quote.id).status, 'awarded')
   assert.equal(service.snapshot(supplier).quotes.find(row => row.id === revised.quote.id).items[0].cost, 0.12)
-  await service.execute(supplier, 'acknowledge-order', { id: order.id, confirmed: true })
+  await approve(supplier, await prepare(supplier, { action: 'acknowledge-order', id: order.id }))
   assert.equal(service.snapshot(buyer).orders[0].status, 'acknowledged')
   const { change } = await service.execute(supplier, 'propose-change', { orderId: order.id, title: 'Add delivery', amount: 2.15 })
   assert.equal(service.snapshot(buyer).orders[0].total, 0.45)
-  await service.execute(buyer, 'approve-change', { id: change.id, confirmed: true })
+  await approve(buyer, await prepare(buyer, { action: 'approve-change', id: change.id }))
   assert.equal(service.snapshot(supplier).orders[0].total, 2.6)
   await service.execute(buyer, 'approve-change', { id: change.id, confirmed: true })
   assert.equal(service.snapshot(buyer).orders[0].total, 2.6, 'Duplicate approval must not add twice')
@@ -98,14 +112,18 @@ try {
   await assert.rejects(service.execute(second, 'save-quote', { rfqId: 'unknown', items: [] }), /not available/)
   const draftTool = tools.find(tool => tool.name === 'draft_message')
   assert.ok(draftTool, 'Assistant tools registered through a Cordis child context')
-  const proposal = await draftTool.execute(supplier, { rfqId: rfq.id, toId: buyer.id, text: 'Negotiation draft only' })
-  assert.equal(proposal.action.action, 'send-message')
+  const proposal = await draftTool.execute(supplier, { rfqId: rfq.id, toId: buyer.id, text: 'Negotiation draft only' }, { source: 'workflow', runId: 'procurement-review-run' })
+  assert.equal(proposal.action.type, 'navigate'); assert.equal(proposal.proposal.kind, 'procurement.commit')
+  assert.equal(proposal.proposal.input.preview.recipients[0].name, buyer.company)
   assert.ok(!service.snapshot(buyer).messages.some(row => row.text === 'Negotiation draft only'))
+  const receipt = await approve(supplier, proposal); assert.equal(receipt.action.input.view, 'messages')
+  await approve(supplier, proposal)
+  assert.equal(service.snapshot(buyer).messages.filter(row => row.text === 'Negotiation draft only').length, 1, 'Repeated approval sends one message')
   console.log(JSON.stringify({ ok: true, checks: 'real-ledger-QEP; two recipients; private drafts/costs/preferences; exact totals; revision supersession; human order/acknowledgment/change; idempotency; tool proposals',
     rfqs: count, registeredTools: tools.length, registeredRoutes: routes.length, root }))
   await fiber.dispose()
-  assert.equal(routes.length, 0)
-  assert.equal(navigation.length, 0)
+  assert.equal(routes.length, baseRoutes)
+  assert.equal(navigation.length, baseNavigation)
   assert.equal(tools.length, 0)
   console.log('Cordis disposal: routes, navigation and tools removed.')
   const eventCounts = users.map(user => context.store.events(user.id).length)
@@ -116,6 +134,7 @@ try {
   console.log('Startup demo: two bids immediately available; new accounts empty; remount appends no events and preserves orders.')
 } finally {
   await fiber.dispose()
+  await actionsFiber.dispose()
   await storeFiber.dispose()
   await foundation.dispose()
 }

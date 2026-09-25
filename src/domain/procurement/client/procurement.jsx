@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import './proposal-preview.jsx'
 import { registry, useApp, useResource, api, Icon, Button, Badge, Field, PageHeader, Modal, Empty, Loading, ErrorNotice, money, date, initials } from '../../../system/webui/client/core.jsx'
 const ProcurementContext = createContext(null)
 const useWork = () => useContext(ProcurementContext)
