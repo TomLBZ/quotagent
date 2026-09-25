@@ -18,6 +18,13 @@ product behavior and acceptance, independently of older completion statuses.
 | Natural-language themes/widgets, actual generated utility code, skills, market and promotion | system/plugin-studio | Runtime contract 4–5; ADR-0028; generated-utility-live.json |
 | Complete quotation process and differentiated user experience | domain/procurement | Runtime contract 2, 7 |
 | Account facts and model context reconstructible from ledger; public QEP exchange | system/workspace-store | Replay and public workflow evidence |
+| Stable background refresh | system/webui | Plugin workspace contract; focus and mounted cards preserved |
+| Unique extension lineage and installed marketplace state | system/plugin-studio | Plugin workspace contract; active personal/global selection and idempotent installs |
+| Complete native and repository plugin inventory | system/plugin-manager | Plugin workspace contract; actual fibers and clear repository-only status |
+| Persisted credentials, preferences and editable configuration | system/settings | Plugin workspace contract; masked credentials, inherited defaults and account overrides |
+| Immutable account uploads and downloads | system/file-store | Plugin workspace contract; retained provenance and account ownership |
+| Source review, mapping and private draft import | domain/ingestion | Plugin workspace contract; contractor RFQ and supplier quote from real files |
+| Traditional format parsers and optional AI extraction | domain/ingestion-engines | Plugin workspace contract; email/Excel/CSV/document fixtures and real model |
 | Public experience evaluation | system/eval | Independent evaluation evidence |
 | Recoverability, documentation, individual commit/push batches | system/repo-gate | Ignored state/handover; versioned specs and git refs |
 
@@ -43,6 +50,11 @@ or assert that every advanced historical behavior has been reimplemented.
 | system/accounts | Client identity and server administration | One client role, separate admin accounts, current-account settings and functional capability permissions |
 | system/workspace-store | Ledger/QEP, projections and cross-account delivery | Existing Python kernels, account record replay and explicit public record exchange |
 | system/webui | GUI, reusable controls and client navigation | Generic React shell/registry and HTTP transport; feature pages remain owned by their plugins |
+| system/settings | Plugin configuration and preferences | Schema-owned UI, persisted defaults/overrides, private credentials; actual consumers include provider, assistant, WebUI and ingestion |
+| system/plugin-manager | Runtime discovery and lifecycle | Actual native/child fibers, repository-only inventory and managed enable/disable |
+| system/file-store | File IO | Account-owned immutable uploads, downloads and ledger metadata |
+| domain/ingestion | Intake and editable drafts | File source preview, column mapping and private procurement draft import |
+| domain/ingestion-engines | Email/table/document intake and information extraction | Individual email/Excel/CSV/document parsers and optional actual model extraction |
 
 Launcher/composition belongs to system/runtime. Evaluation and repository-operation
 requirements remain owned by system/eval and system/repo-gate. Historical mail,

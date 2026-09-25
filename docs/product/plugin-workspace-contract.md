@@ -2,7 +2,8 @@
 <!-- budget: 12288 bytes, hard -->
 
 Source: user's five follow-up requirements, 2026-09-25. This extends the
-[runtime contract](runtime-contract.md); acceptance is pending public verification.
+[runtime contract](runtime-contract.md). Public acceptance passed; see the
+[commands, reports and screenshots](../work/evidence/plugin-workspace-2026-09-25/README.md).
 
 | Requirement | Owner | Observable acceptance |
 |---|---|---|
@@ -17,14 +18,16 @@ Source: user's five follow-up requirements, 2026-09-25. This extends the
 `ctx.settings.define({id,name,scope,fields,defaults})` registers a schema through a
 Cordis-owned effect and returns its disposer. Scope is `user` (account override on
 top of global defaults) or `admin` (server setting). IDs are slash-free. Field types
-are text/password/number/boolean/select/color. `get(user,id)` returns effective values
+are text/textarea/password/number/boolean/select/color. `get(user,id)` returns effective values
 to the owning plugin; `view(user,id)` masks secrets and exposes schema; `list(user)`
 returns accessible schemas. `GET/PATCH /settings/:id` display/save values. PATCH
-accepts `{values,clearSecrets?}`; an empty password means keep the saved credential.
+accepts `{values,clearSecrets?,reset?}`; an empty password means keep the saved credential.
 
 Non-secret settings versions append `settings/config-saved` events. Credentials are
 persisted privately through the settings plugin, excluded from ledger/settings reads
-and model prompts. Actual model request parameters remain ledger recorded. Config
+and model prompts. AI connection resolution requires a personal key when the user
+changes the inherited provider or endpoint; other preferences preserve shared access.
+Actual model request parameters remain ledger recorded. Config
 changes do not themselves execute external commitments. UI refresh reconciles saved
 state without replacing a form being edited. Effective user values inherit server
 defaults, and source/override state is visible rather than duplicated config knobs.
@@ -55,9 +58,33 @@ masquerade as empty success. Text extraction and AI results are durable account 
 The ingestion UI owns file selection/upload, parser selection, preview, mapping and
 editable line review. AI extraction calls the configured provider with the actual
 source, leaves unspecified quantities/prices unresolved and creates drafts for human
-review. Imports must not publish RFQs, submit quotes or make commitments. Exact format
+review. Imports must not publish RFQs, submit quotes or make commitments. Supplier drafts
+require explicit RFQ-line matches and matching quantities, units and currency; there
+is no implicit currency or unit conversion. Exact format
 support and tested fixtures are documented with evidence; scanned-image OCR or any
 unimplemented format must not be implied by a generic file picker.
+
+## Supported formats and limits
+
+| Engine | Formats and behavior |
+|---|---|
+| Email | EML with MIME attachments; MBOX message archives; Outlook MSG plain/HTML bodies and attachments |
+| Spreadsheet | XLSX and binary XLS, all sheets with individual heading aliases; saved formula results |
+| Tabular | CSV/TSV with configured or detected delimiter, quoted fields/newlines, UTF-8 or BOM-marked UTF-16 |
+| Documents | DOCX tables/text, PDF text layers, HTML tables/text, TXT/Markdown and structured JSON |
+| AI | Actual configured provider extracts reviewed lines and source excerpts from persisted parsed content |
+
+Sixteen generated real-format fixtures are covered by the parser command. XLSM/XLSB/ODS
+are accepted by the spreadsheet library but not separately fixture-tested. Scanned PDFs
+require external OCR; legacy Word `.doc` and RTF-only MSG bodies require another export.
+PDF text extraction does not promise layout-perfect tables. Empty/unsupported attachments
+warn without discarding usable parent content. Source: [engine requirements](../../src/domain/ingestion-engines/requirements/README.md).
+
+File limits default to 10 MB per file, configurable to 20 MB. The preview preserves up
+to 250,000 characters and configured rows (default 500, max 10,000); AI sees up to 80,000
+characters and 250 rows/items. Truncation is reported. Parsed originals remain downloadable.
+Sources: [file store](../../src/system/file-store/code/index.mjs),
+[ingestion](../../src/domain/ingestion/code/index.mjs), [AI engine](../../src/domain/ingestion-engines/code/ai.mjs).
 
 ## Verification
 

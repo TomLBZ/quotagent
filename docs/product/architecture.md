@@ -2,9 +2,8 @@
 <!-- budget: 12288 bytes, hard -->
 
 The current product is composed by [host/product.mjs](../../host/product.mjs) from
-native Cordis plugins. Each plugin owns its routes, services, assistant tools, and
-frontend components. React renders a generic shell and registered feature pages.
-This document describes implementation scope; public-browser acceptance is recorded
+native Cordis plugins. Plugins own routes, services, assistant tools and frontend components. React renders a generic shell and registered feature pages.
+Implementation scope is described here; public-browser acceptance is recorded
 separately against the [runtime contract](runtime-contract.md).
 
 ## Source map
@@ -17,6 +16,11 @@ separately against the [runtime contract](runtime-contract.md).
 | `system/agent-runtime` | [provider](../../src/system/agent-runtime/code/product-ai.mjs), [assistant](../../src/system/agent-runtime/code/product-assistant.mjs), [assistant UI](../../src/system/agent-runtime/client/assistant.jsx) | Actual model requests, account conversations, current workspace context, remembered preferences and registered tool execution |
 | `system/plugin-studio` | [studio](../../src/system/plugin-studio/code/product.mjs), [utility runtime](../../src/system/plugin-studio/code/tool-runtime.mjs), [studio UI](../../src/system/plugin-studio/client/studio.jsx) | Model-authored utility code, real Cordis child plugins, load/unload, skills, publication, installation and admin promotion |
 | `system/workspace-store` | [Node service](../../src/system/workspace-store/code/index.mjs), [Python adapter](../../src/system/workspace-store/code/bridge.py) | Append-only account facts, replayable projections, and public record exchange using existing kernels |
+| `system/settings` | [service](../../src/system/settings/code/index.mjs), [forms](../../src/system/settings/client/settings.jsx) | Schema registration, global defaults and account overrides, masked credentials, persisted preferences and generic config UI |
+| `system/plugin-manager` | [manager](../../src/system/plugin-manager/code/index.mjs), [catalog](../../src/system/plugin-manager/client/manager.jsx) | Native fiber inventory including children, repository-only catalog, persisted real enable/disable and dependencies |
+| `system/file-store` | [service](../../src/system/file-store/code/index.mjs) | Account-owned immutable uploads, downloads and ledger-backed metadata |
+| `domain/ingestion` | [service](../../src/domain/ingestion/code/index.mjs), [workspace](../../src/domain/ingestion/client/ingestion.jsx) | Upload, source preview, column mapping, editable extracted lines and private procurement draft import |
+| `domain/ingestion-engines` | [engines](../../src/domain/ingestion-engines/code/index.mjs) | Five individually mounted parsers: email, Excel, CSV/TSV, documents and optional live AI extraction |
 
 The [launcher](../../run) owns process startup, shutdown, build, status and diagnostics.
 The host contains plugin composition rather than procurement behavior. Dependency
@@ -50,10 +54,8 @@ commitments through the corresponding client workflow; an assistant tool does no
 confirm them. Sources: [tools](../../src/domain/procurement/code/index.mjs) and
 [action implementation](../../src/domain/procurement/code/service.mjs).
 
-The confirmation records the current signed-in user's decision as
-`procurement/human-approved` before the corresponding business writes. It is the
-current product's approval interaction; older multi-approver queue acceptance is
-not implied by this implementation. Negotiation messages are nonbinding context;
+The signed-in user's confirmation appends `procurement/human-approved` before business
+writes; this does not implement the historical multi-approver queue. Negotiation messages are nonbinding context;
 changed commercial terms become effective through an approved quote/order workflow.
 
 ## Operational assistant
@@ -71,10 +73,13 @@ This is the first AI benefit: understanding information and preparing useful wor
 inside the procurement process. It depends on provider availability. No deterministic
 rule result is presented as an actual model response.
 
-Current extraction consumes pasted text. Saved skills run when the user chooses
-Run skill, with the assistant's existing tools and current workspace context. There
-is no scheduled skill runner, external inbox ingestion, or document OCR plugin in
-the [current host composition](../../host/product.mjs).
+Extraction consumes pasted text and uploaded files. Traditional engines preserve rows,
+text and email attachments; the optional AI engine uses the actual source and records
+its extraction request/output. Users review and edit lines before creating a private
+RFQ or quote. Supplier imports reconcile RFQ item identity, quantities, units and
+currency; costs stay private. See the [ingestion contract](plugin-workspace-contract.md).
+Saved skills run on demand. Live inbox sync, scheduled skills and scanned-document
+OCR are outside the [current composition](../../host/product.mjs).
 
 ## Personal extensions and reusable skills
 
@@ -108,18 +113,33 @@ than a claim of guaranteed correctness. Sources:
 
 Publishing makes a descriptor available in the marketplace. Installing makes an
 independent personal copy. Administrator promotion makes an independent global copy,
-so the author's original extension retains its own lifecycle. Client accounts cannot
+so the author's original extension retains its own lifecycle. Origin lineage is the
+identity for installed state and UI selection. One instance per account/global scope
+is active; enabled personal copies take precedence over global defaults. Older duplicate
+records are retained and unloaded. Editable theme colors, widget content, utility inputs
+and skill instructions remount their effects through Cordis. Client accounts cannot
 make system-wide changes. Pure utility code can implement new calculations and data
 transformations; adding arbitrary frontend dependencies or server integrations is
 outside the supported generation surface.
 
-The narrow [live utility demonstration](../../src/system/plugin-studio/tools/live-utility-check.mjs)
-uses an actual generated landed-cost implementation. It verified two input sets
-(totals 1,235.85 and 441.00), caller-specific workspace reads, publication/installation,
-global promotion and removal of both effects on unload. Evidence command:
-`node src/system/plugin-studio/tools/live-utility-check.mjs`; output is recorded in
-`tmp/product-evidence/generated-utility-live.json`. This is backend execution evidence,
-separate from public-browser acceptance.
+## Plugin settings, inventory and files
+
+The configuration plugin owns schema forms and persistence. Non-secret values append
+`settings/config-saved` to the appropriate realm. Credentials live in its private file,
+are masked in UI responses and do not enter model prompts. Account overrides inherit
+global defaults; changing a personal AI endpoint requires an account-owned key. The
+provider consumes effective settings on every request. Settings and admin inventory have
+independent navigation, so disabling Studio does not remove its re-enable controls.
+Sources: [settings](../../src/system/settings/code/index.mjs),
+[provider](../../src/system/agent-runtime/code/product-ai.mjs),
+[manager](../../src/system/plugin-manager/code/index.mjs).
+
+The manager lists mounted native fibers and their named children. Repository manifests
+that are not mounted are explicitly labelled repository-only; historical mail transport
+is not presented as a running inbox. Email file ingestion is an active, separate engine.
+File bytes are account-owned, content-addressed and checked against their recorded hash.
+Parsed source and reviewed results are ledger facts; deletion from the library preserves
+prior provenance. Source: [file store](../../src/system/file-store/code/index.mjs).
 
 ## Current scope and historical requirements
 
@@ -131,9 +151,8 @@ retains ownership of earlier requirements without asserting feature parity. Hist
 the previous panel UI and deterministic harness. Those checks are not evidence for
 the new React experience.
 
-All 166 historical definition rows are mapped to one owning plugin, with no missing
-or duplicate assignment. The requirements map separates that ownership inventory
-from the mounted product capabilities and their acceptance evidence.
+The requirements map assigns all 166 historical definitions to owners; mounted
+capabilities and acceptance are recorded separately.
 
 Current acceptance is the public workflow in [runtime-contract.md](runtime-contract.md).
 Real-provider and lifecycle smoke evidence is local under `tmp/product-evidence/`;

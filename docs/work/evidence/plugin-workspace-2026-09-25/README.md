@@ -52,7 +52,7 @@ Focused executable checks and recorded outputs:
 | `node src/system/plugin-studio/tools/lineage-check.mjs` | [Lineage regression](studio-lineage-review.txt): startup retirement, fallback, configuration remount and concurrent loads |
 | `node src/system/settings/tools/provider-scope-check.mjs` | [Dummy endpoint request evidence](ai-credential-review.json): effective credentials, reset, blank/clear behavior and no credential in views/ledger |
 | `npm --prefix host run build` | PASS, Vite 8.3.1, 28 transformed modules |
-| `tools/verify.sh docs` | PASS, budgets and document links/IDs |
+| `tools/verify.sh docs` | PASS, document budgets and IDs (edited links checked separately) |
 
 The public AI cases use the configured provider; the focused credential test deliberately
 uses a local dummy endpoint and is not claimed as live AI. Traditional parsing remains

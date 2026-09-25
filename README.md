@@ -1,11 +1,9 @@
 # Quotagent
 <!-- budget: 4096 bytes, hard -->
 
-A quotation workspace for contractors and suppliers, built with React and native
-Cordis plugins. [Open the demo](https://novara.remoteblossom.com/quotagent/).
+A React and Cordis quotation workspace for contractors and suppliers. [Open the demo](https://novara.remoteblossom.com/quotagent/).
 
-Contractors request, compare, negotiate and order. Suppliers prepare quotes, clarify
-scope and acknowledge orders. Each account sees one business role; a separate admin
+Contractors request, compare and order. Suppliers quote, clarify and acknowledge. Each account sees one business role; a separate admin
 manages users, permissions and global extensions.
 [Architecture and source map](docs/product/architecture.md).
 
@@ -20,19 +18,21 @@ Use the login page’s demo buttons. All demo passwords are **`demo1234`**.
 | `supplier2@demo.local` | Atlas Materials |
 | `admin@demo.local` | Server administration |
 
-1. Compare the two labelled Riverside lighting offers. Ask the assistant to explain
-   price, delivery and payment trade-offs, then draft a negotiation message.
-2. Paste a project brief into chat and ask for an editable RFQ. Review and publish it.
-   In another browser profile, sign in as a supplier, prepare a quote and submit it.
-3. Award from the contractor account, acknowledge from the supplier account, and
-   propose or approve a change. Commitments require your explicit confirmation.
+1. Compare the labelled Riverside offers; ask the agent to explain trade-offs.
+2. Ask for an RFQ draft, review and publish it. Sign in as a supplier to quote.
+3. Award as contractor, acknowledge as supplier, then propose/approve changes.
+   Commitments require your confirmation.
 4. Ask **“Give my workspace a terracotta theme”**, **“Build a landed-cost calculator
    with shipping, duty and tax inputs”**, or **“Save a reusable pre-bid review skill.”**
    In Plugin studio, inspect, run, enable/disable or publish the result.
-5. Use the admin account to manage access or promote a shared extension globally.
+5. Open **Ingest documents**, upload an email, Excel/CSV sheet or document, review
+   the extracted lines and create a private RFQ or quote. Use **Extract with AI** for
+   unstructured source text. Drafts remain editable before any commitment.
+6. Configure credentials and preferences in **Plugin settings**. Admins can inspect
+   all application plugins, manage optional engines or promote a shared extension.
 
-Built-in demo accounts receive shared, labelled sample records. A newly registered
-account starts empty; its supplier/contractor role is selectable in Settings.
+Demo accounts have labelled samples. New accounts start empty; choose one client role
+in Settings.
 
 ## Two levels of AI
 
@@ -41,14 +41,14 @@ and remembered preferences. The agent extracts pasted requirements, creates edit
 RFQ/quote drafts, compares offers and drafts negotiation messages for review.
 
 **Dynamic customization:** the agent generates personal themes, reference widgets,
-workflow skills and executable utilities. For a utility it writes actual JavaScript
-logic and input fields; an executable Cordis plugin owns its UI and callable effects.
+workflow skills and executable utilities. Utilities contain generated JavaScript, inputs and callable Cordis effects.
 Users load, unload, publish and install extensions. Admin promotion creates an
 independent global copy. Skills save a `SKILL.md` and execute through the assistant.
 
-Current extraction accepts pasted text. Skills run on demand. Generated utilities
+Extraction accepts pasted text and uploaded EML/MBOX/MSG, XLSX/XLS, CSV/TSV, DOCX,
+text PDF, TXT, HTML and JSON files. Email attachments are parsed too. Skills run on demand. Generated utilities
 are bounded pure functions with number/text inputs, JSON output and the caller’s
-workspace context. OCR, inbox sync, scheduled skills and arbitrary server integrations
+workspace context. OCR, live inbox sync, scheduled skills and arbitrary server integrations
 are outside this composition. See [current scope](docs/product/runtime-contract.md).
 
 ## Run locally
@@ -62,8 +62,7 @@ Requires Node.js 22.12+ and Python 3.
 ./run down
 ```
 
-`up` installs missing dependencies and builds the frontend. Use `./run build` after
-client edits. Default: `http://127.0.0.1:8093/quotagent/`; select another local port
+`up` installs missing dependencies and builds the frontend. Rebuild client edits with `./run build`. Default: `http://127.0.0.1:8093/quotagent/`; select another local port
 with `--port`. Accounts, ledgers and generated artifacts survive restarts under
 `tmp/product-data/`; override with `QUOTAGENT_PRODUCT_DATA`.
 
@@ -79,12 +78,11 @@ api_keys:
     base_url: https://api.openai.com/v1
 ```
 
-Supply the credential through the named environment variable. `QUOTAGENT_AI_MODEL`
+Plugin settings saves global/personal model credentials. Personal endpoints need
+personal keys. Environment credentials also work. `QUOTAGENT_AI_MODEL`
 and `QUOTAGENT_AI_URL` override model/endpoint. Manual procurement works without AI
 configuration. [Provider implementation](src/system/agent-runtime/code/product-ai.mjs).
 
 [Plugin ownership](docs/product/plugin-requirements.md) maps all **166 historical
-requirements** to owners; ownership does not imply feature parity. Older design notes
-and evidence describe earlier versions. Current behavior is defined by the
-[product contract](docs/product/runtime-contract.md); repository rules are in
-[AGENTS.md](AGENTS.md).
+requirements** to owners; ownership does not imply feature parity. Current scope: [product contract](docs/product/runtime-contract.md).
+Rules: [AGENTS.md](AGENTS.md).

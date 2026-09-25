@@ -3,7 +3,7 @@
 
 Status: delivered demo; public acceptance is recorded in [evidence](../work/evidence/product-2026-09-25/README.md)
 and [independent evaluation](evaluation.md).
-Source: user goal objective supplied 2026-09-25; ADR-0027. This contract supersedes
+Source: user goal objective supplied 2026-09-25; ADR-0027 and ADR-0029. This contract supersedes
 side-switching administration and the old panel-catalogue demo experience.
 
 ## Plugin composition
@@ -20,7 +20,12 @@ public workspace service launch this product composition.
 | system/accounts | Persistent login, profile, supplier/contractor type, separate admin account, account administration |
 | domain/procurement | RFQs, item extraction/import, private costs, quotes, comparison, messages/clarifications, negotiated revisions, human-confirmed award/PO, changes, exports, deadlines |
 | system/agent-runtime | Live provider, ledger-recorded complete model context/output, account conversations, contextual recommendations, drafts, preferences, tool execution |
-| system/plugin-studio | Natural-language personal plugin/skill generation, Cordis installation/disposal, marketplace publication/install, admin promotion/global management |
+| system/plugin-studio | Natural-language personal plugin/skill generation, editable configurations, lineage-aware Cordis installation/disposal, installed marketplace state, global promotion |
+| system/settings | Persisted schema-based global defaults, account overrides, masked credentials, independent settings UI |
+| system/plugin-manager | Complete native/child inventory, repository-only catalog, optional lifecycle and dependencies, independent admin UI |
+| system/file-store | Account-owned content-addressed upload/download and durable metadata |
+| domain/ingestion | Upload, preview, mapping, line review and private RFQ/quote import |
+| domain/ingestion-engines | Individually mounted email, Excel, CSV/TSV, document and optional live AI engines |
 
 All new functionality belongs to these plugins. Existing detailed requirements are
 mapped to capability groups in `plugin-requirements.md`; no global functional owner.
@@ -37,7 +42,7 @@ resolved via `createRequire(new URL('../../../../host/package.json', import.meta
   `{user, body, params, query, req, res}`; return JSON object. Errors throw an Error
   with `status` (default 400). Public routes receive nullable user. JSON response
   is the returned object; no extra envelope. `ctx.web.contribute({id,label,icon,roles,order})`
-  registers navigable UI metadata; `GET /api/bootstrap` returns `{user, navigation, extensions}`.
+  registers navigable UI metadata; `GET /api/bootstrap` returns `{user, navigation, extensions, ui}`; `ui` carries refresh and upload limits.
 - `ctx.store.list(realm, collection)` / `get(realm,collection,id)` are synchronous
   read projections, returning copies. `put(realm,collection,record,{actor,event}={})`
   is asynchronous and requires `record.id`; every version appends an event.
@@ -97,7 +102,10 @@ Client displays grounded summaries, source records and actionable draft buttons.
 No rule output may be labelled as a model response.
 
 Studio: `GET /studio` => `{plugins,market,skills}`; `POST /studio/generate {prompt}`;
-`POST /studio/:id/:action` where action is load/unload/publish/install/promote/delete/run.
+`POST /studio/:id/:action` where action is load/unload/publish/install/promote/delete/run/configure.
+Configure accepts `{name?,description?,spec}` and remounts enabled effects. List entries
+include `lineageId`, `scope`, `canManage`, and visible instances; marketplace includes
+`installed`, `installedId`, `installedEnabled`, and `installationScope`.
 Plugin `{id,name,description,ownerId,kind:'theme'|'widget'|'skill'|'calculator',enabled,published,global,
 spec:{...},source?,createdAt}`. Theme spec `{accent,background,surface,text,radius}`;
 widget spec `{title,body,items?}`; skill spec `{prompt,steps?}`; calculator spec
@@ -109,6 +117,19 @@ formula templates or business-write tools. Source and callable behavior survive
 marketplace installation and global promotion (ADR-0028). Generated descriptor
 and executable Cordis module are visible for review in the studio. Skills run a new
 assistant turn; human commitments still require review. Admin can promote global default.
+
+## Configurable plugins and ingestion
+
+The [follow-up contract](plugin-workspace-contract.md) defines settings, inventory,
+file ownership, ingestion formats and additional public acceptance. Configuration
+schemas and UI are owned by their plugins, with generic controls from settings.
+`GET /settings` lists permitted schemas; `GET/PATCH /settings/:id` reads/saves values,
+explicit credential clearing or reset. `GET /plugins` is admin inventory;
+`POST /plugins/:id/enable|disable` controls managed optional Cordis fibers.
+`GET/POST /files` lists/uploads account files. `GET /ingestion` lists files, parsed
+sources and available engines. `POST /ingestion/upload|parse`,
+`PATCH /ingestion/:id`, and `POST /ingestion/:id/extract|import` drive the owned GUI.
+Source: [ingestion routes](../../src/domain/ingestion/code/index.mjs).
 
 ## Acceptance from user viewpoint
 
