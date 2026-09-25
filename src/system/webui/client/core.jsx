@@ -26,18 +26,31 @@ export function useResource(path, initial = {}) {
   const app = useApp()
   const [data, setData] = useState(initial)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
-  const fetchId = useRef(0)
+  const fetchId = useRef(0), loadedKey = useRef(null), initialValue = useRef(initial)
+  const resourceKey = `${app.user?.id || ''}:${path}`
   const reload = useCallback(async () => {
     const id = ++fetchId.current
-    setError('')
-    try { const value = await api(path); if (fetchId.current === id) setData(value); return value }
-    catch (e) { if (fetchId.current === id) setError(e.message) }
-    finally { if (fetchId.current === id) setLoading(false) }
-  }, [path])
-  useEffect(() => { setLoading(true); reload(); return () => { fetchId.current++ } }, [reload, app.version, app.user?.id])
-  return { data, setData, loading, error, reload }
+    // Loading replaces content only when opening a new resource/account. Background
+    // refreshes keep the existing component tree, active input and unsaved forms.
+    if (loadedKey.current !== resourceKey) setLoading(true)
+    setRefreshing(true)
+    try {
+      const value = await api(path)
+      if (fetchId.current === id) { loadedKey.current = resourceKey; setData(value); setError('') }
+      return value
+    } catch (e) { if (fetchId.current === id) setError(e.message) }
+    finally { if (fetchId.current === id) { setLoading(false); setRefreshing(false) } }
+  }, [path, resourceKey])
+  useEffect(() => {
+    if (loadedKey.current !== resourceKey) setData(initialValue.current)
+    reload()
+    return () => { fetchId.current++ }
+  }, [reload, app.version, resourceKey])
+  return { data, setData, loading, refreshing, error, reload }
 }
+
 const paths = {
   grid: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
   file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M8 13h8 M8 17h5',
@@ -100,10 +113,11 @@ function App() {
   useEffect(() => { refreshSession() }, [refreshSession, version])
   useEffect(() => {
     const sync = () => { if (document.visibilityState !== 'hidden') refresh() }
-    const timer = setInterval(sync, 8000)
+    const seconds=Math.max(3,Math.min(120,Number(bootstrap?.ui?.refreshSeconds) || 8))
+    const timer = setInterval(sync, seconds * 1000)
     window.addEventListener('focus', sync)
     return () => { clearInterval(timer); window.removeEventListener('focus', sync) }
-  }, [refresh])
+  }, [refresh, bootstrap?.ui?.refreshSeconds])
   useEffect(() => { const handler = () => { setPage(location.hash.slice(1).split('/')[0] || 'workspace'); setMenu(false) }; window.addEventListener('hashchange', handler); return () => window.removeEventListener('hashchange', handler) }, [])
   const notify = useCallback((message, type = 'success') => { clearTimeout(toastTimer.current); setToast({ message, type }); toastTimer.current = setTimeout(() => setToast(null), 6000) }, [])
   const navigate = useCallback((id, nextContext = {}) => { setContext(nextContext); setPage(id); location.hash = id; setMenu(false) }, [])
