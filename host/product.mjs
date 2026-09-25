@@ -17,6 +17,12 @@ import * as spreadsheetEngine from '../src/domain/ingestion-engines/code/spreads
 import * as tabularEngine from '../src/domain/ingestion-engines/code/tabular.mjs'
 import * as documentEngine from '../src/domain/ingestion-engines/code/documents.mjs'
 import * as aiEngine from '../src/domain/ingestion-engines/code/ai.mjs'
+import * as notifications from '../src/system/notifications/code/index.mjs'
+import * as actions from '../src/system/action-center/code/index.mjs'
+import * as mail from '../src/system/mail/code/product.mjs'
+import * as telegram from '../src/system/telegram/code/product.mjs'
+import * as connections from '../src/system/agent-connections/code/index.mjs'
+import * as workflows from '../src/system/agent-workflows/code/index.mjs'
 const root=fileURLToPath(new URL('../',import.meta.url))
 const ctx=new Context(), mounted=[], definitions=[]
 const mount=async(id,module,config={},metadata={})=>{
@@ -36,6 +42,8 @@ await mount('accounts',accounts,{}, {name:'Accounts and permissions',repoId:'sys
 await mount('settings',settings,{}, {name:'Plugin configuration and credentials',repoId:'system/settings'})
 await mount('plugin-manager',manager,{repositoryRoot:root},{name:'Application plugin manager',repoId:'system/plugin-manager'})
 for(const definition of definitions.slice(0,-1))ctx.effect(()=>ctx.plugins.register(definition))
+await mount('notifications',notifications,{}, {name:'Notifications',repoId:'system/notifications',configurationId:'notifications'})
+await mount('action-center',actions,{}, {name:'Human action review',repoId:'system/action-center'})
 await mount('agent-runtime',agent,{}, {name:'AI agent runtime',repoId:'system/agent-runtime',configurationId:'ai'})
 await mount('procurement',procurement,{}, {name:'Quotation and order workflow',repoId:'domain/procurement'})
 await mount('plugin-studio',studio,{}, {name:'Personal plugins and marketplace',repoId:'system/plugin-studio'})
@@ -48,6 +56,10 @@ for(const [id,module,label,file] of [
   ['ingestion-documents',documentEngine,'Document import engine','documents'],
   ['ingestion-ai',aiEngine,'AI line-item extraction','ai'],
 ]) await mount(id,module,{}, {name:label,repoId:'domain/ingestion-engines',source:`src/domain/ingestion-engines/code/${file}.mjs`,configurationId:id==='ingestion-ai'?'ai':'ingestion'})
+await mount('mail',mail,{}, {name:'Email inbox and SMTP',repoId:'system/mail',configurationId:'mail'})
+await mount('telegram',telegram,{apiBase:process.env.QUOTAGENT_TELEGRAM_API_BASE}, {name:'Telegram messaging',repoId:'system/telegram',configurationId:'telegram'})
+await mount('agent-connections',connections,{}, {name:'MCP and A2A connections',repoId:'system/agent-connections'})
+await mount('agent-workflows',workflows,{}, {name:'Agent workroom and memory',repoId:'system/agent-workflows',configurationId:'workflows'})
 const address=await ctx.web.listen()
 console.log(JSON.stringify({ready:true,port:address.port,url:`http://127.0.0.1:${address.port}${ctx.web.prefix}/`,plugins:definitions.map(d=>({id:d.id,state:d.fiber?.state??null}))}))
 let closing=false
