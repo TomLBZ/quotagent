@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as store from '../../workspace-store/code/index.mjs'
 import * as settings from '../../settings/code/index.mjs'
@@ -57,7 +57,12 @@ try {
   assert.equal(history.tasks.length, 2); assert.equal(history.trust, 'external'); assert.equal(approved.result.action.input.view, 'connections')
   const delegated = await tools.find(tool => tool.name === 'propose_agent_connection_call').execute(buyer, { connectionId: modern.id, operation: 'tool', input: { name: 'landed_cost', arguments: { quantity: 1, unitPrice: 2, freight: 3 } } }, { source: 'workflow', runId: 'protocol-smoke-run', stepId: 'cost' })
   assert.equal(delegated.approval.runId, 'protocol-smoke-run'); assert.equal(delegated.approval.source.kind, 'workflow'); assert.equal(delegated.approval.source.stepId, 'cost')
+  await ctx.connections.remove(buyer, legacy.id)
+  assert.deepEqual(JSON.parse(readFileSync(`${root}/settings/credentials.json`, 'utf8'))[buyer.id][legacy.configurationId], {}, 'Deletion clears credentials before unregistering their schema')
+  await ctx.store.put(buyer.id, 'agent-connections', { ...ctx.connections.get(buyer, a2a.id), deleted: true, enabled: false }, { actor: buyer.id, event: 'connections/deleted' })
   await fiber.dispose(); assert.ok(!routes.some(([, path]) => path.startsWith('/connections'))); assert.ok(!tools.some(tool => tool.name.includes('agent_connection')))
-  const restored = await mount(connections); assert.ok(ctx.settings.list(buyer).some(schema => schema.id === modern.configurationId)); assert.equal(ctx.connections.detail(buyer, a2a.id).tasks.length, 2); await restored.dispose()
+  const restored = await mount(connections); assert.ok(ctx.settings.list(buyer).some(schema => schema.id === modern.configurationId)); assert.equal(ctx.store.list(buyer.id, 'connection-tasks').filter(row => row.connectionId === a2a.id).length, 2)
+  assert.deepEqual(JSON.parse(readFileSync(`${root}/settings/credentials.json`, 'utf8'))[buyer.id][a2a.configurationId], {}, 'Startup clears legacy tombstone credentials through settings')
+  assert.ok(!ctx.settings.list(buyer).some(schema => schema.id === a2a.configurationId)); assert.equal(ctx.actions.get(buyer, proposal.approval.id).status, 'succeeded'); await restored.dispose()
   console.log(JSON.stringify({ ok: true, root, checks: ['official SDK MCP2026 StreamableHTTP SSE responses and legacy SSE', 'tools/resources/prompts discovery and real calls', 'review-before-call and no duplicate approval', 'tool errors fail actions', 'A2A1.0 card, send, query, input-required reply, artifacts, cancel', 'private connection settings and credential-free ledger', 'notifications, restart recovery, complete effect disposal'], remoteCalls: fixture.calls.length }))
 } finally { for (const fiber of fibers.reverse()) await fiber.dispose(); await fixture.close() }

@@ -6,7 +6,7 @@ export const provides = ['connections']
 const now = () => new Date().toISOString()
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }) }
 const clone = value => structuredClone(value)
-export function apply(ctx) {
+export async function apply(ctx) {
   const sessions = new Map(), schemas = new Map(), controllers = new Set()
   let disposed = false
   const records = user => ctx.store.list(user.id, 'agent-connections').filter(row => !row.deleted)
@@ -20,7 +20,15 @@ export function apply(ctx) {
       validate: credentialHeaders, onChange: () => close(row.id) })
     schemas.set(row.id, disposer)
   }
-  for (const account of ctx.accounts.list()) for (const row of records(account)) registerSchema(row)
+  for (const account of ctx.accounts.list()) for (const row of ctx.store.list(account.id, 'agent-connections')) {
+    registerSchema(row)
+    if (row.deleted) {
+      // Older removals retained a credential entry after dropping its schema.
+      // Clear through the owning settings service, including its live cache.
+      if (ctx.settings.view(account, row.configurationId).hasOverrides) await ctx.settings.save(account, row.configurationId, { reset: true })
+      schemas.get(row.id)?.(); schemas.delete(row.id)
+    }
+  }
   const list = user => records(user).map(row => { registerSchema(row); return row })
   const save = async (user, input, id) => {
     if (ctx.accounts.can && !ctx.accounts.can(user, 'plugins:manage')) fail('Plugin configuration is disabled for this account.', 403)
@@ -128,7 +136,7 @@ export function apply(ctx) {
     const row = get(user, id), operation = body.operation, input = normalize(user, row, operation, body.input || {})
     return ['resource', 'prompt', 'query'].includes(operation) ? invoke(user, id, operation, input) : propose(user, id, operation, input)
   }
-  const remove = async (user, id) => { const row = get(user, id); await close(id); await write(user, { ...row, enabled: false, deleted: true }, 'connections/deleted'); schemas.get(id)?.(); schemas.delete(id); return { ok: true } }
+  const remove = async (user, id) => { const row = get(user, id); await close(id); await ctx.settings.save(user, row.configurationId, { reset: true }); await write(user, { ...row, enabled: false, deleted: true }, 'connections/deleted'); schemas.get(id)?.(); schemas.delete(id); return { ok: true } }
   const detail = (user, id) => ({ connection: get(user, id), calls: ctx.store.list(user.id, 'connection-calls').filter(row => row.connectionId === id).sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 50), tasks: ctx.store.list(user.id, 'connection-tasks').filter(row => row.connectionId === id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) })
   ctx.provide('connections', { list, get, save, discover, run, propose, remove, detail })
   ctx.effect(() => ctx.web.contribute({ id: 'connections', label: 'Agent connections', icon: 'puzzle', roles: ['contractor', 'supplier', 'admin'], order: 55 }))
