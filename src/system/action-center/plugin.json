@@ -1,0 +1,1 @@
+{"name":"action-center","version":"1.0.0","layer":"system","entry":"code/index.mjs","provides":["actions"],"description":"Durable human review of external sends, remote tool calls and agent memory suggestions, with decisions and execution receipts."}
