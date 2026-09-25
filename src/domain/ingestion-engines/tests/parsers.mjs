@@ -11,6 +11,7 @@ for(const [filename,buffer]of Object.entries(files)) {
   const engine=/\.(eml|mbox|msg)$/.test(filename)?email:/\.(xlsx|xls)$/.test(filename)?spreadsheet:/\.(csv|tsv)$/.test(filename)?tabular:documents
   const parsed=await engine.parse({filename,buffer,settings:{delimiter:'auto'}})
   if(filename==='scan-placeholder.pdf')assert.match(parsed.warnings.join(' '),/no extractable text/)
+  else if(filename==='empty-attachment.eml'){assert.equal(parsed.rows.length,1);assert.equal(parsed.attachments[0].buffer.length,0)}
   else if(filename.endsWith('.eml')){assert.equal(parsed.attachments.length,1);assert.match(parsed.text,/Payment is 30 days/);assert.equal(parsed.attachments[0].buffer.length,files['cabling-offer.xlsx'].length)}
   else if(filename.endsWith('.mbox')){assert.equal(parsed.metadata.messages,2);assert.equal(parsed.rows.length,4)}
   else {assert.equal(parsed.rows.length,2,`${filename} must extract two actual lines`);assert.ok(parsed.text.length>20)}

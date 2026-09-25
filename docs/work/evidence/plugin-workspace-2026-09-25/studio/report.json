@@ -1,0 +1,150 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "startedAt": "2026-09-25T09:28:16.851Z",
+  "checks": [
+    {
+      "message": "Background refresh keeps content, configuration dialog, and input focus mounted",
+      "details": {
+        "removedGrids": 0,
+        "loadingFrames": 0,
+        "sameGrid": true,
+        "sameDialog": true,
+        "focusPreserved": true
+      }
+    },
+    {
+      "message": "Unfinished configuration remains intact across periodic refresh"
+    },
+    {
+      "message": "Theme color picker saves and applies the chosen color to the live workspace"
+    },
+    {
+      "message": "Theme configuration survives page reload"
+    },
+    {
+      "message": "Marketplace marks the owner’s extension Installed without an install button"
+    },
+    {
+      "message": "Installed marketplace state changes to Manage and persists"
+    },
+    {
+      "message": "Marketplace presents one entry per shared extension lineage"
+    },
+    {
+      "message": "Administrator sees actual WebUI, AI provider, workflow, and supporting runtime plugins",
+      "details": {
+        "runtimeNames": [
+          "Application plugin manager",
+          "WebUI application",
+          "Workspace database and QEP",
+          "Accounts and permissions",
+          "Plugin configuration and credentials",
+          "AI agent runtime",
+          "Quotation and order workflow",
+          "Personal plugins and marketplace",
+          "Account file storage",
+          "Document ingestion workspace",
+          "Email import engine",
+          "Excel import engine",
+          "CSV and TSV import engine",
+          "Document import engine",
+          "AI line-item extraction",
+          "AI model provider",
+          "Workspace assistant",
+          "Generated utility runtime"
+        ]
+      }
+    },
+    {
+      "message": "Historical mail plugin is honestly identified as repository-only with no fake enable control"
+    },
+    {
+      "message": "Application plugin Configure opens its real registered schema"
+    },
+    {
+      "message": "Admin global promotion keeps one lineage card instead of duplicate plugin cards"
+    },
+    {
+      "message": "Administrator can select personal installations and global default inside one extension",
+      "details": {
+        "instances": [
+          "Global default · Enabled",
+          "Personal · Jordan Lee · Enabled",
+          "Personal · Taylor Chen · Enabled"
+        ]
+      }
+    },
+    {
+      "message": "Client global extension offers a personal customization copy without global controls"
+    },
+    {
+      "message": "Disabling a personal theme applies the active global theme and keeps one lineage card"
+    },
+    {
+      "message": "Client can still manage the disabled personal instance while a global fallback is active"
+    },
+    {
+      "message": "Customize a copy reuses the existing personal installation and its saved color"
+    },
+    {
+      "message": "Existing model credentials are represented by configuration status, not exposed values"
+    },
+    {
+      "message": "Editing one personal setting preserves inheritance for all untouched fields",
+      "details": {
+        "submittedKeys": [
+          "timeoutSeconds"
+        ]
+      }
+    },
+    {
+      "message": "Personal plugin settings save and persist across reload"
+    },
+    {
+      "message": "Administrator sees all five ingestion engine plugins as active",
+      "details": {
+        "engines": [
+          "Email import engine",
+          "Excel import engine",
+          "CSV and TSV import engine",
+          "Document import engine",
+          "AI line-item extraction"
+        ]
+      }
+    },
+    {
+      "message": "Disabling the CSV plugin removes its parser from the client upload selector"
+    },
+    {
+      "message": "Re-enabling the CSV plugin restores the client parser choice"
+    },
+    {
+      "message": "Application manager remains available after optional Studio is disabled"
+    },
+    {
+      "message": "Client plugin settings remain usable while Studio is disabled"
+    },
+    {
+      "message": "Administrator re-enables Studio through the surviving application manager"
+    },
+    {
+      "message": "Plugin workspace journey has no browser JavaScript errors"
+    }
+  ],
+  "pageErrors": [],
+  "artifacts": {
+    "01-theme-color-configuration": "01-theme-color-configuration.png",
+    "02-marketplace-installed-state": "02-marketplace-installed-state.png",
+    "03-admin-repository-mail": "03-admin-repository-mail.png",
+    "04-admin-plugin-settings": "04-admin-plugin-settings.png",
+    "05-admin-extension-instances": "05-admin-extension-instances.png",
+    "09-personal-instance-with-global-fallback": "09-personal-instance-with-global-fallback.png",
+    "06-personal-plugin-settings": "06-personal-plugin-settings.png",
+    "10-ingestion-with-csv-disabled": "10-ingestion-with-csv-disabled.png",
+    "07-client-settings-without-studio": "07-client-settings-without-studio.png",
+    "08-native-manager-with-studio-disabled": "08-native-manager-with-studio-disabled.png"
+  },
+  "extension": "[UI check] Configurable lake 8496851",
+  "ok": true,
+  "finishedAt": "2026-09-25T09:28:52.849Z"
+}

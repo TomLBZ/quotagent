@@ -47,6 +47,7 @@ export async function fixtures(directory) {
     'cabling-offer.txt':Buffer.from(plain),'cabling-offer.html':Buffer.from(html),
     'cabling-offer.json':Buffer.from(JSON.stringify({items:entries.map(row=>({description:row[0],quantity:row[1],unit:row[2],unitPrice:row[3]}))})),
     'cabling-offer.eml':Buffer.from(eml),'cabling-offer.mbox':Buffer.from(`From supplier@example.test Fri Sep 25 10:00:00 2026\n${message('First offer')}\nFrom supplier@example.test Fri Sep 25 10:01:00 2026\n${message('Revised offer')}`),
+    'empty-attachment.eml':Buffer.from('Subject: Valve request\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="parts"\r\n\r\n--parts\r\nContent-Type: text/plain\r\n\r\n10 each Useful valve\r\n--parts\r\nContent-Type: text/csv\r\nContent-Disposition: attachment; filename="empty.csv"\r\n\r\n\r\n--parts--\r\n'),
     'cabling-offer.msg':CFB.write(msg,{type:'buffer'}),
   }
   if(directory){mkdirSync(directory,{recursive:true});for(const [name,buffer]of Object.entries(records))writeFileSync(join(directory,name),buffer)}

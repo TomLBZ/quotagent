@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "mode": "after",
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "at": "2026-09-25T09:33:58.319Z",
+  "accounts": {
+    "contractor": {
+      "settings": 4,
+      "extensions": 1,
+      "documents": 13,
+      "files": 10
+    },
+    "supplier": {
+      "settings": 4,
+      "extensions": 1,
+      "documents": 3,
+      "files": 2
+    },
+    "supplier2": {
+      "settings": 4,
+      "extensions": 3,
+      "documents": 0,
+      "files": 0
+    },
+    "admin": {
+      "settings": 5,
+      "extensions": 0,
+      "runtime": 18
+    }
+  },
+  "checks": [
+    "GUI login and navigation",
+    "masked effective settings and inheritance preserved",
+    "installed and effective extension identity preserved",
+    "uploaded content hashes and parsed/imported records preserved",
+    "native and engine inventory preserved"
+  ],
+  "browserErrors": []
+}

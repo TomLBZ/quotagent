@@ -1,0 +1,26 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "at": "2026-09-25T09:30:32.272Z",
+  "screenshots": [
+    "01-email-attachment.png",
+    "02-ai-reviewed-email-items.png",
+    "03-private-rfq-draft.png",
+    "06-preview-cabling-offer-csv.png",
+    "06-preview-cabling-offer-docx.png",
+    "06-preview-cabling-offer-pdf.png",
+    "06-preview-mixed-headings-xlsx.png",
+    "06-preview-empty-attachment-eml.png",
+    "04a-explicit-unit-review.png",
+    "04-supplier-spreadsheet-review.png",
+    "05-private-quote-draft.png"
+  ],
+  "browserErrors": [],
+  "checks": [
+    "Contractor uploaded real MIME email; XLSX attachment produced two editable rows.",
+    "Live AI extracted both line items with source excerpts and correct quantities.",
+    "Contractor created and opened private RFQ draft via GUI; did not publish.",
+    "GUI multi-upload previews CSV (with manual mapping), DOCX, text PDF and mixed-heading Excel; empty email attachment warns while preserving the usable body.",
+    "GUI refuses currency and unit mismatches; user explicitly restores reviewed USD/m values before import.",
+    "Supplier imported XLSX, matched two RFQ lines, added own cost and terms, opened $3,156 private quote; did not submit."
+  ]
+}

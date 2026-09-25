@@ -1,0 +1,104 @@
+{
+  "ok": true,
+  "fixtures": "tmp/ingestion-fixtures",
+  "formats": [
+    {
+      "filename": "cabling-offer.xlsx",
+      "rows": 2,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "cabling-offer.xls",
+      "rows": 2,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "mixed-headings.xlsx",
+      "rows": 2,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "cabling-offer.csv",
+      "rows": 2,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "quoted-multiline.csv",
+      "rows": 2,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "cabling-offer.tsv",
+      "rows": 2,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "cabling-offer.docx",
+      "rows": 2,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "cabling-offer.pdf",
+      "rows": 2,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "scan-placeholder.pdf",
+      "rows": 0,
+      "attachments": 0,
+      "warnings": [
+        "This PDF has no extractable text. It may be a scan; OCR is not available. Upload a text PDF, Excel, DOCX or text export instead."
+      ]
+    },
+    {
+      "filename": "cabling-offer.txt",
+      "rows": 2,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "cabling-offer.html",
+      "rows": 2,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "cabling-offer.json",
+      "rows": 2,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "cabling-offer.eml",
+      "rows": 0,
+      "attachments": 1,
+      "warnings": []
+    },
+    {
+      "filename": "cabling-offer.mbox",
+      "rows": 4,
+      "attachments": 0,
+      "warnings": []
+    },
+    {
+      "filename": "empty-attachment.eml",
+      "rows": 1,
+      "attachments": 1,
+      "warnings": []
+    },
+    {
+      "filename": "cabling-offer.msg",
+      "rows": 2,
+      "attachments": 1,
+      "warnings": []
+    }
+  ]
+}

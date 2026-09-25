@@ -14,6 +14,29 @@ async function studio(page){await page.getByRole('navigation',{name:'Main naviga
 const card=(page,name)=>page.locator('.plugin-card').filter({has:page.getByRole('heading',{name,exact:true})})
 const accent=page=>page.locator('.product').evaluate(el=>getComputedStyle(el).getPropertyValue('--accent').trim())
 async function waitAccent(page,value){await page.waitForFunction(value=>getComputedStyle(document.querySelector('.product')).getPropertyValue('--accent').trim()===value,value)}
+async function verifyEngineLifecycle(admin){
+ current=admin
+ await admin.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Application plugins',exact:true}).click()
+ const names=['Email import engine','Excel import engine','CSV and TSV import engine','Document import engine','AI line-item extraction']
+ for(const name of names){const entry=admin.locator('.studio-catalog-plugin').filter({has:admin.getByRole('heading',{name,exact:true})});await entry.getByText('Active',{exact:true}).waitFor()}
+ check(true,'Administrator sees all five ingestion engine plugins as active',{engines:names})
+ const csv=admin.locator('.studio-catalog-plugin').filter({has:admin.getByRole('heading',{name:'CSV and TSV import engine',exact:true})})
+ await csv.getByRole('button',{name:'Disable',exact:true}).click()
+ let client
+ try{
+  await csv.getByRole('button',{name:'Enable',exact:true}).waitFor()
+  client=await login('supplier2@demo.local');current=client
+  await client.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Ingest documents',exact:true}).click()
+  const selector=client.getByLabel('Ingestion engine',{exact:true});await selector.locator('option[value=spreadsheet]').waitFor({state:'attached'})
+  check(await selector.locator('option[value=tabular]').count()===0,'Disabling the CSV plugin removes its parser from the client upload selector')
+  await shot(client,'10-ingestion-with-csv-disabled')
+ }finally{
+  current=admin
+  await csv.getByRole('button',{name:'Enable',exact:true}).click();await csv.getByRole('button',{name:'Disable',exact:true}).waitFor()
+ }
+ if(client){current=client;await client.reload();await client.getByLabel('Ingestion engine',{exact:true}).locator('option[value=tabular]').waitFor({state:'attached'});await client.close();current=admin}
+ check(true,'Re-enabling the CSV plugin restores the client parser choice')
+}
 async function verifyNativeLifecycle(admin){
  current=admin
  const nav=admin.getByRole('navigation',{name:'Main navigation'})
@@ -42,7 +65,7 @@ async function verifyNativeLifecycle(admin){
 const name=`[UI check] Configurable lake ${Date.now().toString().slice(-7)}`;report.extension=name
 try{
  if(process.env.PLUGIN_LIFECYCLE_ONLY==='1'){
-  await verifyNativeLifecycle(await login('admin@demo.local'))
+  const admin=await login('admin@demo.local');await verifyEngineLifecycle(admin);await verifyNativeLifecycle(admin)
  }else{
  const owner=await login('supplier2@demo.local');current=owner;await studio(owner)
  await owner.getByLabel('Describe an extension').fill(`Create a personal theme named exactly "${name}" with accent #287d68, background #f6faf8, surface #ffffff, text #203b33 and radius 12px.`)
@@ -120,6 +143,7 @@ try{
  await shot(owner,'06-personal-plugin-settings')
  await owner.getByRole('dialog').getByRole('button',{name:'Use default settings',exact:true}).click();await owner.getByRole('dialog').getByText('Settings saved.',{exact:true}).waitFor();await owner.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click()
  current=admin;await card(admin,name).getByRole('button',{name:'Disable',exact:true}).click();await admin.waitForTimeout(500)
+ await verifyEngineLifecycle(admin)
  await verifyNativeLifecycle(admin)
  }
  check(report.pageErrors.length===0,'Plugin workspace journey has no browser JavaScript errors')

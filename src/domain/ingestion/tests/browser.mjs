@@ -40,6 +40,31 @@ try {
   await screenshot(buyer,'03-private-rfq-draft')
   observations.checks.push('Contractor created and opened private RFQ draft via GUI; did not publish.')
 
+  await buyer.getByRole('button',{name:'Ingest documents',exact:true}).click()
+  const previewFiles=['cabling-offer.csv','cabling-offer.docx','cabling-offer.pdf','mixed-headings.xlsx','empty-attachment.eml']
+  await buyer.getByLabel('Upload source files').setInputFiles(previewFiles.map(filename=>join(source,filename)))
+  await buyer.locator('.ingest-document-link').filter({hasText:'empty-attachment.eml'}).first().waitFor({timeout:60000})
+  for(const filename of previewFiles){
+    await buyer.locator('.ingest-document-link').filter({hasText:filename}).first().click()
+    await buyer.getByRole('heading',{name:filename,exact:true}).waitFor()
+    if(filename==='empty-attachment.eml'){
+      assert.equal(await buyer.getByLabel('Imported item 1 description',{exact:true}).inputValue(),'Useful valve')
+      await buyer.getByText(/Attachment empty.csv could not be stored.*empty/).waitFor()
+    } else await waitItems(buyer)
+    if(filename==='cabling-offer.csv'){
+      await buyer.getByRole('button',{name:'Source rows 2',exact:true}).click()
+      await buyer.getByRole('button',{name:'Map columns',exact:true}).click()
+      await buyer.getByRole('button',{name:'Apply column mapping',exact:true}).click()
+      await waitItems(buyer)
+    }
+    if(filename==='cabling-offer.pdf'){
+      await buyer.getByRole('button',{name:'Source text',exact:true}).click()
+      assert.match(await buyer.locator('.ingest-source-text').innerText(),/Page 1[\s\S]*CAT6 cable/)
+    }
+    await screenshot(buyer,`06-preview-${filename.replace(/\./g,'-')}`)
+  }
+  observations.checks.push('GUI multi-upload previews CSV (with manual mapping), DOCX, text PDF and mixed-heading Excel; empty email attachment warns while preserving the usable body.')
+
   const supplier=await pageFor('supplier')
   await supplier.getByLabel('Ingestion engine',{exact:true}).selectOption('auto')
   await supplier.getByLabel('Upload source files').setInputFiles(join(source,'cabling-offer.xlsx'))
@@ -52,10 +77,10 @@ try {
   await supplier.getByLabel('Payment terms',{exact:true}).fill('Net 30')
   await supplier.getByLabel('Lead time (days)',{exact:true}).fill('12')
   await supplier.getByLabel('Imported item 1 private cost',{exact:true}).fill('1.20')
-  await supplier.getByLabel('Reviewed offer currency',{exact:true}).selectOption('EUR')
+  await supplier.locator('label.field').filter({hasText:'Reviewed offer currency'}).locator('select').selectOption('EUR')
   await supplier.getByRole('button',{name:'Create private quote draft',exact:true}).click()
   await supplier.getByText(/This extraction is priced in EUR, but the RFQ uses USD/).waitFor()
-  await supplier.getByLabel('Reviewed offer currency',{exact:true}).selectOption('USD')
+  await supplier.locator('label.field').filter({hasText:'Reviewed offer currency'}).locator('select').selectOption('USD')
   await supplier.getByLabel('Imported item 1 unit',{exact:true}).fill('box')
   await supplier.getByRole('button',{name:'Create private quote draft',exact:true}).click()
   await supplier.getByText(/is priced per box, but the RFQ requests m/).waitFor()

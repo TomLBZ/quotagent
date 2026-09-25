@@ -1,0 +1,166 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "at": "2026-09-25T09:30:12.933Z",
+  "observations": [
+    {
+      "role": "contractor",
+      "text": "Signed in to contractor-only workspace",
+      "details": {
+        "navigation": "Overview\nIngest documents\nRequests\nQuotes\nOrders\nMessages\nPlugin studio\nPlugin settings"
+      }
+    },
+    {
+      "role": "contractor",
+      "text": "Email attachment became two editable rows without transcription",
+      "details": {
+        "first": {
+          "description": "Brass ball valve DN25",
+          "quantity": "24",
+          "unit": "each",
+          "price": "18.5"
+        },
+        "second": "Pressure gauge 0-10 bar"
+      }
+    },
+    {
+      "role": "contractor",
+      "text": "Source text retains message context and attachment text",
+      "details": {
+        "source": "Message 1\nSubject: Independent review - plant-room materials\nFrom: \"Review Fixture\" <review@example.invalid>\nTo: \"Buyer\" <buyer@example.invalid>\nDate: \n\nPrivate review sample, not a live commercial offer. Attached schedule is priced in USD. Please review quantities and specifications.\n\nAttachment: plant-room-schedule.csv\nDescription,Quantity,Unit,Unit Price\r\nBrass ball valve DN25,24,each,18.50\r\nPressure gauge 0-10 bar,6,each,31.25\r\n"
+      }
+    },
+    {
+      "role": "contractor",
+      "text": "Attachment has row count and download control",
+      "details": {
+        "attachment": "plant-room-schedule.csv\n2 rows extracted\nDownload"
+      }
+    },
+    {
+      "role": "contractor",
+      "text": "Opened an editable private RFQ draft without publishing",
+      "details": {
+        "draftText": "All requests\nREQUEST FOR QUOTATION\n[Independent private review] Plant-room materials\n\nNorthstar Construction \u00b7 Due No deadline \u00b7 USD\n\nAsk AI\nEdit draft\nPublish request\nRequest created\nSuppliers invited\nOffers received\nOrder confirmed\nScope & details\nCompare offers\n0\nConversation\n0\nProject brief\nDraft\n\nImported from independent-private-review-plant-room.eml. Review the source and extracted scope before publishing.\n\nDeadline\nNo deadline\nCurrency\nUSD\nRequested items\n2\nInvited suppliers\n0\nScope of supply\n2 line items\nItem\tDescription\tQuantity\tUnit\n01\tBrass ball valve DN25\t24\teach\n02\tPressure gauge 0-10 bar\t6\teach"
+      }
+    },
+    {
+      "role": "supplier",
+      "text": "Supplier library does not display contractor-only review upload",
+      "details": {
+        "contractorFilenameVisible": 0,
+        "libraryContains": false
+      }
+    },
+    {
+      "role": "supplier",
+      "text": "Supplier review exposes RFQ matching, reviewed currency and separate private cost",
+      "details": {
+        "options": [
+          "Select an open request\u2026",
+          "[Public check] AI library fit-out 24655735",
+          "[Demo] Riverside structured cabling",
+          "[Demo] Riverside office lighting"
+        ],
+        "matchedRequest": "[Demo] Riverside structured cabling",
+        "privateCost": "1.2",
+        "currency": "USD",
+        "importButtonEnabled": true,
+        "tableLayout": {
+          "contentWidth": 587,
+          "visibleWidth": 482
+        }
+      }
+    },
+    {
+      "role": "supplier",
+      "text": "Plugin settings is a dedicated navigation destination",
+      "details": {
+        "settings": [
+          "AI model connection",
+          "AI assistant preferences",
+          "Uploaded files",
+          "Document ingestion"
+        ]
+      }
+    },
+    {
+      "role": "supplier",
+      "text": "AI connection form shows credential status without exposing its value",
+      "details": {
+        "apiKeyValueLength": 0,
+        "formText": "AI model connection settings\n\nThese settings apply only to your account. Leave credentials blank to keep the current value.\n\nProvider name\nModel\nAPI base URL\nOpenAI-compatible endpoint, including /v1 when required.\nAPI key\nClear the saved api key\nRequest timeout (seconds)\nClose\nSave settings"
+      }
+    },
+    {
+      "role": "supplier",
+      "text": "Marketplace exposes installed/global status and personal customization",
+      "details": {
+        "cards": [
+          "Installed\nWORKSPACE THEME\n[UI check] Configurable lake 8496851\n\nMy unfinished configuration must survive background refresh.\n\nManage\nView details\nShared with the community",
+          "Installed\nWORKSPACE THEME\n[Public check] Orchid theme 4350280\n\nA soft orchid workspace theme with a deep magenta accent on pale lilac backgrounds and dark navy text for strong, comfortable readability.\n\nManage\nEnable\nView details\nShared with the community"
+        ]
+      }
+    },
+    {
+      "role": "admin",
+      "text": "Runtime catalog includes platform and ingestion capabilities",
+      "details": {
+        "names": [
+          "Application plugin manager",
+          "WebUI application",
+          "Workspace database and QEP",
+          "Accounts and permissions",
+          "Plugin configuration and credentials",
+          "AI agent runtime",
+          "Quotation and order workflow",
+          "Personal plugins and marketplace",
+          "Account file storage",
+          "Document ingestion workspace",
+          "Email import engine",
+          "Excel import engine",
+          "CSV and TSV import engine",
+          "Document import engine",
+          "AI line-item extraction",
+          "AI model provider",
+          "Workspace assistant",
+          "Generated utility runtime"
+        ]
+      }
+    },
+    {
+      "role": "admin",
+      "text": "Historical mail entry is distinguished from active ingestion",
+      "details": {
+        "mail": [
+          "mail\nRepository only\n\nHistorical SMTP/IMAP mail adapter and read-only operations view. It is not loaded in this application. Email document ingestion is a separate current plugin.\n\nsystem \u00b7 v1.0.0\nDetails"
+        ]
+      }
+    },
+    {
+      "role": "admin",
+      "text": "Runtime Configure opens working form with named fields",
+      "details": {
+        "fields": [
+          "Background refresh interval (seconds)",
+          "Maximum request size (MB)"
+        ]
+      }
+    }
+  ],
+  "errors": [],
+  "screenshots": [
+    "01-contractor-email-to-items.png",
+    "02-contractor-source-context.png",
+    "03-contractor-private-rfq.png",
+    "04-supplier-scope-and-private-cost.png",
+    "05-supplier-ai-connection.png",
+    "06-supplier-marketplace.png",
+    "07-admin-runtime-catalog.png",
+    "08-admin-historical-mail.png",
+    "09-admin-web-settings.png"
+  ],
+  "technicalNotes": [
+    "Initial exact currency label selector did not match the wrapped select; resumed read-only using the visible field label."
+  ],
+  "completedAt": "2026-09-25T09:33:07.687Z"
+}

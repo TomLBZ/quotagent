@@ -1,0 +1,81 @@
+{
+  "ok": true,
+  "checks": [
+    "live nested Cordis inventory",
+    "configuration association",
+    "historical mail distinct",
+    "admin route ownership",
+    "dependency refusal",
+    "actual disposal removes services/routes",
+    "persisted disable across restart",
+    "actual remount restores services/routes",
+    "manager unload disposes managed fibers"
+  ],
+  "runtime": [
+    {
+      "id": "agent-runtime",
+      "provides": [
+        "ai",
+        "assistant"
+      ]
+    },
+    {
+      "id": "plugin-studio",
+      "provides": [
+        "studio",
+        "studioRuntime"
+      ]
+    },
+    {
+      "id": "runtime:root:1",
+      "provides": [
+        "web",
+        "store",
+        "accounts"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "runtime:root:2",
+      "provides": [
+        "settings"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "runtime:root:14",
+      "provides": [
+        "plugins"
+      ],
+      "parentId": null
+    },
+    {
+      "id": "runtime:agent-runtime:17",
+      "provides": [
+        "ai"
+      ],
+      "parentId": "agent-runtime"
+    },
+    {
+      "id": "runtime:agent-runtime:18",
+      "provides": [
+        "assistant"
+      ],
+      "parentId": "agent-runtime"
+    },
+    {
+      "id": "runtime:plugin-studio:21",
+      "provides": [
+        "studioRuntime"
+      ],
+      "parentId": "plugin-studio"
+    }
+  ],
+  "repositoryAvailable": 70,
+  "state": {
+    "enabled": {
+      "plugin-studio": true,
+      "agent-runtime": true
+    }
+  }
+}

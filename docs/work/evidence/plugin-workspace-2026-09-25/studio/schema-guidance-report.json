@@ -1,0 +1,10 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "startedAt": "2026-09-25T09:36:44.016Z",
+  "pageErrors": [],
+  "description": "Use the shared model connection or provide your own. A different provider or endpoint requires your own API key. Leave an existing key blank to keep it.",
+  "ok": true,
+  "credentialsBlank": true,
+  "screenshot": "11-schema-guidance.png",
+  "finishedAt": "2026-09-25T09:36:46.127Z"
+}
