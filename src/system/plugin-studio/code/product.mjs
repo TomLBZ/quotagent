@@ -112,7 +112,7 @@ export async function apply(ctx, config = {}) {
   ctx.inject(['actions'], child => {
     actions=child.actions
     child.effect(()=>()=>{actions=null})
-    child.effect(()=>child.actions.register({kind:'studio.generate',label:'Create personal plugin',execute:async(user,input)=>{const result=await generate(user,input);return{...result,action:{type:'navigate',label:'Open plugin studio',input:{view:'extensions'}}}}))
+    child.effect(()=>child.actions.register({kind:'studio.generate',label:'Create personal plugin',execute:async(user,input)=>{const result=await generate(user,input);return{...result,action:{type:'navigate',label:'Open plugin studio',input:{view:'extensions'}}}}}))
   })
   let assistant = null
   let procurement = null
