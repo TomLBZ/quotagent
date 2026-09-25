@@ -1,0 +1,1 @@
+{"name":"ingestion","version":"1.0.0","layer":"domain","entry":"code/index.mjs","provides":["ingestion"],"description":"Upload, parse, map and review source documents, then create private RFQ or supplier quote drafts."}

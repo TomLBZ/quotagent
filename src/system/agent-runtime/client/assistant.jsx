@@ -48,7 +48,7 @@ function Assistant() {
   async function actionClick(action) {
     const name = action.action || action.type || action.name
     const args = action.input || action.args || action.payload || {}
-    if (name === 'navigate') {app.navigate(action.target || args.view || 'workspace', {rfqId:args.rfqId,quoteId:args.quoteId}); app.setAssistantOpen(false); return}
+    if (name === 'navigate') {app.navigate(action.target || args.view || 'workspace', args); app.setAssistantOpen(false); return}
     setReview({...action,action:name,input:{...args},label:action.label || action.title || 'Review suggested action'})
   }
   const suggestions = app.user.role === 'supplier' ? [
