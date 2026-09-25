@@ -27,3 +27,11 @@ USER-GOALS.md
 # 注意（阶段 5.1，EV-168）：这条规则只匹配**目录**；仓库现在把 `user-space` 放成一个**指向 `src/userspace/`
 # 的符号链接**（唯一事实源 = `src/userspace/**`，且它是被跟踪的）。所以旧路径照样可读，但磁盘上只有一份内容。
 user-space/
+
+# Local agent recovery and human progress (user requirement)
+.agents/goal-objective.md
+.agents/state.json
+.agents/sessions/
+docs/work/handover.md
+docs/work/progress-checklist.md
+.agents/product-progress.md
