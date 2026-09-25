@@ -8,6 +8,19 @@
     "node": ">=20"
   },
   "dependencies": {
-    "cordis": "4.0.0-rc.10"
+    "cordis": "4.0.0-rc.10",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest",
+    "yaml": "latest"
+  },
+  "scripts": {
+    "build": "vite build --config ../src/system/webui/client/vite.config.mjs",
+    "start": "node product.mjs"
+  },
+  "devDependencies": {
+    "vite": "latest",
+    "@vitejs/plugin-react": "latest",
+    "playwright": "latest"
   }
 }
