@@ -1,0 +1,126 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "startedAt": "2026-09-25T08:19:10.280Z",
+  "checks": [
+    {
+      "message": "Two supplier accounts sign in through the public URL",
+      "details": {
+        "ownerOriginal": "#177f72",
+        "otherOriginal": "#177f72"
+      }
+    },
+    {
+      "message": "Generated theme applies only to its owning account",
+      "details": {
+        "generatedAccent": "#b83f75",
+        "ownerOriginal": "#177f72",
+        "otherOriginal": "#177f72"
+      }
+    },
+    {
+      "message": "Disabling a personal theme restores the previous appearance"
+    },
+    {
+      "message": "User publishes their real generated extension to the marketplace"
+    },
+    {
+      "message": "Another account installs the published extension through marketplace UI"
+    },
+    {
+      "message": "Administrator promotes a user extension to a global default",
+      "details": {
+        "globalAccent": "#b83f75"
+      }
+    },
+    {
+      "message": "Administrator disables the global plugin and account appearance restores"
+    },
+    {
+      "message": "Generated JavaScript utility computes 7 × 19.5 = 136.5 in the GUI",
+      "details": {
+        "result": "Result\n\nQuotation total\n\nTotal\n136.5\nQuantity\n7\nUnit Price\n19.5\nResult details"
+      }
+    },
+    {
+      "message": "Generated utility recomputes after user changes input",
+      "details": {
+        "result": "Result\n\nQuotation total\n\nTotal\n100\nQuantity\n4\nUnit Price\n25\nResult details"
+      }
+    },
+    {
+      "message": "Generated executable Cordis source is reviewable from the UI"
+    },
+    {
+      "message": "Saved workflow skill runs a real contextual assistant turn",
+      "details": {
+        "reply": "QUOTAGENT\nMorning scan — Atlas Materials (Taylor Chen)\nRead-only review. Date format: none applicable (no dates exist in this workspace).\nResult: nothing to review.\n• Open RFQs: 0 (workspace openRfqs = 0)\n• Unsubmitted quote drafts: 0 (draftQuotes = 0)\n• Already-submitted/awarded quotes: none\n• Orders: 0 · Pending orders: 0 · Pending changes: 0 · Unread messages: 0\nNo source request name, RFQ reference, due date, line item, currency, incoterm or delivery location can be extracted — all fields would read \"not found in workspace\" because no records exist.\nContext only (contacts on file, no linked RFQ): Alex Morgan, Northstar Construction; Casey Public Check, Demo Library Construction. These are contacts, not open requests.\nAction 1: none — no open RFQ or unsubmitted draft exists, so there is no item with a due date to act on.\nAction 2: none — no other open item requires attention today.\nMissing information\n• No source requests to attach questions to. Blocking gap: this account has no invited/open RFQ and no draft quote in the workspace. Verify you are signed in to the intended account and that invitations have been received before a morning review can produce actions.\nAssumptions\n• I treated the workspace as complete; if an RFQ invitation was sent to a different login, it would not appear here.\n• No timezone applied, since no timestamps or due dates are present; if dates appear later, I will state the format and timezone used.\nIntegrity note: nothing was sent, submitted, approved, drafted, published or committed — this was a read-only review.\n1 step completed"
+      }
+    },
+    {
+      "message": "Public studio journey has no browser JavaScript errors"
+    },
+    {
+      "message": "Saved skill re-run after restart uses actual Riverside project context",
+      "details": {
+        "reply": "QUOTAGENT\nMorning review — Atlas Materials (Taylor Chen)\nRead-only. Date format: YYYY-MM-DD. Timezone: activity timestamps are UTC (Z); RFQ deadlines carry no time or timezone, so they are ambiguous (see Assumptions).\nOpen RFQs (2) — ranked by due date\n1. [Demo] Riverside structured cabling — open RFQ — due 2026-10-02 — status: unpriced, no draft quote, missing incoterms/freight basis and cost basis\n2. [Demo] Riverside office lighting — open RFQ, due 2026-10-02 — status: quote already submitted (context only); buyer asked to confirm lead time and payment terms\nContext only: submitted quote for the lighting RFQ — Atlas Materials, total 5,292 USD, 35-day lead, \"100% advance payment\", freight included, status submitted, rank 1. Not in the action list.\nBoth share the same deadline, so the tie is broken by completeness gap → cabling first (no pricing exists at all).\nCriticality: cannot be confirmed. The current date is not found in workspace; if today is 2026-09-25 (latest activity), both deadlines are ~7 days out and not critical. Recheck if today is 2026-09-30 or later.\nAction 1\n• Source request: [Demo] Riverside structured cabling, due 2026-10-02\n• Do next: confirm unit cost basis and freight/incoterm for both lines so a private draft can be priced — line 1 \"CAT6 cable, installed and tested\", 1500 m; line 2 \"Dual data outlet with faceplate\", 48 each.\n• Why priority: no draft quote and no cost basis exists, so this is the largest completeness gap and the only item with zero pricing work done.\n• Blocker: missing incoterm, delivery location, freight basis, validity period, lead time and internal costs.\nAction 2\n• Source request: [Demo] Riverside office lighting, due 2026-10-02\n• Do next: verify the submitted quote's 35-day lead and 100% advance payment against the buyer's stated requirement (\"confirm lead time and payment terms before award\"), and check the site's delivery window.\n• Why priority: the buyer flagged lead time and payment terms as award conditions; the quote notes \"Confirm delivery window\".\n• Blocker: no confirmed delivery window; advance payment is full cash exposure before delivery.\nMissing information\n[Demo] Riverside structured cabling\n• Incoterm and freight basis — delivered or ex-works? Not found in workspace.\n• Delivery location — not found in workspace.\n• Validity period and payment terms acceptable to buyer — not found in workspace.\n• Any spec/certification (e.g. cable category test certs, outlet type) — not stated.\n• Internal: unit cost per line not found in workspace; lead time not stated.\n[Demo] Riverside office lighting\n• Confirm acceptable lead time (35 days quoted; expectation not stated).\n• Is \"100% advance payment\" acceptable? Not stated.\n• Delivery window/date and site readiness — the quote asks to confirm; not found in workspace.\n• Whether \"complete delivered LED lighting packages\" implies extras beyond the two listed lines — brief text is ambiguous.\n• Validity period — not found in workspace.\nAssumptions\n• I treated all demo: true records and status: published RFQs as open and live; no award, closure or expiry data exists in the workspace.\n• Deadline 2026-10-02 has no time zone, so I applied no offset and treated it as end-of-day; if a cutoff time exists, priority may change.\n• Free-text fields (\"installed and tested\", \"complete delivered packages\") may carry scope not captured in line items; flagged, not priced.\nNothing was sent, submitted, approved, drafted, published or committed — this was a read-only scan for human review.\n1 step completed"
+      }
+    },
+    {
+      "message": "Saved skill re-run has no browser JavaScript errors"
+    },
+    {
+      "message": "Saved skill re-run after restart uses actual Riverside project context",
+      "details": {
+        "reply": "QUOTAGENT\nMorning review — Atlas Materials (Taylor Chen) · read-only\nDate format: YYYY-MM-DD. Timezone: timestamps are UTC (Z); deadlines have no time/timezone → ambiguous.\nChange since last run: none. Same 2 open RFQs, 0 drafts, 1 submitted quote.\nOpen RFQs (2) — by due date\n1. [Demo] Riverside structured cabling (open RFQ) — due 2026-10-02 — unpriced, no draft, cost basis and incoterm/freight basis missing\n2. [Demo] Riverside office lighting (open RFQ) — due 2026-10-02 — quote already submitted; buyer asked to confirm lead time and payment terms\nContext only: lighting quote for Atlas Materials, 5,292 USD USD-submitted, 35-day lead, \"100% advance payment\", freight included. Not in the action list. Only your own quote is visible, so no rank or price comparison can be inferred.\nTie on deadline → broken by completeness gap: cabling has zero pricing, so it ranks first.\nCriticality: not confirmable — current date is not found in workspace; deadlines carry no time. If today is 2026-09-25, both are ~7 days out, not critical.\nAction 1\n• Source request: [Demo] Riverside structured cabling, due 2026-10-02\n• Do next: obtain the buyer's incoterm, delivery location and freight basis, then confirm internal unit costs for line 1 \"CAT6 cable, installed and tested\", 1500 m and line 2 \"Dual data outlet with faceplate\", 48 each, so a private draft can be priced.\n• Why priority: largest completeness gap — no draft and no cost basis exist.\n• Blocker: incoterm, delivery location, freight basis, payment terms, validity period, lead time, costs — all not found in workspace.\nAction 2\n• Source request: [Demo] Riverside office lighting, due 2026-10-02\n• Do next: verify the submitted quote's 35-day lead and full advance payment against the buyer's pre-award condition, and confirm the delivery window the quote asks about.\n• Why priority: the RFQ text makes lead time and payment terms a condition before award.\n• Blocker: delivery window not confirmed; no stated acceptable lead time or payment terms. Reopening price is not possible without your authorization.\nMissing information\n[Demo] Riverside structured cabling\n• Incoterm and freight basis? Not found in workspace.\n• Delivery location? Not found in workspace.\n• Currency: USD stated. Payment terms and validity period — not found.\n• Cable/outlet spec, certification or test documentation required? Not stated.\n• Internal: unit cost per line, lead time, margin check — not found.\n[Demo] Riverside office lighting\n• Acceptable lead time vs 35 days quoted? Not stated.\n• Is 100% advance payment acceptable? Not stated.\n• Delivery window and site readiness? Quote says \"Confirm delivery window\" — not found.\n• Does \"complete delivered LED lighting packages\" include items beyond the two lines? Ambiguous.\n• Validity period? Not found.\nAssumptions\n• Treated status: published and demo: true records as open; no closure, award or expiry data exists.\n• No cutoff time known for 2026-10-02, so it is treated as end-of-day; if a cutoff exists, urgency may change.\n• Assumed the latest activity timestamp (2026-09-25) approximates today.\nNothing was sent, submitted, approved, drafted, published or committed — read-only scan for human review.\n1 step completed"
+      }
+    },
+    {
+      "message": "Saved skill re-run has no browser JavaScript errors"
+    },
+    {
+      "message": "Final public saved skill explicitly avoids competitor ranking from supplier-owned quote",
+      "details": {
+        "quote": "Only your own quote is visible, so no rank or price comparison can be inferred."
+      }
+    }
+  ],
+  "pageErrors": [],
+  "artifacts": {
+    "01-personal-theme-enabled": "01-personal-theme-enabled.png",
+    "02-other-account-unchanged": "02-other-account-unchanged.png",
+    "03-personal-theme-disabled": "03-personal-theme-disabled.png",
+    "04-admin-global-promotion": "04-admin-global-promotion.png",
+    "05-global-theme-on-other-account": "05-global-theme-on-other-account.png",
+    "06-generated-utility-real-result": "06-generated-utility-real-result.png",
+    "07-generated-source-review": "07-generated-source-review.png",
+    "08-saved-skill-run": "08-saved-skill-run.png",
+    "09-saved-skill-riverside-context": "09-saved-skill-riverside-context.png",
+    "10-saved-skill-final-supplier-scope": "10-saved-skill-final-supplier-scope.png"
+  },
+  "names": {
+    "themeName": "[Public check] Orchid theme 4350280",
+    "toolName": "[Public check] Quote total 4350280",
+    "skillName": "[Public check] Morning review 4350280"
+  },
+  "ok": true,
+  "finishedAt": "2026-09-25T08:28:47.139Z",
+  "skillRecheckStartedAt": "2026-09-25T08:28:40.659Z",
+  "skillRecheck": {
+    "reply": "QUOTAGENT\nMorning review — Atlas Materials (Taylor Chen) · read-only\nDate format: YYYY-MM-DD. Timezone: timestamps are UTC (Z); deadlines have no time/timezone → ambiguous.\nChange since last run: none. Same 2 open RFQs, 0 drafts, 1 submitted quote.\nOpen RFQs (2) — by due date\n1. [Demo] Riverside structured cabling (open RFQ) — due 2026-10-02 — unpriced, no draft, cost basis and incoterm/freight basis missing\n2. [Demo] Riverside office lighting (open RFQ) — due 2026-10-02 — quote already submitted; buyer asked to confirm lead time and payment terms\nContext only: lighting quote for Atlas Materials, 5,292 USD USD-submitted, 35-day lead, \"100% advance payment\", freight included. Not in the action list. Only your own quote is visible, so no rank or price comparison can be inferred.\nTie on deadline → broken by completeness gap: cabling has zero pricing, so it ranks first.\nCriticality: not confirmable — current date is not found in workspace; deadlines carry no time. If today is 2026-09-25, both are ~7 days out, not critical.\nAction 1\n• Source request: [Demo] Riverside structured cabling, due 2026-10-02\n• Do next: obtain the buyer's incoterm, delivery location and freight basis, then confirm internal unit costs for line 1 \"CAT6 cable, installed and tested\", 1500 m and line 2 \"Dual data outlet with faceplate\", 48 each, so a private draft can be priced.\n• Why priority: largest completeness gap — no draft and no cost basis exist.\n• Blocker: incoterm, delivery location, freight basis, payment terms, validity period, lead time, costs — all not found in workspace.\nAction 2\n• Source request: [Demo] Riverside office lighting, due 2026-10-02\n• Do next: verify the submitted quote's 35-day lead and full advance payment against the buyer's pre-award condition, and confirm the delivery window the quote asks about.\n• Why priority: the RFQ text makes lead time and payment terms a condition before award.\n• Blocker: delivery window not confirmed; no stated acceptable lead time or payment terms. Reopening price is not possible without your authorization.\nMissing information\n[Demo] Riverside structured cabling\n• Incoterm and freight basis? Not found in workspace.\n• Delivery location? Not found in workspace.\n• Currency: USD stated. Payment terms and validity period — not found.\n• Cable/outlet spec, certification or test documentation required? Not stated.\n• Internal: unit cost per line, lead time, margin check — not found.\n[Demo] Riverside office lighting\n• Acceptable lead time vs 35 days quoted? Not stated.\n• Is 100% advance payment acceptable? Not stated.\n• Delivery window and site readiness? Quote says \"Confirm delivery window\" — not found.\n• Does \"complete delivered LED lighting packages\" include items beyond the two lines? Ambiguous.\n• Validity period? Not found.\nAssumptions\n• Treated status: published and demo: true records as open; no closure, award or expiry data exists.\n• No cutoff time known for 2026-10-02, so it is treated as end-of-day; if a cutoff exists, urgency may change.\n• Assumed the latest activity timestamp (2026-09-25) approximates today.\nNothing was sent, submitted, approved, drafted, published or committed — read-only scan for human review.\n1 step completed",
+    "hasQuoteAmount": true,
+    "hasLighting": true,
+    "hasCabling": true,
+    "at": "2026-09-25T08:28:46.934Z"
+  },
+  "skillRecheckFinal": {
+    "reply": "QUOTAGENT\nMorning review — Atlas Materials (Taylor Chen) · read-only\nDate format: YYYY-MM-DD. Timezone: timestamps are UTC (Z); deadlines have no time/timezone → ambiguous.\nChange since last run: none. Same 2 open RFQs, 0 drafts, 1 submitted quote.\nOpen RFQs (2) — by due date\n1. [Demo] Riverside structured cabling (open RFQ) — due 2026-10-02 — unpriced, no draft, cost basis and incoterm/freight basis missing\n2. [Demo] Riverside office lighting (open RFQ) — due 2026-10-02 — quote already submitted; buyer asked to confirm lead time and payment terms\nContext only: lighting quote for Atlas Materials, 5,292 USD USD-submitted, 35-day lead, \"100% advance payment\", freight included. Not in the action list. Only your own quote is visible, so no rank or price comparison can be inferred.\nTie on deadline → broken by completeness gap: cabling has zero pricing, so it ranks first.\nCriticality: not confirmable — current date is not found in workspace; deadlines carry no time. If today is 2026-09-25, both are ~7 days out, not critical.\nAction 1\n• Source request: [Demo] Riverside structured cabling, due 2026-10-02\n• Do next: obtain the buyer's incoterm, delivery location and freight basis, then confirm internal unit costs for line 1 \"CAT6 cable, installed and tested\", 1500 m and line 2 \"Dual data outlet with faceplate\", 48 each, so a private draft can be priced.\n• Why priority: largest completeness gap — no draft and no cost basis exist.\n• Blocker: incoterm, delivery location, freight basis, payment terms, validity period, lead time, costs — all not found in workspace.\nAction 2\n• Source request: [Demo] Riverside office lighting, due 2026-10-02\n• Do next: verify the submitted quote's 35-day lead and full advance payment against the buyer's pre-award condition, and confirm the delivery window the quote asks about.\n• Why priority: the RFQ text makes lead time and payment terms a condition before award.\n• Blocker: delivery window not confirmed; no stated acceptable lead time or payment terms. Reopening price is not possible without your authorization.\nMissing information\n[Demo] Riverside structured cabling\n• Incoterm and freight basis? Not found in workspace.\n• Delivery location? Not found in workspace.\n• Currency: USD stated. Payment terms and validity period — not found.\n• Cable/outlet spec, certification or test documentation required? Not stated.\n• Internal: unit cost per line, lead time, margin check — not found.\n[Demo] Riverside office lighting\n• Acceptable lead time vs 35 days quoted? Not stated.\n• Is 100% advance payment acceptable? Not stated.\n• Delivery window and site readiness? Quote says \"Confirm delivery window\" — not found.\n• Does \"complete delivered LED lighting packages\" include items beyond the two lines? Ambiguous.\n• Validity period? Not found.\nAssumptions\n• Treated status: published and demo: true records as open; no closure, award or expiry data exists.\n• No cutoff time known for 2026-10-02, so it is treated as end-of-day; if a cutoff exists, urgency may change.\n• Assumed the latest activity timestamp (2026-09-25) approximates today.\nNothing was sent, submitted, approved, drafted, published or committed — read-only scan for human review.\n1 step completed",
+    "hasQuoteAmount": true,
+    "hasLighting": true,
+    "hasCabling": true,
+    "at": "2026-09-25T08:28:46.934Z",
+    "runtimeCommit": "fd506e0",
+    "supplierCompetitiveRankSuppressed": true,
+    "currentUtcDateRecognized": false,
+    "limitation": "Fresh response still says current date is unavailable in workspace and approximates from latest activity despite updated system UTC context."
+  }
+}

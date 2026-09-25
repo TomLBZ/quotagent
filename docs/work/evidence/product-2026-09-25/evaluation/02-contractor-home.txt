@@ -1,0 +1,117 @@
+quotagent.
+NC
+Northstar Construction
+Contractor workspace
+WORKSPACE
+Overview
+Requests
+Quotes
+Orders
+Messages
+Plugin studio
+Make it your own
+
+Tell your agent what would make work easier.
+
+Build with your agent
+Settings
+AM
+Alex Morgan
+contractor@demo.local
+Workspace
+Overview
+Connected to your workspace
+AM
+FRIDAY, SEPTEMBER 25
+Good to see you, Alex.
+
+Here’s what’s moving across your procurement workspace.
+
+New request
+YOUR NEXT MOVE, MADE EASIER
+From requirements to the right supplier.
+
+Let your agent prepare requests, compare the details, and help you negotiate with confidence.
+
+Plan my next steps
+Active requests
+0
+Ready for the next step
+Offers received
+0
+Compare on your terms
+Orders in progress
+1
+0 awaiting acknowledgement
+Project conversations
+1
+Context stays with the work
+Your active requests
+
+The work that’s ready to move forward.
+
+View all
+Your next project starts here
+
+Add what you need and invite suppliers to quote.
+
+Create a request
+Move work forward
+Describe what you need
+Turn a brief into a structured request
+Compare your offers
+See price, lead time, and trade-offs
+Draft a follow-up
+Get the answer your project needs
+Make this workspace yours
+Ask your agent for a new capability
+Latest activity
+
+A clear trail of what happened and what changed.
+
+Message sent · [Demo] Community centre lighting · 234097
+
+Alex Morgan
+
+Sep 25, 2026
+Order acknowledged · [Demo] Community centre lighting · 234097
+
+Alex Morgan
+
+Sep 25, 2026
+Change approved · Additional delivery visit
+
+Alex Morgan
+
+Sep 25, 2026
+Change proposed · Additional delivery visit
+
+Project update
+
+Sep 25, 2026
+Order acknowledged · [Demo] Community centre lighting · 234097
+
+Summit Supply
+
+Sep 25, 2026
+Request awarded · [Demo] Community centre lighting · 234097
+
+Alex Morgan
+
+Sep 25, 2026
+Your AI teammate
+Ready to work with you
+Connected to your workspace
+What can we move
+forward today?
+
+I can read the details, prepare the groundwork, and help you decide what comes next.
+
+Turn a brief into an RFQ
+Compare my offers
+Draft a negotiation
+Understand your work
+Build your own tools
+Shift + Enter for a new line
+
+You review and approve commitments.

@@ -1,0 +1,12 @@
+Fresh copy of nonignored working tree files; handover, current checklist, goal, current progress and state absent.
+== quotagent 文档门 (AC-DESIGN-001/002/003) ==
+扫描范围: 契约文档 268 个 markdown 文件（已排除 .git/.venv/__pycache__/node_modules/tmp 下的 0 个临时/派生 .md），仓库根 /workspace/projects/quotagent/tmp/docs-recovery-605fdrx5
+扫描读取: 成功 589 次读取，读窗口里消失 0 个契约文档（消失 ⇒ 判红，不跳过）
+[ok]   AC 定义集合: 主文件 docs/work/acceptance-criteria.md 定义 54 条；archives=[docs/work/acceptance-criteria-archive-b.md:20, docs/work/acceptance-criteria-archive.md:61]（归档文件共 81 条 AC 定义行，受同一套门校验）
+[ok]   FR 定义集合: 主文件 docs/work/functional-requirements.md 定义 73 条；fr_archives=[docs/work/functional-requirements-archive-b.md:46, docs/work/functional-requirements-archive.md:47]（归档文件共 93 条 FR 定义行，受同一套门校验）
+[ok]   T 定义集合: 主文件 docs/work/progress-checklist.md 定义 0 条；t_archives=[docs/work/progress-checklist-archive-b.md:37, docs/work/progress-checklist-archive.md:97]（归档文件共 134 条 T 定义行，受同一套门校验）
+[ok]   ID 完整性: 667 个定义，5060 处引用，0 未解析
+[ok]   占位符: 无
+[ok]   预算: 259 个文件受检，最高占用 100%（src/system/webui/docs/approval-decisions-and-evidence.md 16371/16384 B）
+[ok]   FR↔AC 覆盖: 166 条 FR 均关联 AC，135 条 AC 无孤儿（FR 定义文件 3 个：主文件 + 2 个归档；AC 定义文件 3 个：主文件 + 2 个归档）
+RESULT: PASS

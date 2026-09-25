@@ -1,0 +1,142 @@
+quotagent.
+NC
+Northstar Construction
+Contractor workspace
+WORKSPACE
+Overview
+Requests
+Quotes
+Orders
+Messages
+Plugin studio
+Make it your own
+
+Tell your agent what would make work easier.
+
+Build with your agent
+Settings
+AM
+Alex Morgan
+contractor@demo.local
+Workspace
+Plugin studio
+Connected to your workspace
+AM
+BUILT AROUND YOU
+Your workspace. Your way.
+
+Describe a better way to work. Your agent turns it into an extension you can use and share.
+
+Powered by your agent
+What would make your work easier?
+
+A different look, a helpful widget, or a repeatable workflow. Start with an idea.
+
+Built for your account · Ready to use · Reversible
+Create with AI
+A personal theme
+A useful widget
+A workflow skill
+My extensions
+2
+Marketplace
+2
+Saved skills
+1
+Enabled
+WORKFLOW SKILL
+RFQ Quote Review Checklist
+
+A read-only, reusable procedure that evaluates every quote submitted against the currently selected RFQ and returns a per-supplier comparison table with arithmetic flags, delivery/VAT treatment, lead-time and warranty gaps, draft clarification questions, and a missing-data list.
+
+Confirm the currently selected RFQ and pull only its linked records (items, quotes, suppliers, messages, changes); state that the run is read-only.
+Enumerate every submitted quote with supplier name, quote ID, status and submitted timestamp; if none exist, say so and stop the comparison.
+Recompute each quote line as quantity x unit price against the stated line total, then sum the lines against the stated quote total, flagging every discrepancy with exact figures.
+Disable
+Run skill
+View details
+Only in your workspace
+Publish to market
+Your AI teammate
+Ready to work with you
+Connected to your workspace
+YOU
+Help me turn my project brief into a structured RFQ with line items. Ask me for the requirements to extract.
+QUOTAGENT
+Happy to build that RFQ. Paste your project brief (or the relevant text) and I'll extract it into a private draft — nothing gets published or sent to suppliers until you review.
+To get the line items right, please include:
+Scope & items
+• Product/service descriptions with specs (e.g. "LED panel 36W, 600x600, 4000K")
+• Quantities and units (each, m², linear m, tonnes…)
+• Any alternates or substitutions allowed
+Commercial terms
+• Currency and target deadline
+• Delivery location, delivery included/excluded, lead time
+• Warranty period, payment terms
+• Exclusions you want stated (e.g. install not included)
+Suppliers
+• Who should receive it — I can see Summit Supply and Atlas Materials on your account.
+For reference, your last RFQ was *[Demo] Community centre lighting · 234097* (100× LED panel 36W, 25× occupancy sensor, USD, deadline 2026-10-09), awarded to Summit Supply at $2,125 with Net 30 and 14-day lead.
+Paste the brief and tell me the deadline, currency and supplier list — I'll draft it and flag anything unclear rather than guessing quantities.
+1 step completed
+YOU
+Create an RFQ draft only, labelled [Evaluation] Library lighting 20260925. We need 120 dimmable LED panels (600x600 mm, 4000 K, UGR<19) and 20 emergency battery packs. Deliver to Bristol library by 20 November 2026. Separate delivery and VAT. Ask suppliers for warranty length, lead time and substitutions. Do not send or publish. Extract the exact quantities and flag missing information.
+QUOTAGENT
+Draft created (private, nothing sent or published): [Evaluation] Library lighting 20260925 — ID rfq-80ec3366-5f0.
+Line items extracted exactly as stated
+#	Item	Qty	Unit
+1	Dimmable LED panel, 600×600 mm, 4000 K, UGR<19	120	each
+2	Emergency battery pack	20	each
+Captured in the scope: delivery to Bristol library by 20 Nov 2026; delivery and VAT quoted separately; suppliers to state warranty length, lead time and substitutions.
+Flags — please confirm before issue
+• Currency: the draft defaulted to USD; you may want GBP given a Bristol delivery. Not stated in your brief.
+• No quote deadline set — 20 Nov 2026 is the delivery date, not the tender close.
+• Panel spec gaps: dimming protocol (DALI/0–10 V?) and wattage.
+• Battery packs: duration and type (e.g. 3-hour self-contained), and whether they fit the panels or stand alone.
+• Exact delivery address/access, offloading and install scope not stated.
+• Minimum warranty not set — you're asking suppliers to state theirs.
+• No suppliers invited yet.
+Next step: confirm currency, tender close date and the dimming/battery details, then tell me who to invite — I'll update the draft and prepare a review action.
+1 step completed
+Review RFQ draft
+Ready for your review
+YOU
+For the selected [Evaluation] Library lighting 20260925 request only, compare all received supplier offers and recommend who to award. Use only actual offers for this request; distinguish missing information. Do not modify anything.
+QUOTAGENT
+No offers to compare — this request has zero submitted quotes.
+Checked for RFQ rfq-80ec3366-5f0 only (read-only; nothing modified):
+• Quotes received: none (quotes: [])
+• Suppliers invited: none — the draft has no supplier list
+• Status: still draft, never published, so no supplier could have responded
+No award recommendation is possible. I won't name a winner from other data.
+Missing information that blocks both issuing and evaluating:
+• No quote submission deadline (20 Nov 2026 is the delivery date, not the close)
+• No currency confirmed for the separate delivery/VAT lines
+• Panel dimming protocol and wattage unspecified
+• Battery pack duration/type and whether integral or standalone
+• Delivery address/access, and whether offloading or install is in scope
+• Minimum warranty not set
+Note for accuracy: the one quote on your account ($2,125 from Summit Supply, 14-day lead, Net 30) belongs to the different awarded request *[Demo] Community centre lighting · 234097* — it is not an offer for this library lighting request and shouldn't be used to award it.
+Next step: confirm currency, tender close date and the spec gaps, then invite suppliers (Summit Supply, Atlas Materials). Once quotes come back, I'll run the comparison and prepare an award review for you to approve.
+2 steps completed
+YOU
+Save a reusable workflow skill named [Evaluation] Quote review checklist. When run against the selected RFQ: list submitted supplier offers, verify line-item totals, distinguish included delivery and VAT from unknowns, compare lead time, flag exclusions and warranty gaps, and draft one clarification question per supplier. Use only the selected RFQ records and identify missing data. Never send a message or approve/award anything. Save the skill only; do not run or change any RFQ now.
+QUOTAGENT
+Saved and loaded as RFQ Quote Review Checklist (skill). It's in your Plugin studio.
+What it does when you run it against the selected RFQ — read-only:
+1. Lists submitted offers (supplier, quote ID, status, timestamp); stops cleanly if there are none — never borrows quotes from another RFQ
+2. Recomputes each line (qty × unit price) and the quote total, flagging exact discrepancies
+3. Classifies delivery and VAT per quote as included / separate line / excluded / NOT STATED (unknowns never treated as included)
+4. Tabulates lead time and flags any that misses your required delivery date
+5. Records exclusions and warranty as written, flags gaps and substitutions
+6. Produces one draft clarification question per supplier (labelled "draft – not sent")
+7. Closes with a missing-data list split into RFQ-side vs supplier-side gaps
+Guardrails built in: uses only the selected RFQ's own records, deterministic arithmetic only, no invented prices or terms, and it never sends messages or awards/approves anything — it reads and reports only.
+Not run, nothing changed: I did not execute the skill or modify any RFQ, quote, order or message.
+Next step: select the RFQ you want reviewed in Plugin studio and run it — for the library lighting draft it will report zero offers, since none are invited yet.
+1 step completed
+Open plugin studio
+Ready for your review
+Shift + Enter for a new line
+
+You review and approve commitments.

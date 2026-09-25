@@ -1,0 +1,67 @@
+quotagent.
+SS
+Summit Supply
+Supplier workspace
+WORKSPACE
+Overview
+Requests
+Quotes
+Orders
+Messages
+Plugin studio
+Make it your own
+
+Tell your agent what would make work easier.
+
+Build with your agent
+Settings
+JL
+Jordan Lee
+supplier@demo.local
+Workspace
+Messages
+Connected to your workspace
+JL
+CONTEXT, ALL TOGETHER
+Keep the conversation with the work.
+
+Questions, clarifications, and negotiations stay linked to the right request.
+
+[Demo] Community centre lighting · 234097
+1 messages
+[Demo] Community centre lighting · 234097
+
+One conversation. The full project context.
+
+Help me write
+NC
+Northstar Construction
+Sep 25, 2026
+clarification
+
+Please confirm the delivery window for next Tuesday.
+
+To
+Northstar Construction
+Type
+Clarification
+Negotiation
+Message
+Only shared with the selected recipient.
+Send message
+Your AI teammate
+Ready to work with you
+Connected to your workspace
+What can we move
+forward today?
+
+I can read the details, prepare the groundwork, and help you decide what comes next.
+
+Read my RFQs
+Prepare a quote
+Build a useful skill
+Understand your work
+Build your own tools
+Shift + Enter for a new line
+
+You review and approve commitments.

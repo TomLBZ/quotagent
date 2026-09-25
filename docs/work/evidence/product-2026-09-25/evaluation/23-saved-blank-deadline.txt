@@ -1,0 +1,235 @@
+quotagent.
+NC
+Northstar Construction
+Contractor workspace
+WORKSPACE
+Overview
+Requests
+Quotes
+Orders
+Messages
+Plugin studio
+Make it your own
+
+Tell your agent what would make work easier.
+
+Build with your agent
+Settings
+AM
+Alex Morgan
+contractor@demo.local
+Workspace
+Requests
+Connected to your workspace
+AM
+All requests
+REQUEST FOR QUOTATION
+[Evaluation] Library lighting 20260925
+
+Northstar Construction · Due No deadline · USD
+
+Ask AI
+Edit draft
+Publish request
+Request created
+Suppliers invited
+Offers received
+Order confirmed
+Scope & details
+Compare offers
+0
+Conversation
+0
+Project brief
+Draft
+
+Supply only (install not stated) of library lighting for Bristol library. Deliver to Bristol library by 20 November 2026. Delivery cost and VAT to be shown separately in the quote, not bundled into unit prices. Suppliers to state in their response: warranty length, lead time, and any substitutions offered.
+
+UNRESOLVED / TO CONFIRM BEFORE ISSUE:
+- Currency not stated (no currency set on this draft).
+- Quote submission deadline not stated; 20 Nov 2026 is the required delivery date, not the tender close.
+- Dimmable panel: dimming protocol not specified (DALI / 0-10 V / mains dimmable?) and wattage/output not given.
+- Emergency battery packs: duration and type not specified (e.g. 3-hour self-contained, maintained vs non-maintained), and whether they are integral to the panels or standalone.
+- Exact delivery address and access/site restrictions for Bristol library not given.
+- Whether offloading, install, commissioning or waste disposal are required.
+- Warranty: minimum acceptable length not set — asking suppliers to state theirs.
+- VAT rate/tax treatment not confirmed for the separate-VAT line.
+- Delivery timing: single drop or phased deliveries; delivery window on 20 Nov 2026 not specified.
+- Quantity of 120 panels and 20 battery packs taken as stated; relationship between them (one pack per panel subset?) unconfirmed.
+
+Deadline
+No deadline
+Currency
+USD
+Requested items
+2
+Invited suppliers
+0
+Scope of supply
+2 line items
+Item	Description	Quantity	Unit
+01	Dimmable LED panel, 600 x 600 mm, 4000 K, UGR < 19 (dimming protocol to be confirmed)	120	each
+02	Emergency battery pack for LED panel (type/duration to be confirmed)	20	each
+Your AI teammate
+Ready to work with you
+Working with your selected request
+YOU
+Help me turn my project brief into a structured RFQ with line items. Ask me for the requirements to extract.
+QUOTAGENT
+Happy to build that RFQ. Paste your project brief (or the relevant text) and I'll extract it into a private draft — nothing gets published or sent to suppliers until you review.
+To get the line items right, please include:
+Scope & items
+• Product/service descriptions with specs (e.g. "LED panel 36W, 600x600, 4000K")
+• Quantities and units (each, m², linear m, tonnes…)
+• Any alternates or substitutions allowed
+Commercial terms
+• Currency and target deadline
+• Delivery location, delivery included/excluded, lead time
+• Warranty period, payment terms
+• Exclusions you want stated (e.g. install not included)
+Suppliers
+• Who should receive it — I can see Summit Supply and Atlas Materials on your account.
+For reference, your last RFQ was *[Demo] Community centre lighting · 234097* (100× LED panel 36W, 25× occupancy sensor, USD, deadline 2026-10-09), awarded to Summit Supply at $2,125 with Net 30 and 14-day lead.
+Paste the brief and tell me the deadline, currency and supplier list — I'll draft it and flag anything unclear rather than guessing quantities.
+1 step completed
+YOU
+Create an RFQ draft only, labelled [Evaluation] Library lighting 20260925. We need 120 dimmable LED panels (600x600 mm, 4000 K, UGR<19) and 20 emergency battery packs. Deliver to Bristol library by 20 November 2026. Separate delivery and VAT. Ask suppliers for warranty length, lead time and substitutions. Do not send or publish. Extract the exact quantities and flag missing information.
+QUOTAGENT
+Draft created (private, nothing sent or published): [Evaluation] Library lighting 20260925 — ID rfq-80ec3366-5f0.
+Line items extracted exactly as stated
+#	Item	Qty	Unit
+1	Dimmable LED panel, 600×600 mm, 4000 K, UGR<19	120	each
+2	Emergency battery pack	20	each
+Captured in the scope: delivery to Bristol library by 20 Nov 2026; delivery and VAT quoted separately; suppliers to state warranty length, lead time and substitutions.
+Flags — please confirm before issue
+• Currency: the draft defaulted to USD; you may want GBP given a Bristol delivery. Not stated in your brief.
+• No quote deadline set — 20 Nov 2026 is the delivery date, not the tender close.
+• Panel spec gaps: dimming protocol (DALI/0–10 V?) and wattage.
+• Battery packs: duration and type (e.g. 3-hour self-contained), and whether they fit the panels or stand alone.
+• Exact delivery address/access, offloading and install scope not stated.
+• Minimum warranty not set — you're asking suppliers to state theirs.
+• No suppliers invited yet.
+Next step: confirm currency, tender close date and the dimming/battery details, then tell me who to invite — I'll update the draft and prepare a review action.
+1 step completed
+Review RFQ draft
+Ready for your review
+YOU
+For the selected [Evaluation] Library lighting 20260925 request only, compare all received supplier offers and recommend who to award. Use only actual offers for this request; distinguish missing information. Do not modify anything.
+QUOTAGENT
+No offers to compare — this request has zero submitted quotes.
+Checked for RFQ rfq-80ec3366-5f0 only (read-only; nothing modified):
+• Quotes received: none (quotes: [])
+• Suppliers invited: none — the draft has no supplier list
+• Status: still draft, never published, so no supplier could have responded
+No award recommendation is possible. I won't name a winner from other data.
+Missing information that blocks both issuing and evaluating:
+• No quote submission deadline (20 Nov 2026 is the delivery date, not the close)
+• No currency confirmed for the separate delivery/VAT lines
+• Panel dimming protocol and wattage unspecified
+• Battery pack duration/type and whether integral or standalone
+• Delivery address/access, and whether offloading or install is in scope
+• Minimum warranty not set
+Note for accuracy: the one quote on your account ($2,125 from Summit Supply, 14-day lead, Net 30) belongs to the different awarded request *[Demo] Community centre lighting · 234097* — it is not an offer for this library lighting request and shouldn't be used to award it.
+Next step: confirm currency, tender close date and the spec gaps, then invite suppliers (Summit Supply, Atlas Materials). Once quotes come back, I'll run the comparison and prepare an award review for you to approve.
+2 steps completed
+YOU
+Save a reusable workflow skill named [Evaluation] Quote review checklist. When run against the selected RFQ: list submitted supplier offers, verify line-item totals, distinguish included delivery and VAT from unknowns, compare lead time, flag exclusions and warranty gaps, and draft one clarification question per supplier. Use only the selected RFQ records and identify missing data. Never send a message or approve/award anything. Save the skill only; do not run or change any RFQ now.
+QUOTAGENT
+Saved and loaded as RFQ Quote Review Checklist (skill). It's in your Plugin studio.
+What it does when you run it against the selected RFQ — read-only:
+1. Lists submitted offers (supplier, quote ID, status, timestamp); stops cleanly if there are none — never borrows quotes from another RFQ
+2. Recomputes each line (qty × unit price) and the quote total, flagging exact discrepancies
+3. Classifies delivery and VAT per quote as included / separate line / excluded / NOT STATED (unknowns never treated as included)
+4. Tabulates lead time and flags any that misses your required delivery date
+5. Records exclusions and warranty as written, flags gaps and substitutions
+6. Produces one draft clarification question per supplier (labelled "draft – not sent")
+7. Closes with a missing-data list split into RFQ-side vs supplier-side gaps
+Guardrails built in: uses only the selected RFQ's own records, deterministic arithmetic only, no invented prices or terms, and it never sends messages or awards/approves anything — it reads and reports only.
+Not run, nothing changed: I did not execute the skill or modify any RFQ, quote, order or message.
+Next step: select the RFQ you want reviewed in Plugin studio and run it — for the library lighting draft it will report zero offers, since none are invited yet.
+1 step completed
+Open plugin studio
+Ready for your review
+YOU
+Run my saved workflow "RFQ Quote Review Checklist":
+Run a read-only quote review for the currently selected RFQ, using ONLY that RFQ's own records (its line items, quotes, suppliers, messages, changes) from the live workspace. Never substitute quotes or terms from any other RFQ. This workflow never sends messages, publishes, awards, approves changes, or alters any record; it only reads and reports. Do not estimate, assume or interpolate any price, rate, lead time or term that is not present in the records. If a field is absent, call it NOT STATED and treat it as an unknown, never as included.
+Step 1 - List submitted offers. Enumerate every quote submitted against the selected RFQ with supplier name, quote ID, status and submitted timestamp. If there are no submitted quotes, state that explicitly and stop the comparison; do not pull in quotes from other RFQs.
+Step 2 - Verify line-item totals. For each quote recompute every line as quantity x unit price and compare with the stated line total. Then sum the lines and compare with the quote's stated total. Report every discrepancy as a flag with the exact figures (quote ID, line description, quantity, unit price, computed vs stated). Note any RFQ line item with no corresponding quoted line, and any quoted line that the RFQ did not request (scope coverage and short-supply check).
+Step 3 - Distinguish included delivery and VAT from unknowns. For each quote classify delivery cost and VAT as one of: explicitly included, quoted as a separate line, explicitly excluded, or NOT STATED. Treat NOT STATED as an unknown and never as included; never assume a percentage. Note where delivery or VAT appears bundled into unit prices when the RFQ asked for them separately.
+Step 4 - Compare lead time. Tabulate stated lead time in days per supplier against the RFQ's required delivery date. Flag every lead time that would miss the required date, and flag every quote with no lead time stated.
+Step 5 - Flag exclusions and warranty gaps. Record each supplier's stated exclusions as written (offloading, installation, commissioning, waste disposal, access restrictions, phased deliveries) and mark unstated items as unknown. Record stated warranty length per supplier; if the RFQ set no minimum warranty, say that no minimum is set; flag missing or vague warranty responses and any substitutions offered.
+Step 6 - Draft one clarification question per supplier. Produce exactly one targeted question per supplier, aimed at that supplier's most decision-critical gap (delivery or VAT treatment, lead time, warranty, unstated exclusions, or spec ambiguity). Present it as draft text only, clearly labelled 'draft - not sent'. Do not call any message-sending or commitment action.
+Step 7 - Identify missing data. Close with a consolidated list split into missing on the RFQ side (currency, submission deadline, spec gaps) and missing from supplier responses, clearly separating facts taken from records from gaps.
+Output format: a compact report opening with a scope line (RFQ ID and title, quote count, suppliers, review timestamp) and the statement that nothing was changed; then a per-supplier comparison table with columns Supplier | Quote ID | Status | Submitted | Quoted total | Line-item arithmetic check | Delivery treatment | VAT treatment | Lead time (days) | Warranty | Exclusions | Substitutions; then numbered flags; then the draft clarification questions; then the missing-data list. Cite RFQ IDs, quote IDs and supplier names throughout. Use deterministic arithmetic only from the selected RFQ's records, and never invent offers, prices or terms.
+Workflow steps:
+1. Confirm the currently selected RFQ and pull only its linked records (items, quotes, suppliers, messages, changes); state that the run is read-only.
+2. Enumerate every submitted quote with supplier name, quote ID, status and submitted timestamp; if none exist, say so and stop the comparison.
+3. Recompute each quote line as quantity x unit price against the stated line total, then sum the lines against the stated quote total, flagging every discrepancy with exact figures.
+4. Check scope coverage: RFQ lines with no quoted line, and quoted lines that were not requested.
+5. Classify delivery cost and VAT per quote as explicitly included, separate line, explicitly excluded, or NOT STATED; flag bundling into unit prices.
+6. Tabulate stated lead time in days per supplier against the RFQ required delivery date; flag misses and missing lead times.
+7. Record stated exclusions and warranty per supplier, mark unstated items unknown, and flag vague or missing warranty plus any substitutions.
+8. Draft exactly one clarification question per supplier targeting that supplier's most decision-critical gap, labelled draft - not sent.
+9. Compile missing data split into RFQ-side (currency, submission deadline, spec gaps) and supplier-side gaps.
+10. Emit the comparison table, flags, draft questions and missing-data list, and confirm that no record was created, sent, published, awarded or changed.
+QUOTAGENT
+Scope: rfq-80ec3366-5f0 — *[Evaluation] Library lighting 20260925* · Quotes on this RFQ: 0 · Invited suppliers: 0 · Review timestamp: 2026-09-25 · Read-only — no record was created, sent, published, awarded or changed.
+Step 1 — Submitted offers
+No quotes have been submitted against this RFQ (quotes: []). The draft is still draft, has no suppliers invited, so no supplier could have responded. Comparison stops here per the checklist; no quotes were taken from any other RFQ.
+Supplier	Quote ID	Status	Submitted	Quoted total	Arith. check	Delivery	VAT	Lead time	Warranty	Exclusions	Substitutions
+— none —	—	—	—	—	—	—	—	—	—	—	—
+Steps 2–6 — Not applicable (no quotes to verify, classify, compare lead time for, or raise clarification questions against). Zero clarification questions drafted: there is no supplier response to question.
+Step 7 — Missing data
+*RFQ-side gaps (from the draft record):*
+1. Currency unconfirmed — record shows USD; your brief did not state it (Bristol delivery may imply GBP)
+2. No quote submission deadline (deadline: ""); 20 Nov 2026 is the delivery date, not the close
+3. Dimming protocol not stated (DALI / 0–10 V / mains dimmable) and no panel wattage
+4. Battery pack duration and type not stated; integral vs standalone not stated
+5. Delivery address, access restrictions, offloading/install/commissioning/waste scope not stated
+6. Minimum warranty not set (suppliers only asked to state theirs)
+7. VAT rate/tax treatment for the separate-VAT line not confirmed
+*Supplier-side gaps:* none exist — no responses received.
+Facts vs gaps: facts are the two line items (120 panels, 20 battery packs), the 20 Nov 2026 delivery date and the separate-delivery/VAT instruction; everything above is a gap.
+Next step: confirm currency, tender close and the spec gaps, invite suppliers, then re-run this checklist once quotes exist.
+2 steps completed
+YOU
+Run my saved workflow "RFQ Quote Review Checklist":
+Run a read-only quote review for the currently selected RFQ, using ONLY that RFQ's own records (its line items, quotes, suppliers, messages, changes) from the live workspace. Never substitute quotes or terms from any other RFQ. This workflow never sends messages, publishes, awards, approves changes, or alters any record; it only reads and reports. Do not estimate, assume or interpolate any price, rate, lead time or term that is not present in the records. If a field is absent, call it NOT STATED and treat it as an unknown, never as included.
+Step 1 - List submitted offers. Enumerate every quote submitted against the selected RFQ with supplier name, quote ID, status and submitted timestamp. If there are no submitted quotes, state that explicitly and stop the comparison; do not pull in quotes from other RFQs.
+Step 2 - Verify line-item totals. For each quote recompute every line as quantity x unit price and compare with the stated line total. Then sum the lines and compare with the quote's stated total. Report every discrepancy as a flag with the exact figures (quote ID, line description, quantity, unit price, computed vs stated). Note any RFQ line item with no corresponding quoted line, and any quoted line that the RFQ did not request (scope coverage and short-supply check).
+Step 3 - Distinguish included delivery and VAT from unknowns. For each quote classify delivery cost and VAT as one of: explicitly included, quoted as a separate line, explicitly excluded, or NOT STATED. Treat NOT STATED as an unknown and never as included; never assume a percentage. Note where delivery or VAT appears bundled into unit prices when the RFQ asked for them separately.
+Step 4 - Compare lead time. Tabulate stated lead time in days per supplier against the RFQ's required delivery date. Flag every lead time that would miss the required date, and flag every quote with no lead time stated.
+Step 5 - Flag exclusions and warranty gaps. Record each supplier's stated exclusions as written (offloading, installation, commissioning, waste disposal, access restrictions, phased deliveries) and mark unstated items as unknown. Record stated warranty length per supplier; if the RFQ set no minimum warranty, say that no minimum is set; flag missing or vague warranty responses and any substitutions offered.
+Step 6 - Draft one clarification question per supplier. Produce exactly one targeted question per supplier, aimed at that supplier's most decision-critical gap (delivery or VAT treatment, lead time, warranty, unstated exclusions, or spec ambiguity). Present it as draft text only, clearly labelled 'draft - not sent'. Do not call any message-sending or commitment action.
+Step 7 - Identify missing data. Close with a consolidated list split into missing on the RFQ side (currency, submission deadline, spec gaps) and missing from supplier responses, clearly separating facts taken from records from gaps.
+Output format: a compact report opening with a scope line (RFQ ID and title, quote count, suppliers, review timestamp) and the statement that nothing was changed; then a per-supplier comparison table with columns Supplier | Quote ID | Status | Submitted | Quoted total | Line-item arithmetic check | Delivery treatment | VAT treatment | Lead time (days) | Warranty | Exclusions | Substitutions; then numbered flags; then the draft clarification questions; then the missing-data list. Cite RFQ IDs, quote IDs and supplier names throughout. Use deterministic arithmetic only from the selected RFQ's records, and never invent offers, prices or terms.
+Workflow steps:
+1. Confirm the currently selected RFQ and pull only its linked records (items, quotes, suppliers, messages, changes); state that the run is read-only.
+2. Enumerate every submitted quote with supplier name, quote ID, status and submitted timestamp; if none exist, say so and stop the comparison.
+3. Recompute each quote line as quantity x unit price against the stated line total, then sum the lines against the stated quote total, flagging every discrepancy with exact figures.
+4. Check scope coverage: RFQ lines with no quoted line, and quoted lines that were not requested.
+5. Classify delivery cost and VAT per quote as explicitly included, separate line, explicitly excluded, or NOT STATED; flag bundling into unit prices.
+6. Tabulate stated lead time in days per supplier against the RFQ required delivery date; flag misses and missing lead times.
+7. Record stated exclusions and warranty per supplier, mark unstated items unknown, and flag vague or missing warranty plus any substitutions.
+8. Draft exactly one clarification question per supplier targeting that supplier's most decision-critical gap, labelled draft - not sent.
+9. Compile missing data split into RFQ-side (currency, submission deadline, spec gaps) and supplier-side gaps.
+10. Emit the comparison table, flags, draft questions and missing-data list, and confirm that no record was created, sent, published, awarded or changed.
+QUOTAGENT
+Scope: rfq-80ec3366-5f0 — *[Evaluation] Library lighting 20260925* · Quotes on this RFQ: 0 · Invited suppliers: 0 · Re-run confirmed against live records; result unchanged from the previous run · Read-only — no record was created, sent, published, awarded or changed.
+Step 1 — Submitted offers
+No quotes submitted against this RFQ (quotes: []). The request is still draft with no suppliers invited, so no supplier could respond. Comparison stops here, and no quotes were taken from any other RFQ.
+Supplier	Quote ID	Status	Submitted	Quoted total	Arith. check	Delivery	VAT	Lead time (days)	Warranty	Exclusions	Substitutions
+— none —	—	—	—	—	—	—	—	—	—	—	—
+Steps 2–6 — Not applicable. Nothing to recompute, classify, or compare; no lead time or warranty stated to test. Zero clarification questions drafted — there is no supplier response to question.
+Step 7 — Missing data
+*RFQ-side:* (1) currency unconfirmed — record shows USD, your brief stated none; (2) no quote submission deadline (deadline: ""); (3) dimming protocol and panel wattage not stated; (4) battery pack duration/type and integral-vs-standalone not stated; (5) delivery address, access, offloading/install/commissioning/waste scope not stated; (6) minimum warranty not set; (7) VAT rate/tax treatment unconfirmed.
+*Supplier-side:* none — no responses exist.
+Facts vs gaps: facts are 120 panels, 20 battery packs, delivery to Bristol library by 20 Nov 2026, and the separate-delivery/VAT instruction. All else is a gap.
+Next step: confirm currency, tender close and the spec gaps, invite suppliers, then re-run once quotes are in.
+2 steps completed
+Selected RFQ included
+Shift + Enter for a new line
+
+You review and approve commitments.
+
+Request saved. Review it, then publish to your suppliers.

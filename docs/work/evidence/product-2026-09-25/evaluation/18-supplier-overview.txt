@@ -1,0 +1,116 @@
+quotagent.
+SS
+Summit Supply
+Supplier workspace
+WORKSPACE
+Overview
+Requests
+Quotes
+Orders
+Messages
+Plugin studio
+Make it your own
+
+Tell your agent what would make work easier.
+
+Build with your agent
+Settings
+JL
+Jordan Lee
+supplier@demo.local
+Workspace
+Overview
+Connected to your workspace
+JL
+FRIDAY, SEPTEMBER 25
+Good to see you, Jordan.
+
+Here’s what’s moving across your quotation workspace.
+
+View opportunities
+YOUR NEXT MOVE, MADE EASIER
+Turn a good opportunity into a great quote.
+
+Let your agent read the brief, help price the work, and draft a response worth sending.
+
+Plan my next steps
+Open opportunities
+0
+Invited to your workspace
+Quote drafts
+0
+Pick up where you left off
+Orders in progress
+1
+0 awaiting acknowledgement
+Project conversations
+1
+Context stays with the work
+Your opportunities
+
+The work that’s ready to move forward.
+
+View all
+Your next opportunity will appear here
+
+Invitations from contractors arrive directly in this workspace.
+
+Move work forward
+Prepare your next quote
+Price the scope with your AI teammate
+Clarify the requirements
+Resolve scope before you commit
+Review new orders
+Confirm what you’re ready to deliver
+Make this workspace yours
+Ask your agent for a new capability
+Latest activity
+
+A clear trail of what happened and what changed.
+
+Message received · [Demo] Community centre lighting · 234097
+
+Northstar Construction
+
+Sep 25, 2026
+Order acknowledged · [Demo] Community centre lighting · 234097
+
+Summit Supply
+
+Sep 25, 2026
+Change approved · Additional delivery visit
+
+Project update
+
+Sep 25, 2026
+Change proposed · Additional delivery visit
+
+Jordan Lee
+
+Sep 25, 2026
+Order acknowledged · [Demo] Community centre lighting · 234097
+
+Jordan Lee
+
+Sep 25, 2026
+Request awarded · [Demo] Community centre lighting · 234097
+
+Northstar Construction
+
+Sep 25, 2026
+Your AI teammate
+Ready to work with you
+Connected to your workspace
+What can we move
+forward today?
+
+I can read the details, prepare the groundwork, and help you decide what comes next.
+
+Read my RFQs
+Prepare a quote
+Build a useful skill
+Understand your work
+Build your own tools
+Shift + Enter for a new line
+
+You review and approve commitments.

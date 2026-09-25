@@ -1,0 +1,24 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "startedAt": "2026-09-25T08:28:32.810Z",
+  "checks": [
+    "Supplier has only supplier actions",
+    "Client navigation has no administration",
+    "Contractor creates and publishes RFQ in GUI",
+    "Supplier prepares and submits quote in GUI",
+    "Buyer sees exact submitted total of 2125.00",
+    "Buyer does not see private supplier cost fields",
+    "Buyer approves award and issues order in GUI",
+    "Supplier acknowledges purchase order in GUI",
+    "Approved change updates order to 2200.00",
+    "Contextual project message sent in GUI",
+    "Separate administrator account opens user management",
+    "Admin has server management, no client business view",
+    "Mobile has no page-wide horizontal overflow",
+    "No browser JavaScript errors"
+  ],
+  "errors": [],
+  "project": "[Demo] Community centre lighting · 915203",
+  "ok": true,
+  "finishedAt": "2026-09-25T08:28:40.988Z"
+}

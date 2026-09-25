@@ -1,0 +1,138 @@
+quotagent.
+NC
+Northstar Construction
+Contractor workspace
+WORKSPACE
+Overview
+Requests
+Quotes
+Orders
+Messages
+Plugin studio
+Make it your own
+
+Tell your agent what would make work easier.
+
+Build with your agent
+Settings
+AM
+Alex Morgan
+contractor@demo.local
+Workspace
+Requests
+Connected to your workspace
+AM
+All requests
+REQUEST FOR QUOTATION
+[Evaluation] Library lighting 20260925
+
+Northstar Construction · Due No deadline · USD
+
+Ask AI
+Edit draft
+Publish request
+Request created
+Suppliers invited
+Offers received
+Order confirmed
+Scope & details
+Compare offers
+0
+Conversation
+0
+Project brief
+Draft
+
+Supply only (install not stated) of library lighting for Bristol library. Deliver to Bristol library by 20 November 2026. Delivery cost and VAT to be shown separately in the quote, not bundled into unit prices. Suppliers to state in their response: warranty length, lead time, and any substitutions offered.
+
+UNRESOLVED / TO CONFIRM BEFORE ISSUE:
+- Currency not stated (no currency set on this draft).
+- Quote submission deadline not stated; 20 Nov 2026 is the required delivery date, not the tender close.
+- Dimmable panel: dimming protocol not specified (DALI / 0-10 V / mains dimmable?) and wattage/output not given.
+- Emergency battery packs: duration and type not specified (e.g. 3-hour self-contained, maintained vs non-maintained), and whether they are integral to the panels or standalone.
+- Exact delivery address and access/site restrictions for Bristol library not given.
+- Whether offloading, install, commissioning or waste disposal are required.
+- Warranty: minimum acceptable length not set — asking suppliers to state theirs.
+- VAT rate/tax treatment not confirmed for the separate-VAT line.
+- Delivery timing: single drop or phased deliveries; delivery window on 20 Nov 2026 not specified.
+- Quantity of 120 panels and 20 battery packs taken as stated; relationship between them (one pack per panel subset?) unconfirmed.
+
+Deadline
+No deadline
+Currency
+USD
+Requested items
+2
+Invited suppliers
+0
+Scope of supply
+2 line items
+Item	Description	Quantity	Unit
+01	Dimmable LED panel, 600 x 600 mm, 4000 K, UGR < 19 (dimming protocol to be confirmed)	120	each
+02	Emergency battery pack for LED panel (type/duration to be confirmed)	20	each
+Your AI teammate
+Ready to work with you
+Working with your selected request
+YOU
+Help me turn my project brief into a structured RFQ with line items. Ask me for the requirements to extract.
+QUOTAGENT
+Happy to build that RFQ. Paste your project brief (or the relevant text) and I'll extract it into a private draft — nothing gets published or sent to suppliers until you review.
+To get the line items right, please include:
+Scope & items
+• Product/service descriptions with specs (e.g. "LED panel 36W, 600x600, 4000K")
+• Quantities and units (each, m², linear m, tonnes…)
+• Any alternates or substitutions allowed
+Commercial terms
+• Currency and target deadline
+• Delivery location, delivery included/excluded, lead time
+• Warranty period, payment terms
+• Exclusions you want stated (e.g. install not included)
+Suppliers
+• Who should receive it — I can see Summit Supply and Atlas Materials on your account.
+For reference, your last RFQ was *[Demo] Community centre lighting · 234097* (100× LED panel 36W, 25× occupancy sensor, USD, deadline 2026-10-09), awarded to Summit Supply at $2,125 with Net 30 and 14-day lead.
+Paste the brief and tell me the deadline, currency and supplier list — I'll draft it and flag anything unclear rather than guessing quantities.
+1 step completed
+YOU
+Create an RFQ draft only, labelled [Evaluation] Library lighting 20260925. We need 120 dimmable LED panels (600x600 mm, 4000 K, UGR<19) and 20 emergency battery packs. Deliver to Bristol library by 20 November 2026. Separate delivery and VAT. Ask suppliers for warranty length, lead time and substitutions. Do not send or publish. Extract the exact quantities and flag missing information.
+QUOTAGENT
+Draft created (private, nothing sent or published): [Evaluation] Library lighting 20260925 — ID rfq-80ec3366-5f0.
+Line items extracted exactly as stated
+#	Item	Qty	Unit
+1	Dimmable LED panel, 600×600 mm, 4000 K, UGR<19	120	each
+2	Emergency battery pack	20	each
+Captured in the scope: delivery to Bristol library by 20 Nov 2026; delivery and VAT quoted separately; suppliers to state warranty length, lead time and substitutions.
+Flags — please confirm before issue
+• Currency: the draft defaulted to USD; you may want GBP given a Bristol delivery. Not stated in your brief.
+• No quote deadline set — 20 Nov 2026 is the delivery date, not the tender close.
+• Panel spec gaps: dimming protocol (DALI/0–10 V?) and wattage.
+• Battery packs: duration and type (e.g. 3-hour self-contained), and whether they fit the panels or stand alone.
+• Exact delivery address/access, offloading and install scope not stated.
+• Minimum warranty not set — you're asking suppliers to state theirs.
+• No suppliers invited yet.
+Next step: confirm currency, tender close date and the dimming/battery details, then tell me who to invite — I'll update the draft and prepare a review action.
+1 step completed
+Review RFQ draft
+Ready for your review
+YOU
+For the selected [Evaluation] Library lighting 20260925 request only, compare all received supplier offers and recommend who to award. Use only actual offers for this request; distinguish missing information. Do not modify anything.
+QUOTAGENT
+No offers to compare — this request has zero submitted quotes.
+Checked for RFQ rfq-80ec3366-5f0 only (read-only; nothing modified):
+• Quotes received: none (quotes: [])
+• Suppliers invited: none — the draft has no supplier list
+• Status: still draft, never published, so no supplier could have responded
+No award recommendation is possible. I won't name a winner from other data.
+Missing information that blocks both issuing and evaluating:
+• No quote submission deadline (20 Nov 2026 is the delivery date, not the close)
+• No currency confirmed for the separate delivery/VAT lines
+• Panel dimming protocol and wattage unspecified
+• Battery pack duration/type and whether integral or standalone
+• Delivery address/access, and whether offloading or install is in scope
+• Minimum warranty not set
+Note for accuracy: the one quote on your account ($2,125 from Summit Supply, 14-day lead, Net 30) belongs to the different awarded request *[Demo] Community centre lighting · 234097* — it is not an offer for this library lighting request and shouldn't be used to award it.
+Next step: confirm currency, tender close date and the spec gaps, then invite suppliers (Summit Supply, Atlas Materials). Once quotes come back, I'll run the comparison and prepare an award review for you to approve.
+2 steps completed
+Selected RFQ included
+Shift + Enter for a new line
+
+You review and approve commitments.
