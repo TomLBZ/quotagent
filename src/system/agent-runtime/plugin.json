@@ -1,24 +1,11 @@
 {
   "name": "agent-runtime",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "layer": "system",
+  "entry": "code/product.mjs",
   "provides": [
-    "agentContext",
-    "agentMemory",
-    "agentHarness"
+    "ai",
+    "assistant"
   ],
-  "entry": "code/index.mjs",
-  "description": "system 插件「agent-runtime」：agent 运行期三件 —— 上下文装配（`agentContext`）/ 四层记忆（`agentMemory`）/ 有界 harness（`agentHarness`）。本批（接上 `entry`）：`entry` = `code/index.mjs`，把三个**各自独立**的成员实体按机制组合装载 ⇒ 合法清单（`valid:true`），`provides` 改写为三者的真实服务键；三者「各自独立装卸、卸载零残留」的性质由 `AC-AGENTRT-007` 单独围栏，不因本入口改变。",
-  "migration": {
-    "stage": 4.2,
-    "mode": "entity-moved-and-composite-entry",
-    "impl": "src/system/agent-runtime/code/agent-context.mjs",
-    "impl_members": [
-      "src/system/agent-runtime/code/agent-context.mjs",
-      "src/system/agent-runtime/code/agent-memory.mjs",
-      "src/system/agent-runtime/code/agent-harness.mjs"
-    ],
-    "from": "host/modules/agent-context.mjs + host/modules/agent-memory.mjs + host/modules/agent-harness.mjs",
-    "moves_in_stage": 4.2
-  }
+  "description": "Live model assistant with account context, durable conversations and plugin-owned tools"
 }
