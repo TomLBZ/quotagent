@@ -141,9 +141,21 @@ export function createProcurement({ store, accounts }) {
     const changes = newest(store.list(user.id, 'changes')).filter((change) => orderIds.has(change.orderId))
     const contacts = accounts.list().filter((person) => !person.disabled && person.role === (user.role === 'contractor' ? 'supplier' : 'contractor'))
       .map(({ id, name, company, email, role }) => ({ id, name, company, email, role }))
-    const activity = store.events(user.id).slice(-30).reverse().map((event) => ({ id: event.id || event.event_id || String(event.seq),
-      type: event.type || event.event_type, createdAt: event.createdAt || event.timestamp || event.time || event.ts,
-      actor: event.actor, summary: event.body?.title || event.body?.record?.title || event.body?.action || event.type }))
+    const activity = store.events(user.id).filter(event => {
+      const body = event.body
+      return body?.schema === 'quotagent/workspace-record/v1' && ['rfqs','quotes','orders','messages','changes'].includes(body.collection)
+    }).slice(-20).reverse().map(event => {
+      const {collection,record} = event.body
+      const source = rfqs.find(rfq => rfq.id === (record.rfqId || record.id))
+      const labels = {rfqs:{draft:'Request draft saved',published:'Request published',awarded:'Request awarded'},
+        quotes:{draft:'Quote draft saved',submitted:'Quote received',superseded:'Quote revised',awarded:'Supplier selected'},
+        orders:{issued:'Order issued',acknowledged:'Order acknowledged'},changes:{proposed:'Change proposed',approved:'Change approved'}}
+      const label = collection === 'messages' ? (record.fromId === user.id ? 'Message sent' : 'Message received') : labels[collection]?.[record.status] || 'Project updated'
+      const person = event.actor?.startsWith('human:') ? accounts.get(event.actor.slice(6)) : null
+      return {id:String(event.seq),type:label,createdAt:event.ts,
+        actor:event.actor?.startsWith('agent:') ? 'AI assistant' : person?.name || record.fromName || record.supplierName || record.ownerName || 'Project update',
+        summary:`${label} · ${record.title || source?.title || record.supplierName || 'Project conversation'}`}
+    })
     return { rfqs, quotes, orders, messages, changes, activity, contacts, comparison: comparison(rfqs, quotes),
       stats: { rfqs: rfqs.length, openRfqs: rfqs.filter((rfq) => rfq.status === 'published').length,
         quotes: quotes.filter((quote) => ['submitted', 'awarded'].includes(quote.status)).length,

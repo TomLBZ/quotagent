@@ -85,7 +85,21 @@ export function apply(ctx) {
         if (!record) throw new Error('That record is not available in this account.')
         const allowed = user.role === 'contractor' ? ['publish-rfq', 'award', 'approve-change'] : ['submit-quote', 'acknowledge-order']
         if (!allowed.includes(args.action)) throw new Error('This action belongs to the other party.')
-        return { reviewRequired: true, record, actions: [{ action: args.action, label: 'Review and confirm',
+        const rfq = data.rfqs.find((row) => row.id === (record.rfqId || record.id))
+        const order = record.orderId ? data.orders.find((row) => row.id === record.orderId) : null
+        const title = record.title || rfq?.title || order?.title || 'Procurement commitment'
+        const supplierName = record.supplierName || order?.supplierName || ''
+        const amount = args.action === 'approve-change' ? record.amount : record.total
+        const currency = record.currency || rfq?.currency || order?.currency || 'USD'
+        const amountLabel = typeof amount === 'number'
+          ? new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount) : ''
+        const recipients = args.action === 'publish-rfq'
+          ? record.supplierIds.map((supplierId) => data.contacts.find((row) => row.id === supplierId))
+            .filter(Boolean).map((contact) => contact.company || contact.name).join(', ') : supplierName
+        const summary = [title, recipients && `Supplier${args.action === 'publish-rfq' && record.supplierIds.length > 1 ? 's' : ''}: ${recipients}`,
+          amountLabel && `${args.action === 'approve-change' ? 'Price adjustment' : 'Total'}: ${amountLabel}`].filter(Boolean).join(' · ')
+        return { reviewRequired: true, record, summary, actions: [{ action: args.action, label: 'Review and confirm',
+          record, summary, title, supplierName, amount, currency,
           input: args.action === 'award' ? { quoteId: id } : { id } }], message: 'Awaiting the signed-in person\'s confirmation. Nothing has been committed.' }
       } })
   })
