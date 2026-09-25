@@ -36,6 +36,11 @@ try {
   const demoData = service.snapshot(demoBuyer)
   assert.equal(demoData.rfqs.length, 2, 'Built-in demo opens with lighting and cabling RFQs')
   assert.equal(demoData.comparison.length, 2, 'Built-in demo opens with two supplier bids')
+  assert.equal(demoData.comparison[0].rank, 1, 'Contractor may rank the bids it actually received')
+  const supplierComparison = service.snapshot(users.find(user => user.id === 'supplier2-demo'))
+  assert.equal(supplierComparison.comparison[0].rank, undefined, 'Own quote alone does not establish competitive rank')
+  assert.equal(supplierComparison.comparison[0].savingsVsHighest, undefined)
+  assert.match(supplierComparison.comparisonScope, /Other suppliers' bids are not visible/)
   assert.ok(demoData.rfqs.every(rfq => rfq.demo && rfq.title.startsWith('[Demo]')))
   assert.equal(service.snapshot(buyer).rfqs.length, 0, 'Ordinary accounts start empty')
   const create = await service.execute(buyer, 'create-rfq', { title: 'Smoke account-owned quotation', description: 'Real QEP journey',

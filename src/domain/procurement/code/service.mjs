@@ -103,7 +103,7 @@ export function createProcurement({ store, accounts }) {
       return result
     })
   }
-  const comparison = (rfqs, quotes) => {
+  const comparison = (rfqs, quotes, competitive = true) => {
     const result = []
     for (const rfq of rfqs) {
       const candidates = quotes.filter((quote) => quote.rfqId === rfq.id && ['submitted', 'awarded'].includes(quote.status))
@@ -118,11 +118,14 @@ export function createProcurement({ store, accounts }) {
         if (!quote.paymentTerms) risks.push('Payment terms need clarification.')
         if (quote.leadDays > 30) risks.push(`Long lead time: ${quote.leadDays} days.`)
         if (/100\s*%|full.*advance|advance.*full/i.test(quote.paymentTerms)) risks.push('Full advance payment increases cash exposure.')
-        if (candidates.length > 1 && quote.total < highest * 0.7) risks.push('Price is more than 30% below the highest quote; confirm scope and exclusions.')
+        if (competitive && candidates.length > 1 && quote.total < highest * 0.7) risks.push('Price is more than 30% below the highest quote; confirm scope and exclusions.')
         result.push({ quoteId: quote.id, rfqId: rfq.id, supplierId: quote.supplierId, supplierName: quote.supplierName,
           total: quote.total, currency: quote.currency, leadDays: quote.leadDays, paymentTerms: quote.paymentTerms,
-          items: copy(quote.items), risks, rank: index + 1, savingsVsHighest: (cents(highest) - cents(quote.total)) / 100,
-          complete: missing.length === 0, rationale: 'Sorted by submitted total, then lead time. Review scope and payment terms before award.' })
+          items: copy(quote.items), risks,
+          ...(competitive ? { rank: index + 1, savingsVsHighest: (cents(highest) - cents(quote.total)) / 100 } : {}),
+          complete: missing.length === 0, rationale: competitive
+            ? 'Sorted by submitted total, then lead time. Review scope and payment terms before award.'
+            : 'Only your own quote is visible. Competitor prices, competitive rank and savings against other suppliers are unknown. These checks review your scope and terms only.' })
       }
     }
     return result
@@ -156,7 +159,10 @@ export function createProcurement({ store, accounts }) {
         actor:event.actor?.startsWith('agent:') ? 'AI assistant' : person?.name || record.fromName || record.supplierName || record.ownerName || 'Project update',
         summary:`${label} · ${record.title || source?.title || record.supplierName || 'Project conversation'}`}
     })
-    return { rfqs, quotes, orders, messages, changes, activity, contacts, comparison: comparison(rfqs, quotes),
+    return { rfqs, quotes, orders, messages, changes, activity, contacts, comparison: comparison(rfqs, quotes, user.role === 'contractor'),
+      comparisonScope: user.role === 'contractor'
+        ? 'Submitted offers received by this contractor account; ranking covers those received offers only.'
+        : 'Own supplier quotes only. Other suppliers\' bids are not visible, so no competitive rank, lowest-price claim or savings comparison can be inferred.',
       stats: { rfqs: rfqs.length, openRfqs: rfqs.filter((rfq) => rfq.status === 'published').length,
         quotes: quotes.filter((quote) => ['submitted', 'awarded'].includes(quote.status)).length,
         draftQuotes: quotes.filter((quote) => quote.status === 'draft').length, orders: orders.length,
