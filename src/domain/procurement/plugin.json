@@ -1,0 +1,8 @@
+{
+  "name": "procurement",
+  "version": "1.0.0",
+  "layer": "domain",
+  "entry": "code/index.mjs",
+  "provides": ["procurement"],
+  "description": "Account-owned RFQs, private supplier costing, public quotation exchange, comparison, negotiation, orders and changes. Native Cordis plugin."
+}
