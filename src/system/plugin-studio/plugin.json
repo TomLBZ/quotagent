@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "layer": "system",
   "entry": "code/index.mjs",
-  "provides": ["studio"],
-  "description": "Live model generated personal Cordis plugins and workflow skills, marketplace sharing, installation, and administrator global promotion."
+  "provides": ["studio", "studioRuntime"],
+  "description": "Live model generated personal Cordis plugins, executable utility code and workflow skills, marketplace sharing, installation, and administrator global promotion."
 }

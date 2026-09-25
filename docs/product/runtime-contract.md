@@ -58,6 +58,9 @@ resolved via `createRequire(new URL('../../../../host/package.json', import.meta
   `ctx.procurement.execute(user, action, input)` supports same actions as HTTP.
 - `ctx.studio.list(user)` returns extensions available to user. Every extension uses
   an actual Cordis child context/fiber, with account-scoped UI effects and disposal.
+- `ctx.studioRuntime.register(ownerId,descriptor,source)` registers generated pure
+  JavaScript and returns its disposer. `run(user,id,input,workspace)` executes the
+  registered function with a timeout; studio supplies only the caller's snapshot.
 
 ## HTTP and business shapes
 
@@ -93,9 +96,15 @@ No rule output may be labelled as a model response.
 
 Studio: `GET /studio` => `{plugins,market,skills}`; `POST /studio/generate {prompt}`;
 `POST /studio/:id/:action` where action is load/unload/publish/install/promote/delete/run.
-Plugin `{id,name,description,ownerId,kind:'theme'|'widget'|'skill',enabled,published,global,
+Plugin `{id,name,description,ownerId,kind:'theme'|'widget'|'skill'|'calculator',enabled,published,global,
 spec:{...},source?,createdAt}`. Theme spec `{accent,background,surface,text,radius}`;
-widget spec `{title,body,items?}`; skill spec `{prompt,steps?}`. Generated descriptor
+widget spec `{title,body,items?}`; skill spec `{prompt,steps?}`; calculator spec
+`{title,fields:[{name,label,type:'number'|'text',default}],code}` where `code` is actual
+model-authored JavaScript `function(input, workspace) { ... return result; }`.
+Calculator `POST /studio/:id/run {input:{...}}` returns `{ok:true,result}` using only
+the caller's account snapshot. Code runs as a bounded pure function; no platform
+formula templates or business-write tools. Source and callable behavior survive
+marketplace installation and global promotion (ADR-0028). Generated descriptor
 and executable Cordis module are visible for review in the studio. Skills run a new
 assistant turn; human commitments still require review. Admin can promote global default.
 
@@ -112,6 +121,8 @@ Evidence is saved locally under `tmp/product-evidence/` and summarized in docs w
 4. User asks for UI skin; generated plugin loads for that account, unload restores
    appearance, publish appears in market, admin promotes, another account can install.
 5. Natural-language automation becomes saved skill and runs through the assistant.
+   A requested custom calculator becomes actual generated JavaScript; changing input
+   produces the expected numeric result, and publication/install preserve its behavior.
 6. Desktop/mobile responsive UI; primary workflow and agent reachable in one click.
 7. Independent evaluator tries public UI and records evidence-based preference against
    chat/email alternatives, including remaining limitations. No forced favorable verdict.
