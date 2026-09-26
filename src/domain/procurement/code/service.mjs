@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { commercialFields, requirementFields, quotationAmounts } from './commercial-fields.mjs'
+import { createRfqLifecycle, rfqRevision, quoteRevision, staleQuote } from './rfq-lifecycle.mjs'
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }) }
 const text = (value) => String(value ?? '').trim()
@@ -40,31 +42,31 @@ const nameOf = (user) => user.company || user.name || user.email
 const copy = (value) => structuredClone(value)
 const publicQuote = (quote) => {
   const record = Object.fromEntries(['id', 'rfqId', 'supplierId', 'supplierName', 'ownerId', 'leadDays', 'paymentTerms',
-    'notes', 'status', 'total', 'currency', 'revision', 'createdAt', 'updatedAt', 'submittedAt', 'supersededBy', 'demo']
+    'notes', 'status', 'total', 'currency', 'revision', 'rfqRevision', 'commercial', 'subtotal', 'priceBreakdown', 'createdAt', 'updatedAt', 'submittedAt', 'supersededBy', 'demo']
     .filter((key) => quote[key] !== undefined).map((key) => [key, copy(quote[key])]))
   record.items = quote.items.map(({ id, description, quantity, unit, unitPrice, total }) => ({ id, description, quantity, unit, unitPrice, total }))
   return record
 }
 const publicRfq = (rfq, supplierId) => ({ ...Object.fromEntries(['id', 'title', 'description', 'deadline', 'currency', 'items',
-  'status', 'ownerId', 'ownerName', 'revision', 'createdAt', 'updatedAt', 'publishedAt', 'demo']
+  'status', 'ownerId', 'ownerName', 'revision', 'publishedRevision', 'initialRevision', 'projectId', 'projectName', 'sectionId', 'sectionName', 'amendmentReason', 'requirements', 'createdAt', 'updatedAt', 'publishedAt', 'demo']
   .filter((key) => rfq[key] !== undefined).map((key) => [key, copy(rfq[key])])), supplierIds: [supplierId] })
 
-export function createProcurement({ store, accounts }) {
+export function createProcurement({ store, accounts, resolveUser = user => user }) {
   const get = (user, collection, id) => store.get(user.id, collection, required(id, 'Record ID'))
     || fail('That record is not available in your workspace.', 404)
-  const save = async (user, collection, record, event, actor = `human:${user.id}`) => {
+  const save = async (user, collection, record, event, actor = `human:${user.actorId || user.id}`) => {
     const next = { ...record, updatedAt: now(), createdAt: record.createdAt || now() }
     await store.put(user.id, collection, next, { actor, event })
     return next
   }
   const exchange = async (user, recipient, collection, record, event) => {
     if (!accounts.get(recipient)) fail('The recipient account no longer exists.', 404)
-    await store.exchange(user.id, recipient, collection, copy(record), { actor: `human:${user.id}`, event })
+    await store.exchange(user.id, recipient, collection, copy(record), { actor: `human:${user.actorId || user.id}`, event })
   }
   const approval = async (user, action, id, input, record) => {
     if (input.confirmed !== true) fail('Review this commitment and confirm it before sending.')
     await store.append(user.id, 'procurement/human-approved', { action, recordId: id, confirmed: true,
-      humanId: user.id, scope: copy(record), approvedAt: now() }, { actor: `human:${user.id}`, eventClass: 'fact' })
+      humanId: user.actorId || user.id, scope: copy(record), approvedAt: now() }, { actor: `human:${user.actorId || user.id}`, eventClass: 'fact' })
   }
   const rfqItems = (raw) => {
     if (!Array.isArray(raw) || !raw.length) fail('Add at least one item to the RFQ.')
@@ -103,10 +105,11 @@ export function createProcurement({ store, accounts }) {
       return result
     })
   }
+  const lifecycle = createRfqLifecycle({ store, accounts, get, save, exchange, approval, fail, required, text, role, newId, rfqItems, suppliers, currencyOf, publicRfq })
   const comparison = (rfqs, quotes, competitive = true) => {
     const result = []
     for (const rfq of rfqs) {
-      const candidates = quotes.filter((quote) => quote.rfqId === rfq.id && ['submitted', 'awarded'].includes(quote.status))
+      const candidates = quotes.filter((quote) => quote.rfqId === rfq.id && ['submitted', 'awarded'].includes(quote.status) && !staleQuote(quote, rfq))
       const highest = Math.max(0, ...candidates.map((quote) => quote.total))
       const sorted = [...candidates].sort((a, b) => a.total - b.total || a.leadDays - b.leadDays)
       for (const [index, quote] of sorted.entries()) {
@@ -133,11 +136,13 @@ export function createProcurement({ store, accounts }) {
 
   function snapshot(user) {
     client(user)
+    user = resolveUser(user, 'snapshot', {})
+    client(user)
     const newest = (rows) => rows.sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)))
-    const rfqs = newest(store.list(user.id, 'rfqs')).filter((rfq) => user.role === 'contractor' ? rfq.ownerId === user.id : rfq.supplierIds.includes(user.id))
+    const rfqs = newest(store.list(user.id, 'rfqs')).map(rfq => ({ ...rfq, publishedRevision: rfqRevision(rfq) })).filter((rfq) => user.role === 'contractor' ? rfq.ownerId === user.id : rfq.supplierIds.includes(user.id))
     const visible = new Set(rfqs.map((rfq) => rfq.id))
     const quotes = newest(store.list(user.id, 'quotes')).filter((quote) => visible.has(quote.rfqId) && (user.role === 'contractor' || quote.supplierId === user.id))
-      .map((quote) => ({ ...quote, ...(store.get(user.id, 'quote-status', quote.id) || {}) }))
+      .map((quote) => { const rfq = rfqs.find(row => row.id === quote.rfqId); const stale = staleQuote(quote, rfq); return { ...quote, ...(store.get(user.id, 'quote-status', quote.id) || {}), rfqRevision: quoteRevision(quote, rfq), currentRfqRevision: rfqRevision(rfq), stale, staleReason: stale ? `Prepared against request revision ${quoteRevision(quote, rfq)}; current revision is ${rfqRevision(rfq)}. Review the new scope and prepare a rebid.` : '' } })
     const orders = newest(store.list(user.id, 'orders')).filter((order) => user.role === 'contractor' ? order.ownerId === user.id : order.supplierId === user.id)
     const orderIds = new Set(orders.map((order) => order.id))
     const messages = newest(store.list(user.id, 'messages')).filter((message) => message.fromId === user.id || message.toId === user.id)
@@ -159,7 +164,7 @@ export function createProcurement({ store, accounts }) {
         actor:event.actor?.startsWith('agent:') ? 'AI assistant' : person?.name || record.fromName || record.supplierName || record.ownerName || 'Project update',
         summary:`${label} · ${record.title || source?.title || record.supplierName || 'Project conversation'}`}
     })
-    return { rfqs, quotes, orders, messages, changes, activity, contacts, comparison: comparison(rfqs, quotes, user.role === 'contractor'),
+    return { rfqs, quotes, orders, messages, changes, activity, contacts, ...lifecycle.snapshot(user, rfqs), comparison: comparison(rfqs, quotes, user.role === 'contractor'),
       comparisonScope: user.role === 'contractor'
         ? 'Submitted offers received by this contractor account; ranking covers those received offers only.'
         : 'Own supplier quotes only. Other suppliers\' bids are not visible, so no competitive rank, lowest-price claim or savings comparison can be inferred.',
@@ -172,11 +177,12 @@ export function createProcurement({ store, accounts }) {
         unreadMessages: messages.filter((message) => message.toId === user.id).length } }
   }
 
-  async function execute(user, action, input = {}, { agent = false } = {}) {
+  async function executeInner(user, action, input = {}, { agent = false } = {}) {
     client(user)
     if (user.permissions?.includes('workspace:read-only')) fail('This account has read-only workspace access. Ask your administrator to enable editing.', 403)
-    if (agent && !['create-rfq', 'save-quote'].includes(action)) fail('The assistant can prepare this action for human review but cannot commit it.', 403)
-    const actor = `${agent ? 'agent' : 'human'}:${user.id}`
+    if (agent && !['create-rfq', 'save-quote', 'save-amendment', 'save-clarification-answer'].includes(action)) fail('The assistant can prepare this action for human review but cannot commit it.', 403)
+    const actor = `${agent ? 'agent' : 'human'}:${user.actorId || user.id}`
+    if (lifecycle.actions.has(action)) return lifecycle.execute(user, action, input, actor)
     if (action === 'create-rfq') {
       role(user, 'contractor')
       const existing = input.id ? get(user, 'rfqs', input.id) : null
@@ -185,8 +191,8 @@ export function createProcurement({ store, accounts }) {
       const deadline = text(fields.deadline)
       if (deadline && !Number.isFinite(Date.parse(deadline))) fail('Choose a valid deadline.')
       const rfq = await save(user, 'rfqs', { ...existing, id: existing?.id || newId('rfq'), title: required(fields.title, 'RFQ title'),
-        description: text(fields.description), deadline, currency: currencyOf(fields.currency), items: rfqItems(fields.items),
-        status: 'draft', ownerId: user.id, ownerName: nameOf(user), supplierIds: suppliers(fields.supplierIds), revision: (existing?.revision || 0) + 1 }, 'procurement/rfq-drafted', actor)
+        description: text(fields.description), deadline, currency: currencyOf(fields.currency || (fields.projectId ? get(user, 'projects', fields.projectId).currency : undefined)), items: rfqItems(fields.items),
+        requirements: requirementFields(existing?.requirements, input.requirements), ...lifecycle.contextFields(user, fields), status: 'draft', ownerId: user.id, ownerName: nameOf(user), supplierIds: suppliers(fields.supplierIds), revision: (existing?.revision || 0) + 1 }, 'procurement/rfq-drafted', actor)
       return { ok: true, rfq, message: 'RFQ draft saved. Review the items and invited suppliers before publishing.' }
     }
     if (action === 'publish-rfq') {
@@ -196,28 +202,37 @@ export function createProcurement({ store, accounts }) {
       if (rfq.status === 'published') return { ok: true, rfq, duplicate: true }
       if (!rfq.supplierIds.length) fail('Choose at least one supplier before publishing.')
       await approval(user, action, rfq.id, input, rfq)
-      const published = await save(user, 'rfqs', { ...rfq, status: 'published', publishedAt: now() }, 'procurement/rfq-published')
-      for (const supplierId of published.supplierIds) await exchange(user, supplierId, 'rfqs', publicRfq(published, supplierId), 'procurement/rfq-delivered')
+      const published = await save(user, 'rfqs', { ...rfq, status: 'published', publishedRevision: 1, initialRevision: 1, publishedAt: now() }, 'procurement/rfq-published')
+      await lifecycle.version(user, published)
+      for (const supplierId of published.supplierIds) {
+        await exchange(user, supplierId, 'rfqs', publicRfq(published, supplierId), 'procurement/rfq-delivered')
+        const record = store.get(user.id, 'rfq-versions', `${published.id}:v${rfqRevision(published)}`)
+        await exchange(user, supplierId, 'rfq-versions', lifecycle.publicVersion(record, supplierId), 'procurement/rfq-version-recorded')
+      }
       return { ok: true, rfq: published, message: `RFQ delivered to ${published.supplierIds.length} supplier(s).` }
     }
     if (action === 'save-quote') {
       role(user, 'supplier')
       const rfq = get(user, 'rfqs', input.rfqId)
       if (!rfq.supplierIds.includes(user.id) || rfq.status !== 'published') fail('This RFQ is not open for your quotation.')
+      if (rfqRevision(rfq) > (rfq.initialRevision || 1) && input.rfqRevision === undefined) fail('Specify the current request revision when preparing a rebid; review the amended scope first.', 409)
+      lifecycle.checkExpected(rfq, input.rfqRevision)
       const existing = input.id ? get(user, 'quotes', input.id) : null
       if (existing && (existing.supplierId !== user.id || existing.rfqId !== rfq.id)) fail('This is not your quote for this RFQ.', 403)
       if (existing?.status === 'awarded') fail('Use an order change for an awarded quote.')
       const items = quoteItems(input.items, rfq)
       const leadDays = Number(input.leadDays ?? 14)
       if (!Number.isInteger(leadDays) || leadDays < 0 || leadDays > 3650) fail('Lead time must be a whole number of days from 0 to 3650.')
-      const total = items.reduce((sum, item) => sum + cents(item.total), 0) / 100
+      const commercial = commercialFields(existing?.commercial, input.commercial, items.map(item => item.id))
+      const amounts = quotationAmounts(items.reduce((sum, item) => sum + cents(item.total), 0), commercial)
+      const total = amounts.total
       const costTotal = items.reduce((sum, item) => sum + cents(item.costTotal || 0), 0) / 100
       const costComplete = items.every((item) => item.cost !== undefined)
-      const quote = await save(user, 'quotes', { ...existing, id: existing?.id || newId('quote'), rfqId: rfq.id,
+      const quote = await save(user, 'quotes', { ...existing, id: existing?.id || newId('quote'), rfqId: rfq.id, rfqRevision: rfqRevision(rfq),
         supplierId: user.id, supplierName: nameOf(user), ownerId: rfq.ownerId, items, leadDays,
         paymentTerms: text(input.paymentTerms), notes: text(input.notes), privateNotes: text(input.privateNotes ?? existing?.privateNotes),
-        status: 'draft', total, costTotal, costComplete, margin: costComplete ? (cents(total) - cents(costTotal)) / 100 : null,
-        currency: rfq.currency, revision: existing ? (existing.revision || 0) + 1
+        status: 'draft', ...amounts, costTotal, costComplete, margin: costComplete ? (cents(amounts.subtotal) - cents(costTotal)) / 100 : null, marginBasis: 'Quoted item subtotal minus private item costs; excludes separately declared tax, freight and other costs',
+        commercial, currency: currencyOf(input.currency || existing?.currency || rfq.currency), revision: existing ? (existing.revision || 0) + 1
           : Math.max(0, ...store.list(user.id, 'quotes').filter((row) => row.rfqId === rfq.id).map((row) => row.revision || 1)) + 1 }, 'procurement/quote-drafted', actor)
       return { ok: true, quote, message: 'Private quote draft saved. Costs stay in your workspace.' }
     }
@@ -225,16 +240,23 @@ export function createProcurement({ store, accounts }) {
       role(user, 'supplier')
       const quote = get(user, 'quotes', input.id)
       if (quote.supplierId !== user.id) fail('Only the quote owner can submit it.', 403)
+      const rfq = get(user, 'rfqs', quote.rfqId)
+      if (staleQuote(quote, rfq)) fail(`This quote is based on request revision ${quoteRevision(quote, rfq)}. Rebid against revision ${rfqRevision(rfq)} before submitting.`, 409)
       if (quote.status === 'submitted') return { ok: true, quote, duplicate: true }
       if (quote.status !== 'draft') fail('Only a draft quote can be submitted.')
-      const rfq = get(user, 'rfqs', quote.rfqId)
       if (rfq.status !== 'published') fail('This RFQ is no longer open.')
+      if (quote.commercial?.taxMode === 'exclusive' && quote.commercial.taxRate === undefined) fail('State the tax rate for this tax-exclusive quotation before submitting.')
+      if (quote.commercial?.validityUntil && quote.commercial.validityUntil < now().slice(0, 10)) fail('This quotation has expired. Prepare a current revision before submitting.')
       await approval(user, action, quote.id, input, publicQuote(quote))
       const submitted = await save(user, 'quotes', { ...quote, status: 'submitted', submittedAt: now() }, 'procurement/quote-submitted')
       await exchange(user, rfq.ownerId, 'quotes', publicQuote(submitted), 'procurement/quote-received')
       for (const prior of store.list(user.id, 'quotes').filter((row) => row.rfqId === rfq.id && row.id !== quote.id && row.status === 'submitted')) {
         const superseded = await save(user, 'quotes', { ...prior, status: 'superseded', supersededBy: submitted.id }, 'procurement/quote-superseded')
         await exchange(user, rfq.ownerId, 'quotes', publicQuote(superseded), 'procurement/quote-superseded')
+      }
+      for (const request of store.list(user.id, 'rebid-requests').filter(row => row.rfqId === rfq.id && row.rfqRevision === rfqRevision(rfq) && row.status === 'requested')) {
+        const completed = await save(user, 'rebid-requests', { ...request, status: 'submitted', quoteId: submitted.id }, 'procurement/rebid-submitted')
+        await exchange(user, rfq.ownerId, 'rebid-requests', completed, 'procurement/rebid-submitted')
       }
       return { ok: true, quote: submitted, message: 'Quote sent. Private costs and internal notes were excluded.' }
     }
@@ -260,13 +282,16 @@ export function createProcurement({ store, accounts }) {
         return { ok: true, order: existing, duplicate: true }
       }
       if (quote.status !== 'submitted') fail('Choose a submitted quote.')
+      if (staleQuote(quote, rfq)) fail('This quotation uses an older request revision. Ask the supplier to rebid before awarding.', 409)
       if (quote.items.length !== rfq.items.length) fail('Resolve unpriced RFQ items before issuing an order.')
+      if (quote.commercial?.taxMode === 'exclusive' && quote.commercial.taxRate === undefined) fail('Clarify the tax rate before awarding this tax-exclusive quotation.')
+      if (quote.commercial?.validityUntil && quote.commercial.validityUntil < now().slice(0, 10)) fail('This quotation has expired. Ask the supplier for a current revision before awarding.')
       await approval(user, action, quote.id, input, publicQuote(quote))
       const order = await save(user, 'orders', { id: newId('po'), rfqId: rfq.id, quoteId: quote.id,
         title: rfq.title, ownerId: user.id, ownerName: nameOf(user), supplierId: quote.supplierId,
         supplierName: quote.supplierName, total: quote.total, originalTotal: quote.total, currency: quote.currency,
-        status: 'issued', items: copy(quote.items), leadDays: quote.leadDays, paymentTerms: quote.paymentTerms,
-        awardedBy: user.id }, 'procurement/order-issued')
+        status: 'issued', commercial: copy(quote.commercial || {}), priceBreakdown: copy(quote.priceBreakdown || {}), subtotal: quote.subtotal ?? quote.total, rfqRevision: quote.rfqRevision || rfqRevision(rfq), items: copy(quote.items), leadDays: quote.leadDays, paymentTerms: quote.paymentTerms,
+        awardedBy: user.actorId || user.id }, 'procurement/order-issued')
       const awarded = await save(user, 'quotes', { ...quote, status: 'awarded' }, 'procurement/quote-awarded')
       const closed = await save(user, 'rfqs', { ...rfq, status: 'awarded' }, 'procurement/rfq-awarded')
       await exchange(user, quote.supplierId, 'orders', order, 'procurement/order-received')
@@ -281,7 +306,7 @@ export function createProcurement({ store, accounts }) {
       if (order.supplierId !== user.id) fail('This order belongs to another supplier.', 403)
       if (order.status === 'acknowledged') return { ok: true, order, duplicate: true }
       await approval(user, action, order.id, input, order)
-      const acknowledged = await save(user, 'orders', { ...order, status: 'acknowledged', acknowledgedAt: now(), acknowledgedBy: user.id }, 'procurement/order-acknowledged')
+      const acknowledged = await save(user, 'orders', { ...order, status: 'acknowledged', acknowledgedAt: now(), acknowledgedBy: user.actorId || user.id }, 'procurement/order-acknowledged')
       await exchange(user, order.ownerId, 'orders', acknowledged, 'procurement/acknowledgment-received')
       return { ok: true, order: acknowledged, message: 'Order acknowledged. Both parties now have the same confirmed order.' }
     }
@@ -304,7 +329,7 @@ export function createProcurement({ store, accounts }) {
       const total = cents(order.total) + cents(change.amount)
       if (total < 0) fail('This change would make the order value negative.')
       await approval(user, action, change.id, input, change)
-      const approved = await save(user, 'changes', { ...change, status: 'approved', approvedBy: user.id, approvedAt: now() }, 'procurement/change-approved')
+      const approved = await save(user, 'changes', { ...change, status: 'approved', approvedBy: user.actorId || user.id, approvedAt: now() }, 'procurement/change-approved')
       const updated = await save(user, 'orders', { ...order, total: total / 100 }, 'procurement/order-revised')
       await exchange(user, order.supplierId, 'changes', approved, 'procurement/approved-change-received')
       await exchange(user, order.supplierId, 'orders', updated, 'procurement/revised-order-received')
@@ -312,6 +337,21 @@ export function createProcurement({ store, accounts }) {
     }
     if (action === 'seed-demo') return seedDemo(user)
     fail(`Unknown procurement action: ${action}`, 404)
+  }
+
+  const writes = new Map()
+  function execute(user, action, input = {}, options = {}) {
+    client(user)
+    if (user.permissions?.includes('workspace:read-only')) return Promise.reject(Object.assign(new Error('This account has read-only workspace access.'), { status: 403 }))
+    if (options.agent && !['create-rfq', 'save-quote', 'save-amendment', 'save-clarification-answer'].includes(action)) return Promise.reject(Object.assign(new Error('The assistant can prepare this action for human review but cannot commit it.'), { status: 403 }))
+    user = resolveUser(user, action, input)
+    const target = input.id ? ['quotes', 'rfq-amendments', 'clarifications', 'orders', 'changes'].map(collection => store.get(user.id, collection, input.id)).find(Boolean) : input.quoteId ? store.get(user.id, 'quotes', input.quoteId) : null
+    const key = input.rfqId || target?.rfqId || input.id || user.id
+    const prior = writes.get(key) || Promise.resolve()
+    const job = prior.catch(() => {}).then(() => executeInner(user, action, input, options))
+    writes.set(key, job)
+    job.finally(() => { if (writes.get(key) === job) writes.delete(key) }).catch(() => {})
+    return job
   }
 
   async function seedDemo(user) {
@@ -370,5 +410,5 @@ export function createProcurement({ store, accounts }) {
       .map((row) => row.map(cell).join(',')).join('\r\n') + '\r\n'
   }
 
-  return { snapshot, execute, exportCsv }
+  return { snapshot, execute, exportCsv, normalizeCommercial: commercialFields, normalizeRequirements: requirementFields, normalizeQuotePrice: (items, commercial = {}) => quotationAmounts(items.reduce((sum, item) => sum + lineCents(cents(item.unitPrice), quantity(item.quantity)), 0), commercialFields({}, commercial, items.map(item => item.id))) }
 }

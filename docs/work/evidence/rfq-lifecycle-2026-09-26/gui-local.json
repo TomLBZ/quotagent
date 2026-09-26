@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "base": "http://127.0.0.1:8640/quotagent/",
+  "title": "[RFQ lifecycle check] Lighting 2026-09-26T02-09-44-926Z",
+  "projectName": "[RFQ lifecycle check] Hospital 2026-09-26T02-09-44-926Z",
+  "rfqId": "rfq-4cf588a6-c30",
+  "firstQuoteId": "quote-88ecf51c-981",
+  "amendmentId": "amendment-31d9246e-d24",
+  "rebidQuoteId": "quote-97528ad6-2de",
+  "checks": [
+    "GUI project and section; private draft; reviewed publication to both suppliers",
+    "Submitted quote; private supplier question and buyer answer; explicit broadcast received by second supplier; source-linked FAQ",
+    "Private amendment delta review; published revision2; old quote visibly retained and award disabled",
+    "Amendment reopens prior answer; rebid keeps old prices by itemID and new item blank; revision2 quote becomes comparable; FAQ reused and re-reviewed"
+  ],
+  "jsErrors": [],
+  "mobileOverflow": false,
+  "completedAt": "2026-09-26T02:10:17.915Z"
+}

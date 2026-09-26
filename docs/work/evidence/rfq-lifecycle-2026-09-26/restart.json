@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "base": "http://127.0.0.1:8640/quotagent/",
+  "rfqId": "rfq-4cf588a6-c30",
+  "title": "[RFQ lifecycle check] Lighting 2026-09-26T02-09-44-926Z",
+  "readOnly": true,
+  "checks": [
+    "Published revision1/2 history survives process restart",
+    "Current revision2 quotation remains visible",
+    "Reviewed shared answer survives for contractor and both suppliers"
+  ],
+  "jsErrors": [],
+  "completedAt": "2026-09-26T02:11:49.708Z"
+}

@@ -14,3 +14,8 @@ Agent tools may create editable drafts and prepare review proposals. They cannot
 Business events retain the `procurement/` namespace. `procurement/human-approved` is an approval **fact**, with the action, signed-in human, record ID and reviewed scope. Draft/publication, quote submission/supersession, messages, order issue/acknowledgment and change proposal/approval each use their named event in `service.mjs`. QEP transport and ledger formats remain implemented by the workspace-store plugin and existing kernels.
 
 Validation: `node src/domain/procurement/code/smoke.mjs` exercises two-party RFQ → quote → comparison → order → acknowledgment → approved change, private-cost non-disclosure, ownership and idempotent demo generation. Public-browser acceptance remains owned by the product runtime contract.
+
+The [RFQ lifecycle contract](rfq-lifecycle.md) adds project/section context, private
+amendments and immutable published revisions, quote version binding and rebids,
+structured shared clarifications, and source-linked account FAQ. Its native module,
+GUI/tools and focused real-ledger/browser checks implement the first G1 slice.

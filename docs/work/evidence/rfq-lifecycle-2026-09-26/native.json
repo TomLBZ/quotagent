@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "checks": [
+    "Private project/section ownership; public labels only; initial publication revision; public commercial whitelist and cost exclusion",
+    "Private agent answer; frozen review rejects edits; interrupted broadcast remains open and retries; complete anonymized shared answer; source-linked account FAQ",
+    "Immutable public versions; private amendment; stale quote comparison, submit and award refusal; old-scope concurrency refusal; complete rebid and reopened-answer provenance",
+    "Current-scope rebid restores comparison; FAQ reuse remains private; archive retained; real Ledger/QEP replay and effect disposal"
+  ],
+  "root": "/workspace/projects/quotagent/tmp/rfq-lifecycle-TY7a6e",
+  "rfqId": "rfq-17264da7-16b",
+  "quoteId": "quote-80d8e4b9-9f0",
+  "ledgerEvents": 81
+}
