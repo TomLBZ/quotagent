@@ -16,3 +16,10 @@ identifies the tested working tree. The local GUI used the earlier single-human 
 fixture; subsequent independent signing and public integration are not claimed by
 this evidence. ERP transport is explicit CSV, not a live ERP connection. Reference
 prices and rates are human-sourced observations, not an unconfigured market feed.
+
+Integrated signing and concurrent-editor follow-up, 2026-09-26, exit0:
+
+- `node src/domain/commercial-workbench/tests/smoke.mjs`: [five groups PASS](native-integrated.json), now using bilateral confirmation and independent signing. Root follow-up also verifies stale buyer assumptions return409 without adding a fact.
+- `BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/commercial-workbench/tests/browser.mjs`: [five groups PASS](gui-integrated.json), including a newly invited independent reviewer, separate signature, full pricing/TCO/capacity/ERP/report flow and input/focus preservation across two background refreshes.
+- `BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/commercial-workbench/tests/editor-browser.mjs`: [two groups PASS](gui-editors.json), real409 preserves edited freight12, presents current declaration, requires human merge/retry or explicit reload.
+- Build80 PASS, zero browser JavaScript errors/mobile overflow. Public release replay remains separate.

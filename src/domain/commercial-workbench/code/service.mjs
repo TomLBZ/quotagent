@@ -97,7 +97,7 @@ export function createCommercial(ctx, getReviews) {
     if (proposal.status === 'applied') return { ok: true, quoteId: proposal.quoteId, duplicate: true }
     const basis = pricingBasis(user, proposal.quoteId)
     if (digest(basis) !== proposal.basisDigest || proposal.basisDigest !== input.basisDigest) fail('The quote, costs or margin policy changed after review. Prepare a new pricing proposal.')
-    const result = await ctx.procurement.execute(user, 'save-quote', { ...basis.quote, id: basis.quote.id, items: proposal.items, rfqRevision: basis.quote.rfqRevision })
+    const result = await ctx.procurement.execute(user, 'save-quote', { ...basis.quote, id: basis.quote.id, expectedRevision: basis.quote.revision, items: proposal.items, rfqRevision: basis.quote.rfqRevision })
     await save(user, 'prices', { ...proposal, status: 'applied', approvalId: action.id, appliedQuoteRevision: result.quote.revision }, 'pricing-applied')
     return { ok: true, quoteId: result.quote.id, message: 'Reviewed prices applied to your private draft. The quotation has not been submitted.', action: { type: 'navigate', label: 'Review quote draft', input: { view: 'quotes', quoteId: result.quote.id, rfqId: result.quote.rfqId } } }
   }
@@ -151,7 +151,7 @@ export function createCommercial(ctx, getReviews) {
     if (!ctx.accounts.can(user, 'workspace:write')) fail('Your account has read-only workspace access.', 403)
     if (context.agent && !['evaluate', 'propose-prices', 'create-report'].includes(action)) fail('This private configuration needs human input.', 403)
     if (action === 'save-costs') { account(user, 'supplier'); const quote = quoteFor(user, input.quoteId), costs = buildCosts(quote, input); return { ok: true, costs: await save(user, 'costs', { id: `cost-${quote.id}`, ...costs, quoteRef: ref(user, 'quotes', quote.id), entered: clone(input.items) }, 'cost-model-saved') } }
-    if (action === 'save-terms') { account(user, 'supplier'); const quote = quoteFor(user, input.quoteId); const result = await ctx.procurement.execute(user, 'save-quote', { ...quote, id: quote.id, commercial: input.commercial, currency: input.currency || quote.currency }); return { ...result, message: 'Commercial terms saved in the private draft. Review and submit it separately to share the declaration.' } }
+    if (action === 'save-terms') { account(user, 'supplier'); const quote = quoteFor(user, input.quoteId); const result = await ctx.procurement.execute(user, 'save-quote', { ...quote, id: quote.id, expectedRevision: input.expectedRevision ?? quote.revision, commercial: input.commercial, currency: input.currency || quote.currency }); return { ...result, message: 'Commercial terms saved in the private draft. Review and submit it separately to share the declaration.' } }
     if (action === 'save-calendar') {
       account(user, 'supplier'); const workingDays = [...new Set(input.workingDays || [])].map(value => finite(value, 'Weekday', { max: 6, integer: true }))
       if (!workingDays.length) fail('Choose at least one working weekday; exceptions may still close a day.')
@@ -183,6 +183,7 @@ export function createCommercial(ctx, getReviews) {
     if (action === 'save-policy') { account(user, 'contractor'); const rfq = rfqFor(user, input.rfqId); return { ok: true, policy: await save(user, 'policies', { id: `policy-${rfq.id}`, rfqId: rfq.id, policy: validatePolicy(input.policy) }, 'policy-saved') } }
     if (action === 'save-assumptions') {
       account(user, 'contractor'); const quote = quoteFor(user, input.quoteId), commercial = ctx.procurement.normalizeCommercial({}, input.commercial, quote.items.map(row => row.id))
+      if(input.expectedRevision!==undefined&&input.expectedRevision!==quote.revision)throw Object.assign(new Error('This quotation changed while you were editing its assumptions.'),{status:409,code:'REVISION_CONFLICT',nextAction:'Review the current declaration and save your assumptions again.',details:{currentRevision:quote.revision,current:quote}})
       return { ok: true, assumptions: await save(user, 'assumptions', { id: `assumption-${quote.id}`, rfqId: quote.rfqId, quoteId: quote.id, quoteRevision: quote.revision, commercial, source: required(input.source, 'Assumption source'), sourceQuoteRef: ref(user, 'quotes', quote.id) }, 'assumptions-recorded') }
     }
     if (action === 'evaluate') return evaluate(user, input, context)

@@ -122,3 +122,26 @@ flow. The subsequent independent reviewer/signature integration and final public
 journey belong to the parent integration batch; this local evidence does not claim
 those passed. ERP is manual CSV staging; rates/references are manual observations;
 capacity is declared availability, not a connected factory schedule.
+
+## Bilateral integration and editable-state follow-up (2026-09-26)
+
+The native five-group check now creates a nonbinding award intent, supplier
+confirmation, an independent colleague's grant and a separately signed PO before
+checking award references and ERP. The full GUI check performs the same sequence
+with a newly invited reviewer; its five groups pass at03:24Z on the integrated
+native application. Source evidence: `tmp/product-evidence/fulfillment/verification/commercial-smoke.json`
+and `tmp/product-evidence/fulfillment/commercial-gui-final/` (responses, CSVs,
+seven screenshots, no JavaScript errors).
+
+Editor identity is the quotation ID, not its refreshed revision. Unsaved cost
+inputs and focus survive two background refreshes. Terms retain their opened
+revision, show the latest declaration when it changes, and require explicit load
+or keep-edits review. Save sends that opened revision to the atomic procurement
+write; changed quotations cannot silently replace terms. Buyer assumptions also
+refuse a stale opened quote revision, without recording a misleading source. Executable check:
+`BASE_URL=<url> node src/domain/commercial-workbench/tests/editor-browser.mjs`.
+Two GUI editors with a delayed read refresh produce a real409; edited freight
+remains visible, the human reviews and retries, and the other editor explicitly
+loads the resulting current values. **PASS2 groups**, evidence
+`tmp/product-evidence/fulfillment/commercial-editors/`. Public acceptance remains
+pending the parent's committed release.

@@ -1,3 +1,4 @@
+import { configureReviewer,grantAndSign } from '../../procurement/tests/review-fixture.mjs'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
@@ -13,11 +14,13 @@ import { multiply, schedulePlan } from '../code/arithmetic.mjs'
 const require = createRequire(new URL('../../../../host/package.json', import.meta.url)), { Context } = require('cordis')
 mkdirSync('tmp',{recursive:true}); const root=mkdtempSync(resolve('tmp/commercial-smoke-'))
 const buyer={id:'buyer',name:'Buyer',role:'contractor',email:'buyer@example.test'},one={id:'supplier-one',name:'One',role:'supplier',email:'one@example.test'},two={id:'supplier-two',name:'Two',role:'supplier',email:'two@example.test'},other={id:'other',name:'Other buyer',role:'contractor'},admin={id:'admin',role:'admin'}
-const member={id:'member',name:'Buyer analyst',role:'contractor',email:'member@example.test'},users=[buyer,one,two,other,admin,member],routes=[],tools=[],navigation=[],checks=[]
+const reviewer={id:'reviewer',name:'Independent reviewer',role:'contractor',email:'reviewer@example.test'}
+const member={id:'member',name:'Buyer analyst',role:'contractor',email:'member@example.test'},users=[buyer,one,two,other,admin,member,reviewer],routes=[],tools=[],navigation=[],checks=[]
 for(const user of users)user.email ||= `${user.id}@example.test`
 async function mount(){const ctx=new Context(),fibers=[];fibers.push(await ctx.plugin({name:'test-services',apply(inner){const add=(list,value)=>{list.push(value);return()=>list.splice(list.indexOf(value),1)};inner.provide('accounts',{list:()=>structuredClone(users),get:id=>structuredClone(users.find(user=>user.id===id)),can:user=>!user.permissions?.includes('workspace:read-only')});inner.provide('web',{route:(...args)=>add(routes,args),contribute:item=>add(navigation,item)});inner.provide('assistant',{tool:tool=>add(tools,tool)})}}));for(const plugin of [storePlugin,settingsPlugin,teamsPlugin,actionsPlugin,procurementPlugin])fibers.push(await ctx.plugin(plugin,plugin===storePlugin?{root}:{}));const commercial=await ctx.plugin(commercialPlugin);return {ctx,commercial,dispose:async()=>{await commercial.dispose();for(const fiber of fibers.reverse())await fiber.dispose()}}}
 let mounted=await mount(),ctx=mounted.ctx
 try{
+ await configureReviewer(ctx,buyer,reviewer,'GBP')
  const invitation=await ctx.teams.invite(buyer,{email:member.email,roleId:'lead'});await ctx.teams.answerInvite(member,invitation.id,true);await ctx.teams.select(member,buyer.id)
  const run=(user,action,input,context)=>ctx.commercial.execute(user,action,input,context),business=(user,action,input)=>ctx.procurement.execute(user,action,input)
  const items=[{id:'panel',description:'LED panel',quantity:10,unit:'each'}]
@@ -76,6 +79,8 @@ try{
  alternate.policy.weights={price:100,delivery:0,payment:0,warranty:0,deviation:0};const byPrice=calculateEvaluation(alternate)
  alternate.policy.weights={price:0,delivery:0,payment:0,warranty:100,deviation:0};const byWarranty=calculateEvaluation(alternate)
  assert.notEqual(byPrice.rows.find(row=>row.rank.value===1).quoteId,byWarranty.rows.find(row=>row.rank.value===1).quoteId)
+ const currentAssumptionQuote=ctx.procurement.snapshot(buyer).quotes.find(row=>row.id===q2.id),beforeAssumption=ctx.store.events(buyer.id).length
+ await assert.rejects(run(buyer,'save-assumptions',{quoteId:q2.id,expectedRevision:currentAssumptionQuote.revision-1,commercial:{freight:0},source:'Stale source fixture'}),error=>error.status===409&&error.code==='REVISION_CONFLICT');assert.equal(ctx.store.events(buyer.id).length,beforeAssumption)
  await run(buyer,'save-assumptions',{quoteId:q2.id,commercial:{freight:0},source:'Explicit fixture assumption'})
  const assumption=ctx.commercial.state(buyer).assumptions[0];assert.equal(assumption.commercial.freight,0)
  const changed=structuredClone(evaluation.basis);changed.assumptions={[q2.id]:{...assumption,quoteRevision:0}};assert(calculateEvaluation(changed).rows.find(row=>row.quoteId===q2.id).flags.some(flag=>flag.kind==='stale-assumptions'))
@@ -83,7 +88,10 @@ try{
  const history=ctx.commercial.state(buyer).history;assert.equal(history.length,2);assert.equal(history[0].quoteCount,1);assert.equal(history[0].trend,'insufficient history');assert(history.every(row=>!Object.hasOwn(row,'rank')&&!Object.hasOwn(row,'score')))
  assert.equal(ctx.commercial.state(one).history.length,1);assert.equal(ctx.commercial.state(two).costs.length,0);assert.equal(ctx.commercial.state(buyer).costs.length,0);assert(!JSON.stringify(ctx.commercial.state(buyer)).includes('Private factory worksheet'))
  assert.throws(()=>ctx.commercial.state(admin),/supplier or contractor/);await assert.rejects(run(other,'save-policy',{rfqId:rfq.id,policy:defaultPolicy}),/available/);await assert.rejects(run(two,'save-costs',costInput),/available/)
- const {order}=await business(buyer,'award',{quoteId:q1.id,confirmed:true})
+ const intent=(await business(buyer,'propose-award',{quoteId:q1.id,reason:'Sourced commercial evaluation supports this offer',confirmed:true})).awardIntent
+ await business(one,'confirm-award',{id:intent.id,confirmed:true})
+ const prepared=await routes.find(row=>row[0]==='POST'&&row[1]==='/workspace/review/:action')[2]({user:buyer,params:{action:'sign-order'},body:{id:intent.id}})
+ const {order}=await grantAndSign(ctx,buyer,reviewer,prepared)
  assert(ctx.commercial.state(buyer).referencePrices.some(row=>row.kind==='award'&&row.sourceRef.collection==='orders'))
  await run(buyer,'save-erp-mapping',{columns:{poNumber:'po_number',itemId:'item_id',quantity:'quantity',unitPrice:'unit_price',currency:'currency'},identityIds:true,orderMap:[],itemMap:[]})
  const exported=ctx.commercial.exportCsv(buyer,'orders'),imported=(await run(buyer,'import-erp',{csv:exported,filename:'round-trip.csv'})).import

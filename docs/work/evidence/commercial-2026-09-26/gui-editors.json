@@ -1,0 +1,14 @@
+{
+  "base": "http://127.0.0.1:8645/quotagent/",
+  "title": "[Commercial edit check] 1790392994389",
+  "ids": {
+    "rfq": "rfq-a9497822-a98",
+    "quote": "quote-e2534008-a3d"
+  },
+  "ok": true,
+  "checks": [
+    "Delayed read refresh plus concurrent GUI save produces real409; stale editor retains12 freight and exposes the current quotation source",
+    "Human review-and-keep saves against the new revision; another editor preserves its old draft until explicitly loading current saved values"
+  ],
+  "errors": []
+}
