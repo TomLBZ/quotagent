@@ -1,0 +1,26 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "at": "2026-09-26T03:52:51.211Z",
+  "checks": [
+    "A newly registered same-side colleague starts with an isolated business workspace",
+    "Owner invitation, explicit colleague acceptance and header selection expose the shared party business records",
+    "Exact authority policy and added custom role reviewed by a different colleague and applied separately; proposer has no self-approve control",
+    "Assignment, assigned-by-me/following filters, mention, unknown-name disclosure, request deadlines and completion produce actionable daily work",
+    "Selected workspace, following and comments survive browser reload; mobile team conversation has no page overflow"
+  ],
+  "screenshots": [
+    "01-accepted-team.png",
+    "02-reviewed-authority.png",
+    "03-assignment-conversation.png",
+    "04-personal-day.png",
+    "05-mobile-team.png"
+  ],
+  "errors": [],
+  "reviewer": {
+    "email": "reviewer-1790394771211@local.test",
+    "name": "Colleague 1790394771211"
+  },
+  "objectKey": "rfq:rfq-07146dae-f0e",
+  "ok": true,
+  "completedAt": "2026-09-26T03:53:08.664Z"
+}
