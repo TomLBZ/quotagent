@@ -1,0 +1,15 @@
+{
+  "id": "./",
+  "name": "Quotagent",
+  "short_name": "Quotagent",
+  "description": "Your quotation workspace with an AI teammate.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f8fa",
+  "theme_color": "#152c39",
+  "icons": [
+    {"src": "app-icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "app-icon-512.png", "sizes": "512x512", "type": "image/png"}
+  ]
+}

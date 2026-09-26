@@ -72,8 +72,8 @@ export function apply(ctx, config = {}) {
       try { if (!(await stat(filename)).isFile()) filename = resolve(assets,'index.html') }
       catch { filename = resolve(assets,'index.html') }
       const content = await readFile(filename)
-      const mime = {'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2'}[extname(filename)] || 'application/octet-stream'
-      res.writeHead(200,{'Content-Type':mime + (mime.startsWith('text/') ? '; charset=utf-8' : ''),'Cache-Control':extname(filename)==='.html' ? 'no-store' : 'public, max-age=3600'})
+      const mime = {'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2','.webmanifest':'application/manifest+json'}[extname(filename)] || 'application/octet-stream'
+      res.writeHead(200,{'Content-Type':mime + (mime.startsWith('text/') ? '; charset=utf-8' : ''),'Cache-Control':(extname(filename)==='.html'||filename.endsWith('/sw.js')) ? 'no-store' : 'public, max-age=3600'})
       res.end(req.method === 'HEAD' ? undefined : content)
     } catch(error) {
       console.error('[webui]',req.method,path,error.message)

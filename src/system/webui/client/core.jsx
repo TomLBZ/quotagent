@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { createPortal } from 'react-dom'
 import { readRoute, routeHash } from './routing.mjs'
 import { WorkspaceNavigation } from './navigation.jsx'
+import { OfflineShell, OfflineSettings } from './offline.jsx'
 import './styles.css'
 
 export const registry = {
@@ -11,12 +12,16 @@ export const registry = {
   page(id, contribution) { this.pages.set(id, contribution); return () => this.pages.delete(id) },
   slot(id, component, options = {}) { this.slots.set(id, component); this.slotOptions.set(id, options); return () => {this.slots.delete(id);this.slotOptions.delete(id)} },
 }
+registry.slot('account:offline-shell',OfflineSettings)
 const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
 export async function api(path, options = {}) {
-  const response = await fetch(`/quotagent/api${path}`, { credentials: 'same-origin', ...options,
+  let response
+  try { response = await fetch(`/quotagent/api${path}`, { credentials: 'same-origin', ...options,
     headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}) })
+    ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}) }) } catch(cause) {window.dispatchEvent(new CustomEvent('quotagent:contact',{detail:{ok:false}}));throw new Error(navigator.onLine&&!window.__QUOTAGENT_OFFLINE_SHELL__?'Cannot reach the application. Check your connection and retry; this action was not queued.':'You are offline. Reconnect before saving or sending; this action was not queued.',{cause})}
+  window.__QUOTAGENT_OFFLINE_SHELL__=false
+  window.dispatchEvent(new CustomEvent('quotagent:contact',{detail:{ok:true}}))
   const text = await response.text()
   let result
   try { result = text ? JSON.parse(text) : {} } catch { result = { error: text || 'The server returned an unreadable response.' } }
@@ -167,7 +172,7 @@ function App() {
   const extensions=bootstrap?.extensions?.plugins||bootstrap?.extensions||[],extensionList=Array.isArray(extensions)?extensions:[]
   const theme=[...extensionList].reverse().find(p=>p.enabled&&p.kind==='theme')?.spec
   const themeStyle=theme?{'--accent':theme.accent,'--canvas':theme.background,'--surface':theme.surface,'--ink':theme.text,'--radius':typeof theme.radius==='number'?`${theme.radius}px`:theme.radius}:{}
-  return <AppContext.Provider value={app}><a className="skip-link" href="#main-content" onClick={event=>{event.preventDefault();document.getElementById('main-content')?.focus()}}>Skip to main content</a><div className={`product assistant-mode-${mode} layout-${presentation.layout||'default'} density-${presentation.density||'comfortable'} ${presentation.className||''}`} style={{...presentation.variables,...themeStyle}}>
+  return <AppContext.Provider value={app}><OfflineShell/><a className="skip-link" href="#main-content" onClick={event=>{event.preventDefault();document.getElementById('main-content')?.focus()}}>Skip to main content</a><div className={`product assistant-mode-${mode} layout-${presentation.layout||'default'} density-${presentation.density||'comfortable'} ${presentation.className||''}`} style={{...presentation.variables,...themeStyle}}>
     {!bootstrap?<div className="startup"><Brand/><ErrorNotice error={failure} retry={refreshSession}/>{!failure&&<Loading/>}</div>:!user?Login?<Login/>:<Empty title="Welcome">The account plugin is not available.</Empty>:<>
       {slots('shell:effect:').map(([id,Effect])=><Effect key={`${user.id}:${id}`}/>)}
       {menu&&<button className="sidebar-scrim" aria-label="Close navigation" onClick={()=>setMenu(false)}/>}
