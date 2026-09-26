@@ -1,0 +1,16 @@
+{
+  "at": "2026-09-26T05:00:57.355Z",
+  "root": "/workspace/projects/quotagent/tmp/exchange-smoke-5bgFrY",
+  "checks": [
+    "Bridge capability negotiation, atomic compare-and-swap race, exact historical sequence projection, malformed metadata diagnostics",
+    "Real accepted team member sees selected party route metadata; only its explicit owner can configure credentials or create a competing hidden route",
+    "Independent roots with explicit private pairing; real approved commitment, signature tampering refusal, exact public projection and signed receipt, duplicate applies once",
+    "Out-of-order signed packages stay held across restart; missing predecessor releases durable successor and receipts without a sequence skip",
+    "Three-way commitment conflict preserves local value and private fields; original sender proof plus explicit recipient acceptance resolves exact incoming terms; domain rejection never projects",
+    "Real loopback HTTP delivery, closed-port failure retained after local write, sender process restart and exact-byte retry without duplicate commitment",
+    "Crash-prefix recovery after signed send rebuilds missing outbox; crash after raw receive never projects until replay validates and applies exactly once",
+    "Clearing pairing credentials disables cached key use; corrupt ledger quarantine preserves original bytes and healthy account operations",
+    "Incompatible bridge handshake produces zero events; no operation runs before negotiation; generic commit is explicitly unavailable and diagnosed"
+  ],
+  "passed": 9
+}

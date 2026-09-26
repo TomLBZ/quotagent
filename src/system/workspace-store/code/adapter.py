@@ -25,6 +25,7 @@ class Workspace:
         self.root = Path(root).resolve()
         (self.root / 'ledgers').mkdir(parents=True, exist_ok=True)
         self.books, self.health = {}, {}
+        self.record_index, self.indexed_counts = {}, {}
         key_file = self.root / 'exchange.key'
         if not key_file.exists():
             temporary = key_file.with_suffix('.tmp')
@@ -48,14 +49,26 @@ class Workspace:
                 if not book.healthy:
                     self.health[realm] = {'realm': realm, 'healthy': False, 'code': 'LEDGER_INTEGRITY', 'message': 'The ledger failed integrity verification. Writes and outbound transfers are stopped.', 'nextAction': 'Preserve the original file and restore or inspect it with an administrator; no automatic repair was performed.', 'details': book.open_failure}
                 else:
-                    malformed = sum(1 for row in book.read() if isinstance(row.get('body'), dict) and row['body'].get('schema') == WORKSPACE and not valid_record(row['body']))
-                    self.health[realm] = {'realm': realm, 'healthy': True, 'recordMetadataDropped': malformed, 'eventCount': book.count}
+                    self.health[realm] = {'realm': realm, 'healthy': True, 'recordMetadataDropped': 0, 'eventCount': book.count}
+                    self.refresh_index(realm, book)
             except Exception as error:
                 self.health[realm] = {'realm': realm, 'healthy': False, 'code': 'STORAGE_UNAVAILABLE', 'message': str(error), 'nextAction': 'Check the account ledger path, disk availability and permissions; retry after repair.'}
         state = self.health.get(realm)
         if not state or not state['healthy']:
             raise AdapterError(state['code'] if state else 'STORAGE_UNAVAILABLE', state['message'] if state else 'Storage is unavailable.', state.get('nextAction', '') if state else '', 503)
         return self.books[realm]
+
+    def refresh_index(self, realm, book):
+        """Disposable process-local projection; existing immutable ledger is its only input."""
+        index = self.record_index.setdefault(realm, {})
+        for seq in range(self.indexed_counts.get(realm, 0) + 1, book.count + 1):
+            row = book.get(seq)
+            body = row.get('body')
+            if valid_record(body):
+                index[(body['collection'], body['record']['id'])] = (body['record'], {'realm': realm, 'seq': row['seq'], 'hash': row['entry_hash']})
+            elif isinstance(body, dict) and body.get('schema') == WORKSPACE:
+                self.health[realm]['recordMetadataDropped'] += 1
+            self.indexed_counts[realm] = seq
 
     def initialize(self):
         for path in (self.root / 'ledgers').glob('*.jsonl'):
@@ -69,25 +82,25 @@ class Workspace:
         return {'events': {realm: book.read() for realm, book in self.books.items() if self.health[realm]['healthy']}, 'health': self.status()}
 
     def status(self):
+        for realm, book in self.books.items():
+            if self.health[realm]['healthy']:
+                self.refresh_index(realm, book)
         result = copy.deepcopy(self.health)
         for realm, book in self.books.items():
             if result[realm]['healthy']:
                 result[realm]['eventCount'] = book.count
-                result[realm]['recordMetadataDropped'] = sum(1 for row in book.read() if isinstance(row.get('body'), dict) and row['body'].get('schema') == WORKSPACE and not valid_record(row['body']))
         return result
 
     def counts(self):
         return {realm: book.count for realm, book in self.books.items() if self.health[realm]['healthy']}
 
     def delta(self, before):
-        return {realm: book.read()[before.get(realm, 0):] for realm, book in self.books.items() if self.health[realm]['healthy'] and book.count > before.get(realm, 0)}
+        return {realm: [book.get(seq) for seq in range(before.get(realm, 0) + 1, book.count + 1)] for realm, book in self.books.items() if self.health[realm]['healthy'] and book.count > before.get(realm, 0)}
 
     def current(self, realm, collection, record_id):
-        for row in reversed(self.book(realm).read()):
-            body = row['body']
-            if valid_record(body) and body['collection'] == collection and body['record']['id'] == record_id:
-                return copy.deepcopy(body['record']), {'realm': realm, 'seq': row['seq'], 'hash': row['entry_hash']}
-        return None, None
+        book = self.book(realm)
+        self.refresh_index(realm, book)
+        return copy.deepcopy(self.record_index[realm].get((collection, record_id), (None, None)))
 
     def put(self, realm, collection, record, *, event='workspace/record-saved', actor=None, expected=None, check_expected=False, correlation_id=None, event_class='fact', refs=None):
         body = {'schema': WORKSPACE, 'collection': collection, 'record': record}

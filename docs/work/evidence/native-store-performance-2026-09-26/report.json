@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "at": "2026-09-26T04:56:48.066Z",
+  "root": "/workspace/projects/quotagent/tmp/store-performance-nPF0Lr",
+  "count": 10000,
+  "recordShape": "One version per distinct item; integer quantity, unit, description. Existing Python Ledger with default fsync=true; serial native NDJSON adapter calls.",
+  "environment": {
+    "node": "v26.5.1",
+    "os": "linux",
+    "release": "6.12.105-production+truenas",
+    "cpu": "AMD Ryzen 9 3950X 16-Core Processor",
+    "filesystemType": 801189825,
+    "ledgerBytes": 6275564
+  },
+  "append": {
+    "totalMs": 27848.673310000002,
+    "meanMs": 2.784867331,
+    "p50Ms": 2.8739040000000386,
+    "p95Ms": 3.079666999999972,
+    "p99Ms": 4.071091000000024,
+    "maxMs": 9.403090000000006
+  },
+  "rebuild": {
+    "events": 10000,
+    "milliseconds": 1149.1625940000013,
+    "exactRecordsAndHead": true
+  },
+  "historical": {
+    "seq": 5000,
+    "records": 5000,
+    "milliseconds": 6.687224999997852
+  },
+  "historicalTargets": {
+    "appendEveryEvent5ms": false,
+    "rebuild10000Within10s": true
+  },
+  "limits": "Single measured container/filesystem and synthetic record size. Append includes IPC, durable append, chain verification and response/projection update. Rebuild includes process startup, ledger validation and all native projections. No public load, remote disk, concurrency or provider inference claimed."
+}

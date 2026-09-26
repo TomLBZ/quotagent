@@ -1,0 +1,7 @@
+{
+  "status": "interrupted-slow-baseline",
+  "at": "2026-09-26T04:54:38.240689+00:00",
+  "completedEvents": 4629,
+  "processElapsed": "05:56",
+  "reason": "Full-ledger deep copies in adapter current/status/delta repeat for every write; stop slow baseline before optimizing adapter. No full 10k acceptance or per-event percentile claim."
+}
