@@ -1,0 +1,19 @@
+{
+  "base": "http://127.0.0.1:8649/quotagent/",
+  "at": "2026-09-26T03:12:07.614Z",
+  "checks": [
+    "Command palette opened through keyboard; actual Help topic selection remains in URL and survives browser reload",
+    "Browser back and forward restore page and selected context without losing the record identifier",
+    "Sharing explains existing access; real modal makes background inert, traps Tab both ways, closes on Escape and returns focus",
+    "Available plugin command is searchable, administrator pages are absent for client and inaccessible deep link explains the account restriction",
+    "390px palette has no horizontal overflow and 44px close target; supplier can use its own available pages"
+  ],
+  "screenshots": [
+    "01-restored-context.png",
+    "02-mobile-palette.png"
+  ],
+  "errors": [],
+  "topic": "Prepare a request and compare offers",
+  "ok": true,
+  "completedAt": "2026-09-26T03:12:10.025Z"
+}

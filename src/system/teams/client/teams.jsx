@@ -58,5 +58,5 @@ function PolicyDiff({proposal}){
  const label=limit=>limit===null?'Not configured':limit==='unlimited'?'Explicitly unlimited':`${limit/100}`
  return <div className="team-policy-diff"><p>Currency: {proposal.previous.currency} → {proposal.next.currency}</p><div className="table-scroll"><table><thead><tr><th>Role</th><th>Previous limit</th><th>Proposed limit</th><th>Proposed permissions</th></tr></thead><tbody>{proposal.next.roles.map(role=><tr key={role.id}><td>{role.label}</td><td>{label(proposal.previous.roles.find(previous=>previous.id===role.id)?.limit??null)}</td><td>{label(role.limit)}</td><td>{[role.canWrite?'Edit':'Read only',role.canManage?'Manage team':null,role.canReviewPolicy?'Review policy':null].filter(Boolean).join(' · ')}</td></tr>)}</tbody></table></div><p>Waiting review policy: {proposal.previous.timeoutPolicy} / {proposal.previous.timeoutMinutes} min → {proposal.next.timeoutPolicy} / {proposal.next.timeoutMinutes} min</p><details><summary>Exact policy before and after</summary><pre>{JSON.stringify({before:proposal.previous,after:proposal.next},null,2)}</pre></details></div>
 }
-registry.page('team',{component:Teams,icon:'users'})
+registry.page('team',{component:Teams,icon:'users',linkKeys:['workspaceId','policyId','object']})
 registry.slot('header:team',TeamHeader,{navigation:'team'})

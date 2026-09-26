@@ -41,4 +41,4 @@ function ActionCenter(){
  {['failed','uncertain','rejected','expired'].includes(action.status)&&(!action.proposerId||action.proposerId===app.user.id)&&<Button variant="secondary" busy={busy==='retry'} onClick={()=>decide('retry')}>Propose another attempt</Button>}{action.status==='executing'&&<p role="status">The owning plugin is executing this signed action. Return later to inspect its receipt.</p>}
  </>}</section></div></>
 }
-registry.page('approvals',{component:ActionCenter,icon:'check'})
+registry.page('approvals',{component:ActionCenter,icon:'check',linkKeys:['actionId']})

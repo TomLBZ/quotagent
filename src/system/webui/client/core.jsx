@@ -1,9 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
+import { createPortal } from 'react-dom'
+import { readRoute, routeHash } from './routing.mjs'
+import { WorkspaceNavigation } from './navigation.jsx'
 import './styles.css'
 
 export const registry = {
-  pages: new Map(), slots: new Map(), slotOptions: new Map(),
+  pages: new Map(), slots: new Map(), slotOptions: new Map(), commands: new Map(),
+  command(id, contribution) { this.commands.set(id, contribution); return () => { if (this.commands.get(id) === contribution) this.commands.delete(id) } },
   page(id, contribution) { this.pages.set(id, contribution); return () => this.pages.delete(id) },
   slot(id, component, options = {}) { this.slots.set(id, component); this.slotOptions.set(id, options); return () => {this.slots.delete(id);this.slotOptions.delete(id)} },
 }
@@ -67,6 +71,7 @@ const paths = {
   close: 'm6 6 12 12 M6 18 18 6', chevron: 'm9 5 7 7-7 7', send: 'm22 2-7 20-4-9-9-4z M22 2 11 13',
   download: 'M12 3v12 m-5-5 5 5 5-5 M4 16v5h16v-5', clock: 'M12 8v5l3 2 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
   logout: 'M9 3H4v18h5 M10 12h12 m-5-5 5 5-5 5', menu: 'M3 6h18 M3 12h18 M3 18h18',
+  link: 'M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2 M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2',
   search: 'M21 21l-5-5 M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0', shield: 'm12 2 9 4v6c0 6-9 10-9 10S3 18 3 12V6z',
   sun: 'M12 2v2 M12 20v2 M2 12h2 M20 12h2 M5 5l2 2 M17 17l2 2 M5 19l2-2 M17 7l2-2 M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0',
 }
@@ -83,25 +88,36 @@ export function Field({ label, hint, children, className = '' }) {
   const controls=React.Children.map(children,child=>React.isValidElement(child)&&['input','select','textarea'].includes(child.type)&&typeof label==='string'&&!child.props['aria-label']&&!child.props['aria-labelledby']?React.cloneElement(child,{'aria-label':label}):child)
   return <label className={`field ${className}`}><span>{label}</span>{controls}{hint && <small>{hint}</small>}</label>
 }
+const modalLayers=[],originalInert=new Map()
+function syncModalLayers(){
+  const top=modalLayers.at(-1)
+  if(!top){for(const [node,inert] of originalInert)node.inert=inert;originalInert.clear();return}
+  for(const node of document.body.children){if(!originalInert.has(node))originalInert.set(node,node.inert);node.inert=node!==top}
+}
 export function Modal({ title, description, children, onClose, wide = false }) {
-  const dialog = useRef(null)
-  useEffect(() => {
-    const before = document.activeElement
-    dialog.current?.focus()
-    const key = e => {
-      if (e.key === 'Escape') onClose()
-      if (e.key === 'Tab') {
-        const focusable = [...dialog.current.querySelectorAll('button:not([disabled]),input:not([disabled]),select,textarea,a[href],[tabindex="0"]')]
-        const first = focusable[0], last = focusable.at(-1)
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus() }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus() }
+  const dialog=useRef(null),close=useRef(onClose),[host]=useState(()=>document.createElement('div'))
+  close.current=onClose
+  useEffect(()=>{
+    const before=document.activeElement
+    host.className='dialog-portal';document.body.appendChild(host);modalLayers.push(host);syncModalLayers()
+    const focusable=()=>[...dialog.current.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]')].filter(node=>node.getClientRects().length&&!node.closest('[hidden],[inert]'))
+    ;(dialog.current.querySelector('input:not([readonly]):not([disabled]),textarea:not([disabled]),select:not([disabled])')||focusable()[0]||dialog.current).focus()
+    const key=event=>{
+      if(modalLayers.at(-1)!==host)return
+      if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close.current()}
+      if(event.key==='Tab'){
+        const nodes=focusable(),first=nodes[0],last=nodes.at(-1)
+        if(!nodes.length){event.preventDefault();dialog.current.focus()}
+        else if(event.shiftKey&&(document.activeElement===first||!nodes.includes(document.activeElement))){event.preventDefault();last.focus()}
+        else if(!event.shiftKey&&(document.activeElement===last||!nodes.includes(document.activeElement))){event.preventDefault();first.focus()}
       }
     }
-    document.addEventListener('keydown', key)
-    return () => { document.removeEventListener('keydown', key); before?.focus() }
-  }, [])
-  return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}><section className={`modal ${wide ? 'modal-wide' : ''}`} ref={dialog} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}><div className="modal-heading"><div><h2>{title}</h2>{description && <p>{description}</p>}</div><button className="icon-button" aria-label="Close dialog" onClick={onClose}><Icon name="close"/></button></div>{children}</section></div>
+    document.addEventListener('keydown',key)
+    return()=>{document.removeEventListener('keydown',key);const i=modalLayers.indexOf(host);if(i>=0)modalLayers.splice(i,1);host.remove();syncModalLayers();if(before?.isConnected&&!before.closest('[inert]'))before.focus()}
+  },[host])
+  return createPortal(<div className="modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget&&modalLayers.at(-1)===host)close.current()}}><section className={`modal ${wide?'modal-wide':''}`} ref={dialog} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}><div className="modal-heading"><div><h2>{title}</h2>{description&&<p>{description}</p>}</div><button className="icon-button" aria-label="Close dialog" onClick={onClose}><Icon name="close"/></button></div>{children}</section></div>,host)
 }
+
 export const money = (value, currency = 'USD') => new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(Number(value) || 0)
 export const date = value => value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No deadline'
 export const initials = text => String(text || '?').split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase()
@@ -109,11 +125,12 @@ export function Brand({ light = false }) { return <div className={`brand ${light
 
 function App() {
   const [bootstrap, setBootstrap] = useState(null), [failure, setFailure] = useState('')
-  const [version, setVersion] = useState(0), [page, setPage] = useState(location.hash.slice(1).split('/')[0] || '')
-  const [context, setContext] = useState({}), [toast, setToast] = useState(null)
+  const [version, setVersion] = useState(0), [page, setPage] = useState(()=>readRoute(location.hash,registry.pages).page)
+  const [context, saveContext] = useState(()=>readRoute(location.hash,registry.pages).context), [toast, setToast] = useState(null)
   const [menu, setMenu] = useState(false), [assistantOpen, setAssistantOpen] = useState(false), [assistantPrompt, setAssistantPrompt] = useState(null)
   const [presentations,setPresentations] = useState([])
-  const toastTimer = useRef(), user = bootstrap?.user
+  const toastTimer = useRef(), user = bootstrap?.user, identity=useRef(null), route=useRef({page,context}),currentRoute=useRef(page)
+  route.current={page,context}
   const refresh = useCallback(() => setVersion(v => v + 1), [])
   const refreshSession = useCallback(async () => { try { const value=await api('/bootstrap');setBootstrap(value);setFailure('');return value } catch(e) { setFailure(e.message) } }, [])
   useEffect(() => { refreshSession() }, [refreshSession, version])
@@ -123,12 +140,13 @@ function App() {
     const timer=setInterval(sync,seconds*1000);window.addEventListener('focus',sync)
     return () => {clearInterval(timer);window.removeEventListener('focus',sync)}
   },[refresh,bootstrap?.ui?.refreshSeconds])
-  useEffect(() => {const handler=()=>{setPage(location.hash.slice(1).split('/')[0]||'');setMenu(false)};window.addEventListener('hashchange',handler);return()=>window.removeEventListener('hashchange',handler)},[])
+  useEffect(() => {const handler=()=>{const next=readRoute(location.hash,registry.pages);setPage(next.page);saveContext(next.context);setMenu(false)};window.addEventListener('hashchange',handler);window.addEventListener('popstate',handler);return()=>{window.removeEventListener('hashchange',handler);window.removeEventListener('popstate',handler)}},[])
   useEffect(()=>()=>clearTimeout(toastTimer.current),[])
-  useEffect(()=>{setAssistantOpen(false);setAssistantPrompt(null);setContext({})},[user?.id])
+  useEffect(()=>{const next=user?user.id+':'+user.role:null;if(identity.current&&identity.current!==next){setAssistantOpen(false);setAssistantPrompt(null);saveContext({});setPage('');history.replaceState(null,'',location.pathname+location.search)}identity.current=next},[user?.id,user?.role])
   const notify=useCallback((message,type='success')=>{clearTimeout(toastTimer.current);setToast({message,type});toastTimer.current=setTimeout(()=>setToast(null),6000)},[])
-  const navigate=useCallback((id,nextContext={})=>{setContext(nextContext);setPage(id);location.hash=id;setMenu(false)},[])
-  const home=useCallback(()=>{setContext({});setPage('');location.hash='';setMenu(false);setAssistantOpen(false)},[])
+  const navigate=useCallback((id,nextContext={})=>{saveContext(nextContext);setPage(id);history.pushState(null,'',routeHash(id,nextContext,registry.pages.get(id)));setMenu(false)},[])
+  const setContext=useCallback(value=>{const next=typeof value==='function'?value(route.current.context):value;saveContext(next);history.replaceState(null,'',routeHash(currentRoute.current,next,registry.pages.get(currentRoute.current)))},[])
+  const home=useCallback(()=>{saveContext({});setPage('');history.pushState(null,'',location.pathname+location.search);setMenu(false);setAssistantOpen(false)},[])
   const ask=useCallback((text='',rfqId,send=true)=>{setAssistantPrompt({text,rfqId,send,at:Date.now()});setAssistantOpen(true)},[])
   const registerPresentation=useCallback((ownerId,value)=>{
     const token=Symbol(ownerId),entry={ownerId,token,value,accountId:user?.id}
@@ -137,7 +155,8 @@ function App() {
   },[user?.id])
   const presentation=Object.assign({},...presentations.filter(item=>item.accountId===user?.id).map(item=>item.value))
   const items=(bootstrap?.navigation||[]).filter(item=>registry.pages.has(item.id)&&(!item.roles||item.roles.includes(user?.role))).sort((a,b)=>(a.order||0)-(b.order||0))
-  const current=items.find(item=>item.id===(page||presentation.landingPage))||items[0]
+  const current=items.find(item=>item.id===(page||presentation.landingPage))||(!page?items[0]:undefined)
+  currentRoute.current=current?.id||page
   const contribution=current&&registry.pages.get(current.id),Component=contribution?.component
   const mode=contribution?.assistantMode||presentation.assistantMode||'on-demand'
   const app={user,bootstrap,version,refresh,refreshSession,page:current?.id,navigate,home,context,setContext,notify,ask,assistantPrompt,assistantOpen,setAssistantOpen,registerPresentation}
@@ -148,17 +167,17 @@ function App() {
   const extensions=bootstrap?.extensions?.plugins||bootstrap?.extensions||[],extensionList=Array.isArray(extensions)?extensions:[]
   const theme=[...extensionList].reverse().find(p=>p.enabled&&p.kind==='theme')?.spec
   const themeStyle=theme?{'--accent':theme.accent,'--canvas':theme.background,'--surface':theme.surface,'--ink':theme.text,'--radius':typeof theme.radius==='number'?`${theme.radius}px`:theme.radius}:{}
-  return <AppContext.Provider value={app}><div className={`product assistant-mode-${mode} layout-${presentation.layout||'default'} density-${presentation.density||'comfortable'} ${presentation.className||''}`} style={{...presentation.variables,...themeStyle}}>
+  return <AppContext.Provider value={app}><a className="skip-link" href="#main-content" onClick={event=>{event.preventDefault();document.getElementById('main-content')?.focus()}}>Skip to main content</a><div className={`product assistant-mode-${mode} layout-${presentation.layout||'default'} density-${presentation.density||'comfortable'} ${presentation.className||''}`} style={{...presentation.variables,...themeStyle}}>
     {!bootstrap?<div className="startup"><Brand/><ErrorNotice error={failure} retry={refreshSession}/>{!failure&&<Loading/>}</div>:!user?Login?<Login/>:<Empty title="Welcome">The account plugin is not available.</Empty>:<>
       {slots('shell:effect:').map(([id,Effect])=><Effect key={`${user.id}:${id}`}/>)}
       {menu&&<button className="sidebar-scrim" aria-label="Close navigation" onClick={()=>setMenu(false)}/>}
       <aside className={`sidebar ${menu?'sidebar-open':''}`}>
         <a className="brand-link" href="#" onClick={e=>{e.preventDefault();home()}}><Brand/></a>
         <div className="workspace-label"><span className="workspace-avatar">{initials(user.company)}</span><div><strong>{user.company||'My workspace'}</strong><span>{user.role==='admin'?'Administration':`${user.role[0].toUpperCase()}${user.role.slice(1)} workspace`}</span></div></div>
-        {Navigation?<Navigation items={items} currentId={current?.id} navigate={navigate}/>:<nav aria-label="Main navigation">{items.map(item=><button key={item.id} className={`nav-item ${current?.id===item.id?'active':''}`} onClick={()=>navigate(item.id)}><Icon name={registry.pages.get(item.id)?.icon||item.icon}/><span>{item.label}</span></button>)}</nav>}
+        {Navigation?<Navigation items={items} currentId={current?.id} navigate={navigate}/>:<nav aria-label="Main navigation">{items.map(item=><button key={item.id} className={`nav-item ${current?.id===item.id?'active':''}`} aria-current={current?.id===item.id?'page':undefined} onClick={()=>navigate(item.id)}><Icon name={registry.pages.get(item.id)?.icon||item.icon}/><span>{item.label}</span></button>)}</nav>}
         <div className="sidebar-bottom"><div className="profile"><span className="avatar">{initials(user.name)}</span><div><strong>{user.name}</strong><span>{user.email}</span></div><button className="icon-button" title="Sign out" aria-label="Sign out" onClick={async()=>{await api('/auth/logout',{method:'POST'});home();await refreshSession()}}><Icon name="logout" size={17}/></button></div></div>
       </aside>
-      <div className="workspace-main"><header className="topbar"><div className="topbar-location"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={()=>setMenu(true)}><Icon name="menu"/></button><span className="breadcrumb-root">Workspace</span><Icon name="chevron" size={13}/><strong>{current?.label||'Workspace'}</strong></div><div className="topbar-right">{slots('header:').map(([id,Contribution])=><Contribution key={id}/>)}{Assistant&&mode!=='hidden'&&<button className="assistant-toggle" onClick={()=>setAssistantOpen(v=>!v)}><Icon name="spark" size={17}/> AI assistant</button>}<span className="avatar avatar-small">{initials(user.name)}</span></div></header><main id="main-content" className="main-content">{Component?<Component key={`${user.id}:${current.id}`}/>:<Empty title="No pages available">This account has no registered workspace pages.</Empty>}{extensionList.filter(p=>p.enabled&&p.kind==='widget').map(p=><section className="card extension-widget" key={p.id}><div className="section-heading"><h3>{p.spec?.title||p.name}</h3><Badge>Personal extension</Badge></div><p>{p.spec?.body}</p>{p.spec?.items?.length>0&&<ul>{p.spec.items.map((item,i)=><li key={i}>{typeof item==='string'?item:JSON.stringify(item)}</li>)}</ul>}</section>)}</main></div>
+      <div className="workspace-main"><header className="topbar"><div className="topbar-location"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={()=>setMenu(true)}><Icon name="menu"/></button><nav aria-label="Breadcrumb"><button className="breadcrumb-root" onClick={home}>Workspace</button><Icon name="chevron" size={13}/><strong aria-current="page">{current?.label||'Unavailable page'}</strong></nav></div><div className="topbar-right"><WorkspaceNavigation items={items} current={current} contribution={contribution}/>{slots('header:').map(([id,Contribution])=><Contribution key={id}/>)}{Assistant&&mode!=='hidden'&&<button className="assistant-toggle" onClick={()=>setAssistantOpen(v=>!v)}><Icon name="spark" size={17}/> AI assistant</button>}<span className="avatar avatar-small">{initials(user.name)}</span></div></header><main id="main-content" tabIndex={-1} className="main-content">{Component?<Component key={`${user.id}:${current.id}`}/>:<Empty title={page?"This page is unavailable":"No pages available"} action={<Button onClick={home}>Go to my home</Button>}>{page?"This page is not enabled for your current account. Sign in with the account that received the work, or ask its owner for access.":"This account has no registered workspace pages."}</Empty>}{extensionList.filter(p=>p.enabled&&p.kind==='widget').map(p=><section className="card extension-widget" key={p.id}><div className="section-heading"><h3>{p.spec?.title||p.name}</h3><Badge>Personal extension</Badge></div><p>{p.spec?.body}</p>{p.spec?.items?.length>0&&<ul>{p.spec.items.map((item,i)=><li key={i}>{typeof item==='string'?item:JSON.stringify(item)}</li>)}</ul>}</section>)}</main></div>
       {Assistant&&mode!=='hidden'&&(assistantOpen||mode==='persistent')&&<aside className={`assistant-dock ${assistantOpen?'assistant-open':''}`} aria-label="AI assistant"><Assistant key={user.id}/></aside>}
       {slots('shell:overlay:').map(([id,Overlay])=><Overlay key={`${user.id}:${id}`}/>)}
     </>}{toast&&<div className={`toast toast-${toast.type}`} role="status"><Icon name={toast.type==='error'?'close':'check'} size={18}/>{toast.message}<button aria-label="Dismiss notification" onClick={()=>setToast(null)}><Icon name="close" size={16}/></button></div>}
