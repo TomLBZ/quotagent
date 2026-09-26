@@ -38,9 +38,10 @@ export function useResource(path, initial = {}) {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const fetchId = useRef(0), loadedKey = useRef(null), initialValue = useRef(initial)
-  const resourceKey = `${app.user?.id || ''}:${path}`
+  const resourceKey = `${app.user?.id || ''}:${app.user?.role || ''}:${app.user?.workspaceOwnerId || ''}:${path}`
   const reload = useCallback(async () => {
     const id = ++fetchId.current
+    if (!path) { setData(initialValue.current); setLoading(false); setRefreshing(false); setError(''); return initialValue.current }
     // Loading replaces content only when opening a new resource/account. Background
     // refreshes keep the existing component tree, active input and unsaved forms.
     if (loadedKey.current !== resourceKey) setLoading(true)

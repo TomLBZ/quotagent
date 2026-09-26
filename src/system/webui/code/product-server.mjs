@@ -1,5 +1,6 @@
 /** Generic Cordis HTTP/UI contribution service. Business routes belong to plugins. */
 import { createServer } from 'node:http'
+import { createCollections } from './collections.mjs'
 import { readFile, stat } from 'node:fs/promises'
 import { resolve, extname, sep } from 'node:path'
 export const name = 'webui-product'
@@ -80,8 +81,15 @@ export function apply(ctx, config = {}) {
       json(res,error.status || 400,{ok:false,error:error.message || 'Unable to complete this action',...(error.code?{code:error.code}:{}),...(error.nextAction?{nextAction:error.nextAction}:{}),...(error.status===409&&error.details?{details:error.details}:{})})
     }
   }
+  const collections=createCollections({store:{get:(...args)=>ctx.get('store').get(...args),put:(...args)=>ctx.get('store').put(...args)}})
+  const collectionQuery=query=>{try{return JSON.parse(query.get('query')||'{}')}catch{throw new Error('Invalid collection query.')}}
+  ctx.effect(()=>route('GET','/collections/:id',({user,params,query})=>collections.query(user,params.id,collectionQuery(query))))
+  ctx.effect(()=>route('GET','/collections/:id/preferences',({user,params})=>collections.preference(user,params.id)))
+  ctx.effect(()=>route('PATCH','/collections/:id/preferences',({user,params,body})=>collections.save(user,params.id,body)))
+  ctx.effect(()=>route('GET','/collections/:id/export',({user,params,query})=>collections.export(user,params.id,collectionQuery(query))))
+  ctx.effect(()=>()=>collections.dispose())
   ctx.provide('web',{
-    prefix,route,
+    prefix,route,collection:entry=>collections.register(entry),
     contribute: item => register(navigation, structuredClone(item)),
     extension: (owner, descriptor) => register(extensions,{owner,descriptor:structuredClone(descriptor)}),
     extensions: applicable,

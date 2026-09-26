@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/collections-QpwRfJ",
+  "at": "2026-09-26T03:48:38.325Z",
+  "checks": [
+    "257-row source matches independent conjunctive filter and stable sort across every server page; complete totals, enum values, explicit all rows and matching-key selection",
+    "Queries are read-only; explicit saved preferences are account/role isolated; stale updates refuse without a fact",
+    "CSV exports complete matching rows and chosen columns with spreadsheet formula escaping",
+    "Unregister removes query/preference access; process replay reconstructs saved view; reset adds a new ledger revision",
+    "Oversized all-match key selection refuses instead of silently truncating; undeclared roles cannot use collection"
+  ]
+}

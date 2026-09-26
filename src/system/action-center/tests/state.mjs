@@ -12,7 +12,7 @@ mkdirSync('tmp',{recursive:true});const root=mkdtempSync(resolve('tmp/connected-
 const ctx=new Context(),routes=[],nav=[],users=[{id:'review-one',role:'contractor'},{id:'review-two',role:'supplier'},{id:'review-admin',role:'admin'}],fibers=[]
 const mount=async(module,config)=>{const f=await ctx.plugin(module,config);fibers.push(f);return f}
 const add=(list,value)=>{list.push(value);return()=>list.splice(list.indexOf(value),1)}
-await mount({name:'review-fixtures',apply(child){child.provide('web',{route:(...r)=>add(routes,r),contribute:n=>add(nav,n)});child.provide('accounts',{list:()=>users,can:()=>true});child.provide('ai',{status:()=>({configured:false})})}})
+await mount({name:'review-fixtures',apply(child){child.provide('web',{route:(...r)=>add(routes,r),contribute:n=>add(nav,n),collection:()=>()=>{}});child.provide('accounts',{list:()=>users,can:()=>true});child.provide('ai',{status:()=>({configured:false})})}})
 await mount(store,{root});await mount(settings);await mount(notifications);let actionFiber=await mount(actions);await mount(policy);await mount(assistant)
 let deliveries=0
 const install=()=>ctx.actions.register({kind:'fixture.send',label:'Send fixture',execute:async(user,input)=>{deliveries++;return{delivered:true,to:input.to}}})
