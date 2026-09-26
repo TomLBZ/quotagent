@@ -106,41 +106,59 @@ export function Brand({ light = false }) { return <div className={`brand ${light
 
 function App() {
   const [bootstrap, setBootstrap] = useState(null), [failure, setFailure] = useState('')
-  const [version, setVersion] = useState(0), [page, setPage] = useState(location.hash.slice(1).split('/')[0] || 'workspace')
+  const [version, setVersion] = useState(0), [page, setPage] = useState(location.hash.slice(1).split('/')[0] || '')
   const [context, setContext] = useState({}), [toast, setToast] = useState(null)
   const [menu, setMenu] = useState(false), [assistantOpen, setAssistantOpen] = useState(false), [assistantPrompt, setAssistantPrompt] = useState(null)
-  const toastTimer = useRef()
+  const [presentations,setPresentations] = useState([])
+  const toastTimer = useRef(), user = bootstrap?.user
   const refresh = useCallback(() => setVersion(v => v + 1), [])
-  const refreshSession = useCallback(async () => { try { setBootstrap(await api('/bootstrap')); setFailure('') } catch(e) { setFailure(e.message) } }, [])
+  const refreshSession = useCallback(async () => { try { const value=await api('/bootstrap');setBootstrap(value);setFailure('');return value } catch(e) { setFailure(e.message) } }, [])
   useEffect(() => { refreshSession() }, [refreshSession, version])
   useEffect(() => {
     const sync = () => { if (document.visibilityState !== 'hidden') refresh() }
     const seconds=Math.max(3,Math.min(120,Number(bootstrap?.ui?.refreshSeconds) || 8))
-    const timer = setInterval(sync, seconds * 1000)
-    window.addEventListener('focus', sync)
-    return () => { clearInterval(timer); window.removeEventListener('focus', sync) }
-  }, [refresh, bootstrap?.ui?.refreshSeconds])
-  useEffect(() => { const handler = () => { setPage(location.hash.slice(1).split('/')[0] || 'workspace'); setMenu(false) }; window.addEventListener('hashchange', handler); return () => window.removeEventListener('hashchange', handler) }, [])
-  const notify = useCallback((message, type = 'success') => { clearTimeout(toastTimer.current); setToast({ message, type }); toastTimer.current = setTimeout(() => setToast(null), 6000) }, [])
-  const navigate = useCallback((id, nextContext = {}) => { setContext(nextContext); setPage(id); location.hash = id; setMenu(false) }, [])
-  const ask = useCallback((text = '', rfqId, send = true) => { setAssistantPrompt({ text, rfqId, send, at: Date.now() }); setAssistantOpen(true) }, [])
-  const app = { user: bootstrap?.user, bootstrap, version, refresh, refreshSession, page, navigate, context, setContext, notify, ask, assistantPrompt, assistantOpen, setAssistantOpen }
-  const user = bootstrap?.user
-  const items = (bootstrap?.navigation || []).filter(item => registry.pages.has(item.id) && (!item.roles || item.roles.includes(user?.role))).sort((a,b) => (a.order || 0) - (b.order || 0))
-  const current = items.find(item => item.id === page) || items[0]
-  const Component = current && registry.pages.get(current.id)?.component
-  const Login = registry.slots.get('login'), Assistant = registry.slots.get('assistant')
-  const extensions = bootstrap?.extensions?.plugins || bootstrap?.extensions || []
-  const extensionList = Array.isArray(extensions) ? extensions : []
-  const theme = [...extensionList].reverse().find(p => p.enabled && p.kind === 'theme')?.spec
-  const themeStyle = theme ? { '--accent': theme.accent, '--canvas': theme.background, '--surface': theme.surface, '--ink': theme.text, '--radius': typeof theme.radius === 'number' ? `${theme.radius}px` : theme.radius } : {}
-  return <AppContext.Provider value={app}><div className="product" style={themeStyle}>
-    {!bootstrap ? <div className="startup"><Brand/><ErrorNotice error={failure} retry={refreshSession}/>{!failure && <Loading/>}</div> : !user ? Login ? <Login/> : <Empty title="Welcome">The account plugin is not available.</Empty> : <>
-      {menu && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMenu(false)}/>}
-      <aside className={`sidebar ${menu ? 'sidebar-open' : ''}`}><a className="brand-link" href="#workspace" onClick={() => navigate(items[0]?.id || 'workspace')}><Brand/></a><div className="workspace-label"><span className="workspace-avatar">{initials(user.company)}</span><div><strong>{user.company || 'My workspace'}</strong><span>{user.role === 'admin' ? 'Administration' : `${user.role[0].toUpperCase()}${user.role.slice(1)} workspace`}</span></div></div><div className="nav-section-label">WORKSPACE</div><nav aria-label="Main navigation">{items.filter(item => !['settings','admin'].includes(item.id)).map(item => <button key={item.id} className={`nav-item ${current?.id === item.id ? 'active' : ''}`} onClick={() => navigate(item.id)}><Icon name={registry.pages.get(item.id)?.icon || item.icon}/><span>{item.label}</span>{current?.id === item.id && <span className="nav-active-dot"/>}</button>)}</nav><div className="sidebar-bottom"><div className="sidebar-help"><span className="small-spark"><Icon name="spark" size={17}/></span><strong>Make it your own</strong><p>Tell your agent what would make work easier.</p><button onClick={() => ask('Help me create a useful personal plugin for my workspace.')}>Build with your agent <Icon name="arrow" size={15}/></button></div>{items.filter(item => ['settings','admin'].includes(item.id)).map(item => <button key={item.id} className={`nav-item ${current?.id === item.id ? 'active' : ''}`} onClick={() => navigate(item.id)}><Icon name={item.icon || 'settings'}/>{item.label}</button>)}<div className="profile"><span className="avatar">{initials(user.name)}</span><div><strong>{user.name}</strong><span>{user.email}</span></div><button className="icon-button" title="Sign out" aria-label="Sign out" onClick={async () => { await api('/auth/logout', {method:'POST'}); setContext({}); refresh(); navigate('workspace') }}><Icon name="logout" size={17}/></button></div></div></aside>
-      <div className="workspace-main"><header className="topbar"><div className="topbar-location"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMenu(true)}><Icon name="menu"/></button><span className="breadcrumb-root">Workspace</span><Icon name="chevron" size={13}/><strong>{current?.label || 'Overview'}</strong></div><div className="topbar-right">{[...registry.slots.entries()].filter(([id])=>id.startsWith('header:') && (!registry.slotOptions.get(id)?.navigation || items.some(item=>item.id===registry.slotOptions.get(id).navigation))).map(([id,Contribution])=><Contribution key={id}/>)}<span className="live-indicator"><span/> Connected to your workspace</span><button className="assistant-toggle" onClick={() => setAssistantOpen(v => !v)}><Icon name="spark" size={17}/> AI assistant</button><span className="avatar avatar-small">{initials(user.name)}</span></div></header><main id="main-content" className="main-content">{Component ? <Component/> : <Empty title="No pages available">This account has no registered workspace pages.</Empty>}{extensionList.filter(p => p.enabled && p.kind === 'widget').map(p => <section className="card extension-widget" key={p.id}><div className="section-heading"><h3>{p.spec?.title || p.name}</h3><Badge>Personal extension</Badge></div><p>{p.spec?.body}</p>{p.spec?.items?.length > 0 && <ul>{p.spec.items.map((item,i) => <li key={i}>{typeof item === 'string' ? item : JSON.stringify(item)}</li>)}</ul>}</section>)}</main></div>
-      {Assistant && <aside className={`assistant-dock ${assistantOpen ? 'assistant-open' : ''}`} aria-label="AI assistant"><Assistant/></aside>}
-    </>}{toast && <div className={`toast toast-${toast.type}`} role="status"><Icon name={toast.type === 'error' ? 'close' : 'check'} size={18}/>{toast.message}<button aria-label="Dismiss notification" onClick={() => setToast(null)}><Icon name="close" size={16}/></button></div>}
+    const timer=setInterval(sync,seconds*1000);window.addEventListener('focus',sync)
+    return () => {clearInterval(timer);window.removeEventListener('focus',sync)}
+  },[refresh,bootstrap?.ui?.refreshSeconds])
+  useEffect(() => {const handler=()=>{setPage(location.hash.slice(1).split('/')[0]||'');setMenu(false)};window.addEventListener('hashchange',handler);return()=>window.removeEventListener('hashchange',handler)},[])
+  useEffect(()=>()=>clearTimeout(toastTimer.current),[])
+  useEffect(()=>{setAssistantOpen(false);setAssistantPrompt(null);setContext({})},[user?.id])
+  const notify=useCallback((message,type='success')=>{clearTimeout(toastTimer.current);setToast({message,type});toastTimer.current=setTimeout(()=>setToast(null),6000)},[])
+  const navigate=useCallback((id,nextContext={})=>{setContext(nextContext);setPage(id);location.hash=id;setMenu(false)},[])
+  const home=useCallback(()=>{setContext({});setPage('');location.hash='';setMenu(false);setAssistantOpen(false)},[])
+  const ask=useCallback((text='',rfqId,send=true)=>{setAssistantPrompt({text,rfqId,send,at:Date.now()});setAssistantOpen(true)},[])
+  const registerPresentation=useCallback((ownerId,value)=>{
+    const token=Symbol(ownerId),entry={ownerId,token,value,accountId:user?.id}
+    setPresentations(old=>[...old.filter(item=>item.ownerId!==ownerId),entry])
+    return()=>setPresentations(old=>old.filter(item=>item.token!==token))
+  },[user?.id])
+  const presentation=Object.assign({},...presentations.filter(item=>item.accountId===user?.id).map(item=>item.value))
+  const items=(bootstrap?.navigation||[]).filter(item=>registry.pages.has(item.id)&&(!item.roles||item.roles.includes(user?.role))).sort((a,b)=>(a.order||0)-(b.order||0))
+  const current=items.find(item=>item.id===(page||presentation.landingPage))||items[0]
+  const contribution=current&&registry.pages.get(current.id),Component=contribution?.component
+  const mode=contribution?.assistantMode||presentation.assistantMode||'on-demand'
+  const app={user,bootstrap,version,refresh,refreshSession,page:current?.id,navigate,home,context,setContext,notify,ask,assistantPrompt,assistantOpen,setAssistantOpen,registerPresentation}
+  const visible=id=>!registry.slotOptions.get(id)?.navigation||items.some(item=>item.id===registry.slotOptions.get(id).navigation)
+  const slots=prefix=>[...registry.slots.entries()].filter(([id])=>id.startsWith(prefix)&&visible(id))
+  const Login=registry.slots.get('login'),Assistant=registry.slots.get('assistant')
+  const Navigation=visible('shell:navigation')&&registry.slots.get('shell:navigation')
+  const extensions=bootstrap?.extensions?.plugins||bootstrap?.extensions||[],extensionList=Array.isArray(extensions)?extensions:[]
+  const theme=[...extensionList].reverse().find(p=>p.enabled&&p.kind==='theme')?.spec
+  const themeStyle=theme?{'--accent':theme.accent,'--canvas':theme.background,'--surface':theme.surface,'--ink':theme.text,'--radius':typeof theme.radius==='number'?`${theme.radius}px`:theme.radius}:{}
+  return <AppContext.Provider value={app}><div className={`product assistant-mode-${mode} layout-${presentation.layout||'default'} density-${presentation.density||'comfortable'} ${presentation.className||''}`} style={{...presentation.variables,...themeStyle}}>
+    {!bootstrap?<div className="startup"><Brand/><ErrorNotice error={failure} retry={refreshSession}/>{!failure&&<Loading/>}</div>:!user?Login?<Login/>:<Empty title="Welcome">The account plugin is not available.</Empty>:<>
+      {slots('shell:effect:').map(([id,Effect])=><Effect key={`${user.id}:${id}`}/>)}
+      {menu&&<button className="sidebar-scrim" aria-label="Close navigation" onClick={()=>setMenu(false)}/>}
+      <aside className={`sidebar ${menu?'sidebar-open':''}`}>
+        <a className="brand-link" href="#" onClick={e=>{e.preventDefault();home()}}><Brand/></a>
+        <div className="workspace-label"><span className="workspace-avatar">{initials(user.company)}</span><div><strong>{user.company||'My workspace'}</strong><span>{user.role==='admin'?'Administration':`${user.role[0].toUpperCase()}${user.role.slice(1)} workspace`}</span></div></div>
+        {Navigation?<Navigation items={items} currentId={current?.id} navigate={navigate}/>:<nav aria-label="Main navigation">{items.map(item=><button key={item.id} className={`nav-item ${current?.id===item.id?'active':''}`} onClick={()=>navigate(item.id)}><Icon name={registry.pages.get(item.id)?.icon||item.icon}/><span>{item.label}</span></button>)}</nav>}
+        <div className="sidebar-bottom"><div className="profile"><span className="avatar">{initials(user.name)}</span><div><strong>{user.name}</strong><span>{user.email}</span></div><button className="icon-button" title="Sign out" aria-label="Sign out" onClick={async()=>{await api('/auth/logout',{method:'POST'});home();await refreshSession()}}><Icon name="logout" size={17}/></button></div></div>
+      </aside>
+      <div className="workspace-main"><header className="topbar"><div className="topbar-location"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={()=>setMenu(true)}><Icon name="menu"/></button><span className="breadcrumb-root">Workspace</span><Icon name="chevron" size={13}/><strong>{current?.label||'Workspace'}</strong></div><div className="topbar-right">{slots('header:').map(([id,Contribution])=><Contribution key={id}/>)}{Assistant&&mode!=='hidden'&&<button className="assistant-toggle" onClick={()=>setAssistantOpen(v=>!v)}><Icon name="spark" size={17}/> AI assistant</button>}<span className="avatar avatar-small">{initials(user.name)}</span></div></header><main id="main-content" className="main-content">{Component?<Component key={`${user.id}:${current.id}`}/>:<Empty title="No pages available">This account has no registered workspace pages.</Empty>}{extensionList.filter(p=>p.enabled&&p.kind==='widget').map(p=><section className="card extension-widget" key={p.id}><div className="section-heading"><h3>{p.spec?.title||p.name}</h3><Badge>Personal extension</Badge></div><p>{p.spec?.body}</p>{p.spec?.items?.length>0&&<ul>{p.spec.items.map((item,i)=><li key={i}>{typeof item==='string'?item:JSON.stringify(item)}</li>)}</ul>}</section>)}</main></div>
+      {Assistant&&mode!=='hidden'&&(assistantOpen||mode==='persistent')&&<aside className={`assistant-dock ${assistantOpen?'assistant-open':''}`} aria-label="AI assistant"><Assistant key={user.id}/></aside>}
+      {slots('shell:overlay:').map(([id,Overlay])=><Overlay key={`${user.id}:${id}`}/>)}
+    </>}{toast&&<div className={`toast toast-${toast.type}`} role="status"><Icon name={toast.type==='error'?'close':'check'} size={18}/>{toast.message}<button aria-label="Dismiss notification" onClick={()=>setToast(null)}><Icon name="close" size={16}/></button></div>}
   </div></AppContext.Provider>
 }
-export function mountApp() { createRoot(document.getElementById('root')).render(<App/>) }
+export function mountApp(){createRoot(document.getElementById('root')).render(<App/>)}

@@ -75,4 +75,4 @@ function AccountMemoryCard(){
  const app=useApp(),resource=useResource('/memory',{memories:[],archived:[]})
  return <section className="card workroom-account-memory"><div className="section-heading"><div><h2>Account memory</h2><p>Reviewed facts and preferences your agents can use.</p></div><Badge>{resource.data.memories.length} active</Badge></div><ErrorNotice error={resource.error} retry={resource.reload}/>{resource.loading?<Loading/>:resource.data.memories.length?<dl className="preference-list">{resource.data.memories.slice(0,3).map(entry=><div key={entry.id}><dt>{entry.key}</dt><dd>{entry.value}</dd></div>)}</dl>:<p className="muted">No active memories. Add one explicitly or ask your assistant to suggest a memory for review.</p>}<Button variant="secondary" icon="file" onClick={()=>app.navigate('workroom',{tab:'memory'})}>Manage memory</Button></section>
 }
-registry.slot('account:memory',AccountMemoryCard)
+registry.slot('account:memory',AccountMemoryCard,{navigation:'workroom'})

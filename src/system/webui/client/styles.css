@@ -31,3 +31,10 @@
 
 /* Keep navigation and account controls reachable as plugins add pages. */
 .sidebar nav{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}.sidebar-bottom{flex-shrink:0}.sidebar .workspace-label,.sidebar .nav-section-label,.sidebar .brand-link{flex-shrink:0}
+/* Generic reversible presentation choices. Business grouping belongs to plugins. */
+.product.assistant-mode-hidden .workspace-main,.product.assistant-mode-on-demand .workspace-main{margin-right:0}
+.product .assistant-toggle{display:flex}
+.product.assistant-mode-on-demand .assistant-close{display:flex}
+.product.assistant-mode-on-demand .assistant-dock{box-shadow:-16px 0 50px #18354320}
+.product .sidebar{overflow-y:auto;scrollbar-width:thin}
+.product .sidebar-bottom{flex-shrink:0}
