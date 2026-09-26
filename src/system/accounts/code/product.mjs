@@ -16,7 +16,7 @@ const CAPABILITY_FLAGS = {
 }
 const COOKIE = 'qa_session'
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000
-const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }) }
+const fail = (message, status = 400, field) => { throw Object.assign(new Error(message), { status, ...(field ? {fieldErrors:{[field]:message}} : {}) }) }
 const clean = (value, max = 200) => String(value ?? '').trim().slice(0, max)
 const emailOf = value => clean(value, 254).toLowerCase()
 const copy = value => JSON.parse(JSON.stringify(value))
@@ -91,11 +91,11 @@ export function apply(ctx, config = {}) {
     const next = {}
     if ('name' in patch) {
       next.name = clean(patch.name, 100)
-      if (!next.name) fail('Enter your name.')
+      if (!next.name) fail('Enter your name.',400,'name')
     }
     if ('company' in patch) next.company = clean(patch.company, 160)
     if ('role' in patch && patch.role !== account.role) {
-      if (!(admin ? ROLES : CLIENT_ROLES).includes(patch.role)) fail('Select supplier or contractor.')
+      if (!(admin ? ROLES : CLIENT_ROLES).includes(patch.role)) fail('Select supplier or contractor.',400,'role')
       if (!admin && account.role === 'admin') fail('An administrator account cannot switch to a client workspace.')
       if (account.role === 'admin' && state.accounts.filter(row => row.role === 'admin' && !row.disabled).length <= 1) {
         fail('Keep at least one active administrator.')
@@ -159,11 +159,11 @@ export function apply(ctx, config = {}) {
     const email = emailOf(body.email)
     const password = String(body.password ?? '')
     const userName = clean(body.name, 100)
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('Enter a valid email address.')
-    if (password.length < 8) fail('Use a password with at least 8 characters.')
-    if (!userName) fail('Enter your name.')
-    if (!CLIENT_ROLES.includes(body.role)) fail('Select supplier or contractor.')
-    if (state.accounts.some(row => row.email === email)) fail('This email already has an account.', 409)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('Enter a valid email address.',400,'email')
+    if (password.length < 8) fail('Use a password with at least 8 characters.',400,'password')
+    if (!userName) fail('Enter your name.',400,'name')
+    if (!CLIENT_ROLES.includes(body.role)) fail('Select supplier or contractor.',400,'role')
+    if (state.accounts.some(row => row.email === email)) fail('This email already has an account.',409,'email')
     const account = { id: `u-${randomUUID()}`, email, name: userName,
       company: clean(body.company, 160), role: body.role, preferences: {}, permissions: [],
       credential: passwordHash(password), createdAt: now() }

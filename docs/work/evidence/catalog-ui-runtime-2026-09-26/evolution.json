@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/extension-evolution-uAgruE",
+  "checks": [
+    "actual generated utility, immutable revision/edit/conflict and exact-byte restore",
+    "realm ownership and independent copied revision provenance",
+    "frozen paired actual execution, visible unmeasured gates, five simultaneous reviewed checks",
+    "explicit owner canary, actual observed execution, automatic window rollback and reviewed promotion",
+    "execution failure triggers real candidate disposal and verified baseline restoration",
+    "global canary only affects declared account cohort",
+    "three similar failures escalate and require explicit human retry note",
+    "metadata-only artifact inventory detects ledger/disk/live disagreement",
+    "model-only skill replay does not invent missing token usage or permit an unmeasured trial",
+    "assistant self-inspection is ledger-visible and revision generation remains draft-only",
+    "metadata-only bounded evolution summary",
+    "Studio native unload removes management while installed fibers and run routes remain",
+    "restart reconstructs immutable history/counterexamples and safely restores interrupted canary baseline"
+  ]
+}

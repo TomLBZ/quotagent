@@ -1,0 +1,8 @@
+tab: accepted
+blank keeps personal: true
+clear effective empty: true
+reset inherits shared: true
+disabled personal + active global: {"visible":[{"id":"global","enabled":true,"scope":"global"}],"effects":[{"id":"global","enabled":true}],"market":[{"installedId":"global","installedEnabled":true,"installationScope":"global"}]}
+configure remount effect: #ffee00
+duplicate restored choice: {"visible":[{"id":"older-personal","accent":"#111111"}],"effects":[{"id":"older-personal","accent":"#111111"}]}
+PASS: active fallback, live remount, deterministic restore, duplicate retirement event, scope replacement, idempotent install, concurrent loads

@@ -79,10 +79,11 @@ export function apply(ctx, config = {}) {
       res.end(req.method === 'HEAD' ? undefined : content)
     } catch(error) {
       console.error('[webui]',req.method,path,error.message)
-      json(res,error.status || 400,{ok:false,error:error.message || 'Unable to complete this action',...(error.code?{code:error.code}:{}),...(error.nextAction?{nextAction:error.nextAction}:{}),...(error.status===409&&error.details?{details:error.details}:{})})
+      json(res,error.status || 400,{ok:false,error:error.message || 'Unable to complete this action',...(error.fieldErrors?{fieldErrors:error.fieldErrors}:{}),...(error.code?{code:error.code}:{}),...(error.nextAction?{nextAction:error.nextAction}:{}),...(error.status===409&&error.details?{details:error.details}:{})})
     }
   }
   const collections=createCollections({store:{get:(...args)=>ctx.get('store').get(...args),put:(...args)=>ctx.get('store').put(...args)}})
+  ctx.effect(()=>route('GET','/routes',()=>({service:'quotagent',routes:[{method:'GET',path:prefix+'/',auth:'none',title:'Quotagent workspace'}]}),{public:true}))
   const collectionQuery=query=>{try{return JSON.parse(query.get('query')||'{}')}catch{throw new Error('Invalid collection query.')}}
   ctx.effect(()=>route('GET','/collections/:id',({user,params,query})=>collections.query(user,params.id,collectionQuery(query))))
   ctx.effect(()=>route('GET','/collections/:id/preferences',({user,params})=>collections.preference(user,params.id)))

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useId } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createPortal } from 'react-dom'
 import { readRoute, routeHash } from './routing.mjs'
@@ -27,7 +27,7 @@ export async function api(path, options = {}) {
   try { result = text ? JSON.parse(text) : {} } catch { result = { error: text || 'The server returned an unreadable response.' } }
   if (!response.ok || result.ok === false) {
     const error = new Error(typeof result.error === 'string' ? result.error : result.error?.message || result.message || result.reason || `Request failed (${response.status})`)
-    error.status = response.status; error.code=result.code; error.nextAction=result.nextAction; error.details=result.details; throw error
+    error.fieldErrors=result.fieldErrors; error.status = response.status; error.code=result.code; error.nextAction=result.nextAction; error.details=result.details; throw error
   }
   return result
 }
@@ -87,12 +87,52 @@ export function Button({ children, icon, variant = 'primary', type = 'button', b
 }
 export const Badge = ({ children, status = 'neutral' }) => <span className={`badge badge-${status}`}>{children}</span>
 export function Empty({ icon = 'file', title, children, action }) { return <div className="empty"><span className="empty-icon"><Icon name={icon} size={26}/></span><h3>{title}</h3><p>{children}</p>{action}</div> }
-export function Loading() { return <div className="loading"><span className="spinner"/> Getting your workspace ready…</div> }
+export function Loading() { return <div className="loading" role="status"><span className="spinner"/> Getting your workspace ready…</div> }
 export function ErrorNotice({ error, retry }) { if (!error) return null; return <div className="error-notice" role="alert">{error}{retry && <button onClick={retry}>Try again</button>}</div> }
 export function PageHeader({ eyebrow, title, children, actions }) { return <div className="page-heading"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1>{children && <p>{children}</p>}</div><div className="heading-actions">{actions}</div></div> }
-export function Field({ label, hint, children, className = '' }) {
-  const controls=React.Children.map(children,child=>React.isValidElement(child)&&['input','select','textarea'].includes(child.type)&&typeof label==='string'&&!child.props['aria-label']&&!child.props['aria-labelledby']?React.cloneElement(child,{'aria-label':label}):child)
-  return <label className={`field ${className}`}><span>{label}</span>{controls}{hint && <small>{hint}</small>}</label>
+export function Field({ label, hint, error, children, className = '' }) {
+  const id=useId(),[invalid,setInvalid]=useState({})
+  const controls=React.Children.map(children,(child,index)=>{
+    if(!React.isValidElement(child)||!['input','select','textarea'].includes(child.type))return child
+    const report=event=>{const message=event.currentTarget.validationMessage||'';setInvalid(prior=>({...prior,[index]:message}))}
+    const edited=handler=>event=>{handler?.(event);if(invalid[index])report(event)}
+    const description=[child.props['aria-describedby'],hint?`${id}-hint`:null,error?`${id}-error`:invalid[index]?`${id}-error-${index}`:null].filter(Boolean).join(' ')
+    return React.cloneElement(child,{
+      ...(!child.props['aria-label']&&!child.props['aria-labelledby']?{'aria-labelledby':`${id}-label`}:{}),
+      'aria-describedby':description||undefined,'aria-invalid':error||invalid[index]?true:child.props['aria-invalid'],
+      onInvalid:event=>{child.props.onInvalid?.(event);report(event)},onInput:edited(child.props.onInput),onChange:edited(child.props.onChange),
+    })
+  })
+  return <label className={`field ${className}`}><span id={`${id}-label`}>{label}</span>{controls}{hint&&<small id={`${id}-hint`}>{hint}</small>}{error?<small className="field-error" id={`${id}-error`} role="alert">{error}</small>:Object.entries(invalid).filter(([,value])=>value).map(([index,value])=><small className="field-error" id={`${id}-error-${index}`} role="alert" key={index}>{value}</small>)}</label>
+}
+// Plugin tables inherit their nearest preceding section heading when the owner has
+// not supplied a caption/name. The observer is confined to this mounted surface;
+// explicit plugin names always win, and unmount restores only our own attributes.
+function useTableNames(surface){
+  const prefix=useId()
+  useEffect(()=>{
+    if(!surface)return
+    const owned=new Map(),headings=new Map();let sequence=0
+    const update=()=>{
+      for(const [table,id]of owned)if(!surface.contains(table)){if(table.getAttribute('aria-labelledby')===id)table.removeAttribute('aria-labelledby');owned.delete(table)}
+      for(const [heading,id]of headings)if(!surface.contains(heading)){if(heading.id===id)heading.removeAttribute('id');headings.delete(heading)}
+      for(const table of surface.querySelectorAll('table')){
+        const previous=owned.get(table)
+        if(previous&&table.getAttribute('aria-labelledby')===previous&&table.querySelector(':scope > caption')){table.removeAttribute('aria-labelledby');owned.delete(table)}
+        if(table.querySelector(':scope > caption')||table.hasAttribute('aria-label')||table.hasAttribute('aria-labelledby'))continue
+        let heading
+        for(let parent=table.parentElement;parent&&surface.contains(parent);parent=parent.parentElement){
+          heading=[...parent.querySelectorAll('h1,h2,h3,h4')].filter(node=>!table.contains(node)&&(node.compareDocumentPosition(table)&Node.DOCUMENT_POSITION_FOLLOWING)).at(-1)
+          if(heading)break
+        }
+        if(!heading)continue
+        if(!heading.id){const id=`table-heading-${prefix}-${++sequence}`;heading.id=id;headings.set(heading,id)}
+        table.setAttribute('aria-labelledby',heading.id);owned.set(table,heading.id)
+      }
+    }
+    update();const observer=new MutationObserver(update);observer.observe(surface,{childList:true,subtree:true})
+    return()=>{observer.disconnect();for(const [table,id]of owned)if(table.getAttribute('aria-labelledby')===id)table.removeAttribute('aria-labelledby');for(const [heading,id]of headings)if(heading.id===id)heading.removeAttribute('id')}
+  },[surface,prefix])
 }
 const modalLayers=[],originalInert=new Map()
 function syncModalLayers(){
@@ -102,6 +142,7 @@ function syncModalLayers(){
 }
 export function Modal({ title, description, children, onClose, wide = false }) {
   const dialog=useRef(null),close=useRef(onClose),[host]=useState(()=>document.createElement('div'))
+  useTableNames(host)
   close.current=onClose
   useEffect(()=>{
     const before=document.activeElement
@@ -130,6 +171,8 @@ export const initials = text => String(text || '?').split(/\s+/).map(p => p[0]).
 export function Brand({ light = false }) { return <div className={`brand ${light ? 'brand-light' : ''}`}><span className="brand-mark"><svg viewBox="0 0 30 30" width="25" height="25" fill="none"><path d="M7 8h7v9H7zM17 8h7v9h-7z" fill="currentColor"/><path d="M14 17c0 5-4 7-7 7M24 17c0 5-4 7-7 7" stroke="currentColor" strokeWidth="3"/></svg></span><span>quotagent<span className="brand-dot">.</span></span></div> }
 
 function App() {
+  const [surface,setSurface]=useState(null)
+  useTableNames(surface)
   const [bootstrap, setBootstrap] = useState(null), [failure, setFailure] = useState('')
   const [version, setVersion] = useState(0), [page, setPage] = useState(()=>readRoute(location.hash,registry.pages).page)
   const [context, saveContext] = useState(()=>readRoute(location.hash,registry.pages).context), [toast, setToast] = useState(null)
@@ -173,7 +216,7 @@ function App() {
   const extensions=bootstrap?.extensions?.plugins||bootstrap?.extensions||[],extensionList=Array.isArray(extensions)?extensions:[]
   const theme=[...extensionList].reverse().find(p=>p.enabled&&p.kind==='theme')?.spec
   const themeStyle=theme?{'--accent':theme.accent,'--canvas':theme.background,'--surface':theme.surface,'--ink':theme.text,'--radius':typeof theme.radius==='number'?`${theme.radius}px`:theme.radius}:{}
-  return <AppContext.Provider value={app}><OfflineShell/><a className="skip-link" href="#main-content" onClick={event=>{event.preventDefault();document.getElementById('main-content')?.focus()}}>Skip to main content</a><div className={`product assistant-mode-${mode} layout-${presentation.layout||'default'} density-${presentation.density||'comfortable'} ${presentation.className||''}`} style={{...presentation.variables,...themeStyle}}>
+  return <AppContext.Provider value={app}><OfflineShell/><a className="skip-link" href="#main-content" onClick={event=>{event.preventDefault();document.getElementById('main-content')?.focus()}}>Skip to main content</a><div ref={setSurface} className={`product assistant-mode-${mode} layout-${presentation.layout||'default'} density-${presentation.density||'comfortable'} ${presentation.className||''}`} style={{...presentation.variables,...themeStyle}}>
     {!bootstrap?<div className="startup"><Brand/><ErrorNotice error={failure} retry={refreshSession}/>{!failure&&<Loading/>}</div>:!user?Login?<Login/>:<Empty title="Welcome">The account plugin is not available.</Empty>:<>
       {slots('shell:effect:').map(([id,Effect])=><Effect key={`${user.id}:${id}`}/>)}
       {menu&&<button className="sidebar-scrim" aria-label="Close navigation" onClick={()=>setMenu(false)}/>}
