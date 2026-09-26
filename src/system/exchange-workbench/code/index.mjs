@@ -5,7 +5,7 @@ export const provides=['exchange']
 const now=()=>new Date().toISOString(),copy=value=>structuredClone(value)
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status})}
 export async function apply(ctx,config={}){
- const schemas=new Map(),peers=new Map(),controllers=new Set(),running=new Set();let disposed=false,timer
+ const schemas=new Map(),peers=new Map(),extensions=new Map(),controllers=new Set(),running=new Set();let disposed=false,timer
  const realm=user=>ctx.get('procurement')?.realm(user)||ctx.get('teams')?.resolveUser(user,'snapshot').id||user.id
  const owner=id=>ctx.accounts.get(id)
  const ownPeers=user=>ctx.store.list(realm(user),'exchange-peers').filter(row=>!row.deleted&&row.sourceRealm===realm(user))
@@ -75,7 +75,7 @@ export async function apply(ctx,config={}){
  const list=user=>{
   const target=realm(user),state=ctx.store.deliveryState(target)
   const thin=row=>{const {envelope,package:packageValue,receipt,...rest}=row;return{...rest,hasReceipt:!!receipt,receiptSummary:receipt?{outcome:receipt.envelope.body.outcome,at:receipt.envelope.body.at,msgId:receipt.envelope.msg_id}:null}}
-  return{realm:target,canManageRoutes:user.id===target,outbox:state.outbox.filter(row=>!row.control).map(thin).reverse(),inbox:state.inbox.filter(row=>!row.control||row.status==='held').map(thin).reverse(),recovery:[...state.outbox.filter(row=>row.controlKind==='resend-request').map(row=>({...thin(row),direction:'outbox'})),...state.inbox.filter(row=>row.controlKind==='resend-request').map(row=>({...thin(row),direction:'inbox'}))].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)),peers:ownPeers(user).map(row=>({...row,paired:row.mode==='local'||ctx.settings.view(owner(row.ownerId),row.configurationId).configuredSecrets.includes('pairingSecret')})),localAccounts:ctx.accounts.list().filter(row=>row.role!=='admin'&&row.id!==target).map(({id,name,role})=>({id,name,role})),capabilities:ctx.store.capabilities,health:ctx.store.health()[target]||{healthy:true,eventCount:0},receiverPath:`${ctx.web.prefix||'/quotagent'}/api/exchange/receive/${encodeURIComponent(target)}`}
+  return{realm:target,extensions:[...extensions.keys()],canManageRoutes:user.id===target,outbox:state.outbox.filter(row=>!row.control).map(thin).reverse(),inbox:state.inbox.filter(row=>!row.control||row.status==='held').map(thin).reverse(),recovery:[...state.outbox.filter(row=>row.controlKind==='resend-request').map(row=>({...thin(row),direction:'outbox'})),...state.inbox.filter(row=>row.controlKind==='resend-request').map(row=>({...thin(row),direction:'inbox'}))].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)),peers:ownPeers(user).map(row=>({...row,paired:row.mode==='local'||ctx.settings.view(owner(row.ownerId),row.configurationId).configuredSecrets.includes('pairingSecret')})),localAccounts:ctx.accounts.list().filter(row=>row.role!=='admin'&&row.id!==target).map(({id,name,role})=>({id,name,role})),capabilities:ctx.store.capabilities,health:ctx.store.health()[target]||{healthy:true,eventCount:0},receiverPath:`${ctx.web.prefix||'/quotagent'}/api/exchange/receive/${encodeURIComponent(target)}`}
  }
  const detail=(user,id,direction='outbox')=>{const row=ctx.store.get(realm(user),direction==='inbox'?'exchange-inbox':'exchange-outbox',id);if(!row)fail('Delivery not found.',404);return row}
  const retry=async(user,id)=>{detail(user,id);const result=await ctx.store.retryDelivery(realm(user),id);return{ok:true,...result}}
@@ -93,7 +93,9 @@ export async function apply(ctx,config={}){
  }}
  timer=setInterval(()=>void tick(),config.retryIntervalMs||5000);timer.unref?.()
  ctx.effect(()=>()=>{disposed=true;clearInterval(timer);for(const controller of controllers)controller.abort();for(const dispose of schemas.values())dispose();schemas.clear();peers.clear()})
- ctx.provide('exchange',{list,savePeer,removePeer,receive,retry,detail,exportPackage,recheck,resolveConflict})
+ const extension=definition=>{if(extensions.has(definition.id))throw new Error('Duplicate exchange extension '+definition.id);extensions.set(definition.id,definition);return()=>extensions.delete(definition.id)}
+ const preview=async(user,packageValue)=>{const target=realm(user);if(packageValue?.channel!=='local')await requirePair(target,packageValue);return ctx.store.inspectPackage(target,packageValue)}
+ ctx.provide('exchange',{list,savePeer,removePeer,receive,retry,detail,exportPackage,recheck,resolveConflict,extension,preview,workspace:realm})
  const route=(method,path,handler,options={})=>ctx.effect(()=>ctx.web.route(method,path,handler,options))
  route('GET','/exchange',({user})=>list(user))
  route('POST','/exchange/peers',({user,body})=>savePeer(user,body),{capability:'plugins:manage'})

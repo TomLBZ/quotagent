@@ -15,7 +15,7 @@ routes or fixed shared-folder layouts.
 | FR-LEDGER-002 | Effective projection by sequence/time, current replay parity | Full and incremental historical cuts match recorded versions |
 | FR-QEP-002 | Domain-selected commitment envelope bound to human ledger proof and public semantic revision | Missing/tampered approval cannot project a commitment; draft facts create no obligation |
 | FR-QEP-003, FR-QEP-004, FR-QEP-008 | Durable pending/held outbox/inbox, stable-byte retry, no sequence skip, receipt recovery | Crash after send and after receive; duplicate and missing-sequence transfer; restart still applies once |
-| FR-INTEG-001, FR-INTEG-002, DOMAIN-012 | Atomic portable package and real HTTP handoff, signed receipt | Independent store roots transport actual QEP bytes; file and HTTP paths produce verified delivery |
+| FR-INTEG-001, FR-INTEG-002 | Atomic portable package and real HTTP handoff, signed receipt | Independent store roots transport actual QEP bytes; file and HTTP paths produce verified delivery |
 | FR-QEP-007 | Base/mine/theirs, field authority, explained conflict and bilateral human decision | Ordinary authority merge keeps provenance; commitment conflict cannot resolve unilaterally |
 | FR-INTEG-004 | Self-described bridge version/capabilities and actionable typed errors | Incompatible handshake adds zero events; unsupported commit is unavailable and diagnosed |
 | SUPPLEMENT-008 | Atomic expected-revision write and domain GUI adoption | Two clients editing one revision: second receives current conflict, no silent overwrite |
@@ -24,8 +24,7 @@ routes or fixed shared-folder layouts.
 
 Preserve existing FR-LEDGER-001/003/004 and FR-QEP-001/005/006 invariants: append-only
 hash chain, kernel dedup/signature/version checks, no silent mandatory-feature
-removal. Existing native email transport already owns FR-INTEG-003; attaching a
-QEP package does not change its approval or retry semantics.
+removal. Native mail owns account IMAP/SMTP. [QEP email delivery](../../exchange-mail/requirements.md) owns DOMAIN-012 and the mail carriage portion of FR-INTEG-003; original signed attachments use the existing email human-review gate.
 
 Service checks: `node src/system/workspace-store/tests/exchange.mjs` must mount real
 native store instances and QEP/Python ledger kernels, exercise the policy callback,
@@ -118,3 +117,16 @@ Commands: `node src/system/workspace-store/tests/resend.mjs` and
 groups and GUI three groups passed; scoped results and limits are in
 [recovery evidence](../../../../docs/work/evidence/qep-resend-2026-09-26/README.md).
 Final public verification remains pending.
+
+## Optional email extension
+
+`exchange.extension({id})` returns a disposer and gates delivery action slots.
+`exchange.preview(user,package)` checks the selected workspace's pairing and the
+existing adapter's signature/recipient inspection without importing a domain record.
+`exchange.workspace(user)` exposes the already authorized selected realm. These
+hooks add no email business logic to the workbench. Independent mail carriage is
+owned by `system/exchange-mail`; SMTP acceptance never substitutes for QEP receipt.
+
+The current browser fixtures create unique labelled accounts through GUI, define
+explicit structured scopes and pair their own realms; they do not alter demo routes.
+The recovery fixture similarly authors its own scoped RFQ before sending the gap.

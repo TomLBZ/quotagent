@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "at": "2026-09-26T05:25:20.422Z",
+  "base": "http://127.0.0.1:8650/quotagent/",
+  "title": "[Exchange fixture] 2026-09-26T05:24:59.323Z",
+  "rfqId": "rfq-7b78bccf-0f1",
+  "checks": [
+    "Both business accounts configure private paired portable routes through GUI; contractor publication queues, exact package download/import reveals supplier request, signed receipt returns delivered",
+    "Failed HTTP handoff preserves approved business record; GUI corrects endpoint and retries exact signed bytes, with recipient receipt verified",
+    "Independent labelled QEP supplier fixture sends concurrent committed quote branches; GUI shows base/current/incoming differences, requires exact human confirmation, and retains applied receipt",
+    "Accepted history reconstructed through GUI, receipt retained after reload, mobile delivery screen fits viewport; separate admin sees storage metadata without private record titles"
+  ],
+  "jsErrors": []
+}

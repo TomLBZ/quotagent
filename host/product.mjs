@@ -27,6 +27,7 @@ import * as aiEngine from '../src/domain/ingestion-engines/code/ai.mjs'
 import * as notifications from '../src/system/notifications/code/index.mjs'
 import * as actions from '../src/system/action-center/code/index.mjs'
 import * as mail from '../src/system/mail/code/product.mjs'
+import * as qepMail from '../src/system/exchange-mail/code/index.mjs'
 import * as telegram from '../src/system/telegram/code/product.mjs'
 import * as connections from '../src/system/agent-connections/code/index.mjs'
 import * as workflows from '../src/system/agent-workflows/code/index.mjs'
@@ -78,6 +79,7 @@ for(const [id,module,label,file] of [
   ['ingestion-ai',aiEngine,'AI line-item extraction','ai'],
 ]) await mount(id,module,{}, {name:label,repoId:'domain/ingestion-engines',source:`src/domain/ingestion-engines/code/${file}.mjs`,configurationId:id==='ingestion-ai'?'ai':'ingestion'})
 await mount('mail',mail,{}, {name:'Email inbox and SMTP',repoId:'system/mail',configurationId:'mail'})
+await mount('exchange-mail',qepMail,{}, {name:'Signed exchange by email',repoId:'system/exchange-mail',configurationId:'qep-mail'})
 await mount('telegram',telegram,{apiBase:process.env.QUOTAGENT_TELEGRAM_API_BASE}, {name:'Telegram messaging',repoId:'system/telegram',configurationId:'telegram'})
 await mount('agent-connections',connections,{}, {name:'MCP and A2A connections',repoId:'system/agent-connections'})
 await mount('agent-workflows',workflows,{}, {name:'Agent workroom and memory',repoId:'system/agent-workflows',configurationId:'workflows'})

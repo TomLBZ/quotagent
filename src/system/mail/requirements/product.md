@@ -2,12 +2,9 @@
 <!-- budget: 4096 bytes, hard -->
 
 Owner: `code/product.mjs`, `code/product-transport.mjs`, `client/mail.jsx` and `client/mail.css`.
-The manifest points to this plugin; legacy Python/view modules are not the current entry. Requires store, settings, accounts, web, files, ingestion, actions and notifications.
+Native manifest entry; requires store, settings, accounts, web, files, ingestion, actions and notifications.
 
-The Email page configures an account-owned IMAP/SMTP connection, tests authentication without sending,
-syncs inbox and an optional sent folder, searches local messages, composes/replies with attachments,
-and opens a human send review. The plugin contributes its own readable frozen email preview through
-`action-preview:mail.send`; exact recipients, subject, body and files are visible before approval.
+Email configures account IMAP/SMTP, tests without sending, syncs inbox/optional sent folder, searches, composes and replies with attachments, then opens human review. Its frozen preview uses `action-preview:mail.send`; exact recipients, subject, body and files are visible before approval.
 
 `ctx.mail.status/list/get/test/sync/draft/propose/ingest` are provided by the plugin. Routes are
 `GET /mail`, `GET /mail/:id`, `POST /mail/test`, `/mail/sync`, `/mail/draft`, `/mail/:id/review`,
@@ -19,8 +16,7 @@ It does not mirror remote deletion or provide mailbox management/full archive ba
 Configuration ID `mail`, scope `account`: IMAP/SMTP host, port, encryption, username, app password or
 OAuth access token; sender name/address; inbox/sent folder; optional automatic check interval and message
 limit. There is no credential inheritance between accounts. Password/token values are masked; token
-refresh and provider OAuth authorization are not implemented. Providers must allow the configured
-IMAP/SMTP authentication method. Sent-folder names vary by provider and are explicitly configurable.
+refresh and provider OAuth authorization are not implemented. Providers must allow IMAP/SMTP. Sent folders are configurable.
 
 Transport uses pinned ImapFlow and Nodemailer. IMAP source MIME is parsed with mailparser; originals
 and attachments are saved with `ctx.files` and can enter the existing ingestion page. Attachment/file
@@ -37,12 +33,10 @@ Unconfirmed delivery is recorded as uncertain and is never retried automatically
 source bodies, attachment IDs, drafts and review links are account-ledger records (`mail/*` events).
 In-app notifications link new mail and send results to the mailbox. Email digests are optional ([contract](digest.md)). Pollers, sockets, routes, settings, tools and action handlers are disposable effects.
 
+Structured MIME delivery-status reports retain external source, exact returned Message-ID and recipient/action/status; unknown formats stay ordinary source mail. `mail.extension({id})` returns a disposer and exposes generic attachment/message UI slots. Signed package handling belongs to [QEP email delivery](../../exchange-mail/requirements.md).
+
 Evidence:
-- `node src/system/mail/tests/product-smoke.mjs`: real loopback IMAP/SMTP plus Telegram HTTP fixture,
-  actual native settings/store/actions/notifications, deduplication, attachment ingestion, no-send proposal,
-  approved send, repeated approval, stale draft refusal, ownership, masked credentials and disposal.
-- `node src/system/mail/tests/product-fixture-server.mjs`: starts loopback-only fictitious services;
-  never forwards. Connection details/receipts are written under `tmp/product-evidence/external-connections`.
-- `BASE_URL=http://127.0.0.1:8620/quotagent/ node src/system/mail/tests/product-browser.mjs`:
-  GUI-only account setup, receive/extract/reply/review/approve and notifications. The Telegram host must
-  point its fixture-only `apiBase` at the printed loopback server. Screenshots/report record fixture scope.
+- `node src/system/mail/tests/product-smoke.mjs`: actual loopback IMAP/SMTP and Telegram; native settings/store/actions/notifications, dedup, files/ingestion, no-send proposal, approval, stale/ownership refusal and disposal.
+- `node src/system/mail/tests/product-fixture-server.mjs`: fictitious loopback services, never forwards; details in `tmp/product-evidence/external-connections`.
+- `BASE_URL=http://127.0.0.1:8620/quotagent/ node src/system/mail/tests/product-browser.mjs`: GUI setup, receive/extract/reply/review/approve and notifications. Host Telegram uses the printed fixture `apiBase`. Reports explicitly record fixture scope.
+- [QEP/DSN protocol and GUI evidence](../../../../docs/work/evidence/qep-mail-2026-09-26/README.md).

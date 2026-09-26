@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "at": "2026-09-26T05:29:50.191Z",
+  "root": "/workspace/projects/quotagent/tmp/qep-mail-8L019F",
+  "checks": [
+    "Actual published QEP package becomes a private editable mail draft; propose sends zero; human approval sends once over SMTP and MIME attachment bytes are identical; SMTP acceptance leaves QEP queued",
+    "Actual IMAP sync stores original MIME and signed attachment; preview applies no business record; explicit verified import validates domain and duplicate import applies once",
+    "Supplier prepares original signed receipt reply, separately approves SMTP, buyer receives through IMAP and imports the verified receipt before QEP becomes delivered",
+    "Another account cannot inspect the mail attachment; explicit package-size refusal preserves source file and sends nothing",
+    "Structured MIME bounce matches exact outgoing Message-ID and recipient with source references; unmatched report stays unlinked and neither report rewrites signed QEP acceptance or triggers a resend",
+    "Mail carries an out-of-order signed message, reviewed signed missing-message request and separately reviewed exact original replay; importing original bytes releases the held successor and fulfills recovery without generating a new commercial commitment",
+    "Native restart preserves exact mail/QEP/report linkage; independent plugin unload removes routes/service and both GUI extension IDs while ordinary retained mail remains readable"
+  ],
+  "smtpSends": {
+    "buyer": 2,
+    "supplier": 3
+  },
+  "scope": "Only fictitious independent native accounts and loopback IMAP/SMTP; no external service or real commercial recipient."
+}

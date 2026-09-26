@@ -204,6 +204,12 @@
       "contract": "src/system/workspace-styles/requirements/README.md",
       "status": "current-owner",
       "runtime": "native-or-owner-tooling"
+    },
+    "system/exchange-mail": {
+      "root": "src/system/exchange-mail",
+      "contract": "src/system/exchange-mail/requirements.md",
+      "status": "current-owner",
+      "runtime": "native-or-owner-tooling"
     }
   },
   "sources": {
@@ -3959,7 +3965,7 @@
       "owner": "domain/commercial-workbench",
       "contract": "src/domain/commercial-workbench/requirements/README.md",
       "disposition": "retain-outcome",
-      "currentOutcome": "Commercial workbench implements sourced weighted five-factor score, visible contributions and exact ranking; supplier receives no competitor rank. Deterministic improvement guidance and historical auto-normalized/clamped weights are not implemented.",
+      "currentOutcome": "Commercial workbench shows source-backed weighted contributions and exact ranking, saved normalized/clamped weight feedback, and deterministic improvement guidance with explicit fixed-peer assumptions. Supplier projections reveal no competitor rank.",
       "status": "verified",
       "reason": "Native6/GUI6 verify source-path text advisories without score changes, contribution-based improvement guidance with fixed-peer limits and explicit saved normalized weight feedback.",
       "acceptance": [
@@ -13823,24 +13829,24 @@
           "line": null
         }
       ],
-      "owner": "system/workspace-store",
-      "contract": "src/system/workspace-store/requirements/README.md",
+      "owner": "system/exchange-mail",
+      "contract": "src/system/exchange-mail/requirements.md",
       "disposition": "retain-outcome",
-      "currentOutcome": "Export portable signed QEP JSON and recover delivery through explicit file import or HTTP retry.",
-      "status": "pending-review",
-      "reason": "Same-host QEP works; standalone file/package handoff and queued relay retries are not connected. Mail attachment intake is not signed QEP import.",
+      "currentOutcome": "Native exchange-mail prepares private editable mail with exact signed QEP packages, previews pairing/signatures, explicitly imports received attachments and prepares separately reviewed signed receipt or recovery replies. SMTP acceptance, reported bounce and QEP delivery stay separate; original IDs/approvals/resources survive exact replay.",
+      "status": "verified",
+      "reason": "Native exchange-mail prepares private editable mail with exact signed QEP packages, previews pairing/signatures, explicitly imports received attachments and prepares separately reviewed signed receipt or recovery replies. SMTP acceptance, reported bounce and QEP delivery stay separate; original IDs/approvals/resources survive exact replay.",
       "acceptance": [
         {
-          "command": "BASE_URL=http://127.0.0.1:8646/quotagent/ node src/system/exchange-workbench/tests/browser.mjs",
-          "evidence": "docs/work/evidence/exchange-2026-09-26/gui-local.json",
-          "scope": "Four isolated local GUI groups; all writes through visible controls. Final public check pending.",
-          "observed": "Original package file and signed receipt cross independent parties through GUI; HTTP failure/retry completes."
+          "command": "node src/system/exchange-mail/tests/native.mjs",
+          "evidence": "docs/work/evidence/qep-mail-2026-09-26/native.json",
+          "scope": "Seven groups with independent native stores and actual loopback SMTP/IMAP, including mail-carried gap control/original replay; no internet delivery or provider OAuth claim",
+          "observed": "Seven groups passed; exact package/receipt/recovery, domain projection only after import, size/source refusal, bounce association, restart/disposal."
         },
         {
-          "command": "node src/system/workspace-store/tests/exchange.mjs",
-          "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
-          "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
-          "observed": "Real independent roots validate original package/signature and retain delivery state."
+          "command": "BASE_URL=http://127.0.0.1:8650/quotagent/ node src/system/exchange-mail/tests/browser.mjs",
+          "evidence": "docs/work/evidence/qep-mail-2026-09-26/browser.json",
+          "scope": "Four local GUI groups; independently registered fictional accounts and actual loopback SMTP/IMAP. Public acceptance remains separate.",
+          "observed": "Four groups passed, zero JavaScript errors, eight screenshots; separately reviewed send and reply, actual receipt, linked DSN, reload and390px."
         }
       ],
       "implementation": {
@@ -13850,10 +13856,10 @@
           "src/system/mail/code/product.mjs"
         ],
         "auditEvidence": [],
-        "group": "G4"
+        "group": "G4",
+        "auditReason": "Same-host QEP works; standalone file/package handoff and queued relay retries are not connected. Mail attachment intake is not signed QEP import."
       },
-      "resolution": "Native GUI can download/import original packages and receipts. A person can carry those files by email; the mail plugin does not currently identify, send or receive QEP packages as a QEP transport.",
-      "remaining": "Direct QEP-aware mail delivery and recovery remains a compatible missing transport outcome; current manual email carriage is not equivalent. Original integration-map/protocol source clauses must guide this adapter, and ordinary email attachment ingestion does not prove signed QEP import."
+      "resolution": "Native exchange-mail prepares private editable mail with exact signed QEP packages, previews pairing/signatures, explicitly imports received attachments and prepares separately reviewed signed receipt or recovery replies. SMTP acceptance, reported bounce and QEP delivery stay separate; original IDs/approvals/resources survive exact replay."
     },
     {
       "id": "NFR-REL-001",

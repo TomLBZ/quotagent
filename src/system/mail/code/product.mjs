@@ -2,6 +2,7 @@ import {randomUUID,createHash} from 'node:crypto'
 import {createRequire} from 'node:module'
 import {createTransport} from './product-transport.mjs'
 import * as digest from './digest.mjs'
+import {deliveryReport} from './delivery-report.mjs'
 const require=createRequire(new URL('../../../../host/package.json',import.meta.url))
 const {simpleParser}=require('mailparser')
 export const name='mail'
@@ -66,7 +67,7 @@ export async function apply(ctx,config={}) {
             const id=`mail-${hash(`${key}:${folder}:${result.uidValidity}:${message.uid}`)}`
             if(ctx.store.get(user.id,'mail-messages',id))continue
             if(message.tooLarge){warnings.push(`Skipped message UID ${message.uid}: original exceeds 20 MB.`);continue}
-            const parsed=await simpleParser(message.source,{skipHtmlToText:false,skipTextToHtml:true,skipImageLinks:true})
+            const parsed=await simpleParser(message.source,{skipHtmlToText:false,skipTextToHtml:true,skipImageLinks:true,keepDeliveryStatus:true})
             const attachments=[],messageWarnings=[];let originalFileId=null
             try {originalFileId=(await ctx.files.put(user,{filename:`email-${message.uid}.eml`,mime:'message/rfc822',buffer:message.source})).id}
             catch(error){messageWarnings.push(`Original: ${error.message}`)}
@@ -78,7 +79,7 @@ export async function apply(ctx,config={}) {
               messageId:parsed.messageId||'',inReplyTo:parsed.inReplyTo||'',references:parsed.references||[],from:parsed.from?.text||'',
               fromAddresses:(parsed.from?.value||[]).map(address=>address.address),replyTo:(parsed.replyTo?.value||[]).map(address=>address.address),
               to:(parsed.to?.value||[]).map(address=>address.address),cc:(parsed.cc?.value||[]).map(address=>address.address),subject:parsed.subject||'(No subject)',
-              body:parsed.text||'',attachments,originalFileId,warnings:messageWarnings,flags:message.flags||[],read:message.flags?.includes('\\Seen')||false,
+              body:parsed.text||'',attachments,originalFileId,deliveryReport:deliveryReport(parsed,originalFileId),warnings:messageWarnings,flags:message.flags||[],read:message.flags?.includes('\\Seen')||false,
               createdAt:time(),receivedAt:parsed.date?.toISOString()||message.date||time()}
             await save(user,'mail-messages',mail,'mail/message-received',`transport:${user.id}`);added.push(mail)
           }
@@ -160,9 +161,10 @@ export async function apply(ctx,config={}) {
       throw Object.assign(new Error(`Email delivery was not confirmed. Check your provider before sending again. ${error.message}`),{deliveryUnknown:true})
     }
   }}))
-  ctx.provide('mail',{status,list,get:record,sync,test,draft,propose,ingest})
+  const extensions=new Map(),extension=definition=>{if(extensions.has(definition.id))throw new Error('Duplicate mail extension '+definition.id);extensions.set(definition.id,definition);return()=>extensions.delete(definition.id)}
+  ctx.provide('mail',{status,list,get:record,sync,test,draft,propose,ingest,extension})
   ctx.effect(()=>ctx.web.contribute({id:'mail',label:'Email',icon:'mail',roles:['contractor','supplier'],order:52}))
-  ctx.effect(()=>ctx.web.route('GET','/mail',({user})=>({status:status(user),messages:list(user),files:ctx.files.list(user)})))
+  ctx.effect(()=>ctx.web.route('GET','/mail',({user})=>({status:status(user),messages:list(user),files:ctx.files.list(user),extensions:[...extensions.keys()]})))
   ctx.effect(()=>ctx.web.route('GET','/mail/:id',({user,params})=>({message:record(user,params.id)})))
   const route=(path,handler)=>ctx.effect(()=>ctx.web.route('POST',path,handler,{capability:'workspace:write'}))
   route('/mail/test',({user,body})=>test(user,body.kind))

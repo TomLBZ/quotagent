@@ -96,7 +96,7 @@ export async function apply(ctx, config = {}) {
   put:(realm,collection,record,options={})=>request({op:'put',realm,collection,record,...options}),append:(realm,type,body,options={})=>request({op:'append',realm,type,body,...options}),
   exchangePolicy:policy=>register(policies,policy),exchangeTransport:transport=>register(transports,transport),
   configurePeer:(realm,peer,channel,secret)=>request({op:secret?'configure-peer':'clear-peer',realm,peer,channel,secret}),
-  package:exportPackage,markDelivery:(realm,id,options)=>request({op:'attempt',realm,id,...options}),deliveryState:realm=>({outbox:list(realm,'exchange-outbox'),inbox:list(realm,'exchange-inbox')}),receivePackage,retryDelivery,
+  package:exportPackage,inspectPackage:(realm,packageValue)=>request({op:'inspect-package',realm,package:packageValue}),markDelivery:(realm,id,options)=>request({op:'attempt',realm,id,...options}),deliveryState:realm=>({outbox:list(realm,'exchange-outbox'),inbox:list(realm,'exchange-inbox')}),receivePackage,retryDelivery,
   async exchange(from,to,collection,record,options={}){
    const policy=policyFor(collection),metadata=policy?await policy.prepare({from,to,collection,record,options}):{type:options.type||'workspace/record-transferred',eventClass:options.eventClass||'fact',refs:options.refs||{},approvals:options.approvals||[]}
    let channel=options.channel||'local',manual=!!options.manual

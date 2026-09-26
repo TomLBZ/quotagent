@@ -4,9 +4,10 @@ import {createRequire} from 'node:module'
 import {once} from 'node:events'
 const require=createRequire(new URL('../../../../host/package.json',import.meta.url))
 const {SMTPServer}=require('smtp-server')
-export async function localServices({source,attachment=Buffer.from('Description,Quantity,Unit,Unit Price\nValve,4,each,12.50')}={}) {
+export async function localServices({source,mailboxMessages,onSmtp,attachment=Buffer.from('Description,Quantity,Unit,Unit Price\nValve,4,each,12.50')}={}) {
   const sockets=new Set(),smtpMessages=[],telegramSent=[],requests=[]
   const raw=source||Buffer.from('From: Vendor <vendor@fixture.invalid>\r\nTo: buyer@fixture.invalid\r\nSubject: Fixture quotation\r\nMessage-ID: <fixture-inquiry@fixture.invalid>\r\nDate: Fri, 25 Sep 2026 10:00:00 +0000\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n4 each Valve @ 12.50\r\n')
+  const folders=mailboxMessages?{INBOX:[...mailboxMessages],Sent:[]}:{INBOX:[raw],Sent:[raw]}
   const imap=netServer(socket=>{
     sockets.add(socket);socket.on('close',()=>sockets.delete(socket));socket.setEncoding('utf8');socket.write('* OK Fixture IMAP ready\r\n')
     let buffer='',authTag=null,folder='INBOX'
@@ -17,12 +18,14 @@ export async function localServices({source,attachment=Buffer.from('Description,
       if(command==='CAPABILITY')socket.write(`* CAPABILITY IMAP4rev1 AUTH=PLAIN SASL-IR\r\n${tag} OK CAPABILITY completed\r\n`)
       else if(command==='AUTHENTICATE'){if(parts.length>1)ok();else{authTag=tag;socket.write('+ \r\n')}}
       else if(command==='LOGIN')ok()
+      else if((command==='LIST'||command==='LSUB')&&args==='"" ""')socket.write(`* LIST (\\Noselect) "/" ""\r\n${tag} OK LIST completed\r\n`)
       else if(command==='LIST'||command==='LSUB')socket.write(`* LIST (\\HasNoChildren) "/" "INBOX"\r\n* LIST (\\HasNoChildren \\Sent) "/" "Sent"\r\n${tag} OK LIST completed\r\n`)
-      else if(command==='EXAMINE'||command==='SELECT'){folder=args.replace(/^"|"$/g,'');socket.write(`* FLAGS (\\Seen)\r\n* 1 EXISTS\r\n* 0 RECENT\r\n* OK [UIDVALIDITY 1234] UIDs valid\r\n* OK [UIDNEXT 2] Next UID\r\n${tag} OK [READ-ONLY] ${folder} selected\r\n`)}
-      else if(command==='UID'&&parts[0]?.toUpperCase()==='SEARCH')socket.write(`* SEARCH 1\r\n${tag} OK SEARCH complete\r\n`)
+      else if(command==='EXAMINE'||command==='SELECT'){folder=args.replace(/^"|"$/g,'');const count=(folders[folder]||[]).length;socket.write(`* FLAGS (\\Seen)\r\n* ${count} EXISTS\r\n* 0 RECENT\r\n* OK [UIDVALIDITY 1234] UIDs valid\r\n* OK [UIDNEXT ${count+1}] Next UID\r\n${tag} OK [READ-ONLY] ${folder} selected\r\n`)}
+      else if(command==='UID'&&parts[0]?.toUpperCase()==='SEARCH')socket.write(`* SEARCH ${(folders[folder]||[]).map((_,i)=>i+1).join(' ')}\r\n${tag} OK SEARCH complete\r\n`)
       else if(command==='UID'&&parts[0]?.toUpperCase()==='FETCH'){
-        if(/BODY(?:\.PEEK)?\[/i.test(args)){socket.write(`* 1 FETCH (UID 1 BODY[] {${raw.length}}\r\n`);socket.write(raw);socket.write(`)\r\n${tag} OK FETCH completed\r\n`)}
-        else socket.write(`* 1 FETCH (UID 1 FLAGS () INTERNALDATE "25-Sep-2026 10:00:00 +0000" RFC822.SIZE ${raw.length})\r\n${tag} OK FETCH completed\r\n`)
+        const messages=folders[folder]||[],wanted=String(parts[1]||'').split(',').flatMap(range=>{const [left,right]=range.split(':').map(value=>value==='*'?messages.length:Number(value));return right?Array.from({length:Math.max(0,right-left+1)},(_,i)=>left+i):[left]})
+        for(const uid of wanted){const raw=messages[uid-1];if(!raw)continue;if(/BODY(?:\.PEEK)?\[/i.test(args)){socket.write(`* ${uid} FETCH (UID ${uid} BODY[] {${raw.length}}\r\n`);socket.write(raw);socket.write(')\r\n')}else socket.write(`* ${uid} FETCH (UID ${uid} FLAGS () INTERNALDATE "25-Sep-2026 10:00:00 +0000" RFC822.SIZE ${raw.length})\r\n`)}
+        socket.write(`${tag} OK FETCH completed\r\n`)
       }
       else if(command==='LOGOUT'){socket.write(`* BYE Closing\r\n${tag} OK LOGOUT completed\r\n`);socket.end()}
       else ok()
@@ -31,7 +34,7 @@ export async function localServices({source,attachment=Buffer.from('Description,
   imap.listen(0,'127.0.0.1');await once(imap,'listening')
   const smtp=new SMTPServer({secure:false,logger:false,authOptional:true,disabledCommands:['STARTTLS'],
     onAuth(auth,session,callback){callback(null,{user:auth.username})},
-    onData(stream,session,callback){const parts=[];stream.on('data',chunk=>parts.push(chunk));stream.on('end',()=>{smtpMessages.push({envelope:session.envelope,source:Buffer.concat(parts)});callback(null,'Fixture accepted')})}})
+    onData(stream,session,callback){const parts=[];stream.on('data',chunk=>parts.push(chunk));stream.on('end',()=>{const message={envelope:session.envelope,source:Buffer.concat(parts)};smtpMessages.push(message);Promise.resolve(onSmtp?.(message)).then(()=>callback(null,'Fixture accepted'),callback)})}})
   await new Promise(resolve=>smtp.listen(0,'127.0.0.1',resolve))
   const updates=[{update_id:1,message:{message_id:10,date:1790330400,chat:{id:4242,type:'private',first_name:'Fixture supplier'},from:{id:4242,first_name:'Fixture',last_name:'Supplier'},text:'Please quote 4 each Valve.'}},
     {update_id:2,message:{message_id:11,date:1790330401,chat:{id:4242,type:'private',first_name:'Fixture supplier'},from:{id:4242,first_name:'Fixture',last_name:'Supplier'},caption:'Offer attached',document:{file_id:'fixture-file',file_unique_id:'fixture-unique',file_name:'telegram-offer.csv',mime_type:'text/csv',file_size:attachment.length}}}]
@@ -50,6 +53,6 @@ export async function localServices({source,attachment=Buffer.from('Description,
     res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({ok:true,result}))
   })
   telegram.listen(0,'127.0.0.1');await once(telegram,'listening')
-  return {imapPort:imap.address().port,smtpPort:smtp.server.address().port,telegramBase:`http://127.0.0.1:${telegram.address().port}`,smtpMessages,telegramSent,requests,updates,
+  return {imapPort:imap.address().port,smtpPort:smtp.server.address().port,telegramBase:`http://127.0.0.1:${telegram.address().port}`,smtpMessages,telegramSent,requests,updates,appendMail:(value,folder='INBOX')=>{if(!folders[folder])folders[folder]=[];folders[folder].push(Buffer.from(value));return folders[folder].length},
     async close(){for(const socket of sockets)socket.destroy();await Promise.all([new Promise(resolve=>imap.close(resolve)),new Promise(resolve=>smtp.close(resolve)),new Promise(resolve=>telegram.close(resolve))])}}
 }
