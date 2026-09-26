@@ -18,11 +18,12 @@ are superseded mechanics, not missing business features.
 | Exact currency/role authority with unknown, zero and explicit unlimited | Native tests exercise threshold, currency mismatch and higher-role escalation; GUI shows complete bands and why a decision waits |
 | Independent review and application of authority policy | Self-approval refused; nominated peer sees exact proposed changes; only reviewed revision can apply |
 | Assignment, transfer, follow and comments with mentions | Object-scoped GUI thread/assignee survive reload; notify only known active team members; unknown mentions are explicit |
-| Personal today view | Counts/rows link to actual own assignments, mentions and pending decisions; clear zero-data state |
+| Personal today view | My work, assigned by me, following, mentions, pending decisions and entered RFQ deadlines link to actual source records; clear zero-data state |
+| Configurable authority roles and complete conversations | Add/rename/remove roles through independently reviewed policy; existing members prevent removal of their role; explicit load-more exposes all comments |
 | Account and plugin lifecycle | Selection persists across browser restart; unload removes routes/tools/UI/jobs without orphaned notifications or losing durable business facts |
 
 `teams.resolveUser(user,operation,input?)` authorizes membership and returns the
-business identity with `actorId` for procurement. `teams.scope/authorize/roster`
+business identity with `actorId` for procurement. `teams.scope/authority/roster`
 provide source-backed account context. Policy and collaboration APIs expose owned
 records and exact next steps; model tools read context or propose changes only.
 

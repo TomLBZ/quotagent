@@ -4,6 +4,7 @@ import { mkdirSync,mkdtempSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as storePlugin from '../../workspace-store/code/index.mjs'
 import * as teamsPlugin from '../code/index.mjs'
+import * as actionPlugin from '../../action-center/code/index.mjs'
 import * as procurementPlugin from '../../../domain/procurement/code/index.mjs'
 const require=createRequire(new URL('../../../../host/package.json',import.meta.url)),{Context}=require('cordis')
 const users=[
@@ -20,7 +21,7 @@ const mount=async(module,config)=>{const fiber=await ctx.plugin(module,config);a
 const checks=[]
 try{
  await mount({name:'team-test-services',apply(child){child.provide('accounts',{get:id=>structuredClone(users.find(user=>user.id===id)),list:()=>structuredClone(users),can:user=>!user.permissions?.includes('workspace:read-only')});child.provide('web',{route:(...args)=>add(routes,args),contribute:item=>add(nav,item)});child.provide('notifications',{push:async(user,input)=>{notices.push({user:user.id,...input});return input}})}})
- await mount(storePlugin,{root});let teamFiber=await mount(teamsPlugin);const procurementFiber=await mount(procurementPlugin)
+ await mount(storePlugin,{root});let teamFiber=await mount(teamsPlugin);const procurementFiber=await mount(procurementPlugin);await mount(actionPlugin)
  assert.equal(ctx.teams.state(owner).workspaces.length,1)
  assert.throws(()=>ctx.teams.scope(outsider,owner.id),/not an active member/)
  await assert.rejects(async()=>ctx.teams.invite(owner,{email:supplier.email,roleId:'lead'}),/same contractor or supplier/)
@@ -30,7 +31,7 @@ try{
  await ctx.teams.answerInvite(reviewer,invitation.id,true);await ctx.teams.select(reviewer,owner.id)
  assert.equal(ctx.teams.scope(reviewer).team.id,owner.id);assert.equal(ctx.teams.list(reviewer).length,2)
  checks.push('Explicit accepted same-party membership; unrelated and opposite-side accounts remain outside the workspace')
- const drafted=await ctx.procurement.execute(owner,'create-rfq',{title:'Team scoped draft',description:'Shared only with accepted colleagues',items:[{id:'lamp',description:'Lamp',quantity:2,unit:'each'}],supplierIds:[supplier.id],currency:'USD'})
+ const drafted=await ctx.procurement.execute(owner,'create-rfq',{title:'Team scoped draft',description:'Shared only with accepted colleagues',deadline:'2026-10-15',items:[{id:'lamp',description:'Lamp',quantity:2,unit:'each'}],supplierIds:[supplier.id],currency:'USD'})
  assert.equal(ctx.procurement.snapshot(reviewer).rfqs[0].id,drafted.rfq.id);assert.equal(ctx.procurement.snapshot(outsider).rfqs.length,0)
  await ctx.procurement.execute(reviewer,'publish-rfq',{id:drafted.rfq.id,confirmed:true})
  const approved=ctx.store.events(owner.id).findLast(event=>event.type==='procurement/human-approved')
@@ -57,6 +58,8 @@ try{
  await ctx.teams.follow(reviewer,{object:reference})
  const comment=await ctx.teams.comment(owner,{object:reference,text:'Please review @reviewer@local.test and check @missing@local.test.'})
  assert.deepEqual(comment.mentions,[reviewer.id]);assert.deepEqual(comment.unresolved,['missing@local.test'])
+ assert.equal(ctx.teams.state(owner).today.assignedByMe[0].assigneeId,reviewer.id);assert.equal(ctx.teams.state(reviewer).today.following[0].object.id,drafted.rfq.id);assert.equal(ctx.teams.state(owner).today.deadlines[0].deadline,'2026-10-15')
+ ctx.actions.register({kind:'fixture.personal-review',execute:async()=>({ok:true})});const personal=await ctx.actions.propose(owner,{kind:'fixture.personal-review',input:{note:'Private account decision'}});assert.equal(ctx.teams.state(owner).today.decisions[0].id,personal.id);assert.equal(ctx.teams.state(reviewer).today.decisions.length,0)
  assert.equal(ctx.teams.state(reviewer).today.assignments.length,1);assert.equal(ctx.teams.state(reviewer).today.mentions.length,1)
  assert.equal(notices.filter(notice=>notice.sourceId===comment.id).length,1)
  await assert.rejects(async()=>ctx.teams.assign(observer,{object:reference,accountId:owner.id}),/cannot assign/)

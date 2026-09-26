@@ -13,7 +13,7 @@ const defaultRoles=()=>[
 ]
 const defaultPolicy=()=>({currency:'USD',roles:defaultRoles(),timeoutMinutes:1440,timeoutPolicy:'remind'})
 
-export function createTeams({store,accounts,notifications=()=>null,procurement=()=>null}) {
+export function createTeams({store,accounts,notifications=()=>null,procurement=()=>null,actions=()=>null}) {
   const locks=new Map();let disposed=false
   const serial=(id,work)=>{
     if(disposed)return Promise.reject(new Error('Teams is reloading. Please retry.'))
@@ -257,15 +257,19 @@ export function createTeams({store,accounts,notifications=()=>null,procurement=(
     for(const id of targets)if(id&&id!==person.id&&people.some(row=>row.accountId===id))await notify(id,{type:mentions.includes(id)?'mention':'comment',title:`${person.name}: ${ref.title}`,body,sourceId:record.id,dedupeKey:'team-comment:'+record.id+':'+id,link:{workspaceId:team.id,object:ref}})
     return record
   }
-  const state=user=>{
+  const state=(user,{commentsLimit=100}={})=>{
     const person=actor(user),workspaces=list(person)
     let current,selectionWarning=''
     try{current=scope(user)}catch{current=scope(person,person.id);selectionWarning='Your previous team is no longer available. Your own workspace is shown.'}
     const {team,member,role}=current,assignments=rows(team,'team-assignments'),comments=rows(team,'team-comments').sort((a,b)=>b.createdAt.localeCompare(a.createdAt)),following=rows(team,'team-following').filter(row=>row.accountId===person.id&&row.active)
+    const scopeUser={...person,workspaceOwnerId:team.id},data=procurement()?.snapshot(scopeUser)
+    const decisions=(actions()?.list(person)||[]).filter(action=>(action.workspaceId||person.id)===team.id&&(action.canNominate||action.canGrant||action.canSign))
+    const deadlines=(data?.rfqs||[]).filter(rfq=>rfq.status==='published'&&rfq.deadline).map(rfq=>({kind:'rfq',id:rfq.id,title:rfq.title,view:'rfqs',rfqId:rfq.id,deadline:rfq.deadline})).sort((a,b)=>a.deadline.localeCompare(b.deadline))
+    const limit=Math.max(20,Math.min(Number.MAX_SAFE_INTEGER,Number(commentsLimit)||100))
     return {workspace:{...team,members:roster(person,team.id)},workspaces,member,role,selectionWarning,
       invitations:store.list(person.id,'team-inbox').filter(row=>row.side===person.role&&row.status==='pending'),sentInvitations:rows(team,'team-invitations'),
-      policyProposals:rows(team,'team-policy-proposals').sort((a,b)=>b.createdAt.localeCompare(a.createdAt)),assignments,comments:comments.slice(0,200),following,
-      today:{assignments:assignments.filter(row=>row.assigneeId===person.id&&row.status==='open'),mentions:comments.filter(row=>row.mentions.includes(person.id)).slice(0,30),following},
+      policyProposals:rows(team,'team-policy-proposals').sort((a,b)=>b.createdAt.localeCompare(a.createdAt)),assignments,comments:comments.slice(0,limit),commentPage:{shown:Math.min(limit,comments.length),total:comments.length,hasMore:comments.length>limit},following,
+      today:{assignments:assignments.filter(row=>row.assigneeId===person.id&&row.status==='open'),assignedByMe:assignments.filter(row=>row.assignedBy===person.id),mentions:comments.filter(row=>row.mentions.includes(person.id)),following,decisions,deadlines},
       canManage:person.id===team.ownerId||role.canManage}
   }
   const dispose=async()=>{disposed=true;await Promise.allSettled([...locks.values()]);locks.clear()}

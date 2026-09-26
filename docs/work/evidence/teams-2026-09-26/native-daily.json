@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/teams-state-lEpfTB",
+  "checks": [
+    "Explicit accepted same-party membership; unrelated and opposite-side accounts remain outside the workspace",
+    "Shared business ownership and real human actor remain distinct through actual Ledger/QEP publication",
+    "Policy requires independent grant then proposer application; unknown, zero, exact limit, explicit unlimited and currency mismatch retain distinct meanings",
+    "Actual object assignments, completion, following, known mentions and unresolved names drive personal activity without duplicate notices",
+    "Removal blocks access while preserving history; native disposal/reload and single-perspective role changes retain correct isolation"
+  ]
+}
