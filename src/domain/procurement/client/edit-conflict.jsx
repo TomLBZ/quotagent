@@ -1,0 +1,7 @@
+import React from 'react'
+import {Button,ErrorNotice,money} from '../../../system/webui/client/core.jsx'
+export function EditConflict({error,onContinue}){
+ if(error?.code!=='REVISION_CONFLICT'||!error.details?.current)return <ErrorNotice error={typeof error==='string'?error:error?.message}/>
+ const current=error.details.current,record=current.fields||current
+ return <section className="lifecycle-notice" role="alert"><h3>A newer version was saved</h3><p>Your unsaved values are still in the form. Compare the current saved details below, merge the changes you want, and explicitly continue before saving again.</p><details open><summary>Current saved version</summary><p><strong>{record.title||record.name||current.question||'Current record'}</strong></p>{(record.description||record.calendar)&&<p>{record.description||record.calendar}</p>}{current.draftAnswer&&<p>{current.draftAnswer}</p>}{record.items&&<div className="table-scroll"><table><thead><tr><th>Item</th><th>Quantity</th><th>Unit price</th></tr></thead><tbody>{record.items.map(row=><tr key={row.id}><td>{row.description}</td><td>{row.quantity} {row.unit}</td><td>{row.unitPrice===undefined?'Not priced':money(row.unitPrice,record.currency||'USD')}</td></tr>)}</tbody></table></div>}{record.paymentTerms&&<p>Payment: {record.paymentTerms}</p>}{record.deadline&&<p>Deadline: {record.deadline}</p>}</details><Button variant="secondary" onClick={()=>onContinue(error.details.currentRevision)}>I reviewed the current version; keep my edited values</Button></section>
+}

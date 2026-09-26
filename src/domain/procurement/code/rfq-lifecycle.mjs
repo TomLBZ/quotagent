@@ -61,13 +61,14 @@ export function createRfqLifecycle(helpers) {
       if (current.published && current.answer && !previousAnswers.some(row => row.revision === current.rfqRevision && row.answer === current.answer)) {
         previousAnswers.push({ revision: current.rfqRevision, answer: current.answer, broadcastAt: current.broadcastAt || current.answeredAt })
       }
-      let updated = current.rfqRevision === rfqRevision(rfq) ? current : await save(user, 'clarifications', { ...current, reopenRevision: rfqRevision(rfq), reopenedRecipients: [], rfqRevision: rfqRevision(rfq), status: 'open',
+      let updated = current.rfqRevision === rfqRevision(rfq) ? current : await save(user, 'clarifications', { ...current, revision: (current.revision || 0) + 1, reopenRevision: rfqRevision(rfq), reopenedRecipients: [], rfqRevision: rfqRevision(rfq), status: 'open',
         answer: '', draftAnswer: '', answerSource: null, answeredAt: null, broadcastAt: null, deliveredIds: [], previousAnswers,
         reopenedReason: `Request amended to revision ${rfqRevision(rfq)}. Review this question against the new scope.` }, 'procurement/clarification-reopened')
       const recipients = current.published ? rfq.supplierIds : current.askerId === user.id ? [] : [current.askerId]
       for (const id of recipients) {
         if (updated.reopenedRecipients?.includes(id)) continue
-        await exchange(user, id, 'clarifications', ticketPublic(updated, id), 'procurement/clarification-reopened')
+        const delivered = await exchange(user, id, 'clarifications', ticketPublic(updated, id), 'procurement/clarification-reopened')
+        if (delivered?.received === false) continue
         updated = await save(user, 'clarifications', { ...updated, reopenedRecipients: [...(updated.reopenedRecipients || []), id] }, 'procurement/clarification-reopened')
       }
     }
@@ -87,7 +88,7 @@ export function createRfqLifecycle(helpers) {
       const existing = input.id ? get(user, 'projects', input.id) : null
       if (existing && existing.ownerId !== user.id) fail('Only the project owner can edit it.', 403)
       const project = await save(user, 'projects', { ...existing, id: existing?.id || newId('project'), ownerId: user.id,
-        name: required(input.name, 'Project name'), currency: currencyOf(input.currency), calendar: text(input.calendar) }, 'procurement/project-saved', actor)
+        revision: (existing?.revision || 0) + 1, name: required(input.name, 'Project name'), currency: currencyOf(input.currency), calendar: text(input.calendar) }, 'procurement/project-saved', actor, input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {})
       return { ok: true, project }
     }
     if (action === 'save-section') {
@@ -97,7 +98,7 @@ export function createRfqLifecycle(helpers) {
       const existing = input.id ? get(user, 'sections', input.id) : null
       if (existing && (existing.ownerId !== user.id || existing.projectId !== project.id)) fail('This section belongs to another project.', 403)
       const section = await save(user, 'sections', { ...existing, id: existing?.id || newId('section'), ownerId: user.id,
-        projectId: project.id, name: required(input.name, 'Section name'), description: text(input.description) }, 'procurement/section-saved', actor)
+        revision: (existing?.revision || 0) + 1, projectId: project.id, name: required(input.name, 'Section name'), description: text(input.description) }, 'procurement/section-saved', actor, input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {})
       return { ok: true, section }
     }
     if (action === 'save-amendment') {
@@ -112,8 +113,8 @@ export function createRfqLifecycle(helpers) {
       const delta = fieldDelta(rfq, fields)
       if (!delta.length) fail('Change at least one scope field before saving an amendment.')
       const amendment = await save(user, 'rfq-amendments', { ...existing, id: existing?.id || newId('amendment'), ownerId: user.id,
-        rfqId: rfq.id, baseRevision: rfqRevision(rfq), status: 'draft', reason: required(input.reason || existing?.reason, 'Reason for amendment'),
-        fields, delta, deliveredIds: [] }, 'procurement/amendment-drafted', actor)
+        rfqId: rfq.id, revision: (existing?.revision || 0) + 1, baseRevision: rfqRevision(rfq), status: 'draft', reason: required(input.reason || existing?.reason, 'Reason for amendment'),
+        fields, delta, deliveredIds: [] }, 'procurement/amendment-drafted', actor, input.expectedDraftRevision !== undefined ? { expectedRevision: input.expectedDraftRevision } : {})
       return { ok: true, amendment, message: 'Private amendment saved. The published request has not changed.' }
     }
     if (action === 'publish-amendment') {
@@ -135,15 +136,17 @@ export function createRfqLifecycle(helpers) {
       }
       for (const recipient of rfq.supplierIds) {
         if (amendment.deliveredIds.includes(recipient)) continue
-        await exchange(user, recipient, 'rfqs', publicRfq(rfq, recipient), 'procurement/rfq-amended')
-        for (const record of store.list(user.id, 'rfq-versions').filter(row => row.rfqId === rfq.id)) await exchange(user, recipient, 'rfq-versions', publicVersion(record, recipient), 'procurement/rfq-version-recorded')
-        const rebid = { id: `${amendment.id}:${recipient}`, rfqId: rfq.id, supplierId: recipient, fromRevision: amendment.baseRevision,
+        const deliveries = [await exchange(user, recipient, 'rfqs', publicRfq(rfq, recipient), 'procurement/rfq-amended')]
+        for (const record of store.list(user.id, 'rfq-versions').filter(row => row.rfqId === rfq.id)) deliveries.push(await exchange(user, recipient, 'rfq-versions', publicVersion(record, recipient), 'procurement/rfq-version-recorded'))
+        const rebid = store.get(user.id, 'rebid-requests', `${amendment.id}:${recipient}`) || { id: `${amendment.id}:${recipient}`, rfqId: rfq.id, supplierId: recipient, fromRevision: amendment.baseRevision,
           rfqRevision: nextRevision, reason: amendment.reason, status: 'requested', ownerId: user.id }
-        await save(user, 'rebid-requests', rebid, 'procurement/rebid-requested')
-        await exchange(user, recipient, 'rebid-requests', rebid, 'procurement/rebid-delivered')
+        if (!store.get(user.id, 'rebid-requests', rebid.id)) await save(user, 'rebid-requests', rebid, 'procurement/rebid-requested')
+        deliveries.push(await exchange(user, recipient, 'rebid-requests', rebid, 'procurement/rebid-delivered'))
+        if (deliveries.some(result => result?.received === false)) continue
         amendment = await save(user, 'rfq-amendments', { ...amendment, deliveredIds: [...amendment.deliveredIds, recipient] }, 'procurement/amendment-delivery-progress')
       }
       await reopen(user, rfq)
+      if (amendment.deliveredIds.length < rfq.supplierIds.length) return { ok: true, rfq, amendment, deliveryPending: true, message: 'The amendment is recorded, but some suppliers have not acknowledged its delivery. Review Deliveries and retry publication after delivery is resolved.' }
       amendment = await save(user, 'rfq-amendments', { ...amendment, status: 'published', publishedAt: now() }, 'procurement/amendment-published')
       return { ok: true, rfq, amendment, message: `Revision ${nextRevision} delivered to every invited supplier. Previous quotations need rebidding.` }
     }
@@ -166,8 +169,8 @@ export function createRfqLifecycle(helpers) {
       const source = input.faqId ? get(user, 'faqs', input.faqId) : null
       if (source && source.status !== 'active') fail('That FAQ entry is archived.')
       const answer = required(input.answer ?? source?.answer, 'Answer')
-      const updated = await save(user, 'clarifications', { ...ticket, status: 'answered', draftAnswer: answer,
-        answerSource: source ? { kind: 'faq', id: source.id, source: source.source } : { kind: actor.startsWith('agent:') ? 'agent-draft' : 'human', accountId: user.id } }, 'procurement/clarification-answer-drafted', actor)
+      const updated = await save(user, 'clarifications', { ...ticket, revision: (ticket.revision || 0) + 1, status: 'answered', draftAnswer: answer,
+        answerSource: source ? { kind: 'faq', id: source.id, source: source.source } : { kind: actor.startsWith('agent:') ? 'agent-draft' : 'human', accountId: user.id } }, 'procurement/clarification-answer-drafted', actor, input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {})
       return { ok: true, clarification: updated, message: 'Answer saved privately. Review and broadcast it to make it shared guidance.' }
     }
     if (action === 'broadcast-clarification') {
@@ -177,14 +180,18 @@ export function createRfqLifecycle(helpers) {
       const answer = required(ticket.draftAnswer || ticket.answer, 'Answer')
       await approval(user, action, ticket.id, input, { question: ticket.question, answer, rfqRevision: ticket.rfqRevision, supplierIds: rfq.supplierIds })
       ticket = await save(user, 'clarifications', { ...ticket, status: 'broadcasting', published: true, answer,
-        answeredAt: ticket.answeredAt || now(), deliveredIds: ticket.deliveredIds || [] }, 'procurement/clarification-broadcast-started')
+        answeredAt: ticket.answeredAt || now(), broadcastAt: ticket.broadcastAt || now(), deliveredIds: ticket.deliveredIds || [] }, 'procurement/clarification-broadcast-started')
       for (const recipient of rfq.supplierIds) {
         if (ticket.deliveredIds.includes(recipient)) continue
-        await exchange(user, recipient, 'clarifications', ticketPublic(ticket, recipient), 'procurement/clarification-delivered')
+        const delivery = await exchange(user, recipient, 'clarifications', ticketPublic(ticket, recipient), 'procurement/clarification-delivered')
+        if (delivery?.received === false) continue
         ticket = await save(user, 'clarifications', { ...ticket, deliveredIds: [...ticket.deliveredIds, recipient] }, 'procurement/clarification-delivery-progress')
       }
+      if (ticket.deliveredIds.length < rfq.supplierIds.length) return { ok: true, clarification: ticket, deliveryPending: true, message: 'The answer is recorded, but some suppliers have not acknowledged receipt. Review Deliveries before retrying the broadcast.' }
       const completed = { ...ticket, status: 'closed', broadcastAt: ticket.broadcastAt || now() }
-      for (const recipient of rfq.supplierIds) await exchange(user, recipient, 'clarifications', ticketPublic(completed, recipient), 'procurement/clarification-delivered')
+      const deliveries = []
+      for (const recipient of rfq.supplierIds) deliveries.push(await exchange(user, recipient, 'clarifications', ticketPublic(completed, recipient), 'procurement/clarification-delivered'))
+      if (deliveries.some(result => result?.received === false)) return { ok: true, clarification: ticket, deliveryPending: true, message: 'The answer reached suppliers; some final shared-answer receipts are pending. Review Deliveries and retry the broadcast to complete it.' }
       ticket = await save(user, 'clarifications', completed, 'procurement/clarification-broadcast')
       return { ok: true, clarification: ticket, message: `Answer delivered to all ${rfq.supplierIds.length} invited suppliers.` }
     }
@@ -209,7 +216,7 @@ export function createRfqLifecycle(helpers) {
       sections: store.list(user.id, 'sections').filter(row => row.ownerId === user.id),
       amendments: store.list(user.id, 'rfq-amendments').filter(row => row.ownerId === user.id && visible.has(row.rfqId)),
       rfqVersions: store.list(user.id, 'rfq-versions').filter(row => visible.has(row.rfqId)),
-      clarifications: store.list(user.id, 'clarifications').filter(row => visible.has(row.rfqId)),
+      clarifications: store.list(user.id, 'clarifications').filter(row => visible.has(row.rfqId)).map(row => user.role === 'supplier' ? ticketPublic(row, user.id) : row),
       faqs: store.list(user.id, 'faqs').filter(row => row.ownerId === user.id),
       rebidRequests: store.list(user.id, 'rebid-requests').filter(row => visible.has(row.rfqId) && (row.ownerId === user.id || row.supplierId === user.id)) }
   }

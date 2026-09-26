@@ -1,4 +1,6 @@
 import { createProcurement } from './service.mjs'
+import { procurementExchangePolicy } from './exchange-policy.mjs'
+import { fulfillmentReview, fulfillmentLabels } from './fulfillment-review.mjs'
 import { createHash } from 'node:crypto'
 
 export const name = 'procurement'
@@ -13,13 +15,23 @@ const item = object({ id: string('RFQ item ID, e.g. item-1'), description: strin
   cost: { type: 'number', description: 'Optional PRIVATE supplier unit cost; never sent to buyer' } }, ['description', 'quantity', 'unit'])
 
 export async function apply(ctx) {
-  const procurement = createProcurement({ store: ctx.store, accounts: ctx.accounts, resolveUser: (user, operation, input) => ctx.get('teams')?.resolveUser(user, operation, input) || user })
+  const scoped = (user, operation = 'snapshot', input = {}) => ctx.get('teams')?.resolveUser(user, operation, input) || user
+  const procurement = createProcurement({ store: ctx.store, accounts: ctx.accounts, resolveUser: scoped, authorizeCommitment: async (user, request) => {
+    if (!['award', 'sign-order', 'approve-change'].includes(request.action)) return null
+    const actions = ctx.get('actions')
+    if (!actions?.authorizeCommitment) throw new Error('Enable independent Review actions before signing a purchase order or approving a monetary change.')
+    return actions.authorizeCommitment(user, request)
+  } })
+  if (ctx.store.exchangePolicy) ctx.effect(() => ctx.store.exchangePolicy(procurementExchangePolicy({ store: ctx.store, accounts: ctx.accounts, procurement })))
   let reviews = null
-  const labels = { 'send-message': 'Send project message', 'publish-rfq': 'Publish request', 'submit-quote': 'Submit quotation', award: 'Award and issue order', 'acknowledge-order': 'Acknowledge order', 'approve-change': 'Approve order change', 'publish-amendment': 'Publish request amendment', 'ask-clarification': 'Send clarification question', 'broadcast-clarification': 'Broadcast shared answer' }
+  const labels = { ...fulfillmentLabels, 'send-message': 'Send project message', 'publish-rfq': 'Publish request', 'submit-quote': 'Submit quotation', 'acknowledge-order': 'Acknowledge order', 'approve-change': 'Approve order change', 'publish-amendment': 'Publish request amendment', 'ask-clarification': 'Send clarification question', 'broadcast-clarification': 'Broadcast shared answer' }
   const ordered = value => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered(value[key])])) : value
-  const fingerprint = value => createHash('sha256').update(JSON.stringify(ordered(value))).digest('hex')
-  const reviewInput = (user, action, input) => {
+  const semantic = value => Array.isArray(value) ? value.map(semantic) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([key]) => !['status','stale','staleReason','currentRfqRevision','cost','costTotal','privateNotes','margin','costComplete','marginBasis'].includes(key) && !['createdAt','updatedAt','publishedAt','submittedAt','confirmedAt','signedAt','approvedAt','appliedAt','answeredAt','broadcastAt','withdrawnAt','closedAt'].includes(key)).map(([key,item]) => [key,semantic(item)])) : value
+  const fingerprint = value => createHash('sha256').update(JSON.stringify(ordered(semantic(value)))).digest('hex')
+  const rawReviewInput = (user, action, input) => {
     const data = procurement.snapshot(user)
+    const fulfillment = fulfillmentReview(user, action, input, data)
+    if (fulfillment) return fulfillment
     if (['publish-amendment', 'ask-clarification', 'broadcast-clarification'].includes(action)) {
       if (action !== 'ask-clarification' && user.role !== 'contractor') throw new Error('Only the request owner may publish or answer shared scope.')
       const record = action === 'publish-amendment' ? data.amendments.find(row => row.id === input.id) : action === 'broadcast-clarification' ? data.clarifications.find(row => row.id === input.id) : data.rfqs.find(row => row.id === input.rfqId)
@@ -70,6 +82,10 @@ export async function apply(ctx) {
         description: record.description || '', notes: record.notes || '', paymentTerms: record.paymentTerms || '', leadDays: record.leadDays, deadline: action === 'publish-rfq' ? record.deadline : undefined }) }
     return { action, payload, reviewed: targets, preview, fingerprint: fingerprint(targets) }
   }
+  const reviewInput = (user, action, input) => {
+    const owner = scoped(user, 'snapshot', input), frozen = rawReviewInput(owner, action, input)
+    return { ...frozen, workspaceId: owner.id, fingerprint: fingerprint({ workspaceId: owner.id, targets: frozen.reviewed, payload: frozen.payload }) }
+  }
   const propose = async (user, action, input, context = {}) => {
     if (!reviews) throw new Error('Enable Review actions to prepare this commitment.')
     const frozen = reviewInput(user, action, input)
@@ -81,12 +97,12 @@ export async function apply(ctx) {
   ctx.inject(['actions'], inner => {
     reviews = inner.actions
     inner.effect(() => () => { reviews = null })
-    inner.effect(() => inner.actions.register({ kind: 'procurement.commit', label: 'Procurement commitment', execute: async (user, input, action, { signal } = {}) => {
+    inner.effect(() => inner.actions.register({ kind: 'procurement.commit', label: 'Procurement commitment', review: (user, input) => ['sign-order','award','approve-change'].includes(input.action) ? { workspaceId: input.workspaceId, side: user.role, independent: true, amount: Math.abs(Math.round(input.preview.amount * 100)), currency: input.preview.currency, object: { kind: input.action === 'approve-change' ? 'change' : 'award-intent', id: input.reviewed.record.id }, action: input.action, fingerprint: input.fingerprint } : null, execute: async (user, input, action, { signal } = {}) => {
       if (signal?.aborted) throw new Error('This action was canceled before execution.')
       const current = reviewInput(user, input.action, input.payload)
-      if (current.fingerprint !== input.fingerprint) throw new Error('This project, quotation, recipient or order changed after the proposal. Prepare a new review of its current details.')
-      const result = await procurement.execute(user, input.action, { ...input.payload, confirmed: true })
-      const target = result.order ? { view: 'orders', orderId: result.order.id, rfqId: result.order.rfqId } : input.action === 'send-message' ? { view: 'messages', rfqId: input.payload.rfqId } : result.quote ? { view: 'quotes', quoteId: result.quote.id, rfqId: result.quote.rfqId } : { view: 'rfqs', rfqId: result.rfq?.id || input.payload.id }
+      if (current.workspaceId !== input.workspaceId || current.fingerprint !== input.fingerprint) throw new Error('This project, quotation, recipient or order changed after the proposal. Prepare a new review of its current details.')
+      const result = await procurement.execute(user, input.action, { ...input.payload, confirmed: true, reviewActionId: action.id })
+      const target = result.awardIntent ? { view: 'orders', rfqId: result.awardIntent.rfqId, awardId: result.awardIntent.id } : result.change ? { view: 'orders', orderId: result.change.orderId } : result.order ? { view: 'orders', orderId: result.order.id, rfqId: result.order.rfqId } : input.action === 'send-message' ? { view: 'messages', rfqId: input.payload.rfqId } : result.quote ? { view: 'quotes', quoteId: result.quote.id, rfqId: result.quote.rfqId } : { view: 'rfqs', rfqId: result.rfq?.id || input.payload.id }
       return { ...result, approvalId: action.id, action: { type: 'navigate', label: 'Open project result', input: target } }
     } }))
   })
@@ -100,7 +116,7 @@ export async function apply(ctx) {
     const account = ctx.accounts.get(id)
     return account?.email === email && account.role === role && !account.disabled ? account : null
   })
-  if (demoAccounts.every(Boolean) && !demoAccounts[0].permissions?.includes('workspace:read-only')) {
+  if (demoAccounts.every(Boolean) && demoAccounts.every(account => ctx.store.health?.()[account.id]?.healthy !== false) && !demoAccounts[0].permissions?.includes('workspace:read-only')) {
     await procurement.execute(demoAccounts[0], 'seed-demo')
   }
   ctx.provide('procurement', procurement)
@@ -111,6 +127,8 @@ export async function apply(ctx) {
     res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="quotation-comparison.csv"' })
     res.end(csv)
   }))
+  ctx.effect(() => ctx.web.route('POST', '/workspace/review/:action', ({ user, params, body }) => propose(user, params.action, body, { source: 'human' }), { capability: 'workspace:write' }))
+  ctx.effect(() => ctx.web.route('POST', '/workspace/change-preview', ({ user, body }) => procurement.previewChange(user, body.orderId, body.lines, body.expectedOrderRevision)))
   ctx.effect(() => ctx.web.route('POST', '/workspace/:action', ({ user, params, body }) => procurement.execute(user, params.action, body), { capability: 'workspace:write' }))
   for (const [id, label, icon, roles, order] of [
     ['workspace', 'Overview', 'LayoutDashboard', ['contractor', 'supplier'], 10],
@@ -118,7 +136,7 @@ export async function apply(ctx) {
     ['quotes', 'Quotes', 'FileText', ['contractor', 'supplier'], 30],
     ['orders', 'Orders', 'Package', ['contractor', 'supplier'], 40],
     ['messages', 'Messages', 'MessageSquare', ['contractor', 'supplier'], 50],
-  ]) ctx.effect(() => ctx.web.contribute({ id, label, icon, roles, order }))
+  ]) ctx.effect(() => ctx.web.contribute({ id, label, icon, roles, order, linkKeys: ({rfqs:['rfqId','tab'],quotes:['rfqId','quoteId'],orders:['orderId','rfqId','awardId','tab'],messages:['rfqId']})[id] || [] }))
 
   // Deferred injection avoids a cycle: the assistant may itself depend on procurement.
   ctx.inject(['assistant'], (inner) => {
@@ -168,9 +186,9 @@ export async function apply(ctx) {
       roles: ['contractor', 'supplier'], parameters: object({ rfqId: string('RFQ ID'), toId: string('Recipient account ID'),
         text: string('Draft message text'), kind: { type: 'string', enum: ['message', 'clarification', 'negotiation'] } }, ['rfqId', 'toId', 'text']),
       execute: (user, args, context) => propose(user, 'send-message', args, context) })
-    register({ name: 'prepare_commitment', effect: 'proposal', description: 'Save an exact durable human review proposal for publishing, quote submission, award, order acknowledgment or change approval. Nothing is committed until a person approves; changed target records require a fresh review.',
-      roles: ['contractor', 'supplier'], parameters: object({ action: { type: 'string', enum: ['publish-rfq', 'submit-quote', 'award', 'acknowledge-order', 'approve-change'] },
-        id: string('RFQ, quote, order or change ID'), quoteId: string('Quote ID for award') }, ['action']),
+    register({ name: 'prepare_commitment', effect: 'proposal', description: 'Save an exact durable human review proposal for publishing, quote submission, a nonbinding award intent, supplier confirmation, independently reviewed order signing, order acknowledgment or sourced change approval. Nothing is committed until a person approves; changed target records require a fresh review.',
+      roles: ['contractor', 'supplier'], parameters: object({ action: { type: 'string', enum: ['publish-rfq', 'submit-quote', 'propose-award', 'confirm-award', 'decline-award', 'withdraw-award', 'sign-order', 'acknowledge-order', 'confirm-change', 'reject-change', 'approve-change', 'settle-change', 'close-rfq', 'withdraw-quote'] },
+        id: string('RFQ, quote, award intent, order or change ID'), quoteId: string('Quote ID for a nonbinding award intent'), reason: string('Explicit selection or decision reason'), note: string('Optional change closure note') }, ['action']),
       execute: (user, args, context) => propose(user, args.action, args, context) })
   })
 }

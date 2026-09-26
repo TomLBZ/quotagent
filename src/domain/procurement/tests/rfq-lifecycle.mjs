@@ -4,6 +4,8 @@ import { mkdirSync, mkdtempSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as storePlugin from '../../../system/workspace-store/code/index.mjs'
 import * as procurementPlugin from '../code/index.mjs'
+import * as teamsPlugin from '../../../system/teams/code/index.mjs'
+import { configureReviewer, grantAndSign } from './review-fixture.mjs'
 import * as actionsPlugin from '../../../system/action-center/code/index.mjs'
 const require = createRequire(new URL('../../../../host/package.json', import.meta.url)), { Context } = require('cordis')
 mkdirSync('tmp', { recursive: true })
@@ -11,8 +13,9 @@ const root = mkdtempSync(resolve('tmp/rfq-lifecycle-'))
 const buyer = { id: 'buyer', name: 'Buyer', role: 'contractor', email: 'buyer@example.test' }
 const one = { id: 'supplier-one', name: 'One', role: 'supplier', email: 'one@example.test' }
 const two = { id: 'supplier-two', name: 'Two', role: 'supplier', email: 'two@example.test' }
-const outsider = { id: 'other-buyer', name: 'Other buyer', role: 'contractor' }
-const users = [buyer, one, two, outsider], tools = [], routes = []
+const outsider = { id: 'other-buyer', name: 'Other buyer', role: 'contractor', email: 'other@example.test' }
+const reviewer = {id:'reviewer',name:'Reviewer',role:'contractor',email:'reviewer@example.test'}
+const users = [buyer, one, two, outsider, reviewer], tools = [], routes = []
 async function mount() {
   const ctx = new Context(), fibers = []
   fibers.push(await ctx.plugin({ name: 'test-services', apply(inner) {
@@ -21,12 +24,13 @@ async function mount() {
     inner.provide('web', { route: (...args) => add(routes, args), contribute: () => () => {} })
     inner.provide('assistant', { tool: tool => add(tools, tool) })
   } }))
-  fibers.push(await ctx.plugin(storePlugin, { root })); fibers.push(await ctx.plugin(actionsPlugin)); fibers.push(await ctx.plugin(procurementPlugin))
+  fibers.push(await ctx.plugin(storePlugin, { root })); fibers.push(await ctx.plugin(teamsPlugin)); fibers.push(await ctx.plugin(actionsPlugin)); fibers.push(await ctx.plugin(procurementPlugin))
   return { ctx, dispose: async () => { for (const fiber of [...fibers].reverse()) await fiber.dispose() } }
 }
 let mounted = await mount(), ctx = mounted.ctx
 const checks = []
 try {
+  await configureReviewer(ctx,buyer,reviewer,'GBP')
   const service = ctx.procurement, run = (user, action, input, options) => service.execute(user, action, input, options)
   const missingImpacts = service.normalizeCommercial({}, { deviations: [{ description: 'Needs review', priceImpact: '', timeImpactDays: '' }] }, []).deviations[0]
   assert.equal(missingImpacts.priceImpact, undefined); assert.equal(missingImpacts.timeImpactDays, undefined)
@@ -105,7 +109,7 @@ try {
   await assert.rejects(run(buyer, 'publish-amendment', { id: competing.id, confirmed: true }), /changed after/)
   await assert.rejects(run(one, 'submit-quote', { id: quote.id, confirmed: true }), /Rebid/)
   await assert.rejects(run(two, 'submit-quote', { id: staleDraft.id, confirmed: true }), /Rebid/)
-  await assert.rejects(run(buyer, 'award', { quoteId: quote.id, confirmed: true }), /older request/)
+  await assert.rejects(run(buyer, 'propose-award', { quoteId: quote.id, reason:'Cannot award stale scope', confirmed: true }), /older request/)
   await assert.rejects(run(one, 'save-quote', { rfqId: rfq.id, rfqRevision: 1, items: [{ id: 'panel', unitPrice: 20 }] }), /changed to revision/)
   await assert.rejects(run(buyer, 'save-amendment', { rfqId: rfq.id, expectedRevision: 2, supplierIds: [one.id], reason: 'Remove other supplier' }), /keep all previously/)
   checks.push('Immutable public versions; private amendment; stale quote comparison, submit and award refusal; old-scope concurrency refusal; complete rebid and reopened-answer provenance')
@@ -119,7 +123,10 @@ try {
   await run(buyer, 'archive-faq', { id: faq.id })
   assert.equal(service.snapshot(buyer).faqs[0].status, 'archived')
   assert.ok(!JSON.stringify(ctx.store.events(two.id)).includes('supplier-one'), 'Another supplier identity must not enter recipient ledger')
-  const {order} = await run(buyer, 'award', {quoteId:rebid.id,confirmed:true})
+  const intent=(await run(buyer,'propose-award',{quoteId:rebid.id,reason:'Current complete scope',confirmed:true})).awardIntent
+  await run(one,'confirm-award',{id:intent.id,confirmed:true})
+  const proposal=await tools.find(tool=>tool.name==='prepare_commitment').execute(buyer,{action:'sign-order',id:intent.id},{source:'human'})
+  const {order}=await grantAndSign(ctx,buyer,reviewer,proposal)
   assert.equal(order.total,385); assert.equal(order.priceBreakdown.taxAmount,60); assert.equal(service.snapshot(one).orders[0].total,385)
   const before = service.snapshot(buyer)
   await mounted.dispose(); assert.equal(tools.length, 0); assert.equal(routes.length, 0)

@@ -1,0 +1,12 @@
+{
+  "base": "http://127.0.0.1:8645/quotagent/",
+  "title": "[Edit conflict check] 1790392410752",
+  "id": "rfq-b353f48b-8fd",
+  "ok": true,
+  "checks": [
+    "Two GUI editors: stale save409 preserves unsaved input and displays latest saved source; human explicitly merges and retries; optional empty deadline remains empty",
+    "Record and selected tab survive copied URL/reload",
+    "Other-party copied private draft link explains unavailable access without selecting an unrelated record"
+  ],
+  "errors": []
+}

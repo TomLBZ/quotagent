@@ -1,0 +1,28 @@
+{
+  "base": "http://127.0.0.1:8645/quotagent/",
+  "title": "[Fulfillment check] Lighting 1790392258265",
+  "reviewer": {
+    "email": "fulfillment-reviewer-1790392258265@local.test",
+    "name": "Fulfillment reviewer 1790392258265"
+  },
+  "screenshots": [
+    "restart-matching-history.png",
+    "restart-counterparty-receipts.png"
+  ],
+  "ids": {
+    "rfq": "rfq-ecf4e7ed-c12",
+    "quote": "quote-093d0873-a06",
+    "intent": "award-0f77285d-d86",
+    "order": "po-award-0f77285d-d86",
+    "change": "change-fa9b506f-68d",
+    "invoice": "invoice-633f06ba-d77",
+    "signature": "57849aaa-af2c-4a27-b99a-c90805aa6900"
+  },
+  "stamp": 1790392258265,
+  "ok": true,
+  "checks": [
+    "Process replay preserves approved order scope, invoice matching history and both supplier delivery receipts"
+  ],
+  "errors": [],
+  "completedAt": "2026-09-26T03:14:18.365Z"
+}

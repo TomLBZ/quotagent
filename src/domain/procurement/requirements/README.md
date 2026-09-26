@@ -19,3 +19,9 @@ The [RFQ lifecycle contract](rfq-lifecycle.md) adds project/section context, pri
 amendments and immutable published revisions, quote version binding and rebids,
 structured shared clarifications, and source-linked account FAQ. Its native module,
 GUI/tools and focused real-ledger/browser checks implement the first G1 slice.
+
+The [bilateral fulfillment contract](fulfillment.md) replaces instant award with
+nonbinding selection, supplier confirmation and independently reviewed signing.
+Sourced line changes need both parties and a scoped grant; delivery acceptance
+and invoice reconciliation retain discrepancies and references without payment.
+`fulfillment.mjs` owns these states; its GUI and real-ledger tests cover them.

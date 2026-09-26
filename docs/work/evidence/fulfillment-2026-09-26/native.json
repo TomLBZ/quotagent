@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/procurement-fulfillment-wvJ6Pq",
+  "checks": [
+    "Atomic compare-and-save rejects stale RFQ/quote edits without appending; team business owner and actual editor retained; public QEP policy rejects private cost and unreviewed changed money",
+    "Real team authority + reviewer grant + proposer signature; supplier confirmation prerequisite; no premature PO/approval; exact tax/freight total; duplicate signature one order; private costs excluded",
+    "Structured original quote/rate basis; explicit changed-rate reason + counterparty confirmation; independent absolute delta authority; precise applied scope; duplicate application and two-party closure",
+    "Reviewed acceptance increment limits and unique sources; no reduction below accepted scope; invoice arithmetic/currency/rate/tax/freight/quantity differences; cumulative matching excludes prior billed units; new delivery resolves mismatch with history retained",
+    "Withdrawal prevents confirmation and closes source transparently; actual signed queued PO reports pending, reuses the original packet and completes delivery without a duplicate commitment",
+    "Actual durable ledger replay preserves bilateral award, independent grant, approved scope and invoice matching history in both realms"
+  ],
+  "ids": {
+    "rfq": "rfq-ac5716a3-f1b",
+    "quote": "quote-31dcdeec-b81",
+    "intent": "award-4d19c710-143",
+    "order": "po-award-4d19c710-143",
+    "change": "change-ccab77a1-2e1",
+    "receipt": "acceptance-3a8e84f2-e80",
+    "invoice": "invoice-343008ce-9f0",
+    "action": "939d4732-4271-4420-8f20-19e91c78591e"
+  },
+  "events": 470
+}

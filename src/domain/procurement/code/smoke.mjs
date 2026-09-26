@@ -5,6 +5,8 @@ import { mkdirSync, mkdtempSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as storePlugin from '../../../system/workspace-store/code/index.mjs'
 import * as procurementPlugin from './index.mjs'
+import * as teamsPlugin from '../../../system/teams/code/index.mjs'
+import { configureReviewer, grantAndSign } from '../tests/review-fixture.mjs'
 import * as actionsPlugin from '../../../system/action-center/code/index.mjs'
 
 const require = createRequire(new URL('../../../../host/package.json', import.meta.url))
@@ -21,6 +23,7 @@ const users = [
   { id: 'supplier-demo', name: 'Demo supplier', company: 'Summit', role: 'supplier', email: 'supplier@demo.local', preferences: {} },
   { id: 'supplier2-demo', name: 'Demo second', company: 'Atlas', role: 'supplier', email: 'supplier2@demo.local', preferences: {} },
 ]
+const reviewer = { id: 'smoke-reviewer', name: 'Reviewer', role: 'contractor', email: 'reviewer@example.test' }; users.push(reviewer)
 const routes = [], navigation = [], tools = []
 const push = (list, entry) => { list.push(entry); return () => list.splice(list.indexOf(entry), 1) }
 const foundation = await context.plugin({ name: 'smoke-foundation', apply(ctx) {
@@ -29,14 +32,16 @@ const foundation = await context.plugin({ name: 'smoke-foundation', apply(ctx) {
   ctx.provide('assistant', { tool: entry => push(tools, entry) })
 } })
 const storeFiber = await context.plugin(storePlugin, { root })
+const teamsFiber = await context.plugin(teamsPlugin)
 const actionsFiber = await context.plugin(actionsPlugin)
-const baseRoutes = routes.length, baseNavigation = navigation.length
+const baseRoutes = routes.length, baseNavigation = navigation.length, baseTools = tools.length
 let fiber = await context.plugin(procurementPlugin)
 try {
   const service = context.procurement
   const prepare = (user, input, metadata = {}) => tools.find(tool => tool.name === 'prepare_commitment').execute(user, input, metadata)
   const approve = async (user, proposal) => { const decision = await context.actions.approve(user, proposal.proposal.id, { confirmed: true }); assert.equal(decision.status, 'succeeded', decision.error); return decision.result }
   const [buyer, supplier, second] = users
+  await configureReviewer(context,buyer,reviewer)
   const demoBuyer = users.find(user => user.id === 'contractor-demo')
   const demoData = service.snapshot(demoBuyer)
   assert.equal(demoData.rfqs.length, 2, 'Built-in demo opens with lighting and cabling RFQs')
@@ -90,18 +95,21 @@ try {
   assert.equal(service.snapshot(buyer).comparison.length, 1, 'Only latest submitted revision is ranked')
   assert.equal(service.snapshot(buyer).comparison[0].total, 0.45)
   await assert.rejects(service.execute(buyer, 'award', { quoteId: revised.quote.id, confirmed: true }, { agent: true }), /cannot commit/)
-  const { order } = await approve(buyer, await prepare(buyer, { action: 'award', quoteId: revised.quote.id }))
+  const { awardIntent } = await service.execute(buyer, 'propose-award', { quoteId: revised.quote.id, reason: 'Complete reviewed scope', confirmed: true })
+  await service.execute(supplier, 'confirm-award', { id: awardIntent.id, confirmed: true })
+  const { order } = await grantAndSign(context,buyer,reviewer,await prepare(buyer, { action: 'sign-order', id: awardIntent.id }))
   assert.equal(service.snapshot(supplier).orders[0].id, order.id)
   assert.equal(service.snapshot(supplier).quotes.find(row => row.id === revised.quote.id).status, 'awarded')
   assert.equal(service.snapshot(supplier).quotes.find(row => row.id === revised.quote.id).items[0].cost, 0.12)
   await approve(supplier, await prepare(supplier, { action: 'acknowledge-order', id: order.id }))
   assert.equal(service.snapshot(buyer).orders[0].status, 'acknowledged')
-  const { change } = await service.execute(supplier, 'propose-change', { orderId: order.id, title: 'Add delivery', amount: 2.15 })
+  const { change } = await service.execute(supplier, 'propose-change', { orderId: order.id, title: 'Add quoted length', lines: [{itemId:'x',deltaQuantity:1}], confirmed:true })
   assert.equal(service.snapshot(buyer).orders[0].total, 0.45)
-  await approve(buyer, await prepare(buyer, { action: 'approve-change', id: change.id }))
-  assert.equal(service.snapshot(supplier).orders[0].total, 2.6)
+  await service.execute(buyer, 'confirm-change', {id:change.id,confirmed:true})
+  await grantAndSign(context,buyer,reviewer,await prepare(buyer, { action: 'approve-change', id: change.id }))
+  assert.equal(service.snapshot(supplier).orders[0].total, 0.75)
   await service.execute(buyer, 'approve-change', { id: change.id, confirmed: true })
-  assert.equal(service.snapshot(buyer).orders[0].total, 2.6, 'Duplicate approval must not add twice')
+  assert.equal(service.snapshot(buyer).orders[0].total, 0.75, 'Duplicate approval must not add twice')
   assert.ok(service.exportCsv(buyer, rfq.id).includes('0.45'))
   await service.execute(buyer, 'seed-demo')
   const count = service.snapshot(buyer).rfqs.length
@@ -124,17 +132,18 @@ try {
   await fiber.dispose()
   assert.equal(routes.length, baseRoutes)
   assert.equal(navigation.length, baseNavigation)
-  assert.equal(tools.length, 0)
+  assert.equal(tools.length, baseTools)
   console.log('Cordis disposal: routes, navigation and tools removed.')
   const eventCounts = users.map(user => context.store.events(user.id).length)
   fiber = await context.plugin(procurementPlugin)
   assert.deepEqual(users.map(user => context.store.events(user.id).length), eventCounts, 'Remount must not seed again or alter existing work')
   assert.deepEqual(context.procurement.snapshot(demoBuyer).rfqs, demoData.rfqs)
-  assert.equal(context.procurement.snapshot(buyer).orders[0].total, 2.6, 'Remount preserves existing commitments')
+  assert.equal(context.procurement.snapshot(buyer).orders[0].total, 0.75, 'Remount preserves existing commitments')
   console.log('Startup demo: two bids immediately available; new accounts empty; remount appends no events and preserves orders.')
 } finally {
   await fiber.dispose()
   await actionsFiber.dispose()
+  await teamsFiber.dispose()
   await storeFiber.dispose()
   await foundation.dispose()
 }
