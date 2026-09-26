@@ -23,6 +23,8 @@ import * as mail from '../src/system/mail/code/product.mjs'
 import * as telegram from '../src/system/telegram/code/product.mjs'
 import * as connections from '../src/system/agent-connections/code/index.mjs'
 import * as workflows from '../src/system/agent-workflows/code/index.mjs'
+import * as workspaceStyles from '../src/system/workspace-styles/code/index.mjs'
+import * as userGuide from '../src/system/user-guide/code/index.mjs'
 const root=fileURLToPath(new URL('../',import.meta.url))
 const ctx=new Context(), mounted=[], definitions=[]
 const mount=async(id,module,config={},metadata={})=>{
@@ -36,7 +38,7 @@ const mount=async(id,module,config={},metadata={})=>{
   if(ctx.plugins)ctx.effect(()=>ctx.plugins.register(definition))
   return fiber
 }
-await mount('webui',web,{port:Number(process.env.QUOTAGENT_WEBUI_PORT||8093),host:process.env.QUOTAGENT_WEBUI_HOST||'127.0.0.1',prefix:process.env.QUOTAGENT_WEBUI_PREFIX||'/quotagent',assets:resolve(root,'src/system/webui/client/dist')},{name:'WebUI application',repoId:'system/webui',configurationId:'webui'})
+await mount('webui',web,{port:Number(process.env.QUOTAGENT_WEBUI_PORT||8093),host:process.env.QUOTAGENT_WEBUI_HOST||'127.0.0.1',prefix:process.env.QUOTAGENT_WEBUI_PREFIX||'/quotagent',assets:process.env.QUOTAGENT_WEBUI_ASSETS||resolve(root,'src/system/webui/client/dist')},{name:'WebUI application',repoId:'system/webui',configurationId:'webui'})
 await mount('workspace-store',store,{root:process.env.QUOTAGENT_PRODUCT_DATA||resolve(root,'tmp/product-data')},{name:'Workspace database and QEP',repoId:'system/workspace-store'})
 await mount('accounts',accounts,{}, {name:'Accounts and permissions',repoId:'system/accounts'})
 await mount('settings',settings,{}, {name:'Plugin configuration and credentials',repoId:'system/settings'})
@@ -60,6 +62,8 @@ await mount('mail',mail,{}, {name:'Email inbox and SMTP',repoId:'system/mail',co
 await mount('telegram',telegram,{apiBase:process.env.QUOTAGENT_TELEGRAM_API_BASE}, {name:'Telegram messaging',repoId:'system/telegram',configurationId:'telegram'})
 await mount('agent-connections',connections,{}, {name:'MCP and A2A connections',repoId:'system/agent-connections'})
 await mount('agent-workflows',workflows,{}, {name:'Agent workroom and memory',repoId:'system/agent-workflows',configurationId:'workflows'})
+await mount('workspace-styles',workspaceStyles,{}, {name:'Workspace styles',repoId:'system/workspace-styles',configurationId:'workspace-styles'})
+await mount('user-guide',userGuide,{}, {name:'Help and getting started',repoId:'system/user-guide'})
 const address=await ctx.web.listen()
 console.log(JSON.stringify({ready:true,port:address.port,url:`http://127.0.0.1:${address.port}${ctx.web.prefix}/`,plugins:definitions.map(d=>({id:d.id,state:d.fiber?.state??null}))}))
 let closing=false

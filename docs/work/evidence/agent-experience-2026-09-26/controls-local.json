@@ -1,0 +1,87 @@
+{
+  "base": "http://127.0.0.1:8620/quotagent/",
+  "startedAt": "2026-09-26T01:40:23.092Z",
+  "checks": [
+    "Agent workspace mounts one conversation composer",
+    "User can pause a running assistant request from the conversation",
+    "Paused task survives browser reload with Resume and Stop controls",
+    "Additional guidance stays visible and does not resume a paused task",
+    "Real model completes the resumed conversation",
+    "Actual model answer follows the additional guidance",
+    "Stopped task stays stopped after reload and has no Resume action",
+    "User can send a new follow-up after stopping a task",
+    "Conversation controls produce no browser JavaScript errors"
+  ],
+  "pageErrors": [],
+  "runs": [
+    {
+      "id": "13239dd2-06d0-4c04-a0af-cdf6ced8c04d",
+      "status": "running",
+      "phase": "model",
+      "revision": 1,
+      "results": 0
+    },
+    {
+      "id": "13239dd2-06d0-4c04-a0af-cdf6ced8c04d",
+      "status": "paused",
+      "phase": "model",
+      "revision": 3,
+      "results": 0
+    },
+    {
+      "id": "13239dd2-06d0-4c04-a0af-cdf6ced8c04d",
+      "status": "paused",
+      "phase": "model",
+      "revision": 5,
+      "results": 0,
+      "error": ""
+    },
+    {
+      "id": "13239dd2-06d0-4c04-a0af-cdf6ced8c04d",
+      "status": "running",
+      "phase": "model",
+      "revision": 6,
+      "results": 0,
+      "error": ""
+    },
+    {
+      "id": "13239dd2-06d0-4c04-a0af-cdf6ced8c04d",
+      "status": "completed",
+      "phase": "complete",
+      "revision": 8,
+      "results": 0,
+      "error": ""
+    },
+    {
+      "id": "1a9a189b-38ed-4d66-bc34-da87c137d16f",
+      "status": "running",
+      "phase": "model",
+      "revision": 1,
+      "results": 0
+    },
+    {
+      "id": "1a9a189b-38ed-4d66-bc34-da87c137d16f",
+      "status": "stopped",
+      "phase": "complete",
+      "revision": 3,
+      "results": 0
+    },
+    {
+      "id": "8d07c15d-8bbc-4fef-9058-dd77f1a7be7a",
+      "status": "running",
+      "phase": "model",
+      "revision": 1,
+      "results": 0
+    },
+    {
+      "id": "8d07c15d-8bbc-4fef-9058-dd77f1a7be7a",
+      "status": "completed",
+      "phase": "complete",
+      "revision": 3,
+      "results": 0,
+      "error": ""
+    }
+  ],
+  "ok": true,
+  "finishedAt": "2026-09-26T01:40:31.942Z"
+}
