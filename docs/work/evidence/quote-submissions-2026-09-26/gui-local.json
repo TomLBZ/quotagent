@@ -1,0 +1,25 @@
+{
+  "base": "http://127.0.0.1:8645/quotagent/",
+  "stamp": 1790400436312,
+  "ok": true,
+  "checks": [
+    "Three separately authored GUI quotations selected together; two frozen reviews prepared and stale source refused individually, with nothing sent",
+    "Contractor has no received quote after preparation; repeated GUI selection reuses the two existing matching pending reviews",
+    "Registered business previews show both readable recipients and prices with raw detail hidden; after one draft changes, explicit two-action batch sends the unchanged quote and preserves a separate changed-source failure without submitting the edited offer",
+    "Supplier prepares only the failed edited quotation again, sees its changed terms, and separately approves; both signed offers arrive without private costs, successful original is not repeated, and durable preparation history fits narrow screens"
+  ],
+  "errors": [],
+  "ids": {
+    "batch": "bba9ef90-932d-4138-94f8-149bf0b5ee8e",
+    "quotes": [
+      "quote-6d28a4ed-8bb",
+      "quote-b7745189-2cf",
+      "quote-b936c26b-527"
+    ],
+    "actions": [
+      "c3b95195-3c62-4b47-b022-b0888505f65f",
+      "20c161ea-741e-42b6-a61d-209653d8cf53"
+    ]
+  },
+  "at": "2026-09-26T05:27:49.339Z"
+}

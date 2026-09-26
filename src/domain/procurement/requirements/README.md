@@ -37,3 +37,5 @@ The [public declaration contract](public-declarations.md) requires complete auth
 measurement and responsibility for new publications, preserves named firm/indicative
 milestones and qualifications through PO signing, and implements source-bound
 structured FAQ publication, exact lookup, reviewed adaptation and deprecation.
+The [selected submission contract](submission-batches.md) prepares multiple supplier
+drafts as individual frozen human reviews with durable partial-result receipts.

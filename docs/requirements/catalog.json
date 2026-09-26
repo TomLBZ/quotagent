@@ -10849,18 +10849,24 @@
           "line": null
         }
       ],
-      "owner": "system/action-center",
-      "contract": "src/system/action-center/requirements.md",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/submission-batches.md",
       "disposition": "retain-outcome",
-      "currentOutcome": "Retain per-item approval batch successes, failures and blocked receipts; never resend successful items on retry.",
-      "status": "pending-review",
-      "reason": "Single-item review only. Need bounded selection, independent checks/idempotence and truthful partial success.",
+      "currentOutcome": "Supplier selects several own drafts; distinct frozen reviews and durable per-item preparation receipts; stale/missing records fail independently, pending reviews reused, changed sources fail human execution, fresh failed-only preparation never repeats success. Generic action-center retains explicit per-item batch decisions.",
+      "status": "verified",
+      "reason": "Supplier selects several own drafts; distinct frozen reviews and durable per-item preparation receipts; stale/missing records fail independently, pending reviews reused, changed sources fail human execution, fresh failed-only preparation never repeats success. Generic action-center retains explicit per-item batch decisions.",
       "acceptance": [
         {
-          "command": "node src/system/action-center/tests/independent.mjs",
-          "evidence": "docs/work/evidence/independent-actions-2026-09-26/perspective.json",
-          "scope": "Seven native groups with real account ledger/teams and controlled external executors. Procurement GUI signing has separate evidence.",
-          "observed": "Mixed batch retains individual success/failure/blocked results; failed retry creates a new unsigned proposal and never repeats a success."
+          "command": "node src/domain/procurement/tests/submission-batches.mjs",
+          "evidence": "docs/work/evidence/quote-submissions-2026-09-26/native.json",
+          "scope": "Four actual native Cordis/ledger groups; selected own-team source records and independent per-item outcomes",
+          "observed": "Native4 passed; partial stale/unavailable preparation, pending reuse, actual mixed human execution and durable restart."
+        },
+        {
+          "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/submission-batches-browser.mjs",
+          "evidence": "docs/work/evidence/quote-submissions-2026-09-26/gui-local.json",
+          "scope": "Four local real GUI groups with newly registered accounts; all business writes through visible controls, no public claim",
+          "observed": "Readable multi-review, mixed successful/changed-source execution, fresh failed-only retry, actual buyer receipts without private costs, reload390px; zero JavaScript errors."
         }
       ],
       "implementation": {
@@ -10870,10 +10876,10 @@
           "src/system/action-center/code/index.mjs"
         ],
         "auditEvidence": [],
-        "group": "G3"
+        "group": "G3",
+        "auditReason": "Single-item review only. Need bounded selection, independent checks/idempotence and truthful partial success."
       },
-      "resolution": "Action-center generic batch service and GUI operate on already prepared actions; native controlled executors prove partial success semantics.",
-      "remaining": "Specific multi-quotation submission preparation and end-to-end partial approval GUI have no matching evidence in this slice. Generic action batches alone do not prove batch quotation creation/submission across domain records."
+      "resolution": "Domain procurement owns multi-quotation preparation and exact source reviews; the shared action-center executes each explicit human decision and retains independent receipts. Supplier selects several own drafts; distinct frozen reviews and durable per-item preparation receipts; stale/missing records fail independently, pending reviews reused, changed sources fail human execution, fresh failed-only preparation never repeats success. Generic action-center retains explicit per-item batch decisions."
     },
     {
       "id": "SUPPLEMENT-020",

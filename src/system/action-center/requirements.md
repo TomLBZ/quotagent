@@ -92,3 +92,9 @@ checks do not approve an external commitment or fabricate model risk assessment.
 Observed local native5 and GUI3 groups passed, with regressions state9/independent7,
 103-module build and docs checks. Commands and limits are in
 `docs/work/evidence/action-review-provenance.md`.
+
+Selected batch reviews reuse each owning plugin’s registered action preview and
+declared risk summary. Exact raw request details remain available in a disclosure.
+The same readable component serves single and batch review; action-center has no
+quotation-specific renderer. Executed quotation partial-outcome evidence:
+`docs/work/evidence/quote-submissions-2026-09-26/README.md`.

@@ -1,3 +1,4 @@
+import {createSubmissionBatches} from './submission-batches.mjs'
 import {installDraftContext,pairedParties} from './draft-context.mjs'
 import {requestCollection} from './request-collection.mjs'
 import {publicQuoteLine} from './structured-scope.mjs'
@@ -75,6 +76,7 @@ export async function apply(ctx) {
     const order = record.orderId ? data.orders.find(row => row.id === record.orderId) : action === 'acknowledge-order' ? record : null
     const rfq = data.rfqs.find(row => row.id === (record.rfqId || order?.rfqId || record.id))
     const recipientIds = action === 'publish-rfq' ? record.supplierIds : [action === 'send-message' ? input.toId : user.role === 'supplier' ? rfq?.ownerId || record.ownerId : record.supplierId || order?.supplierId]
+    if (action === 'submit-quote' && rfq?.status !== 'published') throw new Error('This request is no longer open for quotations.')
     const recipients = recipientIds.map(recipientId => data.contacts.find(row => row.id === recipientId))
     if (!recipients.length || recipients.some(person => !person)) throw new Error('Choose active counterparties from this project before preparing the action.')
     let payload = action === 'award' ? { quoteId: id } : { id }
@@ -114,9 +116,17 @@ export async function apply(ctx) {
     const frozen = reviewInput(user, action, input)
     const amount = typeof frozen.preview.amount === 'number' ? ` · ${new Intl.NumberFormat('en-US', { style: 'currency', currency: frozen.preview.currency }).format(frozen.preview.amount)}` : ''
     const proposal = await reviews.propose(user, { kind: 'procurement.commit', title: `${labels[action]}: ${frozen.preview.title}`, summary: `${frozen.preview.recipients.map(person => person.name).join(', ')}${amount}`, input: frozen,
-      source: { kind: context.source || 'assistant', plugin: 'procurement', ...(context.stepId ? { stepId: context.stepId } : {}) }, runId: context.runId || null })
+      idempotencyKey:context.idempotencyKey||null, source: { kind: context.source || 'assistant', plugin: 'procurement', ...(context.stepId ? { stepId: context.stepId } : {}) }, runId: context.runId || null })
     return { ok: true, reviewRequired: true, proposal, action: { type: 'navigate', label: 'Review procurement action', input: { view: 'approvals', actionId: proposal.id } }, message: 'Saved for human review. Nothing has been sent or committed.' }
   }
+  const submissions=createSubmissionBatches({store:ctx.store,scoped,accounts:ctx.accounts,actions:user=>reviews?.list(user)||[],prepareOne:async(user,id,context)=>{
+    const current=reviewInput(user,'submit-quote',{id}),pending=reviews?.list(user).find(row=>row.kind==='procurement.commit'&&row.status==='pending'&&row.input.action==='submit-quote'&&row.input.workspaceId===current.workspaceId&&row.input.fingerprint===current.fingerprint)
+    if(pending)return {proposal:pending,reused:true}
+    return propose(user,'submit-quote',{id},context)
+  }})
+  ctx.effect(()=>()=>submissions.dispose())
+  procurement.prepareSubmissions=submissions.prepare
+  procurement.submissionBatches=submissions.list
   ctx.inject(['actions'], inner => {
     reviews = inner.actions
     inner.effect(() => () => { reviews = null })
@@ -154,6 +164,8 @@ export async function apply(ctx) {
     res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="quotation-comparison.csv"' })
     res.end(csv)
   }))
+  ctx.effect(()=>ctx.web.route('GET','/workspace/submission-batches',({user})=>({batches:submissions.list(user)})))
+  ctx.effect(()=>ctx.web.route('POST','/workspace/review-submissions',({user,body})=>submissions.prepare(user,body,{source:'human'}),{capability:'workspace:write'}))
   ctx.effect(() => ctx.web.route('POST', '/workspace/review/:action', ({ user, params, body }) => propose(user, params.action, body, { source: 'human' }), { capability: 'workspace:write' }))
   ctx.effect(() => ctx.web.route('POST', '/workspace/change-preview', ({ user, body }) => procurement.previewChange(user, body.orderId, body.lines, body.expectedOrderRevision)))
   ctx.effect(() => ctx.web.route('POST', '/workspace/:action', ({ user, params, body }) => procurement.execute(user, params.action, body), { capability: 'workspace:write' }))
@@ -216,6 +228,7 @@ export async function apply(ctx) {
       roles: ['contractor', 'supplier'], parameters: object({ rfqId: string('RFQ ID'), toId: string('Recipient account ID'),
         text: string('Draft message text'), kind: { type: 'string', enum: ['message', 'clarification', 'negotiation'] } }, ['rfqId', 'toId', 'text']),
       execute: (user, args, context) => propose(user, 'send-message', args, context) })
+    register({name:'prepare_quote_submissions',effect:'proposal',roles:['supplier'],description:'Prepare separately frozen review actions for up to 50 selected own quotation drafts. Returns durable per-item preparation results; nothing is submitted and each exact quotation still needs human review.',parameters:object({quoteIds:{type:'array',items:string('Own quotation draft ID'),minItems:1,maxItems:50}},['quoteIds']),execute:(user,args,context)=>submissions.prepare(user,args,{...context,source:context?.source||'assistant'})})
     register({ name: 'prepare_commitment', effect: 'proposal', description: 'Save an exact durable human review proposal for publishing, quote submission, a nonbinding award intent, supplier confirmation, independently reviewed order signing, order acknowledgment or sourced change approval. Nothing is committed until a person approves; changed target records require a fresh review.',
       roles: ['contractor', 'supplier'], parameters: object({ action: { type: 'string', enum: ['publish-rfq', 'submit-quote', 'propose-award', 'confirm-award', 'decline-award', 'withdraw-award', 'sign-order', 'acknowledge-order', 'confirm-change', 'reject-change', 'approve-change', 'settle-change', 'close-rfq', 'withdraw-quote'] },
         id: string('RFQ, quote, award intent, order or change ID'), quoteId: string('Quote ID for a nonbinding award intent'), reason: string('Explicit selection or decision reason'), note: string('Optional change closure note') }, ['action']),

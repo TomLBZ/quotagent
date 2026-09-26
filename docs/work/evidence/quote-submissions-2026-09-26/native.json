@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/submission-batches-rkMhWB",
+  "checks": [
+    "Actual accepted supplier teammate prepares four selected drafts in supplier realm: two exact reviews and separate stale/unavailable failures; actual actor retained, no quote submitted and unrelated realm sees nothing",
+    "Repeat selection reuses matching pending frozen reviews rather than creating duplicates; read-only and contractor accounts cannot prepare supplier submissions",
+    "Explicit human batch decision sends only unchanged exact offer through signed QEP; edited draft fails its frozen review individually, can be prepared afresh and submitted without repeating the successful quote or leaking private costs",
+    "Real native remount retains original partial preparations, per-item failed/succeeded review outcomes, both received quotations and actual team actor provenance"
+  ],
+  "ids": {
+    "batch": "fe0a7c72-cbf4-4643-a8ae-1159f05ba274",
+    "reviewBatch": "a58e24b9-6cef-4433-9b54-047f1e2c064c",
+    "quotes": [
+      "quote-dd50a8b0-1c0",
+      "quote-0e39abdc-669"
+    ]
+  },
+  "at": "2026-09-26T05:19:08.650Z"
+}
