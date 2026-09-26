@@ -102,6 +102,18 @@ class Workspace:
         self.refresh_index(realm, book)
         return copy.deepcopy(self.record_index[realm].get((collection, record_id), (None, None)))
 
+    def fail_request(self, request, error):
+        if not isinstance(error, OSError) or not request.get('realm'):
+            return error
+        try:
+            realm = self.realm(request['realm'])
+        except AdapterError:
+            return error
+        message = 'Storage failed during this request. Its write outcome is uncertain; this party is paused until the original ledger is verified on restart.'
+        next_action = 'Preserve the ledger, restore disk access, then restart and inspect recorded state before retrying. Do not remove or rewrite a partial tail automatically.'
+        self.health[realm] = {'realm': realm, 'healthy': False, 'code': 'STORAGE_WRITE_UNCERTAIN', 'message': message, 'nextAction': next_action, 'osError': error.errno}
+        return AdapterError('STORAGE_WRITE_UNCERTAIN', message, next_action, 503, {'realm': realm, 'osError': error.errno})
+
     def put(self, realm, collection, record, *, event='workspace/record-saved', actor=None, expected=None, check_expected=False, correlation_id=None, event_class='fact', refs=None):
         body = {'schema': WORKSPACE, 'collection': collection, 'record': record}
         if not valid_record(body):

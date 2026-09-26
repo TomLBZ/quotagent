@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/store-io-3xglywry",
+  "groups": 5,
+  "checks": [
+    {
+      "fault": "disk-full",
+      "code": "STORAGE_WRITE_UNCERTAIN",
+      "laterWriteRefused": true,
+      "healthyRealmContinues": true,
+      "reopen": "original record recovered"
+    },
+    {
+      "fault": "permission-denied",
+      "code": "STORAGE_WRITE_UNCERTAIN",
+      "laterWriteRefused": true,
+      "healthyRealmContinues": true,
+      "reopen": "original record recovered"
+    },
+    {
+      "fault": "partial-tail",
+      "code": "STORAGE_WRITE_UNCERTAIN",
+      "laterWriteRefused": true,
+      "healthyRealmContinues": true,
+      "reopen": "quarantined unchanged partial bytes"
+    },
+    {
+      "fault": "fsync-uncertain",
+      "code": "STORAGE_WRITE_UNCERTAIN",
+      "laterWriteRefused": true,
+      "healthyRealmContinues": true,
+      "reopen": "valid complete uncertain append recovered"
+    },
+    {
+      "fault": "actual-ndjson-fsync",
+      "code": "STORAGE_WRITE_UNCERTAIN",
+      "laterWriteRefused": true,
+      "healthyRealmContinues": true,
+      "wireStatus": 503
+    }
+  ],
+  "scope": "Injected Python OS errors around real temporary ledger writes and actual NDJSON bridge. Full fsync failure leaves complete bytes; partial write leaves an actual malformed tail. Not a production disk exhaustion test."
+}

@@ -19,3 +19,11 @@ the full history on every write. Process disposal discards the index; remount
 rebuilds it. [Measured baseline](../../../../docs/work/evidence/native-store-performance-2026-09-26/README.md):
 10k writes 27.85 s, p95 3.08 ms, max 9.40 ms; full reconstruction 1.15 s. The historical
 every-write 5 ms target was not met in this sample.
+
+SUPPLEMENT-026: an operating-system error during an adapter request makes that
+realm's write outcome explicitly uncertain and unavailable until a verified reopen.
+No subsequent request appends past a possible partial tail. Other healthy realms
+continue. A complete but unacknowledged append may reappear after restart; a partial
+line remains quarantined with original bytes preserved. Fault acceptance injects
+ENOSPC/EACCES/fsync failures around actual temporary ledger files and distinguishes
+these controlled errors from a genuinely full production disk.

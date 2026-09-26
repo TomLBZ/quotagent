@@ -23,5 +23,6 @@ for line in sys.stdin:
             value = workspace.execute(req)
             out = {'id': req.get('rpcId', req.get('id')), 'ok': True, 'value': value, 'events': workspace.delta(before), 'health': workspace.status()}
     except Exception as exc:
+        exc = workspace.fail_request(req, exc)
         out = {'id': req.get('rpcId', req.get('id')), 'ok': False, 'error': str(exc), 'code': getattr(exc, 'code', 'ADAPTER_ERROR'), 'nextAction': getattr(exc, 'next_action', 'Inspect the delivery or record, correct the reported problem and retry.'), 'status': getattr(exc, 'status', 400), 'details': getattr(exc, 'details', None), 'events': workspace.delta(before), 'health': workspace.status()}
     print(json.dumps(out, ensure_ascii=False), flush=True)
