@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/settings-transactions-SIvaOd",
+  "checks": [
+    "Account credentials remain private and write-only in schemas, export and template; private file mode0600",
+    "Authorized workspace→project→section inheritance retains per-key shadow provenance; other accounts and scoped credentials refuse",
+    "Dry run is zero-write and reviewed digest applies the exact staged changes",
+    "Concurrent edits invalidate preview; schema preflight and disposable registered veto prevent activation",
+    "Failed multi-schema apply restores values, credentials and plugin runtime with explicit compensation receipt",
+    "Native YAML import validates structure, exposes file provenance and initialize-only preserves existing overrides",
+    "Export/import round-trip restores explicit values without freezing shared inherited defaults",
+    "Restart rolls back an interrupted private journal before schema consumers initialize; no transaction auto-replays",
+    "A bundle previews and applies multiple inherited layers together, including removal of a narrower override",
+    "Plugin refusal messages redact submitted credentials before HTTP errors and durable refusal receipts",
+    "Operator-selected native YAML file initializes a fresh account once and preserves subsequent user edits"
+  ]
+}

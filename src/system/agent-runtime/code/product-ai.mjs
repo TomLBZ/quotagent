@@ -18,8 +18,10 @@ export async function apply(ctx, config = {}) {
     const filename = config.configFile || process.env.QUOTAGENT_CONFIG || '/workspace/config.yaml'
     const doc = existsSync(filename) ? parse(readFileSync(filename,'utf8')) : {}
     const llm = doc.llm || {}, provider = llm.provider || 'openai', entry = doc.api_keys?.[provider] || {}
-    const key = process.env[entry.env || 'QUOTAGENT_AI_KEY'] || entry.value || ''
-    return {provider,model:process.env.QUOTAGENT_AI_MODEL || llm.model || entry.default_model || '',
+    const keyVariable=entry.env||'QUOTAGENT_AI_KEY', key = process.env[keyVariable] || entry.value || ''
+    const source=(variable,present,path)=>variable&&process.env[variable]?{source:'environment',reference:variable}:present?{source:'file',reference:filename+'#'+path}:{source:'default',reference:'AI connection plugin default'}
+    const origins={provider:source(null,llm.provider,'llm.provider'),model:source('QUOTAGENT_AI_MODEL',llm.model||entry.default_model,llm.model?'llm.model':'api_keys.'+provider+'.default_model'),baseUrl:source('QUOTAGENT_AI_URL',entry.base_url,'api_keys.'+provider+'.base_url'),apiKey:source(keyVariable,entry.value,'api_keys.'+provider+'.value'),timeoutSeconds:source(null,llm.timeout_s,'llm.timeout_s')}
+    return {origins,provider,model:process.env.QUOTAGENT_AI_MODEL || llm.model || entry.default_model || '',
       key,baseUrl:process.env.QUOTAGENT_AI_URL || entry.base_url || 'https://api.openai.com/v1',
       effort:llm.reasoning_effort,extra:{...llm.extra_body,...entry.extra_body},timeout:Number(llm.timeout_s || 180)*1000}
   }
@@ -29,6 +31,7 @@ export async function apply(ctx, config = {}) {
       {key:'baseUrl',label:'API base URL',type:'text',required:true,description:'OpenAI-compatible endpoint, including /v1 when required.'},
       {key:'apiKey',label:'API key',type:'password'},
       {key:'timeoutSeconds',label:'Request timeout (seconds)',type:'number',min:5,max:300}],
+    origins:()=>legacySettings().origins,
     defaults:()=>{const s=legacySettings();return {provider:s.provider,model:s.model,baseUrl:s.baseUrl,apiKey:s.key,timeoutSeconds:s.timeout/1000}},
     resolve:(values,{user,globalValues,overriddenKeys})=>{
       const changed=values.provider!==globalValues.provider || values.baseUrl.replace(/\/$/,'')!==globalValues.baseUrl.replace(/\/$/,'')
