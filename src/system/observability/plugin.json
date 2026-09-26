@@ -1,16 +1,10 @@
 {
   "name": "observability",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "layer": "system",
   "provides": [
-    "observability"
+    "operations"
   ],
-  "entry": "code/index.mjs",
-  "description": "system 插件「observability」：本批 `EV-178` 补**真实承载** —— 入口 `code/index.mjs`（薄包装：`export *` 活绑定 + 透传自述面）+ 实体 `code/observability.mjs`（`entry` 指向的入口**真实存在**，`tools/plugin.sh list` 不再报 `artifact-missing`）。**不新造功能**：语义仍只在实体里。",
-  "migration": {
-    "stage": 5,
-    "mode": "entity-moved-and-wrapper",
-    "impl": "src/system/observability/code/observability.mjs",
-    "batch": "EV-178"
-  }
+  "entry": "code/product.mjs",
+  "description": "Native operational metadata, explicit source coverage, disposable periodic snapshots and authorized account event timelines."
 }

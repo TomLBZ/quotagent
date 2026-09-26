@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/operations-7PBV1x",
+  "at": "2026-09-26T04:11:29.878Z",
+  "checks": [
+    "Real ledger operational counts exclude body/cost canaries and record IDs; quarantined realm explicitly reduces coverage; unavailable provider metrics are null; system canary counts use their actual source",
+    "Separate admin gets aggregate metadata only; accepted teammate sees owner event metadata; unrelated supplier and admin timeline do not receive another party events; an unrelated quarantined account cannot break workspace discovery, while own unavailable workspace fails explicitly",
+    "Actual periodic atomic snapshot is readable JSON, contains only metadata and appends no account events",
+    "Disposal removes routes, service, interval and derived snapshot while preserving ledger facts"
+  ]
+}

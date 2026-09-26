@@ -71,7 +71,13 @@ export function createTeams({store,accounts,notifications=()=>null,procurement=(
   }
   const list=user=>{
     const person=actor(user)
-    return accounts.list().filter(account=>account.role===person.role).map(account=>rawTeam(account.id)).filter(team=>team.members.some(member=>member.accountId===person.id&&member.active)).map(team=>({id:team.id,name:team.name,side:team.side,ownerId:team.ownerId}))
+    // The current workspace must remain readable. A quarantined, unrelated
+    // account must not prevent everyone on the same side from using Teams.
+    scope(user)
+    return accounts.list().filter(account=>!account.disabled&&account.role===person.role).flatMap(account=>{
+      try {return [rawTeam(account.id)]}
+      catch(error){if(error.status===503&&account.id!==person.id)return [];throw error}
+    }).filter(team=>team.members.some(member=>member.accountId===person.id&&member.active)).map(team=>({id:team.id,name:team.name,side:team.side,ownerId:team.ownerId}))
   }
   const select=async(user,ownerId)=>{
     const {person,team}=membership(user,ownerId)

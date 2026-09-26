@@ -1,0 +1,318 @@
+{
+  "generatedAt": "2026-09-26T04:16:13.663Z",
+  "source": "native-cordis-and-ledger-projections",
+  "coverage": {
+    "totalAccounts": 4,
+    "availableAccounts": 4,
+    "unavailableAccounts": 0,
+    "complete": true,
+    "unavailable": []
+  },
+  "sources": {
+    "ledger": "workspace-store",
+    "plugins": "plugin-manager",
+    "provider": "agent-runtime"
+  },
+  "totals": {
+    "events": 91,
+    "requests": 0,
+    "completed": 0,
+    "failed": 0,
+    "unknown": 0,
+    "active": 0,
+    "queued": 0,
+    "retries": 0
+  },
+  "circuits": {},
+  "collections": {
+    "review-actions": {
+      "total": 0,
+      "states": {}
+    },
+    "clarifications": {
+      "total": 0,
+      "states": {}
+    },
+    "faqs": {
+      "total": 0,
+      "states": {}
+    },
+    "workflow-runs": {
+      "total": 0,
+      "states": {}
+    },
+    "exchange-outbox": {
+      "total": 12,
+      "states": {
+        "delivered": 6,
+        "other": 6
+      }
+    },
+    "exchange-inbox": {
+      "total": 12,
+      "states": {
+        "other": 12
+      }
+    },
+    "studio-proposals": {
+      "total": 0,
+      "states": {}
+    },
+    "studio-feedback": {
+      "total": 0,
+      "states": {}
+    },
+    "studio-shadow-reports": {
+      "total": 0,
+      "states": {}
+    },
+    "provider-requests": {
+      "total": 0,
+      "states": {}
+    },
+    "mail-messages": {
+      "total": 0,
+      "states": {}
+    },
+    "evidence-exports": {
+      "total": 0,
+      "states": {}
+    },
+    "evidence-rebuilds": {
+      "total": 0,
+      "states": {}
+    }
+  },
+  "eventFamilies": {
+    "procurement": 13,
+    "kernel": 24,
+    "exchange": 48,
+    "relay": 6
+  },
+  "plugins": [
+    {
+      "id": "plugin-manager",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "webui",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "workspace-store",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "accounts",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "settings",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "notifications",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "teams",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "action-center",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "agent-runtime",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "procurement",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "exchange-workbench",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "commercial-workbench",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "installed-plugins",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "plugin-studio",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "file-store",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "evidence",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "attachments",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "retention",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "ingestion",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "ingestion-email",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "ingestion-spreadsheet",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "ingestion-tabular",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "ingestion-documents",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "ingestion-ai",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "mail",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "telegram",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "agent-connections",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "agent-workflows",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "workspace-styles",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "user-guide",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "observability",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "sandbox",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "procurement-sandbox",
+      "status": "active",
+      "parentId": null
+    },
+    {
+      "id": "runtime:plugin-manager:9",
+      "status": "active",
+      "parentId": "plugin-manager"
+    },
+    {
+      "id": "runtime:agent-runtime:16",
+      "status": "active",
+      "parentId": "agent-runtime"
+    },
+    {
+      "id": "runtime:agent-runtime:17",
+      "status": "active",
+      "parentId": "agent-runtime"
+    },
+    {
+      "id": "runtime:agent-runtime:18",
+      "status": "active",
+      "parentId": "agent-runtime"
+    },
+    {
+      "id": "runtime:agent-runtime:21",
+      "status": "active",
+      "parentId": "agent-runtime"
+    },
+    {
+      "id": "runtime:agent-runtime:22",
+      "status": "active",
+      "parentId": "agent-runtime"
+    },
+    {
+      "id": "runtime:agent-runtime:25",
+      "status": "active",
+      "parentId": "agent-runtime"
+    },
+    {
+      "id": "runtime:installed-plugins:38",
+      "status": "active",
+      "parentId": "installed-plugins"
+    },
+    {
+      "id": "runtime:mail:60",
+      "status": "active",
+      "parentId": "mail"
+    }
+  ],
+  "sharedRuntime": {
+    "available": true,
+    "trials": 0,
+    "states": {}
+  },
+  "process": {
+    "uptimeSeconds": 3,
+    "residentBytes": 198991872
+  },
+  "snapshot": {
+    "enabled": true,
+    "lastError": null
+  },
+  "scope": "Application operational metadata only; counts cover readable active account realms. No account record bodies or private values."
+}

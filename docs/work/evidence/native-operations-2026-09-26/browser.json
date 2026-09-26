@@ -1,0 +1,19 @@
+{
+  "at": "2026-09-26T04:16:11.088Z",
+  "root": "/workspace/projects/quotagent/tmp/operations-gui-ZOeLjK",
+  "checks": [
+    "Separate admin GUI displays actual native plugin/provider metadata and downloads a timestamped source-labelled JSON snapshot",
+    "Administrator previews and applies periodic snapshot settings in GUI; explicit value survives reload",
+    "contractor GUI offers only its authorized timeline; real collection query and explicit personal preferences survive reload",
+    "supplier GUI offers only its authorized timeline; real collection query and explicit personal preferences survive reload",
+    "All three account views fit a 390px viewport with no JavaScript errors"
+  ],
+  "errors": [],
+  "screenshots": [
+    "admin-mobile.png",
+    "contractor-mobile.png",
+    "supplier-mobile.png"
+  ],
+  "base": "http://127.0.0.1:45967/quotagent/",
+  "ok": true
+}

@@ -22,5 +22,6 @@ import '../src/system/installed-plugins/client/installed.jsx'
 import '../src/system/teams/client/teams.jsx'
 import '../src/domain/commercial-workbench/client/workbench.jsx'
 import '../src/system/exchange-workbench/client/exchange.jsx'
+import '../src/system/observability/client/operations.jsx'
 import { mountApp } from '../src/system/webui/client/core.jsx'
 mountApp()
