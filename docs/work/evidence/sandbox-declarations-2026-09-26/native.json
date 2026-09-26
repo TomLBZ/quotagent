@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/sandbox-isolation-XgTRRS",
+  "checks": [
+    "Current native procurement/actions/teams/QEP generate8 simulated steps and an independently reviewed order in a separate ledger, without copying or changing real business/files/credentials",
+    "Same HTTP gateway routes bootstrap/read/write into fixed synthetic contractor identity; another real account stays live, file upload/download remain isolated, and role mutation/unavailable outbound plugins refuse",
+    "Reset stops native children and replaces only that demo root; prior practice edits disappear while real bytes remain identical",
+    "Exit restores real identity; resume retains saved demo; unavailable scenario returns explicit503/minimal exit bootstrap and reload restores its existing ledger",
+    "Separate supplier sandbox keeps only that perspective and private own costs, isolated from contractor demo and real accounts",
+    "Whole sandbox-controller restart restores per-owner mode and existing isolated ledgers; concurrent first requests share a single native runtime per owner",
+    "A failed factory still leaves visible owned controls; even a changed-role owner can exit and clear the failed demo without touching another account",
+    "Clear deletes only owned demo directory; native unload removes routes/interception/children with real private bytes unchanged"
+  ]
+}
