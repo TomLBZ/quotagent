@@ -1,0 +1,1823 @@
+[
+  {
+    "id": "FR-LEDGER-001",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Account facts append through the existing immutable hash-chained Python ledger.",
+    "resolution": "workspace-store/code/adapter.py delegates to kernel/code/ledger.py; no alternate mutable fact writer or kernel format change was introduced.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-AUDIT-001",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-AUDIT-001.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Twelve-event chain, duplicate suppression, unchanged reopen head, detected tampering, frozen startup and refused append all passed."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Current native writes/restart recovery retain ledger-backed records."
+      }
+    ]
+  },
+  {
+    "id": "FR-LEDGER-002",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Rebuild projections at a recorded sequence or time, including full and incremental reconstruction.",
+    "resolution": "kernel/code/ledger.py retains projections; workspace-store/code/index.mjs exposes historical projection and exchange-workbench owns the GUI.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-AUDIT-002",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-AUDIT-002.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Full/incremental indexes and typed projections equal; sequence-24 snapshot and repeated read agree; model-input reconstruction negative control detects mismatch."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8646/quotagent/ node src/system/exchange-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/gui-local.json",
+        "scope": "Four isolated local GUI groups; all writes through visible controls. Final public check pending.",
+        "observed": "History view rebuilds records at a specified recorded point and survives reload."
+      }
+    ]
+  },
+  {
+    "id": "FR-LEDGER-003",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Verify ledger continuity at startup and append; quarantine an unhealthy realm and refuse its reads/writes/delivery while healthy accounts continue.",
+    "resolution": "kernel/code/ledger.py verifies full startup chain and appended tail; workspace-store tracks health and refuses effective reads/delivery for known corruption.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-AUDIT-001",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-AUDIT-001.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Modified sequence detected, restart freezes ledger and append is rejected."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Corrupt realm is quarantined while a healthy account continues; cached pairing secret removal is respected."
+      }
+    ]
+  },
+  {
+    "id": "FR-LEDGER-004",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "The same correlation ID, event type and body hash do not append a second fact.",
+    "resolution": "Existing Ledger.append dedup key remains the kernel source of truth.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-AUDIT-001",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-AUDIT-001.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Repeated exact fact yields unchanged chain/event count."
+      }
+    ]
+  },
+  {
+    "id": "FR-PLUGIN-001",
+    "status": "verified",
+    "owner": "system/plugin-manager",
+    "contract": "src/system/plugin-manager/requirements/README.md",
+    "currentOutcome": "Use actual native Cordis plugin lifecycle, dependency readiness and reversible effects with GUI controls.",
+    "resolution": "plugin-manager controls actual fibers/children, persists enabled state and reports unavailable required services. Historical tools/plugin.sh verbs are not the user interface or lifecycle source of truth.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/plugin-workspace-2026-09-25/plugin-manager-lifecycle.json",
+        "scope": "Nine actual Cordis lifecycle checks on the recorded plugin inventory; counts are revision-specific.",
+        "observed": "Dependency refusal, route/service disposal, persisted disable and true remount all passed."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-manager/tests/capability-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/capability.json",
+        "scope": "Four public GUI groups; actual account permission and actual Help plugin lifecycle changes, then restoration.",
+        "observed": "Actual Help plugin is disabled/re-enabled through native request resolution."
+      }
+    ]
+  },
+  {
+    "id": "FR-QEP-001",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Construct and validate signed QEP envelopes without changing the existing protocol semantics.",
+    "resolution": "workspace-store/code/delivery.py wraps existing kernel/code/qep.py; protocol validation precedes business projection.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Independent roots exchange actual signed commitment, reject invalid signatures, and retain public projection plus signed receipt."
+      }
+    ]
+  },
+  {
+    "id": "FR-QEP-002",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "A commitment requires a matching human approval proof; a receiving party refuses invalid commitments.",
+    "resolution": "Existing QEP validation checks approval binding; action-center supplies actual human decision and procurement supplies frozen business inputs.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Independent approved commitment applies; invalid approval/signature input refuses before effective record."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Five public GUI groups with fictitious business parties and actual native approval/QEP/order/change writers; no commercial transaction with an external company.",
+        "observed": "Separate reviewer grants and proposer signs one exact order; supplier confirms the exact offer first."
+      }
+    ]
+  },
+  {
+    "id": "FR-QEP-004",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "At-least-once QEP delivery deduplicates exact received messages.",
+    "resolution": "Existing QEP dedup plus native durable inbox/outbox receipts preserve effectively-once business application.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-QEP-002",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-QEP-002.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Three physical deliveries append one received fact; retransmission retains original message ID/body hash and replay remains stable."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Repeated signed package is deduplicated across independent roots and recovery."
+      }
+    ]
+  },
+  {
+    "id": "FR-APPROVE-001",
+    "status": "verified",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Persist approval requests, human grants/rejections and execution receipts without allowing a model to impersonate a signer.",
+    "resolution": "Action-center separates proposal registration from approve/sign routes; assistant tools return review navigation rather than confirmation.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/state.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/README.md",
+        "scope": "Nine native action-service groups; real durable state, controlled executors.",
+        "observed": "Propose executes nothing; explicit human confirmation is required; concurrent approval executes once; AI/source text cannot confirm."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Five public GUI groups with fictitious business parties and actual native approval/QEP/order/change writers; no commercial transaction with an external company.",
+        "observed": "Independent human grant and proposer signature produce one order."
+      }
+    ]
+  },
+  {
+    "id": "FR-APPROVE-002",
+    "status": "verified",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Bind an approval to its exact action, current party policy and frozen payload; do not reuse it for another commitment.",
+    "resolution": "Action input hash, independent grant and final signature are revalidated against current business/policy state.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/independent.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/perspective.json",
+        "scope": "Seven native groups with real account ledger/teams and controlled external executors. Procurement GUI signing has separate evidence.",
+        "observed": "Grant applies only to the frozen action; changed policy, amount/currency or removed reviewer blocks signature."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Five public GUI groups with fictitious business parties and actual native approval/QEP/order/change writers; no commercial transaction with an external company.",
+        "observed": "Exact accepted offer produces a scoped order; reviewed later change uses a new decision and applies once."
+      }
+    ]
+  },
+  {
+    "id": "FR-EVAL-003",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Collect source-linked measured run baselines with explicit coverage and unknown costs/outcomes.",
+    "resolution": "agent-runtime/code/product-evaluation.mjs derives counts/durations/interventions from retained runs; provider controls/usage retain known versus unknown tokens/tariffs.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/evaluation.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/evaluation.json",
+        "scope": "Seven native groups; four explicitly synthetic recorded-run families and deterministic assertion replay, not deterministic fresh model behavior.",
+        "observed": "Baseline reads actual captured records and leaves business improvement unknown."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-runtime/tests/runtime-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/runtime.json",
+        "scope": "Five public GUI groups on the recorded integrated release, using a labelled local provider fixture and synthetic tariff.",
+        "observed": "User sees configured refusal/resume, context omissions, measured tokens and clearly labelled synthetic cost."
+      }
+    ]
+  },
+  {
+    "id": "FR-INTEG-001",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Portable file delivery writes complete signed packages atomically and imports the original package explicitly.",
+    "resolution": "kernel file binding retains temporary-write/rename behavior; native delivery.package exports stable sequence/message filenames and file import validates original signed bytes.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-INTEG-001",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-INTEG-001.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Atomic temporary-to-final write, exact sequence/message filename, partial-file exclusion, malformed-JSON quarantine and file delivery passed."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8646/quotagent/ node src/system/exchange-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/gui-local.json",
+        "scope": "Four isolated local GUI groups; all writes through visible controls. Final public check pending.",
+        "observed": "User exports QEP JSON, imports it at the peer, and imports the signed receipt through GUI."
+      }
+    ]
+  },
+  {
+    "id": "FR-MAIL-001",
+    "status": "verified",
+    "owner": "system/mail",
+    "contract": "src/system/mail/requirements/product.md",
+    "currentOutcome": "Offer account-configured actual IMAP/SMTP, truthful unavailable/connected/send states and masked private connection secrets.",
+    "resolution": "Native mail product plugin replaces the old Python standard-library/env-precedence carrier; account-scoped settings are independent for every user.",
+    "acceptance": [
+      {
+        "command": "node src/system/mail/tests/product-smoke.mjs",
+        "evidence": "docs/work/evidence/g9-configuration-and-notifications.md",
+        "scope": "2026-09-26 rerun against local protocol fixtures; actual SMTP/IMAP, native services and durable state.",
+        "observed": "Ten groups rerun actual IMAP/SMTP and loopback Telegram; credentials/account isolation, UID dedup and transport receipts pass."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/mail/tests/product-browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/mail-telegram.json",
+        "scope": "Recorded public GUI journey with real native plugins and fictitious loopback SMTP/IMAP/Telegram/MCP/A2A services; not live third-party delivery.",
+        "observed": "User connects IMAP/SMTP in GUI, syncs a real MIME message and manually approves one actual SMTP fixture send."
+      }
+    ]
+  },
+  {
+    "id": "FR-MAIL-002",
+    "status": "superseded",
+    "owner": "system/mail",
+    "contract": "src/system/mail/requirements/product.md",
+    "currentOutcome": "Manage mail connection settings/status through the full native GUI and generic schema import/export/init.",
+    "resolution": "Read-only host config snapshots, fixed ops/mail routes and YAML-only editing are superseded by account-owned native schema UI. Generic settings preserves masked credentials and explicit private exports.",
+    "acceptance": [
+      {
+        "command": "node src/system/mail/tests/product-smoke.mjs",
+        "evidence": "docs/work/evidence/g9-configuration-and-notifications.md",
+        "scope": "2026-09-26 rerun against local protocol fixtures; actual SMTP/IMAP, native services and durable state.",
+        "observed": "Actual schema configuration establishes IMAP/SMTP connection and preserves owner isolation."
+      },
+      {
+        "command": "node src/system/settings/tests/transactions.mjs",
+        "evidence": "docs/work/evidence/g9-2026-09-26/settings.json",
+        "scope": "G9 native configuration acceptance; YAML/schema behavior, scoped provenance and rollback.",
+        "observed": "Schema import/export/init and failed preflight/rollback retain correct effective settings; secret fields remain write-only by default."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/mail/tests/product-browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/mail-telegram.json",
+        "scope": "Recorded public GUI journey with real native plugins and fictitious loopback SMTP/IMAP/Telegram/MCP/A2A services; not live third-party delivery.",
+        "observed": "Visible settings/connect/sync/compose/reply/review flow works."
+      }
+    ]
+  },
+  {
+    "id": "FR-ADV-001",
+    "status": "superseded",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Provide role-scoped, source-grounded agent suggestions with explicit missing context and direct review/navigation actions; do not invent competitive supplier rankings.",
+    "resolution": "The fixed five-rule, no-model advice-panel, SSR routes and copyable Python commands are superseded by native assistant, commercial comparison and durable review UI. Their safe outcomes remain: source-visible context, no invented facts, own-role access and no automatic commitment. Source: agent-runtime/code/product-assistant.mjs, context.mjs; procurement supplier snapshot exposes no competitive ranking.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/provider-controls.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/provider.json",
+        "scope": "Fourteen native groups with actual loopback HTTP provider, controlled clock and explicit synthetic tariff; not a provider price or business-quality claim.",
+        "observed": "Context receipts distinguish omitted/empty/degraded sources."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/mail/tests/product-ai-browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/hostile-email.json",
+        "scope": "Public actual-model observed case; not a universal prompt-injection guarantee.",
+        "observed": "Live model reads hostile fixture mail, makes an editable draft, sends zero messages and activates no poisoned memory."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Five public GUI groups with fictitious business parties and actual native approval/QEP/order/change writers; no commercial transaction with an external company.",
+        "observed": "Actual business follow-up actions remain explicit frozen human review."
+      }
+    ]
+  },
+  {
+    "id": "FR-GATE-001",
+    "status": "superseded",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Show pending review owner, age, consequence and next action, plus traceable business change responsibility; permit explicit reminders/escalation/expiry without automatic approval.",
+    "resolution": "Old read-only gate-timeline SSR/as_of-only derivation, 0600 pending files and Python-only nudge writer are superseded by durable action-center and domain change GUI. Native actions own clocks/decisions and domain plugins supply record links.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/independent.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/perspective.json",
+        "scope": "Seven native groups with real account ledger/teams and controlled external executors. Procurement GUI signing has separate evidence.",
+        "observed": "Reasoned delegation, reminder, higher-role escalation and expiry retain receipts; expiry never grants/executes."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Five public GUI groups with fictitious business parties and actual native approval/QEP/order/change writers; no commercial transaction with an external company.",
+        "observed": "Change records trace original rates/quantity, counterparty confirmation and exact independent approval."
+      }
+    ]
+  },
+  {
+    "id": "FR-AUTH-001",
+    "status": "superseded",
+    "owner": "system/teams",
+    "contract": "src/system/teams/requirements/README.md",
+    "currentOutcome": "Expose currency-bound integer monetary authority, distinguish unknown from explicit zero, identify an eligible higher reviewer and require human policy review.",
+    "resolution": "Native teams authority/policy GUI replaces the old pure snapshot SSR/CLI component and manual terminal commands. Policy cannot become effective merely because an agent suggests it.",
+    "acceptance": [
+      {
+        "command": "node src/system/teams/tests/state.mjs",
+        "evidence": "docs/work/evidence/teams-2026-09-26/native-daily.json",
+        "scope": "Five native groups on actual store/QEP; team policy and daily-work ownership verified.",
+        "observed": "Unknown, zero, exact limit, explicit unlimited and currency mismatch remain distinct; separate reviewer must grant policy then proposer applies."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/teams/tests/browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/teams.json",
+        "scope": "Five public GUI groups for explicit same-party collaboration and independent review.",
+        "observed": "Users configure actual party authority with independent review and inspect eligible human responsibility."
+      }
+    ]
+  },
+  {
+    "id": "FR-USREQ-010",
+    "status": "verified",
+    "owner": "system/installed-plugins",
+    "contract": "src/system/installed-plugins/requirements/README.md",
+    "currentOutcome": "Let native and account-installed plugins evolve through immutable revisions, observed shadow/canary trials, explicit activation and rollback while retaining independent Cordis lifecycle.",
+    "resolution": "Plugin Studio owns optional management; installed-plugins owns persistent account runtimes. Paired marketplace clone/artifact hashes preserve lineage without rewriting other account installs. Cordis is pinned to 4.0.0-rc.10 as the stated contract; this review makes no new claim about the latest npm release.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/g7-native-evolution.md",
+        "scope": "Thirteen native groups; bounded supported artifact kinds, not arbitrary kernel self-modification.",
+        "observed": "Immutable revision diff/restore, feedback candidate, paired trial observations, scoped canary and rollback preserve ownership; Studio unload leaves installed tool alive."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-studio/tests/evolution-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/evolution.json",
+        "scope": "Six public actual-model GUI groups on the recorded integrated release.",
+        "observed": "Real generated tool evolves 6→9 through reviewed trial/canary; previous revision is restored and runs while optional Studio is disabled."
+      }
+    ]
+  },
+  {
+    "id": "FR-USREQ-012",
+    "status": "superseded",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Supply agent advice through native system plugins and turn suggestions into editable drafts or reviewed proposals.",
+    "resolution": "Historical advice-panel.mjs/userplugin-elevate.py and subagent-as-build-mechanism are replaced by native assistant/workflows, plugin Studio and installed-runtime lifecycles. Advice cannot approve or directly send a commitment.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-workflows/tests/browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/workroom.json",
+        "scope": "Recorded public actual-model GUI journey; 15 groups.",
+        "observed": "Actual configured model uses planner and distinct specialist contexts, human plan/question checkpoints and traceable synthesis."
+      },
+      {
+        "command": "node src/system/action-center/tests/state.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/README.md",
+        "scope": "Nine native action-service groups; real durable state, controlled executors.",
+        "observed": "Proposal alone executes nothing; AI cannot manufacture confirmation or bypass delegated policy."
+      }
+    ]
+  },
+  {
+    "id": "FR-QEP-003",
+    "status": "implemented",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Detect missing stream sequences, retain held messages without skipping and expose exact predecessor recovery.",
+    "resolution": "Native recipient durably holds gaps; exchange-workbench/code/index.mjs prepends unacknowledged predecessors on sender retry. Existing kernel emits resend_requested, but native transport does not forward a separate resend-control round trip.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "A held gap survives restart and applies only after its predecessor; stream does not skip."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8646/quotagent/ node src/system/exchange-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/gui-local.json",
+        "scope": "Four isolated local GUI groups; all writes through visible controls. Final public check pending.",
+        "observed": "Missing-sequence state and exact package retry/recheck controls are visible."
+      }
+    ],
+    "remaining": "Retained automatic resend-request clause lacks a native wire request/outbox/response path. Current manual recovery and predecessor batching are verified substitutes for delivery recovery, not evidence that this control exchange exists."
+  },
+  {
+    "id": "FR-QEP-005",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Refuse a peer with no common supported QEP version and retain the reason.",
+    "resolution": "delivery.inspect calls the existing endpoint negotiation before accepted business projection.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-QEP-004",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-QEP-004.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "No version intersection records rejection and no agreement; compatible peers select the highest common supported version."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Native bridge and package validation produce stable incompatibility errors without business application."
+      }
+    ]
+  },
+  {
+    "id": "FR-QEP-006",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Record optional-feature degradation; approval, signature and version binding cannot be downgraded away.",
+    "resolution": "Existing QEP negotiation remains authoritative and native delivery.inspect consumes its result.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-QEP-004",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-QEP-004.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Optional pack-delta degradation is recorded; missing mandatory approval/signature/version features refuse negotiation."
+      }
+    ]
+  },
+  {
+    "id": "FR-QEP-007",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Show shared base, current local and received public values; preserve private fields and require explicit reconciliation of conflicting commitments.",
+    "resolution": "workspace-store delivery and exchange-workbench reconcile actual record versions. Acceptance uses the exact approved incoming public record; an alternative price/scope requires a fresh business proposal.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Three-way commitment conflict leaves private fields intact; explicit exact-input acceptance applies once and domain rejection produces no effective record."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8646/quotagent/ node src/system/exchange-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/gui-local.json",
+        "scope": "Four isolated local GUI groups; all writes through visible controls. Final public check pending.",
+        "observed": "Recipient reviews shared base/local/received differences before accepting the sender-approved version."
+      }
+    ]
+  },
+  {
+    "id": "FR-QEP-008",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Recover durable outbound/inbound work after interruption and retry exact signed bytes without duplicate facts.",
+    "resolution": "delivery.recover rebuilds missing indexes from existing ledger/QEP events; native application remains policy-aware.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Crash immediately after send rebuilds outbox; raw receive before application stays unapplied until validated replay; exact-byte retry after sender restart applies once."
+      }
+    ]
+  },
+  {
+    "id": "FR-APPROVE-003",
+    "status": "verified",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Pending human review does not block unrelated agent work; timeout policy reminds, escalates or expires and never auto-approves.",
+    "resolution": "Action-center queues proposals independently and policy worker records bounded reminder/escalation/expiry outcomes; workflow tasks can wait while independent tasks continue.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/independent.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/perspective.json",
+        "scope": "Seven native groups with real account ledger/teams and controlled external executors. Procurement GUI signing has separate evidence.",
+        "observed": "Reminder/escalation/expiry preserve durable state; expired action cannot execute even before background sweep."
+      },
+      {
+        "command": "node src/system/agent-workflows/tests/state.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/focused-checks.json",
+        "scope": "Native controlled-provider run-state evidence.",
+        "observed": "Independent ready agents run concurrently while explicit human checkpoints remain pending."
+      }
+    ]
+  },
+  {
+    "id": "FR-EVAL-001",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Run explicitly synthetic S1–S4 scenario families with assertions against retained native run outputs.",
+    "resolution": "product-evaluation keeps fixture labels; assertions inspect actual recorded outputs and coverage, not fabricated business success.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/evaluation.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/evaluation.json",
+        "scope": "Seven native groups; four explicitly synthetic recorded-run families and deterministic assertion replay, not deterministic fresh model behavior.",
+        "observed": "Four labelled synthetic native families capture real HTTP receipts, freeze assertions and preserve failed cases."
+      }
+    ]
+  },
+  {
+    "id": "FR-EVAL-002",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Replay frozen recorded-run assertions deterministically without a fresh model call or business write.",
+    "resolution": "product-evaluation freezes outputs and source hashes; replay is a read-only assertion evaluation.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/evaluation.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/evaluation.json",
+        "scope": "Seven native groups; four explicitly synthetic recorded-run families and deterministic assertion replay, not deterministic fresh model behavior.",
+        "observed": "Repeated assertion replay is identical with zero provider calls/writes; later run projections do not change the frozen source output."
+      }
+    ]
+  },
+  {
+    "id": "FR-EVAL-004",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Retain append-only counterexample proposals; only explicit human acceptance activates a case.",
+    "resolution": "Evaluation service has no overwrite/delete endpoint for accepted cases; failure evidence stays failed rather than being rewritten to pass.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/evaluation.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/evaluation.json",
+        "scope": "Seven native groups; four explicitly synthetic recorded-run families and deterministic assertion replay, not deterministic fresh model behavior.",
+        "observed": "Human activation freezes assertion/source; failed checks remain counterexamples and survive real ledger restart."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-runtime/tests/runtime-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/runtime.json",
+        "scope": "Five public GUI groups on the recorded integrated release, using a labelled local provider fixture and synthetic tariff.",
+        "observed": "User accepts an observed output check, sees a retained failed case and reruns its recorded assertion."
+      }
+    ]
+  },
+  {
+    "id": "FR-INTEG-002",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Deliver original signed public QEP packages over HTTP with durable transport receipts; the transport does not negotiate or modify business terms.",
+    "resolution": "Native exchange-workbench transport replaces the historical separately operated relay carrier. It forwards signed package batches, records response/failure and retains explicit retry; QEP/business validation belongs to the receiving plugins.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Real HTTP endpoint failure occurs after durable local append, then corrected route and sender restart deliver exact original bytes with receipt."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8646/quotagent/ node src/system/exchange-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/gui-local.json",
+        "scope": "Four isolated local GUI groups; all writes through visible controls. Final public check pending.",
+        "observed": "User sees failed HTTP delivery, corrects the route, retries and observes retained receipt."
+      }
+    ]
+  },
+  {
+    "id": "FR-INTEG-004",
+    "status": "implemented",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Native host and Python kernel communicate through a capability-negotiated NDJSON bridge with typed actionable errors and no generic commit operation.",
+    "resolution": "workspace-store/code/bridge.py requires hello before operations; adapter describes capabilities and rejects incompatible versions. Caller realm/actor is supplied by trusted native host services, not a publicly exposed bridge API.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Incompatible hello appends zero events; missing handshake rejects; commit is absent; errors carry stable code and next action."
+      }
+    ],
+    "remaining": "The original claim that caller identity cannot be self-declared is not established at the NDJSON process boundary: adapter requests still carry realm/actor from the trusted host. Either formally supersede the obsolete untrusted-caller bridge model with the current native service boundary, or add explicit caller binding if it remains mandatory; current tests do not prove it."
+  },
+  {
+    "id": "FR-INTEG-003",
+    "status": "verified",
+    "owner": "system/mail",
+    "contract": "src/system/mail/requirements/product.md",
+    "currentOutcome": "A mail transport failure cannot be reported as sent; durable successful receipts survive later notification failure.",
+    "resolution": "mail/code/product.mjs isolates durable transport receipt from best-effort notification; ambiguous failures remain uncertain and are never automatically resent.",
+    "acceptance": [
+      {
+        "command": "node src/system/mail/tests/product-smoke.mjs",
+        "evidence": "docs/work/evidence/g9-configuration-and-notifications.md",
+        "scope": "2026-09-26 rerun against local protocol fixtures; actual SMTP/IMAP, native services and durable state.",
+        "observed": "Stale proposal refuses; actual loopback send receipt persists when subsequent notification fails; no duplicate retry masquerades as a new success."
+      },
+      {
+        "command": "node src/system/action-center/tests/state.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/README.md",
+        "scope": "Nine native action-service groups; real durable state, controlled executors.",
+        "observed": "Action restart marks interrupted external execution uncertain and does not auto-send."
+      }
+    ]
+  },
+  {
+    "id": "FR-UX-001",
+    "status": "verified",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Present pending action contents, immutable proposal/input hash, exact captured source chain and owning-plugin risk declarations.",
+    "resolution": "ADR-0051 and action-center/code/provenance.mjs capture actual source event refs and distinguish not-assessed, explicitly empty owner flags and uncaptured historical sources. Review UI exposes original event and safe source navigation.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/provenance.mjs",
+        "evidence": "docs/work/evidence/action-review-provenance/native-report.json",
+        "scope": "Five actual native ledger groups on latest source; local verified, final public deployment/check pending.",
+        "observed": "Exact authorized source event survives later record mutation; missing/empty/legacy assessment states differ; payload mismatch is explicit."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8650/quotagent/ node src/system/action-center/tests/provenance-browser.mjs",
+        "evidence": "docs/work/evidence/action-review-provenance/browser-report.json",
+        "scope": "Three isolated local GUI groups/five screenshots; unsigned fictitious proposal, no order signed; final public check pending.",
+        "observed": "Concrete unsigned offer shows 35-day/full-advance flags, exact original proposal and quote sources, source inspection/navigation and 390 px layout."
+      }
+    ],
+    "remaining": "Local source/native/GUI verified; final public provenance journey remains pending. No risk-free or historical-source reconstruction claim."
+  },
+  {
+    "id": "FR-RUNTIME-003",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Offer bounded realm diagnostic subscriptions with prefix filtering, identity deduplication and reversible registration; reading/subscribing itself writes no ledger/file.",
+    "resolution": "provider-controls diagnostic ring is in memory. Durable model/admission facts are separate owned events and are not produced merely by observing the ring.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/provider-controls.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/provider.json",
+        "scope": "Fourteen native groups with actual loopback HTTP provider, controlled clock and explicit synthetic tariff; not a provider price or business-quality claim.",
+        "observed": "Bounded prefix subscriptions deduplicate identifiers and dispose callbacks; read-only metadata excludes credentials and does not append records."
+      }
+    ]
+  },
+  {
+    "id": "FR-RUNTIME-004",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Enforce integer-micro-unit rolling cost budgets with distinct oversized-request and wait-for-window explanations.",
+    "resolution": "provider-policy and provider-controls distinguish reservations, actual usage, unknown price and tariff binding; decision clock is injectable.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/provider-controls.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/provider.json",
+        "scope": "Fourteen native groups with actual loopback HTTP provider, controlled clock and explicit synthetic tariff; not a provider price or business-quality claim.",
+        "observed": "Integer tariff arithmetic, measured coverage, oversized refusal, depleted rolling window and controlled rollover passed."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-runtime/tests/runtime-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/runtime.json",
+        "scope": "Five public GUI groups on the recorded integrated release, using a labelled local provider fixture and synthetic tariff.",
+        "observed": "GUI config changes and explicit resume make the next budget decision visible; synthetic tariff is labelled."
+      }
+    ]
+  },
+  {
+    "id": "FR-RUNTIME-005",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Bound repeated provider failures with an account/connection circuit, cooldown, one recovery probe and visible retry time.",
+    "resolution": "provider-controls owns circuit states and disposable admission effects.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/provider-controls.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/provider.json",
+        "scope": "Fourteen native groups with actual loopback HTTP provider, controlled clock and explicit synthetic tariff; not a provider price or business-quality claim.",
+        "observed": "Consecutive failures open circuit; one half-open probe after cooldown is permitted and a simultaneous probe refuses."
+      }
+    ]
+  },
+  {
+    "id": "FR-RUNTIME-006",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Expose bounded admission/backpressure, queue wait and eligible retries; explicit timeout is an error and decision timing is injectable.",
+    "resolution": "Native provider-controls replaces historical host-carrier mechanics while preserving deterministic controlled-clock policy evaluation and abortable real waits.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/provider-controls.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/provider.json",
+        "scope": "Fourteen native groups with actual loopback HTTP provider, controlled clock and explicit synthetic tariff; not a provider price or business-quality claim.",
+        "observed": "Host backpressure refuses before dispatch; queue timeout causes no dispatch; eligible 503 honors one Retry-After retry; actual request timeout is not retried; cancellation releases lease."
+      }
+    ]
+  },
+  {
+    "id": "FR-RUNTIME-009",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Deduplicate identical account-owned provider request identities and replay failure as failure.",
+    "resolution": "Provider controls coalesce in-flight work and retain durable result identity; ambiguous interrupted calls never auto-resend.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/provider-controls.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/provider.json",
+        "scope": "Fourteen native groups with actual loopback HTTP provider, controlled clock and explicit synthetic tariff; not a provider price or business-quality claim.",
+        "observed": "Concurrent identities dispatch once; durable replay retains result; changed payload rejects and failed request never replays as success."
+      },
+      {
+        "command": "node src/system/agent-runtime/tests/evaluation.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/evaluation.json",
+        "scope": "Seven native groups; four explicitly synthetic recorded-run families and deterministic assertion replay, not deterministic fresh model behavior.",
+        "observed": "Restart retains identities/reservations and marks unfinished identity interrupted without replay."
+      }
+    ]
+  },
+  {
+    "id": "FR-ADMIN-001",
+    "status": "verified",
+    "owner": "system/accounts",
+    "contract": "src/system/accounts/requirements/README.md",
+    "currentOutcome": "Expose a separate administrator account UI with server-side role checks; unauthorized client accounts cannot use administrator routes.",
+    "resolution": "accounts/code/product.mjs registers admin-only user routes and navigation; generic web route authorization enforces account role.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-manager/tests/capability-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/capability.json",
+        "scope": "Four public GUI groups; actual account permission and actual Help plugin lifecycle changes, then restoration.",
+        "observed": "Separate admin account grants permission and performs real plugin lifecycle; client/other party cannot read private request explanations."
+      },
+      {
+        "command": "node src/system/accounts/tests/sign-in.mjs",
+        "evidence": "docs/work/evidence/sign-in-2026-09-26/native.json",
+        "scope": "Two actual local HTTP groups with controlled sign-in clock; no universal timing-side-channel claim.",
+        "observed": "Refused login returns no session cookie; valid independent account sign-in works."
+      }
+    ]
+  },
+  {
+    "id": "FR-ADMIN-004",
+    "status": "verified",
+    "owner": "system/plugin-manager",
+    "contract": "src/system/plugin-manager/requirements/README.md",
+    "currentOutcome": "Let administrators inspect actual agent/plugin blockers, missing configuration and capability requests without fabricated progress.",
+    "resolution": "Plugin inventory derives live fibers/dependency state; capability requests retain blocked/pending decisions and runtime usage provides source-linked status metadata.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-manager/tests/capability-requests.mjs",
+        "evidence": "docs/work/evidence/capability-requests-2026-09-26/native.json",
+        "scope": "Four native Cordis/account/store groups; lifecycle failure executor is controlled.",
+        "observed": "Real lifecycle failure remains blocked with error; permission/configuration progress reflects explicit decisions."
+      },
+      {
+        "command": "node src/system/agent-runtime/tests/provider-controls.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/provider.json",
+        "scope": "Fourteen native groups with actual loopback HTTP provider, controlled clock and explicit synthetic tariff; not a provider price or business-quality claim.",
+        "observed": "Admin metadata shows unavailable realm coverage/count unknown rather than failing healthy accounts or inventing totals."
+      }
+    ]
+  },
+  {
+    "id": "FR-ADMIN-006",
+    "status": "superseded",
+    "owner": "system/plugin-manager",
+    "contract": "src/system/plugin-manager/requirements/README.md",
+    "currentOutcome": "Persist explicit pending, blocked, resolved, rejected and expired capability requests with validated transitions and retained reason.",
+    "resolution": "The historical Python-only writer/read-only host mechanism is replaced by native plugin-manager capability requests. Guidance is not resolved until requester confirms; rejection retry links a new request.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-manager/tests/capability-requests.mjs",
+        "evidence": "docs/work/evidence/capability-requests-2026-09-26/native.json",
+        "scope": "Four native Cordis/account/store groups; lifecycle failure executor is controlled.",
+        "observed": "Blocked lifecycle failure, explicit retry, requester guidance confirmation, rejection/expiry and reload history all passed."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-manager/tests/capability-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/capability.json",
+        "scope": "Four public GUI groups; actual account permission and actual Help plugin lifecycle changes, then restoration.",
+        "observed": "GUI permission/lifecycle/guidance transitions match actual effects; unrelated clients cannot see the request."
+      }
+    ]
+  },
+  {
+    "id": "FR-ADMIN-008",
+    "status": "verified",
+    "owner": "system/accounts",
+    "contract": "src/system/accounts/requirements/README.md",
+    "currentOutcome": "Use uniform refused-sign-in behavior and bounded cooldown without creating a session or falsely successful login.",
+    "resolution": "accounts sign-in limiter keys normalized identity and reports the same user-facing failure for missing/wrong/disabled/cooling accounts.",
+    "acceptance": [
+      {
+        "command": "node src/system/accounts/tests/sign-in.mjs",
+        "evidence": "docs/work/evidence/sign-in-2026-09-26/native.json",
+        "scope": "Two actual local HTTP groups with controlled sign-in clock; no universal timing-side-channel claim.",
+        "observed": "Five failures cause bounded 30-second cooldown; correct password during cooldown still refuses; different account works; expiry requires a fresh explicit successful login."
+      }
+    ]
+  },
+  {
+    "id": "FR-ADMIN-009",
+    "status": "superseded",
+    "owner": "system/accounts",
+    "contract": "src/system/accounts/requirements/README.md",
+    "currentOutcome": "Require an authenticated administrator account for server changes; rejected login/elevation attempts create no session or pending action.",
+    "resolution": "Old non-admin token elevation and submission-file handoff are removed. Current account/session and admin-route model replaces token mechanics without introducing a client-side elevation path.",
+    "acceptance": [
+      {
+        "command": "node src/system/accounts/tests/sign-in.mjs",
+        "evidence": "docs/work/evidence/sign-in-2026-09-26/native.json",
+        "scope": "Two actual local HTTP groups with controlled sign-in clock; no universal timing-side-channel claim.",
+        "observed": "Missing, wrong, disabled and cooling accounts return uniform failure and no session cookie."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-manager/tests/capability-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/capability.json",
+        "scope": "Four public GUI groups; actual account permission and actual Help plugin lifecycle changes, then restoration.",
+        "observed": "A separate administrator explicitly resolves requests; ordinary client cannot self-grant its permission."
+      }
+    ]
+  },
+  {
+    "id": "FR-ADMIN-010",
+    "status": "superseded",
+    "owner": "system/accounts",
+    "contract": "src/system/accounts/requirements/README.md",
+    "currentOutcome": "Keep authentication credentials server-owned and exclude credential material from public account profiles or client configuration.",
+    "resolution": "Environment/file admin-token normalization is obsolete. accounts/code/product.mjs persists salted scrypt hashes in mode-0600 account storage, compares derived hashes with timingSafeEqual and returns publicProfile without credentials; HttpOnly sessions replace token HTML/JS handling.",
+    "acceptance": [
+      {
+        "command": "node src/system/accounts/tests/sign-in.mjs",
+        "evidence": "docs/work/evidence/sign-in-2026-09-26/native.json",
+        "scope": "Two actual local HTTP groups with controlled sign-in clock; no universal timing-side-channel claim.",
+        "observed": "Actual HTTP login failures return no session; successful server authentication creates the account session."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-manager/tests/capability-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/capability.json",
+        "scope": "Four public GUI groups; actual account permission and actual Help plugin lifecycle changes, then restoration.",
+        "observed": "Admin-only changes require the separate authenticated account; client receives only permitted request data."
+      }
+    ]
+  },
+  {
+    "id": "FR-ADMIN-005",
+    "status": "superseded",
+    "owner": "system/plugin-manager",
+    "contract": "src/system/plugin-manager/requirements/README.md",
+    "currentOutcome": "Resolve client blockers through visible administrator permission/plugin/configuration actions with truthful durable receipts.",
+    "resolution": "Old host 0600 pending-file handoff and no-host-ledger restriction are superseded by native account-owned requests and separate admin decisions; source events preserve who acted.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-manager/tests/capability-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/capability.json",
+        "scope": "Four public GUI groups; actual account permission and actual Help plugin lifecycle changes, then restoration.",
+        "observed": "Actual AI permission changes and Help lifecycle changes take effect; configuration guidance remains pending until the client confirms."
+      }
+    ]
+  },
+  {
+    "id": "FR-AGENTRT-006",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Bound context groups, history, memory, items and payload bytes; report exact omissions and distinguish empty sources from degraded assembly.",
+    "resolution": "agent-runtime/code/context.mjs preserves complete records/tool turns and stores context receipts used by assistant and workflows.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/provider-controls.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/provider.json",
+        "scope": "Fourteen native groups with actual loopback HTTP provider, controlled clock and explicit synthetic tariff; not a provider price or business-quality claim.",
+        "observed": "Whole-record/turn bounds record omitted identifiers/bytes and distinguish empty from degraded."
+      },
+      {
+        "command": "node src/system/agent-runtime/tests/evaluation.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/evaluation.json",
+        "scope": "Seven native groups; four explicitly synthetic recorded-run families and deterministic assertion replay, not deterministic fresh model behavior.",
+        "observed": "Native assistant context omissions survive actual ledger restart."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-runtime/tests/runtime-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/runtime.json",
+        "scope": "Five public GUI groups on the recorded integrated release, using a labelled local provider fixture and synthetic tariff.",
+        "observed": "User sees context omission receipt on the actual run."
+      }
+    ]
+  },
+  {
+    "id": "FR-AGENTRT-002",
+    "status": "superseded",
+    "owner": "system/agent-workflows",
+    "contract": "src/system/agent-workflows/requirements/README.md",
+    "currentOutcome": "Retain durable ledger-reconstructible conversation/project context, human-reviewed policy memory and protocol-only cross-party consensus.",
+    "resolution": "The old session-never-on-disk mechanism conflicts with model-visible ledger provenance and resumable native workflows; ADR-0031/0038 and workflow requirements replace it. Human edits activate policy; model suggestions require review; private realms are never merged by memory.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-workflows/tests/state.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/focused-checks.json",
+        "scope": "Native service evidence with controlled model responses, not live-model quality.",
+        "observed": "Native controlled-provider checks verify human-approved memory/history/isolation, human checkpoints, unload/recovery and declared dependencies."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-workflows/tests/browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/workroom.json",
+        "scope": "Public actual-model journey; memory content remains account-owned.",
+        "observed": "GUI manual memory, human review, later input use, edit/history/archive and reload all passed."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-001",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Agents help each permitted client perspective read context, extract items, compare offers, draft negotiation and remember explicitly reviewed preferences.",
+    "resolution": "Native assistant/workflows invoke domain tools under recorded account/workspace perspective; ingestion, procurement and memory remain their owning plugins. This is observed workflow capability, not a promise of every model answer being correct.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-workflows/tests/browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/workroom.json",
+        "scope": "Public actual-model GUI case with trace inspection.",
+        "observed": "Actual model plans quotation analysis, uses distinct agents, answers human questions, synthesizes reports and consumes reviewed memory."
+      },
+      {
+        "command": "node tools/product-agent-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-agent.json",
+        "scope": "Recorded public actual-model contractor and supplier journey, 18 checks.",
+        "observed": "Both sides create editable domain drafts and persistent preferences; commitments remain explicit human actions."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-004",
+    "status": "verified",
+    "owner": "system/accounts",
+    "contract": "src/system/accounts/requirements/README.md",
+    "currentOutcome": "Persist one supplier/contractor account perspective and keep administrator identity separate from client views.",
+    "resolution": "Accounts restrict client role updates to supplier/contractor; current runs pin workspace and role so a perspective change cannot resume old work as the new role.",
+    "acceptance": [
+      {
+        "command": "node tools/product-agent-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-agent.json",
+        "scope": "Recorded public actual-model GUI journey.",
+        "observed": "Account registration and perspective change persist; supplier and contractor receive their own domain views."
+      },
+      {
+        "command": "node src/system/agent-workflows/tests/scope.mjs",
+        "evidence": "docs/work/evidence/g6-auditable-runtime.md",
+        "scope": "Controlled native current-role/pinned-workspace checks.",
+        "observed": "Changing perspective prevents old task continuation and excludes incompatible prior context."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-007",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Account-owned facts and model context remain reconstructible from the append-only ledger; public business exchange uses QEP.",
+    "resolution": "Native store reuses Ledger/QEP. Agent provider captures complete model requests; context receipts account for omissions and exact wire dispatch is measured for new calls.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-AUDIT-002",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-AUDIT-002.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Twenty model-visible inputs reconstruct identically from ledger and negative control detects divergent reconstruction."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Independent roots receive only explicit public projections; restart rebuilds accepted native records."
+      },
+      {
+        "command": "node src/system/agent-runtime/tests/dispatch.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/dispatch.json",
+        "scope": "Two local actual HTTP groups; historical calls are explicitly boundary-unmeasured.",
+        "observed": "Recorded canonical request bytes/hash match actual outgoing HTTP body; replay causes no second dispatch."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-010",
+    "status": "verified",
+    "owner": "system/plugin-manager",
+    "contract": "src/system/plugin-manager/requirements/README.md",
+    "currentOutcome": "Distinguish current native plugin instances, repository artifacts and account-installed generated plugins in the inventory.",
+    "resolution": "Plugin manager combines actual Cordis fiber metadata and explicit manifest inventory; installed-plugins owns user runtime independent of Studio. Artifact counts describe each inventory scope, not a fabricated all-repository execution count.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/plugin-workspace-2026-09-25/plugin-manager-lifecycle.json",
+        "scope": "Actual native inventory/lifecycle proof for the recorded revision.",
+        "observed": "Nested native children, associated settings, repository-only historical mail and admin ownership are distinct."
+      },
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/g7-native-evolution.md",
+        "scope": "Thirteen native evolution groups; installed runtime separated from optional Studio.",
+        "observed": "Manifest/lineage/revision hashes and installed artifact ownership remain visible; unloading Studio does not stop installed tools."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-015",
+    "status": "verified",
+    "owner": "system/mail",
+    "contract": "src/system/mail/requirements/product.md",
+    "currentOutcome": "Use real inbox synchronization, attachments, editable mail drafts/replies and human-reviewed sending.",
+    "resolution": "Mail owns actual IMAP/SMTP, ingestion/files owns parsed attachments and action-center owns sends; tool outputs preserve external source trust.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/mail/tests/product-browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/mail-telegram.json",
+        "scope": "Recorded public GUI journey with real native plugins and fictitious loopback SMTP/IMAP/Telegram/MCP/A2A services; not live third-party delivery.",
+        "observed": "Real fixture inbox MIME/XLSX attachment becomes editable extracted items; draft/proposal sends zero messages and explicit approval yields one SMTP receipt."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/mail/tests/product-ai-browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/hostile-email.json",
+        "scope": "Public actual-model observed case with loopback mail transport.",
+        "observed": "Actual model reads incoming email and drafts reviewed reply while refusing source-requested automatic send."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-016",
+    "status": "verified",
+    "owner": "system/telegram",
+    "contract": "src/system/telegram/requirements/README.md",
+    "currentOutcome": "Connect a Telegram bot, read updates/attachments, draft reviewed sends and optionally send fixed generic activity notifications only after explicit opt-in.",
+    "resolution": "Native telegram plugin uses getMe/getUpdates/sendMessage, account-owned settings and disposable polling/subscriptions. Notification forwarding never includes private quotation/cost details.",
+    "acceptance": [
+      {
+        "command": "node src/system/mail/tests/product-smoke.mjs",
+        "evidence": "docs/work/evidence/g9-configuration-and-notifications.md",
+        "scope": "2026-09-26 rerun against local protocol fixtures; actual SMTP/IMAP, native services and durable state.",
+        "observed": "Actual local Bot API HTTP fixture verifies updates, reviewed sends and opt-in generic notifications; credentials and private content remain isolated."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/mail/tests/product-browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/mail-telegram.json",
+        "scope": "Recorded public GUI journey with real native plugins and fictitious loopback SMTP/IMAP/Telegram/MCP/A2A services; not live third-party delivery.",
+        "observed": "Bot connection and incoming CSV work in GUI; visible human approval causes one fixture message."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-017",
+    "status": "verified",
+    "owner": "system/agent-connections",
+    "contract": "src/system/agent-connections/requirements/functional.md",
+    "currentOutcome": "Connect real MCP tools/resources/prompts and A2A tasks with account-owned discovery, credentials, human-reviewed external effects and resumable visible interaction.",
+    "resolution": "agent-connections uses actual MCP SDK transports and A2A HTTP interaction; history remains account-owned after connection removal.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-connections/tests/smoke.mjs",
+        "evidence": "docs/work/evidence/g9-configuration-and-notifications.md",
+        "scope": "2026-09-26 rerun against local protocol fixtures; actual SMTP/IMAP, native services and durable state.",
+        "observed": "Eight groups rerun modern Streamable HTTP and legacy SSE tools/resources/prompts, reviewed tool errors, A2A card/query/input/reply/artifact/cancel and disposal."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-connections/tests/browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/mcp-a2a.json",
+        "scope": "Recorded public GUI journey with real native plugins and fictitious loopback SMTP/IMAP/Telegram/MCP/A2A services; not live third-party delivery.",
+        "observed": "Seven public GUI groups cover discovery, masked config, resource/prompt, approved tool receipt, A2A input/reply/artifact/cancel and supplier isolation."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-018",
+    "status": "verified",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Use durable human review for external actions and preserve execution/uncertainty receipts across restart.",
+    "resolution": "Action-center owns pending/reviewed/approved/executing/sent/failed/uncertain lifecycle and never automatically replays an ambiguous external effect.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/state.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/README.md",
+        "scope": "Nine native action-service groups; real durable state, controlled executors.",
+        "observed": "Concurrent idempotence, separate approval, notification outage after send and uncertain restart recovery preserve truthful state."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/mail/tests/product-browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/mail-telegram.json",
+        "scope": "Recorded public GUI journey with real native plugins and fictitious loopback SMTP/IMAP/Telegram/MCP/A2A services; not live third-party delivery.",
+        "observed": "Mail and Telegram proposals send nothing until visible human approval; actual loopback transport receipts persist."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-020",
+    "status": "verified",
+    "owner": "system/agent-workflows",
+    "contract": "src/system/agent-workflows/requirements/README.md",
+    "currentOutcome": "Coordinate multiple model agents with human checkpoints, durable traces and reviewed memory under pinned workspace and role.",
+    "resolution": "agent-workflows planner/specialists/synthesis use separate contexts and dependency/concurrency controls; run state is ledger-backed and recovers paused.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-workflows/tests/browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/workroom.json",
+        "scope": "Public configured actual-model GUI case.",
+        "observed": "Fifteen public checks cover real planner/specialists, human plan/questions, parallel tasks, trace, synthesis and memory history."
+      },
+      {
+        "command": "node src/system/agent-workflows/tests/scope.mjs",
+        "evidence": "docs/work/evidence/g6-auditable-runtime.md",
+        "scope": "Two controlled native scope groups; 13 model calls and seven tool calls.",
+        "observed": "A saved run retains its original workspace; role changes prevent continued/resumed calls and require a new task."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-021",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Enforce declared tool effects and treat received external content as evidence rather than executable authority.",
+    "resolution": "Assistant runtime routes delegates through invoke with read/draft/proposal policy; action executors require separate human approval. Source trust is retained in received content and context.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/state.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/README.md",
+        "scope": "Nine native action-service groups; real durable state, controlled executors.",
+        "observed": "Untrusted draft/proposal does not execute, AI confirmation is refused and account policy cannot be bypassed."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/mail/tests/product-ai-browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/hostile-email.json",
+        "scope": "One observed public actual-model case; not perfect source-injection resistance.",
+        "observed": "Hostile fixture asks for auto-send and memory poisoning; live model produces draft/review with zero transport sends and no active poisoned memory."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-008",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Concurrent editors receive an explicit revision conflict instead of an implicit overwrite.",
+    "resolution": "Native compare-and-set uses expected source revision; rejected edits return current record and actionable conflict metadata.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Two competing compare-and-set writes permit one success; stale write does not append an effective new revision."
+      },
+      {
+        "command": "node src/system/webui/tests/conflicts.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/README.md",
+        "scope": "Actual local HTTP conflict response test.",
+        "observed": "409 includes code, current record and nextAction; refused edit appends no event."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-010",
+    "status": "verified",
+    "owner": "system/teams",
+    "contract": "src/system/teams/requirements/README.md",
+    "currentOutcome": "Add colleagues only through explicit same-party invitation acceptance and enforce their action roles.",
+    "resolution": "Teams owns account-to-workspace membership; actor remains the real human and business owner remains the selected party.",
+    "acceptance": [
+      {
+        "command": "node src/system/teams/tests/state.mjs",
+        "evidence": "docs/work/evidence/teams-2026-09-26/native-daily.json",
+        "scope": "Five native groups on actual store/QEP; team policy and daily-work ownership verified.",
+        "observed": "Unrelated/opposite-party accounts remain outside; removal and role changes remove access without deleting history."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/teams/tests/browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/teams.json",
+        "scope": "Five public GUI groups for explicit same-party collaboration and independent review.",
+        "observed": "Invitee explicitly accepts before team work/review becomes available."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-011",
+    "status": "verified",
+    "owner": "system/teams",
+    "contract": "src/system/teams/requirements/README.md",
+    "currentOutcome": "Apply explicit monetary authority bands and separately reviewed policy changes.",
+    "resolution": "Teams policy exposes currency/limit and independent approval; final signer cannot silently broaden their own policy.",
+    "acceptance": [
+      {
+        "command": "node src/system/teams/tests/state.mjs",
+        "evidence": "docs/work/evidence/teams-2026-09-26/native-daily.json",
+        "scope": "Five native groups on actual store/QEP; team policy and daily-work ownership verified.",
+        "observed": "Independently approved policy differentiates unknown/zero/exact/unlimited and prevents currency mismatch."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Five public GUI groups with fictitious business parties and actual native approval/QEP/order/change writers; no commercial transaction with an external company.",
+        "observed": "Colleague review authority covers the order while proposer authority is zero."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-012",
+    "status": "verified",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Require a different scoped approver where party policy demands it, then let the proposer sign the exact award/order using that grant once.",
+    "resolution": "Teams policy and action-center independent review are integrated with procurement frozen business inputs.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/independent.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/perspective.json",
+        "scope": "Seven native groups with real account ledger/teams and controlled external executors. Procurement GUI signing has separate evidence.",
+        "observed": "Different nominated reviewer grants; proposer signature runs once; outsider/policy/currency changes refuse."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Five public GUI groups with fictitious business parties and actual native approval/QEP/order/change writers; no commercial transaction with an external company.",
+        "observed": "Actual GUI independent reviewer approves exact order while proposer monetary limit is zero; proposer signs one 265 USD order."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-013",
+    "status": "verified",
+    "owner": "system/teams",
+    "contract": "src/system/teams/requirements/README.md",
+    "currentOutcome": "Assign/handoff actual records, follow them and notify known mentioned colleagues while preserving durable history.",
+    "resolution": "Teams activity service links assignments/follows/comments to actual record refs; unresolved mention names remain explicit.",
+    "acceptance": [
+      {
+        "command": "node src/system/teams/tests/state.mjs",
+        "evidence": "docs/work/evidence/teams-2026-09-26/native-daily.json",
+        "scope": "Five native groups on actual store/QEP; team policy and daily-work ownership verified.",
+        "observed": "Object assignments, completion, following and known mentions update personal activity without duplicate notifications."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/teams/tests/browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/teams.json",
+        "scope": "Five public GUI groups for explicit same-party collaboration and independent review.",
+        "observed": "GUI assigns work, comments, mentions, follows and completes an owned object."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-014",
+    "status": "verified",
+    "owner": "system/teams",
+    "contract": "src/system/teams/requirements/README.md",
+    "currentOutcome": "Offer daily mine, assigned-by-me and followed work lists from account-owned activity.",
+    "resolution": "Teams personal views derive persisted assignment/follow/completion state and respect selected party membership.",
+    "acceptance": [
+      {
+        "command": "node src/system/teams/tests/state.mjs",
+        "evidence": "docs/work/evidence/teams-2026-09-26/native-daily.json",
+        "scope": "Five native groups on actual store/QEP; team policy and daily-work ownership verified.",
+        "observed": "Assignment and follow changes produce correct personal activity and survive removal/reload."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8643/quotagent/ node src/system/teams/tests/browser.mjs",
+        "evidence": "docs/work/evidence/teams-2026-09-26/gui-daily.json",
+        "scope": "Recorded isolated local daily-work GUI journey; parent public team journey verifies the base collaboration flow.",
+        "observed": "Mine, assigned-by-me, followed and completion views use actual persisted objects."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-019",
+    "status": "implemented",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Retain per-item approval batch successes, failures and blocked receipts; never resend successful items on retry.",
+    "resolution": "Action-center generic batch service and GUI operate on already prepared actions; native controlled executors prove partial success semantics.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/independent.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/perspective.json",
+        "scope": "Seven native groups with real account ledger/teams and controlled external executors. Procurement GUI signing has separate evidence.",
+        "observed": "Mixed batch retains individual success/failure/blocked results; failed retry creates a new unsigned proposal and never repeats a success."
+      }
+    ],
+    "remaining": "Specific multi-quotation submission preparation and end-to-end partial approval GUI have no matching evidence in this slice. Generic action batches alone do not prove batch quotation creation/submission across domain records."
+  },
+  {
+    "id": "SUPPLEMENT-020",
+    "status": "verified",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Persist background batch progress and allow pause/resume of only unattempted work while preserving completed/uncertain receipts.",
+    "resolution": "Action-center batch state records current item and each result before next dispatch; restart reconciles interrupted execution without automatic duplicate effect.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/independent.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/perspective.json",
+        "scope": "Seven native groups with real account ledger/teams and controlled external executors. Procurement GUI signing has separate evidence.",
+        "observed": "Background batch pauses after in-flight effect, resumes only unattempted items, and reconciles a completed effect after interruption."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-026",
+    "status": "implemented",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Report unreadable or corrupt realms explicitly, preserve healthy accounts, and never label a failed persistent write successful.",
+    "resolution": "Known corrupted ledgers enter native quarantine and surface health metadata; typed adapter errors propagate. Source uses flush/fsync and durable append before receipt.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Tampered realm is quarantined and healthy realm continues; startup and admin metadata retain actionable error."
+      }
+    ],
+    "remaining": "No matching fault-injection evidence covers disk-full, permission-denied and partial filesystem-write failures. Corruption/restart evidence must not be generalized to those failure modes."
+  },
+  {
+    "id": "SUPPLEMENT-028",
+    "status": "verified",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Make omitted context sources and counts auditable rather than silently truncating them.",
+    "resolution": "Context receipts retain group limits, missing/degraded sources, excluded role/workspace history and exact whole-turn omissions.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/provider-controls.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/provider.json",
+        "scope": "Fourteen native groups with actual loopback HTTP provider, controlled clock and explicit synthetic tariff; not a provider price or business-quality claim.",
+        "observed": "Omission identifiers and byte counts are recorded, preserving complete tool turns."
+      },
+      {
+        "command": "node src/system/agent-runtime/tests/evaluation.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/evaluation.json",
+        "scope": "Seven native groups; four explicitly synthetic recorded-run families and deterministic assertion replay, not deterministic fresh model behavior.",
+        "observed": "New role excludes old-role and untagged history with explicit ledger receipt."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-runtime/tests/runtime-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/runtime.json",
+        "scope": "Five public GUI groups on the recorded integrated release, using a labelled local provider fixture and synthetic tariff.",
+        "observed": "Run detail displays retained omitted-source accounting."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-033",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Provide account-visible failed/pending exchange state with explicit resumable outbox recovery.",
+    "resolution": "Exchange-workbench exposes recipient/stream/error/attempt/receipt state and exact retry controls; role/workspace ownership controls views.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8646/quotagent/ node src/system/exchange-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/gui-local.json",
+        "scope": "Four isolated local GUI groups; all writes through visible controls. Final public check pending.",
+        "observed": "Partner route failure, correction, retry, receipt, held gaps and conflict handling remain visible after reload."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Failed delivery does not erase the local accepted fact; restart retains pending exact bytes."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-034",
+    "status": "implemented",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Show measured agent-run baselines with source coverage and keep unobserved business improvement unknown.",
+    "resolution": "product-evaluation exposes run counts/duration/interventions/cost coverage; commercial history separately exposes observed quote distributions. These do not establish quotation-cycle, completeness or productivity improvement.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/evaluation.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/evaluation.json",
+        "scope": "Seven native groups; four explicitly synthetic recorded-run families and deterministic assertion replay, not deterministic fresh model behavior.",
+        "observed": "Read-only baseline exposes measured coverage and explicitly leaves business improvement unknown."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-runtime/tests/runtime-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/runtime.json",
+        "scope": "Five public GUI groups on the recorded integrated release, using a labelled local provider fixture and synthetic tariff.",
+        "observed": "Actual GUI run/cost/context records are available for inspection."
+      }
+    ],
+    "remaining": "The retained business metric outcome still needs defined record-derived quotation-cycle/completeness/intervention measures and a comparable baseline. No measured superiority, saved time or win-rate improvement is established by runtime fixture metrics."
+  },
+  {
+    "id": "DOMAIN-012",
+    "status": "implemented",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Export portable signed QEP JSON and recover delivery through explicit file import or HTTP retry.",
+    "resolution": "Native GUI can download/import original packages and receipts. A person can carry those files by email; the mail plugin does not currently identify, send or receive QEP packages as a QEP transport.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8646/quotagent/ node src/system/exchange-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/gui-local.json",
+        "scope": "Four isolated local GUI groups; all writes through visible controls. Final public check pending.",
+        "observed": "Original package file and signed receipt cross independent parties through GUI; HTTP failure/retry completes."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Real independent roots validate original package/signature and retain delivery state."
+      }
+    ],
+    "remaining": "Direct QEP-aware mail delivery and recovery remains a compatible missing transport outcome; current manual email carriage is not equivalent. Original integration-map/protocol source clauses must guide this adapter, and ordinary email attachment ingestion does not prove signed QEP import."
+  },
+  {
+    "id": "NFR-REL-001",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Facts acknowledged as appended survive the tested interruption points.",
+    "resolution": "Existing Ledger append flushes and fsyncs before acknowledgement; native outbox/application recovery appends corrections rather than rewriting history.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-AUDIT-001",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-AUDIT-001.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Reopen retains the exact appended chain head."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Interruption prefixes after QEP send and raw receive recover without losing accepted facts."
+      }
+    ]
+  },
+  {
+    "id": "NFR-REL-002",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Restart reconstructs durable business state from accepted ledger events, excluding unsaved form edits.",
+    "resolution": "workspace-store.initialize replays existing ledgers and delivery state; workflows recover interrupted work as paused, not automatically running.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Current native record projections, pending deliveries and held messages survive adapter restart."
+      },
+      {
+        "command": "node src/system/agent-workflows/tests/recovery-browser.mjs start; restart the recorded test process; node src/system/agent-workflows/tests/recovery-browser.mjs verify",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/restart.json",
+        "scope": "Public GUI plus actual process restart, scoped to the recorded release/current schema.",
+        "observed": "Actual public process restart retains task/trace state as paused; explicit human resume then cancel is required."
+      }
+    ]
+  },
+  {
+    "id": "NFR-REL-003",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "At-least-once transport and deduplication yield effectively-once application of the same business message.",
+    "resolution": "Kernel QEP and native delivery each retain original IDs/body hashes and durable application/receipt state.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-QEP-002",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-QEP-002.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Repeated physical file delivery produces one fact."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Signed retransmission and restart recovery do not repeat business application."
+      }
+    ]
+  },
+  {
+    "id": "NFR-REL-005",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "An offline peer does not block durable local work; its external delivery remains pending/failed until explicitly recovered.",
+    "resolution": "Native delivery appends local public intent/outbox before attempting transport and exposes failures without pretending acceptance.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Closed real HTTP port fails after durable local write; sender restart then exact-byte retry succeeds."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8646/quotagent/ node src/system/exchange-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/gui-local.json",
+        "scope": "Four isolated local GUI groups; all writes through visible controls. Final public check pending.",
+        "observed": "Failed route is visible and editable while local records remain accessible."
+      }
+    ]
+  },
+  {
+    "id": "NFR-IDEM-001",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "The same message ID and body hash do not produce duplicate facts.",
+    "resolution": "Existing QEP duplicate checks plus native inbox dedup preserve this message identity.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-QEP-002",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-QEP-002.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Three deliveries produce one receive fact with stable retransmission ID/body hash."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Duplicate signed package yields existing retained application/receipt."
+      }
+    ]
+  },
+  {
+    "id": "NFR-IDEM-003",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Concurrent changes to one entity require explicit revision reconciliation.",
+    "resolution": "Native CAS refuses stale edit; exchanged public differences retain shared/local/incoming values and explicit resolution.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "CAS race rejects stale version and three-way reconciliation never silently overwrites conflicting local/private state."
+      }
+    ]
+  },
+  {
+    "id": "NFR-IDEM-004",
+    "status": "verified",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Repeated submission of the same commitment intent cannot create a second external commitment.",
+    "resolution": "Action-center identity/decision lock and domain reviewed record transition checks preserve one committed effect; retries after ambiguous transport remain explicit.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/state.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/README.md",
+        "scope": "Nine native action-service groups; real durable state, controlled executors.",
+        "observed": "Concurrent approvals execute the controlled external effect once; durable proposal identity refuses conflicting payload."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Five public GUI groups with fictitious business parties and actual native approval/QEP/order/change writers; no commercial transaction with an external company.",
+        "observed": "Order sign and reviewed order change each apply once through real domain writers."
+      }
+    ]
+  },
+  {
+    "id": "NFR-PERF-002",
+    "status": "assumption",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Measure ledger append latency including fsync before treating 5 ms as a service objective.",
+    "resolution": "Source performs flush/fsync, but the retained numerical target has no matching controlled benchmark in the current native reports.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-AUDIT-001",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-AUDIT-001.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Correctness/reopen checks pass; this command does not measure a 5 ms append distribution."
+      }
+    ],
+    "remaining": "Run a stated hardware/filesystem/workload benchmark and report percentiles; no <=5 ms claim is verified."
+  },
+  {
+    "id": "NFR-PERF-003",
+    "status": "assumption",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Measure replay latency for a 10,000-event fixture before treating 10 seconds as a service objective.",
+    "resolution": "Current projection correctness tests do not provide a timed 10,000-event native reconstruction benchmark.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-AUDIT-002",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-AUDIT-002.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Full/incremental and fixed-sequence reconstruction are correct at the tested fixture size; no 10,000-event timing measurement."
+      }
+    ],
+    "remaining": "No matching 10,000-event <=10 s measurement; preserve as an unvalidated performance target."
+  },
+  {
+    "id": "NFR-PERF-004",
+    "status": "assumption",
+    "owner": "system/agent-runtime",
+    "contract": "src/system/agent-runtime/requirements/product.md",
+    "currentOutcome": "Apply configurable bounded model request timeout and visible cancellation/budget reasons; report observed latency instead of claiming a universal 60-second provider SLO.",
+    "resolution": "provider-controls implements bounded requests/queue/retries and usage retains duration. External model latency cannot be established by synthetic fixtures.",
+    "acceptance": [
+      {
+        "command": "node src/system/agent-runtime/tests/provider-controls.mjs",
+        "evidence": "docs/work/evidence/runtime-controls-2026-09-26/provider.json",
+        "scope": "Fourteen native groups with actual loopback HTTP provider, controlled clock and explicit synthetic tariff; not a provider price or business-quality claim.",
+        "observed": "Actual local HTTP timeout terminates one attempt and retains unknown usage; budget/backpressure refusal is explicit."
+      }
+    ],
+    "remaining": "Original <=60 s model latency target is unmeasured for the configured real provider/workload. Current controls are verified; the numerical SLO remains an assumption."
+  },
+  {
+    "id": "NFR-UX-001",
+    "status": "verified",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Queue human gates visibly while allowing independent agent work to continue.",
+    "resolution": "Action proposals are asynchronous records; workflow dependency scheduling can continue independent ready tasks while retaining human questions/checkpoints.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/independent.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/perspective.json",
+        "scope": "Seven native groups with real account ledger/teams and controlled external executors. Procurement GUI signing has separate evidence.",
+        "observed": "Creating/reviewing a pending action does not invoke its executor."
+      },
+      {
+        "command": "node src/system/agent-workflows/tests/state.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/focused-checks.json",
+        "scope": "Native controlled-provider concurrency/checkpoint evidence.",
+        "observed": "Independent tasks run concurrently; human questions/plans persist and resume explicitly."
+      }
+    ]
+  },
+  {
+    "id": "NFR-UX-002",
+    "status": "verified",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "Every pending action can show its concrete summary, exact payload hash, captured sources and explicitly assessed or unassessed risks.",
+    "resolution": "Generic action-center renders provenance supplied by the owning plugin; it does not infer risk-free status or resolve historical IDs to newer records.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/provenance.mjs",
+        "evidence": "docs/work/evidence/action-review-provenance/native-report.json",
+        "scope": "Five actual native ledger groups on latest source; local verified, final public deployment/check pending.",
+        "observed": "Source hash/record/realm binding, legacy-unmeasured fallback and payload mismatch checks pass."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8650/quotagent/ node src/system/action-center/tests/provenance-browser.mjs",
+        "evidence": "docs/work/evidence/action-review-provenance/browser-report.json",
+        "scope": "Three isolated local GUI groups/five screenshots; unsigned fictitious proposal, no order signed; final public check pending.",
+        "observed": "Review UI exposes exact source chain and owner-declared commercial flags without approving the action."
+      }
+    ],
+    "remaining": "Local native/GUI verified; final public evidence for the latest provenance/risk UI is pending."
+  },
+  {
+    "id": "NFR-COMPAT-001",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Reject incompatible protocol peers explicitly before effective business application.",
+    "resolution": "Existing QEP version negotiation is invoked by native package inspection; bridge version handshake independently protects host/kernel capability compatibility.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-QEP-004",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-QEP-004.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "No common version refuses and records reason."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Incompatible native bridge handshake appends zero events and reports next action."
+      }
+    ]
+  },
+  {
+    "id": "NFR-COMPAT-002",
+    "status": "verified",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Add event types without rewriting prior records; record semantic changes in additive ADRs.",
+    "resolution": "Current native additions are documented by ADR-0037 delivery, ADR-0038 runtime and ADR-0051 action provenance; existing kernel ledger/QEP meanings are unchanged. This is evidence for current changes, not a guarantee about future edits.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Previously appended native records replay while new delivery events append; kernel format remains readable."
+      },
+      {
+        "command": "node src/system/action-center/tests/provenance.mjs",
+        "evidence": "docs/work/evidence/action-review-provenance/native-report.json",
+        "scope": "Five local native groups, latest provenance slice not yet public.",
+        "observed": "Legacy uncaptured actions remain explicitly unmeasured; new captured references survive restart without rewriting legacy history."
+      }
+    ]
+  },
+  {
+    "id": "NFR-COMPAT-003",
+    "status": "implemented",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Keep prior ledger bytes unchanged and readable under the preserved Python kernel format.",
+    "resolution": "Current kernel and native restart tests prove existing/current-schema readability; they do not establish every historical native projection migration.",
+    "acceptance": [
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-AUDIT-001",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-AUDIT-001.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Original appended chain reopens unchanged."
+      },
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Current native schemas replay after restart and unsupported/corrupt data are not silently accepted."
+      }
+    ],
+    "remaining": "No complete cross-version archive fixture/migration matrix proves the original indefinite old-version claim. Preserve read-only originals and add explicit compatibility evidence for each materially different historical schema."
+  },
+  {
+    "id": "NFR-COMPAT-004",
+    "status": "implemented",
+    "owner": "system/workspace-store",
+    "contract": "src/system/workspace-store/requirements/README.md",
+    "currentOutcome": "Allow independently deployed parties to negotiate supported QEP versions without synchronized business-state upgrades.",
+    "resolution": "Independent data-root/HTTP transport works and protocol negotiation is tested; both native endpoints in current delivery evidence run the same product revision.",
+    "acceptance": [
+      {
+        "command": "node src/system/workspace-store/tests/exchange.mjs",
+        "evidence": "docs/work/evidence/exchange-2026-09-26/native.json",
+        "scope": "Nine native Cordis/Python-backed groups; independent local data roots, actual signed QEP and loopback HTTP. Public deployment of this slice remains pending.",
+        "observed": "Two independent roots exchange valid signed packages over actual HTTP."
+      },
+      {
+        "command": "tools/run.sh -m quotagent.qa ac AC-QEP-004",
+        "evidence": "docs/work/evidence/catalog-review-2026-09-26/catalog-AC-QEP-004.txt",
+        "scope": "Fresh 2026-09-26 kernel/library fixture execution; not native GUI or a mixed-version deployed rollout.",
+        "observed": "Library peers with different advertised supported versions choose a common version or refuse clearly."
+      }
+    ],
+    "remaining": "No independent mixed-product-version rolling-upgrade journey has been executed. Do not infer it from same-revision independent roots or kernel capability intersection."
+  },
+  {
+    "id": "NFR-COMP-004",
+    "status": "verified",
+    "owner": "system/action-center",
+    "contract": "src/system/action-center/requirements.md",
+    "currentOutcome": "A model cannot substitute for a required human approval/signature.",
+    "resolution": "Assistant proposal tools have no approve effect; domain execution remains registered behind explicit human route and role/policy validation.",
+    "acceptance": [
+      {
+        "command": "node src/system/action-center/tests/state.mjs",
+        "evidence": "docs/work/evidence/independent-actions-2026-09-26/README.md",
+        "scope": "Nine native action-service groups; real durable state, controlled executors.",
+        "observed": "AI confirmation and untrusted source instructions do not execute an action."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Five public GUI groups with fictitious business parties and actual native approval/QEP/order/change writers; no commercial transaction with an external company.",
+        "observed": "Different human reviewer and final proposer signature are both required by actual party policy."
+      }
+    ]
+  }
+]

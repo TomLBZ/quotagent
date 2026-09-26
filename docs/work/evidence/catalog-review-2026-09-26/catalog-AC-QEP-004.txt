@@ -1,0 +1,51 @@
+{
+  "ac": "AC-QEP-004",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "能力自述含 qep_versions 与 features（建立通信时先交换）",
+      "ok": true,
+      "detail": "caps={'participant': 'con-B', 'kind': 'contractor', 'realm': 'contractor:con-B', 'qep_versions': ['1.0'], 'features': ['approval_chain_v2', 'pack_deltas', 'signature_verify', 'version_binding']}"
+    },
+    {
+      "name": "版本交集为空 → 拒绝通信并落 kernel/qep-rejected（附双方版本列表）",
+      "ok": true,
+      "detail": "result={'ok': False, 'reason': 'version-intersection-empty', 'local_versions': ['1.0'], 'peer_versions': ['2.0']} rejected={\"reason\": \"版本交集为空\", \"errors\": [\"本端 ['1.0']\", \"对端 ['2.0']\"], \"msg_id\": null, \"from\": null, \"code\": \"version-intersection-empty\", \"attempt\": 1}"
+    },
+    {
+      "name": "拒绝后不留下「已协商成功」的假象（agreed_version 仍为空，不静默降级）",
+      "ok": true,
+      "detail": "agreed_version=None"
+    },
+    {
+      "name": "兼容时取版本交集的**最大值**（1.0/1.1 ∩ 1.0/1.1/1.2 → 1.1）",
+      "ok": true,
+      "detail": "result={'ok': True, 'version': '1.1', 'features': ['approval_chain_v2', 'pack_deltas', 'signature_verify', 'version_binding'], 'degraded': [], 'peer': 'con-B'}"
+    },
+    {
+      "name": "特性取交集：差异落 kernel/qep-degraded（含 degraded 清单与不可降级项）",
+      "ok": true,
+      "detail": "degraded=['pack_deltas'] events={\"participant\": \"sup-A\", \"peer\": \"con-B\", \"version\": \"1.0\", \"features_agreed\": [\"approval_chain_v2\", \"signature_verify\", \"version_binding\"], \"degraded\": [\"pack_deltas\"], \"non_degradable\": [\"approval_c"
+    },
+    {
+      "name": "**不可降级项**缺失（签名/版本绑定/批准链）→ 拒绝通信而不是降级",
+      "ok": true,
+      "detail": "result={'ok': False, 'reason': 'non-degradable-feature-missing', 'missing': ['approval_chain_v2', 'signature_verify', 'version_binding'], 'rejected': {'reason': '不可降级特性缺失', 'errors': [\"缺失: ['approval_chain_v2', 'signature_verify', 'version_binding']\"], 'msg_id': None, 'path': None, 'at': '2026-09-26T04:33:52Z', 'code': 'non-degradable-feature-missing'}} rejected+1"
+    }
+  ],
+  "evidence_refs": [
+    "EV-042"
+  ],
+  "command": "qa ac AC-QEP-004",
+  "phase": "P1",
+  "title": "版本协商：交集为空即拒绝并留痕；特性降级有账本事件；不可降级项缺失即拒绝",
+  "first_failure": "",
+  "exit_code": 0
+}
+[PASS] AC-QEP-004 — 版本协商：交集为空即拒绝并留痕；特性降级有账本事件；不可降级项缺失即拒绝
+  ok   能力自述含 qep_versions 与 features（建立通信时先交换）
+  ok   版本交集为空 → 拒绝通信并落 kernel/qep-rejected（附双方版本列表）
+  ok   拒绝后不留下「已协商成功」的假象（agreed_version 仍为空，不静默降级）
+  ok   兼容时取版本交集的**最大值**（1.0/1.1 ∩ 1.0/1.1/1.2 → 1.1）
+  ok   特性取交集：差异落 kernel/qep-degraded（含 degraded 清单与不可降级项）
+  ok   **不可降级项**缺失（签名/版本绑定/批准链）→ 拒绝通信而不是降级

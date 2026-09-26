@@ -3,7 +3,7 @@
 
 Owns live AI, context understanding/extraction, business drafting, comparison,
 negotiation suggestions, explicit preference memory, and tool orchestration in
-[product contract](../../../../docs/product/runtime-contract.md).
+[product contract](../../../../docs/design/architecture.md).
 
 `code/product-ai.mjs` reads configured provider settings, sends real requests and
 appends complete input/output events. `code/product-assistant.mjs` persists chat

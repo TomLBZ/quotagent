@@ -16,6 +16,6 @@ Acceptance and executable evidence:
 1. `node src/system/workspace-styles/tests/smoke.mjs`: native Cordis + real persistent store/settings; defaults, validation, account/admin isolation, restart persistence, schema/routes/nav disposal, guide role/progress isolation.
 2. `BASE_URL=http://127.0.0.1:8620/quotagent/ node src/system/workspace-styles/tests/browser.mjs`: GUI layout/palette/spacing save and reload, account isolation, navigation reachability, role tours/Help links, responsive screenshots. Public base URL runs the same interaction proof after integration.
 
-These are acceptance targets until the commands have run; reports record actual results. Source API contract: `docs/product/runtime-contract.md`; shell extension contract agreed in the Sept26 parent-agent task, with generic implementation in `src/system/webui/client/core.jsx`.
+These are acceptance targets until the commands have run; reports record actual results. Source API contract: `docs/design/architecture.md`; shell extension contract agreed in the Sept26 parent-agent task, with generic implementation in `src/system/webui/client/core.jsx`.
 
 Lifecycle browser: `BASE_URL=http://127.0.0.1:8620/quotagent/ node src/system/workspace-styles/tests/lifecycle-browser.mjs` disables/re-enables only these two native plugins through admin GUI and verifies removal/restoration of client effects. Saved account choices/progress remain.

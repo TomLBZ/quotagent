@@ -1,14 +1,14 @@
 # Quotagent
 <!-- budget: 4096 bytes, hard -->
 
-A React and Cordis quotation workspace for contractors and suppliers. [Open the demo](https://novara.remoteblossom.com/quotagent/).
+A quotation workspace for contractors and suppliers. [Open the demo](https://novara.remoteblossom.com/quotagent/).
 
-Each account has one business role. A separate admin manages users and global extensions.
-[Architecture and source map](docs/product/architecture.md).
+Each account has one role; a separate admin manages users and global extensions.
+[Architecture and source map](docs/design/architecture.md).
 
 ## Try it
 
-Use the login page’s demo buttons. All demo passwords are **`demo1234`**.
+Demo buttons sign in with password **`demo1234`**.
 
 | Account | Workspace |
 |---|---|
@@ -19,8 +19,8 @@ Use the login page’s demo buttons. All demo passwords are **`demo1234`**.
 
 1. Compare the labelled Riverside offers; ask the agent to explain trade-offs.
 2. Ask for an RFQ draft, review and publish it. Sign in as a supplier to quote.
-3. Award as contractor, acknowledge as supplier, then propose/approve changes.
-   Commitments require your confirmation.
+3. Request award confirmation, get an independent colleague’s approval, then sign
+   the PO. Acknowledge as supplier; review changes and delivery/invoice results.
 4. Ask **“Give my workspace a terracotta theme”**, **“Build a landed-cost calculator
    with shipping, duty and tax inputs”**, or **“Save a reusable pre-bid review skill.”**
    In Plugin studio, inspect, run, enable/disable or publish the result.
@@ -33,11 +33,11 @@ Use the login page’s demo buttons. All demo passwords are **`demo1234`**.
    plan, answer questions, inspect traces and manage account memory. **Review actions**
    holds proposed sends, remote calls and commitments until you approve them.
 
-Demo accounts have labelled samples. New accounts start empty.
+Demo accounts have labelled samples. **Try demo** opens an isolated fictional workflow; **Exit demo** restores live work.
 
 ## Two levels of AI
 
-**Business assistance:** real model calls use the account’s RFQs, quotes, messages
+**Business assistance:** model calls use the account’s RFQs, quotes, messages
 and editable account memory. The agent reads incoming mail, extracts requirements,
 creates drafts, compares offers and prepares reviewed actions. Multi-agent runs retain
 plans, specialist context, human feedback and a synthesized decision brief.
@@ -48,9 +48,9 @@ Users load, unload, publish and install extensions. Admin promotion creates an
 independent global copy. Skills save a `SKILL.md` and execute through the assistant.
 
 Files and mail attachments enter the ingestion workspace for editable line extraction.
-Generated utilities are bounded pure functions; skills run on demand. OCR, scheduled
+Utilities are pure functions; skills run on demand. OCR, scheduled
 skills and arbitrary generated server code remain outside this composition.
-[Connection setup and limits](docs/product/connected-agent-contract.md) include IMAP/SMTP,
+[Connection setup and limits](docs/product/getting-started.md) include IMAP/SMTP,
 Telegram Bot API, MCP HTTP/SSE and A2A. OAuth consent and MCP stdio are not implemented.
 
 ## Run locally
@@ -84,5 +84,5 @@ api_keys:
 Personal model endpoints need personal keys. `QUOTAGENT_AI_MODEL` and
 `QUOTAGENT_AI_URL` override model/endpoint. Manual procurement works without AI.
 
-[Plugin ownership](docs/product/plugin-requirements.md) and [current scope](docs/product/runtime-contract.md).
+[Plugin ownership](docs/requirements/README.md) and [current scope](docs/README.md).
 Rules: [AGENTS.md](AGENTS.md).

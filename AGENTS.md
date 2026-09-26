@@ -25,22 +25,23 @@ P2 产品实现期：当前入口 `host/product.mjs`，产品契约见 `docs/pro
 7. **一轮一批**：更新本地 progress 与 handover → commit → push → 读回远端 refs 确认，缺一不可。
 8. **协议与账本格式变更必须新增 ADR**（`docs/design/adr/`），不得原地改语义。
 9. **文档预算**：文件头声明预算；`AGENTS.md` ≤ 4096 B，`handover.md` ≤ 1024 B，其余见
-   `docs/design/12-documentation-standard.md`。超预算先删冗余，不加长度。
+   `docs/design/documentation.md`。超预算先删冗余，不加长度。
 10. **不碰内核语义**：自进化只能发生在插件/配置/提示词/策略层；账本与 QEP 版本语义不可自改。
 11. **WebUI = 完整 GUI 应用**（不是账本投影、不是只读路由）：插件注册 **UI 元素/交互方式/动作与命令/
     业务逻辑钩子/通知与状态**贡献任意功能；**双方必须仅通过 GUI 完成全部业务流程**（含写操作），允许前端
     框架。真源 `docs/product/runtime-contract.md`；禁止再按旧口径描述它，也禁止新增只冻旧形态的 UI 判据
-    （旧 UI 快照/seed/ui-mutate 门按 29 §2 删除）。
+    （旧 SSR/只读门的替代见 ADR-0027/0048）。
 12. **业务功能优先**：推进真实业务功能是唯一重要的事；门禁与测试只是安全带 —— 与需求冲突或只冻旧形态的
     测试/门直接删除（存在不等于合理），不得为「门全绿」牺牲功能推进。
 
 ## 布局
 
 ```
-docs/analysis/   对 cordis/harness 的代码级分析、可发扬的设计优势、领域痛点
 docs/design/     系统设计：架构、领域模型、交换协议、服务/事件目录、自进化、信任、评测
 docs/design/adr/ 架构决策记录（不可原地改语义）
-docs/work/       路线图、功能需求、验收标准、进度清单、交接、证据
+docs/product/    面向承包商、供应商与管理员的使用指南
+docs/requirements/   插件归属、历史来源与验收索引
+docs/work/       执行证据；本地交接/进度保持忽略
 .agents/state.json   机器可读状态：阶段/下一任务/最后验证/阻塞
 .agents/skills/      本仓库的 agent 技能（接手、实现任务、写设计记录）
 .agents/sessions/    每轮次记录（一行一轮次）

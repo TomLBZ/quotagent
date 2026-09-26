@@ -2,7 +2,7 @@
 <!-- budget: 4096 bytes, hard -->
 
 Owner of login, registration, logout, profile settings, one client role per account,
-and administrator user/permission management. Source: `docs/product/runtime-contract.md`.
+and administrator user/permission management. Source: `docs/design/architecture.md`.
 
 Implementation: `../code/product.mjs`. Password hashes and sessions live in the local
 runtime account store. Preferences exposed to assistants are recorded in the account

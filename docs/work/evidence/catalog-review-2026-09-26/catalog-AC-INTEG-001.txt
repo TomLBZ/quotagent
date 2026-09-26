@@ -1,0 +1,57 @@
+{
+  "ac": "AC-INTEG-001",
+  "status": "pass",
+  "assertions": [
+    {
+      "name": "写入先落临时文件（*.tmp），最终名在 commit 前不可见",
+      "ok": true,
+      "detail": "staged=000001-01M3DZVDR3BSQPZ9TK0X1WPG6S.qep.json.tmp"
+    },
+    {
+      "name": "半写文件不被读取（pending 为空）",
+      "ok": true,
+      "detail": "pending=[]"
+    },
+    {
+      "name": "commit 使用 rename 原子落盘，命名约定为 <seq:06d>-<msg_id>.qep.json",
+      "ok": true,
+      "detail": "final=000001-01M3DZVDR3BSQPZ9TK0X1WPG6S.qep.json staged_gone=True"
+    },
+    {
+      "name": "完整报文可被读取，且重复扫描幂等（不重复产出）",
+      "ok": true,
+      "detail": "pending=['000001-01M3DZVDR3BSQPZ9TK0X1WPG6S.qep.json']"
+    },
+    {
+      "name": "损坏的最终文件不被当作报文读取，且被隔离并记录原因（不静默丢弃）",
+      "ok": true,
+      "detail": "pending=1 rejected=[('000999-01JZZZZZZZZZZZZZZZZZZZZZZZ.qep.json', 'JSON 解析失败: JSONDecodeError: Expecting va')]"
+    },
+    {
+      "name": "未完成的 *.tmp 被忽略（既不入账也不误判为损坏）",
+      "ok": true,
+      "detail": "rejected=['000999-01JZZZZZZZZZZZZZZZZZZZZZZZ.qep.json']"
+    },
+    {
+      "name": "投递文件可被接收方验证并入账（端到端投递闭环）",
+      "ok": true,
+      "detail": "msg_id=01M3DZVDR3BSQPZ9TK0X1WPG6S facts=1"
+    }
+  ],
+  "evidence_refs": [
+    "EV-015"
+  ],
+  "command": "qa ac AC-INTEG-001",
+  "phase": "P0",
+  "title": "文件投递为原子写（临时文件 + rename）；半写文件不被读取",
+  "first_failure": "",
+  "exit_code": 0
+}
+[PASS] AC-INTEG-001 — 文件投递为原子写（临时文件 + rename）；半写文件不被读取
+  ok   写入先落临时文件（*.tmp），最终名在 commit 前不可见
+  ok   半写文件不被读取（pending 为空）
+  ok   commit 使用 rename 原子落盘，命名约定为 <seq:06d>-<msg_id>.qep.json
+  ok   完整报文可被读取，且重复扫描幂等（不重复产出）
+  ok   损坏的最终文件不被当作报文读取，且被隔离并记录原因（不静默丢弃）
+  ok   未完成的 *.tmp 被忽略（既不入账也不误判为损坏）
+  ok   投递文件可被接收方验证并入账（端到端投递闭环）

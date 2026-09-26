@@ -1,20 +1,31 @@
-# 证据目录
+# Executed evidence
+<!-- budget: 6144 bytes, hard -->
 
-<!-- budget: 8 KB。命名：EV-<NNN>-<AC-ID 或主题>.txt -->
+Evidence records what a named command observed at a specific scope and revision.
+Historical outputs remain useful provenance; they do not establish that a current
+native capability exists. Requirement acceptance links are in the
+[catalog](../../requirements/catalog.json).
 
-每条 AC 执行后把**原始输出**存这里（头部含时间、命令、commit、退出码）。
-**索引与规则分册**：本页只放规则与分册指引；`EV-*` 的完整清单在按阶段分册的索引里（`INDEX.md` → `INDEX-P1.md` → `INDEX-P2.md`，随批次增长）。
-
-| 分册 | 内容 |
+| Current source area | Evidence |
 |---|---|
-| `INDEX.md` | 全部 `EV-*` 的编号、内容摘要、对应 AC（定义处）（**已到 8192 B 预算上限**，新批次写分册） |
-| `INDEX-P1.md` | P1 mvp demo 及之后的批次（EV-039 起）的编号、摘要、关联 |
-| `INDEX-P2.md` | P2 product 批次的证据行（EV-153 起；`INDEX.md` 满预算时的新增分册） |
-| `EV-<NNN>-*.txt` | 原始命令输出（时间 / 命令 / commit / 退出码 / 结果） |
+| Public integration at immutablef2366a0 | [Eight GUI journeys](integrated-public-2026-09-26/README.md) |
+| Initial agent controls, styles, guides and usage | [Agent experience](agent-experience-2026-09-26/README.md) |
+| Configuration, notifications and SMTP digests | [G9](g9-configuration-and-notifications.md) |
+| Evidence, attachments, PDF and retention | [Native artifacts](native-artifacts-2026-09-26/README.md) |
+| Native application operations | [Operations](native-operations-2026-09-26/README.md) |
+| Isolated contractor/supplier practice | [Sandbox](g8-isolated-sandbox.md) |
+| Saved collection queries and selection | [Collections](collections-2026-09-26/README.md) |
+| Request defaults/paired parties | [Context](g1-context-defaults-and-peers.md) |
+| Paged request list | [Requests](g1-request-collection.md) |
+| Provider controls and recorded-run evaluation | [Runtime](g6-auditable-runtime.md) |
+| Generated extension evolution | [Evolution](g7-native-evolution.md) |
 
-规则：
+The first four goal enhancements have public evidence; the ongoing compatible
+requirement closure still needs final integrated release and independent evaluation.
+Local protocol services exercise actual SMTP/IMAP/MCP/A2A/HTTP boundaries without
+claiming external-account delivery or live model quality. Original raw temporary
+artifacts named by reports may be larger than retained summaries/screenshots.
 
-1. **没有证据的 AC 不得标 passed**（`AGENTS.md` 规则 6）。
-2. `progress-checklist.md` 的 evidence 列必须指向本目录的真实文件。
-3. 证据文件只追加，不修改历史输出；复跑另存并在文件名里带批次后缀。
-4. 证据中的命令必须是**可直接复现**的（含 `cwd`、环境前提、退出码）。
+Older `EV-*` evidence and September25 directories describe earlier revisions. Use
+their recorded source commit and the catalog's disposition; do not treat their gate
+names or SSR snapshots as current acceptance requirements.

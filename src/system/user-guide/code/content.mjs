@@ -1,6 +1,6 @@
 const clients=['contractor','supplier'],all=[...clients,'admin']
 export const contentSources=[
- 'docs/product/runtime-contract.md','docs/product/connected-agent-contract.md',
+ 'docs/design/architecture.md','docs/product/getting-started.md',
  'src/domain/procurement/code/service.mjs','src/domain/ingestion/requirements/README.md',
  'src/system/mail/requirements/product.md','src/system/telegram/requirements/README.md',
  'src/system/agent-connections/requirements/functional.md','src/system/agent-workflows/code/index.mjs',

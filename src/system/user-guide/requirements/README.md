@@ -16,6 +16,6 @@ Acceptance and executable evidence:
 1. `node src/system/workspace-styles/tests/smoke.mjs`: real native persistence, role-filtered topics, validated progress, isolation, replay/resume and disposal for both plugins.
 2. `BASE_URL=http://127.0.0.1:8620/quotagent/ node src/system/workspace-styles/tests/browser.mjs`: contractor/supplier/admin guidance, skip/replay, Help search and destination link, persistence, 390/1024/1440 layouts. Public URL verification follows integration.
 
-Current workflow facts are sourced from `docs/product/runtime-contract.md`, `docs/product/connected-agent-contract.md`, and the owning plugin code/requirements referenced in `code/content.mjs`. Requirements are acceptance targets until recorded commands pass.
+Current workflow facts are sourced from `docs/design/architecture.md`, `docs/product/getting-started.md`, and the owning plugin code/requirements referenced in `code/content.mjs`. Requirements are acceptance targets until recorded commands pass.
 
 Lifecycle browser: `BASE_URL=http://127.0.0.1:8620/quotagent/ node src/system/workspace-styles/tests/lifecycle-browser.mjs` disables/re-enables only these two native plugins through admin GUI and verifies removal/restoration of client effects. Saved account choices/progress remain.

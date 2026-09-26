@@ -4,7 +4,7 @@
 Optional management owner for natural-language plugin/skill creation, configuration,
 marketplace sharing, administrator promotion and the revision review workflow.
 Installed capabilities and artifact lifecycle belong to `system/installed-plugins`.
-Source: `docs/product/runtime-contract.md`, acceptance checks 4 and 5.
+Source: `docs/design/architecture.md`, acceptance checks 4 and 5.
 
 Implementation: `../code/product.mjs`. A real model produces a theme/widget/skill
 descriptor or a calculator descriptor with actual JavaScript implementation. The
@@ -26,6 +26,14 @@ The narrow live-provider check is `node src/system/plugin-studio/tools/live-util
 
 Generation, lifecycle, skill and utility execution are recorded through workspace-store. Full
 provider input/output uses agent-runtime. Executable artifacts remain local runtime data.
+
+Generation records the prompt digest and descriptor/artifact hashes. Identical generated
+content within an account reuses its existing personal ID without new lifecycle events
+or overriding explicit disablement. Sharing verifies both immutable revision bytes and
+the active artifact when loaded; inconsistent files cannot be published, copied or
+promoted. GUI lifecycle requests bind the revision the user opened. Acceptance:
+`node src/system/plugin-studio/tests/evolution.mjs` includes duplicate generation,
+disabled reuse, stale review and tampered-file publish/install/promotion refusals.
 
 Revision history, feedback proposals, paired evaluation, five review checks and observed
 trials are specified in [evolution.md](evolution.md). Read-only assistant inspection is

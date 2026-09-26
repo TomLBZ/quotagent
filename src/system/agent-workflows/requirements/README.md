@@ -2,7 +2,7 @@
 <!-- budget: 6144 bytes, hard -->
 
 Owner: native `agent-workflows` plugin. Composition and trust contracts are in
-`docs/product/connected-agent-contract.md`; this plugin changes no kernel or QEP semantics.
+`docs/product/getting-started.md`; this plugin changes no kernel or QEP semantics.
 
 - `code/index.mjs` supplies `workflows` and `memory`, account-owned HTTP routes,
   assistant tool registrations, workroom navigation and configurable planner review/parallelism.
