@@ -3,6 +3,7 @@
 
 Owner: native `system/exchange-workbench` and `system/workspace-store` adapter.
 Decision: [ADR-0037](../../../../docs/design/adr/0037-native-durable-qep-exchange.md).
+Automatic gap recovery: [ADR-0052](../../../../docs/design/adr/0052-native-qep-resend-control.md).
 Historical kernel/stdio/relay implementation details are references; acceptance
 checks the native GUI and durable delivery outcomes, not obsolete operator-only
 routes or fixed shared-folder layouts.
@@ -95,3 +96,25 @@ use bounded exponential delay (five attempts) and a retained attention notificat
 manual imports/downloads never start background delivery. Clearing a pairing secret
 also removes its live adapter key. Unload removes routes/schemas/timer/transports and
 aborts HTTP requests; restart reconstructs durable metadata and pending streams.
+
+## Automatic missing-message recovery
+
+FR-QEP-003 additionally requires a real signed resend-request/replay round trip.
+The adapter prepares durable bounded requests for held gaps, and the paired HTTP
+transport returns the exact original signed messages even if previously marked
+delivered. Requests and returned messages use the existing kernel sequence and
+signature rules; no new commercial approval or body is manufactured. Fulfillment
+requires actual receipt of the missing sequences. Duplicates, unavailable source
+messages, large gaps and transport failures remain explicit. Work is bounded to
+64 requested messages per range and eight HTTP recovery rounds per attempt.
+
+Required acceptance: actual independent native stores and loopback HTTP must
+recover a missing already-acknowledged predecessor from a signed control request,
+survive request restart, keep original envelope bytes/approval, apply each business
+record once, refuse malformed/foreign control, expose unavailable sequences, and
+stop bounded cycles. GUI must show the request and recovery receipts after reload.
+Commands: `node src/system/workspace-store/tests/resend.mjs` and
+`node src/system/exchange-workbench/tests/resend-browser.mjs`. Local native six
+groups and GUI three groups passed; scoped results and limits are in
+[recovery evidence](../../../../docs/work/evidence/qep-resend-2026-09-26/README.md).
+Final public verification remains pending.

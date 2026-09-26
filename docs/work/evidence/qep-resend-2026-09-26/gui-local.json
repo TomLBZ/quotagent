@@ -1,0 +1,19 @@
+{
+  "at": "2026-09-26T05:00:56.257Z",
+  "base": "http://127.0.0.1:8650/quotagent/",
+  "checks": [
+    "GUI pairs a labelled independent fixture, imports an out-of-order signed quotation and shows the held successor plus durable recovery request instead of skipping a sequence",
+    "Visible recovery retry sends the signed request over actual loopback HTTP, retrieves the original missing quote, releases the successor and records exact original message identity without new commercial approval",
+    "Fulfilled request and original IDs survive full reload; recovery dialog fits390px with zero JavaScript errors"
+  ],
+  "errors": [],
+  "screenshots": [
+    "01-successor-held.png",
+    "02-signed-request.png",
+    "03-original-recovered.png",
+    "04-mobile-recovered.png"
+  ],
+  "quoteId": "local-protocol-quote-1790398858071",
+  "firstMessageId": "01M3E1D0V5WV7XWCMP866C8Z11",
+  "ok": true
+}

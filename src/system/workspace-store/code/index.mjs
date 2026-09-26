@@ -60,21 +60,35 @@ export async function apply(ctx, config = {}) {
   if(policy?.packageResources)exported.package.resources=await policy.packageResources({from:realm,to:row.to,collection:row.collection,record,msgId:row.id})
   return exported
  }
- const deliveryResult=row=>({record:copy(row.envelope?.body?.record),msgId:row.id,received:row.status==='delivered',status:row.status,queued:['queued','failed','held','conflict'].includes(row.status),error:row.error||undefined,nextAction:row.nextAction||undefined})
+ const deliveryResult=row=>({record:copy(row.envelope?.body?.record),msgId:row.id,received:['delivered','fulfilled'].includes(row.status),status:row.status,queued:['queued','requested','failed','held','conflict'].includes(row.status),error:row.error||undefined,nextAction:row.nextAction||undefined})
  async function retryDelivery(realm,id,options={}){
   const row=get(realm,'exchange-outbox',id);if(!row)throw Object.assign(new Error('Delivery not found'),{status:404})
-  if(row.status==='delivered'||row.control)return deliveryResult(row)
+  if(['delivered','fulfilled'].includes(row.status)||row.control&&row.controlKind!=='resend-request')return deliveryResult(row)
   const transport=[...transports.values()].find(item=>item.handles?.(row)),controller=new AbortController();controllers.add(controller)
   try{
    if(row.channel!=='local'&&!transport)return deliveryResult(row)
    await request({op:'attempt',realm,id,status:'queued',started:true})
-   const exported=await exportPackage(realm,id)
-   const response=row.channel==='local'?await receivePackage(row.to,exported.package,options):await transport.deliver({from:realm,to:row.to,delivery:row,package:exported.package,signal:controller.signal})
-   const receipts=[...(response?.receipts||[]),response?.receipt,...(response?.released||[]).map(item=>item.receipt)].filter(Boolean).sort((a,b)=>a.envelope.seq-b.envelope.seq)
-   for(const receipt of receipts)await receivePackage(realm,receipt,options)
-   if(!receipts.length&&response?.status!=='held')await request({op:'attempt',realm,id,status:'queued',error:'Awaiting the recipient’s signed receipt.',nextAction:'Import the receipt or retry the exact original package.'})
-   else if(response?.status==='held')await request({op:'attempt',realm,id,status:'held',error:'Earlier messages are missing at the recipient.',nextAction:'Deliver earlier queued messages first, then retry.'})
-  }catch(error){await request({op:'attempt',realm,id,status:'failed',error:error.message,nextAction:error.nextAction||'Retry this delivery; the reviewed business record and signed message will be reused.'})}
+   let outgoing=[row],response,round=0;const replayed=new Set(),handledRequests=new Set()
+   while(outgoing.length&&round++<8){
+    const packages=[];for(const item of outgoing.slice(0,64)){packages.push((await exportPackage(realm,item.id)).package);if(item.id!==id)await request({op:'append',realm,type:'exchange/resend-replayed',body:{msgId:item.id,seq:item.seq,bodyHash:item.bodyHash,triggerId:id,round},actor:'system:exchange',correlationId:`replay:${id}:${item.id}:${round}`})}
+    if(row.channel==='local'){
+     const received=[];for(const value of packages)received.push(await receivePackage(row.to,value,options))
+     const control=list(row.to,'exchange-outbox').filter(item=>item.control&&item.to===realm&&item.channel===row.channel).slice(-64)
+     response={...received.at(-1),receipts:control.map(item=>({schema:'quotagent/qep-package/v1',channel:item.channel,envelope:item.envelope})),replays:[]}
+     for(const result of received.flatMap(item=>[item,...(item.released||[])]))for(const replayId of result.resendIds||[])response.replays.push((await exportPackage(row.to,replayId)).package)
+    }else response=await transport.deliver({from:realm,to:row.to,delivery:outgoing[0],package:packages[0],packages,signal:controller.signal})
+    const returned=[...(response?.receipts||[]),...(response?.replays||[]),response?.receipt,...(response?.released||[]).map(item=>item.receipt)].filter(Boolean)
+    const unique=[...new Map(returned.map(item=>[item.envelope.msg_id,item])).values()].sort((a,b)=>a.envelope.seq-b.envelope.seq)
+    if(unique.length>128)throw Object.assign(new Error('The peer returned more than 128 recovery packages in one response.'),{nextAction:'Retry a bounded recovery batch through the paired route.'})
+    const needed=new Set()
+    for(const value of unique){const incoming=await receivePackage(realm,value,options);for(const item of [incoming,...(incoming.released||[])])if(item.controlKind==='resend-request'&&!handledRequests.has(item.id)){handledRequests.add(item.id);for(const replayId of item.resendIds||[])needed.add(replayId)}}
+    for(const item of list(realm,'exchange-outbox'))if(item.controlKind==='resend-request'&&item.to===row.to&&item.channel===row.channel&&['queued','failed','held','requested'].includes(item.status))needed.add(item.id)
+    outgoing=[...needed].filter(replayId=>!replayed.has(replayId)).map(replayId=>get(realm,'exchange-outbox',replayId)).filter(Boolean).slice(0,64)
+    for(const item of outgoing)replayed.add(item.id)
+   }
+   const latest=get(realm,'exchange-outbox',id)
+   if(!['delivered','fulfilled','rejected','conflict'].includes(latest.status))await request({op:'attempt',realm,id,status:latest.controlKind==='resend-request'?'requested':response?.status==='held'?'held':'queued',error:outgoing.length?'Recovery reached its bounded round limit.':latest.controlKind==='resend-request'?'Awaiting the requested original messages.':'Awaiting the recipient’s signed receipt.',nextAction:'Retry the retained recovery request or import the original missing packages; no new business approval is needed.'})
+  }catch(error){const latest=get(realm,'exchange-outbox',id);if(!['delivered','fulfilled','rejected','conflict'].includes(latest.status))await request({op:'attempt',realm,id,status:'failed',error:error.message,nextAction:error.nextAction||'Retry this delivery; the reviewed business record and signed message will be reused.'});else await request({op:'append',realm,type:'exchange/recovery-interrupted',body:{msgId:id,status:latest.status,error:error.message},actor:'system:exchange'})}
   finally{controllers.delete(controller)}
   return deliveryResult(get(realm,'exchange-outbox',id))
  }

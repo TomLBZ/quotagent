@@ -5,12 +5,13 @@ import hashlib
 import json
 import os
 import re
-from quotagent.kernel.qep import KeyStore, QepEndpoint, SUPPORTED_QEP_VERSIONS, SUPPORTED_FEATURES, RECEIPT_TYPE
+from quotagent.kernel.qep import KeyStore, QepEndpoint, SUPPORTED_QEP_VERSIONS, SUPPORTED_FEATURES, RECEIPT_TYPE, RESEND_REQUEST_TYPE
 from quotagent.kernel.canon import canonical_bytes, digest, ZERO_HASH
 from quotagent.kernel.ledger import utc_now
 from adapter import AdapterError, valid_record
 TRANSFER = 'quotagent/qep-workspace-transfer/v1'
 PACKAGE = 'quotagent/qep-package/v1'
+MAX_RESEND = 64
 
 
 class ChannelLedger:
@@ -41,11 +42,14 @@ class Delivery:
                 record, channel, target = body['record'], body['channel'], body['to']
                 identity = digest({'from': realm, 'to': target, 'channel': channel, 'collection': body['collection'], 'record': record})
                 row = {'id': envelope['msg_id'], 'identity': identity, 'to': target, 'channel': channel, 'collection': body['collection'], 'recordId': record['id'], 'recordRevision': record.get('revision'), 'title': record.get('title') or record.get('supplierName') or record['id'], 'eventClass': envelope['class'], 'type': envelope['type'], 'seq': envelope['seq'], 'bodyHash': envelope['body_hash'], 'recordHash': body['recordHash'], 'envelope': envelope, 'status': 'queued', 'attempts': 0, 'received': False, 'error': 'Recovered signed delivery after interruption.'}
-            elif envelope.get('type') == RECEIPT_TYPE and body.get('outcome'):
+            elif envelope.get('type') in (RECEIPT_TYPE, RESEND_REQUEST_TYPE):
                 recipient = envelope['recipients'][0]
                 target = recipient.split(':to:')[0].removeprefix('account:')
                 channel = recipient.split(':via:')[-1] if ':via:' in recipient else 'local'
-                row = {'id': envelope['msg_id'], 'to': target, 'channel': channel, 'seq': envelope['seq'], 'bodyHash': envelope['body_hash'], 'envelope': envelope, 'type': RECEIPT_TYPE, 'control': True, 'status': 'receipt', 'received': False, 'attempts': 0, 'acks': body['msg_id'], 'title': 'Receipt for ' + body['msg_id']}
+                if envelope['type'] == RESEND_REQUEST_TYPE:
+                    row = self.resend_record(envelope, target, channel)
+                else:
+                    row = {'id': envelope['msg_id'], 'to': target, 'channel': channel, 'seq': envelope['seq'], 'bodyHash': envelope['body_hash'], 'envelope': envelope, 'type': RECEIPT_TYPE, 'control': True, 'status': 'receipt', 'received': False, 'attempts': 0, 'acks': body['msg_id'], 'title': 'Receipt for ' + body['msg_id']}
             else:
                 continue
             self.save(realm, 'exchange-outbox', row, 'delivery-recovered')
@@ -98,6 +102,33 @@ class Delivery:
         if not record:
             raise AdapterError('DELIVERY_NOT_FOUND', 'This delivery is not in the account outbox.', status=404)
         return record
+
+    def resend_record(self, envelope, target, channel):
+        missing = envelope['body']['missing']
+        return {'id': envelope['msg_id'], 'identity': 'resend:' + digest(envelope['body']), 'to': target, 'channel': channel, 'seq': envelope['seq'], 'bodyHash': envelope['body_hash'], 'envelope': envelope, 'type': RESEND_REQUEST_TYPE, 'control': True, 'controlKind': 'resend-request', 'status': 'queued', 'received': False, 'attempts': 0, 'missing': missing, 'title': 'Recover missing sequences ' + ', '.join(map(str, missing))}
+
+    def request_missing(self, realm, source, channel, missing):
+        missing = missing[:MAX_RESEND]
+        if not missing:
+            return None
+        ep = self.endpoint(realm, source, channel)
+        body = {'from_participant': ep.participant, 'to_participant': self.participant(source, realm, channel), 'missing': missing, 'from_seq': missing[0], 'to_seq': missing[-1]}
+        identity = 'resend:' + digest(body)
+        existing = next((row for row in self.records(realm, 'exchange-outbox') if row.get('identity') == identity), None)
+        if existing:
+            return existing
+        envelope = ep.envelope(RESEND_REQUEST_TYPE, 'intent', body, recipients=[body['to_participant']], correlation_id=identity)
+        sent = ep.send(envelope)
+        return self.save(realm, 'exchange-outbox', self.resend_record(sent['envelope'], source, channel), 'resend-prepared')
+
+    def fulfill_requests(self, realm, source, channel):
+        participant = self.participant(realm, source, channel)
+        received = {event['body']['seq']: event['body']['msg_id'] for event in self.store.book(realm).read(type='kernel/qep-received') if event['actor'] == participant and event['body']['from'] == self.participant(source, realm, channel)}
+        for row in self.records(realm, 'exchange-outbox'):
+            if row.get('controlKind') != 'resend-request' or row['to'] != source or row['channel'] != channel or row['status'] == 'fulfilled':
+                continue
+            if all(seq in received for seq in row['missing']):
+                self.save(realm, 'exchange-outbox', {**row, 'status': 'fulfilled', 'received': True, 'error': None, 'responseMessageIds': [received[seq] for seq in row['missing']]}, 'resend-fulfilled')
 
     def package(self, realm, msg_id):
         row = self.outbox(realm, msg_id)
@@ -168,6 +199,11 @@ class Delivery:
         if envelope['sender']['participant_id'] != self.participant(source, realm, channel) or envelope.get('recipients') != [ep.participant]:
             raise AdapterError('RECIPIENT_MISMATCH', 'This signed package names a different recipient or pairing.', 'Open the intended recipient account; do not edit the signed package.', 403)
         body = envelope['body']
+        if envelope['type'] == RESEND_REQUEST_TYPE:
+            missing = body.get('missing')
+            if envelope['class'] != 'intent' or not isinstance(missing, list) or not 1 <= len(missing) <= MAX_RESEND or any(type(seq) is not int or seq < 1 for seq in missing) or missing != sorted(set(missing)) or body.get('from_seq') != missing[0] or body.get('to_seq') != missing[-1] or body.get('from_participant') != envelope['sender']['participant_id'] or body.get('to_participant') != ep.participant:
+                raise AdapterError('RESEND_BINDING', 'The signed recovery request has an invalid stream or missing-sequence range.', 'Request at most 64 distinct ordered sequences from the original paired sender.', 409)
+            return {'from': source, 'to': realm, 'channel': channel, 'control': True, 'controlKind': 'resend-request', 'envelope': envelope}
         if envelope['type'] == RECEIPT_TYPE:
             return {'from': source, 'to': realm, 'channel': channel, 'control': True, 'envelope': envelope}
         if body.get('schema') != TRANSFER or body.get('from') != source or body.get('to') != realm or body.get('channel') != channel or digest(body.get('record')) != body.get('recordHash') or digest(body.get('base')) != body.get('baseHash'):
@@ -202,9 +238,15 @@ class Delivery:
         # Kernel holds validated envelopes in memory; the adapter owns their durable
         # policy-aware replay so an automatic drain cannot bypass domain validation.
         ep.held.clear()
+        self.fulfill_requests(realm, source, channel)
+        resend = self.request_missing(realm, source, channel, result.get('missing', [])) if result.get('held') else None
         if inspected.get('control'):
             if not result.get('received') and not result.get('duplicate'):
-                return self.save(realm, 'exchange-inbox', {'id': envelope['msg_id'], 'from': source, 'channel': channel, 'package': package, 'status': 'held', 'missing': result.get('missing', []), 'control': True}, 'receipt-held')
+                return self.save(realm, 'exchange-inbox', {'id': envelope['msg_id'], 'from': source, 'channel': channel, 'seq': envelope['seq'], 'package': package, 'status': 'held', 'missing': result.get('missing', []), 'control': True, 'controlKind': inspected.get('controlKind'), 'resendRequestId': resend['id'] if resend else None}, 'control-held')
+            if inspected.get('controlKind') == 'resend-request':
+                missing = envelope['body']['missing']
+                matched = {row['seq']: row for row in self.records(realm, 'exchange-outbox') if row['to'] == source and row['channel'] == channel and row['seq'] in missing}
+                return self.save(realm, 'exchange-inbox', {'id': envelope['msg_id'], 'from': source, 'channel': channel, 'seq': envelope['seq'], 'package': package, 'status': 'applied', 'control': True, 'controlKind': 'resend-request', 'requestedSequences': missing, 'resendIds': [matched[seq]['id'] for seq in missing if seq in matched], 'unavailable': [seq for seq in missing if seq not in matched], 'title': 'Peer requested original messages'}, 'resend-received')
             body = envelope['body']; outbox = self.outbox(realm, body.get('msg_id'))
             if outbox['to'] != source or outbox['channel'] != channel or outbox['bodyHash'] != body.get('body_hash') or outbox['seq'] != body.get('seq'):
                 raise AdapterError('RECEIPT_BINDING', 'The signed receipt names a different message, peer or body hash.', status=409)
@@ -215,7 +257,7 @@ class Delivery:
         if not result.get('received') and not result.get('duplicate') and not result.get('held'):
             raise AdapterError('QEP_REJECTED', 'The QEP kernel rejected this delivery.', details=result)
         status = 'held' if result.get('held') else 'received'
-        return self.save(realm, 'exchange-inbox', {'id': envelope['msg_id'], 'from': source, 'channel': channel, 'collection': inspected['collection'], 'recordId': inspected['record']['id'], 'title': inspected['record'].get('title') or inspected['record'].get('supplierName') or inspected['record']['id'], 'package': package, 'status': status, 'missing': result.get('missing', []), 'eventClass': envelope['class'], 'seq': envelope['seq']}, 'inbox-' + status)
+        return self.save(realm, 'exchange-inbox', {'id': envelope['msg_id'], 'from': source, 'channel': channel, 'collection': inspected['collection'], 'recordId': inspected['record']['id'], 'title': inspected['record'].get('title') or inspected['record'].get('supplierName') or inspected['record']['id'], 'package': package, 'status': status, 'missing': result.get('missing', []), 'resendRequestId': resend['id'] if resend else None, 'eventClass': envelope['class'], 'seq': envelope['seq']}, 'inbox-' + status)
 
     def receipt(self, realm, inbox, outcome, message=None):
         if inbox.get('receipt') and inbox['receipt']['envelope']['body'].get('outcome') == outcome:

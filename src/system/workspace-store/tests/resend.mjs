@@ -1,0 +1,49 @@
+import assert from 'node:assert/strict'
+import {createRequire} from 'node:module'
+import {mkdtempSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs'
+import {resolve,join} from 'node:path'
+import {createServer} from 'node:http'
+import {createHash,createHmac} from 'node:crypto'
+import * as storePlugin from '../code/index.mjs'
+import * as settingsPlugin from '../../settings/code/index.mjs'
+import * as exchangePlugin from '../../exchange-workbench/code/index.mjs'
+const require=createRequire(new URL('../../../../host/package.json',import.meta.url)),{Context}=require('cordis')
+mkdirSync('tmp',{recursive:true});const root=mkdtempSync(resolve('tmp/qep-resend-')),checks=[],users=[{id:'buyer',name:'Buyer fixture',role:'contractor'},{id:'supplier',name:'Supplier fixture',role:'supplier'}],secret='only-fictitious-resend-pairing'
+async function mount(directory){const ctx=new Context(),fibers=[],routes=[];fibers.push(await ctx.plugin({name:'resend-test-host',apply(inner){inner.provide('accounts',{list:()=>structuredClone(users),get:id=>users.find(row=>row.id===id),can:()=>true});inner.provide('web',{prefix:'/quotagent',contribute:()=>()=>{},route:(...args)=>{routes.push(args);return()=>routes.splice(routes.indexOf(args),1)}})}}));for(const plugin of [storePlugin,settingsPlugin,exchangePlugin])fibers.push(await ctx.plugin(plugin,plugin===storePlugin?{root:directory}:plugin===exchangePlugin?{retryIntervalMs:3600000,timeoutMs:1000}:{}));const dispose=ctx.store.exchangePolicy({id:'resend-fixture',collections:['offers'],prepare:({record})=>({type:'fixture/offer',eventClass:'fact',refs:{},approvals:[]}),validate:()=>({ok:true}),authority:()=>({owner:'sender',commitment:false})});return{ctx,close:async()=>{dispose();for(const fiber of fibers.reverse())await fiber.dispose();assert.equal(routes.length,0);assert.equal(ctx.get('exchange'),undefined)}}}
+const pair=async(target,user,peer)=>(await target.ctx.exchange.savePeer(user,{name:`Fixture ${peer.id}`,peerRealm:peer.id,role:peer.role,mode:'manual',channel:'resend-fixture',pairingSecret:secret})).peer
+const canon=value=>JSON.stringify((function sort(v){return Array.isArray(v)?v.map(sort):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,sort(v[k])])):typeof v==='string'?v.normalize('NFC'):v})(value))
+const digest=value=>'sha256:'+createHash('sha256').update(canon(value)).digest('hex')
+function signed(original,patch){const value=structuredClone(original),envelope={...value.envelope,...patch};delete envelope.signature;envelope.body_hash=digest(envelope.body);const participant=envelope.sender.participant_id,key=createHash('sha256').update(secret+participant).digest();envelope.signature=`hmac-sha256:${participant}-k1:${createHmac('sha256',key).update(canon(envelope)).digest('hex')}`;value.envelope=envelope;return value}
+let a=await mount(join(root,'a')),b=await mount(join(root,'b')),server;const httpBodies=[];let echoRequest=false
+try{
+ const ap=await pair(a,users[0],users[1]);await pair(b,users[1],users[0])
+ const first=await a.ctx.store.exchange('buyer','supplier','offers',{id:'first',amount:10}),second=await a.ctx.store.exchange('buyer','supplier','offers',{id:'second',amount:20}),original=(await a.ctx.store.package('buyer',first.msgId)).package
+ // Controlled fault: the sender metadata says delivered, while this fixture peer
+ // lacks the original. This is not evidence of a real receipt or a lost ledger.
+ await a.ctx.store.markDelivery('buyer',first.msgId,{status:'delivered'})
+ const held=await b.ctx.exchange.receive('supplier',(await a.ctx.store.package('buyer',second.msgId)).package,{user:users[1]});assert.equal(held.status,'held');assert.equal(b.ctx.store.get('supplier','offers','second'),undefined)
+ let request=b.ctx.store.deliveryState('supplier').outbox.find(row=>row.controlKind==='resend-request');assert.deepEqual(request.missing,[1]);const control=(await b.ctx.store.package('supplier',request.id)).package
+ await b.ctx.exchange.receive('supplier',(await a.ctx.store.package('buyer',second.msgId)).package,{user:users[1]});assert.equal(b.ctx.store.deliveryState('supplier').outbox.filter(row=>row.controlKind==='resend-request').length,1)
+ await b.close();const ledger=join(root,'b/ledgers/supplier.jsonl'),prefix=readFileSync(ledger,'utf8').trim().split('\n'),cut=prefix.findIndex(line=>{const event=JSON.parse(line);return event.type==='kernel/qep-sent'&&event.body.msg_id===request.id});assert(cut>=0);writeFileSync(ledger,prefix.slice(0,cut+1).join('\n')+'\n');b=await mount(join(root,'b'));assert.deepEqual((await b.ctx.store.package('supplier',request.id)).package,control)
+ checks.push('A missing predecessor creates one signed bounded request, keeps the successor held, reuses exact request identity on duplicates and survives native restart')
+ server=createServer(async(req,res)=>{let raw='';for await(const part of req)raw+=part;try{const body=JSON.parse(raw);httpBodies.push(body);const result=echoRequest?{status:'held',receipts:[control]}:await b.ctx.exchange.receive('supplier',body.packages);res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(result))}catch(error){res.writeHead(error.status||500,{'content-type':'application/json'});res.end(JSON.stringify({error:error.message}))}});await new Promise(done=>server.listen(0,'127.0.0.1',done));const port=server.address().port
+ await a.ctx.exchange.savePeer(users[0],{...ap,mode:'http',endpoint:`http://127.0.0.1:${port}/receive`})
+ const recovered=await a.ctx.exchange.retry(users[0],second.msgId);assert.equal(recovered.status,'delivered');assert.equal(b.ctx.store.get('supplier','offers','first').amount,10);assert.equal(b.ctx.store.get('supplier','offers','second').amount,20)
+ assert.equal(b.ctx.store.get('supplier','exchange-outbox',request.id).status,'fulfilled');assert(httpBodies.length>=2);assert.deepEqual(httpBodies.flatMap(row=>row.packages).find(row=>row.envelope.msg_id===first.msgId),original);assert.equal(a.ctx.store.get('buyer','exchange-inbox',request.id).controlKind,'resend-request')
+ const count=()=>b.ctx.store.events('supplier').filter(row=>row.type==='exchange/record-applied').length;assert.equal(count(),2);await a.ctx.exchange.receive('buyer',control,{user:users[0]});assert.equal(count(),2);assert.equal(a.ctx.store.events('buyer').filter(row=>row.type==='exchange/resend-received').length,1)
+ checks.push('Actual HTTP carries signed request and exact original replay even when sender metadata already says delivered; both records apply once and fulfilled request names received originals')
+ const tooLarge=signed(control,{body:{...control.envelope.body,missing:Array.from({length:65},(_,i)=>i+1),from_seq:1,to_seq:65}});await assert.rejects(a.ctx.exchange.receive('buyer',tooLarge,{user:users[0]}),error=>error.code==='RESEND_BINDING');const malformed=signed(control,{body:{...control.envelope.body,missing:[1,1]}});await assert.rejects(a.ctx.exchange.receive('buyer',malformed,{user:users[0]}),error=>error.code==='RESEND_BINDING')
+ const foreign=signed(control,{body:{...control.envelope.body,to_participant:'account:other:to:supplier:via:resend-fixture'}});await assert.rejects(a.ctx.exchange.receive('buyer',foreign,{user:users[0]}),error=>error.code==='RESEND_BINDING')
+ checks.push('Correctly signed malformed ranges and foreign requested stream bindings are refused before preparing any replay')
+ // A peer may have lost an original source package: report unavailable rather
+ // than inventing a replacement. Generate a valid next control with its fixture key.
+ const latest=b.ctx.store.deliveryState('supplier').outbox.sort((x,y)=>x.seq-y.seq).at(-1)
+ const unavailable=signed(control,{msg_id:'01ZZZZZZZZZZZZZZZZZZZZZZZZ',seq:latest.seq+1,prev_hash:latest.bodyHash,correlation_id:'fixture-unavailable',body:{...control.envelope.body,missing:[999],from_seq:999,to_seq:999}})
+ const response=await a.ctx.exchange.receive('buyer',unavailable,{user:users[0]});assert.deepEqual(response.unavailable,[999]);assert.deepEqual(response.replays,[]);assert.equal(a.ctx.store.list('buyer','offers').length,0)
+ checks.push('An authenticated unavailable-sequence request retains explicit missing evidence and returns no fabricated package or business record')
+ echoRequest=true;const before=httpBodies.length,repeated=await a.ctx.store.exchange('buyer','supplier','offers',{id:'repeated-control',amount:25});assert.equal(repeated.status,'held');assert(httpBodies.length-before<=2);assert.equal(b.ctx.store.get('supplier','offers','repeated-control'),undefined);checks.push('A peer repeating an old valid request without receipts triggers at most one replay in the attempt and ends visibly held instead of an unbounded control loop')
+ await new Promise(done=>server.close(done));const pending=await a.ctx.store.exchange('buyer','supplier','offers',{id:'outage',amount:30});assert.equal(pending.status,'failed');assert.equal(a.ctx.store.get('buyer','exchange-outbox',second.msgId).status,'delivered')
+ const list=b.ctx.exchange.list(users[1]);assert(list.recovery.some(row=>row.id===request.id&&row.status==='fulfilled'));assert(!JSON.stringify(list).includes(secret))
+ checks.push('Recovery history is account-visible without pairing secrets; subsequent network failure preserves prior fulfilled/delivered receipts and native disposal removes routes/timers')
+ const report={ok:true,at:new Date().toISOString(),root,checks,httpRequests:httpBodies.length,fixtureLimit:'The already-delivered sender flag is controlled fixture metadata; actual signed request/replay and HTTP are real, not a claim that a production ledger lost data.'};writeFileSync(join(root,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2))
+}finally{if(server?.listening)await new Promise(done=>server.close(done));await a.close().catch(()=>{});await b.close().catch(()=>{})}
