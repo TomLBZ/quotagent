@@ -1,0 +1,36 @@
+{
+  "at": "2026-09-26T05:49:01.606Z",
+  "root": "/workspace/projects/quotagent/tmp/operations-gui-H8txGC",
+  "checks": [
+    "Separate admin GUI displays actual native plugin/provider metadata and downloads a timestamped source-labelled JSON snapshot",
+    "Administrator previews and applies periodic snapshot settings in GUI; explicit value survives reload",
+    "Original shared admin snapshot interval restored through GUI and verified after reload",
+    "contractor GUI offers only its authorized timeline; real collection query and explicit personal preferences survive reload",
+    "supplier GUI offers only its authorized timeline; real collection query and explicit personal preferences survive reload",
+    "All three account views fit a 390px viewport with no JavaScript errors"
+  ],
+  "errors": [],
+  "screenshots": [
+    "admin-snapshot-setting-persisted.png",
+    "admin-mobile.png",
+    "contractor-mobile.png",
+    "supplier-mobile.png"
+  ],
+  "base": "http://127.0.0.1:8648/quotagent/",
+  "snapshotSetting": {
+    "before": "30",
+    "applied": "45",
+    "restored": "30"
+  },
+  "accounts": [
+    {
+      "id": "u-226ebcf2-2ea3-433c-9901-b0ebf33eecf6",
+      "role": "contractor"
+    },
+    {
+      "id": "u-0dcae96d-1878-44aa-9bbd-5b1e80a46fcf",
+      "role": "supplier"
+    }
+  ],
+  "ok": true
+}

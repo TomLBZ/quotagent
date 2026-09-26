@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "at": "2026-09-26T05:48:26.865Z",
+  "base": "http://127.0.0.1:8648/quotagent/",
+  "checks": [
+    "Native required and email validation expose persistent control-linked errors; valid edit removes invalid state and real sign-in still works",
+    "Visible workspace label and descriptive hint are programmatically associated; keyboard-focused native control has a visible indicator",
+    "Real server409 duplicate-email response renders beside its email control with described-by and invalid state; editing clears the field error; no account was created",
+    "Actual administrator tables without owner captions inherit nonempty section-heading accessible names",
+    "Explicit event-table caption wins over automatic section-heading naming",
+    "Delayed saved preferences disable every generic query/save/export/paging control; typing waits for readiness and the entered search survives hydration and reaches the real collection query",
+    "An early page-specific Review actions tab change is retained over hydrated preferences and reaches the real authorized query",
+    "Failed saved-view request exposes an alert and retry; it never displays the empty-history state, and retry restores records",
+    "Separate row-source failure also preserves unavailable semantics and a working retry",
+    "Settled 390px sidebar opens/closes by keyboard-capable controls; closed sidebar is offscreen and document has no horizontal overflow"
+  ],
+  "jsErrors": [],
+  "tableNames": [
+    {
+      "label": null,
+      "heading": "People & permissions"
+    }
+  ]
+}
