@@ -1,0 +1,14 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "stamp": 1790401243746,
+  "ok": false,
+  "error": "locator.click: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Confirm award intent', exact: true })\u001b[22m\n\n    at /workspace/projects/quotagent/src/domain/procurement/tests/public-declarations-browser.mjs:22:499",
+  "checks": [
+    "An incomplete draft stays editable; GUI publication refuses missing measurement/responsibility, then succeeds only after human-authored dimension, unit, owner, deliverables and exclusions",
+    "Supplier explicitly offers five alternative pairs plus additional packing, assumptions/exclusions and a named firm dated milestone; contractor receives exact declarations with submitted total155"
+  ],
+  "errors": [
+    "order is not defined",
+    "order is not defined"
+  ]
+}
