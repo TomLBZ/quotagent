@@ -29,7 +29,7 @@ export function createConversations(ctx, hooks) {
   }
   const all = user => ctx.store.list(user.id, collection).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   const current = user => all(user).findLast(run => !terminal.has(run.status)) || all(user).at(-1) || null
-  const view = run => run && Object.fromEntries(['id','status','phase','createdAt','updatedAt','finishedAt','message','rfqId','error','notice','results','actions','revision','modelSteps','reply'].map(key => [key, run[key]]))
+  const view = run => run && Object.fromEntries(['id','status','phase','createdAt','updatedAt','finishedAt','message','rfqId','workspaceOwnerId','workspaceName','error','notice','results','actions','revision','modelSteps','reply'].map(key => [key, run[key]]))
   const save = (user, run, event) => {
     run.updatedAt = now(); run.revision = (run.revision || 0) + 1
     return ctx.store.put(user.id, collection, run, {event: `assistant/${event}`, actor: `agent:${user.id}`})
@@ -57,7 +57,7 @@ export function createConversations(ctx, hooks) {
   }
   const finish = (user, id, response, signal) => update(user, id, 'completed', async run => {
     const reply = {id:id+'-assistant',role:'assistant',content:response.content || 'Your drafts are ready to review.',createdAt:now(),tools:run.results,actions:run.actions,model:hooks.status(user).model}
-    await ctx.store.put(user.id, 'agent-turns', {id,createdAt:run.createdAt,messages:run.turnWire}, {actor:`agent:${user.id}`})
+    await ctx.store.put(user.id, 'agent-turns', {id,createdAt:run.createdAt,workspaceOwnerId:run.workspaceOwnerId,workspaceName:run.workspaceName,messages:run.turnWire}, {actor:`agent:${user.id}`})
     await ctx.store.put(user.id, 'chat', reply, {actor:`agent:${user.id}`})
     run.reply=reply; run.status='completed'; run.phase='complete'; run.finishedAt=now(); run.error=''; run.notice=''
   }, signal)
@@ -66,6 +66,7 @@ export function createConversations(ctx, hooks) {
     try {
       while (!disposed && !signal.aborted) {
         const run = get(user, id)
+        const taskUser=run.workspaceOwnerId?{...user,workspaceOwnerId:run.workspaceOwnerId}:user
         if (run.status !== 'running') break
         if (run.phase === 'finish') { await finish(user,id,run.final,signal); break }
         if (run.phase === 'tools') {
@@ -75,7 +76,7 @@ export function createConversations(ctx, hooks) {
           if (!ready || signal.aborted || disposed) break
           let value
           try {
-            value = await hooks.invoke(user,{name:call.function.name,arguments:JSON.parse(call.function.arguments || '{}'),context:{source:'assistant',turnId:id,runId:id,callId:call.id,userMessage:run.message,externalContext:run.externalContext,signal}})
+            value = await hooks.invoke(taskUser,{name:call.function.name,arguments:JSON.parse(call.function.arguments || '{}'),context:{source:'assistant',turnId:id,runId:id,callId:call.id,userMessage:run.message,externalContext:run.externalContext,signal}})
           } catch (error) { value={ok:false,error:error.message,...(signal.aborted?{uncertain:true,message:'This tool was interrupted. Check its records before repeating the action.'}:{})} }
           // A tool already in progress may finish after pause. Keep its receipt,
           // but the next iteration cannot launch another tool while paused.
@@ -83,7 +84,7 @@ export function createConversations(ctx, hooks) {
           continue
         }
         const summary = run.modelSteps >= 6
-        const response = await ctx.ai.complete(user,{
+        const response = await ctx.ai.complete(taskUser,{
           messages:summary ? [...run.wire,{role:'user',content:'Summarize the completed work and next human review step now. Do not call more tools.'}] : run.wire,
           ...(!summary?{tools:hooks.definitions(user)}:{}),purpose:summary?'workspace-summary':'workspace-assistant',signal,
         })
@@ -114,7 +115,7 @@ export function createConversations(ctx, hooks) {
     if(active && !terminal.has(active.status)) throw new Error('Resume or stop the current task, or add guidance to it.')
     const id=randomUUID(),createdAt=now(),prepared=await hooks.prepare(user,{message:text,rfqId})
     const run={id,ownerId:user.id,status:'running',phase:'model',createdAt,message:text,rfqId:rfqId||null,
-      wire:prepared.wire,turnWire:[{role:'user',content:text}],results:[],actions:[],pendingTools:[],toolIndex:0,modelSteps:0,externalContext:false,revision:0}
+      workspaceOwnerId:prepared.workspaceOwnerId,workspaceName:prepared.workspaceName,wire:prepared.wire,turnWire:[{role:'user',content:text}],results:[],actions:[],pendingTools:[],toolIndex:0,modelSteps:0,externalContext:false,revision:0}
     await lock(user,async()=>{
       await ctx.store.put(user.id,'chat',{id:id+'-user',role:'user',content:text,createdAt},{actor:`human:${user.id}`})
       await save(user,run,'started')
@@ -156,7 +157,7 @@ export function createConversations(ctx, hooks) {
           run.status='stopped';run.phase='complete';run.finishedAt=now();run.notice='Stopped. Completed drafts and review actions are kept.'
           const content='Task stopped at your request. Completed work is retained; no further steps will run.'
           push(run,{role:'assistant',content})
-          await ctx.store.put(user.id,'agent-turns',{id,createdAt:run.createdAt,messages:run.turnWire},{actor:`human:${user.id}`})
+          await ctx.store.put(user.id,'agent-turns',{id,createdAt:run.createdAt,workspaceOwnerId:run.workspaceOwnerId,workspaceName:run.workspaceName,messages:run.turnWire},{actor:`human:${user.id}`})
           await ctx.store.put(user.id,'chat',{id:id+'-stopped',role:'assistant',content,createdAt:now(),tools:run.results,actions:run.actions},{actor:`human:${user.id}`})
         }else{
           push(run,{role:'user',content:guidance});run.message+='\n\nAdditional guidance: '+guidance;run.modelSteps=0;run.error=''

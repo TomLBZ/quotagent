@@ -14,8 +14,8 @@ function harness({model,tool,gate}={}){
     await gate?.(collection,record,options)
     table(realm,collection).set(record.id,structuredClone(record));events.push({realm,type:options.event,body:{collection,record:structuredClone(record)}})
   }}
-  const ctx={store,accounts:{list:()=>[user,other],can:()=>true},ai:{complete:async(who,request)=>{calls.push({who:who.id,...request});return model?model(request,calls.length):answer('Done')}}}
-  const hooks={prepare:async(_,{message})=>({wire:[{role:'user',content:message}]}),definitions:()=>[],status:()=>({model:'fixture'}),invoke:async(who,request)=>{executions.push(request);return tool?tool(request):{ok:true,summary:'Draft saved'}}}
+  const ctx={store,accounts:{list:()=>[user,other],can:()=>true},ai:{complete:async(who,request)=>{calls.push({who:who.id,workspaceOwnerId:who.workspaceOwnerId,...request});return model?model(request,calls.length):answer('Done')}}}
+  const hooks={prepare:async(_,{message})=>({wire:[{role:'user',content:message}]}),definitions:()=>[],status:()=>({model:'fixture'}),invoke:async(who,request)=>{executions.push({...request,workspaceOwnerId:who.workspaceOwnerId});return tool?tool(request):{ok:true,summary:'Draft saved'}}}
   const engine=createConversations(ctx,hooks)
   return {engine,ctx,hooks,store,records,events,calls,executions}
 }
@@ -82,5 +82,19 @@ const checks=[]
   assert.equal(h.calls[0].signal.aborted,true);assert.equal(h.engine.get(user,run.id).status,'paused')
   await assert.rejects(()=>h.engine.start(user,{message:'Too late'}),/reloading/)
   checks.push('Disposal aborts active requests, settles jobs and preserves a paused restart checkpoint')
+}
+{
+  let selected='first-team'
+  const h=harness({model:(request,n)=>n===1?never(request.signal):n===2?toolResponse:answer('Scoped task completed')})
+  h.hooks.prepare=async(_,{message})=>({workspaceOwnerId:selected,workspaceName:'First Team',wire:[{role:'user',content:message}]})
+  const {run}=await h.engine.start(user,{message:'Prepare drafts in this team'})
+  await until(()=>h.calls.length===1)
+  await h.engine.control(user,run.id,{action:'pause'});selected='other-team'
+  await h.engine.control(user,run.id,{action:'resume'})
+  await until(()=>h.engine.get(user,run.id).status==='completed')
+  assert(h.calls.every(call=>call.workspaceOwnerId==='first-team'))
+  assert(h.executions.every(call=>call.workspaceOwnerId==='first-team'))
+  assert.equal(h.store.list(user.id,'agent-turns')[0].workspaceOwnerId,'first-team')
+  await h.engine.dispose();checks.push('Team scope is captured durably; switching selected workspace while paused never retargets model/tool work or conversation history')
 }
 console.log(JSON.stringify({ok:true,checks},null,2))

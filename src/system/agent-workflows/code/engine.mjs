@@ -134,14 +134,16 @@ export function createWorkflows(ctx,{memory,notify=async()=>{}}){
   }
   function launch(user,id){
     if(disposed||jobs.has(id)||controls.has(id)||raw(user,id).status!=='running')return
+    const run=raw(user,id),taskUser=run.workspaceOwnerId?{...user,workspaceOwnerId:run.workspaceOwnerId}:user
     const controller=new AbortController();controllers.set(id,controller)
-    const job=Promise.resolve().then(()=>execute(user,id,controller.signal));jobs.set(id,job)
+    const job=Promise.resolve().then(()=>execute(taskUser,id,controller.signal));jobs.set(id,job)
     job.finally(()=>{jobs.delete(id);controllers.delete(id);if(!disposed&&raw(user,id).status==='running')launch(user,id)}).catch(()=>{})
   }
   async function start(user,input={}){
     if(!ctx.accounts.can(user,'assistant:use'))throw failure('The assistant is disabled for this account.',403)
     const objective=clean(input.objective);if(!objective)throw failure('Describe the outcome you want the agent team to achieve.')
-    const run={id:randomUUID(),ownerId:user.id,title:objective.slice(0,100),objective,rfqId:clean(input.rfqId,100)||null,status:'running',phase:'plan',checkpoint:input.checkpoint ?? ctx.settings.get(user,'workflows').reviewPlan,parallelism:ctx.settings.get(user,'workflows').parallelism,steps:[],questions:[],feedback:[],revision:1,createdAt:now(),updatedAt:now()}
+    const teamScope=user.role==='admin'?null:ctx.get?.('teams')?.scope(user)
+    const run={id:randomUUID(),ownerId:user.id,workspaceOwnerId:teamScope?.team.id,workspaceName:teamScope?.team.name,title:objective.slice(0,100),objective,rfqId:clean(input.rfqId,100)||null,status:'running',phase:'plan',checkpoint:input.checkpoint ?? ctx.settings.get(user,'workflows').reviewPlan,parallelism:ctx.settings.get(user,'workflows').parallelism,steps:[],questions:[],feedback:[],revision:1,createdAt:now(),updatedAt:now()}
     await ctx.store.put(user.id,'workflow-runs',run,{actor:`human:${user.id}`,event:'workflows/created'})
     await trace(user,run.id,'created',{summary:objective});launch(user,run.id);return get(user,run.id)
   }
