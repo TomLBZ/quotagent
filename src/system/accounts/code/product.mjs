@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { signInCooldown } from './sign-in.mjs'
 
 export const name = 'product-accounts'
 export const inject = ['web', 'store']
@@ -35,6 +36,7 @@ const publicProfile = account => account ? copy({
 }) : null
 
 export function apply(ctx, config = {}) {
+  const cooldown=signInCooldown(config.loginClock);ctx.effect(()=>()=>cooldown.dispose())
   const directory = join(config.root ?? ctx.store.root, 'accounts')
   const cookiePath = ctx.web.prefix || '/quotagent'
   const file = join(directory, 'accounts.json')
@@ -145,10 +147,11 @@ export function apply(ctx, config = {}) {
   })
   const route = (method, path, handler, options) => ctx.effect(() => ctx.web.route(method, path, handler, options))
   route('POST', '/auth/login', ({ body, req, res }) => {
-    const account = state.accounts.find(row => row.email === emailOf(body.email))
-    if (!account || account.disabled || !passwordMatches(String(body.password ?? ''), account.credential)) {
-      fail('Email or password is incorrect.', 401)
+    const email=emailOf(body.email),account=state.accounts.find(row=>row.email===email)
+    if(cooldown.blocked(email)||!account||account.disabled||!passwordMatches(String(body.password??''),account.credential)){
+      cooldown.failed(email);fail('Email or password is incorrect, or sign-in is temporarily unavailable. Try again shortly.',401)
     }
+    cooldown.clear(email)
     setSession(req, res, account)
     return { user: publicProfile(account) }
   }, { public: true })

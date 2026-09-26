@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/sign-in-KgKYIi",
+  "checks": [
+    "Actual HTTP generic failure has no session; five normalized failures prevent even correct credentials during bounded cooldown",
+    "A separate account remains available; injected 30-second expiry requires explicit login and a successful login resets failure history"
+  ]
+}
