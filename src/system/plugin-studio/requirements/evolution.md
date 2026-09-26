@@ -1,7 +1,7 @@
 # Native extension evolution
 <!-- budget: 12288 bytes, hard -->
 
-Decision: [ADR-0034](../../../../docs/design/adr/0034-immutable-extension-revisions-and-runtime-ownership.md). Management owner is `system/plugin-studio`; installed execution and artifacts belong to `system/installed-plugins`. This contract maps every G7 clause from `tmp/agent-experience/requirements-audit.json`; the source documents below remain the requirement origins. Implemented in the sources below; local native and real-model GUI evidence is recorded in `docs/work/evidence/EV-G7-NATIVE-EVOLUTION.md`. Public replay remains a release step owned by the host integrator.
+Decision: [ADR-0034](../../../../docs/design/adr/0034-immutable-extension-revisions-and-runtime-ownership.md). Management owner is `system/plugin-studio`; installed execution and artifacts belong to `system/installed-plugins`. This contract maps every G7 clause from `tmp/agent-experience/requirements-audit.json`; the source documents below remain the requirement origins. Implemented in the sources below; local native and real-model GUI evidence is recorded in `docs/work/evidence/g7-native-evolution.md`. Public replay remains a release step owned by the host integrator.
 
 | Retained clause | Native outcome and acceptance |
 |---|---|
