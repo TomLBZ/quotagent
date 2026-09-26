@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "at": "2026-09-26T05:24:50.481Z",
+  "base": "http://127.0.0.1:8648/quotagent/",
+  "checks": [
+    "GUI creates and publishes both explicit deadlines; received object discloses automatic authenticated view metadata and originating buyer sees the delivered first/last/count receipt",
+    "Supplier GUI prepares exact future promise, Action center previews it, human approval delivers through QEP; buyer sees due basis, supplier sees only own response",
+    "Buyer reviews exact reminder for one invited supplier; intended supplier sees delivered text while another supplier promise remains private to its parties",
+    "GUI printable RFQ displays recorded deadline, item ID, revision and exact ledger hash anchor in a script-free document with browser print/save PDF control",
+    "Sourced weekly GUI shows recorded publication and real reviewed decision wait; CSV, TXT and printable report retain identical object and ledger references",
+    "Narrow mobile view has no page overflow and delivered response history survives reload without replaying the promise"
+  ],
+  "jsErrors": [],
+  "rfqId": "rfq-5169f125-f71",
+  "title": "[Response evidence] 1790400279240",
+  "promiseActionId": "9d7e372e-14c8-486a-9286-c9d3191be507",
+  "reminderActionId": "6fe8f5f0-55b9-4b95-8466-4958c61d4543"
+}

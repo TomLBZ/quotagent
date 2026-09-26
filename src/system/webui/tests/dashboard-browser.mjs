@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict'
+import {chromium} from '../../../../host/node_modules/playwright/index.mjs'
+import {mkdirSync,writeFileSync} from 'node:fs'
+const base=process.env.BASE_URL||'https://novara.remoteblossom.com/quotagent/',output=process.env.EVIDENCE_DIR||'tmp/product-evidence/final-public/dashboard'
+const origin=new URL(base).origin;mkdirSync(output,{recursive:true})
+const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE||'/opt/hermes/.playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell'}),page=await browser.newPage({viewport:{width:1440,height:1000}}),report={base,at:new Date().toISOString(),checks:[],errors:[],screenshots:[]}
+page.on('pageerror',error=>report.errors.push(error.message));page.setDefaultTimeout(30000)
+const shot=async name=>{await page.screenshot({path:output+'/'+name,fullPage:true});report.screenshots.push(name)}
+try{
+ await page.goto(origin+'/');await page.getByRole('heading',{name:'Projects & routes',exact:true}).waitFor();const link=page.locator('#routes').getByRole('link',{name:'/quotagent',exact:true});await link.waitFor();assert.equal(await link.getAttribute('href'),'/quotagent/');const discovery=await page.evaluate(async()=>{const value=await(await fetch('/api/status')).json();return value.routes.find(route=>route.prefix==='/quotagent')});assert.equal(discovery.entry_source,'service:/api/routes');report.discovery=discovery;await shot('01-dashboard-entry.png');await link.click();await page.waitForURL(base);await page.getByLabel('Email address',{exact:true}).waitFor();report.checks.push('Actual public dashboard Projects & routes link opens the independent application sign-in through the existing gateway')
+ const routes=await page.evaluate(async()=>{const response=await fetch('api/routes');return{status:response.status,body:await response.json()}});assert.equal(routes.status,200);assert.deepEqual(routes.body.routes,[{method:'GET',path:'/quotagent/',auth:'none',title:'Quotagent workspace'}]);report.checks.push('The deployed application describes its exact public entry at /quotagent/api/routes without requiring account identity')
+ await page.getByRole('button',{name:'I’m a contractor',exact:true}).click();await page.getByRole('navigation',{name:'Main navigation'}).waitFor();await page.getByRole('button',{name:'Find a page or action',exact:true}).waitFor();await shot('02-account-workspace.png');report.checks.push('The discovered entry supports account sign-in and opens the agent-first contractor workspace with navigable plugin actions')
+ assert.deepEqual(report.errors,[]);report.ok=true;console.log(JSON.stringify(report,null,2))
+}catch(error){report.error=error.stack;process.exitCode=1;await shot('failure.png').catch(()=>{});console.error(report.error)}finally{writeFileSync(output+'/report.json',JSON.stringify(report,null,2)+'\n');await browser.close()}
