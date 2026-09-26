@@ -25,6 +25,7 @@ import * as connections from '../src/system/agent-connections/code/index.mjs'
 import * as workflows from '../src/system/agent-workflows/code/index.mjs'
 import * as workspaceStyles from '../src/system/workspace-styles/code/index.mjs'
 import * as userGuide from '../src/system/user-guide/code/index.mjs'
+import * as installed from '../src/system/installed-plugins/code/index.mjs'
 const root=fileURLToPath(new URL('../',import.meta.url))
 const ctx=new Context(), mounted=[], definitions=[]
 const mount=async(id,module,config={},metadata={})=>{
@@ -48,6 +49,7 @@ await mount('notifications',notifications,{}, {name:'Notifications',repoId:'syst
 await mount('action-center',actions,{}, {name:'Human action review',repoId:'system/action-center'})
 await mount('agent-runtime',agent,{}, {name:'AI agent runtime',repoId:'system/agent-runtime',configurationId:'ai'})
 await mount('procurement',procurement,{}, {name:'Quotation and order workflow',repoId:'domain/procurement'})
+await mount('installed-plugins',installed,{}, {name:'Installed plugins runtime',repoId:'system/installed-plugins'})
 await mount('plugin-studio',studio,{}, {name:'Personal plugins and marketplace',repoId:'system/plugin-studio'})
 await mount('file-store',files,{}, {name:'Account file storage',repoId:'system/file-store',configurationId:'file-store'})
 await mount('ingestion',ingestion,{}, {name:'Document ingestion workspace',repoId:'domain/ingestion',configurationId:'ingestion'})

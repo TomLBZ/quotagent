@@ -5,7 +5,7 @@ const display = value => value === null || value === undefined ? '—'
   : typeof value === 'object' ? JSON.stringify(value) : String(value)
 
 /** Generic UI for any model-authored pure utility; no business formulas here. */
-export function GeneratedTool({ plugin, onClose }) {
+export function GeneratedTool({ plugin, onClose, endpoint = "/studio" }) {
   const fields = plugin.spec?.fields || []
   const [input, setInput] = useState(() => Object.fromEntries(fields.map(field => [field.name, field.default ?? ''])))
   const [result, setResult] = useState(null)
@@ -15,7 +15,7 @@ export function GeneratedTool({ plugin, onClose }) {
     event.preventDefault()
     setBusy(true); setError(''); setResult(null)
     try {
-      const response = await api(`/studio/${plugin.id}/run`, { method: 'POST', body: { input } })
+      const response = await api(`${endpoint}/${plugin.id}/run`, { method: 'POST', body: { input, expectedRevisionId: plugin.revisionId } })
       setResult(response.result)
     } catch (failure) { setError(failure.message) }
     finally { setBusy(false) }

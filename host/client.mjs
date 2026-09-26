@@ -15,5 +15,6 @@ import '../src/system/agent-connections/client/connections.jsx'
 import '../src/system/agent-workflows/client/workroom.jsx'
 import '../src/system/workspace-styles/client/styles.jsx'
 import '../src/system/user-guide/client/guide.jsx'
+import '../src/system/installed-plugins/client/installed.jsx'
 import { mountApp } from '../src/system/webui/client/core.jsx'
 mountApp()

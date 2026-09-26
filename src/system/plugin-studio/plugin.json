@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "layer": "system",
   "entry": "code/index.mjs",
-  "provides": ["studio", "studioRuntime"],
-  "description": "Live model generated personal Cordis plugins, executable utility code and workflow skills, marketplace sharing, installation, and administrator global promotion."
+  "provides": [
+    "studio"
+  ],
+  "description": "Optional management for model-generated extensions, immutable revision proposals, paired replay, and limited observed trials. Installed capabilities run in the independent installed-plugins service."
 }

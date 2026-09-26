@@ -19,6 +19,24 @@ export function compileUtility(source) {
   })()`, { filename: 'generated-personal-utility.js' })
 }
 
+export function normalizeInput(descriptor, raw = {}) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Utility input must be an object.')
+  return Object.fromEntries(descriptor.spec.fields.map(field => {
+    const supplied = raw[field.name] ?? field.default
+    const value = field.type === 'number' ? Number(supplied) : String(supplied).slice(0, 24000)
+    if (field.type === 'number' && !Number.isFinite(value)) throw new Error(`Enter a valid number for ${field.label}.`)
+    return [field.name, value]
+  }))
+}
+
+export function runCompiled(script, input, workspace, timeout = 750) {
+  const context = createContext({ __input: JSON.stringify(input), __workspace: JSON.stringify(workspace) },
+    { codeGeneration: { strings: false, wasm: false }, microtaskMode: 'afterEvaluate' })
+  const output = script.runInContext(context, { timeout })
+  if (output.length > 200000) throw new Error('The utility returned too much data. Ask for a smaller summary.')
+  return JSON.parse(output)
+}
+
 export function apply(ctx, config = {}) {
   const utilities = new Map()
   const timeout = Number(config.timeout ?? 750)
@@ -33,11 +51,7 @@ export function apply(ctx, config = {}) {
       const utility = utilities.get(id)
       if (!utility) throw new Error('Load this utility before running it.')
       if (utility.owner !== '*' && utility.owner !== user.id) throw new Error('Install this utility in your own workspace before running it.')
-      const context = createContext({ __input: JSON.stringify(input), __workspace: JSON.stringify(workspace) },
-        { codeGeneration: { strings: false, wasm: false }, microtaskMode: 'afterEvaluate' })
-      const output = utility.script.runInContext(context, { timeout })
-      if (output.length > 200000) throw new Error('The utility returned too much data. Ask for a smaller summary.')
-      return JSON.parse(output)
+      return runCompiled(utility.script, input, workspace, timeout)
     },
     list: user => [...utilities.values()].filter(row => row.owner === '*' || row.owner === user.id)
       .map(row => structuredClone(row.descriptor)),

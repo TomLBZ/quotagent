@@ -11,6 +11,8 @@ import * as store from '../../workspace-store/code/index.mjs'
 import * as accounts from '../../accounts/code/product.mjs'
 import * as ai from '../../agent-runtime/code/product-ai.mjs'
 import * as procurement from '../../../domain/procurement/code/index.mjs'
+import * as installedRuntime from '../../installed-plugins/code/index.mjs'
+import * as settings from '../../settings/code/index.mjs'
 import * as studio from '../code/product.mjs'
 
 const require = createRequire(new URL('../../../../host/package.json', import.meta.url))
@@ -27,7 +29,7 @@ Compute base=quantity*unitPrice+shipping+insurance; duty=base*dutyPercent/100; t
 Return named numeric keys total, unitCost, duty, tax rounded to two decimal places, rfqCount equal to workspace.rfqs.length, plus a readable summary and rows of the calculation.
 Reject a non-positive quantity with a clear error. Do not access any external APIs. This should be executable custom source, not a static widget or an agent skill.`
 try {
-  for (const [plugin, config] of [[web, {}], [store, { root: data }], [accounts, {}], [ai, {}], [procurement, {}], [studio, {}]]) {
+  for (const [plugin, config] of [[web, {}], [store, { root: data }], [accounts, {}], [settings, {}], [ai, {}], [procurement, {}], [installedRuntime, {}], [studio, {}]]) {
     fibers.push(await ctx.plugin(plugin, config))
   }
   const owner = ctx.accounts.get('contractor-demo')
@@ -41,7 +43,7 @@ try {
   if (!plugin.enabled) await ctx.studio.execute(owner, plugin.id, 'load')
   assert.equal(plugin.kind, 'calculator')
   assert.ok(plugin.spec.code.includes('function'))
-  assert.match(plugin.source, /studioRuntime\.register/)
+  assert.match(plugin.source, /config\.attach/)
   assert.equal(ctx.studioRuntime.list(owner).length, 1)
   assert.equal(ctx.studioRuntime.list(other).length, 0)
   const first = await ctx.studio.run(owner, plugin.id, { input: {} })
@@ -49,7 +51,7 @@ try {
   assert.equal(first.result.unitCost, 123.59)
   assert.equal(first.result.duty, 53.5)
   assert.equal(first.result.tax, 112.35)
-  assert.equal(first.result.rfqCount, 1)
+  assert.equal(first.result.rfqCount, ctx.procurement.snapshot(owner).rfqs.length)
   const secondInput = { quantity: 2, unitPrice: 200, shipping: 20, insurance: 0, dutyPercent: 0, taxPercent: 5 }
   const second = await ctx.studio.run(owner, plugin.id, { input: secondInput })
   assert.equal(second.result.total, 441)
@@ -64,15 +66,15 @@ try {
   const installed = await ctx.studio.execute(other, plugin.id, 'install')
   const installedResult = await ctx.studio.run(other, installed.plugin.id, { input: secondInput })
   assert.equal(installedResult.result.total, 441)
-  assert.equal(installedResult.result.rfqCount, 0)
+  assert.equal(installedResult.result.rfqCount, ctx.procurement.snapshot(other).rfqs.length)
   const promoted = await ctx.studio.execute(admin, plugin.id, 'promote')
   const globalResult = await ctx.studio.run(other, promoted.plugin.id, { input: secondInput })
   assert.equal(globalResult.result.total, 441)
-  assert.equal(globalResult.result.rfqCount, 0)
+  assert.equal(globalResult.result.rfqCount, ctx.procurement.snapshot(other).rfqs.length)
   await ctx.studio.execute(owner, plugin.id, 'unload')
   assert.equal(ctx.studioRuntime.list(owner).some(row => row.id === plugin.id), false)
   assert.equal(ctx.web.extensions(owner).some(row => row.id === plugin.id), false)
-  await assert.rejects(() => ctx.studio.run(owner, plugin.id, { input: {} }), /Load this plugin/)
+  await assert.rejects(() => ctx.studio.run(owner, plugin.id, { input: {} }), /Enable this extension/)
   const evidence = { ok: true, generatedAt: new Date().toISOString(), command: 'node src/system/plugin-studio/tools/live-utility-check.mjs' + (resume ? ` --resume ${resume}` : ''),
     data, provider: ctx.ai.status(), pluginId: plugin.id, name: plugin.name, generatedCode: plugin.spec.code,
     first: first.result, changedInputs: second.result, installed: installedResult.result, global: globalResult.result,

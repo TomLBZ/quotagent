@@ -1,16 +1,17 @@
 # Plugin studio
 <!-- budget: 4096 bytes, hard -->
 
-Owner of natural-language plugin/skill creation, user-scoped installation and disposal,
-marketplace publishing and installation, administrator global promotion and deletion.
+Optional management owner for natural-language plugin/skill creation, configuration,
+marketplace sharing, administrator promotion and the revision review workflow.
+Installed capabilities and artifact lifecycle belong to `system/installed-plugins`.
 Source: `docs/product/runtime-contract.md`, acceptance checks 4 and 5.
 
 Implementation: `../code/product.mjs`. A real model produces a theme/widget/skill
 descriptor or a calculator descriptor with actual JavaScript implementation. The
-plugin compiles that descriptor into a visible executable Cordis module,
-persists the module and skill instructions under the runtime store, and loads it as a
-Cordis child plugin. Each child registers an account-scoped UI effect; unloading disposes
-that effect. Enabled plugins restore on server restart. No directory-wide user scanning.
+management plugin asks the installed runtime to compile an immutable, numbered Cordis
+artifact and load a native child. The child receives a scoped attach capability and
+registers a reversible effect. Enabled plugins restore independently of Studio, including
+when Studio is disabled. No directory-wide user scanning.
 
 Publication exposes a marketplace listing. Installation creates an independent personal
 copy. Administrator promotion creates an independent global default plugin. Only its
@@ -25,3 +26,7 @@ The narrow live-provider check is `node src/system/plugin-studio/tools/live-util
 
 Generation, lifecycle, skill and utility execution are recorded through workspace-store. Full
 provider input/output uses agent-runtime. Executable artifacts remain local runtime data.
+
+Revision history, feedback proposals, paired evaluation, five review checks and observed
+trials are specified in [evolution.md](evolution.md). Read-only assistant inspection is
+ledger-recorded; assistant-generated revisions remain inactive until human review.

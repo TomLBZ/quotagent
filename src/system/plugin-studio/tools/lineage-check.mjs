@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { Context } from '../../../../host/node_modules/cordis/lib/index.js'
 import * as settings from '../../settings/code/index.mjs'
+import * as installed from '../../installed-plugins/code/index.mjs'
 import * as studio from '../code/product.mjs'
 import * as web from '../../webui/code/product-server.mjs'
 import { mkdtempSync, mkdirSync } from 'node:fs'
@@ -13,7 +14,7 @@ const events = []
 const key = (realm, collection, id) => `${realm}:${collection}:${id}`
 const user={id:'client',role:'contractor',name:'Client'}, admin={id:'admin',role:'admin',name:'Admin'}
 const core=await ctx.plugin({name:'review-core',apply(child){
-  child.provide('store',{root,get:(realm,collection,id)=>structuredClone(rows.get(key(realm,collection,id))),
+  child.provide('store',{root,events:()=>[],get:(realm,collection,id)=>structuredClone(rows.get(key(realm,collection,id))),
     list:(realm,collection)=>[...rows.entries()].filter(([id])=>id.startsWith(`${realm}:${collection}:`)).map(([,value])=>structuredClone(value)),
     put:async(realm,collection,value,options)=>{events.push({id:value.id,event:options?.event});rows.set(key(realm,collection,value.id),structuredClone(value))},append:async()=>{}})
   child.provide('accounts',{can:()=>true,get:id=>id==='admin'?admin:{...user,id},resolve:()=>null})
@@ -36,6 +37,7 @@ const original={id:'original',kind:'theme',spec,name:'Shared theme',description:
 const global={...original,id:'global',originId:'original',ownerId:'admin',global:true}
 const personal={...original,id:'personal',originId:'original',ownerId:'client',published:false,enabled:false}
 for (const row of [original,global,personal]) await ctx.store.put('system','studio-plugins',row)
+const runtimeFiber=await ctx.plugin(installed)
 const studioFiber=await ctx.plugin(studio)
 console.log('disabled personal + active global:',JSON.stringify({visible:ctx.studio.list(user).plugins.map(p=>({id:p.id,enabled:p.enabled,scope:p.scope})),effects:ctx.web.extensions(user).map(p=>({id:p.id,enabled:p.enabled})),market:ctx.studio.list(user).market.map(p=>({installedId:p.installedId,installedEnabled:p.installedEnabled,installationScope:p.installationScope}))}))
 assert.equal(ctx.studio.list(user).plugins[0].id,'global')
@@ -52,6 +54,9 @@ const newer={...personal,id:'newer-personal',enabled:true,createdAt:'2026-01-02T
 rows.delete(key('system','studio-plugins','personal'))
 for(const row of [older,newer])await ctx.store.put('system','studio-plugins',row)
 await studioFiber.dispose()
+assert(ctx.web.extensions(user).length, 'Installed effects survive Studio unload')
+await runtimeFiber.dispose()
+const restoredRuntime=await ctx.plugin(installed)
 const restored=await ctx.plugin(studio)
 console.log('duplicate restored choice:',JSON.stringify({visible:ctx.studio.list(user).plugins.map(p=>({id:p.id,accent:p.spec.accent})),effects:ctx.web.extensions(user).map(p=>({id:p.id,accent:p.spec.accent}))}))
 assert.equal(ctx.studio.list(user).plugins[0].id,'older-personal')
@@ -73,4 +78,4 @@ await Promise.all([ctx.studio.execute(user,'older-personal','load'),ctx.studio.e
 assert.equal(ctx.store.list('system','studio-plugins').filter(p=>p.ownerId==='client' && p.enabled).length,1)
 assert.deepEqual(ctx.web.extensions(user).map(p=>p.id),['newer-personal'])
 console.log('PASS: active fallback, live remount, deterministic restore, duplicate retirement event, scope replacement, idempotent install, concurrent loads')
-await restored.dispose();await settingsFiber.dispose();await webFiber.dispose();await core.dispose()
+await restored.dispose();await restoredRuntime.dispose();await settingsFiber.dispose();await webFiber.dispose();await core.dispose()

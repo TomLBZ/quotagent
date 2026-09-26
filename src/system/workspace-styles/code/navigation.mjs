@@ -2,7 +2,7 @@ const groups=[
  {id:'quotation',label:'Quotation work',icon:'file',ids:['workspace','rfqs','quotes','orders','messages']},
  {id:'management',label:'Manage application',icon:'shield',ids:['admin','plugins']},
  {id:'sources',label:'Sources & connections',icon:'mail',ids:['ingestion','mail','telegram','connections']},
- {id:'personalize',label:'Personalize',icon:'puzzle',ids:['extensions','workspace-style','ai-usage','plugin-settings']},
+ {id:'personalize',label:'Personalize',icon:'puzzle',ids:['extensions','installed-tools','workspace-style','ai-usage','plugin-settings']},
 ]
 export function groupNavigation(items){
  const byId=new Map(items.map(item=>[item.id,item])),take=ids=>ids.map(id=>byId.get(id)).filter(Boolean)
