@@ -1,4 +1,5 @@
 import {installDraftContext,pairedParties} from './draft-context.mjs'
+import {requestCollection} from './request-collection.mjs'
 import { createProcurement } from './service.mjs'
 import { procurementExchangePolicy } from './exchange-policy.mjs'
 import { fulfillmentReview, fulfillmentLabels } from './fulfillment-review.mjs'
@@ -24,6 +25,7 @@ export async function apply(ctx) {
     if (!actions?.authorizeCommitment) throw new Error('Enable independent Review actions before signing a purchase order or approving a monetary change.')
     return actions.authorizeCommitment(user, request)
   } })
+  if (ctx.web.collection) ctx.effect(() => ctx.web.collection(requestCollection(procurement)))
   if (ctx.store.exchangePolicy) ctx.effect(() => ctx.store.exchangePolicy(procurementExchangePolicy({ store: ctx.store, accounts: ctx.accounts, procurement })))
   let reviews = null
   const labels = { ...fulfillmentLabels, 'send-message': 'Send project message', 'publish-rfq': 'Publish request', 'submit-quote': 'Submit quotation', 'acknowledge-order': 'Acknowledge order', 'approve-change': 'Approve order change', 'publish-amendment': 'Publish request amendment', 'ask-clarification': 'Send clarification question', 'broadcast-clarification': 'Broadcast shared answer' }
