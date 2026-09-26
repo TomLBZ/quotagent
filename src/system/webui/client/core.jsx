@@ -79,7 +79,10 @@ export function Empty({ icon = 'file', title, children, action }) { return <div 
 export function Loading() { return <div className="loading"><span className="spinner"/> Getting your workspace ready…</div> }
 export function ErrorNotice({ error, retry }) { if (!error) return null; return <div className="error-notice" role="alert">{error}{retry && <button onClick={retry}>Try again</button>}</div> }
 export function PageHeader({ eyebrow, title, children, actions }) { return <div className="page-heading"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1>{children && <p>{children}</p>}</div><div className="heading-actions">{actions}</div></div> }
-export function Field({ label, hint, children, className = '' }) { return <label className={`field ${className}`}><span>{label}</span>{children}{hint && <small>{hint}</small>}</label> }
+export function Field({ label, hint, children, className = '' }) {
+  const controls=React.Children.map(children,child=>React.isValidElement(child)&&['input','select','textarea'].includes(child.type)&&typeof label==='string'&&!child.props['aria-label']&&!child.props['aria-labelledby']?React.cloneElement(child,{'aria-label':label}):child)
+  return <label className={`field ${className}`}><span>{label}</span>{controls}{hint && <small>{hint}</small>}</label>
+}
 export function Modal({ title, description, children, onClose, wide = false }) {
   const dialog = useRef(null)
   useEffect(() => {
