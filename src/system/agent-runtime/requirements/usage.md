@@ -17,7 +17,9 @@ Input, output, total, cached input, uncached input, cache-write input and reason
 output are shown only when the provider reports a valid nonnegative integer.
 Missing counts remain null and coverage counts accompany sums. Reported zero is
 preserved. Cache and reasoning breakdowns are subsets; they are never added to
-input/output totals. No prices or estimated charges are calculated.
+input/output totals. Configured-tariff cost estimates are projected separately from recorded call metadata;
+unknown pricing stays unknown and currencies remain separate. These estimates are
+not invoices. See `controls-and-evaluation.md` for tariff provenance and budgets.
 
 GET `/usage` accepts scope mine/all, inclusive UTC from/to dates, provider, model,
 purpose, status, and an admin accountId filter. Default is own account and the last

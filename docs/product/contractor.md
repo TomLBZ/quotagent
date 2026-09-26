@@ -8,7 +8,9 @@ access. Select the intended workspace before starting work.
 1. In **Requests**, create a project/section and an RFQ, or ask the assistant to
    prepare a draft. **Ingest documents** converts uploaded emails, spreadsheets and
    documents into editable lines. Check quantities, units, currency, deadlines,
-   scope and invited parties before publishing.
+   scope and invited parties before publishing. New publications need declared
+   measurement rules, interface responsibilities, deliverables and exclusions.
+   Confirm uncited extraction assumptions explicitly; edits need fresh confirmation.
 2. Answer clarification tickets and review a broadcast before sending the answer
    to the invited parties. Reusable FAQs retain their source. Publish amendments
    explicitly; quotations bound to an older request revision stay visibly stale.
@@ -31,6 +33,10 @@ access. Select the intended workspace before starting work.
 
 **Review actions**, **Party team**, notifications and the agent workroom support
 handoffs, independent review, assigned work and explicit remembered preferences.
+**Responses** tracks current coverage, reviewed reminders and response promises.
+Its Business measures tab compares record-derived response cycles, completeness
+and intervention counts across equal-duration windows, with definitions,
+denominators and source links. Missing history stays unmeasured.
 You can continue other work while a review waits. Supplier cost models and internal
 supplier evaluations are not part of your received quote.
 

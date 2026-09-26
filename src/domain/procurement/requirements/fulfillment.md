@@ -123,7 +123,9 @@ optional `object-attachments` slot; procurement provides authorized object conte
   deadline, copied record/tab reload and another party's unavailable-record view.
 - `npm --prefix host run build`: native client composition.
 
-Later G1 closure still tracks structured RFQ interfaces/measurement and terms
-library/conflict decisions, response promises/deadlines/coverage, negotiation bounds,
-and delivery read receipts/print. Those outcomes are not waived or claimed complete
-by this fulfillment slice.
+Related current contracts: `scope-terms-negotiation.md` and
+`public-declarations.md` cover declared interfaces/measurement, term conflicts,
+negotiation bounds and public offer declarations. Native `domain/response-workbench`
+owns response promises/coverage and read receipts/print. Their separate acceptance
+is in `docs/work/evidence/{procurement-scope,procurement-declarations,response-workbench}-2026-09-26/`;
+this fulfillment report does not stand in for those feature checks.
