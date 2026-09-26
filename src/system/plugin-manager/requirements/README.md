@@ -4,7 +4,8 @@
 The administrator sees registered runtime plugins, named Cordis child plugins, and
 all repository `src/**/plugin.json` manifests. These categories have distinct active,
 disabled, and available statuses; availability does not imply runtime compatibility.
-Generated personal/global plugins remain owned by Plugin Studio.
+Generated personal/global artifacts and execution belong to Installed plugins;
+Plugin Studio owns creation and evaluated revisions.
 
 The host registers actual modules, fibers, dependencies, and configuration schema IDs
 with `ctx.plugins.register`. Its disposer removes the registration. Lifecycle controls
@@ -20,3 +21,7 @@ API: admin `GET /plugins`; `POST /plugins/:id/enable` or `/disable`. IDs are sla
 The historical mail adapter is shown separately from current email ingestion.
 Implementation: [code/index.mjs](../code/index.mjs). Narrow lifecycle evidence:
 `node src/system/plugin-manager/tools/lifecycle-check.mjs`.
+
+Clients request administrative help in Account settings; the administrator sees
+the capability inbox above Application plugins. See [capability requests](capability-requests.md)
+for native permissions, lifecycle resolution and guidance receipts.

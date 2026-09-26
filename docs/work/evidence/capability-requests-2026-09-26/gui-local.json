@@ -1,0 +1,19 @@
+{
+  "base": "http://127.0.0.1:8644/quotagent/",
+  "at": "2026-09-26T02:48:41.945Z",
+  "checks": [
+    "Client requests a blocked capability; separate admin reviews and changes actual account permission; both retain the resolved receipt",
+    "Administrative request invokes real Cordis lifecycle; disabled Help becomes active again without a source edit",
+    "Configuration guidance stays awaiting requester until the client explicitly confirms the observed result",
+    "Unrelated supplier sees none of the requester’s explanations; mobile settings has no page overflow or browser errors"
+  ],
+  "screenshots": [
+    "01-account-access-receipt.png",
+    "02-plugin-lifecycle-grant.png",
+    "03-guidance-confirmed.png",
+    "04-mobile-requests.png"
+  ],
+  "errors": [],
+  "ok": true,
+  "completedAt": "2026-09-26T02:48:46.423Z"
+}

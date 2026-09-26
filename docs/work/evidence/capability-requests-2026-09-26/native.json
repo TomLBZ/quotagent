@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/capability-requests-ZQZOQn",
+  "checks": [
+    "Actual account permission stays blocked until a separate administrator explicitly grants it; unrelated clients cannot see request reasons",
+    "Plugin activation uses the registered lifecycle operation; a failed operation retains a blocked receipt and a successful retry records actual active state",
+    "Guidance never claims automatic configuration success; only the requester confirms the observed outcome",
+    "Rejection, linked fresh request and expiry never grant access; durable receipts survive native unload/reload without residual routes or credentials"
+  ],
+  "notifications": 10
+}

@@ -1,4 +1,5 @@
 /** Native Cordis inventory and actual lifecycle for registered application plugins. */
+import * as capabilityRequests from './capability-requests.mjs'
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -43,7 +44,7 @@ function discover(root) {
   return manifests.sort((a, b) => a.repoId.localeCompare(b.repoId))
 }
 
-export function apply(ctx, config = {}) {
+export async function apply(ctx, config = {}) {
   const root = resolve(config.repositoryRoot || ROOT)
   const directory = join(config.root || ctx.store.root, 'plugin-manager')
   const file = join(directory, 'state.json')
@@ -202,6 +203,7 @@ export function apply(ctx, config = {}) {
     return task
   }
   ctx.provide('plugins', { register, enabled, list, setEnabled })
+  await ctx.plugin(capabilityRequests)
   ctx.effect(() => ctx.web.contribute({ id: 'plugins', label: 'Application plugins', icon: 'puzzle', roles: ['admin'], order: 20 }))
   ctx.effect(() => ctx.web.route('GET', '/plugins', ({ user }) => ({ plugins: list(user),
     generatedPlugins: { owner: 'plugin-studio', section: 'extensions', note: 'Generated account and global plugins are managed in Plugin Studio.' },

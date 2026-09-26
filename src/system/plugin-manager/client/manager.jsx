@@ -1,4 +1,5 @@
 import './manager.css'
+import {CapabilityRequests} from './capability-requests.jsx'
 import React, { useState } from 'react'
 import { registry, useApp, useResource, api, Icon, Button, Badge, PageHeader, Modal, Empty, ErrorNotice, Loading } from '../../webui/client/core.jsx'
 import { PluginSettings } from '../../settings/client/settings.jsx'
@@ -15,5 +16,5 @@ export function ApplicationPlugins() {
     {inspect && <Modal title={inspect.name || inspect.id} description={inspect.description} onClose={()=>setInspect(null)}><dl className="preference-list"><div><dt>Status</dt><dd>{inspect.status==='available' ? 'Repository entry — not loaded in this application' : inspect.status}</dd></div><div><dt>Layer</dt><dd>{inspect.layer || 'Application'}</dd></div>{inspect.source && <div><dt>Source</dt><dd>{display(inspect.source)}</dd></div>}{inspect.parentId && <div><dt>Managed by</dt><dd>{inspect.parentId}</dd></div>}{inspect.dependencies?.length>0 && <div><dt>Dependencies</dt><dd>{inspect.dependencies.join(', ')}</dd></div>}{inspect.provides?.length>0 && <div><dt>Provides</dt><dd>{inspect.provides.join(', ')}</dd></div>}</dl>{inspect.reason && <p className="studio-catalog-reason">{inspect.reason}</p>}<div className="form-actions">{inspect.configurable && <Button icon="settings" onClick={()=>{setSettings({id:inspect.configurationId || inspect.id,name:inspect.name});setInspect(null)}}>Configure</Button>}<Button variant="secondary" onClick={()=>setInspect(null)}>Close</Button></div></Modal>}
   </>
 }
-function ManagerPage(){return <><PageHeader eyebrow="APPLICATION MANAGEMENT" title="Application plugins">Inspect, configure, and manage the plugins that run your application.</PageHeader><ApplicationPlugins/></>}
+function ManagerPage(){return <><PageHeader eyebrow="APPLICATION MANAGEMENT" title="Application plugins">Inspect, configure, and manage the plugins that run your application.</PageHeader><CapabilityRequests admin/><ApplicationPlugins/></>}
 registry.page('plugins',{component:ManagerPage,icon:'puzzle'})
