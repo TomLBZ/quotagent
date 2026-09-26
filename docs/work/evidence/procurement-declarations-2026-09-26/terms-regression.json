@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/procurement-terms-vYVm2v",
+  "checks": [
+    "Human term library versions and archives survive as separate facts; missing private draft term gets exact sourced default; later revision does not rewrite the request; agents cannot author policy",
+    "Required/offered textual and numeric terms remain distinct; unresolved or revision-required differences block selection; explicit human acceptance carries exact exceptions and sources into signed QEP intent",
+    "Supplier confirmation and independent reviewer grant produce a PO retaining offered terms, original requirements and reasoned exceptions; unreviewed changed contract terms cannot reuse the original human decision",
+    "Quote revision invalidates old decisions and requires fresh review; real store remount preserves library history, accepted PO exceptions and unresolved current-source differences"
+  ],
+  "ids": {
+    "rfq": "rfq-53ce5c4b-580",
+    "quote": "quote-6ddb3509-487",
+    "order": "po-award-b2517aed-9b8"
+  },
+  "at": "2026-09-26T05:01:18.907Z"
+}

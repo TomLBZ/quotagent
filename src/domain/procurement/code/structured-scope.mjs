@@ -19,8 +19,8 @@ export function scopeFields(input,prior) {
 export function scopeItemFields(item) {
   return Object.fromEntries(['measurementRuleId','interfaceId'].filter(key=>item[key]!==undefined).map(key=>[key,text(item[key])]))
 }
-export function validatePublishedScope(rfq) {
-  if(!rfq.scope)return{structured:false}
+export function validatePublishedScope(rfq,{requireDeclarations=false}={}) {
+  if(!rfq.scope){if(requireDeclarations||rfq.scopePolicy==='declared/v1')fail('Declare measurement rules, deliverables, exclusions and responsibility interfaces before publishing. Open Edit draft to complete the scope.');return{structured:false}}
   const scope=scopeFields(rfq.scope)
   if(!scope.measurementRules.length||!scope.interfaces.length)fail('Declare measurement rules and responsibility interfaces before publishing structured scope.')
   required(scope.deliverables,'Deliverables');required(scope.exclusions,'Exclusions (state None explicitly when there are none)')

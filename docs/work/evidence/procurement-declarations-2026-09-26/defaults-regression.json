@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/procurement-context-AgnPeq",
+  "checks": [
+    "Actual schema/account/workspace/project/section precedence and per-key origins; project currency fallback; applied draft basis retained; later configuration never rewrites existing draft or explicit blank",
+    "Only explicit active party membership grants shared defaults; write authority, foreign realm and wrong section parent refuse; source identifies actual colleague while record remains party-owned",
+    "Supplier consumes only its own default sources, retains existing fields and explicit zero/blank; private preparation provenance and costs never enter the submitted public quote",
+    "Only enabled paired metadata exposes an external contact with real source reference; no fake account or unrelated workspace contact; disabling removes new invitations and queues existing approved handoff; removed route refuses before approval or publication",
+    "Real ledger remount reconstructs scoped provenance and draft basis; native unload removes schema, scope providers and routes"
+  ],
+  "ids": {
+    "project": "project-9be85e2b-e42",
+    "section": "section-2c157a57-2e1",
+    "rfq": "rfq-d56a4a58-9b0",
+    "quote": "quote-102b5574-0d8"
+  },
+  "at": "2026-09-26T05:21:22.907Z"
+}

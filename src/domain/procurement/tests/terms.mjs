@@ -1,3 +1,4 @@
+import {authoredFixtureInput} from './declared-scope-fixture.mjs'
 import assert from 'node:assert/strict'
 import {mkdtempSync,mkdirSync,writeFileSync} from 'node:fs'
 import {resolve,join} from 'node:path'
@@ -13,7 +14,7 @@ const buyer={id:'buyer',role:'contractor',name:'Buyer',email:'buyer@terms.local'
 async function mount(){const ctx=new Context(),fibers=[];fibers.push(await ctx.plugin({name:'terms-fixture',apply(inner){inner.provide('accounts',{list:()=>structuredClone(users),get:id=>structuredClone(users.find(row=>row.id===id)),can:()=>true});inner.provide('web',{route:(...args)=>{routes.push(args);return()=>routes.splice(routes.indexOf(args),1)},contribute:()=>()=>{}})}}));for(const plugin of[storePlugin,teamsPlugin,actionsPlugin,procurementPlugin])fibers.push(await ctx.plugin(plugin,plugin===storePlugin?{root}:{}));return{ctx,dispose:async()=>{for(const fiber of fibers.reverse())await fiber.dispose()}}}
 let mounted=await mount(),ctx=mounted.ctx
 try{
- const run=(user,action,input,options)=>ctx.procurement.execute(user,action,input,options)
+ const run=(user,action,input,options)=>ctx.procurement.execute(user,action,authoredFixtureInput(action,input),options)
  await configureReviewer(ctx,buyer,reviewer)
  const library=(await run(buyer,'save-term',{key:'site-access',label:'Site access',family:'delivery',text:'Supplier books delivery 48 hours ahead',defaultFor:'request'})).term
  let rfq=(await run(buyer,'create-rfq',{title:'Term decision fixture',items:[{id:'panel',description:'Panel',quantity:10,unit:'each'}],supplierIds:[supplier.id],requirements:{paymentDays:30}})).rfq

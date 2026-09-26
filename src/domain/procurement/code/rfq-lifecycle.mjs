@@ -128,12 +128,12 @@ export function createRfqLifecycle(helpers) {
       const nextRevision = amendment.baseRevision + 1
       if (amendment.status === 'draft' && amendment.baseRevision !== rfqRevision(rfq)) fail('The published request changed after this amendment was drafted. Prepare a new amendment.', 409)
       if (amendment.status === 'publishing' && rfqRevision(rfq) !== amendment.baseRevision && !(rfqRevision(rfq) === nextRevision && rfq.lastAmendmentId === amendment.id)) fail('A newer amendment exists. Review its delivery state before retrying.', 409)
-      validatePublishedScope(amendment.fields)
+      validatePublishedScope(amendment.fields,{requireDeclarations:true})
       await approval(user, action, amendment.id, input, amendment)
       if (amendment.status === 'draft') amendment = await save(user, 'rfq-amendments', { ...amendment, status: 'publishing' }, 'procurement/amendment-delivery-started')
       if (rfqRevision(rfq) === amendment.baseRevision) {
         await version(user, rfq)
-        rfq = await save(user, 'rfqs', { ...rfq, ...amendment.fields, initialRevision: rfq.initialRevision || rfqRevision(rfq),
+        rfq = await save(user, 'rfqs', { ...rfq, ...amendment.fields, scopePolicy:'declared/v1', initialRevision: rfq.initialRevision || rfqRevision(rfq),
           publishedRevision: nextRevision, revision: nextRevision, lastAmendmentId: amendment.id,
           amendmentReason: amendment.reason, amendmentDelta: amendment.delta, publishedAt: now() }, 'procurement/rfq-amended')
         await version(user, rfq)

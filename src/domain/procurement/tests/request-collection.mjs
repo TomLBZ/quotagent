@@ -1,3 +1,4 @@
+import {declaredScope} from './declared-scope-fixture.mjs'
 import assert from 'node:assert/strict'
 import {mkdtempSync,mkdirSync,writeFileSync} from 'node:fs'
 import {resolve,join} from 'node:path'
@@ -25,7 +26,7 @@ try{
   assert.equal(filtered.query.matched,15);assert.equal(csv.rows,15);assert.deepEqual(csv.columns,['title','currency','lineCount']);assert.equal(ctx.store.events(buyer.id).length,sourceEvents)
   checks.push('31 real request drafts cross four server pages exactly; foreign parties and uninvited suppliers see no other records; whole-source query and selected-column export agree without writes')
 
-  const rfq=records[0];await procurement.execute(buyer,'publish-rfq',{id:rfq.id,confirmed:true})
+  const rfq=records[0];await procurement.execute(buyer,'create-rfq',{id:rfq.id,...declaredScope(rfq.items),expectedRevision:rfq.revision});await procurement.execute(buyer,'publish-rfq',{id:rfq.id,confirmed:true})
   const draft=(await procurement.execute(supplier,'save-quote',{rfqId:rfq.id,items:[{id:'panel',unitPrice:10,cost:2}],privateNotes:'Private floor'})).quote
   assert.equal((await collections.query(buyer,'requests',{search:rfq.title})).rows[0].quoteCount,0)
   await procurement.execute(supplier,'submit-quote',{id:draft.id,confirmed:true})

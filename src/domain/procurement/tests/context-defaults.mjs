@@ -1,3 +1,4 @@
+import {authoredFixtureInput} from './declared-scope-fixture.mjs'
 import assert from 'node:assert/strict'
 import {mkdtempSync,mkdirSync} from 'node:fs'
 import {resolve} from 'node:path'
@@ -12,7 +13,7 @@ mkdirSync('tmp',{recursive:true});const root=mkdtempSync(resolve('tmp/procuremen
 async function mount(){const ctx=new Context(),fibers=[];fibers.push(await ctx.plugin({name:'context-fixture',apply(inner){inner.provide('accounts',{list:()=>structuredClone(users),get:id=>structuredClone(users.find(row=>row.id===id)),can:user=>!user.permissions?.includes('workspace:read-only')});inner.provide('web',{route:(...args)=>{routes.push(args);return()=>routes.splice(routes.indexOf(args),1)},contribute:()=>()=>{}})}}));for(const plugin of [storePlugin,settingsPlugin,teamsPlugin,procurementPlugin,exchangePlugin])fibers.push(await ctx.plugin(plugin,plugin===storePlugin?{root}:{}));return{ctx,procurement:fibers[4],dispose:async()=>{for(const fiber of fibers.reverse())await fiber.dispose()}}}
 let mounted=await mount(),ctx=mounted.ctx
 try{
- const run=(user,action,input)=>ctx.procurement.execute(user,action,input),save=(user,scope,context,values)=>ctx.settings.save(user,'procurement',{scope,context,values})
+ const run=(user,action,input)=>ctx.procurement.execute(user,action,authoredFixtureInput(action,input)),save=(user,scope,context,values)=>ctx.settings.save(user,'procurement',{scope,context,values})
  assert(ctx.settings.list(buyer).some(row=>row.id==='procurement'))
  const project=(await run(buyer,'save-project',{name:'Northern site',currency:'GBP'})).project,section=(await run(buyer,'save-section',{projectId:project.id,name:'Lighting'})).section,otherProject=(await run(buyer,'save-project',{name:'Other site',currency:'USD'})).project
  assert.equal(ctx.procurement.defaults(buyer,{projectId:project.id}).values.currency,'GBP')

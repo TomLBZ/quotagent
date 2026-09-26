@@ -6,7 +6,7 @@ const copy = value => structuredClone(value)
 const now = () => new Date().toISOString()
 const ordered = value => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered(value[key])])) : value
 const digest = value => createHash('sha256').update(JSON.stringify(ordered(value))).digest('hex')
-export const offerBasis = quote => Object.fromEntries(['id', 'rfqId', 'rfqRevision', 'supplierId', 'revision', 'items', 'currency', 'total', 'subtotal', 'priceBreakdown', 'commercial', 'leadDays', 'paymentTerms', 'notes', 'terms'].map(key => [key, quote[key] ?? null]))
+export const offerBasis = quote => Object.fromEntries(['id', 'rfqId', 'rfqRevision', 'supplierId', 'revision', 'items', 'currency', 'total', 'subtotal', 'priceBreakdown', 'commercial', 'leadDays', 'paymentTerms', 'notes', 'terms', 'assumptions', 'exclusions', 'schedule'].map(key => [key, quote[key] ?? null]))
 
 export function createFulfillment(h) {
   const { store, accounts, get, save, exchange, approval, fail, required, text, role, newId, cents, quantity, lineCents, publicQuote, publicRfq, terms } = h
@@ -19,7 +19,7 @@ export function createFulfillment(h) {
     if (rfq.status !== 'published') fail('This request is no longer open for an award.')
     if (quote.status !== 'submitted') fail('Choose a current submitted quotation.')
     if (staleQuote(quote, rfq)) fail('This quotation uses an older request revision. Ask the supplier to rebid.')
-    if (quote.items.length !== rfq.items.length || rfq.items.some(item => !quote.items.some(row => row.id === item.id))) fail('Resolve unpriced scope before proposing an award.')
+    if (rfq.items.some(item => !quote.items.some(row => row.id === item.id || row.classification==='alternative' && row.sourceItemId===item.id))) fail('Resolve unpriced scope before proposing an award.')
     const amounts = quotationAmounts(quote.items.reduce((sum,item) => sum + lineCents(cents(item.unitPrice),item.quantity),0),quote.commercial || {})
     if (quote.items.some(item => lineCents(cents(item.unitPrice),item.quantity) !== cents(item.total)) || amounts.total !== quote.total) fail('The source quotation arithmetic is inconsistent. Request a corrected quotation before selection.')
     if (quote.commercial?.validityUntil && quote.commercial.validityUntil < now().slice(0, 10)) fail('This quotation has expired. Request a new quotation.')
@@ -119,7 +119,7 @@ export function createFulfillment(h) {
         title: rfq.title, ownerId: user.id, ownerName: rfq.ownerName, supplierId: quote.supplierId, supplierName: quote.supplierName,
         ...quotationAmounts(quote.items.reduce((sum, item) => sum + lineCents(cents(item.unitPrice), item.quantity), 0), quote.commercial || {}),
         originalTotal: quote.total, currency: quote.currency, status: 'issued', orderRevision: 1, commercial: copy(quote.commercial || {}),
-        ...acceptedTerms, items: copy(quote.items), originalItems: copy(quote.items), leadDays: quote.leadDays, paymentTerms: quote.paymentTerms,
+        ...acceptedTerms, ...Object.fromEntries(['assumptions','exclusions','schedule'].filter(key=>quote[key]!==undefined).map(key=>[key,copy(quote[key])])), items: copy(quote.items), originalItems: copy(quote.items), leadDays: quote.leadDays, paymentTerms: quote.paymentTerms,
         supplierConfirmedBy: intent.confirmedBy, supplierConfirmedAt: intent.confirmedAt, signedBy: actor(user), signedAt: now(), reviewActionId: input.reviewActionId || null }, 'procurement/order-issued')
       const committed = await save(user, 'award-intents', { ...intent, status: 'committed', binding: true, orderId, signedBy: actor(user), reviewActionId: input.reviewActionId || null }, 'procurement/award-committed')
       const awarded = await save(user, 'quotes', { ...quote, status: 'awarded' }, 'procurement/quote-awarded')

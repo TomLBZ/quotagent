@@ -1,3 +1,4 @@
+import {declaredScope} from '../../procurement/tests/declared-scope-fixture.mjs'
 /** Real Cordis + Python Ledger, no AI provider needed for upload/table/private-draft flow. */
 import assert from 'node:assert/strict'
 import {createRequire} from 'node:module'
@@ -43,6 +44,7 @@ try {
   assert.equal(mixed.items[1].description,'Dual data outlet with faceplate');assert.equal(mixed.items[1].quantity,48)
   const {rfq}=await ctx.ingestion.importDraft(buyer,record.id,{title:'Email-based private RFQ',supplierIds:[supplier.id]})
   assert.equal(rfq.status,'draft');assert.equal(ctx.procurement.snapshot(supplier).rfqs.length,0)
+  await ctx.procurement.execute(buyer,'create-rfq',{id:rfq.id,...declaredScope(rfq.items),expectedRevision:rfq.revision})
   await ctx.procurement.execute(buyer,'publish-rfq',{id:rfq.id,confirmed:true})
   const offer=await parse(supplier,'cabling-offer.xlsx')
   const {quote}=await ctx.ingestion.importDraft(supplier,offer.id,{rfqId:rfq.id,paymentTerms:'Net 30',leadDays:12})

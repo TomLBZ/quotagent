@@ -1,3 +1,4 @@
+import {authoredFixtureInput} from './declared-scope-fixture.mjs'
 import assert from 'node:assert/strict'
 import {mkdtempSync,mkdirSync,writeFileSync} from 'node:fs'
 import {resolve,join} from 'node:path'
@@ -8,7 +9,7 @@ import * as procurementPlugin from '../code/index.mjs'
 mkdirSync('tmp',{recursive:true});const root=mkdtempSync(resolve('tmp/structured-scope-')),ctx=new Context(),checks=[],fibers=[]
 const buyer={id:'buyer',role:'contractor',name:'Buyer'},supplier={id:'supplier',role:'supplier',name:'Supplier'},users=[buyer,supplier]
 fibers.push(await ctx.plugin({name:'scope-fixture',apply(inner){inner.provide('accounts',{list:()=>structuredClone(users),get:id=>structuredClone(users.find(row=>row.id===id)),can:()=>true});inner.provide('web',{route:()=>()=>{},contribute:()=>()=>{}})}}));fibers.push(await ctx.plugin(storePlugin,{root}));fibers.push(await ctx.plugin(procurementPlugin))
-const run=(user,action,input)=>ctx.procurement.execute(user,action,input)
+const run=(user,action,input)=>ctx.procurement.execute(user,action,authoredFixtureInput(action,input))
 try{
   const scope={measurementRules:[{id:'length',name:'Installed cable length',dimension:'length',units:[{unit:'m',factor:1},{unit:'cm',factor:0.01},{unit:'bundle',factor:5}]}],interfaces:[{id:'supply',name:'Cable supply and delivery',responsibilityOwner:''}],deliverables:'Labelled cable drums delivered to site',exclusions:'Installation is excluded'}
   let rfq=(await run(buyer,'create-rfq',{title:'Structured cable supply',scope,items:[{id:'cable',description:'Cable',quantity:10,unit:'m',measurementRuleId:'length',interfaceId:'supply'}],supplierIds:[supplier.id]})).rfq

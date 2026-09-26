@@ -1,0 +1,1232 @@
+{
+  "schema": "quotagent/procurement-clause-review/v1",
+  "reviewedAt": "2026-09-26T05:23:39.596692+00:00",
+  "scope": "Exact disposition of the previous43 procurement-owned source clauses; FR-VIZ-001 is verified in its current commercial-workbench owner. No source text changed.",
+  "counts": {
+    "verified": 43
+  },
+  "clauses": [
+    {
+      "id": "FR-NORM-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Authored measurement factors preserve original and exact target unit/price. Commercial workbench supplies source-dated FX and tax normalization; unknown sources remain explicitly incomplete.",
+      "code": [
+        "src/domain/procurement/code/structured-scope.mjs",
+        "src/domain/procurement/code/commercial-fields.mjs",
+        "src/domain/commercial-workbench/code/evaluation.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/scope-native.json",
+        "docs/work/evidence/commercial-2026-09-26/native-integrated.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-NORM-001 | 单位、币种与汇率时点、含税口径、计量规则归一化 | must | P0 | AC-NORM-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 63
+        }
+      ]
+    },
+    {
+      "id": "FR-NORM-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Missing/incompatible/inexact conversion refuses with durable normalization-refused reason/nextAction; no guessed equivalent. Commercial missing inputs exclude derived score/TCO rather than invent a value.",
+      "code": [
+        "src/domain/procurement/code/structured-scope.mjs",
+        "src/domain/procurement/code/service.mjs",
+        "src/domain/commercial-workbench/code/evaluation.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/scope-native.json",
+        "docs/work/evidence/commercial-2026-09-26/native-integrated.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-NORM-002 | 不可归一即拒绝并留痕，不得猜测兜底 | must | P0 | AC-NORM-002 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 64
+        }
+      ]
+    },
+    {
+      "id": "FR-NORM-003",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Base items retain exact RFQ IDs/quantities; additional and alternative items require explicit classification/reason and source reference, and remain visible in accepted scope.",
+      "code": [
+        "src/domain/procurement/code/structured-scope.mjs",
+        "src/domain/procurement/client/structured-scope.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/scope-native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-NORM-003 | 报价条目与询价清单条目对齐（含 `additional` 标记） | must | P0 | AC-NORM-003 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 65
+        }
+      ]
+    },
+    {
+      "id": "FR-NORM-004",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/rfq-lifecycle.md",
+      "currentOutcome": "RFQ publishedRevision and quote rfqRevision mismatch is explicitly stale with old/new refs, excluded from comparison; amendment emits rebid request and refuses old submit/award.",
+      "code": [
+        "src/domain/procurement/code/rfq-lifecycle.mjs",
+        "src/domain/procurement/code/service.mjs",
+        "src/domain/procurement/client/rfq-lifecycle.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/native.json",
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/gui-local.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-NORM-004 | 包版本与报价版本一致性门（不一致不得进比价） | must | P0 | AC-COMPARE-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 66
+        }
+      ]
+    },
+    {
+      "id": "FR-RFQ-006",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/rfq-lifecycle.md",
+      "currentOutcome": "RFQ publishedRevision and quote rfqRevision mismatch is explicitly stale with old/new refs, excluded from comparison; amendment emits rebid request and refuses old submit/award.",
+      "code": [
+        "src/domain/procurement/code/rfq-lifecycle.mjs",
+        "src/domain/procurement/code/service.mjs",
+        "src/domain/procurement/client/rfq-lifecycle.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/native.json",
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/gui-local.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-RFQ-006 | 包升版后，基于旧版本的报价必须被标记为**过期**（含旧/新版本号）且不得进入排序，并产生重报请求（提示对方基于新版本重报） | must | P1 | AC-RFQ-004 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 57
+        }
+      ]
+    },
+    {
+      "id": "FR-CLARIFY-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/rfq-lifecycle.md",
+      "currentOutcome": "Clarification has exact RFQ revision and only valid referenced items; human reviewed question/answer/broadcast flow retains sources.",
+      "code": [
+        "src/domain/procurement/code/rfq-lifecycle.mjs",
+        "src/domain/procurement/client/rfq-lifecycle.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-CLARIFY-001 | 澄清工单绑定包版本与条目引用 | must | P0 | AC-CLARIFY-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 67
+        }
+      ]
+    },
+    {
+      "id": "FR-RFQ-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "GUI authors scope, measurement rules, interfaces/responsibility, deliverables and exclusions. These public declarations preserve exact RFQ/amendment versions.",
+      "code": [
+        "src/domain/procurement/code/structured-scope.mjs",
+        "src/domain/procurement/client/structured-scope.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/scope-native.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-RFQ-001 | 创建采购包：范围、接口、计量规则、交付物、除外责任 | must | P0 | AC-RFQ-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 77
+        }
+      ]
+    },
+    {
+      "id": "FR-RFQ-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/public-declarations.md",
+      "currentOutcome": "Every newly performed RFQ publication and amendment publication requires complete authored measurement units/dimensions, exactly one responsibility interface per line, named owner, deliverables and exclusions. Private incomplete drafts remain editable; historical published scope remains unknown.",
+      "code": [
+        "src/domain/procurement/code/structured-scope.mjs",
+        "src/domain/procurement/code/service.mjs",
+        "src/domain/procurement/client/structured-scope.jsx",
+        "src/domain/procurement/code/quote-declarations.mjs",
+        "src/domain/procurement/code/faq.mjs",
+        "src/domain/procurement/code/fulfillment.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-declarations-2026-09-26/native.json",
+        "docs/work/evidence/procurement-declarations-2026-09-26/gui-local.json",
+        "docs/work/evidence/procurement-declarations-2026-09-26/gui-paired.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-RFQ-002 | 清单条目 CRUD 与校验（单位属计量规则表、必须有唯一接口责任方） | must | P0 | AC-RFQ-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 78
+        }
+      ]
+    },
+    {
+      "id": "FR-RFQ-003",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/rfq-lifecycle.md",
+      "currentOutcome": "Publication creates immutable rfq-versions; published changes use private amendment, reviewed publication, field delta and new revision.",
+      "code": [
+        "src/domain/procurement/code/rfq-lifecycle.mjs",
+        "src/domain/procurement/client/rfq-lifecycle.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/native.json",
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/gui-local.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-RFQ-003 | 发布产生不可变版本；修改必须升版并给字段级 delta | must | P0 | AC-RFQ-002 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 79
+        }
+      ]
+    },
+    {
+      "id": "FR-AWARD-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Nonbinding selection requires supplier confirmation, independent eligible reviewer grant and actual proposer human signature; PO is derived deterministically and cannot be separately authored.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/code/fulfillment-review.mjs",
+        "src/domain/procurement/code/index.mjs",
+        "src/domain/procurement/client/fulfillment.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json",
+        "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/terms-native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-AWARD-002 | 供应商确认 + 承包商人工签署 → 承诺；缺一即抛错 | must | P0 | AC-AWARD-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 83
+        }
+      ]
+    },
+    {
+      "id": "FR-AWARD-003",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Nonbinding selection requires supplier confirmation, independent eligible reviewer grant and actual proposer human signature; PO is derived deterministically and cannot be separately authored.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/code/fulfillment-review.mjs",
+        "src/domain/procurement/code/index.mjs",
+        "src/domain/procurement/client/fulfillment.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json",
+        "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/terms-native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-AWARD-003 | PO 只能由承诺派生，不得手工另建 | must | P1 | AC-AWARD-002 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 60
+        }
+      ]
+    },
+    {
+      "id": "DOMAIN-005",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Nonbinding selection requires supplier confirmation, independent eligible reviewer grant and actual proposer human signature; PO is derived deterministically and cannot be separately authored.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/code/fulfillment-review.mjs",
+        "src/domain/procurement/code/index.mjs",
+        "src/domain/procurement/client/fulfillment.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json",
+        "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/terms-native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "Supplier-confirmed award intent, decline/withdrawal, then separately human-signed commitment and derived PO",
+      "originalSources": [
+        {
+          "source": "docs/design/02-domain-model.md",
+          "locator": "docs/design/02-domain-model.md §2.4,3",
+          "line": null
+        }
+      ]
+    },
+    {
+      "id": "FR-DEV-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Declared deviation category technical/commercial/schedule/scope with optional source item, money and whole-day impacts. Blank unknown does not become zero; descriptive impact never silently changes quoted commitment.",
+      "code": [
+        "src/domain/procurement/code/commercial-fields.mjs",
+        "src/domain/procurement/client/deviations.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/scope-native.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-DEV-001 | 偏差捕捉（技术/商务/进度/范围）与影响量化 | must | P0 | AC-DEV-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 96
+        }
+      ]
+    },
+    {
+      "id": "FR-NEGO-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Human-authored private policy revision sets attempt count, per-attempt concession percent, cost uplift and price band; real sourced cost floor enforced. Rejected attempts count, changed policy invalidates old proposal, interruption/replay never reuses a number.",
+      "code": [
+        "src/domain/procurement/code/negotiation.mjs",
+        "src/domain/procurement/client/negotiation.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/negotiation-native.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [
+        "Historical Python strategy patch service path is replaced by native ledger-backed per-thread policy revision with actual actor; round/authority semantics retained."
+      ],
+      "originalText": "| FR-NEGO-001 | 有限轮次谈判：轮次上限与让步上限来自策略 patch | could | P2 | AC-NEGO-001 、AC-NEGO-003 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 102
+        }
+      ]
+    },
+    {
+      "id": "FR-NEGO-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Every permitted concession is frozen in action-center and requires human execution; supplier execution creates private draft only, separate human submission shares price. Model cannot open/change policy or execute review.",
+      "code": [
+        "src/domain/procurement/code/negotiation.mjs",
+        "src/domain/procurement/code/index.mjs",
+        "src/domain/procurement/client/negotiation.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/negotiation-native.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-NEGO-002 | 任何价格让步必须人工批准 | must | P2 | AC-NEGO-001 、AC-NEGO-003 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 103
+        }
+      ]
+    },
+    {
+      "id": "FR-RFQ-009",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/rfq-lifecycle.md",
+      "currentOutcome": "Invited supplier reads its received local QEP projection including revision/deadlines; no buyer realm scan and no all-bidder identities or private defaults in exchanged shape. Explicit external pairings also receive native RFQ/quotes.",
+      "code": [
+        "src/domain/procurement/code/service.mjs",
+        "src/domain/procurement/code/rfq-lifecycle.mjs",
+        "src/domain/procurement/code/exchange-policy.mjs",
+        "src/domain/procurement/code/paired-parties.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/native.json",
+        "docs/work/evidence/g1-context-defaults-and-peers.md"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [
+        "Exactly-nine-key envelope-only SSR projection and named seven degradation reasons froze an obsolete read-only host. Signed native QEP copies, recipient-specific public whitelist and typed current errors preserve privacy/visibility."
+      ],
+      "originalText": "| FR-RFQ-009 | **「供应商看不到自己的 RFQ 包」的根因修复：被邀供应商在自己的视角里看得到**发给它的**包事实**（投递信封 + 收件人作用域 + 字段级白名单；**字段白名单逐字段列在** `docs/design/26-rfq-delivery-visibility.md` §2，本行不复述）：`rfq/*` 事实只落在**发送方 realm**（实测：供应商那本账本里 `rfq/*` **0 行**）⇒ 供应商看不到要报的包、@rev、报价截止。修法**不跨读对方账本**：读**投递信封**（发送方放进共享交换目录的交付件），按 `delivered_to` 做**收件人作用域**（身份**只来自本视角自己的账本** `realms()`；0 个 ⇒ `no-identity`，多于 1 个 ⇒ `ambiguous-identity` fail-closed），再按字段白名单投影（✓ `package_id`/`rev`/`quote_by`/`clarify_by`/`items[{item_id,code,qty,unit}]`/`currency`/`delivered_at`/发放对象只出自己，**恰 9 键**；✗ 承包商私域与他家供应商数据**读都不读**）+ **两道结构性负控**（出现任何非我发放对象/私域键名 ⇒ 整条抑制 + 服务端审计）⇒ **带哨兵与不带哨兵输出逐字节一致**、他家代号与他家包 **0 命中**；承包商侧**不得减少**（他不读投递信封）。派生行 `type=rfq/published`、`seq: null`；确定性、有界（+`omitted`）、**降级 7 个有名 reason**；纯函数零写面。组装：`host/modules/projection.mjs` + `host/lib/ledger-view.mjs` 的 `realms()` + `host/modules/webui.mjs` 的只读装配与首页投递块（脚本只来自受信来源）+ `--rfq-delivery` | must | P2 | AC-RFQ-007 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 108
+        }
+      ]
+    },
+    {
+      "id": "FR-QUOTE-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "GUI authors actual editable private quotation, validates items/money, persists and shows result; exact human-reviewed submit is distinct. Buyer receives only submitted public quote; draft costs/notes stay private.",
+      "code": [
+        "src/domain/procurement/code/service.mjs",
+        "src/domain/procurement/client/procurement.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json",
+        "docs/work/evidence/fulfillment-2026-09-26/gui.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [
+        "CLI-only signature, 0600 pending-file staging, no-browser-POST ledger mutation, fixed12-field shape, SSR-only transport conflict with authorized native complete GUI. Historical both-party draft visibility conflicts with current explicit private-draft product contract and sovereignty."
+      ],
+      "originalText": "| FR-QUOTE-001 | **「把报价准备好（草稿）：行项目 / 单价 / 交期 / 备注」**（domain 插件 `quote-prepare`，正面回答「**员工填了单价点了提交、浏览器回一页 200、什么都没发生**」这条最伤信任的假成功）：铁律是**浏览器不得直接签署人工动作**（`quote.submit` 只能由人/CLI 签），但**不需要签名的写动作必须在 APP 里真做成** —— 闭环三段各自可验证：① 准备（SSR 页；`GET` 与 `POST` 同路径）；② 宿主 `POST` **只落一条 0600 待办件**（目录 0700、原子写，**账本零新增**；**202** + `next_action`，**绝不**返回与 GET 相同的 200 页面）；③ `tools/quote-draft.py` 是**唯一落账本者**，落 `quote/drafted`（**非签名动作**：不是 `quote/submitted`；body **恰 12 键**、**不含备注正文与凭据**）、待办件移入 `applied/`、幂等 `duplicates`、拒绝码各自给 `code` + `next_action`。**字段级**校验：`view`/`rfq_id`/`item_id`/`unit_price_cents`（**整数分**）/`lead_time_days`/`prepared_by`（`human:*`）/`currency`/`note` 八个字段各自给 `{field, code, message, next_action}`（拒绝码是**闭合集合**；越界**不夹取**、备注**不截断**）。行项目目录从**本视角事实**里逐条按键读（`items[]`/`item_ids[]`/`item_id`/`lines[].item_id`），读不出来 ⇒ `degraded` + 有名 reason，**不编行项目**；数值非法/行项目不存在/待办件被改过一律拒且**零写账本**。**双向可见**：同一份草稿**两侧登记**，供应商侧与承包商侧各自从**自己的**账本投影回读（行项目 / 单价 / 状态恒为**待签署** / 引用），承包商侧读到「**供应商 X 已准备报价（待签署）**」。**签署入口**：页面上给**可复制**的 CLI 命令（真实 RFQ / 行项目 / 金额整数分）+ 明说「**本 APP 不代签**」（`data-signature-required=\"1\"`、`can_sign=false`、服务面无 `approve`/`decide`/`submit`/`send`）。宿主侧围栏：只应为 `GET` 的路由收到非 GET ⇒ **405 + `Allow: GET`** + `{ok:false,code:\"method-not-allowed\",next_action}`；页面 **脚本只来自受信来源** | must | P2 | AC-QUOTE-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 109
+        }
+      ]
+    },
+    {
+      "id": "FR-VIZ-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/commercial-workbench",
+      "contract": "src/domain/commercial-workbench/requirements/README.md",
+      "currentOutcome": "Sourced deterministic factor-specific improvement guidance names its fixed-peer assumption. Weight entry explicitly displays original, clamped and accepted normalized values before use; all-zero weights refuse.",
+      "code": [
+        "src/domain/commercial-workbench/code/evaluation.mjs",
+        "src/domain/commercial-workbench/client/evaluation.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/commercial-advisory-2026-09-26/native.json",
+        "docs/work/evidence/commercial-advisory-2026-09-26/report.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [
+        "SSR/SSE form rendering and exact legacy sentinel projection machinery are superseded by native React/authorized service projections."
+      ],
+      "originalText": "| FR-VIZ-001 | P2 | **比价 heuristics 可视化（domain 插件）**：把候选按**可调权重**（价格/交期/付款/质保/偏差）排序，并给出**每项的贡献分解**与确定性的\"如何提升排名\"提示；权重越界**夹取并回显**（归一后和为一）；有界并诚实报 `omitted`；**私域零泄漏**（供应商侧不得因排名暗示标底：带私域键的行整行跳过并报数，带哨兵与不带哨兵的输出**逐字节一致**）；页面 SSE 交互（`<form method=get>`，无内联脚本） | AC-VIZ-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 117
+        }
+      ]
+    },
+    {
+      "id": "FR-GATE-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Changes reference original quoted line IDs/rates, show original/current/proposed quantities/rates/exact-cent deltas and source basis. Missing source is rejected, never counted. Counterparty confirmation plus independent reviewer and human sign applies scope; settlement retained perparty.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/client/fulfillment.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json",
+        "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [
+        "Legacy /<view>/changes route and read-only degraded-row projection replaced by owner-authorized native sourced-change preview and lifecycle. No missing basis is silently included."
+      ],
+      "originalText": "| FR-GATE-002 | P2 | **变更单逐行明细**（`gate-timeline` 规则 ⑤）：`/<view>/changes/<id>/` 与 `/<view>/api/changes/<id>` 逐行给原量×原价→新量×新价→差额（整数分）、行小计与总计差额、每行 `basis`；缺依据的行**不计入小计**（列 `basis_missing`）；无可用行 ⇒ degraded+reason+明细空；未知 id ⇒ 404+`next_action`；私域列仅业主侧可见 | AC-GATE-002 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements.md",
+          "locator": "docs/work/functional-requirements.md",
+          "line": 121
+        }
+      ]
+    },
+    {
+      "id": "FR-CHANGE-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Changes reference original quoted line IDs/rates, show original/current/proposed quantities/rates/exact-cent deltas and source basis. Missing source is rejected, never counted. Counterparty confirmation plus independent reviewer and human sign applies scope; settlement retained perparty.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/client/fulfillment.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json",
+        "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [
+        "Legacy /<view>/changes route and read-only degraded-row projection replaced by owner-authorized native sourced-change preview and lifecycle. No missing basis is silently included."
+      ],
+      "originalText": "| FR-CHANGE-001 | 变更请求引用原报价条目与单价基准 | must | P1 | AC-CHANGE-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 63
+        }
+      ]
+    },
+    {
+      "id": "FR-CHANGE-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Changes reference original quoted line IDs/rates, show original/current/proposed quantities/rates/exact-cent deltas and source basis. Missing source is rejected, never counted. Counterparty confirmation plus independent reviewer and human sign applies scope; settlement retained perparty.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/client/fulfillment.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json",
+        "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [
+        "Legacy /<view>/changes route and read-only degraded-row projection replaced by owner-authorized native sourced-change preview and lifecycle. No missing basis is silently included."
+      ],
+      "originalText": "| FR-CHANGE-002 | 变更定价与差额重算；人工批准后生效 | must | P1 | AC-CHANGE-002 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 64
+        }
+      ]
+    },
+    {
+      "id": "DOMAIN-006",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Changes reference original quoted line IDs/rates, show original/current/proposed quantities/rates/exact-cent deltas and source basis. Missing source is rejected, never counted. Counterparty confirmation plus independent reviewer and human sign applies scope; settlement retained perparty.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/client/fulfillment.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json",
+        "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [
+        "Legacy /<view>/changes route and read-only degraded-row projection replaced by owner-authorized native sourced-change preview and lifecycle. No missing basis is silently included."
+      ],
+      "originalText": "Change pricing from original quoted line rates, application and settlement states",
+      "originalSources": [
+        {
+          "source": "docs/design/02-domain-model.md",
+          "locator": "docs/design/02-domain-model.md §2.5,3",
+          "line": null
+        }
+      ]
+    },
+    {
+      "id": "FR-CLARIFY-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/rfq-lifecycle.md",
+      "currentOutcome": "Broadcast records every invited recipient receipt and cannot close with missing delivery; retry preserves frozen reviewed answer and packet. Bidder identity anonymized to others.",
+      "code": [
+        "src/domain/procurement/code/rfq-lifecycle.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-CLARIFY-002 | 答案必须广播给全部在册投标人，否则不得关闭 | must | P1 | AC-CLARIFY-002 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 38
+        }
+      ]
+    },
+    {
+      "id": "FR-CLARIFY-003",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/rfq-lifecycle.md",
+      "currentOutcome": "Published revision reopens applicable closed/answered tickets, preserves previous answers and exact prior version; agent cannot silently reuse old answer as current.",
+      "code": [
+        "src/domain/procurement/code/rfq-lifecycle.mjs",
+        "src/domain/procurement/client/rfq-lifecycle.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-CLARIFY-003 | 包版本变更时相关工单自动重开 | should | P1 | AC-CLARIFY-003 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 39
+        }
+      ]
+    },
+    {
+      "id": "FR-CLARIFY-004",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/rfq-lifecycle.md",
+      "currentOutcome": "Own fully broadcast answer can be saved to own source-linked FAQ; GUI reuse makes a private draft and requires fresh reviewed broadcast; archive retained. Additional strict structured lookup outcomes remain SUPPLEMENT-031.",
+      "code": [
+        "src/domain/procurement/code/rfq-lifecycle.mjs",
+        "src/domain/procurement/client/rfq-lifecycle.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/native.json",
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/gui-local.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-CLARIFY-004 | FAQ 沉淀与复用（本 realm 内） | could | P2 | AC-CLARIFY-004、AC-FAQ-001 、AC-PIPELINE-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 40
+        }
+      ]
+    },
+    {
+      "id": "FR-RFQ-004",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/rfq-lifecycle.md",
+      "currentOutcome": "Version distributions retain recipient/revision/time and actual QEP delivery state; pending handoff is never claimed delivered. Local supplier copies retain source version.",
+      "code": [
+        "src/domain/procurement/code/rfq-lifecycle.mjs",
+        "src/domain/procurement/code/exchange-policy.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/rfq-lifecycle-2026-09-26/native.json",
+        "docs/work/evidence/g1-context-defaults-and-peers.md"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-RFQ-004 | 分发记录：谁在何时收到哪个版本 | must | P1 | AC-RFQ-003 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 55
+        }
+      ]
+    },
+    {
+      "id": "FR-AWARD-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Human nonbinding intent can be withdrawn or supplier declined and a fresh selection proposed; no order/obligation before bilateral independent signing. History retained.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/client/fulfillment.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-AWARD-001 | 授标意向（Intent）可撤回，可复；不产生义务 | must | P1 | AC-AWARD-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 59
+        }
+      ]
+    },
+    {
+      "id": "FR-TERMS-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Own human term library is versioned/archivable; new draft fills missing keys and records exact local source refs. Later defaults never rewrite existing records or leak private preparation basis.",
+      "code": [
+        "src/domain/procurement/code/terms.mjs",
+        "src/domain/procurement/client/terms.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/terms-native.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-TERMS-001 | 条款库与默认条款应用 | should | P1 | AC-TERMS-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 61
+        }
+      ]
+    },
+    {
+      "id": "FR-TERMS-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Required/offered custom and numeric terms shown separately; exact revision-bound reasoned human accept/revise decision gates award/sign. Both originals and accepted exceptions retained in PO.",
+      "code": [
+        "src/domain/procurement/code/terms.mjs",
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/client/terms.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/terms-native.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-TERMS-002 | 条款冲突标注并提请人工，不得静默取其一 | must | P1 | AC-TERMS-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 62
+        }
+      ]
+    },
+    {
+      "id": "FR-DEV-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/public-declarations.md",
+      "currentOutcome": "Explicit alternative lines cover their original RFQ item and additional scope remains separately labelled. Human-reviewed nonbinding intent, supplier confirmation and independent sign adopt the exact alternative/additional list into a signed PO.",
+      "code": [
+        "src/domain/procurement/code/structured-scope.mjs",
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/client/structured-scope.jsx",
+        "src/domain/procurement/code/quote-declarations.mjs",
+        "src/domain/procurement/code/faq.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-declarations-2026-09-26/native.json",
+        "docs/work/evidence/procurement-declarations-2026-09-26/gui-local.json",
+        "docs/work/evidence/procurement-declarations-2026-09-26/gui-paired.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-DEV-002 | 替代方案建议（Intent，人工采纳） | could | P2 | AC-DEV-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 73
+        }
+      ]
+    },
+    {
+      "id": "FR-UX-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Buyer internal scoring/private defaults stay in own realm; supplier workspace suppresses competitor rank/savings; public whitelists exclude private costs, limits and bidder identities; explicit source-link membership refuses crossing into buyer workspace.",
+      "code": [
+        "src/domain/procurement/code/service.mjs",
+        "src/domain/procurement/code/exchange-policy.mjs",
+        "src/domain/procurement/client/workspace-link.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/negotiation-native.json",
+        "docs/work/evidence/commercial-2026-09-26/native-integrated.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| FR-UX-002 | 供应商视图不得暴露承包商私域字段 | must | P1 | AC-TRUST-001 |",
+      "originalSources": [
+        {
+          "source": "docs/work/functional-requirements-archive.md",
+          "locator": "docs/work/functional-requirements-archive.md",
+          "line": 92
+        }
+      ]
+    },
+    {
+      "id": "NFR-UX-003",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Buyer internal scoring/private defaults stay in own realm; supplier workspace suppresses competitor rank/savings; public whitelists exclude private costs, limits and bidder identities; explicit source-link membership refuses crossing into buyer workspace.",
+      "code": [
+        "src/domain/procurement/code/service.mjs",
+        "src/domain/procurement/code/exchange-policy.mjs",
+        "src/domain/procurement/client/workspace-link.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/negotiation-native.json",
+        "docs/work/evidence/commercial-2026-09-26/native-integrated.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| NFR-UX-003 | 供应商侧界面不得暴露承包商私域任何字段（含间接暗示） |",
+      "originalSources": [
+        {
+          "source": "docs/design/10-nonfunctional.md",
+          "locator": "docs/design/10-nonfunctional.md:41",
+          "line": 41
+        }
+      ]
+    },
+    {
+      "id": "CURRENT-006",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Complete current basic GUI flow has different contractor/supplier controls: request, privatequote/submission, comparison, bilateral reviewed order, acknowledgment, sourced changes, accepted delivery and invoice matching. Additional documented advanced gaps tracked independently.",
+      "code": [
+        "src/domain/procurement/client/procurement.jsx",
+        "src/domain/procurement/client/fulfillment.jsx",
+        "src/domain/procurement/code/service.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "Complete quotation process and differentiated user experience",
+      "originalSources": [
+        {
+          "source": "docs/product/plugin-requirements.md",
+          "locator": "docs/product/plugin-requirements.md",
+          "line": null
+        }
+      ]
+    },
+    {
+      "id": "SUPPLEMENT-031",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/public-declarations.md",
+      "currentOutcome": "Structured FAQ candidates select allowed authored key/value fields from a fully broadcast source. Human publication freezes exact package/revision, question hash and ledger refs; deterministic exact lookup returns content only on match. Mismatch returns no content; explicit historical adaptation stays private until broadcast; deprecation/replay preserve history.",
+      "code": [
+        "src/domain/procurement/code/rfq-lifecycle.mjs",
+        "src/domain/procurement/client/rfq-lifecycle.jsx",
+        "src/domain/procurement/code/quote-declarations.mjs",
+        "src/domain/procurement/code/faq.mjs",
+        "src/domain/procurement/code/structured-scope.mjs",
+        "src/domain/procurement/code/fulfillment.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-declarations-2026-09-26/native.json",
+        "docs/work/evidence/procurement-declarations-2026-09-26/gui-local.json",
+        "docs/work/evidence/procurement-declarations-2026-09-26/gui-paired.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [
+        "Python method names and direct CLI paths are superseded; source/version/private-field restrictions remain compatible."
+      ],
+      "originalText": "Structured source-backed FAQ propose/validate/publish/reuse/deprecate",
+      "originalSources": [
+        {
+          "source": "docs/design/18-faq-contract.md",
+          "locator": "docs/design/18-faq-contract.md",
+          "line": null
+        }
+      ]
+    },
+    {
+      "id": "SUPPLEMENT-032",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Business records explicitly distinguish private drafts, nonbinding proposal, confirmed intent, reviewed signed commitment, receipt/invoice facts; exchange policy classifies/binds exact human-approved semantics and current revision.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/code/exchange-policy.mjs",
+        "src/domain/procurement/code/rfq-lifecycle.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json",
+        "docs/work/evidence/procurement-scope-2026-09-26/terms-native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "Business object state machines retain fact/intent/commitment distinctions",
+      "originalSources": [
+        {
+          "source": "docs/design/02-domain-model.md",
+          "locator": "docs/design/02-domain-model.md §1–3",
+          "line": null
+        }
+      ]
+    },
+    {
+      "id": "DOMAIN-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/context-defaults-and-peers.md",
+      "currentOutcome": "Own project/section context includes labels, currency/calendar and invitees; authorized scoped settings hierarchy with exact per-key provenance affects only new omitted fields; team actor/owner retained.",
+      "code": [
+        "src/domain/procurement/code/context-defaults.mjs",
+        "src/domain/procurement/code/rfq-lifecycle.mjs",
+        "src/domain/procurement/client/draft-defaults.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/g1-context-defaults-and-peers.md"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "Project and section contexts with participants, currency, calendar and scoped defaults",
+      "originalSources": [
+        {
+          "source": "docs/design/02-domain-model.md",
+          "locator": "docs/design/02-domain-model.md §2.1; docs/design/01-architecture.md §5",
+          "line": null
+        },
+        {
+          "source": "docs/design/01-architecture.md",
+          "locator": "docs/design/02-domain-model.md §2.1; docs/design/01-architecture.md §5",
+          "line": null
+        }
+      ]
+    },
+    {
+      "id": "DOMAIN-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/public-declarations.md",
+      "currentOutcome": "Native RFQ sources retain explicit measurement, item/interface identity and party ownership. New publication enforces complete authored declarations; reviewed amendments preserve older versions and require rebid.",
+      "code": [
+        "src/domain/procurement/code/structured-scope.mjs",
+        "src/domain/procurement/code/response-fields.mjs",
+        "src/domain/procurement/client/structured-scope.jsx",
+        "src/domain/procurement/client/object-attachments.jsx",
+        "src/domain/procurement/code/quote-declarations.mjs",
+        "src/domain/procurement/code/faq.mjs",
+        "src/domain/procurement/code/fulfillment.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-declarations-2026-09-26/native.json",
+        "docs/work/evidence/procurement-declarations-2026-09-26/gui-local.json",
+        "docs/work/evidence/procurement-declarations-2026-09-26/gui-paired.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "RFQ scope, unique interface responsibility, measurement rules, deliverables and specification references",
+      "originalSources": [
+        {
+          "source": "docs/design/02-domain-model.md",
+          "locator": "docs/design/02-domain-model.md §2.2",
+          "line": null
+        }
+      ]
+    },
+    {
+      "id": "DOMAIN-003",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/public-declarations.md",
+      "currentOutcome": "Public quotations carry separate assumptions/exclusions and named dated firm/indicative milestones with item references. Normal revision/approval/QEP and signed PO preserve them; agent tools cannot change submitted firm milestones during stated validity.",
+      "code": [
+        "src/domain/procurement/code/commercial-fields.mjs",
+        "src/domain/procurement/client/deviations.jsx",
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/code/quote-declarations.mjs",
+        "src/domain/procurement/code/faq.mjs",
+        "src/domain/procurement/code/structured-scope.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-declarations-2026-09-26/native.json",
+        "docs/work/evidence/procurement-declarations-2026-09-26/gui-local.json",
+        "docs/work/evidence/procurement-declarations-2026-09-26/gui-paired.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "Quotation validity, tax mode, structured assumptions/exclusions/deviations and binding schedule milestones",
+      "originalSources": [
+        {
+          "source": "docs/design/02-domain-model.md",
+          "locator": "docs/design/02-domain-model.md §2.3",
+          "line": null
+        }
+      ]
+    },
+    {
+      "id": "DOMAIN-004",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Human close RFQ and withdraw offer with reasons preserves records; withdrawal invalidates later confirmations/signing. No destructive history rewrite.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/client/fulfillment.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "Close published RFQ and withdraw quote with append-only retained history",
+      "originalSources": [
+        {
+          "source": "docs/design/02-domain-model.md",
+          "locator": "docs/design/02-domain-model.md §3; docs/design/03-exchange-protocol.md §3",
+          "line": null
+        },
+        {
+          "source": "docs/design/03-exchange-protocol.md",
+          "locator": "docs/design/02-domain-model.md §3; docs/design/03-exchange-protocol.md §3",
+          "line": null
+        }
+      ]
+    },
+    {
+      "id": "DOMAIN-007",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "Human accepted quantities/deficiencies against exact approved scope; cumulative excess refuses until approved line change; no order acknowledgment treated as delivery.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/client/fulfillment.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json",
+        "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "Delivery acceptance with quantities and deficiencies; excess quantity requires approved change",
+      "originalSources": [
+        {
+          "source": "docs/design/02-domain-model.md",
+          "locator": "docs/design/02-domain-model.md §2.5",
+          "line": null
+        }
+      ]
+    },
+    {
+      "id": "DOMAIN-008",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/fulfillment.md",
+      "currentOutcome": "PO–accepted delivery–source invoice matching retains exact quantity/rate/currency/tax/freight discrepancies, cumulative prior billing and history; recheck uses new sources, no payment.",
+      "code": [
+        "src/domain/procurement/code/fulfillment.mjs",
+        "src/domain/procurement/client/fulfillment.jsx"
+      ],
+      "evidence": [
+        "docs/work/evidence/fulfillment-2026-09-26/native.json",
+        "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "PO–acceptance–invoice matching and retained discrepancy records",
+      "originalSources": [
+        {
+          "source": "docs/design/02-domain-model.md",
+          "locator": "docs/design/02-domain-model.md §2.5; docs/design/00-overview.md §5",
+          "line": null
+        },
+        {
+          "source": "docs/design/00-overview.md",
+          "locator": "docs/design/02-domain-model.md §2.5; docs/design/00-overview.md §5",
+          "line": null
+        }
+      ]
+    },
+    {
+      "id": "NFR-IDEM-002",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Normalization and current comparison repeat deterministically without appended events; 200items×5quotes actual source case measured. Other mutations use their separate reviewed idempotency semantics.",
+      "code": [
+        "src/domain/procurement/code/structured-scope.mjs",
+        "src/domain/procurement/code/service.mjs",
+        "src/domain/procurement/tests/normalization-performance.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/performance-native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| NFR-IDEM-002 | 同一核对步骤可安全重跑（投影、归一化、比价均为纯函数语义） |",
+      "originalSources": [
+        {
+          "source": "docs/design/10-nonfunctional.md",
+          "locator": "docs/design/10-nonfunctional.md:20",
+          "line": 20
+        }
+      ]
+    },
+    {
+      "id": "NFR-PERF-001",
+      "reviewStatus": "verified",
+      "proposedStatus": "verified",
+      "owner": "domain/procurement",
+      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "currentOutcome": "Actual200items×5submitted quotes measured five normalization calls plus authorized comparison at93.96ms on this host, below original30s reference. Fixture construction/QEP/model calls excluded; not a universal SLA.",
+      "code": [
+        "src/domain/procurement/tests/normalization-performance.mjs"
+      ],
+      "evidence": [
+        "docs/work/evidence/procurement-scope-2026-09-26/performance-native.json"
+      ],
+      "remainingCompatibleWork": [],
+      "supersededMechanisms": [],
+      "originalText": "| NFR-PERF-001 | 归一化 + 比价 ≤ 30 s（200 条目 × 5 报价，本机单进程） | P0 采集真实基线后修订 |",
+      "originalSources": [
+        {
+          "source": "docs/design/10-nonfunctional.md",
+          "locator": "docs/design/10-nonfunctional.md:28",
+          "line": 28
+        }
+      ]
+    }
+  ],
+  "nextBatches": [],
+  "additionalClause": {
+    "id": "SUPPLEMENT-019",
+    "originalText": "Per-item batch quotation submission and approval with partial receipts",
+    "originalSources": [
+      {
+        "source": "docs/design/29-webui-gui-app.md",
+        "locator": "docs/design/29-webui-gui-app.md §19; src/system/webui/docs/scale-batch-and-narrow-screen.md",
+        "line": null
+      },
+      {
+        "source": "src/system/webui/docs/scale-batch-and-narrow-screen.md",
+        "locator": "docs/design/29-webui-gui-app.md §19; src/system/webui/docs/scale-batch-and-narrow-screen.md",
+        "line": null
+      }
+    ],
+    "owner": "system/action-center",
+    "supportingOwner": "domain/procurement",
+    "reviewStatus": "awaiting-final-gui-report",
+    "contract": "src/domain/procurement/requirements/submission-batches.md",
+    "currentOutcome": "Supplier selects several own drafts; distinct frozen reviews and durable per-item preparation receipts; stale/missing records fail independently, pending reviews reused, changed sources fail human execution, fresh failed-only preparation never repeats success. Generic action-center retains explicit per-item batch decisions.",
+    "code": [
+      "src/domain/procurement/code/submission-batches.mjs",
+      "src/domain/procurement/client/submission-batches.jsx",
+      "src/system/action-center/code/service.mjs",
+      "src/system/action-center/client/actions.jsx"
+    ],
+    "evidence": [
+      "docs/work/evidence/quote-submissions-2026-09-26/native.json",
+      "docs/work/evidence/quote-submissions-2026-09-26/gui-local.json"
+    ]
+  }
+}

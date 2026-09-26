@@ -1,3 +1,4 @@
+import {authoredFixtureInput} from './declared-scope-fixture.mjs'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mkdirSync, mkdtempSync } from 'node:fs'
@@ -31,7 +32,7 @@ let mounted = await mount(), ctx = mounted.ctx
 const checks = []
 try {
   await configureReviewer(ctx,buyer,reviewer,'GBP')
-  const service = ctx.procurement, run = (user, action, input, options) => service.execute(user, action, input, options)
+  const service = ctx.procurement, run = (user, action, input, options) => service.execute(user, action, authoredFixtureInput(action,input), options)
   const missingImpacts = service.normalizeCommercial({}, { deviations: [{ description: 'Needs review', priceImpact: '', timeImpactDays: '' }] }, []).deviations[0]
   assert.equal(missingImpacts.priceImpact, undefined); assert.equal(missingImpacts.timeImpactDays, undefined)
   assert.throws(() => service.normalizeCommercial({}, { taxRate: true }, []), /explicit number/)

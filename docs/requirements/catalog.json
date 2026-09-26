@@ -2700,23 +2700,23 @@
         }
       ],
       "owner": "domain/procurement",
-      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "contract": "src/domain/procurement/requirements/public-declarations.md",
       "disposition": "retain-outcome",
-      "currentOutcome": "Item CRUD and complete validation exist for structured RFQs. A new unstructured RFQ can still publish.",
-      "status": "pending-review",
-      "reason": "Scope text and item CRUD exist, but structured interfaces, measurement rule, deliverables, exclusions and unique responsibility owner are absent.",
+      "currentOutcome": "Every newly performed RFQ publication and amendment publication requires complete authored measurement units/dimensions, exactly one responsibility interface per line, named owner, deliverables and exclusions. Private incomplete drafts remain editable; historical published scope remains unknown.",
+      "status": "verified",
+      "reason": "Every newly performed RFQ publication and amendment publication requires complete authored measurement units/dimensions, exactly one responsibility interface per line, named owner, deliverables and exclusions. Private incomplete drafts remain editable; historical published scope remains unknown.",
       "acceptance": [
         {
-          "command": "node src/domain/procurement/tests/structured-scope.mjs",
-          "evidence": "docs/work/evidence/procurement-scope-2026-09-26/scope-native.json",
-          "scope": "Executed native or GUI scenario as labelled in the linked report; public scope only where command uses the public URL. Later residuals remain separately open.",
-          "observed": "Item CRUD and complete validation exist for structured RFQs. A new unstructured RFQ can still publish."
+          "command": "node src/domain/procurement/tests/public-declarations.mjs",
+          "evidence": "docs/work/evidence/procurement-declarations-2026-09-26/native.json",
+          "scope": "Four native Cordis/Python/QEP groups; authored source declarations and independent simulated authority",
+          "observed": "Every newly performed RFQ publication and amendment publication requires complete authored measurement units/dimensions, exactly one responsibility interface per line, named owner, deliverables and exclusions. Private incomplete drafts remain editable; historical published scope remains unknown."
         },
         {
-          "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/scope-terms-negotiation-browser.mjs",
-          "evidence": "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json",
-          "scope": "Executed native or GUI scenario as labelled in the linked report; public scope only where command uses the public URL. Later residuals remain separately open.",
-          "observed": "Item CRUD and complete validation exist for structured RFQs. A new unstructured RFQ can still publish."
+          "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/public-declarations-browser.mjs",
+          "evidence": "docs/work/evidence/procurement-declarations-2026-09-26/gui-local.json",
+          "scope": "Five actual local GUI groups with three newly registered accounts and visible business writes; public replay remains separate",
+          "observed": "Every newly performed RFQ publication and amendment publication requires complete authored measurement units/dimensions, exactly one responsibility interface per line, named owner, deliverables and exclusions. Private incomplete drafts remain editable; historical published scope remains unknown."
         }
       ],
       "implementation": {
@@ -2727,12 +2727,10 @@
         "auditEvidence": [
           "docs/work/evidence/product-2026-09-25/README.md"
         ],
-        "group": "G1"
+        "group": "G1",
+        "auditReason": "Scope text and item CRUD exist, but structured interfaces, measurement rule, deliverables, exclusions and unique responsibility owner are absent."
       },
-      "remaining": [
-        "Require explicit measurement and responsibility on every newly published RFQ; historical records remain marked unknown without fabricated migration."
-      ],
-      "resolution": "Current native owner review preserves the original outcome. "
+      "resolution": "Every newly performed RFQ publication and amendment publication requires complete authored measurement units/dimensions, exactly one responsibility interface per line, named owner, deliverables and exclusions. Private incomplete drafts remain editable; historical published scope remains unknown."
     },
     {
       "id": "FR-RFQ-003",
@@ -6068,23 +6066,23 @@
         }
       ],
       "owner": "domain/procurement",
-      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "contract": "src/domain/procurement/requirements/public-declarations.md",
       "disposition": "retain-outcome",
-      "currentOutcome": "Explicit alternative line preserves original item reference and qualification; quote is an offer only, visible alternative flagged; adoption follows bilateral human award/sign flow.",
-      "status": "pending-review",
-      "reason": "Freeform qualifications and real model conditional suggestions exist; structured technical/commercial/scope/delivery deviations, impact arithmetic and accepted alternative records absent.",
+      "currentOutcome": "Explicit alternative lines cover their original RFQ item and additional scope remains separately labelled. Human-reviewed nonbinding intent, supplier confirmation and independent sign adopt the exact alternative/additional list into a signed PO.",
+      "status": "verified",
+      "reason": "Explicit alternative lines cover their original RFQ item and additional scope remains separately labelled. Human-reviewed nonbinding intent, supplier confirmation and independent sign adopt the exact alternative/additional list into a signed PO.",
       "acceptance": [
         {
-          "command": "node src/domain/procurement/tests/structured-scope.mjs",
-          "evidence": "docs/work/evidence/procurement-scope-2026-09-26/scope-native.json",
-          "scope": "Executed native or GUI scenario as labelled in the linked report; public scope only where command uses the public URL. Later residuals remain separately open.",
-          "observed": "Explicit alternative line preserves original item reference and qualification; quote is an offer only, visible alternative flagged; adoption follows bilateral human award/sign flow."
+          "command": "node src/domain/procurement/tests/public-declarations.mjs",
+          "evidence": "docs/work/evidence/procurement-declarations-2026-09-26/native.json",
+          "scope": "Four native Cordis/Python/QEP groups; authored source declarations and independent simulated authority",
+          "observed": "Explicit alternative lines cover their original RFQ item and additional scope remains separately labelled. Human-reviewed nonbinding intent, supplier confirmation and independent sign adopt the exact alternative/additional list into a signed PO."
         },
         {
-          "command": "node src/domain/procurement/tests/fulfillment.mjs",
-          "evidence": "docs/work/evidence/fulfillment-2026-09-26/native.json",
-          "scope": "Executed native or GUI scenario as labelled in the linked report; public scope only where command uses the public URL. Later residuals remain separately open.",
-          "observed": "Explicit alternative line preserves original item reference and qualification; quote is an offer only, visible alternative flagged; adoption follows bilateral human award/sign flow."
+          "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/public-declarations-browser.mjs",
+          "evidence": "docs/work/evidence/procurement-declarations-2026-09-26/gui-local.json",
+          "scope": "Five actual local GUI groups with three newly registered accounts and visible business writes; public replay remains separate",
+          "observed": "Explicit alternative lines cover their original RFQ item and additional scope remains separately labelled. Human-reviewed nonbinding intent, supplier confirmation and independent sign adopt the exact alternative/additional list into a signed PO."
         }
       ],
       "implementation": {
@@ -6096,12 +6094,10 @@
         "auditEvidence": [
           "docs/work/evidence/product-2026-09-25/README.md"
         ],
-        "group": "G1"
+        "group": "G1",
+        "auditReason": "Freeform qualifications and real model conditional suggestions exist; structured technical/commercial/scope/delivery deviations, impact arithmetic and accepted alternative records absent."
       },
-      "remaining": [
-        "Fulfillment checkOffer currently rejects extra/alternative line count; support complete source coverage with explicit human adoption, then prove actual signed alternative PO."
-      ],
-      "resolution": "Current native owner review preserves the original outcome. "
+      "resolution": "Explicit alternative lines cover their original RFQ item and additional scope remains separately labelled. Human-reviewed nonbinding intent, supplier confirmation and independent sign adopt the exact alternative/additional list into a signed PO."
     },
     {
       "id": "FR-EVAL-001",
@@ -11369,17 +11365,23 @@
         }
       ],
       "owner": "domain/procurement",
-      "contract": "src/domain/procurement/requirements/rfq-lifecycle.md",
+      "contract": "src/domain/procurement/requirements/public-declarations.md",
       "disposition": "retain-outcome",
-      "currentOutcome": "Source-linked human saved FAQ, private reviewed adaptation and archive exist. Missing strict structured reusable fields and exact package/version lookup refusal without old content.",
-      "status": "pending-review",
-      "reason": "No FAQ entity or reviewed reuse. Must not publish an answer to one supplier as universal fact without source/broadcast validation.",
+      "currentOutcome": "Structured FAQ candidates select allowed authored key/value fields from a fully broadcast source. Human publication freezes exact package/revision, question hash and ledger refs; deterministic exact lookup returns content only on match. Mismatch returns no content; explicit historical adaptation stays private until broadcast; deprecation/replay preserve history.",
+      "status": "verified",
+      "reason": "Structured FAQ candidates select allowed authored key/value fields from a fully broadcast source. Human publication freezes exact package/revision, question hash and ledger refs; deterministic exact lookup returns content only on match. Mismatch returns no content; explicit historical adaptation stays private until broadcast; deprecation/replay preserve history.",
       "acceptance": [
         {
-          "command": "node src/domain/procurement/tests/rfq-lifecycle.mjs",
-          "evidence": "docs/work/evidence/rfq-lifecycle-2026-09-26/native.json",
-          "scope": "Executed native or GUI scenario as labelled in the linked report; public scope only where command uses the public URL. Later residuals remain separately open.",
-          "observed": "Source-linked human saved FAQ, private reviewed adaptation and archive exist. Missing strict structured reusable fields and exact package/version lookup refusal without old content."
+          "command": "node src/domain/procurement/tests/public-declarations.mjs",
+          "evidence": "docs/work/evidence/procurement-declarations-2026-09-26/native.json",
+          "scope": "Four native Cordis/Python/QEP groups; authored source declarations and independent simulated authority",
+          "observed": "Structured FAQ candidates select allowed authored key/value fields from a fully broadcast source. Human publication freezes exact package/revision, question hash and ledger refs; deterministic exact lookup returns content only on match. Mismatch returns no content; explicit historical adaptation stays private until broadcast; deprecation/replay preserve history."
+        },
+        {
+          "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/public-declarations-browser.mjs",
+          "evidence": "docs/work/evidence/procurement-declarations-2026-09-26/gui-local.json",
+          "scope": "Five actual local GUI groups with three newly registered accounts and visible business writes; public replay remains separate",
+          "observed": "Structured FAQ candidates select allowed authored key/value fields from a fully broadcast source. Human publication freezes exact package/revision, question hash and ledger refs; deterministic exact lookup returns content only on match. Mismatch returns no content; explicit historical adaptation stays private until broadcast; deprecation/replay preserve history."
         }
       ],
       "implementation": {
@@ -11389,12 +11391,10 @@
           "src/domain/faq/code"
         ],
         "auditEvidence": [],
-        "group": "G1"
+        "group": "G1",
+        "auditReason": "No FAQ entity or reviewed reuse. Must not publish an answer to one supplier as universal fact without source/broadcast validation."
       },
-      "remaining": [
-        "Implement explicit structured-field FAQ publication, validation/provenance, exact-version lookup plus separate reviewed adaptation; no silent cross-version fact reuse."
-      ],
-      "resolution": "Current native owner review preserves the original outcome. Python method names and direct CLI paths are superseded; source/version/private-field restrictions remain compatible."
+      "resolution": "Structured FAQ candidates select allowed authored key/value fields from a fully broadcast source. Human publication freezes exact package/revision, question hash and ledger refs; deterministic exact lookup returns content only on match. Mismatch returns no content; explicit historical adaptation stays private until broadcast; deprecation/replay preserve history."
     },
     {
       "id": "SUPPLEMENT-032",
@@ -13400,23 +13400,23 @@
         }
       ],
       "owner": "domain/procurement",
-      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "contract": "src/domain/procurement/requirements/public-declarations.md",
       "disposition": "retain-outcome",
-      "currentOutcome": "Structured scope and two deadlines implemented; G5 object attachments supply source specification versions. Newly published unstructured RFQs still need mandatory declarations.",
-      "status": "pending-review",
-      "reason": "Description and item list exist; structured interfaces, responsibility validation, measurement/spec references and two deadlines absent.",
+      "currentOutcome": "Native RFQ sources retain explicit measurement, item/interface identity and party ownership. New publication enforces complete authored declarations; reviewed amendments preserve older versions and require rebid.",
+      "status": "verified",
+      "reason": "Native RFQ sources retain explicit measurement, item/interface identity and party ownership. New publication enforces complete authored declarations; reviewed amendments preserve older versions and require rebid.",
       "acceptance": [
         {
-          "command": "node src/domain/procurement/tests/structured-scope.mjs",
-          "evidence": "docs/work/evidence/procurement-scope-2026-09-26/scope-native.json",
-          "scope": "Executed native or GUI scenario as labelled in the linked report; public scope only where command uses the public URL. Later residuals remain separately open.",
-          "observed": "Structured scope and two deadlines implemented; G5 object attachments supply source specification versions. Newly published unstructured RFQs still need mandatory declarations."
+          "command": "node src/domain/procurement/tests/public-declarations.mjs",
+          "evidence": "docs/work/evidence/procurement-declarations-2026-09-26/native.json",
+          "scope": "Four native Cordis/Python/QEP groups; authored source declarations and independent simulated authority",
+          "observed": "Native RFQ sources retain explicit measurement, item/interface identity and party ownership. New publication enforces complete authored declarations; reviewed amendments preserve older versions and require rebid."
         },
         {
-          "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/scope-terms-negotiation-browser.mjs",
-          "evidence": "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json",
-          "scope": "Executed native or GUI scenario as labelled in the linked report; public scope only where command uses the public URL. Later residuals remain separately open.",
-          "observed": "Structured scope and two deadlines implemented; G5 object attachments supply source specification versions. Newly published unstructured RFQs still need mandatory declarations."
+          "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/public-declarations-browser.mjs",
+          "evidence": "docs/work/evidence/procurement-declarations-2026-09-26/gui-local.json",
+          "scope": "Five actual local GUI groups with three newly registered accounts and visible business writes; public replay remains separate",
+          "observed": "Native RFQ sources retain explicit measurement, item/interface identity and party ownership. New publication enforces complete authored declarations; reviewed amendments preserve older versions and require rebid."
         }
       ],
       "implementation": {
@@ -13425,12 +13425,10 @@
           "src/domain/procurement/code/service.mjs"
         ],
         "auditEvidence": [],
-        "group": "G1"
+        "group": "G1",
+        "auditReason": "Description and item list exist; structured interfaces, responsibility validation, measurement/spec references and two deadlines absent."
       },
-      "remaining": [
-        "Close new-publication bypass of unique responsibility and admitted measurement rules; preserve explicit legacy unknowns."
-      ],
-      "resolution": "Current native owner review preserves the original outcome. "
+      "resolution": "Native RFQ sources retain explicit measurement, item/interface identity and party ownership. New publication enforces complete authored declarations; reviewed amendments preserve older versions and require rebid."
     },
     {
       "id": "DOMAIN-003",
@@ -13444,23 +13442,23 @@
         }
       ],
       "owner": "domain/procurement",
-      "contract": "src/domain/procurement/requirements/scope-terms-negotiation.md",
+      "contract": "src/domain/procurement/requirements/public-declarations.md",
       "disposition": "retain-outcome",
-      "currentOutcome": "Tax/validity, typed deviations, explicit required/offered terms and binding delivery mode implemented. No named public binding schedule milestones in quote/award/order yet.",
-      "status": "pending-review",
-      "reason": "Current terms/notes/leadDays insufficient for structured comparison, expiry control and binding-versus-indicative promises.",
+      "currentOutcome": "Public quotations carry separate assumptions/exclusions and named dated firm/indicative milestones with item references. Normal revision/approval/QEP and signed PO preserve them; agent tools cannot change submitted firm milestones during stated validity.",
+      "status": "verified",
+      "reason": "Public quotations carry separate assumptions/exclusions and named dated firm/indicative milestones with item references. Normal revision/approval/QEP and signed PO preserve them; agent tools cannot change submitted firm milestones during stated validity.",
       "acceptance": [
         {
-          "command": "node src/domain/procurement/tests/structured-scope.mjs",
-          "evidence": "docs/work/evidence/procurement-scope-2026-09-26/scope-native.json",
-          "scope": "Executed native or GUI scenario as labelled in the linked report; public scope only where command uses the public URL. Later residuals remain separately open.",
-          "observed": "Tax/validity, typed deviations, explicit required/offered terms and binding delivery mode implemented. No named public binding schedule milestones in quote/award/order yet."
+          "command": "node src/domain/procurement/tests/public-declarations.mjs",
+          "evidence": "docs/work/evidence/procurement-declarations-2026-09-26/native.json",
+          "scope": "Four native Cordis/Python/QEP groups; authored source declarations and independent simulated authority",
+          "observed": "Public quotations carry separate assumptions/exclusions and named dated firm/indicative milestones with item references. Normal revision/approval/QEP and signed PO preserve them; agent tools cannot change submitted firm milestones during stated validity."
         },
         {
-          "command": "node src/domain/commercial-workbench/tests/smoke.mjs",
-          "evidence": "docs/work/evidence/commercial-2026-09-26/native-integrated.json",
-          "scope": "Executed native or GUI scenario as labelled in the linked report; public scope only where command uses the public URL. Later residuals remain separately open.",
-          "observed": "Tax/validity, typed deviations, explicit required/offered terms and binding delivery mode implemented. No named public binding schedule milestones in quote/award/order yet."
+          "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/public-declarations-browser.mjs",
+          "evidence": "docs/work/evidence/procurement-declarations-2026-09-26/gui-local.json",
+          "scope": "Five actual local GUI groups with three newly registered accounts and visible business writes; public replay remains separate",
+          "observed": "Public quotations carry separate assumptions/exclusions and named dated firm/indicative milestones with item references. Normal revision/approval/QEP and signed PO preserve them; agent tools cannot change submitted firm milestones during stated validity."
         }
       ],
       "implementation": {
@@ -13469,13 +13467,10 @@
           "src/domain/procurement/code/service.mjs"
         ],
         "auditEvidence": [],
-        "group": "G1"
+        "group": "G1",
+        "auditReason": "Current terms/notes/leadDays insufficient for structured comparison, expiry control and binding-versus-indicative promises."
       },
-      "remaining": [
-        "Add explicit public named schedule milestones with binding/indicative semantics and preserve in revisions, award/PO source fingerprints and QEP.",
-        "Ensure declared assumptions/exclusions can be structured and reviewed separately from free-text notes."
-      ],
-      "resolution": "Current native owner review preserves the original outcome. "
+      "resolution": "Public quotations carry separate assumptions/exclusions and named dated firm/indicative milestones with item references. Normal revision/approval/QEP and signed PO preserve them; agent tools cannot change submitted firm milestones during stated validity."
     },
     {
       "id": "DOMAIN-004",

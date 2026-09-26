@@ -59,4 +59,5 @@ mechanics without rewriting their original meaning.
 | [0050](0050-native-operational-metadata.md) | ADR-0050 Native operational metadata and scoped timelines |
 | [0051](0051-captured-action-review-provenance.md) | ADR-0051 — Captured action review provenance |
 | [0052](0052-native-qep-resend-control.md) | ADR-0052 Signed QEP resend controls |
+| [0053](0053-explicit-publication-and-reusable-source-declarations.md) | ADR-0053 Explicit publication and reusable source declarations |
 | [0055](0055-native-host-and-version-support-boundaries.md) | ADR-0055 Native host and version support boundaries |

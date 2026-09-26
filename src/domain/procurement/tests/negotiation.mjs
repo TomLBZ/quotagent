@@ -1,3 +1,4 @@
+import {authoredFixtureInput} from './declared-scope-fixture.mjs'
 import assert from 'node:assert/strict'
 import {mkdtempSync,mkdirSync,writeFileSync} from 'node:fs'
 import {resolve,join} from 'node:path'
@@ -10,7 +11,7 @@ const buyer={id:'buyer',role:'contractor',name:'Buyer'},supplier={id:'supplier',
 async function mount(){const ctx=new Context(),fibers=[];fibers.push(await ctx.plugin({name:'negotiation-fixture',apply(inner){inner.provide('accounts',{list:()=>structuredClone(users),get:id=>structuredClone(users.find(row=>row.id===id)),can:()=>true});inner.provide('web',{route:()=>()=>{},contribute:()=>()=>{}})}}));for(const plugin of[storePlugin,actionsPlugin,procurementPlugin])fibers.push(await ctx.plugin(plugin,plugin===storePlugin?{root}:{}));return{ctx,dispose:async()=>{for(const fiber of fibers.reverse())await fiber.dispose()}}}
 let mounted=await mount(),ctx=mounted.ctx
 try{
- const run=(user,action,input,options)=>ctx.procurement.execute(user,action,input,options)
+ const run=(user,action,input,options)=>ctx.procurement.execute(user,action,authoredFixtureInput(action,input),options)
  const rfq=(await run(buyer,'create-rfq',{title:'Private bounded negotiation',items:[{id:'panel',description:'Panel',quantity:10,unit:'each'}],supplierIds:[supplier.id]})).rfq;await run(buyer,'publish-rfq',{id:rfq.id,confirmed:true})
  const quote=(await run(supplier,'save-quote',{rfqId:rfq.id,items:[{id:'panel',unitPrice:20,cost:12}],paymentTerms:'Net30'})).quote;await run(supplier,'submit-quote',{id:quote.id,confirmed:true})
  await assert.rejects(run(supplier,'open-negotiation',{quoteId:quote.id,itemId:'panel',policy:{}}),/Minimum authorized/)

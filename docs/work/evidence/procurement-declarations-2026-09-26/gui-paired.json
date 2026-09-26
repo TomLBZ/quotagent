@@ -1,0 +1,20 @@
+{
+  "left": "http://127.0.0.1:8645/quotagent/",
+  "right": "http://127.0.0.1:8652/quotagent/",
+  "title": "[Paired party check] Panels 1790399886365",
+  "ok": true,
+  "checks": [
+    "Different accounts on two independent application processes pair explicit role/realm/HTTP receiver with a shared channel; neither party is fabricated as a local account",
+    "Contractor selects labelled external supplier in the normal GUI and publishes; signed RFQ and immutable version arrive in the other service and render as its opportunity",
+    "Supplier drafts with private unit cost12 then human-submits price20×10; reverse signed QEP delivers200 quote, with costs and preparation metadata absent from contractor projection",
+    "Both application GUIs expose their own signed applied receipt for the original business transfer; no direct business API fixture writes"
+  ],
+  "errors": [],
+  "ids": {
+    "buyer": "u-fce97a89-8b5e-4d1d-b5c6-cccc8a9f53d8",
+    "supplier": "u-38c532d1-8a90-4418-b0ab-36159ab90d50",
+    "rfq": "rfq-9dc3b0c0-d1d",
+    "quote": "quote-89bb6c8e-683"
+  },
+  "at": "2026-09-26T05:18:15.268Z"
+}

@@ -1,3 +1,4 @@
+import {fillDeclaredScope} from './declared-scope-fixture.mjs'
 // All business writes originate from visible GUI controls. Response capture is evidence only.
 import assert from 'node:assert/strict'
 import { chromium } from '../../../../host/node_modules/playwright/index.mjs'
@@ -56,6 +57,7 @@ try {
   await buyer.getByLabel('Item 1 description', { exact: true }).fill('40 W LED panel'); await buyer.getByLabel('Item 1 quantity', { exact: true }).fill('10')
   await buyer.locator('.supplier-options label').filter({ hasText: 'supplier@demo.local' }).getByRole('checkbox').check()
   await buyer.locator('.supplier-options label').filter({ hasText: 'supplier2@demo.local' }).getByRole('checkbox').check()
+  await fillDeclaredScope(buyer)
   const created = await mutation(buyer, 'create-rfq', () => buyer.getByRole('button', { name: 'Save request draft', exact: true }).click())
   assert.equal(created.rfq.currency, 'GBP'); assert.equal(created.rfq.projectName, projectName)
   await buyer.getByRole('button', { name: 'Publish request', exact: true }).click(); await confirm(buyer, 'publish-rfq')
@@ -80,6 +82,8 @@ try {
   await buyer.getByRole('button', { name: 'Draft amendment', exact: true }).click(); await field(buyer, 'Reason for amendment').fill('Updated room plan requires two more panels and occupancy sensors.')
   await buyer.getByLabel('Item 1 quantity', { exact: true }).fill('12'); await buyer.getByRole('button', { name: 'Add item', exact: true }).click()
   await buyer.getByLabel('Item 2 description', { exact: true }).fill('Occupancy sensor'); await buyer.getByLabel('Item 2 quantity', { exact: true }).fill('2')
+  await buyer.getByLabel('Item 2 measurement rule',{exact:true}).selectOption({label:'Authored fixture quantity · each'})
+  await buyer.getByLabel('Item 2 responsibility interface',{exact:true}).selectOption({label:'Supply the authored request items · Supplier'})
   const amendment = await mutation(buyer, 'save-amendment', () => buyer.getByRole('button', { name: 'Save amendment draft', exact: true }).click())
   await shot(buyer, '06-private-amendment-delta'); await buyer.getByRole('button', { name: 'Review & publish amendment', exact: true }).click(); await confirm(buyer, 'publish-amendment')
   await buyer.getByRole('button', { name: 'Compare offers', exact: true }).click(); await buyer.getByText('Rebid needed · scope changed', { exact: true }).waitFor()

@@ -37,7 +37,7 @@ export function fulfillmentReview(user, action, input, data) {
     currency: record.currency || rfq?.currency || order?.currency, amount: record.amount ?? record.total,
     description: payload.reason || record.reason || record.description || '', text: record.quote ? `Supplier confirmation: ${record.confirmedAt || 'awaiting supplier'}. Request revision ${record.rfqRevision}.` : '',
     items: commercial.items || [], changes: record.lines || [], priceBreakdown: commercial.priceBreakdown,
-    paymentTerms: commercial.paymentTerms || '', leadDays: commercial.leadDays, commercial: commercial.commercial || {}, terms:commercial.terms||[], requiredTerms:record.requiredTerms||[], termExceptions:record.termExceptions||[],
+    paymentTerms: commercial.paymentTerms || '', leadDays: commercial.leadDays, commercial: commercial.commercial || {}, assumptions:commercial.assumptions,exclusions:commercial.exclusions,schedule:commercial.schedule, terms:commercial.terms||[], requiredTerms:record.requiredTerms||[], termExceptions:record.termExceptions||[],
     ...(order ? { orderRevision: order.orderRevision || 1, resultingTotal: record.proposedAmounts?.total } : {}) }
   return { action, payload, reviewed: targets, preview }
 }

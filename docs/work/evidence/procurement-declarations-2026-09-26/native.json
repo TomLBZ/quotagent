@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/public-declarations-XtGSg1",
+  "checks": [
+    "New unstructured publication refuses before any approval/fact; explicit fixture-authored rules and owner publish through real QEP with declared policy marker",
+    "Human selection adopts complete explicit alternative+additional scope; firm milestones and qualifications survive signed QEP intent→supplier confirmation→independent grant→PO; model cannot change valid firm promise and tampered order cannot reuse approval",
+    "Model may prepare only selected allowed FAQ fields from shared source; private keys rejected, human publication required, source refs and question hash retained; exact lookup deterministic/read-only and realm-isolated",
+    "Wrong-version FAQ lookup returns no content; explicit historical adaptation retains source+target versions as private draft until full human broadcast; deprecation and signed milestone order survive actual remount"
+  ],
+  "ids": {
+    "rfq": "rfq-ee083557-552",
+    "quote": "quote-192805a4-ccb",
+    "order": "po-award-a5da35c8-45d",
+    "faq": "faq-4b5d5006-843",
+    "faqRfq": "rfq-1f4a82e6-08b",
+    "ticket": "clarification-553f2568-432"
+  },
+  "at": "2026-09-26T05:16:47.261Z"
+}

@@ -1,3 +1,4 @@
+import {declaredScope} from '../tests/declared-scope-fixture.mjs'
 /** Focused integration exercise using the real Cordis and Python Ledger/QEP adapter. */
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
@@ -54,7 +55,7 @@ try {
   assert.ok(demoData.rfqs.every(rfq => rfq.demo && rfq.title.startsWith('[Demo]')))
   assert.equal(service.snapshot(buyer).rfqs.length, 0, 'Ordinary accounts start empty')
   const create = await service.execute(buyer, 'create-rfq', { title: 'Smoke account-owned quotation', description: 'Real QEP journey',
-    currency: 'USD', supplierIds: [supplier.id, second.id], items: [{ id: 'x', description: 'Decimal quantity', quantity: 1.5, unit: 'm' }] })
+    currency: 'USD', supplierIds: [supplier.id, second.id], ...declaredScope([{ id: 'x', description: 'Decimal quantity', quantity: 1.5, unit: 'm' }]) })
   const rfq = create.rfq
   const updated = await service.execute(buyer, 'create-rfq', { id: rfq.id, description: 'Editable extracted draft, real QEP journey' })
   assert.equal(updated.rfq.id, rfq.id)
