@@ -49,7 +49,7 @@ export async function apply(ctx) {
         parameters: { type: 'object', properties: { prompt: { type: 'string', description: 'Complete description of the desired plugin or repeatable workflow.' } }, required: ['prompt'], additionalProperties: false },
         execute: async (user, args) => {
           const result = await generate(user, { prompt: `${forceSkill ? 'Create a reusable workflow skill (kind=skill). ' : ''}${args.prompt}` })
-          return { ok: true, plugin: result.plugin, message: `${result.plugin.name} is ready and loaded in your workspace.`,
+          return { ok: true, plugin: result.plugin, message: result.plugin.enabled ? `${result.plugin.name} is ready and loaded in your workspace.` : `${result.plugin.name} already exists and is disabled. You can enable it from Plugin studio.`,
             action: { type: 'navigate', target: 'extensions', label: 'Open plugin studio' } }
         },
       }))

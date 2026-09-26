@@ -23,13 +23,13 @@ function Studio() {
   async function generate(event) {
     event.preventDefault(); if(!prompt.trim()) return
     setBusy('generate'); setError('')
-    try {const response=await api('/studio/generate',{method:'POST',body:{prompt}});setPrompt('');app.refresh();app.notify(`${response.plugin?.name || 'Your extension'} is ready to use.`);setTab('mine')}
+    try {const response=await api('/studio/generate',{method:'POST',body:{prompt}});setPrompt('');app.refresh();app.notify(response.reused ? `This extension already exists${response.plugin?.enabled ? ' and is ready to use' : '; enable it when you want to use it'}.` : `${response.plugin?.name || 'Your extension'} is ready to use.`);setTab('mine')}
     catch(e){setError(e.message)} finally {setBusy('')}
   }
   async function act(plugin,action) {
     setBusy(plugin.id);setError('')
     try {
-      const result=await api(`/studio/${encodeURIComponent(plugin.id)}/${action}`,{method:'POST',body:{}})
+      const result=await api(`/studio/${encodeURIComponent(plugin.id)}/${action}`,{method:'POST',body:{expectedRevisionId:plugin.revisionId}})
       app.refresh();app.notify({load:'Extension enabled in your workspace.',unload:'Extension disabled. Your workspace has been restored.',publish:'Your extension is now in the marketplace.',install:'Extension installed in your workspace.',promote:'Extension promoted to a global default.',delete:'Extension deleted.',run:'Workflow completed. Open your assistant to review the result.'}[action])
       if(action==='run')app.setAssistantOpen(true)
       return result

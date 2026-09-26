@@ -84,7 +84,9 @@ export async function apply(ctx,config={}){
  }
  const create=(user,descriptor,options={})=>serialize(async()=>{
   if(!ctx.accounts.can(user,'plugins:manage'))fail('Extension creation is disabled for this account.',403)
-  const plugin={id:idOf(),...parseDescriptor({content:JSON.stringify(descriptor)}),ownerId:user.id,enabled:true,published:false,global:false,createdAt:now(),...options};plugin.lineageId=lineage(plugin)
+  const valid=parseDescriptor({content:JSON.stringify(descriptor)}),prompt=clean(options.generationPrompt,12000),contentHash=hash(descriptorOf(valid))
+  if(prompt){const existing=records().filter(row=>row.ownerId===user.id&&!row.global&&row.generationPrompt&&row.contentHash===contentHash).sort(newest)[0];if(existing)return{ok:true,reused:true,plugin:publicPlugin(existing,user),...list(user)}}
+  const plugin={id:idOf(),...valid,ownerId:user.id,enabled:true,published:false,global:false,createdAt:now(),...options,...(prompt?{sourcePromptDigest:hash(prompt)}:{})};plugin.lineageId=lineage(plugin)
   const revision=await archive.create(plugin,plugin,{actor:user.id,reason:options.reason||'Created extension',origin:options.origin||null});const saved=await activate(plugin,revision,user.id,options.event||'studio/plugin-created');return{ok:true,plugin:publicPlugin(saved,user),...list(user)}
  })
  const ensureNoTrial=id=>{if(activeTrial(id))fail('Finish or roll back the active trial before changing this extension.',409)}
@@ -104,6 +106,8 @@ export async function apply(ctx,config={}){
  }
  const mutate=(user,id,action,input={})=>serialize(async()=>{
   const plugin=lookup(id);if(!ctx.accounts.can(user,'plugins:manage'))fail('Extension management is disabled for this account.',403)
+  if(input.expectedRevisionId&&input.expectedRevisionId!==plugin.revisionId)fail('This extension changed after you opened it. Review the latest revision before continuing.',409)
+  if(['publish','install','promote'].includes(action)){const revision=archive.get(id,plugin.revisionId);if(!archive.verify(plugin,revision).ok||isActive(plugin)&&!archive.verify(plugin,revision,{current:true}).ok)fail('This extension has inconsistent artifact bytes. Inspect its inventory and restore a verified revision before sharing it.',409)}
   if(action==='install'){if(!plugin.published&&!plugin.global&&plugin.ownerId!==user.id)fail('This extension has not been published.',403);const existing=records().filter(row=>row.ownerId===user.id&&!row.global&&lineage(row)===lineage(plugin)).sort(activeFirst)[0];if(existing){ensureNoTrial(existing.id);const next=await activate({...existing,enabled:true},archive.get(existing.id,existing.revisionId),user.id,'studio/plugin-loaded');return{ok:true,plugin:publicPlugin(next,user),...list(user)}}const next=await cloneInstall(user,plugin);return{ok:true,plugin:publicPlugin(next,user),...list(user)}}
   if(action==='promote'){if(user.role!=='admin')fail('Only administrators can promote a global default.',403);const existing=records().filter(row=>row.global&&lineage(row)===lineage(plugin)).sort(activeFirst)[0];if(existing){const next=await activate({...existing,enabled:true},archive.get(existing.id,existing.revisionId),user.id,'studio/plugin-loaded');return{ok:true,plugin:publicPlugin(next,user),...list(user)}}const next=await cloneInstall(user,plugin,{global:true});return{ok:true,plugin:publicPlugin(next,user),...list(user)}}
   canManage(user,plugin);ensureNoTrial(id);let next
