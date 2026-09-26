@@ -1,0 +1,26 @@
+{
+  "base": "http://127.0.0.1:8643/quotagent/",
+  "at": "2026-09-26T02:31:56.410Z",
+  "checks": [
+    "A newly registered same-side colleague starts with an isolated business workspace",
+    "Owner invitation, explicit colleague acceptance and header selection expose the shared party business records",
+    "Exact policy reviewed by a different colleague and applied separately by proposer; proposer has no self-approve control",
+    "Assignment, mention, unresolved-name disclosure, follow and completion produce durable actionable daily work",
+    "Selected workspace, following and comments survive browser reload; mobile team conversation has no page overflow"
+  ],
+  "screenshots": [
+    "01-accepted-team.png",
+    "02-reviewed-authority.png",
+    "03-assignment-conversation.png",
+    "04-personal-day.png",
+    "05-mobile-team.png"
+  ],
+  "errors": [],
+  "reviewer": {
+    "email": "reviewer-1790389916410@local.test",
+    "name": "Colleague 1790389916410"
+  },
+  "objectKey": "rfq:demo-contractor-demo-supplier-demo-cabling",
+  "ok": true,
+  "completedAt": "2026-09-26T02:32:06.207Z"
+}

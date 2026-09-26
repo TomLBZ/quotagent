@@ -1,7 +1,9 @@
 # Party teams, authority and collaboration
 <!-- budget: 8192 bytes, hard -->
 
-Status: implementation in progress. Native owner `system/teams`; shared approval
+Status: team foundation implemented; local native and GUI evidence in
+`docs/work/evidence/teams-2026-09-26/`. Domain independent signoff is the next
+integration slice. Native owner `system/teams`; shared approval
 execution belongs to `system/action-center`. Decision: ADR-0035.
 
 Current requirements consolidate historical FR-AUTH-001, FR-GATE-001,

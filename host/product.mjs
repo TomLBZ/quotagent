@@ -26,6 +26,7 @@ import * as workflows from '../src/system/agent-workflows/code/index.mjs'
 import * as workspaceStyles from '../src/system/workspace-styles/code/index.mjs'
 import * as userGuide from '../src/system/user-guide/code/index.mjs'
 import * as installed from '../src/system/installed-plugins/code/index.mjs'
+import * as teams from '../src/system/teams/code/index.mjs'
 const root=fileURLToPath(new URL('../',import.meta.url))
 const ctx=new Context(), mounted=[], definitions=[]
 const mount=async(id,module,config={},metadata={})=>{
@@ -46,6 +47,7 @@ await mount('settings',settings,{}, {name:'Plugin configuration and credentials'
 await mount('plugin-manager',manager,{repositoryRoot:root},{name:'Application plugin manager',repoId:'system/plugin-manager'})
 for(const definition of definitions.slice(0,-1))ctx.effect(()=>ctx.plugins.register(definition))
 await mount('notifications',notifications,{}, {name:'Notifications',repoId:'system/notifications',configurationId:'notifications'})
+await mount('teams',teams,{}, {name:'Party teams and authority',repoId:'system/teams'})
 await mount('action-center',actions,{}, {name:'Human action review',repoId:'system/action-center'})
 await mount('agent-runtime',agent,{}, {name:'AI agent runtime',repoId:'system/agent-runtime',configurationId:'ai'})
 await mount('procurement',procurement,{}, {name:'Quotation and order workflow',repoId:'domain/procurement'})

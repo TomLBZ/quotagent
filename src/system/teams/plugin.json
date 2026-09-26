@@ -1,0 +1,1 @@
+{"name":"teams","version":"1.0.0","layer":"system","entry":"code/index.mjs","provides":["teams"],"description":"Explicit party membership, reviewed authority, assignments, following and colleague comments."}
