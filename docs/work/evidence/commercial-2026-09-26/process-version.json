@@ -1,0 +1,27 @@
+{
+  "verifiedAt": "2026-09-26T02:22:33.460Z",
+  "baselineCommit": "9f4cddc180b6e748c55452482ccc9563ad292a19",
+  "runtime": "isolated native host/product.mjs, port8641, working-tree composition started immediately before browser report",
+  "data": "tmp/agent-experience/commercial/data-final",
+  "assets": "tmp/agent-experience/commercial/assets",
+  "scope": "G2 complete GUI; procurement fixture award used then-current single-human semantics; G1/G3 independent signature integration pending",
+  "ownedSourceHashes": {
+    "src/domain/commercial-workbench/client/common.jsx": "7facfd93a5a427d2338c19c7c5b2243fd3f6c5950f210b41cdb2240a73c7b2fe",
+    "src/domain/commercial-workbench/client/evaluation.jsx": "9dc0a4abaf302efb190282bbb801d8bab1338ccb7aa6ae23510c3610f02edb35",
+    "src/domain/commercial-workbench/client/exchange.jsx": "ecee83f27d206e78c41346b27d0b0667f1dca01cfe5139719fa9b358bf6a3445",
+    "src/domain/commercial-workbench/client/supplier.jsx": "e289a901e444aaa134cc6cf6d3a45780cf787b39af243703ac81d6eacbba51ff",
+    "src/domain/commercial-workbench/client/terms.jsx": "df64546dd58b6882dfdf23402b354fe84b53728db94c593392643537a91d4271",
+    "src/domain/commercial-workbench/client/workbench.css": "e011cef8195d1db1499420482accc2c470cd08bb36f7a373c1213ac620d46ad5",
+    "src/domain/commercial-workbench/client/workbench.jsx": "cd25fcca2ad9d2387b767e780582f56f3a27eae8791623c880e3e1d4819422d3",
+    "src/domain/commercial-workbench/code/arithmetic.mjs": "440806f64a29c159d40faacaa205b20914b661c3dfa5788c8c5657b6fa2e4cca",
+    "src/domain/commercial-workbench/code/evaluation.mjs": "f11a443c9e3efb5f16fdfa6545c965d9c41b00dd957201b46f1964aee6d912c7",
+    "src/domain/commercial-workbench/code/index.mjs": "373ed04acecaf928ec49209d93303aaa295a9d8f7bcf81b4d6c0506b1d47ca09",
+    "src/domain/commercial-workbench/code/service.mjs": "f839aa6345d1fe7837080cd9af7775d5fdbef1a5b1602263ad2fb1f9f6f32650",
+    "src/domain/commercial-workbench/plugin.json": "390f0ef87b6b02461cc12062ab09c39789a3f34e8291c5cf76ca55de0b2fc1bc",
+    "src/domain/commercial-workbench/requirements/README.md": "a4b0e0ff0ea5add531fa9e20fac41ba30f609ffa0537c93792e47c4306dc7e84",
+    "src/domain/commercial-workbench/tests/browser.mjs": "f7aa0660f7221b655e16a319fe3aceadbf3d249c8874f956ab6acf8f32fccf42",
+    "src/domain/commercial-workbench/tests/smoke.mjs": "a1c0c9f86caab1b961e177d13b041898d9bb58cb5c059be630774c4ff3575c00"
+  },
+  "serviceEvidence": "tmp/commercial-smoke-DII3eE/report.json",
+  "browserEvidence": "tmp/agent-experience/commercial/local/report.json"
+}

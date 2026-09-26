@@ -27,6 +27,7 @@ import * as workspaceStyles from '../src/system/workspace-styles/code/index.mjs'
 import * as userGuide from '../src/system/user-guide/code/index.mjs'
 import * as installed from '../src/system/installed-plugins/code/index.mjs'
 import * as teams from '../src/system/teams/code/index.mjs'
+import * as commercial from '../src/domain/commercial-workbench/code/index.mjs'
 const root=fileURLToPath(new URL('../',import.meta.url))
 const ctx=new Context(), mounted=[], definitions=[]
 const mount=async(id,module,config={},metadata={})=>{
@@ -51,6 +52,7 @@ await mount('teams',teams,{}, {name:'Party teams and authority',repoId:'system/t
 await mount('action-center',actions,{}, {name:'Human action review',repoId:'system/action-center'})
 await mount('agent-runtime',agent,{}, {name:'AI agent runtime',repoId:'system/agent-runtime',configurationId:'ai'})
 await mount('procurement',procurement,{}, {name:'Quotation and order workflow',repoId:'domain/procurement'})
+await mount('commercial-workbench',commercial,{}, {name:'Commercial workbench',repoId:'domain/commercial-workbench',configurationId:'commercial'})
 await mount('installed-plugins',installed,{}, {name:'Installed plugins runtime',repoId:'system/installed-plugins'})
 await mount('plugin-studio',studio,{}, {name:'Personal plugins and marketplace',repoId:'system/plugin-studio'})
 await mount('file-store',files,{}, {name:'Account file storage',repoId:'system/file-store',configurationId:'file-store'})

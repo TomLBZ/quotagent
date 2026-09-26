@@ -410,5 +410,5 @@ export function createProcurement({ store, accounts, resolveUser = user => user 
       .map((row) => row.map(cell).join(',')).join('\r\n') + '\r\n'
   }
 
-  return { snapshot, execute, exportCsv, normalizeCommercial: commercialFields, normalizeRequirements: requirementFields, normalizeQuotePrice: (items, commercial = {}) => quotationAmounts(items.reduce((sum, item) => sum + lineCents(cents(item.unitPrice), quantity(item.quantity)), 0), commercialFields({}, commercial, items.map(item => item.id))) }
+  return { snapshot, execute, exportCsv, realm: user => resolveUser(user, 'snapshot', {}).id, normalizeCommercial: commercialFields, normalizeRequirements: requirementFields, normalizeQuotePrice: (items, commercial = {}) => quotationAmounts(items.reduce((sum, item) => sum + lineCents(cents(item.unitPrice), quantity(item.quantity)), 0), commercialFields({}, commercial, items.map(item => item.id))) }
 }

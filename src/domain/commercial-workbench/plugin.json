@@ -1,0 +1,8 @@
+{
+  "name": "commercial-workbench",
+  "version": "1.0.0",
+  "layer": "domain",
+  "entry": "code/index.mjs",
+  "provides": ["commercial"],
+  "description": "Private factor costs, capacity, sourced quotation evaluation and manual ERP interoperability"
+}

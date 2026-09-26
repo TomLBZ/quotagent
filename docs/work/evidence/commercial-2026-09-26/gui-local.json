@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "base": "http://127.0.0.1:8641/quotagent/",
+  "title": "[Commercial check] Panels 2026-09-26T02:22:20.760Z",
+  "rfqId": "rfq-5bdbf59a-714",
+  "quoteIds": [
+    "quote-3c71a0c4-d8a",
+    "quote-0f023fb9-6a1"
+  ],
+  "checks": [
+    "Supplier GUI commercial terms, private seven-factor costing, account margin setting and exact reviewed below-floor draft prices (£170 including tax/freight)",
+    "Dated supplier availability, task dependency scheduling, visible delivery conflict and archival capacity release without altering firm quotation",
+    "Received terms; missing FX explicitly unknown; manually sourced timestamp-valid FX/reference price; exact GBP normalization, warning source, weighted what-if archive, CSV export and private sourced assumptions",
+    "Descriptive item/currency history without rankings; human-reviewed fixture award; genuine PO CSV download/upload round trip; retained original failed mapping; sourced weekly activity report",
+    "Private cost reconstruction after browser reload, no JavaScript errors and mobile report without horizontal overflow"
+  ],
+  "jsErrors": [],
+  "at": "2026-09-26T02:22:33.460Z"
+}
