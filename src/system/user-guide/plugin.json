@@ -1,0 +1,1 @@
+{"name":"user-guide","version":"1.0.0","layer":"system","entry":"code/index.mjs","provides":["userGuide"],"description":"Role-specific getting-started walkthroughs, persistent account progress and searchable in-app Help."}
