@@ -1,4 +1,5 @@
 import { cents, money, multiply, finite, text, digest, median, itemKey, daysBetween } from './arithmetic.mjs'
+import {quotationTextFlags,improvementGuidance,normalizedWeights} from './advisory.mjs'
 export const components = ['price', 'delivery', 'payment', 'warranty', 'deviation']
 export const defaultPolicy = { weights: { price: 60, delivery: 15, payment: 10, warranty: 5, deviation: 10 }, allowedLeadDays: 30, timeCostPerDay: 800,
   capitalRatePercent: 8, warrantyMonths: 12, warrantyCostPerMonth: 2000, paymentDays: 30, maxAdvancePercent: 30, penaltyPercent: 0, lowPricePercent: 60 }
@@ -17,7 +18,7 @@ export function calculateEvaluation(basis) {
       excluded.push({ quoteId: quote.id, supplierName: quote.supplierName, reason: 'RFQ revision mismatch. Request a reviewed rebid against the current scope.', quoteRevision: quote.rfqRevision, currentRevision: rfq.publishedRevision || rfq.revision, citations: unique([...quoteRefs, ...rfqRefs]) }); continue
     }
     const savedAssumption = assumptions[quote.id], operator = savedAssumption?.quoteRevision === quote.revision ? savedAssumption : null, terms = { ...(quote.commercial || {}), ...(operator?.commercial || {}) }
-    const termRefs = unique([...quoteRefs, operator?.sourceRef]), flags = [], missing = [], amounts = {}
+    const termRefs = unique([...quoteRefs, operator?.sourceRef]), flags = quotationTextFlags(quote,quoteRefs[0]), missing = [], amounts = {}
     const addFlag = (kind, message, citations = common) => flags.push({ kind, message, citations: unique(citations) })
     const markMissing = (name, target) => { missing.push(name); addFlag('missing-term', `${name} was not declared or supplied as a sourced assumption.`, target || termRefs) }
     if (savedAssumption && !operator) addFlag('stale-assumptions', 'Saved assumptions refer to an older quotation revision and were not applied.', [savedAssumption.sourceRef, ...quoteRefs])
@@ -87,15 +88,14 @@ export function calculateEvaluation(basis) {
     row.score = measure(contributions.reduce((sum, value) => sum + value.contribution, 0), unique(contributions.flatMap(value => value.citations)), 'sum of component min/max normalized value × percentage weight; lower is preferred under this policy', { contributions })
   }
   comparable.sort((a, b) => a.score.value - b.score.value || a.quoteId.localeCompare(b.quoteId)).forEach((row, index) => { row.rank = measure(index + 1, row.score.citations, 'ascending policy score; exact ties ordered by quote ID') })
+  for(const row of rows)row.guidance=improvementGuidance(row,comparable,policy.weights)
   const result = { formulaVersion: 'commercial-tco/1', rfqId: rfq.id, rfqRevision: rfq.publishedRevision || rfq.revision, currency, asOf, weights: policy.weights, rows, excluded,
     warning: 'Decision support only. Flags do not veto or change scores. Missing terms and unquantified impacts remain visible. Supplier history does not contribute to scoring.' }
   return { id: `evaluation-${digest({ basis, result }).slice(0, 24)}`, ...result }
 }
 
 export function validatePolicy(input) {
-  const policy = { weights: {} }
-  for (const key of components) policy.weights[key] = finite(input.weights?.[key], `${key} weight`, { max: 100 })
-  if (Math.abs(Object.values(policy.weights).reduce((sum, value) => sum + value, 0) - 100) > 0.000001) throw new Error('Comparison weights must add up to 100%.')
+  const policy = normalizedWeights(input.weights,components)
   for (const key of ['allowedLeadDays', 'warrantyMonths', 'paymentDays']) policy[key] = finite(input[key], key, { max: 36500, integer: true })
   for (const key of ['timeCostPerDay', 'warrantyCostPerMonth']) policy[key] = cents(input[key], key) / 100
   for (const key of ['capitalRatePercent', 'maxAdvancePercent', 'penaltyPercent', 'lowPricePercent']) policy[key] = finite(input[key], key, { max: 100 })

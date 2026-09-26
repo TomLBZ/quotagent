@@ -1,0 +1,13 @@
+{
+  "passed": 6,
+  "checks": [
+    "Seven sourced cost factors, exact cents, explicit missing versus zero; below-floor human review, workflow attribution, stale refusal, exact tax/freight preview, idempotent draft application",
+    "Capacity exceptions, dependencies, milestone shortage, other-plan reservations, cycle rejection and archival release; firm quotation lead time unchanged",
+    "Quotation instruction/private-disclosure signals keep scores/ranks unchanged; deterministic sourced improvement guidance; clamped and normalized policy echoes exact original/accepted values; all-zero refusal",
+    "Five exact TCO components, exclusive tax/freight not double-counted, timestamp-valid FX, unknowns distinct from zero, immutable content identity, all citations resolvable, weight-driven ranking, warning independence and stale assumption refusal",
+    "Own-realm descriptive supplier history without ratings; costs/competitors isolated; awarded source fallback; explicit ERP export/import, retained failed mapping and currency-separated report",
+    "RFQ stale scope excluded; native unload removes service/routes/navigation/settings/tools; actual ledger remount reconstructs costs/evaluations/source references"
+  ],
+  "root": "/workspace/projects/quotagent/tmp/commercial-smoke-TWm2Vv",
+  "at": "2026-09-26T04:56:21.841Z"
+}

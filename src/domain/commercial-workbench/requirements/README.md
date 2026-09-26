@@ -62,6 +62,15 @@ existing draft service with exact RFQ item IDs, not direct procurement record wr
 
 ## Arithmetic and provenance
 
+FR-GUARD-005 adds source-path warning flags for instruction-like quotation text and
+explicit private-cost/benchmark disclosures. These deterministic signals are
+nonexhaustive prompts for human inspection; they neither reject nor change scoring.
+FR-VIZ-001 retains contribution-based improvement guidance against the current
+comparison set, with source citations and explicit fixed-peer assumptions. It is
+not a promise of a future rank. Human-entered finite weights are clamped0–100 and
+normalized to100, with original inputs, adjustments and accepted weights displayed
+and persisted. All-zero weights require correction; no policy is guessed.
+
 Money rounds to cents at explicit line/conversion/component boundaries; quantities
 allow six decimals. Cost factors retain their entered base, rate, amount and source.
 Overhead applies to direct material/labor/equipment; risk and finance apply to direct
