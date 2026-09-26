@@ -15,6 +15,8 @@ import * as evidence from '../src/system/evidence/code/product.mjs'
 import * as attachments from '../src/system/attachments/code/product.mjs'
 import * as retention from '../src/system/retention/code/product.mjs'
 import * as operations from '../src/system/observability/code/product.mjs'
+import * as sandbox from '../src/system/sandbox/code/index.mjs'
+import * as procurementSandbox from '../src/domain/procurement-sandbox/code/index.mjs'
 import * as ingestion from '../src/domain/ingestion/code/index.mjs'
 import * as emailEngine from '../src/domain/ingestion-engines/code/email.mjs'
 import * as spreadsheetEngine from '../src/domain/ingestion-engines/code/spreadsheet.mjs'
@@ -80,6 +82,8 @@ await mount('agent-workflows',workflows,{}, {name:'Agent workroom and memory',re
 await mount('workspace-styles',workspaceStyles,{}, {name:'Workspace styles',repoId:'system/workspace-styles',configurationId:'workspace-styles'})
 await mount('user-guide',userGuide,{}, {name:'Help and getting started',repoId:'system/user-guide'})
 await mount('observability',operations,{}, {name:'Operations and event timeline',repoId:'system/observability',configurationId:'operations'})
+await mount('sandbox',sandbox,{}, {name:'Isolated demo sandbox',repoId:'system/sandbox'})
+await mount('procurement-sandbox',procurementSandbox,{}, {name:'Quotation demo scenario',repoId:'domain/procurement-sandbox'})
 const address=await ctx.web.listen()
 console.log(JSON.stringify({ready:true,port:address.port,url:`http://127.0.0.1:${address.port}${ctx.web.prefix}/`,plugins:definitions.map(d=>({id:d.id,state:d.fiber?.state??null}))}))
 let closing=false

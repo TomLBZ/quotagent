@@ -1,0 +1,1 @@
+{"name":"procurement-sandbox","version":"1.0.0","layer":"domain","entry":"code/index.mjs","provides":[],"description":"A native isolated quotation-to-order example using real procurement writers and explicitly simulated approvals."}

@@ -6,7 +6,7 @@ import { resolve, extname, sep } from 'node:path'
 export const name = 'webui-product'
 export const inject = []
 export function apply(ctx, config = {}) {
-  const routes = [], navigation = [], extensions = []
+  const routes = [], navigation = [], extensions = [], interceptors = []
   const prefix = (config.prefix || '/quotagent').replace(/\/$/, '')
   const assets = resolve(config.assets || 'src/system/webui/client/dist')
   let accounts = null, server = null, settings = null
@@ -51,6 +51,7 @@ export function apply(ctx, config = {}) {
       if (path.startsWith('/api/')) {
         const apiPath = path.slice(4)
         const user = accounts ? await accounts.resolve(req) : null
+        for (const interceptor of [...interceptors]) if (await interceptor({user,req,res,apiPath})) return
         if (apiPath === '/bootstrap') return json(res,200,{user,navigation:navigation.filter(item => user && (!item.roles || item.roles.includes(user.role))).sort((a,b)=>(a.order||0)-(b.order||0)),extensions:applicable(user),ui:settings?.get(user,'webui') || {refreshSeconds:8,maxRequestMb:32}})
         const entry = routes.find(row => row.method === req.method && row.pattern.test(apiPath))
         if (!entry) return json(res,404,{error:'This action is not available'})
@@ -89,7 +90,7 @@ export function apply(ctx, config = {}) {
   ctx.effect(()=>route('GET','/collections/:id/export',({user,params,query})=>collections.export(user,params.id,collectionQuery(query))))
   ctx.effect(()=>()=>collections.dispose())
   ctx.provide('web',{
-    prefix,route,collection:entry=>collections.register(entry),
+    prefix,route,handle,intercept:handler=>register(interceptors,handler),collection:entry=>collections.register(entry),
     contribute: item => register(navigation, structuredClone(item)),
     extension: (owner, descriptor) => register(extensions,{owner,descriptor:structuredClone(descriptor)}),
     extensions: applicable,

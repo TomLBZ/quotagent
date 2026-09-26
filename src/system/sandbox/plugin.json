@@ -1,0 +1,1 @@
+{"name":"sandbox","version":"1.0.0","layer":"system","entry":"code/index.mjs","provides":["sandbox"],"description":"Account-owned isolated demo runtimes, disposable scenario registration and visible reset/exit controls."}

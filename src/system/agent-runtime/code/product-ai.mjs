@@ -15,6 +15,7 @@ export async function apply(ctx, config = {}) {
   const runtime = ctx.get('aiRuntime')
   const controllers = new Set()
   const legacySettings = () => {
+    if(config.inheritDefaults===false)return {origins:Object.fromEntries(['provider','model','baseUrl','apiKey','timeoutSeconds'].map(key=>[key,{source:'default',reference:'Isolated AI connection defaults; operator environment/file inheritance disabled'}])),provider:'openai',model:'',key:'',baseUrl:'https://api.openai.com/v1',extra:{},timeout:180000}
     const filename = config.configFile || process.env.QUOTAGENT_CONFIG || '/workspace/config.yaml'
     const doc = existsSync(filename) ? parse(readFileSync(filename,'utf8')) : {}
     const llm = doc.llm || {}, provider = llm.provider || 'openai', entry = doc.api_keys?.[provider] || {}
