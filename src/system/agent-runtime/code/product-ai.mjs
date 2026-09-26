@@ -44,25 +44,31 @@ export function apply(ctx, config = {}) {
     if (s.effort && !['none','off','disabled'].includes(String(s.effort))) request.reasoning_effort=s.effort
     else if (s.provider === 'deepseek') request.thinking={type:'disabled'}
     const endpoint = s.baseUrl.replace(/\/$/,'') + '/chat/completions'
-    const callId = randomUUID()
+    const callId = randomUUID(), startedAt = new Date().toISOString()
     await ctx.store.append(user.id,'agent/model-requested',{callId,purpose,provider:s.provider,endpoint,request},{actor:`agent:${user.id}`})
     const controller = new AbortController(); controllers.add(controller)
     const abort=()=>controller.abort(signal?.reason)
     if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true})
     const timer = setTimeout(()=>controller.abort(),s.timeout)
+    let payload = null, outcome = 'failed'
     try {
       const response = await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${s.key}`},body:JSON.stringify(request),signal:controller.signal})
-      const payload = await response.json()
+      payload = await response.json()
       if (!response.ok) throw new Error(`Model provider returned ${response.status}: ${String(payload.error?.message || 'request failed').slice(0,300)}`)
       await ctx.store.append(user.id,'agent/model-completed',{callId,response:payload},{actor:`agent:${user.id}`})
       const message = payload.choices?.[0]?.message
       if (!message) throw new Error('The model returned no response. Please try again.')
+      outcome = 'completed'
       return message
     } catch(error) {
-      const message = error.name === 'AbortError' ? (signal?.aborted?'This agent task was cancelled.':'The model took too long. Please try again.') : error.message.replaceAll(s.key,'[redacted]')
+      outcome = signal?.aborted ? 'canceled' : 'failed'
+      const message = signal?.aborted ? 'This agent task was cancelled.' : controller.signal.aborted ? 'The model took too long. Please try again.' : error.message.replaceAll(s.key,'[redacted]')
       await ctx.store.append(user.id,'agent/model-failed',{callId,error:message},{actor:`agent:${user.id}`})
       throw new Error(message)
-    } finally { clearTimeout(timer);signal?.removeEventListener('abort',abort);controllers.delete(controller) }
+    } finally {
+      clearTimeout(timer);signal?.removeEventListener('abort',abort);controllers.delete(controller)
+      await ctx.get('usage')?.record(user,{callId,provider:s.provider,model:payload?.model||s.model,purpose,status:outcome,startedAt,finishedAt:new Date().toISOString(),usage:payload?.usage??null})
+    }
   }
   ctx.provide('ai',{complete,status})
   ctx.effect(()=>()=>{ for(const controller of controllers) controller.abort(); controllers.clear() })

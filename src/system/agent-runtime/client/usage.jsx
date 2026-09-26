@@ -1,0 +1,54 @@
+import React, { useState } from 'react'
+import { registry, useApp, useResource, Button, Badge, Field, PageHeader, Empty, ErrorNotice, Loading } from '../../webui/client/core.jsx'
+import { PluginSettings } from '../../settings/client/settings.jsx'
+import './usage.css'
+
+const number = value => value === null || value === undefined ? 'Not reported' : new Intl.NumberFormat().format(value)
+const metricNames = { total: 'Total tokens', input: 'Input tokens', output: 'Output tokens', cachedInput: 'Cached input', uncachedInput: 'Uncached input', cacheWriteInput: 'Cache writes', reasoningOutput: 'Reasoning output' }
+const purposeNames = { 'workspace-assistant': 'AI conversation', 'workspace-summary': 'Conversation summary', 'plugin-generation': 'Plugin creation', 'document-line-item-extraction': 'Document extraction', 'workflow:planner': 'Workroom planning', 'workflow:agent': 'Workroom specialists', 'workflow:report': 'Specialist reports', 'workflow:synthesis': 'Workroom synthesis' }
+const statusNames = { completed: 'Completed', failed: 'Failed', canceled: 'Canceled', pending: 'No final status' }
+const defaults = () => ({ scope: 'mine', from: new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10), provider: '', model: '', purpose: '', status: '', accountId: '' })
+const shortDate = value => new Date(`${value}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
+const label = (key, value) => key === 'purpose' ? purposeNames[value] || value : key === 'status' ? statusNames[value] || value : value
+function TokenValue({ metric }) {
+  return <span className="usage-token-value">{number(metric?.value)}{metric?.unknownCalls > 0 && metric?.knownCalls > 0 && <small> + unknown</small>}</span>
+}
+function Summary({ summary }) {
+  return <div className="usage-summary"><article className="card usage-stat"><span>Model calls</span><strong>{number(summary.calls)}</strong><small>{summary.statuses.completed} completed · {summary.statuses.failed} failed · {summary.statuses.canceled} canceled{summary.statuses.pending ? ` · ${summary.statuses.pending} without final status` : ''}</small></article>{['total', 'input', 'output'].map(key => <article className="card usage-stat" key={key}><span>{metricNames[key]}</span><strong><TokenValue metric={summary.tokens[key]}/></strong><small>{summary.tokens[key].knownCalls} of {summary.calls} calls reported this count</small></article>)}</div>
+}
+function DailyChart({ rows, metric, onDay }) {
+  const maximum = Math.max(1, ...rows.map(row => row.tokens[metric].value || 0))
+  return <div className="usage-chart" aria-label={`${metricNames[metric]} by UTC date`}><div className="usage-bars">{rows.map(row => {
+    const value = row.tokens[metric].value, coverage = row.tokens[metric]
+    const description = `${row.key}: ${number(value)} ${metricNames[metric].toLowerCase()}, ${row.calls} calls${coverage.unknownCalls ? `, ${coverage.unknownCalls} calls unreported` : ''}. Inspect this day.`
+    return <button className={`usage-day ${value === null ? 'usage-day-unknown' : ''}`} key={row.key} onClick={() => onDay(row.key)} aria-label={description} title={description}><span className="usage-bar-space"><span className="usage-bar" style={{ height: value === null ? '5px' : `${Math.max(3, value / maximum * 100)}%` }}/></span><span className="usage-day-label">{shortDate(row.key)}</span><span className="usage-day-count">{value === null ? '?' : new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value)}</span></button>
+  })}</div></div>
+}
+export function Usage() {
+  const app = useApp(), [filters, setFilters] = useState(defaults), [draft, setDraft] = useState(defaults), [metric, setMetric] = useState('total'), [grouping, setGrouping] = useState('Model'), [showSettings, setShowSettings] = useState(false)
+  const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value)).toString()
+  const resource = useResource(`/usage?${query}`), data = resource.data, options = data.options || {}
+  const update = (key, value) => setDraft(previous => ({ ...previous, [key]: value, ...(key === 'scope' ? { accountId: '' } : {}) }))
+  const chooseDay = date => { const next = { ...filters, from: date, to: date }; setDraft(next); setFilters(next) }
+  const reset = () => { const next = defaults(); setDraft(next); setFilters(next); setGrouping('Model') }
+  const groups = data[`by${grouping}`] || [], accountName = id => options.accounts?.find(account => account.id === id)?.name || id
+  return <div className="usage-page"><PageHeader eyebrow="UNDERSTAND YOUR AI ACTIVITY" title="AI usage" actions={<Button variant="secondary" icon="settings" onClick={() => setShowSettings(true)}>Model settings</Button>}>See how your AI activity uses tokens, from conversations and document extraction to specialist agents and plugin creation.</PageHeader>
+    <form className="card usage-filters" onSubmit={event => { event.preventDefault(); setFilters({ ...draft }); if (draft.scope !== 'all' && grouping === 'Account') setGrouping('Model') }}>
+      {app.user.role === 'admin' && <Field label="Usage scope"><select aria-label="Usage scope" value={draft.scope} onChange={event => update('scope', event.target.value)}><option value="mine">My account</option><option value="all">All accounts</option></select></Field>}
+      <Field label="From (UTC)"><input type="date" required value={draft.from} onChange={event => update('from', event.target.value)}/></Field><Field label="To (UTC)"><input type="date" required value={draft.to} onChange={event => update('to', event.target.value)}/></Field>
+      {['model', 'provider', 'purpose', 'status'].map(key => <Field key={key} label={key[0].toUpperCase() + key.slice(1)}><select aria-label={key[0].toUpperCase() + key.slice(1)} value={draft[key]} onChange={event => update(key, event.target.value)}><option value="">All {key === 'status' ? 'statuses' : key === 'purpose' ? 'activities' : `${key}s`}</option>{(options[key] || []).map(value => <option key={value} value={value}>{label(key, value)}</option>)}</select></Field>)}
+      {draft.scope === 'all' && options.accounts && <Field label="Account"><select aria-label="Account" value={draft.accountId} onChange={event => update('accountId', event.target.value)}><option value="">Every account</option>{options.accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></Field>}
+      <div className="usage-filter-actions"><Button type="submit">Apply filters</Button><Button variant="ghost" onClick={reset}>Reset filters</Button></div>
+    </form><ErrorNotice error={resource.error} retry={resource.reload}/>
+    {resource.loading ? <Loading/> : data.summary && <><Summary summary={data.summary}/><p className="usage-coverage">Counts come from provider responses recorded for this workspace. {data.summary.unknownCalls > 0 ? `${data.summary.unknownCalls} of ${data.summary.calls} calls have no reported total; the displayed sum covers the other calls.` : 'Every call in this selection has a reported total.'} Token counts are not a bill or a cost estimate.</p>
+      {!data.summary.calls ? <Empty icon="spark" title="No AI calls in this selection">Change the filters or use your AI assistant, document extraction, or agent workroom. Usage appears when a request is recorded.</Empty> : <>
+        <section className="card usage-chart-card"><div className="section-heading"><div><h2>Usage over time</h2><p className="muted">Dates are UTC. Select a day to inspect its calls.</p></div><Field label="Chart metric"><select aria-label="Chart metric" value={metric} onChange={event => setMetric(event.target.value)}>{Object.entries(metricNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></Field></div><DailyChart rows={data.daily} metric={metric} onDay={chooseDay}/><p className="usage-caption">Showing days with recorded calls. “?” means the selected count was not reported. Hover or focus a bar for its exact count and reporting coverage.</p></section>
+        <section className="card usage-breakdown"><div className="section-heading"><h2>Where tokens were used</h2><Field label="Group by"><select aria-label="Group by" value={grouping} onChange={event => setGrouping(event.target.value)}>{['Model', 'Provider', 'Purpose', 'Status', ...(filters.scope === 'all' ? ['Account'] : [])].map(value => <option key={value}>{value}</option>)}</select></Field></div><div className="usage-table-wrap"><table><thead><tr><th>{grouping}</th><th>Calls</th><th>Input</th><th>Output</th><th>Total</th></tr></thead><tbody>{groups.map(row => <tr key={row.key}><th>{grouping === 'Account' ? accountName(row.key) : label(grouping.toLowerCase(), row.key)}</th><td>{number(row.calls)}</td>{['input', 'output', 'total'].map(key => <td key={key}><TokenValue metric={row.tokens[key]}/></td>)}</tr>)}</tbody></table></div></section>
+        <section className="card usage-details"><h2>Provider token breakdown</h2><p className="muted">Cache counts are part of input tokens. Reasoning counts are part of output tokens. They are shown separately here and are not added to totals.</p><dl className="usage-subtotals">{['cachedInput', 'uncachedInput', 'cacheWriteInput', 'reasoningOutput'].map(key => <div key={key}><dt>{metricNames[key]}</dt><dd><TokenValue metric={data.summary.tokens[key]}/></dd><small>{data.summary.tokens[key].knownCalls} of {data.summary.calls} calls reported</small></div>)}</dl></section>
+        <section className="card usage-recent"><h2>Recent model calls</h2><p className="muted">{data.calls.length} of {data.summary.calls} calls in this selection. “No final status” includes requests interrupted before an outcome was recorded; it does not mean a model is still running.</p><div className="usage-table-wrap"><table><thead><tr><th>Started (UTC)</th>{filters.scope === 'all' && <th>Account</th>}<th>Activity</th><th>Model</th><th>Status</th><th>Total tokens</th><th>Duration</th></tr></thead><tbody>{data.calls.map(call => <tr key={`${call.accountId}:${call.callId}`}><td>{call.startedAt?.replace('T', ' ').slice(0, 19)}</td>{filters.scope === 'all' && <td>{accountName(call.accountId)}</td>}<td>{label('purpose', call.purpose)}</td><td>{call.model}<small className="usage-provider">{call.provider}</small></td><td><Badge status={call.status === 'completed' ? 'success' : call.status === 'failed' ? 'warning' : 'neutral'}>{statusNames[call.status]}</Badge></td><td>{number(call.tokens.total)}</td><td>{call.durationMs === null ? '—' : `${(call.durationMs / 1000).toFixed(1)} s`}</td></tr>)}</tbody></table></div></section>
+      </>}
+    </>}
+    {showSettings && <PluginSettings plugin={{ id: 'ai', name: 'AI model connection' }} onClose={() => setShowSettings(false)}/>}
+  </div>
+}
+registry.page('ai-usage', { component: Usage, icon: 'spark' })
