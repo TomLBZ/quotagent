@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/provider-dispatch-nG3qTn",
+  "checks": [
+    "Actual loopback HTTP request exactly reconstructs from ledger using declared serialization, including Unicode and newlines",
+    "Pre-dispatch event binds actual UTF8 bytes/hash to call/run/attempt without credentials; idempotent replay performs no second HTTP dispatch"
+  ],
+  "bytes": 150,
+  "sha256": "ee184de9b045980237c3edbd431229d5210ecf703793ea1e80abe6e692e56937"
+}

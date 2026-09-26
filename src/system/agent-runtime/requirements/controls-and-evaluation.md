@@ -24,3 +24,9 @@ Source modules: `code/provider-controls.mjs` (native child/service), `code/provi
 Settings must name currency, tariff provenance/date and actual provider/model binding. Missing usage/pricing is unknown. Cost is an explicit estimate, not an invoice. No provider credentials enter trace/cost/evaluation metadata. Scope is account-owned model activity; current party workspace remains pinned on saved runs across reload and navigation switches.
 
 Executable checks: loopback actual HTTP provider checks plus real Cordis/store restart; existing usage/controls checks; workflow workspace pinning/cancellation; read-only deterministic recorded-run assertions and human counterexample approval; native GUI configuration→model run→typed receipt/context omissions→cost coverage/evaluation. Commands and observed results are in the linked evidence. Historical tasks without a saved role cannot resume; role changes require stopping and starting a new task. Prior transcripts must match both saved role and workspace, with exclusions ledger-recorded. Safe GUI links contain only run/case/RFQ IDs and tab keys.
+
+Exact provider boundary evidence follows ADR-0043: new requests declare
+`json-key-sorted/v1`; each actual attempt records `agent/model-dispatched` with
+call/run/attempt, SHA256 and UTF-8 byte count before reusing that exact wire string.
+`node src/system/agent-runtime/tests/dispatch.mjs` verifies actual HTTP bytes against
+ledger reconstruction. Older calls remain boundary-unmeasured.

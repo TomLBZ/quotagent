@@ -1,9 +1,9 @@
 /** Real configured model provider. Every complete input/output is account-ledger backed. */
 import { readFileSync, existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
 import * as runtimeControls from './provider-controls.mjs'
-import {AdmissionError,retryDelay} from './provider-policy.mjs'
+import {AdmissionError,retryDelay,stable} from './provider-policy.mjs'
 import {normalizeUsage} from './product-usage.mjs'
 import {boundSourceMessages} from './context.mjs'
 const require = createRequire(new URL('../../../../host/package.json', import.meta.url))
@@ -52,13 +52,14 @@ export async function apply(ctx, config = {}) {
     if(s.effort&&!['none','off','disabled'].includes(String(s.effort)))request.reasoning_effort=s.effort
     else if(s.provider==='deepseek')request.thinking={type:'disabled'}
     delete request.max_tokens;delete request.max_completion_tokens;request[limits.outputLimitParameter]=limits.maxOutputTokens
+    const wireBody=JSON.stringify(stable(request)),serialization='json-key-sorted/v1',requestSha256=createHash('sha256').update(wireBody).digest('hex'),requestBytes=Buffer.byteLength(wireBody,'utf8')
     const endpoint=s.baseUrl.replace(/\/$/,'')+'/chat/completions',callId=randomUUID(),startedAt=new Date().toISOString(),attemptUsage=[]
     let responseValue=null,outcome='failed',failure=null,result=null
     const redact=message=>String(message).replaceAll(s.key,'[redacted]').slice(0,1000)
     try{
       result=await runtime.run(user,{connection:s,request,purpose,signal,runId,requestKey,callId},async lease=>{
-        if(Buffer.byteLength(JSON.stringify(request),'utf8')>limits.maxContextBytes)throw new AdmissionError('context-too-large','This complete model request exceeds the configured context byte limit.',{status:413,nextAction:'Narrow the source/task or increase the explicit context limit. Required instructions were not silently truncated.'})
-        await ctx.store.append(user.id,'agent/model-requested',{callId,purpose,runId,provider:s.provider,endpoint,request,contextReceipt:contextReceipt||null},{actor:`agent:${user.id}`})
+        if(requestBytes>limits.maxContextBytes)throw new AdmissionError('context-too-large','This complete model request exceeds the configured context byte limit.',{status:413,nextAction:'Narrow the source/task or increase the explicit context limit. Required instructions were not silently truncated.'})
+        await ctx.store.append(user.id,'agent/model-requested',{callId,purpose,runId,provider:s.provider,endpoint,request,serialization,contextReceipt:contextReceipt||null},{actor:`agent:${user.id}`})
         for(let attempt=0;;attempt++){
           await lease.attempt()
           const controller=new AbortController();controllers.add(controller);let timedOut=false
@@ -66,7 +67,8 @@ export async function apply(ctx, config = {}) {
           const timer=setTimeout(()=>{timedOut=true;controller.abort()},s.timeout)
           let response,payload
           try{
-            response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${s.key}`},body:JSON.stringify(request),signal:controller.signal})
+            await ctx.store.append(user.id,'agent/model-dispatched',{callId,runId,attempt:attempt+1,serialization,requestSha256,requestBytes},{actor:`agent:${user.id}`})
+            response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${s.key}`},body:wireBody,signal:controller.signal})
             try{payload=await response.json()}catch{throw new AdmissionError('invalid-provider-response','The provider did not return a valid JSON response.',{status:502})}
             attemptUsage.push(payload.usage??null);responseValue=payload
             if(!response.ok){

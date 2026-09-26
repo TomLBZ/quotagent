@@ -28,3 +28,11 @@ Native composition `agent-runtime/code/product.mjs` owns `product-provider-contr
 `provider-controls.mjs` reserves before dispatch, reconciles only complete usage, retains unknown attempt cost, and never retries timeout/network ambiguity. Tariffs are exact provider/model bindings with human source/date, integer micro-unit estimates and separate currencies; they are not bills. Unknown counts/cost remain unknown. Runtime views are read-only; admin sees aggregate metadata only. `context.mjs` omits whole records/turns and records counts, bytes, hashes and reasons. `perspective.mjs` prevents role changes from repurposing saved context; untagged legacy tasks require a new task, and previous-role transcripts are explicitly excluded with ledger evidence.
 
 `product-evaluation.mjs` replays **recorded assertions**, not fresh model execution. Four fixture families exercise materials, subcontract scope, currency/terms and untrusted-source labels but do not establish live reasoning quality or attack resistance. Counterexamples require human acceptance and have no delete/overwrite route. Baselines report recorded status/token/duration coverage; elapsed time can include human waits. Quote completeness, procurement cycle-time improvement and business quality stay unmeasured. Supplier descriptive observations remain G2 commercial-workbench ownership. Live public model/user evaluation belongs to the root release check.
+
+Measured dispatch follow-up (ADR-0043):
+`node src/system/agent-runtime/tests/dispatch.mjs`, 2026-09-26, exit0;
+[two checks PASS](runtime-controls-2026-09-26/dispatch.json). The actual local HTTP
+request (150 UTF-8 bytes, including Unicode and newlines) equals reconstruction
+from the recorded request and declared sorted-key serialization. Boundary hash and
+length agree; replay sends no second request. This observes local dispatch, not
+remote model execution or historical calls without this event.
