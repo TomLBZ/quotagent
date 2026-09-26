@@ -1,0 +1,1 @@
+{"id":"system/exchange-workbench","name":"Exchange workbench","version":"0.1.0","layer":"system","description":"Account-owned durable QEP deliveries, portable packages, HTTP pairing, receipts and conflict review.","entry":"code/index.mjs","native":true,"dependencies":["system/workspace-store","system/accounts","system/settings","system/webui"],"provides":["exchange"]}

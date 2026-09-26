@@ -77,7 +77,7 @@ export function apply(ctx, config = {}) {
       res.end(req.method === 'HEAD' ? undefined : content)
     } catch(error) {
       console.error('[webui]',req.method,path,error.message)
-      json(res,error.status || 400,{ok:false,error:error.message || 'Unable to complete this action'})
+      json(res,error.status || 400,{ok:false,error:error.message || 'Unable to complete this action',...(error.code?{code:error.code}:{}),...(error.nextAction?{nextAction:error.nextAction}:{}),...(error.status===409&&error.details?{details:error.details}:{})})
     }
   }
   ctx.provide('web',{
@@ -88,7 +88,7 @@ export function apply(ctx, config = {}) {
     routes: () => routes.map(({method,path})=>({method,path})),
     async listen() {
       server = createServer(handle)
-      await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(config.port || 8093,config.host || '127.0.0.1',resolve) })
+      await new Promise((resolve,reject)=>{ server.once('error',reject); server.listen(config.port ?? 8093,config.host || '127.0.0.1',resolve) })
       return server.address()
     },
   })

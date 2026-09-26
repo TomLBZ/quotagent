@@ -1,7 +1,7 @@
 const groups=[
  {id:'quotation',label:'Quotation work',icon:'file',ids:['workspace','rfqs','quotes','orders','messages','commercial','team']},
  {id:'management',label:'Manage application',icon:'shield',ids:['admin','plugins']},
- {id:'sources',label:'Sources & connections',icon:'mail',ids:['ingestion','mail','telegram','connections']},
+ {id:'sources',label:'Sources & connections',icon:'mail',ids:['ingestion','mail','telegram','connections','exchange']},
  {id:'personalize',label:'Personalize',icon:'puzzle',ids:['extensions','installed-tools','workspace-style','ai-usage','plugin-settings']},
 ]
 export function groupNavigation(items){

@@ -18,7 +18,7 @@ export async function api(path, options = {}) {
   try { result = text ? JSON.parse(text) : {} } catch { result = { error: text || 'The server returned an unreadable response.' } }
   if (!response.ok || result.ok === false) {
     const error = new Error(typeof result.error === 'string' ? result.error : result.error?.message || result.message || result.reason || `Request failed (${response.status})`)
-    error.status = response.status; throw error
+    error.status = response.status; error.code=result.code; error.nextAction=result.nextAction; error.details=result.details; throw error
   }
   return result
 }
