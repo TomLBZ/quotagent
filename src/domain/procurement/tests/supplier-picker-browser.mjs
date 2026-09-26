@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict'
+import {browserHarness} from '../../../system/file-store/tests/browser-helpers.mjs'
+
+const h = await browserHarness('supplier-picker')
+try {
+  const page = await h.login(process.env.CONTRACTOR_EMAIL || 'contractor@demo.local')
+  await h.nav(page,'Requests')
+  await page.getByRole('button',{name:'New request',exact:true}).click()
+  let form = page.getByRole('dialog',{name:'Create a request for quotation',exact:true})
+  const cards = form.locator('.supplier-options label')
+  assert(await cards.count() >= 2,'The GUI fixture needs at least two authorized supplier contacts')
+  const contacts = []
+  for (let index = 0; index < 2; index++) {
+    const card = cards.nth(index), detail = await card.locator('small').innerText()
+    contacts.push({company:await card.locator('strong').innerText(),name:detail.split(' · ')[0],email:detail.match(/[^\s·]+@[^\s·]+/)?.[0]})
+  }
+  assert(contacts.every(row=>row.email),'Use two displayed local contacts with actual email addresses')
+  const search = form.getByRole('searchbox',{name:'Search suppliers',exact:true})
+  const selected = form.locator('.supplier-options input:checked')
+  assert.equal(await selected.count(),0)
+  await search.fill(`  ${contacts[0].company.toUpperCase()}  `)
+  assert(await cards.count() >= 1)
+  assert.equal(await selected.count(),0,'A search must not automatically invite anyone')
+  await cards.filter({hasText:contacts[0].email}).getByRole('checkbox').check()
+  await search.fill(contacts[0].name)
+  assert(await cards.filter({hasText:contacts[0].email}).getByRole('checkbox').isChecked())
+  await search.fill(contacts[0].email)
+  assert.equal(await cards.count(),1)
+  assert(await cards.getByRole('checkbox').isChecked())
+  h.checks.push('Company search ignores case/outer whitespace; actual name and email find the same selected supplier, and searching never auto-selects')
+
+  await search.fill(contacts[1].email)
+  assert.equal(await cards.count(),1)
+  assert.equal(await cards.getByRole('checkbox').isChecked(),false)
+  await cards.getByRole('checkbox').check()
+  await form.getByRole('status').filter({hasText:'2 selected · 1 hidden by search'}).waitFor()
+  await search.fill(`no-matching-supplier-${Date.now()}`)
+  assert.equal(await cards.count(),0)
+  await form.getByText('No suppliers match this search.',{exact:true}).waitFor()
+  await form.getByRole('status').filter({hasText:'2 selected · 2 hidden by search'}).waitFor()
+  await page.screenshot({path:`${h.directory}/01-no-matches-selections-retained.png`,animations:'disabled'})
+  await form.getByRole('button',{name:'Clear supplier search',exact:true}).click()
+  assert.equal(await search.inputValue(),'')
+  assert.equal(await selected.count(),2)
+  for(const contact of contacts)assert(await cards.filter({hasText:contact.email}).getByRole('checkbox').isChecked())
+  h.checks.push('Two explicit choices survive disjoint filters and an empty result; selected/hidden counts stay truthful and Clear restores both checked cards')
+
+  const title = `[Supplier search check] ${Date.now()}`
+  await form.getByLabel('Request title',{exact:true}).fill(title)
+  await form.getByLabel('Item 1 description',{exact:true}).fill('Supplier picker private draft fixture')
+  const saved = await h.click(page,'workspace/create-rfq','Save request draft')
+  assert.equal(saved.rfq.status,'draft')
+  assert.equal(saved.rfq.supplierIds.length,2)
+  await page.getByRole('button',{name:'Edit draft',exact:true}).click()
+  form = page.getByRole('dialog',{name:'Edit request draft',exact:true})
+  const reopened = form.locator('.supplier-options label')
+  assert.equal(await form.locator('.supplier-options input:checked').count(),2)
+  for(const contact of contacts)assert(await reopened.filter({hasText:contact.email}).getByRole('checkbox').isChecked())
+  await form.getByRole('searchbox',{name:'Search suppliers',exact:true}).scrollIntoViewIfNeeded()
+  await page.screenshot({path:`${h.directory}/02-reopened-private-draft.png`,animations:'disabled'})
+  await form.getByRole('button',{name:'Cancel',exact:true}).click()
+  h.checks.push('GUI save creates only a private draft; reopening confirms both named suppliers persisted without hidden-selection loss')
+  await h.finish({rfqId:saved.rfq.id,contacts,scope:'Actual native application GUI; private draft only, no publication or external commitment'})
+} catch(error) {await h.fail(error);throw error}
+finally {await h.close()}

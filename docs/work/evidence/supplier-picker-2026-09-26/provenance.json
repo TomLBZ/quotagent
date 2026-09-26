@@ -1,0 +1,13 @@
+{
+  "backendRevision": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+  "frontendBaseRevision": "031d0e5183db2af79e64dbd0f1b602be57dff5e4",
+  "frontend": "Local build from current working tree with supplier-picker change; not deployed",
+  "frontendSourceSha256": "02bcddbd23f454ff695f807f7a9dce6567ec3100588a61d7037641e1c54df25e",
+  "data": "Isolated existing tmp/agent-experience/responses/data",
+  "server": "127.0.0.1:8648, stopped after test",
+  "build": {
+    "ok": true,
+    "modules": 114
+  },
+  "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ EVIDENCE_DIR=tmp/agent-experience/supplier-picker/browser node src/domain/procurement/tests/supplier-picker-browser.mjs"
+}
