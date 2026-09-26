@@ -1,0 +1,1 @@
+{"name":"response-workbench","version":"1.0.0","layer":"domain","entry":"code/index.mjs","provides":["responses"],"description":"Response deadlines, reviewed promises and reminders, read receipts and sourced printable records"}

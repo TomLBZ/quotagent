@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "at": "2026-09-26T04:38:45.516Z",
+  "root": "/workspace/projects/quotagent/tmp/responses-native-HIqhwk",
+  "checks": [
+    "Real procurement RFQ with normalized clarification cutoff; frozen supplier promise sends only after account-owned action approval via QEP; fixed-time coverage deterministic with zero read writes and no other-bidder exposure",
+    "Received detail records authenticated reader/version and real QEP return; repeat within 60 seconds adds no event, later view increments first/last/count; owner/unrelated account/other bidder cannot invent or inspect receipt",
+    "Coverage counts only current submitted offers; private drafts and stale quotes excluded; reviewed exact reminder is received; request amendment invalidates an older prepared promise and its old due basis",
+    "Automatic private due/overdue and clarification reminders are durable and deduplicated, with no automatic counterparty message; actual past clarification cutoff refuses new question",
+    "Accepted colleague response remains pinned after workspace switch; actual independent signed order supports exact currency amount and matched approval wait; print preserves lines/revisions/hash anchors while removing private quote fields and escaping HTML; report/CSV/TXT/print share one read-only source calculation; later acknowledgments do not recount orders and retrospective overdue excludes later responses",
+    "Restart replays operational promises, receipts and reminders; mounted plugin disposal removes services/routes/tools/schema/policy and scheduler performs no later writes"
+  ]
+}
