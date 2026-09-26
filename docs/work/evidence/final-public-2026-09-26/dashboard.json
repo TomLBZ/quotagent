@@ -1,0 +1,22 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "at": "2026-09-26T05:41:03.995Z",
+  "checks": [
+    "Actual public dashboard Projects & routes link opens the independent application sign-in through the existing gateway",
+    "The deployed application describes its exact public entry at /quotagent/api/routes without requiring account identity",
+    "The discovered entry supports account sign-in and opens the agent-first contractor workspace with navigable plugin actions"
+  ],
+  "errors": [],
+  "screenshots": [
+    "01-dashboard-entry.png",
+    "02-account-workspace.png"
+  ],
+  "discovery": {
+    "prefix": "/quotagent",
+    "type": "proxy",
+    "target": "http://127.0.0.1:8093",
+    "link": "/quotagent/",
+    "entry_source": "service:/api/routes"
+  },
+  "ok": true
+}

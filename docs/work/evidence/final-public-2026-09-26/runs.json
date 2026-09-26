@@ -1,0 +1,182 @@
+[
+  {
+    "name": "dashboard",
+    "revision": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/dashboard-final node src/system/webui/tests/dashboard-browser.mjs",
+    "report": "dashboard.json",
+    "groups": 3,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/dashboard-final"
+  },
+  {
+    "name": "attachments",
+    "revision": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/attachments node src/system/attachments/tests/browser.mjs",
+    "report": "attachments.json",
+    "groups": 4,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/attachments"
+  },
+  {
+    "name": "retention",
+    "revision": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/retention FRESH_ACCOUNTS=1 node src/system/retention/tests/browser.mjs",
+    "report": "retention.json",
+    "groups": 5,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/retention"
+  },
+  {
+    "name": "evidence",
+    "revision": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/evidence node src/system/evidence/tests/browser.mjs",
+    "report": "evidence.json",
+    "groups": 4,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/evidence"
+  },
+  {
+    "name": "responses",
+    "revision": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/responses node src/domain/response-workbench/tests/browser.mjs",
+    "report": "responses.json",
+    "groups": 6,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/responses"
+  },
+  {
+    "name": "metrics",
+    "revision": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/metrics node src/domain/response-workbench/tests/metrics-browser.mjs",
+    "report": "metrics.json",
+    "groups": 5,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/metrics"
+  },
+  {
+    "name": "styles-help",
+    "revision": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/styles-help node src/system/workspace-styles/tests/browser.mjs",
+    "report": "styles-help.json",
+    "groups": 7,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/styles-help"
+  },
+  {
+    "name": "current-help",
+    "revision": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/current-help node src/system/user-guide/tests/current-browser.mjs",
+    "report": "current-help.json",
+    "groups": 4,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/current-help"
+  },
+  {
+    "name": "exchange",
+    "revision": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/exchange node src/system/exchange-workbench/tests/browser.mjs",
+    "report": "exchange.json",
+    "groups": 4,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/exchange"
+  },
+  {
+    "name": "resend",
+    "revision": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/resend node src/system/exchange-workbench/tests/resend-browser.mjs",
+    "report": "resend.json",
+    "groups": 3,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/resend"
+  },
+  {
+    "name": "qep-mail",
+    "revision": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/qep-mail node src/system/exchange-mail/tests/browser.mjs",
+    "report": "qep-mail.json",
+    "groups": 4,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/qep-mail"
+  },
+  {
+    "name": "ingestion-review",
+    "revision": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/ingestion-review node src/domain/ingestion/tests/review-browser.mjs",
+    "report": "ingestion-review.json",
+    "groups": 3,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/ingestion-review"
+  },
+  {
+    "name": "offline",
+    "revision": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/offline node src/system/webui/tests/offline-browser.mjs",
+    "report": "offline.json",
+    "groups": 4,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/offline"
+  },
+  {
+    "name": "declarations",
+    "revision": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/declarations node src/domain/procurement/tests/public-declarations-browser.mjs",
+    "report": "declarations.json",
+    "groups": 5,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/declarations"
+  },
+  {
+    "name": "operations",
+    "revision": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/operations node src/system/observability/tests/browser.mjs",
+    "report": "operations.json",
+    "groups": 6,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/operations"
+  },
+  {
+    "name": "batches",
+    "revision": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/batches node src/domain/procurement/tests/submission-batches-browser.mjs",
+    "report": "batches.json",
+    "groups": 4,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/batches"
+  },
+  {
+    "name": "scope",
+    "revision": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/scope node src/domain/procurement/tests/scope-terms-negotiation-browser.mjs",
+    "report": "scope.json",
+    "groups": 8,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/scope"
+  },
+  {
+    "name": "commercial",
+    "revision": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/commercial FRESH_ACCOUNTS=1 node src/domain/commercial-workbench/tests/browser.mjs",
+    "report": "commercial.json",
+    "groups": 6,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/commercial"
+  },
+  {
+    "name": "settings",
+    "revision": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/settings node src/system/settings/tests/public-browser.mjs",
+    "report": "settings.json",
+    "groups": 8,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/settings"
+  },
+  {
+    "name": "sandbox",
+    "revision": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/sandbox FRESH_ACCOUNTS=1 node src/system/sandbox/tests/browser.mjs",
+    "report": "sandbox.json",
+    "groups": 4,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/sandbox"
+  }
+]

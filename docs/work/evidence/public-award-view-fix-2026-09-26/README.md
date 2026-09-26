@@ -13,3 +13,8 @@ row’s currency to `QuoteLineBasis`. The finalized OrderCard retains its own or
 context. No backend, record, protocol or price calculation changes.
 `git diff --check` passed. Actual public replay of the same meaningful GUI journey
 on a new committed build is required; it is not claimed passed at this fix checkpoint.
+
+Corrected immutable `67bd9af5b73036104f81abdacae0883fd8d2ffce` replay of the same
+command passed [all5 GUI groups with0 JavaScript errors](public-replay.json).
+The actual supplier confirmation, independent grant and signed PO preserve the
+alternative/additional scope and firm milestone. Original failure remains above.

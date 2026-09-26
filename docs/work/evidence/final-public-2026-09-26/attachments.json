@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "at": "2026-09-26T05:42:28.337Z",
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "checks": [
+    "RFQ created and published through GUI; attachment initially private, exact recipient review delivers via real QEP, intended supplier downloads identical bytes while the other invited supplier sees no file",
+    "Same filename creates immutable superseding version, prior bytes still download, delivered removal becomes visible tombstone and counterparty history remains accessible",
+    "Real PNG renders, valid PDF rendered to a bounded canvas with actual nonblank page pixels and explicit download fallback, escaped text retains literal markup, bounded text preview discloses exact truncation, unsupported media offers its original download",
+    "Attachment versions and removal state survive reload; narrow mobile layout has no horizontal page overflow"
+  ],
+  "jsErrors": [],
+  "rfqId": "rfq-1bc8a12c-6a5",
+  "title": "[File evidence] Request 1790401320356",
+  "filename": "scope-1790401320356.txt",
+  "attachmentIds": [
+    "attachment-daf20cf3-8797-4642-adf2-01d24d23f684",
+    "attachment-665190c4-6496-4cf1-9186-82372a6bba40"
+  ]
+}

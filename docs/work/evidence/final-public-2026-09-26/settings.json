@@ -1,0 +1,33 @@
+{
+  "at": "2026-09-26T05:56:18.740Z",
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "checks": [
+    "Fresh account imports two native schemas through zero-write masked YAML preview and explicit apply; effective provenance names the actual file and digest automatic permission stays off",
+    "Export redacts secrets; initialize-only import preserves existing account overrides, and a plugin preflight veto keeps the valid digest recipient without sending",
+    "27 separate visible IMAP syncs import actual fictitious MIME messages and produce 27 durable notifications; a no-new-mail sync adds none, and connection/sync never send SMTP",
+    "Private mail send review produces a second real notification source without executing or sending that email",
+    "Exact GUI digest review sends one capped two-item count summary over SMTP, excludes source/private detail, records its receipt and blocks immediate repeat while preserving 26 eligible items",
+    "Server pagination reaches actual activity beyond25; GUI shows explicit mail and origin-view review attribution, then marks all27 matching mail notices read across pages",
+    "Account mute survives reload and suppresses alerts while retaining unread history; unsaved preferences remain intact during a 10-second open-form check",
+    "390px notification controls fit without horizontal overflow or JavaScript errors; fixture records exactly one explicitly reviewed digest delivery"
+  ],
+  "screenshots": [
+    "01-masked-yaml-preview.png",
+    "02-initialize-and-plugin-veto.png",
+    "03-bounded-digest-review.png",
+    "04-smtp-receipt-and-throttle.png",
+    "05-real-activity-second-page.png",
+    "06-review-source-attribution.png",
+    "07-persisted-mute-preserved-history.png",
+    "08-mobile-notification-window.png"
+  ],
+  "errors": [],
+  "scope": "New GUI-created fixture account; real loopback IMAP/SMTP only, no Telegram call or synthetic application-ledger seeding. Multi-producer merging remains covered by native/local evidence.",
+  "account": {
+    "id": "u-9a053d44-f5e5-48dd-a73a-5e72f72d6b48",
+    "email": "settings-contractor-1790402178740-4jf9l@fixture.invalid"
+  },
+  "ok": true,
+  "smtpSends": 1,
+  "telegramSends": 0
+}

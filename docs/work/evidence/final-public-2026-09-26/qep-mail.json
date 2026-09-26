@@ -1,0 +1,39 @@
+{
+  "at": "2026-09-26T05:42:11.905Z",
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "checks": [
+    "Both accounts configure and test actual IMAP/SMTP through GUI without sending; contractor publishes explicit scoped RFQ, prepares exact private QEP email and approves one SMTP send while QEP remains queued",
+    "Supplier synchronizes the actual MIME attachment, previews verified paired signatures, explicitly imports the request, then separately reviews and sends its original signed receipt reply",
+    "Only buyer import of the original signed receipt marks QEP delivered; the email reader distinguishes mail sent from QEP delivered",
+    "An exact structured fixture bounce is linked as external reported failure, preserves the signed QEP receipt, causes no resend and survives full reload/mobile view"
+  ],
+  "screenshots": [
+    "01-private-package-draft.png",
+    "review-0-buyer.png",
+    "02-received-original-package.png",
+    "03-verified-import.png",
+    "review-0-supplier.png",
+    "04-mail-accepted-qep-delivered.png",
+    "05-reported-bounce-with-signed-receipt.png",
+    "06-mobile-mail-provenance.png"
+  ],
+  "errors": [],
+  "scope": "Fictitious loopback SMTP/IMAP; fixture servers route only to each other and never forward externally.",
+  "accounts": {
+    "buyer": "u-0b7c8605-1a2d-4366-80f7-f0fce1e3fb36",
+    "supplier": "u-6a4ecae8-0416-4848-9990-14fca244185f"
+  },
+  "rfqId": "rfq-6f6ce74e-ed3",
+  "deliveryId": "01M3E3RS7ZTGG5ZJBTVCY5NB49",
+  "mailId": "mail-draft-5cdcf3e1-73ce-4ca2-863a-e33f852f50d7",
+  "nativeInventory": {
+    "id": "exchange-mail",
+    "enabled": true,
+    "repoId": "system/exchange-mail"
+  },
+  "ok": true,
+  "smtpSends": {
+    "buyer": 1,
+    "supplier": 1
+  }
+}

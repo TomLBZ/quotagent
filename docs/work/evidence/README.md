@@ -8,6 +8,7 @@ native capability exists. Requirement acceptance links are in the
 
 | Current source area | Evidence |
 |---|---|
+| Requirement-completion public release67bd9af | [20 GUI journeys and generated-plugin continuation](final-public-2026-09-26/README.md) |
 | Public integration at immutablef2366a0 | [Eight GUI journeys](integrated-public-2026-09-26/README.md) |
 | Initial agent controls, styles, guides and usage | [Agent experience](agent-experience-2026-09-26/README.md) |
 | Configuration, notifications and SMTP digests | [G9](g9-configuration-and-notifications.md) |
@@ -20,8 +21,8 @@ native capability exists. Requirement acceptance links are in the
 | Provider controls and recorded-run evaluation | [Runtime](g6-auditable-runtime.md) |
 | Generated extension evolution | [Evolution](g7-native-evolution.md) |
 
-The first four goal enhancements have public evidence; the ongoing compatible
-requirement closure still needs final integrated release and independent evaluation.
+The first four goal enhancements and the completed compatible feature release have
+public evidence; final independent preference evaluation remains separate.
 Local protocol services exercise actual SMTP/IMAP/MCP/A2A/HTTP boundaries without
 claiming external-account delivery or live model quality. Original raw temporary
 artifacts named by reports may be larger than retained summaries/screenshots.

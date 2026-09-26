@@ -1,0 +1,22 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "stamp": 1790402033538,
+  "ok": true,
+  "checks": [
+    "An incomplete draft stays editable; GUI publication refuses missing measurement/responsibility, then succeeds only after human-authored dimension, unit, owner, deliverables and exclusions",
+    "Supplier explicitly offers five alternative pairs plus additional packing, assumptions/exclusions and a named firm dated milestone; contractor receives exact declarations with submitted total155",
+    "Alternative/additional offer follows nonbinding award, supplier confirmation, different colleague grant and contractor signature; signed PO preserves exact line classifications, assumptions, exclusions and firm milestone in both party views",
+    "Broadcast answer becomes a private structured candidate with authored allowed key/value; lookup returns no candidate content until a human reviews and publishes the selected source-bound fields",
+    "Amendment causes content-free wrong-revision lookup; explicit sourced adaptation creates only a private answer until ordinary broadcast; deprecation and page reload retain the original source and history"
+  ],
+  "errors": [],
+  "ids": {
+    "rfq": "rfq-26838430-9bb",
+    "quote": "quote-931e9c04-d67",
+    "order": "po-award-a5523511-6ff",
+    "action": "b86ba10b-0178-46c4-823e-a38655bcb6b7",
+    "faqRfq": "rfq-ad22c035-553",
+    "faq": "faq-cc4a594b-b94"
+  },
+  "at": "2026-09-26T05:54:58.068Z"
+}

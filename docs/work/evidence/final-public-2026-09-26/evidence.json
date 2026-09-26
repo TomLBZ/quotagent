@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "at": "2026-09-26T05:51:31.593Z",
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "checks": [
+    "GUI chooses real ledger range, creates Ed25519 signed audit bundle and separately downloads its public verification key with fingerprint/trust explanation",
+    "Separate reviewer account uploads carried package: missing trusted key fails, independently supplied key validates chain/Merkle/proofs/signature, altered signature fails with retained readable report",
+    "Actual configured model invoked only through assistant GUI; evidence GUI reconstructs its containing ledger, source digest and exact dispatch bytes and downloads the recorded request",
+    "Role-owned verification history survives reload; admin observations expose only counts, mobile verification screen fits viewport"
+  ],
+  "jsErrors": [],
+  "exportId": "audit-c7c9e6aa-ad41-45fc-ae81-c4884166c176",
+  "fileId": "file-f47cdc21-1afc-4ab4-8895-f587a5db5684",
+  "modelCallId": "953b29b6-52b9-4e8e-9b3a-ab5e25729850",
+  "release": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+  "releaseProvenance": "release.json",
+  "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/evidence node src/system/evidence/tests/browser.mjs"
+}

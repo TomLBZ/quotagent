@@ -1,0 +1,25 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "title": "[Scope terms check] Cable 1790402221296",
+  "ok": true,
+  "checks": [
+    "GUI term library supplies sourced missing term; structured RFQ explicitly declares measurement factors, responsibility, deliverables and exclusions before reviewed publication",
+    "Supplier authors original1000cm×0.20; declared exact conversion yields10m×20 with source retained, private cost12 and an explicit24h offered term",
+    "Contractor sees both required48h and offered24h, reviews and confirms an explicit exception bound to exact request/quote revisions without changing source declarations",
+    "Supplier declares all private limits and sourced cost; below-floor proposal is refused and attempt1 retained without sharing any price",
+    "Exact action review shows20→19 and private18floor; human approval creates only private quote revision, while contractor still sees200 submitted total",
+    "Separate GUI submission shares190, source revision invalidates earlier term decision; closing and browser reload retain both attempts and explicit outcome",
+    "Joined colleague opens a sourced link from their own workspace: record stays hidden until explicit authorized team switch, and URL preserves requested RFQ and workspace after reload",
+    "Counterparty holding the same record cannot switch into contractor realm; source link preserves explicit access refusal and does not reveal linked private details"
+  ],
+  "errors": [],
+  "ids": {
+    "rfq": "rfq-8c8931ee-669",
+    "quote": "quote-f691e19d-604",
+    "revision": "quote-0656e0c6-1bf",
+    "thread": "negotiation-9c821cb5-a74",
+    "action": "a6c9d209-cd4c-47af-9309-d51352da5abc",
+    "term": "term-adcccdb9-4c7"
+  },
+  "at": "2026-09-26T05:57:23.962Z"
+}

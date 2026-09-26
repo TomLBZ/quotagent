@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "at": "2026-09-26T05:43:27.496Z",
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "checks": [
+    "Contractor Help explains explicit declarations and current-scope response rules; real links open Requests, Responses and the Business measures tab with its intended context",
+    "Evidence, signed-email and isolated-demo Help preserves trust/delivery limitations and opens the real pages; visiting sandbox controls does not start or reset a demo",
+    "Supplier Help explains separate batch reviews/receipts and private supplier-party scope; quotation destination is reachable",
+    "Admin Help links to scoped operations and provider usage, explains estimate/unknown boundaries and omits client-only demo walkthrough"
+  ],
+  "jsErrors": [],
+  "release": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+  "scope": "Public Help navigation and factual text; no chat/model calls, commercial writes, plugin lifecycle or sandbox mode changes",
+  "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/current-help node src/system/user-guide/tests/current-browser.mjs"
+}

@@ -1,0 +1,74 @@
+[
+  {
+    "wait": 0,
+    "innerWidth": 390,
+    "html": 390,
+    "body": 390,
+    "overflow": [
+      {
+        "tag": "BUTTON",
+        "class": "",
+        "width": 80,
+        "right": 426,
+        "scroll": 80,
+        "text": "Plugin settings"
+      },
+      {
+        "tag": "BUTTON",
+        "class": "",
+        "width": 85,
+        "right": 464,
+        "scroll": 85,
+        "text": "Limited live trial"
+      }
+    ]
+  },
+  {
+    "wait": 100,
+    "innerWidth": 390,
+    "html": 390,
+    "body": 390,
+    "overflow": [
+      {
+        "tag": "BUTTON",
+        "class": "",
+        "width": 80,
+        "right": 426,
+        "scroll": 80,
+        "text": "Plugin settings"
+      },
+      {
+        "tag": "BUTTON",
+        "class": "",
+        "width": 85,
+        "right": 464,
+        "scroll": 85,
+        "text": "Limited live trial"
+      }
+    ]
+  },
+  {
+    "wait": 500,
+    "innerWidth": 390,
+    "html": 390,
+    "body": 390,
+    "overflow": [
+      {
+        "tag": "BUTTON",
+        "class": "",
+        "width": 80,
+        "right": 426,
+        "scroll": 80,
+        "text": "Plugin settings"
+      },
+      {
+        "tag": "BUTTON",
+        "class": "",
+        "width": 85,
+        "right": 464,
+        "scroll": 85,
+        "text": "Limited live trial"
+      }
+    ]
+  }
+]

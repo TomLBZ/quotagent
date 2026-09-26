@@ -1,0 +1,22 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "at": "2026-09-26T05:57:03.683Z",
+  "checks": [
+    "Contractor reviews the declared scenario, explicitly starts eight actual native workflow steps, and sees its independently reviewed acknowledged order and two offers",
+    "Normal request editor creates a private sandbox draft; a second tab on the same account sees the same sandbox identity",
+    "At390px the visible demo banner does not overflow; reset removes only practice edits, exit restores original live records, resume preserves the new order, and clear removes only this demo",
+    "Supplier has a separate fixed-role sandbox with only its own private costs, prepares a quote through the normal editor, and clears practice without changing live quotes"
+  ],
+  "screenshots": [
+    "01-reviewed-demo-steps.png",
+    "02-contractor-demo-receipts.png",
+    "03-native-order.png",
+    "04-normal-draft-editor-result.png",
+    "05-mobile-active-boundary.png",
+    "06-live-workspace-restored.png",
+    "07-supplier-demo-receipts.png",
+    "08-supplier-private-draft.png"
+  ],
+  "errors": [],
+  "ok": true
+}

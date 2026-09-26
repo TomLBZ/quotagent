@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "at": "2026-09-26T05:46:15.636Z",
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "checks": [
+    "GUI retention policy saves explicit zero-day review threshold; current object reference remains ineligible and disposal stays disabled",
+    "GUI creates an owner project and attached RFQ file; project patch raises the required age despite zero-day account policy, then explicit project edit restores eligibility",
+    "GUI removes object reference with tombstone, applies named reasoned hold to exact file, visibly blocks disposal, then records explicit hold release",
+    "Action-center GUI shows frozen filename/digest/reason; human approval removes actual bytes, retains truthful outcome and tombstone, result navigation and reload remain usable",
+    "Admin all-account observations omit private filenames and bodies; account files and retention table fit narrow mobile viewport"
+  ],
+  "jsErrors": [],
+  "fileId": "file-cf1d7b68-78e1-45a2-b3e9-b2274636cba7",
+  "attachmentId": "attachment-11b9bc2f-58af-45a1-a76b-3fae59834387",
+  "approvalId": "2ab05e79-cd36-492a-893a-d06e27178ff4",
+  "holdId": "hold-00bdb29d-e40a-48bc-8177-1b9dd859a14d",
+  "filename": "retention-1790401566458.txt"
+}

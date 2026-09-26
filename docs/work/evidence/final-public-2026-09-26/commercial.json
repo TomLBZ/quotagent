@@ -1,0 +1,44 @@
+{
+  "ok": true,
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "title": "[Commercial check] Panels 2026-09-26T05:59:38.636Z",
+  "rfqId": "rfq-7a38e157-863",
+  "quoteIds": [
+    "quote-a2f8dc66-a9e",
+    "quote-b3a32653-ce3"
+  ],
+  "fixtureParties": [
+    {
+      "name": "Commercial buyer 1790402378636",
+      "email": "commercial-buyer-1790402378636@local.test",
+      "role": "contractor",
+      "id": "u-8119881e-3eac-4c26-a615-145d3e80ee3c"
+    },
+    {
+      "name": "Commercial supplier 1790402378636",
+      "email": "commercial-supplier-1790402378636@local.test",
+      "role": "supplier",
+      "id": "u-ff06fd44-08d3-40a7-a667-2b4908413cb2"
+    },
+    {
+      "name": "Commercial second 1790402378636",
+      "email": "commercial-second-1790402378636@local.test",
+      "role": "supplier",
+      "id": "u-6a951d7e-5519-49c3-9023-81622f745307"
+    }
+  ],
+  "reviewer": {
+    "name": "Commercial reviewer 1790402378636",
+    "email": "commercial-reviewer-1790402378636@local.test"
+  },
+  "checks": [
+    "Supplier GUI commercial terms, unsaved cost fields/focus across two background refreshes, private seven-factor costing, account margin setting and exact reviewed below-floor draft prices (£170 including tax/freight)",
+    "Dated supplier availability, task dependency scheduling, visible delivery conflict and archival capacity release without altering firm quotation",
+    "Quote text instruction/private-cost warnings remain advisory; source-linked deterministic component improvement explains fixed-peer assumption; entered200/-10/0/100/0 explicitly normalizes to50/0/0/50/0 with saved feedback",
+    "Received terms; missing FX explicitly unknown; manually sourced timestamp-valid FX/reference price; exact GBP normalization, warning source, weighted what-if archive, CSV export and private sourced assumptions",
+    "Descriptive item/currency history without rankings; supplier-confirmed independently reviewed fixture award; genuine PO CSV download/upload round trip; retained original failed mapping; sourced weekly activity report",
+    "Private cost reconstruction after browser reload, no JavaScript errors and mobile report without horizontal overflow"
+  ],
+  "jsErrors": [],
+  "at": "2026-09-26T06:00:09.282Z"
+}

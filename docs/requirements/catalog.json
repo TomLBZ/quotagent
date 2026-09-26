@@ -4403,14 +4403,20 @@
       "contract": "src/system/webui/requirements/current.md",
       "disposition": "native-agentic-replacement",
       "currentOutcome": "Independent application serves health and one self-described sign-in entry for existing dashboard Projects & routes.",
-      "status": "implemented",
-      "reason": "Added missing public /api/routes; external dashboard code entry_via_service in /workspace/services/dashboard/dashboard.py consumes this schema. No cross-repo edit.",
+      "status": "verified",
+      "reason": "Actual public dashboard Projects & routes discovers /api/routes and opens account sign-in and the agent-first workspace. Role separation remains account-based.",
       "acceptance": [
         {
           "command": "node src/system/webui/tests/discovery.mjs",
           "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/discovery.json",
           "scope": "Actual local ephemeral HTTP with configurable prefix",
           "observed": "Single public app entry, health, slash redirect and disposal closes server; public dashboard replay pending final deployment."
+        },
+        {
+          "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/dashboard-final node src/system/webui/tests/dashboard-browser.mjs",
+          "evidence": "docs/work/evidence/final-public-2026-09-26/dashboard.json",
+          "scope": "Public Chromium GUI on immutablebf2cb4b; dashboard discovery implementation unchanged in67bd9af.",
+          "observed": "Three groups passed: actual dashboard click-through, deployed self-description entry_source=service:/api/routes, account sign-in and agent-first workspace; zero browser errors."
         }
       ],
       "implementation": {
@@ -4428,8 +4434,8 @@
         "group": "G8",
         "auditReason": "Current role-specific modern GUI/public gateway and real assistant, marketplace, business controls have public evaluator evidence. Deterministic no-model advice and path-based arbitrary identity are superseded by live AI and signed-in account routes."
       },
-      "resolution": "Added missing public /api/routes; external dashboard code entry_via_service in /workspace/services/dashboard/dashboard.py consumes this schema. No cross-repo edit.",
-      "remaining": "After normal public deployment, click Quotagent entry from existing public dashboard and retain browser evidence. Current deployed endpoint still404 at review time."
+      "resolution": "Actual public dashboard Projects & routes discovers /api/routes and opens account sign-in and the agent-first workspace. Role separation remains account-based.",
+      "remaining": ""
     },
     {
       "id": "FR-USREQ-005",
@@ -4724,8 +4730,8 @@
       "contract": "src/system/webui/requirements/current.md",
       "disposition": "native-agentic-replacement",
       "currentOutcome": "Gateway serves account sign-in and each authorized role gets its own distinct available pages/data; dashboard discovers the single app entry.",
-      "status": "implemented",
-      "reason": "Role-encoded URL impersonation is superseded by requested persistent account roles. Clear dashboard access retained.",
+      "status": "verified",
+      "reason": "Actual public dashboard Projects & routes discovers /api/routes and opens account sign-in and the agent-first workspace. Role separation remains account-based.",
       "acceptance": [
         {
           "command": "node src/system/webui/tests/discovery.mjs",
@@ -4744,6 +4750,12 @@
           "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
           "scope": "Public real browser, two account roles,390px",
           "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+        },
+        {
+          "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/dashboard-final node src/system/webui/tests/dashboard-browser.mjs",
+          "evidence": "docs/work/evidence/final-public-2026-09-26/dashboard.json",
+          "scope": "Public Chromium GUI on immutablebf2cb4b; dashboard discovery implementation unchanged in67bd9af.",
+          "observed": "Three groups passed: actual dashboard click-through, deployed self-description entry_source=service:/api/routes, account sign-in and agent-first workspace; zero browser errors."
         }
       ],
       "implementation": {
@@ -4761,8 +4773,8 @@
         "group": "G8",
         "auditReason": "Current role-specific modern GUI/public gateway and real assistant, marketplace, business controls have public evaluator evidence. Deterministic no-model advice and path-based arbitrary identity are superseded by live AI and signed-in account routes."
       },
-      "resolution": "Role-encoded URL impersonation is superseded by requested persistent account roles. Clear dashboard access retained.",
-      "remaining": "Final deployed public dashboard click-through pending; role separation already verified publicly."
+      "resolution": "Actual public dashboard Projects & routes discovers /api/routes and opens account sign-in and the agent-first workspace. Role separation remains account-based.",
+      "remaining": ""
     },
     {
       "id": "FR-USREQ-012",

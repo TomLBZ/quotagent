@@ -1,0 +1,38 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "at": "2026-09-26T05:55:25.344Z",
+  "name": "Quantity trial 1790402125287",
+  "checks": [
+    "Actual configured model generated an executable personal tool through GUI with matching prompt digest and recorded content/artifact hashes",
+    "Original feedback saved; actual model returned inactive proposed revision with rationale, risks, rollback and exact diff",
+    "Retained frozen counterexample, actual6→9 paired execution, explicit human classification and five passed checks",
+    "Explicit owner-only live trial executed candidate; one-observation window unloaded it and verified baseline restoration before human deployment",
+    "GUI restored previous immutable revision1 after reviewed deployment"
+  ],
+  "screenshots": [
+    "01-feedback-proposal-diff.png",
+    "02-immutable-revision-source.png",
+    "03-paired-results-five-checks.png",
+    "04-observed-trial-rollback.png",
+    "05-restored-historical-artifact.png",
+    "failure.png"
+  ],
+  "browserErrors": [],
+  "generation": {
+    "sourcePromptDigest": "5247073522b8ef6e336d20ac97554d26bd16a07bebbd22d3668b0d3fa55195fd",
+    "contentHash": "db69c0d4bcebb3b7c7b519cffc5bcaedfef2fe2a2868ca045b0ce8d6beed96de",
+    "artifactHash": "22d50997c313fffe2335e3584b36a6dda1504af4c98219deedcd699938ed6345",
+    "revisionId": "plugin-1a6ecb1f-4278-4baf-8b82-ec0d84b9aece:r1",
+    "reused": false
+  },
+  "pluginId": "plugin-1a6ecb1f-4278-4baf-8b82-ec0d84b9aece",
+  "pairedOutputs": [
+    {
+      "total": 6
+    },
+    {
+      "total": 9
+    }
+  ],
+  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\ntrue !== false\n\n    at file:///workspace/projects/quotagent/src/system/plugin-studio/tests/evolution-browser.mjs:19:62"
+}

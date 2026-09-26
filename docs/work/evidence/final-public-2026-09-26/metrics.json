@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "at": "2026-09-26T05:41:31.514Z",
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "checks": [
+    "Contractor GUI explicitly includes existing labelled demo records; actual ledger cohorts and source-backed values appear beside an honestly unmeasured prior window, with no saved-time/superiority claim",
+    "Visible source details retain actual ledger hashes; daily cohort chart changes row selection; downloadedCSV contains both periods, denominators, definitions and full references",
+    "Request filter preserves exact record scope; unequal baseline duration is refused in the GUI instead of compared or shown as empty, and correction restores results",
+    "Supplier GUI reports own local scope/submissions only, no competing supplier identity and no buyer-private comparison score; own account usage scope is labelled",
+    "390px measures fit the viewport with bounded table scrolling; selected Business measures tab survives browser reload and no JavaScript errors occur"
+  ],
+  "jsErrors": [],
+  "scope": "Read-only existing local native ledgers; no fabricated baseline history or business mutation",
+  "release": "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288",
+  "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/metrics node src/domain/response-workbench/tests/metrics-browser.mjs"
+}

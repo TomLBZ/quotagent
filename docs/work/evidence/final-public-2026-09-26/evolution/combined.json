@@ -1,0 +1,91 @@
+{
+  "ok": true,
+  "release": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+  "releaseProvenance": "release.json",
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "at": "2026-09-26T05:57:54.899Z",
+  "scope": "One real configured-model GUI generation and one revision proposal; completion across initial and resumed GUI sessions, without repeating model calls. No product source changes.",
+  "initial": {
+    "report": "report.json",
+    "completedChecks": [
+      "Actual configured model generated an executable personal tool through GUI with matching prompt digest and recorded content/artifact hashes",
+      "Original feedback saved; actual model returned inactive proposed revision with rationale, risks, rollback and exact diff",
+      "Retained frozen counterexample, actual6\u21929 paired execution, explicit human classification and five passed checks",
+      "Explicit owner-only live trial executed candidate; one-observation window unloaded it and verified baseline restoration before human deployment",
+      "GUI restored previous immutable revision1 after reviewed deployment"
+    ],
+    "completedGroups": 5,
+    "retainedFailure": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\ntrue !== false\n\n    at file:///workspace/projects/quotagent/src/system/plugin-studio/tests/evolution-browser.mjs:19:62",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/evolution node src/system/plugin-studio/tests/evolution-browser.mjs",
+    "harnessNote": "Initial run was before addition of the400ms settled-viewport wait and RESUME_AFTER_RESTORE branch. Original failure report and screenshots are unchanged."
+  },
+  "layoutReproduction": {
+    "report": "viewport/dimensions.json",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/evolution/viewport node tmp/agent-experience/evolution-viewport.mjs",
+    "observed": [
+      {
+        "waitMs": 0,
+        "viewport": 390,
+        "document": 390,
+        "body": 390
+      },
+      {
+        "waitMs": 100,
+        "viewport": 390,
+        "document": 390,
+        "body": 390
+      },
+      {
+        "waitMs": 500,
+        "viewport": 390,
+        "document": 390,
+        "body": 390
+      }
+    ],
+    "interpretation": "Immediate full-journey resize assertion observed transient overflow; independent unchanged-product read-only revisit measured390px document/body at all sampled points. Resume waited400ms and passed the original overflow assertion."
+  },
+  "resume": {
+    "report": "resume/report.json",
+    "checks": [
+      "Existing declared tool selected; no new generation claim",
+      "Resume inspected the retained original at restored revision1; no generation or revision model call repeated",
+      "Published original through GUI; separate supplier installed an independent personal ID with source provenance and executed the generated tool",
+      "Admin disabled Studio through GUI; independent installed page, artifact inspection and actual tool execution survived; management restored"
+    ],
+    "groups": 4,
+    "additionalModelCalls": 0,
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/evolution/resume EXISTING_NAME='Quantity trial 1790402125287' RESUME_AFTER_RESTORE=1 node src/system/plugin-studio/tests/evolution-browser.mjs",
+    "harness": "resume/evolution-browser-used.mjs",
+    "harnessSha256": "872fb9c006366805ab463c540b4a8c373530227a9cbb17275bd05b4004485531"
+  },
+  "pluginId": "plugin-1a6ecb1f-4278-4baf-8b82-ec0d84b9aece",
+  "installedCopyId": "plugin-720c6087-658c-45e5-9074-e95046892de0",
+  "generation": {
+    "sourcePromptDigest": "5247073522b8ef6e336d20ac97554d26bd16a07bebbd22d3668b0d3fa55195fd",
+    "contentHash": "db69c0d4bcebb3b7c7b519cffc5bcaedfef2fe2a2868ca045b0ce8d6beed96de",
+    "artifactHash": "22d50997c313fffe2335e3584b36a6dda1504af4c98219deedcd699938ed6345",
+    "revisionId": "plugin-1a6ecb1f-4278-4baf-8b82-ec0d84b9aece:r1",
+    "reused": false
+  },
+  "pairedOutputs": [
+    {
+      "total": 6
+    },
+    {
+      "total": 9
+    }
+  ],
+  "studioToggles": [
+    {
+      "enabled": false,
+      "at": "2026-09-26T05:57:51.864Z"
+    },
+    {
+      "enabled": true,
+      "at": "2026-09-26T05:57:54.899Z"
+    }
+  ],
+  "studioRestored": true,
+  "browserErrors": [],
+  "deduplicationScope": "Prompt/content/artifact hashes were observed on the actual generated plugin. This public journey does not claim stochastic repeated-generation deduplication; explicit identical-content reuse is covered by the separate native15 check."
+}

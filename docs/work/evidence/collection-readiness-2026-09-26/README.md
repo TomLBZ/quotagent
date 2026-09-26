@@ -30,3 +30,8 @@ settings save/restore and390px checks also pass. All writes were through GUI on
 isolated data; shared snapshot interval was restored. The preview was stopped
 after verification. Corrected public-release replay remains the deployment owner’s
 next acceptance step.
+
+Corrected public `67bd9af5b73036104f81abdacae0883fd8d2ffce`: the same Operations
+command with `BASE_URL=https://novara.remoteblossom.com/quotagent/` passed
+[6 GUI groups and0 JavaScript errors](public-operations.json), including actual
+search/sort Save view and reload for fresh contractor/supplier accounts.
