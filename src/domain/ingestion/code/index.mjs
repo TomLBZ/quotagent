@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { extname } from 'node:path'
 import { cleanItems, mapRows, suggestMapping, sourceCurrencies } from './mapping.mjs'
+import {itemReview,reviewDocument} from './review.mjs'
 
 export const name = 'ingestion'
 export const inject = ['store', 'files', 'web', 'procurement', 'settings']
@@ -27,7 +28,8 @@ export function apply(ctx) {
   }
   const get = (user, id) => {
     guard(user)
-    return ctx.store.get(user.id, 'ingestion', id) || fail('This imported document is not in your account.', 404)
+    const record=ctx.store.get(user.id, 'ingestion', id) || fail('This imported document is not in your account.', 404)
+    return reviewDocument(record,user.role)
   }
   const list = user => {
     guard(user)
@@ -35,7 +37,7 @@ export function apply(ctx) {
       ...record, rowCount: rows.length, itemCount: items.length, preview: text.slice(0, 200) }))
   }
   const save = async (user, record, event, actor = `human:${user.id}`) => {
-    const next = { ...record, updatedAt: now() }
+    const next = reviewDocument({ ...record, updatedAt: now() },user.role)
     await ctx.store.put(user.id, 'ingestion', next, { actor, event })
     return next
   }
@@ -128,7 +130,9 @@ export function apply(ctx) {
     const record = get(user, id)
     const mapping = input.mapping ? Object.fromEntries(['description','quantity','unit','unitPrice','cost'].map(key => [key, String(input.mapping[key] || '')])) : record.mapping
     const items = input.items ? cleanItems(input.items) : input.mapping ? mapRows(record.rows, mapping) : record.items
-    return save(user, { ...record, title: String(input.title ?? record.title), currency: String(input.currency ?? record.currency), mapping, items }, 'ingestion/extraction-edited')
+    const assumptionReviews={...record.assumptionReviews}
+    for(const id of input.confirmAssumptions||[]){const item=items.find(item=>item.id===id);if(!item)fail('The assumption item is no longer present.');const review=itemReview(record,item);if(review.kind==='assumption')assumptionReviews[id]={fingerprint:review.fingerprint,by:user.id,at:now()}}
+    return save(user, { ...record, title: String(input.title ?? record.title), currency: String(input.currency ?? record.currency), mapping, items,assumptionReviews }, input.confirmAssumptions?.length?'ingestion/assumptions-reviewed':'ingestion/extraction-edited')
   }
   const importDraft = async (user, id, input, { agent = false } = {}) => {
     guard(user, true)
@@ -138,6 +142,7 @@ export function apply(ctx) {
     })
     if (!record.items.length) fail('Extract or add at least one item before importing.')
     if (!record.currency) fail('Review and select the currency before importing; the source may contain more than one currency.')
+    if(record.itemReviews.some(item=>item.kind==='assumption'&&!item.confirmed))fail('Confirm the labelled assumptions using Save reviewed extraction before creating a draft.')
     let result, kind
     if (user.role === 'contractor') {
       kind = 'rfq'
