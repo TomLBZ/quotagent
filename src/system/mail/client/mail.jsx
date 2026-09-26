@@ -1,6 +1,7 @@
 import React,{useState,useEffect} from 'react'
 import {registry,useApp,useResource,api,Icon,Button,Badge,Field,PageHeader,ErrorNotice,Empty,Loading,Modal} from '../../webui/client/core.jsx'
 import {PluginSettings} from '../../settings/client/settings.jsx'
+import {DigestPanel} from './digest.jsx'
 import './mail.css'
 const stamp=value=>value?new Date(value).toLocaleString():'Not checked yet'
 const labelStatus=value=>({'partially-sent':'Partly accepted',pending:'Awaiting approval',uncertain:'Check delivery',sending:'Sending'}[value]||value)
@@ -33,6 +34,7 @@ function Mail(){
         {current.receipt&&<p className="mail-receipt">SMTP receipt: {current.receipt.accepted?.length||0} recipient(s) accepted{current.receipt.rejected?.length?` · Rejected: ${current.receipt.rejected.join(', ')}`:''}. {current.receipt.response}</p>}
       </>:<Empty icon="mail" title="Choose a conversation">Read the source, review its attachments, then decide what happens next.</Empty>}</section>
     </div>
+    <DigestPanel/>
     {settingsOpen&&<PluginSettings plugin={{id:'mail',name:'Email connection'}} onClose={()=>{setSettingsOpen(false);resource.reload()}}/>}
     {compose&&<MailComposer initial={compose} files={files} close={()=>setCompose(null)} saved={async message=>{setSelected(message.id);setFolder('drafts');await resource.reload()}}/>}
   </>

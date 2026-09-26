@@ -35,8 +35,7 @@ Each declares its effect; received source is external content. Drafts/proposals 
 executes only through `ctx.actions` human approval; draft-version/connection checks prevent stale sends.
 Unconfirmed delivery is recorded as uncertain and is never retried automatically. Outbound receipts,
 source bodies, attachment IDs, drafts and review links are account-ledger records (`mail/*` events).
-In-app notifications link new mail and send results to the mailbox. No automatic external notification
-email is enabled. Pollers, sockets, routes, settings, tools and action handlers are disposable effects.
+In-app notifications link new mail and send results to the mailbox. Email digests are optional ([contract](digest.md)). Pollers, sockets, routes, settings, tools and action handlers are disposable effects.
 
 Evidence:
 - `node src/system/mail/tests/product-smoke.mjs`: real loopback IMAP/SMTP plus Telegram HTTP fixture,

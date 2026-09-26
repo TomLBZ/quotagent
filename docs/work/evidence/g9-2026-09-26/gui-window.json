@@ -1,0 +1,9 @@
+{
+  "base": "http://127.0.0.1:8650/quotagent/",
+  "checks": [
+    "Latest runtime/browser first and last controls reach exact final13 of63 persisted notices after restart",
+    "Pending input survives the configured periodic background refresh without saving it"
+  ],
+  "errors": [],
+  "ok": true
+}

@@ -1,6 +1,7 @@
 import {randomUUID,createHash} from 'node:crypto'
 import {createRequire} from 'node:module'
 import {createTransport} from './product-transport.mjs'
+import * as digest from './digest.mjs'
 const require=createRequire(new URL('../../../../host/package.json',import.meta.url))
 const {simpleParser}=require('mailparser')
 export const name='mail'
@@ -28,7 +29,7 @@ const fields=[
 ]
 const defaults={enabled:false,fromName:'',fromAddress:'',imapHost:'',imapPort:993,imapSecurity:'tls',imapUser:'',imapPassword:'',imapAccessToken:'',inboxMailbox:'INBOX',sentMailbox:'',smtpHost:'',smtpPort:587,smtpSecurity:'starttls',smtpUser:'',smtpPassword:'',smtpAccessToken:'',autoSync:false,syncIntervalSeconds:120,maxMessages:50}
 
-export function apply(ctx,config={}) {
+export async function apply(ctx,config={}) {
   const transport=config.transport || createTransport(),running=new Map(),nextCheck=new Map()
   let disposed=false,timer
   const guard=(user,write=false)=>{if(!user?.id)fail('Sign in to use email.',401);if(write&&user.permissions?.includes('workspace:read-only'))fail('This account has read-only workspace access.',403)}
@@ -87,7 +88,7 @@ export function apply(ctx,config={}) {
         const next={...previous,id:'connection',cursors,lastSyncAt:time(),lastError:null,warnings,imported:added.length}
         await save(user,'mail-state',next,'mail/sync-completed',`transport:${user.id}`)
         const incoming=added.filter(message=>message.direction==='inbound')
-        if(incoming.length)await ctx.notifications.push(user,{type:'mail',title:`${incoming.length} new email${incoming.length===1?'':'s'}`,body:incoming[0].subject,link:{view:'mail',messageId:incoming[0].id},sourceId:incoming[0].id,dedupeKey:`mail:${incoming.map(item=>item.id).join(':')}`})
+        if(incoming.length)await ctx.notifications.push(user,{source:{pluginId:'mail',panelId:'mail',label:'Email'},type:'mail',title:`${incoming.length} new email${incoming.length===1?'':'s'}`,body:incoming[0].subject,link:{view:'mail',messageId:incoming[0].id},sourceId:incoming[0].id,dedupeKey:`mail:${incoming.map(item=>item.id).join(':')}`})
         return {ok:true,imported:added.length,warnings,status:status(user)}
       } catch(error) {
         if(!disposed)await save(user,'mail-state',{...previous,cursors,lastError:error.message,lastAttemptAt:time()},'mail/sync-failed',`transport:${user.id}`)
@@ -151,7 +152,7 @@ export function apply(ctx,config={}) {
         attachments:input.attachments.map(file=>({filename:file.filename,contentType:file.mime,content:ctx.files.read(user,file.id)}))})
       const next={...message,to:input.to,cc:input.cc,bcc:input.bcc,subject:input.subject,body:input.body,status:receipt.rejected.length?'partially-sent':'sent',folder:'Sent',from:input.from.address,fromAddresses:[input.from.address],receipt,messageId:receipt.messageId,sentAt:time(),receivedAt:time(),actionId:action.id}
       await save(user,'mail-messages',next,'mail/message-sent')
-      try {await ctx.notifications.push(user,{type:'mail',title:receipt.rejected.length?'Email partially accepted':'Email sent',body:message.subject,link:{view:'mail',messageId:message.id},sourceId:message.id,dedupeKey:`mail-sent:${action.id}`})}
+      try {await ctx.notifications.push(user,{source:{pluginId:'mail',panelId:'mail',label:'Email'},type:'mail',title:receipt.rejected.length?'Email partially accepted':'Email sent',body:message.subject,link:{view:'mail',messageId:message.id},sourceId:message.id,dedupeKey:`mail-sent:${action.id}`})}
       catch(error){try{await ctx.store.append(user.id,'mail/notification-failed',{messageId:message.id,error:error.message},{actor:'system:mail'})}catch{}}
       return {message:next,receipt,action:{type:'navigate',label:'Open sent email',input:{view:'mail',messageId:next.id}}}
     } catch(error) {
@@ -179,6 +180,7 @@ export function apply(ctx,config={}) {
     tool({name:'mail_prepare_send',effect:'proposal',description:'Create a human review request for a saved email draft. This NEVER sends: a person must approve the immutable recipient, body and attachments in the review UI.',parameters:{type:'object',properties:{id:{type:'string'}},required:['id']},execute:(user,args,context)=>propose(user,args.id,{agent:true,runId:context?.runId})})
     tool({name:'mail_ingest',effect:'draft',description:'Parse an email or its saved attachment into editable document line items for this account.',parameters:{type:'object',properties:{id:{type:'string'},fileId:{type:'string'}},required:['id']},execute:(user,args)=>ingest(user,args.id,args.fileId)})
   })
+  await ctx.plugin(digest,config.digest||{})
   const poll=async()=>{
     if(disposed)return
     for(const user of ctx.accounts.list()) {

@@ -1,0 +1,25 @@
+{
+  "base": "http://127.0.0.1:8650/quotagent/",
+  "at": "2026-09-26T03:42:43.691Z",
+  "evidence": "Synthetic notification history and loopback-only IMAP/SMTP; no external deliveries.",
+  "checks": [
+    "GUI imports a two-schema native YAML file; zero-write masked preview precedes explicit apply, including account-only connection credentials",
+    "GUI export omits passwords; plugin preflight rejects an invalid recipient and preserves the working configuration",
+    "GUI tests real IMAP/SMTP without delivery, receives a MIME email, then explicit digest confirmation sends exactly one capped summary with a durable receipt",
+    "GUI pages beyond the first25 items, displays both merged producers, and marks all61 filtered notices read across pages",
+    "Account mute preferences persist across browser reload and suppress header alerts without deleting unread history; unsaved form text remains intact",
+    "Notification filters/windows fit390px with no JavaScript errors"
+  ],
+  "screenshots": [
+    "01-yaml-preview.png",
+    "02-plugin-veto-keeps-configuration.png",
+    "03-digest-exact-human-review.png",
+    "04-local-smtp-receipt.png",
+    "05-notification-second-page.png",
+    "06-cross-source-provenance.png",
+    "07-persisted-alert-preferences.png",
+    "08-mobile-notification-window.png"
+  ],
+  "errors": [],
+  "ok": true
+}

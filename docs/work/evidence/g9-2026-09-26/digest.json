@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/mail-digest-qGOI4v",
+  "smtpAccepted": 3,
+  "lostReceiptDispatches": 1,
+  "checks": [
+    "Actual IMAP arrival creates eligible in-app activity; digest defaults off and accounts remain isolated",
+    "Exact confirmed preview sends one real SMTP batch, capped at2, carries fixed counts/link only and records recipient/receipt",
+    "Separate automatic opt-in drains bounded batches with throttle, durable deduplication and no empty send",
+    "Actual SMTP DATA accepted then connection lost: delivery becomes uncertain and never automatically retries, including native reload",
+    "Unfinished persisted dispatch recovers as uncertain; child unload removes preferences, routes, timers and transport"
+  ]
+}
