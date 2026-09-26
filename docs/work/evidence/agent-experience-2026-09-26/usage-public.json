@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "baseUrl": "https://novara.remoteblossom.com/quotagent/",
+  "checks": [
+    "Actual account history and reported token totals displayed; aggregate access denied",
+    "Model/status filters preserve unknown counts; cache chart and purpose grouping work",
+    "Clicking a chart day selects its UTC range; model settings opens directly",
+    "Supplier sees only its own call history",
+    "Admin aggregate and account filters match the account-owned usage totals"
+  ],
+  "javascriptErrors": [],
+  "historical": {
+    "accountCalls": 55,
+    "reportedTotal": 1315965,
+    "unknownCalls": 3
+  },
+  "checkedAt": "2026-09-26T01:51:35.514Z"
+}

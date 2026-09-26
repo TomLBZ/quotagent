@@ -3,7 +3,7 @@
 
 Scope: assistant controls, workspace styles, role guides and provider usage.
 Local integrated verification uses an isolated copy of demo ledgers at loopback8620;
-public verification is pending. This evidence does not close the wider requirements
+public verification passed at `https://novara.remoteblossom.com/quotagent/` on release `f398143`. This evidence does not close the wider requirements
 completion objective or imply all historical business features are implemented.
 
 | Command | Observed result |
@@ -20,3 +20,11 @@ Build: `host/node_modules/.bin/vite build --config src/system/webui/client/vite.
 A separate race review reproduced rapid pause/resume/stop and wrong-account control;
 fixes abort the latest queued controller, validate ownership before abort, and make
 Resume on running state idempotent. Core test now covers those behaviors.
+
+## Public verification
+
+- `EVIDENCE_DIR=tmp/agent-experience/controls-public node src/system/agent-runtime/tests/controls-browser.mjs` → [9 actual-model GUI checks passed](controls-public.json).
+- `BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/agent-experience/workspace-public node src/system/workspace-styles/tests/browser.mjs` → [7 groups passed](workspace-public.json), all3roles, saved choices and390/1024px layouts.
+- `BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/agent-experience/usage/public node src/system/agent-runtime/tests/usage-browser.mjs` → [5 groups passed](usage-public.json), actual account totals, chart/filter behavior and administrator aggregation.
+
+No browser JavaScript errors were observed. Token counts are provider-reported; aborted/unreported calls remain unknown. This verifies the four experience features; business-gap closure and documentation consolidation remain in progress.

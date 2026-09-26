@@ -1,0 +1,27 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "at": "2026-09-26T01:48:37.998Z",
+  "checks": [
+    "Contractor changed layout, palette and spacing through GUI; saved choices survived reload",
+    "Home follows Classic records then Focus agent layout without duplicate dock",
+    "contractor: replay, step persistence across reload, role-specific Help search and working destination",
+    "supplier: replay, step persistence across reload, role-specific Help search and working destination",
+    "Supplier retains own default style; contractor choice does not leak",
+    "admin: replay, step persistence across reload, role-specific Help search and working destination",
+    "Administrator receives management guidance and no quotation-work group"
+  ],
+  "screenshots": [
+    "01-agent-first-workspace.png",
+    "02-persisted-workspace-style.png",
+    "contractor-walkthrough.png",
+    "contractor-help.png",
+    "03-style-1024.png",
+    "03-style-390.png",
+    "supplier-walkthrough.png",
+    "supplier-help.png",
+    "admin-walkthrough.png",
+    "admin-help.png"
+  ],
+  "browserErrors": [],
+  "ok": true
+}

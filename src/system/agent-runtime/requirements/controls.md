@@ -1,7 +1,7 @@
 # Controllable assistant conversations
 <!-- budget: 8192 bytes, hard -->
 
-Status: implementation in progress. Owner: native `agent-runtime` / `product-assistant`.
+Status: implemented; [public evidence](../../../../docs/work/evidence/agent-experience-2026-09-26/README.md). Owner: native `agent-runtime` / `product-assistant`.
 Source: user enhancement objective 2026-09-26; decision ADR-0031.
 
 | Requirement | Acceptance |

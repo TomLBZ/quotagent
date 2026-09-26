@@ -1,0 +1,87 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "startedAt": "2026-09-26T01:48:37.969Z",
+  "checks": [
+    "Agent workspace mounts one conversation composer",
+    "User can pause a running assistant request from the conversation",
+    "Paused task survives browser reload with Resume and Stop controls",
+    "Additional guidance stays visible and does not resume a paused task",
+    "Real model completes the resumed conversation",
+    "Actual model answer follows the additional guidance",
+    "Stopped task stays stopped after reload and has no Resume action",
+    "User can send a new follow-up after stopping a task",
+    "Conversation controls produce no browser JavaScript errors"
+  ],
+  "pageErrors": [],
+  "runs": [
+    {
+      "id": "bb0499fb-1225-442a-8c74-f24e01249bab",
+      "status": "running",
+      "phase": "model",
+      "revision": 1,
+      "results": 0
+    },
+    {
+      "id": "bb0499fb-1225-442a-8c74-f24e01249bab",
+      "status": "paused",
+      "phase": "model",
+      "revision": 3,
+      "results": 0
+    },
+    {
+      "id": "bb0499fb-1225-442a-8c74-f24e01249bab",
+      "status": "paused",
+      "phase": "model",
+      "revision": 5,
+      "results": 0,
+      "error": ""
+    },
+    {
+      "id": "bb0499fb-1225-442a-8c74-f24e01249bab",
+      "status": "running",
+      "phase": "model",
+      "revision": 6,
+      "results": 0,
+      "error": ""
+    },
+    {
+      "id": "bb0499fb-1225-442a-8c74-f24e01249bab",
+      "status": "completed",
+      "phase": "complete",
+      "revision": 8,
+      "results": 0,
+      "error": ""
+    },
+    {
+      "id": "f4fb74ec-0478-4c1e-8f1e-1e90267ca43a",
+      "status": "running",
+      "phase": "model",
+      "revision": 1,
+      "results": 0
+    },
+    {
+      "id": "f4fb74ec-0478-4c1e-8f1e-1e90267ca43a",
+      "status": "stopped",
+      "phase": "complete",
+      "revision": 3,
+      "results": 0
+    },
+    {
+      "id": "5ef51564-6f1d-46c0-9762-e9f0996f71ef",
+      "status": "running",
+      "phase": "model",
+      "revision": 1,
+      "results": 0
+    },
+    {
+      "id": "5ef51564-6f1d-46c0-9762-e9f0996f71ef",
+      "status": "completed",
+      "phase": "complete",
+      "revision": 3,
+      "results": 0,
+      "error": ""
+    }
+  ],
+  "ok": true,
+  "finishedAt": "2026-09-26T01:48:50.475Z"
+}
