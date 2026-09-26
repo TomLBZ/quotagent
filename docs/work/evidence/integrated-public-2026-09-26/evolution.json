@@ -1,0 +1,26 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "at": "2026-09-26T03:38:17.319Z",
+  "name": "Quantity trial 1790393897261",
+  "checks": [
+    "Actual configured model generated an executable personal tool through GUI",
+    "Original feedback saved; actual model returned inactive proposed revision with rationale, risks, rollback and exact diff",
+    "Retained frozen counterexample, actual6→9 paired execution, explicit human classification and five passed checks",
+    "Explicit owner-only live trial executed candidate; one-observation window unloaded it and verified baseline restoration before human deployment",
+    "GUI restored previous immutable revision1 after reviewed deployment",
+    "Admin disabled Studio through GUI; independent installed page, artifact inspection and actual tool execution survived; management restored"
+  ],
+  "screenshots": [
+    "01-feedback-proposal-diff.png",
+    "02-immutable-revision-source.png",
+    "03-paired-results-five-checks.png",
+    "04-observed-trial-rollback.png",
+    "05-restored-historical-artifact.png",
+    "06-mobile-history.png",
+    "07-studio-off-installed-tool-runs.png",
+    "08-consistent-artifact-inventory.png"
+  ],
+  "browserErrors": [],
+  "pluginId": "plugin-8262263d-c2f7-4f0e-a541-6ebb73c5ff37",
+  "ok": true
+}

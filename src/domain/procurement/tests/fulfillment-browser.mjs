@@ -11,6 +11,7 @@ async function ready(page){await page.getByRole('navigation',{name:'Main navigat
 async function fresh(email,password='demo1234'){const page=await browser.newPage({viewport:{width:1480,height:1100}});pages.push(page);page.setDefaultTimeout(18000);page.on('pageerror',e=>errors.push(e.message));page.on('response',async response=>{if(response.url().includes('/api/')&&response.request().method()!=='GET')responses.push({url:response.url(),status:response.status(),body:await response.json().catch(()=>null)})});await page.goto(base);if(email){await page.getByLabel('Email address',{exact:true}).fill(email);await page.getByLabel('Password',{exact:true}).fill(password);await page.getByRole('button',{name:'Sign in',exact:true}).click();await ready(page)}return page}
 async function nav(page,label){
  const nav=page.getByRole('navigation',{name:'Main navigation'}),button=nav.getByRole('button',{name:label,exact:true})
+ await nav.waitFor();await nav.getByRole('button',{name:label,exact:true,includeHidden:true}).waitFor({state:'attached'})
  for(let attempt=0;attempt<5;attempt++){
   if(!await button.isVisible())await nav.locator('.ws-nav-group').filter({has:page.getByRole('button',{name:label,exact:true,includeHidden:true})}).locator('.ws-group-toggle').click()
   try{await button.click({timeout:2500});return}catch(error){if(attempt===4)throw error}

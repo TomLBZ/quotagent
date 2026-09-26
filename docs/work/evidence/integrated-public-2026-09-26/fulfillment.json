@@ -1,0 +1,41 @@
+{
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "title": "[Fulfillment check] Lighting 1790393896111",
+  "reviewer": {
+    "email": "fulfillment-reviewer-1790393896111@local.test",
+    "name": "Fulfillment reviewer 1790393896111"
+  },
+  "screenshots": [
+    "01-nonbinding-intent-review.png",
+    "02-supplier-confirms-offer.png",
+    "review-2.png",
+    "03-independent-signature-receipt.png",
+    "04-sourced-change-review.png",
+    "review-5.png",
+    "05-approved-change-receipt.png",
+    "06-invoice-missing-acceptance.png",
+    "07-invoice-reconciliation-history.png",
+    "08-counterparty-delivery-proof.png",
+    "09-mobile-matching.png"
+  ],
+  "ids": {
+    "rfq": "rfq-53ee84b8-aeb",
+    "quote": "quote-316db77c-0c4",
+    "intent": "award-369518e1-4f8",
+    "order": "po-award-369518e1-4f8",
+    "change": "change-22a7eaa1-f2a",
+    "invoice": "invoice-2c652dad-12e",
+    "signature": "1e877908-fa05-452a-8d09-f3bab5e376c1"
+  },
+  "stamp": 1790393896111,
+  "ok": true,
+  "checks": [
+    "New colleague explicitly invited and accepted; different human approves exact authority policy; reviewer limit covers order while proposer limit is zero",
+    "GUI RFQ and private quote; declared tax/freight; nonbinding intent creates no PO; supplier confirms exact offer; independent colleague grants and proposer signs one265USD order",
+    "GUI change traces original20USD rate, quantity10→12 and rate20→22 with reason; counterparty confirms, independent approval applies76.80USD once",
+    "Partial delivery5 causes invoice12 mismatch; reviewed further delivery7 permits a fresh match; prior mismatch remains visible with source receipts and order revision",
+    "Supplier sees shared receipt sources; mobile invoice history stays within viewport"
+  ],
+  "errors": [],
+  "completedAt": "2026-09-26T03:40:04.429Z"
+}
