@@ -11498,24 +11498,24 @@
           "line": null
         }
       ],
-      "owner": "system/agent-runtime",
-      "contract": "src/system/agent-runtime/requirements/product.md",
+      "owner": "domain/response-workbench",
+      "contract": "src/domain/response-workbench/requirements/business-measures.md",
       "disposition": "retain-outcome",
-      "currentOutcome": "Show measured agent-run baselines with source coverage and keep unobserved business improvement unknown.",
-      "status": "pending-review",
-      "reason": "Public evaluations exist; no configurable recurring cycle-time/clarification-count/completeness/human-intervention/cost trend dashboard.",
+      "currentOutcome": "Native account/selected-party business measures tab projects quotation cycles, structural completeness, declared measurement conformance, clarification rounds, paired human rewrites, approved actions, private scored comparisons and own configured-rate usage estimates. Equal-duration observed baseline, source references, coverage limits, supplier isolation, filters and CSV are explicit. Existing provider/evidence/replay outcomes are sourced from their own records.",
+      "status": "verified",
+      "reason": "Retain measurable compatible business evaluation outcomes as a read-only ledger projection. No fabricated earlier history, baseline targets, saved time, invoice charges, accuracy labels or causal performance superiority. Missing denominators/reference labels are unmeasured. Pure projection adds no ledger/QEP semantics.",
       "acceptance": [
         {
-          "command": "node src/system/agent-runtime/tests/evaluation.mjs",
-          "evidence": "docs/work/evidence/runtime-controls-2026-09-26/evaluation.json",
-          "scope": "Seven native groups; four explicitly synthetic recorded-run families and deterministic assertion replay, not deterministic fresh model behavior.",
-          "observed": "Read-only baseline exposes measured coverage and explicitly leaves business improvement unknown."
+          "command": "node src/domain/response-workbench/tests/metrics.mjs",
+          "evidence": "docs/work/evidence/business-measures-2026-09-26/native.json",
+          "scope": "Independent fixed-clock arithmetic fixtures plus real Cordis/Python ledger ownership, read-only/restart/disposal",
+          "observed": "PASS5; zero vs missing, three declared-scope edits counted, equal windows/invalid ranges, stale/duplicate/unaccepted exclusion, source hashes, team/supplier privacy."
         },
         {
-          "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-runtime/tests/runtime-browser.mjs",
-          "evidence": "docs/work/evidence/integrated-public-2026-09-26/runtime.json",
-          "scope": "Five public GUI groups on the recorded integrated release, using a labelled local provider fixture and synthetic tariff.",
-          "observed": "Actual GUI run/cost/context records are available for inspection."
+          "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ EVIDENCE_DIR=tmp/agent-experience/business-measures/browser node src/domain/response-workbench/tests/metrics-browser.mjs",
+          "evidence": "docs/work/evidence/business-measures-2026-09-26/browser.json",
+          "scope": "Existing local native data contractor/supplier GUI; no synthetic baseline history",
+          "observed": "PASS5,0JSerrors; exact filter/source/window CSV, honest missing baseline, failed input correction, supplier scope and390px."
         }
       ],
       "implementation": {
@@ -11525,10 +11525,10 @@
           "src/system/agent-runtime/code/product-ai.mjs"
         ],
         "auditEvidence": [],
-        "group": "G6"
+        "group": "G6",
+        "auditReason": "Public evaluations exist; no configurable recurring cycle-time/clarification-count/completeness/human-intervention/cost trend dashboard."
       },
-      "resolution": "product-evaluation exposes run counts/duration/interventions/cost coverage; commercial history separately exposes observed quote distributions. These do not establish quotation-cycle, completeness or productivity improvement.",
-      "remaining": "The retained business metric outcome still needs defined record-derived quotation-cycle/completeness/intervention measures and a comparable baseline. No measured superiority, saved time or win-rate improvement is established by runtime fixture metrics."
+      "resolution": "Retain measurable compatible business evaluation outcomes as a read-only ledger projection. No fabricated earlier history, baseline targets, saved time, invoice charges, accuracy labels or causal performance superiority. Missing denominators/reference labels are unmeasured. Pure projection adds no ledger/QEP semantics."
     },
     {
       "id": "SUPPLEMENT-035",

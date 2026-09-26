@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "at": "2026-09-26T05:25:39.001Z",
+  "root": "/workspace/projects/quotagent/tmp/business-metrics-wdC8qQ",
+  "checks": [
+    "Fixed-clock two-window independent arithmetic: measured zero versus unknown,3600second response and comparison,50%line/40%commercial completeness,50%rounds, zero paired rewrite, stable source anchors; stale/duplicate/late/unaccepted quotes excluded",
+    "A paired human draft changing assumption text, exclusion text and milestone date counts exactly three editable changes with both source anchors",
+    "Empty denominators stay unknown; unequal/overlapping/future periods refuse; supplier comparison is unmeasured; CSV carries definitions and ledger references",
+    "Actual Cordis/Python ledger records produce hashed sources with no read writes; private quote text omitted, outsider empty/forged team refused, accepted colleague uses selected business realm and own personal analysis",
+    "Real ledger restart reconstructs measures; response owner disposal unregisters metrics HTTP and service"
+  ]
+}
