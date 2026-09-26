@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/notification-windows-QJFO9V",
+  "checks": [
+    "Full history has253 items; server pages cover all11 windows and complete unread counts, reads are pure and account-owned",
+    "Concurrent duplicate reports coalesce; separate producers retain all attribution; severity escalation alerts once and reopens unread",
+    "Server filters and mark-matching-read cover records outside the visible25-row page",
+    "Alert severity/mute preferences preserve complete activity history; subscription removal has immediate effect",
+    "Native unload removes service routes, settings schema and subscriptions"
+  ]
+}

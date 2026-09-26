@@ -70,7 +70,7 @@ export function apply(ctx,config={}) {
           await save(user,'telegram-state',{...previous,offsets,lastSyncAt:now(),lastError:null},'telegram/update-recorded',`transport:${user.id}`)
         }
         await save(user,'telegram-state',{...state(user),offsets,lastSyncAt:now(),lastError:null,warnings},'telegram/sync-completed',`transport:${user.id}`)
-        if(added.length)await ctx.notifications.push(user,{type:'telegram',title:`${added.length} Telegram message${added.length===1?'':'s'} received`,body:added[0].text.slice(0,150)||added[0].document?.filename||'A document arrived',link:{view:'telegram',chatId:added[0].chatId,messageId:added[0].id},sourceId:added[0].id,dedupeKey:`telegram:${key}:${offset}`})
+        if(added.length)await ctx.notifications.push(user,{source:{pluginId:'telegram',panelId:'telegram',label:'Telegram'},type:'telegram',title:`${added.length} Telegram message${added.length===1?'':'s'} received`,body:added[0].text.slice(0,150)||added[0].document?.filename||'A document arrived',link:{view:'telegram',chatId:added[0].chatId,messageId:added[0].id},sourceId:added[0].id,dedupeKey:`telegram:${key}:${offset}`})
         return {ok:true,imported:added.length,warnings,status:status(user)}
       }catch(error){if(!disposed)await save(user,'telegram-state',{...state(user),offsets,lastError:error.message,lastAttemptAt:now()},'telegram/sync-failed',`transport:${user.id}`);if(error.retryAfter)nextCheck.set(user.id,Date.now()+error.retryAfter*1000);throw error}
     })()
@@ -118,7 +118,7 @@ export function apply(ctx,config={}) {
       const sent=await transport.send(options.botToken,input)
       const next={...message,text:input.text,status:'sent',telegramMessageId:sent.message_id,chatId:String(sent.chat.id),sentAt:now(),receivedAt:now(),actionId:action.id}
       await save(user,'telegram-messages',next,'telegram/message-sent')
-      try{await ctx.notifications.push(user,{type:'telegram',title:'Telegram message sent',body:message.text.slice(0,120),link:{view:'telegram',chatId:message.chatId,messageId:message.id},sourceId:message.id,dedupeKey:`telegram-sent:${action.id}`})}
+      try{await ctx.notifications.push(user,{source:{pluginId:'telegram',panelId:'telegram',label:'Telegram'},type:'telegram',title:'Telegram message sent',body:message.text.slice(0,120),link:{view:'telegram',chatId:message.chatId,messageId:message.id},sourceId:message.id,dedupeKey:`telegram-sent:${action.id}`})}
       catch(error){try{await ctx.store.append(user.id,'telegram/notification-failed',{messageId:message.id,error:error.message},{actor:'system:telegram'})}catch{}}
       return{message:next,action:{type:'navigate',label:'Open sent Telegram message',input:{view:'telegram',chatId:next.chatId,messageId:next.id}}}
     }catch(error){await save(user,'telegram-messages',{...message,status:'uncertain',lastError:error.message,actionId:action.id,attemptedAt:now()},'telegram/send-status-uncertain');throw Object.assign(new Error(`Telegram delivery was not confirmed. Check the chat before sending again. ${error.message}`),{deliveryUnknown:true})}
