@@ -34,3 +34,10 @@ leaving the amount unquantified. Chat and every workroom role use the same guida
 [Existing policy9 and controlled-provider workflow8 groups passed](prompt-integration.json)
 after integration. This is capability and guidance, not a guarantee of perfect model
 prose; independent corrected public tool selection remains required.
+
+Independent corrected public `3ab6d8c` replay passed: the model selected the native
+calculator three times (30%,70%,100%); expanded GUI receipts and resulting prose
+matched exact source totals and remainders. [Captured normal browser response](../independent-final-2026-09-26/56-browser-calculator-receipts.json)
+retains quote revision, realm, sequence and hash. The prompt supplied no correct
+amount. The original error remains in [the evaluation](../independent-final-2026-09-26/assessment.md);
+a successful targeted replay is not a universal arithmetic guarantee.

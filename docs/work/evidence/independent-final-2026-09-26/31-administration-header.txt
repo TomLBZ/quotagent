@@ -1,0 +1,17 @@
+SERVER ADMINISTRATION
+Keep everyone moving
+
+Manage accounts, permissions, and extensions for the whole organization.
+
+Administrator
+Accounts
+50
+Across every workspace
+Published extensions
+5
+Shared by your users
+Global defaults
+2
+Available organization-wide
+
+Read-only inspection: people access controls and personal/global extension controls are available. No administration changes made. Account directory omitted from retained evidence.

@@ -1,0 +1,137 @@
+Skip to main content
+quotagent.
+NC
+Northstar Construction
+Contractor workspace
+Agent workspace
+Agent workroom
+Review actions
+Quotation work
+Workspace records
+Sources & connections
+Personalize
+Plugin studio
+Installed tools
+Workspace style
+AI usage
+Plugin settings
+More tools
+Notifications
+Help & getting started
+Settings
+AM
+Alex Morgan
+contractor@demo.local
+Workspace
+Plugin studio
+56
+Help
+Try demo
+AI assistant
+AM
+BUILT AROUND YOU
+Your workspace. Your way.
+
+Create useful extensions, adjust them to fit, and share your best ideas.
+
+Powered by your agent
+2 proposals
+2 paired reviews passed
+0 active trials
+2 verified rollbacks
+My extensions
+6
+Marketplace
+3
+Saved skills
+1
+Plugin settings
+What would make your work easier?
+
+A different look, a useful tool, or a repeatable workflow. Start with an idea.
+
+Built for your account · Configurable · Reversible
+Create with AI
+A personal theme
+A useful widget
+A workflow skill
+
+Your installed extensions and the defaults available to your account.
+
+6 extensions
+Enabled
+PERSONAL TOOL
+Quantity trial 1790402125287
+
+Isolated test tool that doubles a numeric quantity input, returning only the total.
+
+Disable
+Configure
+Improve & history
+Open tool
+View details
+Shared with the community
+Enabled
+PERSONAL TOOL
+Quantity trial 1790393897261
+
+Isolated test utility that doubles a quantity input for verification purposes only.
+
+Disable
+Configure
+Improve & history
+Open tool
+View details
+Only in your workspace
+Publish to market
+Enabled
+PERSONAL TOOL
+Landing Cost Comparator (delivery + VAT)
+
+Deterministic client-side calculator that lands delivery and VAT on two competing supplier offers, shows VAT-exclusive comparable totals against the lower offer, and flags every unknown instead of assuming it.
+
+Disable
+Configure
+Improve & history
+Open tool
+View details
+Only in your workspace
+Publish to market
+Global default
+Disabled
+WORKSPACE THEME
+[UI check] Configurable lake 8496851
+
+My unfinished configuration must survive background refresh.
+
+Managed by administrator
+Customize a copy
+View details
+Organization default
+Enabled
+WORKFLOW SKILL
+RFQ Quote Review Checklist
+
+A read-only, reusable procedure that evaluates every quote submitted against the currently selected RFQ and returns a per-supplier comparison table with arithmetic flags, delivery/VAT treatment, lead-time and warranty gaps, draft clarification questions, and a missing-data list.
+
+Confirm the currently selected RFQ and pull only its linked records (items, quotes, suppliers, messages, changes); state that the run is read-only.
+Enumerate every submitted quote with supplier name, quote ID, status and submitted timestamp; if none exist, say so and stop the comparison.
+Recompute each quote line as quantity x unit price against the stated line total, then sum the lines against the stated quote total, flagging every discrepancy with exact figures.
+Disable
+Configure
+Improve & history
+Run skill
+View details
+Only in your workspace
+Publish to market
+Global default
+Disabled
+WORKSPACE THEME
+[Public check] Orchid theme 4350280
+
+A soft orchid workspace theme with a deep magenta accent on pale lilac backgrounds and dark navy text for strong, comfortable readability.
+
+Managed by administrator
+Customize a copy
+View details
+Organization default

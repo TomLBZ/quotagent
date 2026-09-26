@@ -1,0 +1,57 @@
+Skip to main content
+quotagent.
+NC
+Northstar Construction
+Contractor workspace
+Agent workspace
+Agent workroom
+Review actions
+Quotation work
+Workspace records
+Sources & connections
+Ingest documents
+Email
+Telegram
+Agent connections
+Deliveries & exchange
+Object attachments
+Evidence & verification
+Files & retention
+Personalize
+More tools
+Notifications
+Help & getting started
+Settings
+AM
+Alex Morgan
+contractor@demo.local
+Workspace
+Telegram
+56
+Help
+Try demo
+AI assistant
+AM
+CONVERSATIONS IN CONTEXT
+Keep Telegram close to the work.
+
+Receive bot conversations, extract attached scope, and prepare replies for your approval.
+
+Telegram settings
+New message
+Not connected
+@quotagent_fixture_bot
+
+Connect a bot token from @BotFather, then start a chat with that bot to receive your first message.
+
+Test bot
+Receive messages
+Conversations
+Fixture supplier
+Chat 4242
+
+Thanks. We are reviewing the valve offer. This is a local fixture reply.
+
+Choose a conversation
+
+Messages, attached documents and private reply drafts stay together.

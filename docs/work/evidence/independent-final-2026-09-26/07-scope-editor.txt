@@ -1,0 +1,176 @@
+Skip to main content
+quotagent.
+[N
+[Evaluation] North Workshop
+Contractor workspace
+Agent workspace
+Agent workroom
+Review actions
+Quotation work
+Overview
+Requests
+Quotes
+Responses & receipts
+Orders
+Messages
+Commercial workbench
+My day & team
+Workspace records
+Sources & connections
+Personalize
+More tools
+Notifications
+Help & getting started
+Settings
+IC
+Independent contractor evaluator
+independent-contractor-260926@example.test
+Workspace
+Requests
+Help
+Try demo
+AI assistant
+IC
+PROCUREMENT
+Requests for quotation
+
+A clear scope. The right suppliers. Comparable offers.
+
+Term library
+Projects & sections
+New request
+Search requests
+Filters, saved view & export columns
+
+0 total · 0 matching · 0 on this page · Page 1 of 1
+
+Rows per page
+10
+25
+50
+100
+All (may be slower)
+First page
+Previous page
+Next page
+Last page
+Clear filters
+Ready for your first project?
+
+Try a shared sample project to see requests, offers, and conversations come together.
+
+Create a request
+Explore sample project
+Create a request for quotation
+
+Start with a clear scope. You can review everything before inviting your suppliers.
+
+Already have a brief or item list?
+Paste it into the assistant to extract an editable request.
+Use AI
+Project
+No project selected
+Optional. Manage projects and sections from the Requests page.
+Section
+Whole project
+Draft defaults and sources
+Request title
+Project brief
+Quotation deadline
+Optional. Leave blank if the deadline is not yet agreed.
+Clarification deadline (UTC)
+Optional. Must be no later than the quote deadline.
+Currency
+USD
+GBP
+EUR
+AUD
+SGD
+HKD
+CNY
+Line items
+Add item
+Description
+Quantity
+Unit
+Measurement, interfaces & deliverables
+
+A private draft may be incomplete. Complete every declaration before publishing this structured scope.
+
+Deliverables
+Exclusions
+State None explicitly if there are no exclusions.
+Measurement rules
+Add measurement rule
+Rule 1 name
+Rule 1 dimension
+
+Declare factors in one common base unit. For example, m = 1 and cm = 0.01. Conversions must be exact.
+
+Rule 1 unit 1
+Rule 1 factor 1
+Remove unit
+Add admitted unit
+Responsibility interfaces
+Add interface
+Interface 1 description
+Interface 1 responsibility owner
+One named party owns this interface; describe boundaries in the deliverables.
+Line references
+Steel workbench 1800 x 750 mm, 500 kg
+Item 1 measurement rule
+Choose a rule
+measure-55bf9027 · each
+Item 1 responsibility interface
+Choose an interface
+interface-0292142f · Owner needed
+Declared contract terms · 0
+Invite suppliers
+0 selected
+SS
+Summit Supply
+Jordan Lee · supplier@demo.local
+AM
+Atlas Materials
+Taylor Chen · supplier2@demo.local
+[P
+[Local protocol fixture] exchange
+[Local protocol fixture] supplier · exchange-supplier-1790401235091-6pvui@fixture.invalid
+DS
+Declarations supplier 1790401243746
+Declarations supplier 1790401243746 · declarations-supplier-1790401243746@local.test
+[P
+[Local protocol fixture] resend
+[Local protocol fixture] supplier · resend-supplier-1790401290942-gn2a3@fixture.invalid
+[P
+[Local protocol fixture] qep-mail
+[Local protocol fixture] supplier · qep-mail-supplier-1790401333126-p3un1@fixture.invalid
+DS
+Declarations supplier 1790402033538
+Declarations supplier 1790402033538 · declarations-supplier-1790402033538@local.test
+[P
+[Local protocol fixture] operations
+[Local protocol fixture] supplier · operations-supplier-1790402057730-9maiy@fixture.invalid
+SS
+Submission supplier 1790402110850
+Submission supplier 1790402110850 · submissions-supplier-1790402110850@local.test
+SS
+Submission supplier 1790402176011
+Submission supplier 1790402176011 · submissions-supplier-1790402176011@local.test
+SS
+Scope supplier 1790402221296
+Scope supplier 1790402221296 · scope-supplier-1790402221296@local.test
+SF
+Sandbox fixture supplier
+Sandbox public supplier · sandbox-supplier-1790402238908@local.test
+CS
+Commercial supplier 1790402378636
+Commercial supplier 1790402378636 · commercial-supplier-1790402378636@local.test
+CS
+Commercial second 1790402378636
+Commercial second 1790402378636 · commercial-second-1790402378636@local.test
+[P
+[Evaluation] Plain Supply
+Independent supplier evaluator · independent-supplier-260926@example.test
+Cancel
+Save request draft

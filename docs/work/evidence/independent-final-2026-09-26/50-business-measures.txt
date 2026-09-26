@@ -1,0 +1,206 @@
+Skip to main content
+quotagent.
+[N
+[Evaluation] North Workshop
+Contractor workspace
+Agent workspace
+Agent workroom
+Review actions
+Quotation work
+Overview
+Requests
+Quotes
+Responses & receipts
+Orders
+Messages
+Commercial workbench
+My day & team
+Workspace records
+Sources & connections
+Personalize
+More tools
+Notifications
+Help & getting started
+Settings
+IC
+Independent contractor evaluator
+independent-contractor-260926@example.test
+Workspace
+Responses & receipts
+Help
+Try demo
+AI assistant
+IC
+Responses & receipts
+
+Track who is responding, what time they promised, and which version was opened.
+
+Response coverage
+Activity report
+Business measures
+Recorded business measures
+
+Compare observed work with an earlier window. Definitions and denominators stay visible; empty data never becomes a performance claim.
+
+Current window start (UTC)
+Current window end (UTC)
+Baseline start (UTC)
+Baseline end (UTC)
+Business measure request
+All accessible requests
+[Evaluation] North workshop benches
+ Include explicitly labelled demo records
+Apply measure filters
+Use 7-day windows
+Use 30-day windows
+
+Observed records only. Equal-duration windows use identical formulas; different projects and missing data prevent causal claims. No time saved, win rate or superiority is inferred. Durations include human waits and local delivery delay; ledger precision is one second. No denominator means unmeasured. Unaccepted transfers are excluded.
+
+Available party history starts 2026-09-26T07:38:28Z; 25 accepted source records. 0 accessible requests have no recorded publication/receipt source. The requested baseline starts before this recorded history; counts describe available facts only.
+
+Stale submitted versions excluded: 0 current, 0 baseline.
+
+Selected party: u-5a49c70d-603f-4071-8a00-0f713d1c36d3. Personal analysis and usage: u-5a49c70d-603f-4071-8a00-0f713d1c36d3. Received offers
+
+Current 2026-08-27T07:51:24.881Z → 2026-09-26T07:51:24.881Z
+Observed baseline 2026-07-28T07:51:24.881Z → 2026-08-27T07:51:24.881Z. 30.00 days each; ends are exclusive.
+
+Export measures and sources CSV
+Open provider usage & evaluation
+Open evidence reconstruction
+Observed current and equal-duration baseline measures
+Measure and definition	Current	Baseline	Difference
+Declared measurement conformance
+
+Base lines matching the explicitly declared source measurement rule, quantity and unit / base lines with a declared rule
+
+Current denominator 1; baseline 0
+
+0 base lines have no explicit measurement rule and are unmeasured.
+
+Ledger sources (2)
+	100.0%	Unmeasured	Unmeasured
+Own model-input reconstruction
+
+Passed recorded model-input reconstruction / measured-boundary reconstruction reports in own account
+
+Current denominator 0; baseline 0
+Ledger sources (0)
+	Unmeasured	Unmeasured	Unmeasured
+Own recorded-replay consistency
+
+Identical double recorded-assertion replay / recorded replay receipts; not fresh-model determinism
+
+Current denominator 0; baseline 0
+Ledger sources (0)
+	Unmeasured	Unmeasured	Unmeasured
+Own provider failure rate
+
+Failed own-account provider calls / terminal calls; cancellations are separate, pending excluded
+
+Current denominator 0; baseline 0
+Ledger sources (0)
+	Unmeasured	Unmeasured	Unmeasured
+Own provider elapsed seconds
+
+Own-account terminal provider elapsed seconds; human waiting outside the call is excluded
+
+Current denominator 0; baseline 0
+Ledger sources (0)
+	Unmeasured	Unmeasured	Unmeasured
+Response cycle (seconds)
+
+Mean local published-scope visibility to first matching submitted quotation (seconds)
+
+Current denominator 1; baseline 0
+
+1 cohorts; 0 without an observed response.
+
+Ledger sources (2)
+	78	Unmeasured	Unmeasured
+Priced base-line completeness
+
+Exactly matched priced base RFQ lines / required lines across submitted versions
+
+Current denominator 1; baseline 0
+Ledger sources (2)
+	100.0%	Unmeasured	Unmeasured
+Commercial-field completeness
+
+Supplied currency, leadDays, tax, freight, paymentDays, advancePercent, warrantyMonths, penaltyPercent, validityUntil and deviations / checklist fields
+
+Current denominator 10; baseline 0
+Ledger sources (2)
+	20.0%	Unmeasured	Unmeasured
+Answered clarification rounds / scope
+
+Unique answered same-revision questions / started published revision cohorts
+
+Current denominator 1; baseline 0
+Ledger sources (0)
+	0	Unmeasured	Unmeasured
+Human rewrite ratio
+
+Changed editable leaf values / compared values at first human save after an agent draft
+
+Current denominator 0; baseline 0
+
+0 paired drafts; 1 unmatched human saves excluded.
+
+Ledger sources (0)
+	Unmeasured	Unmeasured	Unmeasured
+Scored comparison rows
+
+Scored rows without quote-specific manual assumptions / rows in exact-revision saved commercial analyses; private to signed-in analyst
+
+Current denominator 0; baseline 0
+
+0 matched analyses out of 0 recorded in this scope.
+
+Ledger sources (0)
+	Unmeasured	Unmeasured	Unmeasured
+Recorded comparison delay (seconds)
+
+Saved comparison event minus latest included exact submitted quote event (seconds)
+
+Current denominator 0; baseline 0
+Ledger sources (0)
+	Unmeasured	Unmeasured	Unmeasured
+Recorded business approvals
+
+Recorded approved business actions with a visible RFQ reference
+
+Ledger sources (1)
+	1	0	1
+Own agent-control interventions
+
+Signed-in account agent pause/resume/stop/guidance/human-answer events; not mouse clicks or draft edits
+
+Ledger sources (0)
+	0	0	0
+Own configured-rate cost estimates
+
+Recorded own-account configured-rate cost estimates, currencies separate; not billed charges or allocated to RFQs
+
+0/0 calls priced; 0 unknown. Estimates, not billed charges. No project allocation.
+
+Ledger sources (0)
+	Unmeasured	Unmeasured	Unmeasured
+Detection / false-positive quality
+
+Detection/false-positive rates require paired human reference labels; no such linked labels are recorded in this projection.
+
+Ledger sources (0)
+	Unmeasured	Unmeasured	Unmeasured
+Current-window response cohorts by day
+2026-09-26
+1/1 answered
+Source-linked local response-cycle cohorts
+Request/revision	Visible from	First submitted quote	Elapsed seconds	Source
+[Evaluation] North workshop benches
+
+Revision 1
+
+	2026-09-26T07:41:16Z	2026-09-26T07:42:34Z	78	
+Ledger sources (2)
+Submitted quote completeness (1 versions)

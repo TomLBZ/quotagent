@@ -1,0 +1,82 @@
+Skip to main content
+quotagent.
+Q
+Quotagent
+Administration
+Agent workspace
+Agent workroom
+Review actions
+Manage application
+Sources & connections
+Personalize
+More tools
+Notifications
+Help & getting started
+Settings
+PA
+Platform Admin
+admin@demo.local
+Workspace
+Agent workspace
+3
+Help
+Try demo
+PA
+YOUR AGENT WORKSPACE
+Make the workspace work better.
+
+Describe the outcome. Your agent prepares the work and brings decisions back to you.
+
+Review actions
+Delegate a larger task
+Your AI teammate
+Ready to work with you
+YOU
+Help me create a new request for quotation. Ask what I need, then prepare an editable RFQ draft.
+QUOTAGENT
+Happy to. Quick note on what I can and can't do: no RFQ-creation tool or connected procurement system is registered on this account right now, so I can't file an RFQ record myself. What I *can* do is draft an editable RFQ text here for you to paste/upload — and save it as a reusable template if you'd like.
+Tell me these and I'll draft it:
+1. Package – trade/scope, project name & location
+2. Quantities & specs – items, units, key standards, drawings available?
+3. Delivery – site address, required date, delivery vs. install
+4. Commercial – currency, whether you want a firm price or rates, payment terms to propose, validity period you'll ask for
+5. Submission – your RFQ reference, deadline date/time, contact, required format (e.g. priced BoQ, signed offer)
+6. Qualifying criteria – insurances, certifications, lead time, exclusions you'll treat as non-compliant
+7. Suppliers – names/emails to invite (I won't contact them; that needs your approval)
+Skeleton draft you can start editing now:
+`
+RFQ [REF] — [PROJECT, LOCATION]
+Issued: [date] Deadline: [date/time]
+1. Scope: [trade + description]
+2. Priced items: [table: item | spec | qty | unit | rate | total]
+3. Delivery: [address / required date / install?]
+4. Commercial: [currency, firm price or rates, payment terms, validity]
+5. Exclusions you must state: [list]
+6. Documents to submit: [priced BoQ, insurances, certifications]
+7. Conditions: prices held firm for offer validity; full quantity coverage required;
+deviations stated on a qualifications sheet.
+Contact: [name, email]
+`
+Send the details (or just point me at an existing scope message) and I'll fill this in. Next step after that: you review, then I can save it as a reusable RFQ template.
+1 tool results
+YOU
+Help me create a useful personal plugin for my workspace.
+QUOTAGENT
+Built and loaded: RFQ Draft Builder is now in your Plugin studio (personal, not published).
+What it does: you paste raw scope notes, it renders a numbered, copy-ready RFQ in plain text — sections 1–8 covering Scope, Priced items, Delivery, Commercial, Documents to submit, Qualifying criteria, Conditions and Contact.
+Inputs it takes:
+• Project + location, RFQ reference (auto-suggests RFQ-YYYY-NNN), issue date, submission deadline
+• Trade/package and scope description
+• Priced items, one per line: item | specification | quantity | unit — rendered as a wrapped text table
+• Delivery address, required on-site date, supply-only vs supply-and-install
+• Currency, pricing basis (firm lump sum / unit rates / both), payment terms, validity period requested
+• Documents requested, qualifying criteria, exclusions suppliers must declare, buyer contact
+Standard conditions it always applies: prices held firm for the stated validity period, full quantity coverage required, deviations only via a separate qualifications sheet, and a line confirming the buyer isn't bound to accept the lowest or any quotation.
+Guardrails: it flags missing or malformed entries as "notes for buyer review", leaves unknowns as "to be confirmed by the buyer", and never sends anything — the footer states it's a buyer-review draft. It doesn't hold supplier costs or internal data.
+Next step: open Plugin studio, run it once with a real package (project name and scope are required), then check the priced-items table alignment and the review notes before you issue the RFQ through your normal process. Tell me if you'd like a reusable version covering the full quote-comparison workflow as well.
+1 tool results
+Open plugin studio
+Ready for your review
+Shift + Enter for a new line
+
+You review and approve commitments.

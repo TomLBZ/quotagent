@@ -1,0 +1,168 @@
+Skip to main content
+quotagent.
+NC
+Northstar Construction
+Contractor workspace
+Agent workspace
+Agent workroom
+Review actions
+Quotation work
+Workspace records
+Sources & connections
+Personalize
+Plugin studio
+Installed tools
+Workspace style
+AI usage
+Plugin settings
+More tools
+Notifications
+Help & getting started
+Settings
+AM
+Alex Morgan
+contractor@demo.local
+Workspace
+AI usage
+56
+Help
+Try demo
+AI assistant
+AM
+UNDERSTAND YOUR AI ACTIVITY
+AI usage
+
+See how your AI activity uses tokens, from conversations and document extraction to specialist agents and plugin creation.
+
+Model settings
+Tokens & cost
+Runtime controls
+Recorded evaluations
+From (UTC)
+To (UTC)
+Model
+All models
+deepseek-flash
+Provider
+All providers
+deepseek
+Purpose
+All activities
+Plugin creation
+plugin-revision-proposal
+AI conversation
+Status
+All statuses
+Canceled
+Completed
+Apply filters
+Reset filters
+Model calls
+13
+11 completed · 0 failed · 2 canceled
+Total tokens
+204,291
++ unknown
+11 of 13 calls reported this count
+Input tokens
+197,587
++ unknown
+11 of 13 calls reported this count
+Output tokens
+6,704
++ unknown
+11 of 13 calls reported this count
+
+Counts come from provider responses recorded for this workspace. 2 of 13 calls have no reported total; the displayed sum covers the other calls. Failed call attempts include requests refused before dispatch. Token counts are not an invoice.
+
+Configured-rate estimates
+
+No priced calls in this selection.
+
+13 calls have unknown cost. Estimates use explicitly configured tariffs; currencies are shown separately and unpriced calls are never counted as free.
+
+Usage over time
+
+Dates are UTC. Select a day to inspect its calls.
+
+Chart metric
+Total tokens
+Input tokens
+Output tokens
+Cached input
+Uncached input
+Cache writes
+Reasoning output
+Sep 26
+204.3K
+
+Showing days with recorded calls. “?” means the selected count was not reported. Hover or focus a bar for its exact count and reporting coverage.
+
+Where tokens were used
+Group by
+Model
+Provider
+Purpose
+Status
+Model	Calls	Input	Output	Total
+deepseek-flash	13	197,587 + unknown	6,704 + unknown	204,291 + unknown
+Provider token breakdown
+
+Cache counts are part of input tokens. Reasoning counts are part of output tokens. They are shown separately here and are not added to totals.
+
+Cached input
+101,632 + unknown
+11 of 13 calls reported
+Uncached input
+95,955 + unknown
+11 of 13 calls reported
+Cache writes
+Not reported
+0 of 13 calls reported
+Reasoning output
+3,224 + unknown
+11 of 13 calls reported
+Recent model calls
+
+13 of 13 calls in this selection. “No final status” includes requests interrupted before an outcome was recorded; it does not mean a model is still running.
+
+Started (UTC)	Activity	Model	Status	Total tokens	Duration
+2026-09-26 07:46:36	Plugin creation	deepseek-flash
+deepseek
+	Completed	2,171	5.6 s
+2026-09-26 07:45:40	AI conversation	deepseek-flash
+deepseek
+	Canceled	Not reported	0.3 s
+2026-09-26 07:45:05	AI conversation	deepseek-flash
+deepseek
+	Completed	34,804	2.6 s
+2026-09-26 07:44:28	AI conversation	deepseek-flash
+deepseek
+	Canceled	Not reported	0.3 s
+2026-09-26 07:44:14	AI conversation	deepseek-flash
+deepseek
+	Completed	34,338	4.0 s
+2026-09-26 07:44:12	AI conversation	deepseek-flash
+deepseek
+	Completed	33,038	2.4 s
+2026-09-26 07:43:37	AI conversation	deepseek-flash
+deepseek
+	Completed	32,772	5.4 s
+2026-09-26 07:43:33	AI conversation	deepseek-flash
+deepseek
+	Completed	31,327	3.4 s
+2026-09-26 05:55:29	plugin-revision-proposal	deepseek-flash
+deepseek
+	Completed	1,831	4.9 s
+2026-09-26 05:55:26	Plugin creation	deepseek-flash
+deepseek
+	Completed	997	1.8 s
+2026-09-26 05:51:24	AI conversation	deepseek-flash
+deepseek
+	Completed	30,116	1.9 s
+2026-09-26 03:38:22	plugin-revision-proposal	deepseek-flash
+deepseek
+	Completed	1,906	6.6 s
+2026-09-26 03:38:18	Plugin creation	deepseek-flash
+deepseek
+	Completed	991	2.7 s

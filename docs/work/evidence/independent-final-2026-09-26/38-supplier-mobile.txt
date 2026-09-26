@@ -1,0 +1,88 @@
+Skip to main content
+quotagent.
+[P
+[Evaluation] Plain Supply
+Supplier workspace
+Agent workspace
+Agent workroom
+Review actions
+Quotation work
+Overview
+Requests
+Quotes
+Responses & receipts
+Orders
+Messages
+Commercial workbench
+My day & team
+Workspace records
+Sources & connections
+Personalize
+More tools
+Notifications
+Help & getting started
+Settings
+IS
+Independent supplier evaluator
+independent-supplier-260926@example.test
+Quotes
+AI assistant
+YOUR PIPELINE
+Every quote, moving forward.
+
+Prepare your drafts, refine your offer, and review exactly what you sent.
+
+Review my quotes with AI
+Prepare several quotations
+
+Select your drafts together. Each exact offer gets its own review; submissions happen only after your decisions.
+
+Select quotation drafts
+[Evaluation] North workshop benches
+
+Due No deadline · 1 line items
+
+Open request
+[P
+[Evaluation] Plain Supply
+quote-f3ddbd23-94e
+Submitted
+Request revision 1
+$3,000.00
+Items $3,000.00
+Tax not stated
+Freight not stated
+Total includes known declared charges. Clarify unstated tax or freight before agreeing.
+Lead time
+21 days
+Payment
+Net 30 from accepted delivery
+Scope
+1 items
+
+Delivery to ground floor bay included. Buyer unloads. Installation excluded. Tax requires clarification.
+
+Read evidence & printable copy
+Print QUOTE record
+
+Received view receipts show who opened an exact version. No receipt means no recorded view; delivery status is shown separately in Deliveries.
+
+Independent contractor evaluator
+Version 1 · 1 view · receipt received
+First 2026-09-26 07:42 UTC · last 2026-09-26 07:42 UTC
+Open response coverage
+Object attachments
+
+Upload privately, then choose an exact version to deliver.
+
+Upload attachment
+ Show all versions and removal history
+No files on this object
+
+Add drawings, scope documents or supporting records. Internal files stay in this party workspace.
+
+Internal files stay in this party. Delivery shares an exact version through QEP; removing it records a tombstone and does not erase retained history.
+View line-by-line pricing
+Price negotiation
+Prepare revision
+Withdraw quote

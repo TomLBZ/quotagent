@@ -1,0 +1,340 @@
+Skip to main content
+quotagent.
+NC
+Northstar Construction
+Contractor workspace
+Agent workspace
+Agent workroom
+Review actions
+Quotation work
+Workspace records
+Sources & connections
+Personalize
+Plugin studio
+Installed tools
+Workspace style
+AI usage
+Plugin settings
+More tools
+Notifications
+Help & getting started
+Settings
+AM
+Alex Morgan
+contractor@demo.local
+Workspace
+AI usage
+56
+Help
+Try demo
+AI assistant
+AM
+UNDERSTAND YOUR AI ACTIVITY
+AI usage
+
+See how your AI activity uses tokens, from conversations and document extraction to specialist agents and plugin creation.
+
+Model settings
+Tokens & cost
+Runtime controls
+Recorded evaluations
+From (UTC)
+To (UTC)
+Model
+All models
+deepseek-flash
+Provider
+All providers
+deepseek
+Purpose
+All activities
+Document extraction
+Plugin creation
+plugin-revision-proposal
+Workroom specialists
+Workroom planning
+Workroom synthesis
+AI conversation
+Status
+All statuses
+Canceled
+Completed
+Failed
+Apply filters
+Reset filters
+Model calls
+68
+63 completed · 3 failed · 2 canceled
+Total tokens
+1,520,256
++ unknown
+63 of 68 calls reported this count
+Input tokens
+1,426,977
++ unknown
+63 of 68 calls reported this count
+Output tokens
+93,279
++ unknown
+63 of 68 calls reported this count
+
+Counts come from provider responses recorded for this workspace. 5 of 68 calls have no reported total; the displayed sum covers the other calls. Failed call attempts include requests refused before dispatch. Token counts are not an invoice.
+
+Configured-rate estimates
+
+No priced calls in this selection.
+
+68 calls have unknown cost. Estimates use explicitly configured tariffs; currencies are shown separately and unpriced calls are never counted as free.
+
+Usage over time
+
+Dates are UTC. Select a day to inspect its calls.
+
+Chart metric
+Total tokens
+Input tokens
+Output tokens
+Cached input
+Uncached input
+Cache writes
+Reasoning output
+Sep 25
+1.3M
+Sep 26
+204.3K
+
+Showing days with recorded calls. “?” means the selected count was not reported. Hover or focus a bar for its exact count and reporting coverage.
+
+Where tokens were used
+Group by
+Model
+Provider
+Purpose
+Status
+Model	Calls	Input	Output	Total
+deepseek-flash	68	1,426,977 + unknown	93,279 + unknown	1,520,256 + unknown
+Provider token breakdown
+
+Cache counts are part of input tokens. Reasoning counts are part of output tokens. They are shown separately here and are not added to totals.
+
+Cached input
+844,416 + unknown
+63 of 68 calls reported
+Uncached input
+582,561 + unknown
+63 of 68 calls reported
+Cache writes
+Not reported
+0 of 68 calls reported
+Reasoning output
+57,496 + unknown
+63 of 68 calls reported
+Recent model calls
+
+68 of 68 calls in this selection. “No final status” includes requests interrupted before an outcome was recorded; it does not mean a model is still running.
+
+Started (UTC)	Activity	Model	Status	Total tokens	Duration
+2026-09-26 07:46:36	Plugin creation	deepseek-flash
+deepseek
+	Completed	2,171	5.6 s
+2026-09-26 07:45:40	AI conversation	deepseek-flash
+deepseek
+	Canceled	Not reported	0.3 s
+2026-09-26 07:45:05	AI conversation	deepseek-flash
+deepseek
+	Completed	34,804	2.6 s
+2026-09-26 07:44:28	AI conversation	deepseek-flash
+deepseek
+	Canceled	Not reported	0.3 s
+2026-09-26 07:44:14	AI conversation	deepseek-flash
+deepseek
+	Completed	34,338	4.0 s
+2026-09-26 07:44:12	AI conversation	deepseek-flash
+deepseek
+	Completed	33,038	2.4 s
+2026-09-26 07:43:37	AI conversation	deepseek-flash
+deepseek
+	Completed	32,772	5.4 s
+2026-09-26 07:43:33	AI conversation	deepseek-flash
+deepseek
+	Completed	31,327	3.4 s
+2026-09-26 05:55:29	plugin-revision-proposal	deepseek-flash
+deepseek
+	Completed	1,831	4.9 s
+2026-09-26 05:55:26	Plugin creation	deepseek-flash
+deepseek
+	Completed	997	1.8 s
+2026-09-26 05:51:24	AI conversation	deepseek-flash
+deepseek
+	Completed	30,116	1.9 s
+2026-09-26 03:38:22	plugin-revision-proposal	deepseek-flash
+deepseek
+	Completed	1,906	6.6 s
+2026-09-26 03:38:18	Plugin creation	deepseek-flash
+deepseek
+	Completed	991	2.7 s
+2026-09-25 10:34:12	Workroom synthesis	deepseek-flash
+deepseek
+	Completed	7,619	9.0 s
+2026-09-25 10:33:51	Workroom specialists	deepseek-flash
+deepseek
+	Completed	23,242	21.0 s
+2026-09-25 10:33:51	Workroom specialists	deepseek-flash
+deepseek
+	Completed	13,365	10.0 s
+2026-09-25 10:33:51	Workroom specialists	deepseek-flash
+deepseek
+	Completed	22,499	14.0 s
+2026-09-25 10:33:48	Workroom specialists	deepseek-flash
+deepseek
+	Failed	Not reported	2.0 s
+2026-09-25 10:33:46	Workroom specialists	deepseek-flash
+deepseek
+	Completed	19,296	2.0 s
+2026-09-25 10:33:45	Workroom specialists	deepseek-flash
+deepseek
+	Completed	18,331	1.0 s
+2026-09-25 10:33:45	Workroom specialists	deepseek-flash
+deepseek
+	Failed	Not reported	5.0 s
+2026-09-25 10:33:44	Workroom specialists	deepseek-flash
+deepseek
+	Completed	9,898	1.0 s
+2026-09-25 10:33:42	Workroom specialists	deepseek-flash
+deepseek
+	Completed	6,626	2.0 s
+2026-09-25 10:33:42	Workroom specialists	deepseek-flash
+deepseek
+	Completed	7,571	5.0 s
+2026-09-25 10:33:42	Workroom specialists	deepseek-flash
+deepseek
+	Completed	6,713	2.0 s
+2026-09-25 10:33:33	AI conversation	deepseek-flash
+deepseek
+	Completed	52,439	3.0 s
+2026-09-25 10:33:31	AI conversation	deepseek-flash
+deepseek
+	Completed	51,514	2.0 s
+2026-09-25 10:33:29	AI conversation	deepseek-flash
+deepseek
+	Completed	50,361	2.0 s
+2026-09-25 10:33:26	Workroom planning	deepseek-flash
+deepseek
+	Completed	6,374	15.0 s
+2026-09-25 10:32:26	AI conversation	deepseek-flash
+deepseek
+	Completed	52,567	3.0 s
+2026-09-25 10:32:20	AI conversation	deepseek-flash
+deepseek
+	Completed	51,626	6.0 s
+2026-09-25 10:32:19	Workroom planning	deepseek-flash
+deepseek
+	Failed	Not reported	0.0 s
+2026-09-25 10:32:18	AI conversation	deepseek-flash
+deepseek
+	Completed	49,997	2.0 s
+2026-09-25 10:18:19	Document extraction	deepseek-flash
+deepseek
+	Completed	1,351	4.0 s
+2026-09-25 10:14:46	AI conversation	deepseek-flash
+deepseek
+	Completed	50,939	3.0 s
+2026-09-25 10:14:36	AI conversation	deepseek-flash
+deepseek
+	Completed	49,934	10.0 s
+2026-09-25 10:14:05	AI conversation	deepseek-flash
+deepseek
+	Completed	51,747	4.0 s
+2026-09-25 10:12:31	AI conversation	deepseek-flash
+deepseek
+	Completed	54,956	4.0 s
+2026-09-25 10:12:28	AI conversation	deepseek-flash
+deepseek
+	Completed	49,052	3.0 s
+2026-09-25 09:40:30	AI conversation	deepseek-flash
+deepseek
+	Completed	51,164	6.0 s
+2026-09-25 09:40:28	AI conversation	deepseek-flash
+deepseek
+	Completed	44,339	1.0 s
+2026-09-25 09:35:41	AI conversation	deepseek-flash
+deepseek
+	Completed	46,259	3.0 s
+2026-09-25 09:34:43	Plugin creation	deepseek-flash
+deepseek
+	Completed	18,687	58.0 s
+2026-09-25 09:34:37	AI conversation	deepseek-flash
+deepseek
+	Completed	34,924	6.0 s
+2026-09-25 09:33:11	Plugin creation	deepseek-flash
+deepseek
+	Completed	27,217	86.0 s
+2026-09-25 09:33:02	AI conversation	deepseek-flash
+deepseek
+	Completed	33,631	8.0 s
+2026-09-25 09:30:34	Document extraction	deepseek-flash
+deepseek
+	Completed	2,325	8.0 s
+2026-09-25 09:29:05	Document extraction	deepseek-flash
+deepseek
+	Completed	2,508	9.0 s
+2026-09-25 08:28:39	AI conversation	deepseek-flash
+deepseek
+	Completed	32,439	3.0 s
+2026-09-25 08:28:36	AI conversation	deepseek-flash
+deepseek
+	Completed	31,372	3.0 s
+2026-09-25 08:28:34	AI conversation	deepseek-flash
+deepseek
+	Completed	28,497	2.0 s
+2026-09-25 08:26:13	AI conversation	deepseek-flash
+deepseek
+	Completed	28,171	3.0 s
+2026-09-25 08:26:07	AI conversation	deepseek-flash
+deepseek
+	Completed	27,059	6.0 s
+2026-09-25 08:25:15	AI conversation	deepseek-flash
+deepseek
+	Completed	25,841	4.0 s
+2026-09-25 08:25:11	AI conversation	deepseek-flash
+deepseek
+	Completed	24,201	4.0 s
+2026-09-25 08:23:19	AI conversation	deepseek-flash
+deepseek
+	Completed	21,985	2.0 s
+2026-09-25 08:23:17	AI conversation	deepseek-flash
+deepseek
+	Completed	19,555	1.0 s
+2026-09-25 08:23:00	AI conversation	deepseek-flash
+deepseek
+	Completed	18,356	3.0 s
+2026-09-25 08:22:59	AI conversation	deepseek-flash
+deepseek
+	Completed	15,901	1.0 s
+2026-09-25 08:22:15	AI conversation	deepseek-flash
+deepseek
+	Completed	14,716	2.0 s
+2026-09-25 08:22:07	Plugin creation	deepseek-flash
+deepseek
+	Completed	3,252	8.0 s
+2026-09-25 08:22:02	AI conversation	deepseek-flash
+deepseek
+	Completed	11,726	5.0 s
+2026-09-25 08:21:21	AI conversation	deepseek-flash
+deepseek
+	Completed	10,895	3.0 s
+2026-09-25 08:21:20	AI conversation	deepseek-flash
+deepseek
+	Completed	8,611	1.0 s
+2026-09-25 08:18:48	AI conversation	deepseek-flash
+deepseek
+	Completed	7,858	2.0 s
+2026-09-25 08:18:43	AI conversation	deepseek-flash
+deepseek
+	Completed	6,914	5.0 s
+2026-09-25 08:18:31	AI conversation	deepseek-flash
+deepseek
+	Completed	5,859	2.0 s
+2026-09-25 08:18:29	AI conversation	deepseek-flash
+deepseek
+	Completed	3,686	2.0 s

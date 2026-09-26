@@ -8,8 +8,10 @@ native capability exists. Requirement acceptance links are in the
 
 | Current source area | Evidence |
 |---|---|
-| Requirement-completion public release67bd9af | [20 GUI journeys and generated-plugin continuation](final-public-2026-09-26/README.md) |
+| Public journeys through corrected release3ab6d8c | [21 GUI journeys and generated-plugin continuation](final-public-2026-09-26/README.md) |
 | Public integration at immutablef2366a0 | [Eight GUI journeys](integrated-public-2026-09-26/README.md) |
+| Independent current product preference and correction recheck | [Practical evaluation](independent-final-2026-09-26/assessment.md) |
+| Full original goal and requirement closure | [Acceptance audit](goal-completion-2026-09-26/README.md) |
 | Initial agent controls, styles, guides and usage | [Agent experience](agent-experience-2026-09-26/README.md) |
 | Configuration, notifications and SMTP digests | [G9](g9-configuration-and-notifications.md) |
 | Evidence, attachments, PDF and retention | [Native artifacts](native-artifacts-2026-09-26/README.md) |
@@ -21,8 +23,9 @@ native capability exists. Requirement acceptance links are in the
 | Provider controls and recorded-run evaluation | [Runtime](g6-auditable-runtime.md) |
 | Generated extension evolution | [Evolution](g7-native-evolution.md) |
 
-The first four goal enhancements and the completed compatible feature release have
-public evidence; final independent preference evaluation remains separate.
+The first four enhancements, compatible feature completion and independent
+preference assessment have scoped public evidence. Two historical latency targets
+remain unproven; the acceptance audit records their measurements and limits.
 Local protocol services exercise actual SMTP/IMAP/MCP/A2A/HTTP boundaries without
 claiming external-account delivery or live model quality. Original raw temporary
 artifacts named by reports may be larger than retained summaries/screenshots.

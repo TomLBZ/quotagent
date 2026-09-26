@@ -178,5 +178,14 @@
     "groups": 4,
     "javascriptErrors": 0,
     "rawArtifacts": "tmp/product-evidence/final-public/sandbox"
+  },
+  {
+    "name": "supplier-picker",
+    "revision": "3ab6d8cde6d2d05acb3a73403279fc9be579a15f",
+    "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/supplier-picker node src/domain/procurement/tests/supplier-picker-browser.mjs",
+    "report": "supplier-picker.json",
+    "groups": 3,
+    "javascriptErrors": 0,
+    "rawArtifacts": "tmp/product-evidence/final-public/supplier-picker"
   }
 ]

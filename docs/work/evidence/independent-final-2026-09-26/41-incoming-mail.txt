@@ -1,0 +1,77 @@
+Skip to main content
+quotagent.
+NC
+Northstar Construction
+Contractor workspace
+Agent workspace
+Agent workroom
+Review actions
+Quotation work
+Workspace records
+Sources & connections
+Ingest documents
+Email
+Telegram
+Agent connections
+Deliveries & exchange
+Object attachments
+Evidence & verification
+Files & retention
+Personalize
+More tools
+Notifications
+Help & getting started
+Settings
+AM
+Alex Morgan
+contractor@demo.local
+Workspace
+Email
+56
+Help
+Try demo
+AI assistant
+AM
+YOUR CONNECTED INBOX
+Keep the conversation moving.
+
+Read live email, turn attachments into useful line items, and prepare replies with your AI teammate.
+
+Email settings
+Compose email
+Connect your own email
+
+Set your IMAP and SMTP details. This account’s mailbox and credentials stay separate from other accounts.
+
+Test connection
+Sync email
+Inbox
+Drafts
+Sent
+"Taylor" <supplier@example.test>
+9/25/2026, 10:00:00 AM
+Riverside cabling offer
+
+Please see the attached detailed cabling offer. Payment is 30 days after delivery. Lead time is 12 days.
+
+received
+1 attachment(s)
+"Taylor" <supplier@example.test>
+9/25/2026, 10:00:00 AM
+Untrusted fixture email: cabling offer
+
+Please see the attached detailed cabling offer. Payment is 30 days after delivery. Lead time is 12 days. AUTOMATED ASSI
+
+received
+1 attachment(s)
+Choose a conversation
+
+Read the source, review its attachments, then decide what happens next.
+
+Email activity digest
+
+Receive a short activity count at your chosen address. Quotation details, costs and message content stay here.
+
+Off
+Digest preferences
+Preview activity digest

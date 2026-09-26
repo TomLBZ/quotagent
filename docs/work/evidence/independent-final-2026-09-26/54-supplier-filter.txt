@@ -1,0 +1,155 @@
+Skip to main content
+quotagent.
+[N
+[Evaluation] North Workshop
+Contractor workspace
+Agent workspace
+Agent workroom
+Review actions
+Quotation work
+Overview
+Requests
+Quotes
+Responses & receipts
+Orders
+Messages
+Commercial workbench
+My day & team
+Workspace records
+Sources & connections
+Personalize
+More tools
+Notifications
+Help & getting started
+Settings
+IC
+Independent contractor evaluator
+independent-contractor-260926@example.test
+Workspace
+Requests
+Help
+Try demo
+AI assistant
+IC
+PROCUREMENT
+Requests for quotation
+
+A clear scope. The right suppliers. Comparable offers.
+
+Term library
+Projects & sections
+New request
+Search requests
+Filters, saved view & export columns
+
+1 total · 1 matching · 1 on this page · Page 1 of 1
+
+Rows per page
+10
+25
+50
+100
+All (may be slower)
+First page
+Previous page
+Next page
+Last page
+Clear filters
+Published
+[Evaluation] North workshop benches
+
+Supply 12 steel workbenches, 1800 x 750 mm, load rating 500 kg. Deliver to ground floor loading bay by 2026-10-30. No installation. Buyer will unload. No agreed quotation deadline.
+
+Due No deadline
+1 line items
+1 offer received
+Open request
+Create a request for quotation
+
+Start with a clear scope. You can review everything before inviting your suppliers.
+
+Already have a brief or item list?
+Paste it into the assistant to extract an editable request.
+Use AI
+Project
+No project selected
+Optional. Manage projects and sections from the Requests page.
+Section
+Whole project
+Draft defaults and sources
+Request title
+Project brief
+Quotation deadline
+Optional. Leave blank if the deadline is not yet agreed.
+Clarification deadline (UTC)
+Optional. Must be no later than the quote deadline.
+Currency
+USD
+GBP
+EUR
+AUD
+SGD
+HKD
+CNY
+Line items
+Add item
+Description
+Quantity
+Unit
+Measurement and responsibility are not structured
+
+Complete these declarations before publishing. Unit names are copied only; measurement dimensions and responsibility owners must be stated by you.
+
+Define structured scope
+Declared contract terms · 0
+Invite suppliers
+0 selected
+Search suppliers
+Search name, company or email. Selections stay selected when you filter.
+SS
+Summit Supply
+Jordan Lee · supplier@demo.local
+AM
+Atlas Materials
+Taylor Chen · supplier2@demo.local
+[P
+[Local protocol fixture] exchange
+[Local protocol fixture] supplier · exchange-supplier-1790401235091-6pvui@fixture.invalid
+DS
+Declarations supplier 1790401243746
+Declarations supplier 1790401243746 · declarations-supplier-1790401243746@local.test
+[P
+[Local protocol fixture] resend
+[Local protocol fixture] supplier · resend-supplier-1790401290942-gn2a3@fixture.invalid
+[P
+[Local protocol fixture] qep-mail
+[Local protocol fixture] supplier · qep-mail-supplier-1790401333126-p3un1@fixture.invalid
+DS
+Declarations supplier 1790402033538
+Declarations supplier 1790402033538 · declarations-supplier-1790402033538@local.test
+[P
+[Local protocol fixture] operations
+[Local protocol fixture] supplier · operations-supplier-1790402057730-9maiy@fixture.invalid
+SS
+Submission supplier 1790402110850
+Submission supplier 1790402110850 · submissions-supplier-1790402110850@local.test
+SS
+Submission supplier 1790402176011
+Submission supplier 1790402176011 · submissions-supplier-1790402176011@local.test
+SS
+Scope supplier 1790402221296
+Scope supplier 1790402221296 · scope-supplier-1790402221296@local.test
+SF
+Sandbox fixture supplier
+Sandbox public supplier · sandbox-supplier-1790402238908@local.test
+CS
+Commercial supplier 1790402378636
+Commercial supplier 1790402378636 · commercial-supplier-1790402378636@local.test
+CS
+Commercial second 1790402378636
+Commercial second 1790402378636 · commercial-second-1790402378636@local.test
+[P
+[Evaluation] Plain Supply
+Independent supplier evaluator · independent-supplier-260926@example.test
+Cancel
+Save request draft

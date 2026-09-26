@@ -1,0 +1,10 @@
+await page.getByRole('textbox',{name:'Message your AI assistant'}).fill('[Independent evaluation pause] Read-only Riverside lighting comparison, including exact arithmetic, missing facts and next steps. No writes or drafts.');
+await page.getByRole('textbox',{name:'Message your AI assistant'}).press('Enter');
+await page.getByRole('button',{name:'Pause task',exact:true}).click();
+await page.waitForTimeout(800);
+await page.screenshot({path:out+'/20-paused.png'});
+await fs.writeFile(out+'/20-paused.txt',(await page.locator('body').innerText()).slice(-7000));
+await page.reload({waitUntil:'networkidle'});
+console.log((await page.locator('body').innerText()).slice(-3500));
+console.log(await page.locator('textarea').evaluateAll(es=>es.map(e=>({aria:e.getAttribute('aria-label'),placeholder:e.placeholder}))));
+console.log((await page.getByRole('button').allTextContents()).slice(-10));

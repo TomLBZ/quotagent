@@ -2,15 +2,17 @@
 <!-- budget: 6144 bytes, hard -->
 
 URL: https://novara.remoteblossom.com/quotagent/ . Final application source:
-`67bd9af5b73036104f81abdacae0883fd8d2ffce`. [Release record](release.json)
+`3ab6d8cde6d2d05acb3a73403279fc9be579a15f`. [Release record](release.json)
 identifies the immutable committed archive, data backup and running process.
 Build:114 modules,35 native composition plugins. [Copied-data preflight](preflight.json)
 passed36 reads across contractor, supplier and administrator accounts before swap.
 
 [Executed commands and per-run revisions](runs.json) link the retained JSON reports.
-Twenty completed browser journeys passed97 groups with0 JavaScript errors.
+Twenty-one completed browser journeys passed100 groups with0 JavaScript errors.
 Initial successful journeys ran on `bf2cb4b`; affected Orders and saved-view paths
-were then replayed on corrected `67bd9af`. Earlier reports keep their actual revision.
+were then replayed on corrected `67bd9af`. Independent review subsequently prompted
+source-bound monetary arithmetic (`2c06f98`) and supplier search (`3ab6d8c`).
+Earlier reports keep their actual revision.
 All business mutations came from visible GUI controls. API reads and captured
 responses were used to verify outcomes, never to seed a public success.
 
@@ -26,6 +28,7 @@ responses were used to verify outcomes, never to seed a public success.
 | Model evidence | Real configured provider call and matched exact dispatch-request reconstruction; independently trusted signed bundle verification |
 | Settings and activity | Masked YAML preview/apply/export,27 real IMAP notifications, pagination/mute/read-all and one explicitly reviewed capped SMTP digest |
 | Operations and views | Administrator metadata, persisted30→45→30 interval, personal search/sort/save/reload without lost input |
+| Supplier invitation search | Actual name/company/email filters retain explicit choices across hidden/no-match states and private draft save/reopen |
 | Imported sources | Missing-value questions, labelled authored assumptions and exact-value human confirmation before private draft creation |
 | Offline app | Chromium installability, current static assets only, visible failed offline write with no replay, reconnection and cache removal |
 | Isolated practice | Eight native scenario steps, separate supplier costs, reset/resume/exit/clear and narrow-screen boundary |
@@ -59,5 +62,8 @@ original failure is retained, not represented as a clean first run. Inspect
 [actual rollback](evolution/04-observed-trial-rollback.png) and
 [independent copy without Studio](evolution/resume/09-independent-copy-without-studio.png).
 
-The independent preference evaluation is recorded separately before requirement
-closure.
+The [independent evaluation](../independent-final-2026-09-26/assessment.md)
+completed a fresh two-party quotation journey and personally used both AI layers.
+It prefers this supervised workspace for repeat multi-supplier quotation work. Its
+wrong-deposit counterexample led to the source-bound calculator; actual corrected
+public tool receipts and narrative passed. The original error and limits remain.

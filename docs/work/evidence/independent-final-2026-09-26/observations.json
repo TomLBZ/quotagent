@@ -1,0 +1,61 @@
+{
+  "evaluator": "independent agent, not human study",
+  "publicUrl": "https://novara.remoteblossom.com/quotagent/",
+  "initialRelease": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+  "observedFromUtc": "2026-09-26T07:38:00Z",
+  "freshContractor": "independent-contractor-260926@example.test",
+  "freshSupplier": "independent-supplier-260926@example.test",
+  "requestTitle": "[Evaluation] North workshop benches",
+  "quoteId": "quote-f3ddbd23-94e",
+  "ownWorkflow": [
+    "fresh accounts",
+    "declared scope draft",
+    "reviewed publication",
+    "received RFQ",
+    "private costing",
+    "draft quote",
+    "human review submission",
+    "received comparison",
+    "source-linked business measures"
+  ],
+  "actualModelTasks": [
+    "read-only two supplier comparison",
+    "detailed comparison",
+    "pause and reload",
+    "guidance then resume",
+    "stop and reload",
+    "generate personal Deposit split utility"
+  ],
+  "materialFinding": {
+    "release": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+    "problem": "AI narrative computed 30% deposit on 5532 as 3240",
+    "correctAmount": 1659.6,
+    "correctBalance": 3872.4,
+    "sourceQuoteRecordCorrupted": false,
+    "externalCommitmentSent": false,
+    "humanSteerCorrectedThisAnswer": true,
+    "productCorrectionRecheck": "PASS on 3ab6d8cde6d2d05acb3a73403279fc9be579a15f; actual calculate_quote_amount source receipts, original failure retained"
+  },
+  "generatedUtility": {
+    "libraryTitle": "Deposit Split Calculator",
+    "toolTitle": "[Evaluation] Deposit split",
+    "inputTotal": 5532,
+    "inputPercent": 30,
+    "deposit": 1659.6,
+    "balance": 3872.4,
+    "invalidPercent": 130,
+    "invalidResult": "No split produced: Deposit percent must be between 0 and 100 (received 130).",
+    "modelUsageTokens": 2171,
+    "providerDurationSeconds": 5.6
+  },
+  "limitations": [
+    "Representative trial, not all functional regressions",
+    "No production communication-channel interoperability or human supplier adoption study; actual configured AI provider was exercised",
+    "Old mail Telegram workroom MCP inspected as retained records",
+    "No signed PO or fulfillment executed in this independent trial",
+    "No measured productivity comparison"
+  ],
+  "finalPreference": "Prefer supervised workspace for repeat multi-supplier quotation work; retain messaging channels and email for one-off work",
+  "recheckRelease": "3ab6d8cde6d2d05acb3a73403279fc9be579a15f",
+  "supplierSearchRecheck": "PASS: filtered selection hidden and retained on clear"
+}

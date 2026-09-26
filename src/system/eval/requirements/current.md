@@ -17,5 +17,7 @@ protocol replies are not model-quality evidence. Historical numerical assumption
 remain explicitly unvalidated until measured under a declared scenario; an isolated
 measurement is not a service guarantee.
 
-Current ongoing goal requires a final independent evaluation after the complete
-compatible requirement release. Earlier evaluation reports remain revision-scoped.
+The September26 independent public evaluation completed the compatible release
+assessment, found a wrong AI deposit and picker friction, and rechecked both fixes
+on3ab6d8c. See [assessment](../../../../docs/work/evidence/independent-final-2026-09-26/assessment.md).
+Earlier evaluation reports remain revision-scoped.

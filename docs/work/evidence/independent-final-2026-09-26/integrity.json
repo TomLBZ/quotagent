@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "checks": [
+    "assessment Markdown 8183 bytes within 8192 budget",
+    "all evidence JSON and action JSONL parse",
+    "browser-inspection.mjs node --check",
+    "actual GUI calculator receipt values 30/70/100 percent and source revision/hash",
+    "no auth session files or passwords in retained evidence"
+  ],
+  "scope": "Evidence integrity, not a product regression suite",
+  "finalRelease": "3ab6d8cde6d2d05acb3a73403279fc9be579a15f"
+}

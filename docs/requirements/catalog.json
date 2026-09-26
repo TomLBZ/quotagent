@@ -8709,7 +8709,7 @@
       "disposition": "retain-outcome",
       "currentOutcome": "Agents help each permitted client perspective read context, extract items, compare offers, draft negotiation and remember explicitly reviewed preferences.",
       "status": "verified",
-      "reason": "Native assistant/workflows invoke domain tools under recorded account/workspace perspective; ingestion, procurement and memory remain their owning plugins. This is observed workflow capability, not a promise of every model answer being correct.",
+      "reason": "Operational AI uses current account records and registered domain tools. Independent public review retained an incorrect narrative deposit; source-bound exact percentage calculations and shared arithmetic guidance were added and independently replayed on3ab6d8c with three actual calculation receipts and correct prose. Human review and model-quality limits remain explicit.",
       "acceptance": [
         {
           "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-workflows/tests/browser.mjs",
@@ -8722,6 +8722,18 @@
           "evidence": "docs/work/evidence/product-2026-09-25/public-agent.json",
           "scope": "Recorded public actual-model contractor and supplier journey, 18 checks.",
           "observed": "Both sides create editable domain drafts and persistent preferences; commitments remain explicit human actions."
+        },
+        {
+          "command": "node src/domain/procurement/tests/quote-amount.mjs",
+          "evidence": "docs/work/evidence/quote-amount-2026-09-26/native.json",
+          "scope": "Native Cordis, actual ledger/QEP, quote-bound read tool; not model narrative acceptance.",
+          "observed": "Five groups: exact5532×30%=1659.60 and3872.40remainder; fractional/rounding, stale source, account/team isolation, read-only/disposal."
+        },
+        {
+          "command": "ROLE=contractordemo ACTION_FILE=<recorded-action.js> SHOT=<capture> node docs/work/evidence/independent-final-2026-09-26/browser-inspection.mjs; exact GUI actions retained in executed-actions.jsonl",
+          "evidence": "docs/work/evidence/independent-final-2026-09-26/56-browser-calculator-receipts.json",
+          "scope": "Independent real configured-model public GUI on immutable3ab6d8c; exact original case plus requested source-derived payment amounts, no correct result supplied in prompt.",
+          "observed": "Three actual calculate_quote_amount receipts:5532at30%=1659.60/3872.40,70%=3872.40/1659.60;5292at100%=5292/0. Current quote revisions and ledger source refs retained; prose matches. No draft/send/award created. This is not universal model correctness."
         }
       ],
       "implementation": {
@@ -9668,9 +9680,16 @@
       "contract": "src/system/eval/requirements/current.md",
       "disposition": "retain-outcome",
       "currentOutcome": "Public experience evaluation",
-      "status": "pending-review",
-      "reason": "Product review and source-backed contracts exist; consolidated current-to-legacy requirement closure is the active task.",
-      "acceptance": [],
+      "status": "verified",
+      "reason": "Independent agent personally completed fresh contractor/supplier quotation work, operational AI controls, generated utility, usage and admin inspection on67bd9af; identified a narrative arithmetic defect and independently rechecked the source-calculator and supplier-picker fixes on3ab6d8c. Clear preference is for supervised repeat multi-supplier quotation work while retaining communication channels.",
+      "acceptance": [
+        {
+          "command": "ROLE=<recorded-role> ACTION_FILE=<recorded-action.js> SHOT=<capture> node docs/work/evidence/independent-final-2026-09-26/browser-inspection.mjs; actions and timestamps retained in executed-actions.jsonl",
+          "evidence": "docs/work/evidence/independent-final-2026-09-26/assessment.md",
+          "scope": "Independent public GUI assessment on67bd9af, targeted corrected-release recheck on3ab6d8c; actual configured AI, two fresh client accounts and separate admin.",
+          "observed": "Preferred supervised repeat multi-supplier quotation workspace over managing state in email/chat plus spreadsheet. Actual request→private cost→reviewed quote exchange, real agent control/usage, generated valid/invalid utility and corrected source arithmetic/filter independently observed. Earlier integrations and unexecuted scenarios explicitly separated."
+        }
+      ],
       "implementation": {
         "auditStatus": "partial",
         "auditCode": [],
@@ -9680,7 +9699,8 @@
           "docs/work/evidence/connected-agent-2026-09-25/README.md"
         ],
         "group": "G6"
-      }
+      },
+      "resolution": "Representative hands-on preference is supported by exact public releases, actions, screenshots and raw receipts; no human study, productivity benchmark or production-channel interoperability claim."
     },
     {
       "id": "CURRENT-023",
@@ -9697,9 +9717,16 @@
       "contract": "src/system/repo-gate/requirements/current.md",
       "disposition": "retain-outcome",
       "currentOutcome": "Recoverability, documentation, individual commit/push batches",
-      "status": "pending-review",
-      "reason": "Product review and source-backed contracts exist; consolidated current-to-legacy requirement closure is the active task.",
-      "acceptance": [],
+      "status": "verified",
+      "reason": "Ignored recovery files, bounded handover, updated role/design/owner documentation and separately named committed functional batches are verified by the retained process snapshot and normal remote-ref readback.",
+      "acceptance": [
+        {
+          "command": "git log -24 --format=\"%H %s\"; git ls-files docs/work/handover.md .agents/state.json .agents/product-progress.md .agents/goal-objective.md; git check-ignore docs/work/handover.md .agents/state.json .agents/product-progress.md .agents/goal-objective.md; git ls-remote origin refs/heads/main; tools/verify.sh docs",
+          "evidence": "docs/work/evidence/goal-completion-2026-09-26/process.json",
+          "scope": "Observed repository and origin/main readback after functional corrections2c06f98 and3ab6d8c; final documentation closure is committed/pushed afterward.",
+          "observed": "Remote and HEAD matched3ab6d8c; all4 recovery files ignored/untracked; handover under1024bytes; separately named functional commits and canonical documentation retained."
+        }
+      ],
       "implementation": {
         "auditStatus": "partial",
         "auditCode": [],
@@ -9709,7 +9736,8 @@
           "docs/work/evidence/connected-agent-2026-09-25/README.md"
         ],
         "group": "G10"
-      }
+      },
+      "resolution": "Current repository process evidence is scoped to this completed feature batch; it is not a guarantee about future agent behavior."
     },
     {
       "id": "GOAL-20260926-01",
@@ -10053,9 +10081,16 @@
       "contract": "src/system/repo-gate/requirements/current.md",
       "disposition": "retain-outcome",
       "currentOutcome": "Complete every still-compatible unfinished functional requirement",
-      "status": "pending-review",
-      "reason": "This audit exposes native integration/feature gaps; listing historical implementations does not satisfy user-facing completion.",
-      "acceptance": [],
+      "status": "verified",
+      "reason": "All323 retained clauses are resolved:277 verified at explicitly recorded scopes,44 incompatible historical mechanics replaced with reasons,2 historical numerical targets retained as measured unproven assumptions. No compatible unfinished functional clause remains; native gap implementations, public journeys and independent correction/recheck are retained.",
+      "acceptance": [
+        {
+          "command": "tools/verify.sh docs; execute the revision-scoped public commands in docs/work/evidence/final-public-2026-09-26/runs.json and independent executed-actions.jsonl",
+          "evidence": "docs/work/evidence/goal-completion-2026-09-26/README.md",
+          "scope": "Complete clause/provenance and owner audit plus actual feature-specific native/public evidence; independent public evaluation through immutable3ab6d8c.",
+          "observed": "323clauses/32owners/226sources;159obsolete documents removed with immutable retrieval.21publicjourneys100groups plus actualmodel evolution and independent end-to-end assessment. All observed functional blockers corrected/replayed. Every-write5ms and universalprovider60s remain explicitly unproven, not converted into passes."
+        }
+      ],
       "implementation": {
         "auditStatus": "missing",
         "auditCode": [
@@ -10063,7 +10098,8 @@
         ],
         "auditEvidence": [],
         "group": "G10"
-      }
+      },
+      "resolution": "Full five-enhancement and original fourteen-item brief audit links source contracts, functional results, two AI levels, current public release, process evidence, independent preference and explicit limits."
     },
     {
       "id": "SUPPLEMENT-001",

@@ -1,0 +1,202 @@
+Skip to main content
+quotagent.
+NC
+Northstar Construction
+Contractor workspace
+Agent workspace
+Agent workroom
+Review actions
+Quotation work
+Workspace records
+Sources & connections
+Personalize
+More tools
+Notifications
+Help & getting started
+Settings
+AM
+Alex Morgan
+contractor@demo.local
+Workspace
+Review actions
+56
+Help
+Try demo
+AI assistant
+AM
+YOU DECIDE WHAT HAPPENS NEXT
+Review actions
+
+Inspect exact proposals, ask a colleague for independent approval, and sign commitments when they are ready.
+
+Open
+My decisions
+All activity
+Search actions
+Filters, saved view & export columns
+
+13 total · 13 matching · 13 on this page · Page 1 of 1
+
+Rows per page
+10
+25
+50
+100
+All (may be slower)
+First page
+Previous page
+Next page
+Last page
+Clear filters
+
+0 selected across pages · 0 on this page
+
+Select all matching actionsClear selection
+Send response reminder: [Response evidence] 1790401246232
+Reviewed response or reminder · Sep 26, 2026
+Risk: Not assessed
+Completed
+Sign purchase order: [Commercial check] Panels 2026-09-26T03:40:53.286Z
+Procurement commitment · Sep 26, 2026
+Risk: Not assessed
+Reviewer: Commercial reviewer 1790394053286 · 248 min
+Completed
+Approve order change: Additional panels and coating
+Procurement commitment · Sep 26, 2026
+Risk: Not assessed
+Reviewer: Fulfillment reviewer 1790393896111 · 251 min
+Completed
+Sign purchase order: [Fulfillment check] Lighting 1790393896111
+Procurement commitment · Sep 26, 2026
+Risk: Not assessed
+Reviewer: Fulfillment reviewer 1790393896111 · 251 min
+Completed
+Sign purchase order: [Fulfillment check] Lighting 1790393488113
+Procurement commitment · Sep 26, 2026
+Risk: Not assessed
+Reviewer: Fulfillment reviewer 1790393488113 · 258 min
+Waiting for colleague
+Call tool at Local protocol 10:28:54 MCP
+Action · Sep 25, 2026
+Risk: Not assessed
+Completed
+Send Telegram message to Fixture supplier
+Action · Sep 25, 2026
+Risk: Not assessed
+Completed
+Cancel task at Local protocol 10:28:54 A2A
+Action · Sep 25, 2026
+Risk: Not assessed
+Completed
+Send task to Local protocol 10:28:54 A2A
+Action · Sep 25, 2026
+Risk: Not assessed
+Completed
+Send email: Re: Riverside cabling offer
+Action · Sep 25, 2026
+Risk: Not assessed
+Completed
+Send task to Local protocol 10:28:54 A2A
+Action · Sep 25, 2026
+Risk: Not assessed
+Completed
+Send task to Local protocol 10:28:54 A2A
+Action · Sep 25, 2026
+Risk: Not assessed
+Completed
+Call tool at Local protocol 10:28:54 MCP
+Action · Sep 25, 2026
+Risk: Not assessed
+Completed
+Review action
+Call tool at Local protocol 10:28:54 MCP
+Completed
+
+Send only the reviewed input below to http://127.0.0.1:8621/mcp. Your workspace is not attached automatically.
+
+Risk flags
+Not assessed
+
+The owning plugin did not record a risk assessment for this proposal.
+
+Exact payload fingerprint
+
+The original proposal digest is not available.
+
+No digest recorded
+SHA-256 · sorted-key JSON/v1
+Source chain
+
+agent-connections · assistant · Historical references not captured
+
+Original proposal
+actions/proposed · Sep 25, 2026
+contractor-demo · event 373
+sha256:20635eb81ed19ae9067a505e063877fef417a6763f73f805e97b572362ce6d97
+Inspect original proposal
+
+This historical proposal did not capture upstream source references. Its frozen input is retained; current records are not substituted.
+
+A matching local digest identifies the recorded content. It does not prove an external claim is true.
+
+Source: agent-connections · assistant
+
+Exact action content
+{
+  "cardPath": "",
+  "connectionId": "e64cdacb-deab-4bed-8176-7b97e82cdf13",
+  "endpoint": "http://127.0.0.1:8621/mcp",
+  "operation": "tool",
+  "payload": {
+    "arguments": {
+      "freight": 120,
+      "quantity": 30,
+      "unitPrice": 80
+    },
+    "name": "landed_cost"
+  },
+  "protocol": "mcp",
+  "transport": "streamable-http"
+}
+
+approved · Sep 25, 2026
+
+Execution result
+{
+  "action": {
+    "input": {
+      "connectionId": "e64cdacb-deab-4bed-8176-7b97e82cdf13",
+      "view": "connections"
+    },
+    "label": "Open connection results",
+    "type": "navigate"
+  },
+  "callId": "3c5f3cfd-87f9-43bc-b503-97989f93c804",
+  "ok": true,
+  "result": {
+    "_meta": {
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "Quotagent local quotation tools",
+        "version": "1.0.0"
+      }
+    },
+    "content": [
+      {
+        "text": "Landed cost: 2520",
+        "type": "text"
+      }
+    ],
+    "structuredContent": {
+      "total": 2520
+    }
+  },
+  "source": {
+    "connectionId": "e64cdacb-deab-4bed-8176-7b97e82cdf13",
+    "name": "Local protocol 10:28:54 MCP",
+    "protocol": "mcp",
+    "url": "http://127.0.0.1:8621/mcp"
+  },
+  "task": null,
+  "trust": "external"
+}
+Open connection results

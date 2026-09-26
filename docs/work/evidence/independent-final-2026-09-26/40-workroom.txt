@@ -1,0 +1,50 @@
+Skip to main content
+quotagent.
+NC
+Northstar Construction
+Contractor workspace
+Agent workspace
+Agent workroom
+Review actions
+Quotation work
+Workspace records
+Sources & connections
+Personalize
+More tools
+Notifications
+Help & getting started
+Settings
+AM
+Alex Morgan
+contractor@demo.local
+Workspace
+Agent workroom
+56
+Help
+Try demo
+AI assistant
+AM
+YOUR AGENT TEAM
+A clear path through complex work.
+
+Give the team an outcome. Review its plan, follow each specialist’s work, and step in when your judgment is needed.
+
+New agent run
+Agent runs
+1
+Account memory
+0
+Specialists work together. You stay in control.
+
+A planner divides the work. Independent agents investigate in parallel. A coordinator brings the evidence into a decision brief. Questions and proposed actions wait for your review.
+
+Visible plans and task states
+Pause and resume
+Account-scoped context
+Riverside office lighting quote analysis plan
+Complete
+
+Analyze the [Demo] Riverside office lighting quotations using separate scope, commercial, and scheduling specialists. Have the scheduling specialist ask me for the required delivery date using ask_workflow_human before judging schedule fit. Let the other specialists inspect records independently. Compare only received current quotes, flag scope/quantity/currency/payment/delivery risks, and reconcile findings into a recommendation and conditional negotiation brief. Do not submit, award, order, send messages, or invent an internal budget.
+
+3/3 tasks complete
+Sep 25, 10:32:19 AM

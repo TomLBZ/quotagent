@@ -26,3 +26,8 @@ JavaScript errors: real displayed company/name/email search, explicit selection
 across disjoint/no-match filters with truthful hidden counts and clear action, then
 private draft save/reopen retaining both invited suppliers. No publication or
 external commitment. `report.json` and the two viewport screenshots retain results.
+
+Public replay on immutable `3ab6d8cde6d2d05acb3a73403279fc9be579a15f`:
+`BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/product-evidence/final-public/supplier-picker node src/domain/procurement/tests/supplier-picker-browser.mjs`
+passed [the same3 groups with0 JavaScript errors](../final-public-2026-09-26/supplier-picker.json),
+including private draft save/reopen. No invitation was published.

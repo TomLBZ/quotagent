@@ -1,0 +1,63 @@
+{
+  "at": "2026-09-26T08:07:21.993067+00:00",
+  "head": "3ab6d8cde6d2d05acb3a73403279fc9be579a15f",
+  "remote": "3ab6d8cde6d2d05acb3a73403279fc9be579a15f\trefs/heads/main",
+  "publicRelease": "3ab6d8cde6d2d05acb3a73403279fc9be579a15f",
+  "recoveryFiles": {
+    "tracked": [],
+    "ignored": [
+      "docs/work/handover.md",
+      ".agents/state.json",
+      ".agents/product-progress.md",
+      ".agents/goal-objective.md"
+    ],
+    "handoverBytes": 963
+  },
+  "documentation": {
+    "clauses": 323,
+    "owners": 32,
+    "sources": 226,
+    "documents": {
+      "removed-obsolete": 159,
+      "replaced-current": 5
+    },
+    "statesAtSnapshot": {
+      "assumption": 2,
+      "superseded": 44,
+      "verified": 277
+    }
+  },
+  "recentBatches": [
+    "3ab6d8cde6d2d05acb3a73403279fc9be579a15f feat(procurement): search supplier invitations without losing selections",
+    "2c06f98ab6ef41b5a0b3ff8ab57b55d7bd8e69a9 fix(agent): calculate quote percentages from recorded source amounts",
+    "031d0e5183db2af79e64dbd0f1b602be57dff5e4 test(product): retain final public journeys and corrected replay evidence",
+    "67bd9af5b73036104f81abdacae0883fd8d2ffce fix(webui): preserve query intent while saved views load",
+    "7f9a39baabf4d6569f8609a393c7b99b12968bf4 fix(procurement): render award intent lines with their declared currency",
+    "bf2cb4bd7f15eaec3201a0fc49077e7c7ea20288 test(webui): exercise current declarations assets and dashboard entry",
+    "ffe54926adb1e10fd6f12b64e4c69cc4d237cb49 docs(help): explain current quotation reviews evidence and connected workflows",
+    "fa0dc154e44ca6d0209cb736b2eb6c768255604c feat(procurement): prepare selected quotes for readable per-item human decisions",
+    "08ec5089f076e6c0dac1e95848d813060bcec717 feat(exchange-mail): review signed packages receipts and recovery through email",
+    "78692aef21c566e9b1d616a28ff19a7afb0f413e fix(sandbox): author explicit scope for fictional quotation scenarios",
+    "9a17dba7cee7ec080c9bb0563cb623dc9c804890 feat(procurement): require declared scope and preserve reviewed public offers",
+    "0d44e568aa780f94fdbc601e7391a9d9bc44eeb5 feat(responses): show sourced business measures and observed baselines",
+    "163ef4787457aeaf7758ecf9655d68d1dac3dcb2 docs(requirements): close verified clauses and define current host boundaries",
+    "8ba25ea2ef79b7740e8ac28c350eb2b0692cc2e2 fix(storage): preserve uncertain writes and pause affected realms",
+    "8a328e654b9b922aa39f7e6407b10fe03c03f622 feat(commercial): explain normalized weights and sourced improvement options",
+    "cdb0d21eb7dc0af7a98a068b99f1b298cf7abeec fix(extensions): preserve generated identity and verify shared artifacts",
+    "07b27ffc823eada7ba94c685ced043c996470179 feat(exchange): recover missing signed messages through resend controls",
+    "2a9509286611c5e832e2bc10ba3de05ec649e0a6 fix(storage): derive incremental adapter indexes from ledger events",
+    "bd249cd375875a3e6832b0547a75a825bd204671 docs(requirements): consolidate plugin contracts and preserve original sources",
+    "e8838a64834c82c96c6719bdcb96a79f868db810 fix(webui): expose recoverable errors accessible fields and app discovery",
+    "9c43c5f651fb54dc3650ffe84ebcf72165b6d207 feat(ingestion): review uncited assumptions and missing source details",
+    "9db4fdd6ef011fd3530dfd631e882ce668a1bd27 feat(responses): track promises receipts and sourced activity reports",
+    "ec94536af13d9ed779ff0f0cdaee3606821908f1 feat(procurement): add declared scope terms and reviewed negotiation",
+    "0876abfffddf2a92d70d1b374f675d0e0f575580 test(plugins): verify independent installed runtime with native services"
+  ],
+  "registryObservation": {
+    "command": "npm view cordis version --json",
+    "observedVersion": "4.0.0-rc.10",
+    "declaredVersion": "4.0.0-rc.10",
+    "scope": "Current primary npm registry response observed by root; no inferred version upgrade."
+  },
+  "snapshotScope": "Read-only snapshot before the final documentation/evidence-only commit; application source is committed, remotely confirmed, and deployed at the listed revision."
+}

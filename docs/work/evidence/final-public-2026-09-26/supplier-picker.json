@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "at": "2026-09-26T07:57:00.553Z",
+  "base": "https://novara.remoteblossom.com/quotagent/",
+  "checks": [
+    "Company search ignores case/outer whitespace; actual name and email find the same selected supplier, and searching never auto-selects",
+    "Two explicit choices survive disjoint filters and an empty result; selected/hidden counts stay truthful and Clear restores both checked cards",
+    "GUI save creates only a private draft; reopening confirms both named suppliers persisted without hidden-selection loss"
+  ],
+  "jsErrors": [],
+  "rfqId": "rfq-04eb3a9f-cd9",
+  "contacts": [
+    {
+      "company": "Summit Supply",
+      "name": "Jordan Lee",
+      "email": "supplier@demo.local"
+    },
+    {
+      "company": "Atlas Materials",
+      "name": "Taylor Chen",
+      "email": "supplier2@demo.local"
+    }
+  ],
+  "scope": "Actual native application GUI; private draft only, no publication or external commitment"
+}

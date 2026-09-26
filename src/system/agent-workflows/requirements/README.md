@@ -55,27 +55,21 @@ limit consequences rather than asserting perfect prompt-injection prevention.
 
 ## Executable evidence
 
-`node src/system/agent-workflows/tests/state.mjs` uses a controlled provider to verify memory
-approval/history/isolation, human checkpoints, simultaneous independent contexts, provider
-input memory/feedback, cancellation, unload/recovery and dependency validation. This is not
-claimed as live model evidence.
+Commands are run from the repository root:
 
-`node src/system/agent-workflows/tests/cancellation.mjs` holds storage writes at the
-cancel/abort-completion boundary and the next-worker transition. It verifies no late agent
-start/provider call, completed-report preservation, and append-only startup reconciliation.
-
-`node src/system/agent-workflows/tests/recovery-browser.mjs start`, an actual process restart,
-then `node src/system/agent-workflows/tests/recovery-browser.mjs verify` exercise public GUI
-recovery, explicit resume, cancellation, delayed task-state and reload checks.
-
-`node src/system/agent-workflows/tests/cancellation-browser.mjs` checks visible correction
-of the earlier cancelled run, then cancels a fresh real four-specialist run and verifies
-terminal task states and trace ordering after a delay and full page reload.
-
-`BASE_URL=https://novara.remoteblossom.com/quotagent EVIDENCE_DIR=tmp/product-evidence/workroom/public node src/system/agent-workflows/tests/browser.mjs`
-uses the configured real provider and visible GUI controls for a complex quotation analysis,
-manual memory, pause/resume, plan review, specialist question/answer, parallel task trace,
-synthesis, reload and memory history/archive. Output and screenshots record observed results.
+- `node src/system/agent-workflows/tests/state.mjs`: controlled provider checks
+  memory approval/isolation/history, human checkpoints, independent contexts,
+  recorded feedback, cancellation, recovery and dependencies; not live-model proof.
+- `node src/system/agent-workflows/tests/cancellation.mjs`: delayed storage and
+  worker transitions retain terminal cancellation and completed reports.
+- `node src/system/agent-workflows/tests/recovery-browser.mjs start`, process
+  restart, then `verify`: public paused recovery and explicit human continuation.
+- `node src/system/agent-workflows/tests/cancellation-browser.mjs`: cancel a real
+  four-specialist run; inspect terminal states after a delay and reload.
+- `BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-workflows/tests/browser.mjs`:
+  actual configured-model plan, pause/resume, feedback, question/answer, parallel
+  specialist traces, synthesis and memory history. Results and limitations are in
+  `docs/work/evidence/connected-agent-2026-09-25/README.md`.
 
 ## Runtime controls and context integration (G6)
 

@@ -1,0 +1,22 @@
+{
+  "release": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+  "directory": "/workspace/projects/quotagent/tmp/releases/final-67bd9af",
+  "createdAt": "2026-09-26T05:52:24.950771+00:00",
+  "data": "/workspace/projects/quotagent/tmp/product-data",
+  "publicUrl": "https://novara.remoteblossom.com/quotagent/",
+  "preflightData": "/workspace/projects/quotagent/tmp/agent-experience/final-preflight-67bd9af",
+  "preflightPid": 2195200,
+  "build": {
+    "modules": 114,
+    "compositionPlugins": 35
+  },
+  "pid": 2195381,
+  "previousPid": 2186055,
+  "backup": "/workspace/projects/quotagent/tmp/agent-experience/public-before-final-67bd9af",
+  "health": {
+    "ok": true,
+    "service": "quotagent",
+    "runtime": "cordis-product"
+  },
+  "deployedAt": "2026-09-26T05:53:26.319690+00:00"
+}
