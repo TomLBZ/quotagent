@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "at": "2026-09-26T03:55:37.697Z",
+  "root": "/workspace/projects/quotagent/tmp/attachments-native-3ZMglE",
+  "checks": [
+    "Private version and identical-upload retry; explicit recipient review; real two-root HMAC QEP manifest+bytes+signed receipt; tampered resource remains non-effective; no file bytes enter ledger",
+    "Immutable filename version chain and older downloads; out-of-order artifact manifest stays held across restart, then explicitly waits for reimported bytes before becoming an attachment",
+    "Delivered removal is a signed tombstone, preserved old file still downloads, active received reference releases only after removal; text preview exact truncation and unsupported download explanation",
+    "Actual independent loopback HTTP transfer includes artifact bytes and verifies a signed delivery receipt; every native route/navigation/policy/guard disposes on unmount",
+    "Real manifest/resource transfers authorize readable quotation, order and change objects as well as RFQs, without modifying business money or commitments",
+    "Simultaneous uploads of the same object filename serialize into distinct ordered immutable versions"
+  ],
+  "passed": 6
+}

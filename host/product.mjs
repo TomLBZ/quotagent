@@ -11,6 +11,9 @@ import * as agent from '../src/system/agent-runtime/code/product.mjs'
 import * as procurement from '../src/domain/procurement/code/index.mjs'
 import * as studio from '../src/system/plugin-studio/code/product.mjs'
 import * as files from '../src/system/file-store/code/index.mjs'
+import * as evidence from '../src/system/evidence/code/product.mjs'
+import * as attachments from '../src/system/attachments/code/product.mjs'
+import * as retention from '../src/system/retention/code/product.mjs'
 import * as ingestion from '../src/domain/ingestion/code/index.mjs'
 import * as emailEngine from '../src/domain/ingestion-engines/code/email.mjs'
 import * as spreadsheetEngine from '../src/domain/ingestion-engines/code/spreadsheet.mjs'
@@ -58,6 +61,9 @@ await mount('commercial-workbench',commercial,{}, {name:'Commercial workbench',r
 await mount('installed-plugins',installed,{}, {name:'Installed plugins runtime',repoId:'system/installed-plugins'})
 await mount('plugin-studio',studio,{}, {name:'Personal plugins and marketplace',repoId:'system/plugin-studio'})
 await mount('file-store',files,{}, {name:'Account file storage',repoId:'system/file-store',configurationId:'file-store'})
+await mount('evidence',evidence,{}, {name:'Evidence bundles and replay',repoId:'system/evidence'})
+await mount('attachments',attachments,{}, {name:'Business attachments',repoId:'system/attachments'})
+await mount('retention',retention,{}, {name:'File retention and legal holds',repoId:'system/retention'})
 await mount('ingestion',ingestion,{}, {name:'Document ingestion workspace',repoId:'domain/ingestion',configurationId:'ingestion'})
 for(const [id,module,label,file] of [
   ['ingestion-email',emailEngine,'Email import engine','email'],

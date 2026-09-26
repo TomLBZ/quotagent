@@ -65,7 +65,7 @@ export async function apply(ctx,config={}){
   async deliver({from,to,delivery,package:packageValue,signal}){
    const peer=configured(from,to,delivery.channel);if(!peer||peer.mode!=='http')return{status:'queued'}
    const controller=new AbortController(),abort=()=>controller.abort(signal?.reason);controllers.add(controller);signal?.addEventListener('abort',abort,{once:true});const timeout=setTimeout(()=>controller.abort(new Error('Peer response timed out. The exact signed package remains available for retry.')),config.timeoutMs||12000)
-   const predecessors=ctx.store.deliveryState(from).outbox.filter(row=>row.to===to&&row.channel===delivery.channel&&row.seq<delivery.seq&&row.status!=='delivered').sort((a,b)=>a.seq-b.seq).map(row=>({schema:'quotagent/qep-package/v1',channel:row.channel,envelope:row.envelope}));
+   const predecessors=[];for(const prior of ctx.store.deliveryState(from).outbox.filter(row=>row.to===to&&row.channel===delivery.channel&&row.seq<delivery.seq&&row.status!=='delivered').sort((a,b)=>a.seq-b.seq))predecessors.push((await ctx.store.package(from,prior.id)).package);
    try{const response=await fetch(peer.endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({packages:[...predecessors,packageValue]}),signal:controller.signal});let result;try{result=await response.json()}catch{fail('The peer returned an unreadable delivery response.',502)}if(!response.ok)fail(result.error||`Peer returned HTTP ${response.status}`,response.status);return result}
    finally{clearTimeout(timeout);signal?.removeEventListener('abort',abort);controllers.delete(controller)}
   }}

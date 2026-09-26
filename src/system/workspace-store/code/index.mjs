@@ -26,11 +26,16 @@ export async function apply(ctx, config = {}) {
  const policyFor=collection=>[...policies.values()].find(policy=>policy.collections.includes(collection))
  const register=(map,definition)=>{if(map.has(definition.id))throw new Error(`Duplicate registration ${definition.id}`);map.set(definition.id,definition);return()=>{if(map.get(definition.id)===definition)map.delete(definition.id)}}
  async function processPackage(realm,packageValue,options={}){
-  const inspected=await request({op:'inspect-package',realm,package:packageValue})
-  const inbox=await request({op:'receive-package',realm,package:packageValue})
+  const {resources,...durablePackage}=packageValue
+  const inspected=await request({op:'inspect-package',realm,package:durablePackage})
+  const inbox=await request({op:'receive-package',realm,package:durablePackage})
   if(inspected.control||inbox.control||inbox.status!=='received')return inbox
   const policy=policyFor(inspected.collection)
   const verdict=policy?await policy.validate({...inspected,peer:options.peer}):policies.size?{ok:false,message:'No mounted domain plugin accepts this public collection.'}:{ok:true}
+  if(verdict.ok&&policy?.receiveResources){
+   try{await policy.receiveResources({...inspected,resources:resources||[],msgId:inbox.id,peer:options.peer})}
+   catch(error){const waiting={...inbox,resourceState:'missing',message:error.message,nextAction:'Import or retry the original package with its required file bytes.'};await request({op:'put',realm,collection:'exchange-inbox',record:waiting,event:'exchange/resources-needed',actor:'system:exchange'});return waiting}
+  }
   const merged=reconcile(inspected,policy)
   const outcome=!verdict.ok?'rejected':merged.conflicts.length?'conflict':'applied'
   return request({op:'settle-inbox',realm,id:inbox.id,expectedHash:inspected.localHash,outcome,record:merged.record,conflicts:merged.conflicts,decisions:merged.decisions,message:!verdict.ok?verdict.message:merged.conflicts.length?'Concurrent or unknown-authority changes need human review.':null})
@@ -48,6 +53,13 @@ export async function apply(ctx, config = {}) {
   })
   receiving.set(realm,work);try{return await work}finally{if(receiving.get(realm)===work)receiving.delete(realm)}
  }
+ async function exportPackage(realm,id){
+  const row=get(realm,'exchange-outbox',id);if(!row)throw Object.assign(new Error('Delivery not found'),{status:404})
+  const exported=await request({op:'package',realm,id}),record=row.envelope.body.record,policy=policyFor(row.collection)
+  if(record?.artifacts?.length&&!policy?.packageResources)throw Object.assign(new Error('The attachment plugin must be available to export the required artifact bytes.'),{status:409})
+  if(policy?.packageResources)exported.package.resources=await policy.packageResources({from:realm,to:row.to,collection:row.collection,record,msgId:row.id})
+  return exported
+ }
  const deliveryResult=row=>({record:copy(row.envelope?.body?.record),msgId:row.id,received:row.status==='delivered',status:row.status,queued:['queued','failed','held','conflict'].includes(row.status),error:row.error||undefined,nextAction:row.nextAction||undefined})
  async function retryDelivery(realm,id,options={}){
   const row=get(realm,'exchange-outbox',id);if(!row)throw Object.assign(new Error('Delivery not found'),{status:404})
@@ -56,7 +68,7 @@ export async function apply(ctx, config = {}) {
   try{
    if(row.channel!=='local'&&!transport)return deliveryResult(row)
    await request({op:'attempt',realm,id,status:'queued',started:true})
-   const exported=await request({op:'package',realm,id})
+   const exported=await exportPackage(realm,id)
    const response=row.channel==='local'?await receivePackage(row.to,exported.package,options):await transport.deliver({from:realm,to:row.to,delivery:row,package:exported.package,signal:controller.signal})
    const receipts=[...(response?.receipts||[]),response?.receipt,...(response?.released||[]).map(item=>item.receipt)].filter(Boolean).sort((a,b)=>a.envelope.seq-b.envelope.seq)
    for(const receipt of receipts)await receivePackage(realm,receipt,options)
@@ -70,7 +82,7 @@ export async function apply(ctx, config = {}) {
   put:(realm,collection,record,options={})=>request({op:'put',realm,collection,record,...options}),append:(realm,type,body,options={})=>request({op:'append',realm,type,body,...options}),
   exchangePolicy:policy=>register(policies,policy),exchangeTransport:transport=>register(transports,transport),
   configurePeer:(realm,peer,channel,secret)=>request({op:secret?'configure-peer':'clear-peer',realm,peer,channel,secret}),
-  package:(realm,id)=>request({op:'package',realm,id}),markDelivery:(realm,id,options)=>request({op:'attempt',realm,id,...options}),deliveryState:realm=>({outbox:list(realm,'exchange-outbox'),inbox:list(realm,'exchange-inbox')}),receivePackage,retryDelivery,
+  package:exportPackage,markDelivery:(realm,id,options)=>request({op:'attempt',realm,id,...options}),deliveryState:realm=>({outbox:list(realm,'exchange-outbox'),inbox:list(realm,'exchange-inbox')}),receivePackage,retryDelivery,
   async exchange(from,to,collection,record,options={}){
    const policy=policyFor(collection),metadata=policy?await policy.prepare({from,to,collection,record,options}):{type:options.type||'workspace/record-transferred',eventClass:options.eventClass||'fact',refs:options.refs||{},approvals:options.approvals||[]}
    let channel=options.channel||'local',manual=!!options.manual
@@ -81,8 +93,9 @@ export async function apply(ctx, config = {}) {
   async resolveConflict(realm,id,{actor,acceptIncoming=false}={}){
    const row=get(realm,'exchange-inbox',id);if(!row||row.status!=='conflict')throw Object.assign(new Error('There is no unresolved conflict'),{status:409})
    if(!actor||!acceptIncoming)throw Object.assign(new Error('A signed-in human must explicitly accept the exact received record; alternative terms must be reviewed and reissued by the business owner.'),{status:409})
-   const inspected=await request({op:'inspect-package',realm,package:row.package}),policy=policyFor(inspected.collection),verdict=policy?await policy.validate(inspected):{ok:true}
+   const inspected=await request({op:'inspect-package',realm,package:row.package}),policy=policyFor(inspected.collection),verdict=policy?await policy.validate(inspected):policies.size?{ok:false,message:'The domain plugin owning this conflict is unavailable.'}:{ok:true}
    if(!verdict.ok)throw Object.assign(new Error(verdict.message),{status:409})
+   if(policy?.receiveResources)await policy.receiveResources({...inspected,resources:[],msgId:id})
    await request({op:'append',realm,type:'exchange/conflict-approved',body:{msgId:id,humanId:actor,recordHash:inspected.recordHash,originalBodyHash:row.package.envelope.body_hash,conflicts:row.conflicts,decision:'accept-exact-received'},actor:`human:${actor}`})
    return request({op:'settle-inbox',realm,id,expectedHash:inspected.localHash,outcome:'applied',record:acceptPublic(inspected.local,inspected.record,inspected.base),resolve:true,resolvedBy:actor})
   },

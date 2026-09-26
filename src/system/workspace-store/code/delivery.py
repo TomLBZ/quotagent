@@ -126,9 +126,10 @@ class Delivery:
         for approval in approvals:
             source = approval.get('sourceRef') or {}
             event = next((row for row in self.store.book(realm).read() if row['seq'] == source.get('seq') and row['entry_hash'] == source.get('hash')), None)
-            if source.get('realm') != realm or not event or event['type'] not in ('procurement/human-approved', 'actions/signed', 'actions/approved', 'exchange/conflict-approved'):
+            if source.get('realm') != realm or not event or event['type'] not in ('procurement/human-approved', 'attachments/human-approved', 'actions/signed', 'actions/approved', 'exchange/conflict-approved'):
                 raise AdapterError('APPROVAL_SOURCE', 'Approval proof does not name a recorded human decision in the sending realm.', status=409)
-            decision_id = event['body'].get('humanId') or event['body'].get('decision', {}).get('actorId') or event['actor'].removeprefix('human:')
+            decision_body = event['body'].get('record', event['body'])
+            decision_id = decision_body.get('humanId') or decision_body.get('decision', {}).get('actorId') or event['actor'].removeprefix('human:')
             if approval.get('by') != 'human:' + decision_id or not approval.get('at') or event['body'].get('approvedAt') and approval['at'] != event['body']['approvedAt'] or not isinstance(approval.get('scope'), dict):
                 raise AdapterError('APPROVAL_BINDING', 'Approval actor, time or scope does not match its recorded decision.', status=409)
             approval['scope']['recordHash'] = record_hash

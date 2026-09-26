@@ -1,0 +1,94 @@
+{
+  "ok": true,
+  "identityStatus": "trusted-signature",
+  "checks": [
+    {
+      "name": "Native bundle format",
+      "ok": true,
+      "detail": "Native signed wrapper around the unchanged Python evidence payload."
+    },
+    {
+      "name": "Signature against included public key",
+      "ok": true,
+      "detail": "A self-contained key checks consistency; it does not establish exporter identity."
+    },
+    {
+      "name": "Independently trusted exporter key",
+      "ok": true,
+      "detail": "The supplied trusted key must match the signed exporter fingerprint."
+    },
+    {
+      "name": "Original payload bytes digest",
+      "ok": true,
+      "detail": "Digest is computed from the exact original UTF-8 bytes."
+    },
+    {
+      "name": "Event and body hash chain",
+      "ok": true,
+      "detail": "逐条重算 entry_hash 与链连接"
+    },
+    {
+      "name": "Merkle root",
+      "ok": true,
+      "detail": "recomputed=sha256:0b93fe58254ec750a29505c5d93b00906ca788119251bea6a0bdfdedc8631335"
+    },
+    {
+      "name": "Event leaf list",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Manifest event count",
+      "ok": true,
+      "detail": "manifest=10 events=10"
+    },
+    {
+      "name": "Manifest sequence boundaries",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Manifest digest",
+      "ok": true,
+      "detail": "改清单任意字段即失败（不只是计数检查）"
+    },
+    {
+      "name": "Payload pack digest",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Manifest leaves and root",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Required event inclusion proofs",
+      "ok": true,
+      "detail": "3 proofs checked against the signed slice"
+    },
+    {
+      "name": "Signed range and root match payload",
+      "ok": true,
+      "detail": "Outer identity, scope boundaries and Merkle root refer to this payload."
+    }
+  ],
+  "firstFailure": null,
+  "exporter": {
+    "realm": "contractor-demo",
+    "fingerprint": "109e8f62ce19e7ca6fce9994ab0b45f156738948b39ae66edbc043de2aeae7a5",
+    "exportedBy": "contractor-demo"
+  },
+  "trustedFingerprint": "109e8f62ce19e7ca6fce9994ab0b45f156738948b39ae66edbc043de2aeae7a5",
+  "manifest": {
+    "realm": "contractor-demo",
+    "fromSeq": 1,
+    "toSeq": 10,
+    "count": 10,
+    "merkleRoot": "sha256:0b93fe58254ec750a29505c5d93b00906ca788119251bea6a0bdfdedc8631335"
+  },
+  "limitations": [
+    "Verification uses only the uploaded package and supplied trusted key.",
+    "Inclusion proves membership in this signed slice, not the truth of its business facts or completeness of all history."
+  ]
+}

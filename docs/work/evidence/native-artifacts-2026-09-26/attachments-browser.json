@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "at": "2026-09-26T04:06:01.088Z",
+  "base": "http://127.0.0.1:8648/quotagent/",
+  "checks": [
+    "RFQ created and published through GUI; attachment initially private, exact recipient review delivers via real QEP, intended supplier downloads identical bytes while the other invited supplier sees no file",
+    "Same filename creates immutable superseding version, prior bytes still download, delivered removal becomes visible tombstone and counterparty history remains accessible",
+    "Real PNG renders, valid PDF rendered to a bounded canvas with actual nonblank page pixels and explicit download fallback, escaped text retains literal markup, bounded text preview discloses exact truncation, unsupported media offers its original download",
+    "Attachment versions and removal state survive reload; narrow mobile layout has no horizontal page overflow"
+  ],
+  "jsErrors": [],
+  "rfqId": "rfq-2ec7db52-f74",
+  "title": "[File evidence] Request 1790395546206",
+  "filename": "scope-1790395546206.txt",
+  "attachmentIds": [
+    "attachment-7ddc66b6-8d97-450b-9318-00f573f2bfa6",
+    "attachment-ef71ff83-d06c-442e-b578-8671a9caacbd"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "at": "2026-09-26T04:00:46.470Z",
+  "root": "/workspace/projects/quotagent/tmp/retention-native-BlT3sv",
+  "checks": [
+    "Real shared blob counted once; observations append zero events and admin totals omit names/bodies; hold added after proposal blocks approval; two reviewed copies dispose bytes only after last reference and preserve exact ledger prefix",
+    "Current object attachment reference blocks disposal; explicit removal then reviewed disposal keeps version tombstone with truthful disposed state",
+    "Actual settings project patches apply strictest age/type/active constraints across a shared file’s own-project references; another party cannot configure or inherit those private patches",
+    "Concurrent unique-byte capacity enforced, corruption and actual upload/read failures observed, original-byte reupload repairs the existing record without fabricating content",
+    "Restart resolves interrupted reviewed intent from actual byte presence: absent becomes recorded disposal, existing bytes remain and require a new review; plugin-owned services/guards/routes unload cleanly"
+  ],
+  "passed": 5
+}

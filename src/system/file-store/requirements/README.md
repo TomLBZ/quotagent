@@ -15,3 +15,8 @@ account data, not plugin process state; unloading the service leaves user docume
 
 Executable evidence: `node src/domain/ingestion/tests/smoke.mjs` uploads and reads actual original bytes,
 checks owner-only retrieval, parses attachment files and creates private drafts through the real ledger.
+
+Artifact lifecycle, capacity, read-only observations, shared-content disposal and
+bounded previews extend this API; see [lifecycle acceptance](lifecycle.md). The
+`maxTotalMb` setting defaults to 1024 MB. Archive preserves original bytes; physical
+disposal requires the separate retention review and records a distinct tombstone.

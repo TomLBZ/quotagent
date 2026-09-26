@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "at": "2026-09-26T03:52:17.213Z",
+  "root": "/workspace/projects/quotagent/tmp/evidence-native-yrYq7F",
+  "checks": [
+    "Native exact-byte Unicode ledger slice, Ed25519 wrapper, independent second-store hash-chain/Merkle/inclusion verification, no source ledger or private key needed",
+    "Missing/wrong independently trusted key, altered payload/proof/signature, and even re-signed corrupted event all fail without fabricated identity or integrity passes",
+    "Actual local HTTP provider request reconstructed byte-for-byte from dispatch receipt, source digest matched, historical boundary explicitly unknown, missing/mismatched input records failure and alert",
+    "Public identity, original exported bytes and reconstruction outcomes survive native restart; read-only stats append nothing; private realms and body-free admin observations preserved"
+  ],
+  "passed": 4
+}
