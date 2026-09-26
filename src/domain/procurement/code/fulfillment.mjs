@@ -6,10 +6,10 @@ const copy = value => structuredClone(value)
 const now = () => new Date().toISOString()
 const ordered = value => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered(value[key])])) : value
 const digest = value => createHash('sha256').update(JSON.stringify(ordered(value))).digest('hex')
-export const offerBasis = quote => Object.fromEntries(['id', 'rfqId', 'rfqRevision', 'supplierId', 'revision', 'items', 'currency', 'total', 'subtotal', 'priceBreakdown', 'commercial', 'leadDays', 'paymentTerms', 'notes'].map(key => [key, quote[key] ?? null]))
+export const offerBasis = quote => Object.fromEntries(['id', 'rfqId', 'rfqRevision', 'supplierId', 'revision', 'items', 'currency', 'total', 'subtotal', 'priceBreakdown', 'commercial', 'leadDays', 'paymentTerms', 'notes', 'terms'].map(key => [key, quote[key] ?? null]))
 
 export function createFulfillment(h) {
-  const { store, accounts, get, save, exchange, approval, fail, required, text, role, newId, cents, quantity, lineCents, publicQuote, publicRfq } = h
+  const { store, accounts, get, save, exchange, approval, fail, required, text, role, newId, cents, quantity, lineCents, publicQuote, publicRfq, terms } = h
   const actor = user => user.actorId || user.id
   const other = (user, record) => user.id === record.ownerId ? record.supplierId : record.ownerId
   const party = (user, record) => { if (![record.ownerId, record.supplierId].includes(user.id)) fail('This agreement belongs to another party.', 403) }
@@ -65,13 +65,14 @@ export function createFulfillment(h) {
       const quote = get(user, 'quotes', input.quoteId), rfq = get(user, 'rfqs', quote.rfqId)
       if (rfq.ownerId !== user.id) fail('Only the request owner may propose an award.', 403)
       checkOffer(quote, rfq)
+      const acceptedTerms=terms.accepted(user,quote,rfq)
       if (store.list(user.id, 'orders').some(row => row.rfqId === rfq.id)) fail('This request already has an order.')
       if (store.list(user.id, 'award-intents').some(row => row.rfqId === rfq.id && ['proposed', 'confirmed'].includes(row.status))) fail('Withdraw or complete the existing award intent before selecting again.')
       const source = publicQuote({ ...quote, rfqRevision: quoteRevision(quote, rfq) })
       const record = { id: newId('award'), rfqId: rfq.id, quoteId: quote.id, ownerId: user.id, ownerName: rfq.ownerName,
         supplierId: quote.supplierId, supplierName: quote.supplierName, title: rfq.title, status: 'proposed', binding: false,
         quote: source, quoteDigest: digest(offerBasis(source)), rfqRevision: rfqRevision(rfq), total: quote.total, currency: quote.currency,
-        reason: required(input.reason, 'Selection reason'), proposedBy: actor(user) }
+        ...acceptedTerms, reason: required(input.reason, 'Selection reason'), proposedBy: actor(user) }
       await approval(user, action, quote.id, input, record)
       const intent = await save(user, 'award-intents', record, 'procurement/award-intent-proposed')
       await exchange(user, intent.supplierId, 'award-intents', intent, 'procurement/award-intent-received')
@@ -108,6 +109,8 @@ export function createFulfillment(h) {
       const quote = get(user, 'quotes', intent.quoteId), rfq = get(user, 'rfqs', intent.rfqId)
       checkOffer(quote, rfq)
       if (digest(offerBasis(publicQuote({ ...quote, rfqRevision: quoteRevision(quote, rfq) }))) !== intent.quoteDigest) fail('The selected offer changed after supplier confirmation. Prepare a new award intent.')
+      const acceptedTerms=terms.accepted(user,quote,rfq)
+      if(digest(acceptedTerms)!==digest({terms:intent.terms||[],requiredTerms:intent.requiredTerms||[],...(intent.termExceptions?{termExceptions:intent.termExceptions}:{})}))fail('Term decisions changed after supplier confirmation. Prepare a new award intent.',409)
       if (rfqRevision(rfq) !== intent.rfqRevision) fail('The scope changed after supplier confirmation.')
       if (store.list(user.id, 'orders').some(row => row.rfqId === rfq.id)) fail('This request already has an order.')
       await approval(user, action, intent.id, input, intent)
@@ -116,7 +119,7 @@ export function createFulfillment(h) {
         title: rfq.title, ownerId: user.id, ownerName: rfq.ownerName, supplierId: quote.supplierId, supplierName: quote.supplierName,
         ...quotationAmounts(quote.items.reduce((sum, item) => sum + lineCents(cents(item.unitPrice), item.quantity), 0), quote.commercial || {}),
         originalTotal: quote.total, currency: quote.currency, status: 'issued', orderRevision: 1, commercial: copy(quote.commercial || {}),
-        items: copy(quote.items), originalItems: copy(quote.items), leadDays: quote.leadDays, paymentTerms: quote.paymentTerms,
+        ...acceptedTerms, items: copy(quote.items), originalItems: copy(quote.items), leadDays: quote.leadDays, paymentTerms: quote.paymentTerms,
         supplierConfirmedBy: intent.confirmedBy, supplierConfirmedAt: intent.confirmedAt, signedBy: actor(user), signedAt: now(), reviewActionId: input.reviewActionId || null }, 'procurement/order-issued')
       const committed = await save(user, 'award-intents', { ...intent, status: 'committed', binding: true, orderId, signedBy: actor(user), reviewActionId: input.reviewActionId || null }, 'procurement/award-committed')
       const awarded = await save(user, 'quotes', { ...quote, status: 'awarded' }, 'procurement/quote-awarded')

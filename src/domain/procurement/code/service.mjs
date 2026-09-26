@@ -1,8 +1,12 @@
+import {createNegotiation} from './negotiation.mjs'
+import {clarificationDeadline} from './response-fields.mjs'
+import {createTerms,termFields} from './terms.mjs'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
 import { commercialFields, requirementFields, quotationAmounts } from './commercial-fields.mjs'
 import { createFulfillment } from './fulfillment.mjs'
 import { createRfqLifecycle, rfqRevision, quoteRevision, staleQuote } from './rfq-lifecycle.mjs'
+import {scopeFields,scopeItemFields,validatePublishedScope,normalizeQuoteLines,publicQuoteLine} from './structured-scope.mjs'
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }) }
 const text = (value) => String(value ?? '').trim()
@@ -44,16 +48,17 @@ const nameOf = (user) => user.company || user.name || user.email
 const copy = (value) => structuredClone(value)
 const publicQuote = (quote) => {
   const record = Object.fromEntries(['id', 'rfqId', 'supplierId', 'supplierName', 'ownerId', 'leadDays', 'paymentTerms',
-    'notes', 'status', 'total', 'currency', 'revision', 'rfqRevision', 'commercial', 'subtotal', 'priceBreakdown', 'createdAt', 'updatedAt', 'submittedAt', 'supersededBy', 'withdrawnReason', 'withdrawnAt', 'demo']
+    'notes', 'terms', 'status', 'total', 'currency', 'revision', 'rfqRevision', 'commercial', 'subtotal', 'priceBreakdown', 'createdAt', 'updatedAt', 'submittedAt', 'supersededBy', 'withdrawnReason', 'withdrawnAt', 'demo']
     .filter((key) => quote[key] !== undefined).map((key) => [key, copy(quote[key])]))
-  record.items = quote.items.map(({ id, description, quantity, unit, unitPrice, total }) => ({ id, description, quantity, unit, unitPrice, total }))
+  record.terms = termFields(quote.terms)
+  record.items = quote.items.map(publicQuoteLine)
   return record
 }
-const publicRfq = (rfq, supplierId) => ({ ...Object.fromEntries(['id', 'title', 'description', 'deadline', 'currency', 'items',
+const publicRfq = (rfq, supplierId) => ({ ...Object.fromEntries(['id', 'title', 'description', 'deadline', 'clarifyDeadline', 'currency', 'items', 'scope', 'terms',
   'status', 'ownerId', 'ownerName', 'revision', 'publishedRevision', 'initialRevision', 'projectId', 'projectName', 'sectionId', 'sectionName', 'amendmentReason', 'requirements', 'createdAt', 'updatedAt', 'publishedAt', 'closedReason', 'closedAt', 'demo']
   .filter((key) => rfq[key] !== undefined).map((key) => [key, copy(rfq[key])])), supplierIds: [supplierId] })
 
-export function createProcurement({ store, accounts, resolveUser = user => user, authorizeCommitment = async () => null, parties = () => [], draftDefaults = () => ({values:{},provenance:{},context:{}}) }) {
+export function createProcurement({ store, accounts, resolveUser = user => user, authorizeCommitment = async () => null, parties = () => [], draftDefaults = () => ({values:{},provenance:{},context:{}}), commercialCostBasis = () => null, proposeNegotiation = () => {throw new Error('Enable Review actions before proposing concessions.')}, negotiationReview = () => null }) {
   const deliveries = new AsyncLocalStorage()
   const directory = user => [...new Map([...accounts.list().filter(person=>!person.disabled).map(({id,name,company,email,role})=>({id,name,company,email,role})),...parties(user)].map(person=>[person.id,person])).values()]
   const party = (user,id) => directory(user).find(person=>person.id===id)
@@ -94,7 +99,7 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
       if (ids.has(id)) fail(`Item ID ${id} is repeated.`)
       ids.add(id)
       return { id, description: required(item.description, `Item ${i + 1} description`),
-        quantity: quantity(item.quantity), unit: required(item.unit || 'each', `Item ${i + 1} unit`) }
+        quantity: quantity(item.quantity), unit: required(item.unit || 'each', `Item ${i + 1} unit`), ...scopeItemFields(item) }
     })
   }
   const suppliers = (ids, user) => [...new Set(Array.isArray(ids) ? ids.map(String) : [])].map((id) => {
@@ -102,29 +107,11 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
     if (!supplier || supplier.role !== 'supplier') fail('Choose an active supplier account or explicitly paired supplier from the contact list.')
     return id
   })
-  const quoteItems = (items, rfq) => {
-    if (!Array.isArray(items) || !items.length) fail('Add quoted prices for the RFQ items.')
-    const known = new Map(rfq.items.map((item) => [item.id, item]))
-    const seen = new Set()
-    return items.map((item) => {
-      const source = known.get(text(item.id))
-      if (!source) fail(`Quoted item ${text(item.id)} is not in this RFQ.`)
-      if (seen.has(source.id)) fail(`Item ${source.id} is repeated.`)
-      seen.add(source.id)
-      const price = cents(item.unitPrice, `Price for ${source.description}`)
-      if (price < 0) fail('Quoted unit prices cannot be negative.')
-      const result = { ...source, unitPrice: price / 100, total: lineCents(price, source.quantity) / 100 }
-      if (item.cost !== undefined && item.cost !== null && item.cost !== '') {
-        const cost = cents(item.cost, 'Private unit cost')
-        if (cost < 0) fail('Private costs cannot be negative.')
-        result.cost = cost / 100
-        result.costTotal = lineCents(cost, source.quantity) / 100
-      }
-      return result
-    })
-  }
+  const quoteItems = (items, rfq) => normalizeQuoteLines(items,rfq,{cents,quantity,lineCents})
+  const negotiation=createNegotiation({store,get,save,fail,required,text,newId,cents,proposeReview:proposeNegotiation,getReview:negotiationReview,costBasis:(user,quote,item,kind)=>{if(kind==='commercial')return commercialCostBasis(user,quote,item);if(item.cost===undefined)return null;const event=store.events(user.id).findLast(row=>row.body?.collection==='quotes'&&row.body.record?.id===quote.id);return{unitCost:item.cost,kind:'quoted-private-unit-cost',sourceRef:event?{realm:user.id,seq:event.seq,hash:event.entry_hash}:null}},applyQuote:(user,input)=>executeInner(user,'save-quote',input),sendMessage:(user,input)=>executeInner(user,'send-message',input)})
+  const terms = createTerms({store,get,save,role,fail,required,text,newId,approval})
   const lifecycle = createRfqLifecycle({ store, accounts, get, save, exchange, approval, fail, required, text, role, newId, rfqItems, suppliers, currencyOf, publicRfq })
-  const fulfillment = createFulfillment({ store, accounts, get, save, exchange, approval, fail, required, text, role, newId, cents, quantity, lineCents, publicQuote, publicRfq })
+  const fulfillment = createFulfillment({ store, accounts, get, save, exchange, approval, fail, required, text, role, newId, cents, quantity, lineCents, publicQuote, publicRfq, terms })
   const comparison = (rfqs, quotes, competitive = true) => {
     const result = []
     for (const rfq of rfqs) {
@@ -136,6 +123,7 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
         const present = new Set(quote.items.map((item) => item.id))
         const missing = rfq.items.filter((item) => !present.has(item.id))
         if (missing.length) risks.push(`${missing.length} unpriced RFQ item${missing.length === 1 ? '' : 's'}: ${missing.map((item) => item.description).join(', ')}`)
+        for(const item of quote.items.filter(item=>item.classification==='additional'||item.classification==='alternative'))risks.push(`${item.classification==='additional'?'Additional scope':'Alternative scope'}: ${item.description}. ${item.scopeReason}`)
         if (quote.currency !== rfq.currency) risks.push('Currency differs from RFQ; totals are not comparable without an agreed FX rate.')
         if (!quote.paymentTerms) risks.push('Payment terms need clarification.')
         if (quote.leadDays > 30) risks.push(`Long lead time: ${quote.leadDays} days.`)
@@ -183,7 +171,7 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
         actor:event.actor?.startsWith('agent:') ? 'AI assistant' : person?.name || record.fromName || record.supplierName || record.ownerName || 'Project update',
         summary:`${label} · ${record.title || source?.title || record.supplierName || 'Project conversation'}`}
     })
-    return { realmId: user.id, deliveries: store.list(user.id, 'exchange-outbox').filter(row => !row.control && row.collection && row.type?.startsWith('procurement/')).map(({id,collection,recordId,title,status,to,error,nextAction,updatedAt}) => ({id,collection,recordId,title,status,to,error,nextAction,updatedAt})), rfqs, quotes, orders, messages, changes, activity, contacts, ...lifecycle.snapshot(user, rfqs), ...fulfillment.snapshot(user), comparison: comparison(rfqs, quotes, user.role === 'contractor'),
+    return { realmId: user.id, deliveries: store.list(user.id, 'exchange-outbox').filter(row => !row.control && row.collection && row.type?.startsWith('procurement/')).map(({id,collection,recordId,title,status,to,error,nextAction,updatedAt}) => ({id,collection,recordId,title,status,to,error,nextAction,updatedAt})), rfqs, quotes, orders, messages, changes, activity, contacts, ...lifecycle.snapshot(user, rfqs), ...fulfillment.snapshot(user), ...terms.state(user,rfqs,quotes), ...negotiation.state(user), comparison: comparison(rfqs, quotes, user.role === 'contractor'),
       comparisonScope: user.role === 'contractor'
         ? 'Submitted offers received by this contractor account; ranking covers those received offers only.'
         : 'Own supplier quotes only. Other suppliers\' bids are not visible, so no competitive rank, lowest-price claim or savings comparison can be inferred.',
@@ -196,11 +184,14 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
         unreadMessages: messages.filter((message) => message.toId === user.id).length } }
   }
 
-  async function executeInner(user, action, input = {}, { agent = false } = {}) {
+  async function executeInner(user, action, input = {}, context = {}) {
+    const {agent=false}=context
     client(user)
     if (user.permissions?.includes('workspace:read-only')) fail('This account has read-only workspace access. Ask your administrator to enable editing.', 403)
-    if (agent && !['create-rfq', 'save-quote', 'save-amendment', 'save-clarification-answer'].includes(action)) fail('The assistant can prepare this action for human review but cannot commit it.', 403)
+    if (agent && !['create-rfq', 'save-quote', 'save-amendment', 'save-clarification-answer', 'request-negotiation'].includes(action)) fail('The assistant can prepare this action for human review but cannot commit it.', 403)
     const actor = `${agent ? 'agent' : 'human'}:${user.actorId || user.id}`
+    if (negotiation.actions.has(action)) return negotiation.execute(user,action,input,context)
+    if (terms.actions.has(action)) return terms.execute(user,action,input)
     if (fulfillment.actions.has(action)) return fulfillment.execute(user, action, input)
     if (lifecycle.actions.has(action)) return lifecycle.execute(user, action, input, actor)
     if (action === 'create-rfq') {
@@ -209,10 +200,11 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
       if (existing && (existing.ownerId !== user.id || existing.status !== 'draft')) fail('Only your own unpublished RFQ draft can be edited.', 403)
       const prepared = existing ? {fields:input,basis:existing.draftDefaults} : prepare(user,input,'rfq')
       const fields = { ...existing, ...prepared.fields }
+      const initialTerms=existing?{terms:termFields(input.terms,existing.terms,fail),basis:existing.termsBasis}:terms.applyDefaults(user,'request',input.terms)
       const deadline = text(fields.deadline)
       if (deadline && !Number.isFinite(Date.parse(deadline))) fail('Choose a valid deadline.')
       const rfq = await save(user, 'rfqs', { ...existing, id: existing?.id || newId('rfq'), title: required(fields.title, 'RFQ title'),
-        description: text(fields.description), draftDefaults: prepared.basis, deadline, currency: currencyOf(fields.currency || (fields.projectId ? get(user, 'projects', fields.projectId).currency : undefined)), items: rfqItems(fields.items),
+        description: text(fields.description), scope:scopeFields(fields.scope,existing?.scope), terms:initialTerms.terms, termsBasis:initialTerms.basis, draftDefaults: prepared.basis, deadline, clarifyDeadline:clarificationDeadline(fields.clarifyDeadline,deadline), currency: currencyOf(fields.currency || (fields.projectId ? get(user, 'projects', fields.projectId).currency : undefined)), items: rfqItems(fields.items),
         requirements: requirementFields(existing?.requirements, input.requirements), ...lifecycle.contextFields(user, fields), status: 'draft', ownerId: user.id, ownerName: nameOf(user), supplierIds: suppliers(fields.supplierIds,user), revision: (existing?.revision || 0) + 1 }, 'procurement/rfq-drafted', actor, input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {})
       return { ok: true, rfq, message: 'RFQ draft saved. Review the items and invited suppliers before publishing.' }
     }
@@ -222,6 +214,7 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
       if (rfq.ownerId !== user.id) fail('Only the RFQ owner can publish it.', 403)
       if (rfq.status === 'published') return { ok: true, rfq, duplicate: true }
       if (!rfq.supplierIds.length) fail('Choose at least one supplier before publishing.')
+      validatePublishedScope(rfq)
       await approval(user, action, rfq.id, input, rfq)
       const published = await save(user, 'rfqs', { ...rfq, status: 'published', publishedRevision: 1, initialRevision: 1, publishedAt: now() }, 'procurement/rfq-published')
       await lifecycle.version(user, published)
@@ -243,7 +236,9 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
       if (existing?.status === 'awarded') fail('Use an order change for an awarded quote.')
       const prepared = existing ? {fields:{...existing,...input},basis:existing.draftDefaults} : prepare(user,input,'quote')
       input = prepared.fields
-      const items = quoteItems(input.items, rfq)
+      const initialTerms=existing?{terms:termFields(input.terms,existing.terms,fail),basis:existing.termsBasis}:terms.applyDefaults(user,'quote',input.terms)
+      let items
+      try{items=quoteItems(input.items,rfq)}catch(error){if(error.code==='SCOPE_NORMALIZATION')await store.append(user.id,'procurement/normalization-refused',{rfqId:rfq.id,rfqRevision:rfqRevision(rfq),quoteId:existing?.id||null,code:error.code,reason:error.message,nextAction:error.nextAction},{actor,eventClass:'fact'});throw error}
       if(input.leadDays === '') fail('State the lead time in whole days; an empty value is unknown.')
       const leadDays = Number(input.leadDays ?? 14)
       if (!Number.isInteger(leadDays) || leadDays < 0 || leadDays > 3650) fail('Lead time must be a whole number of days from 0 to 3650.')
@@ -254,7 +249,7 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
       const costComplete = items.every((item) => item.cost !== undefined)
       const quote = await save(user, 'quotes', { ...existing, id: existing?.id || newId('quote'), rfqId: rfq.id, rfqRevision: rfqRevision(rfq),
         supplierId: user.id, supplierName: nameOf(user), ownerId: rfq.ownerId, items, leadDays, draftDefaults: prepared.basis,
-        paymentTerms: text(input.paymentTerms), notes: text(input.notes), privateNotes: text(input.privateNotes ?? existing?.privateNotes),
+        paymentTerms: text(input.paymentTerms), terms:initialTerms.terms, termsBasis:initialTerms.basis, notes: text(input.notes), privateNotes: text(input.privateNotes ?? existing?.privateNotes),
         status: 'draft', ...amounts, costTotal, costComplete, margin: costComplete ? (cents(amounts.subtotal) - cents(costTotal)) / 100 : null, marginBasis: 'Quoted item subtotal minus private item costs; excludes separately declared tax, freight and other costs',
         commercial, currency: currencyOf(input.currency || existing?.currency || rfq.currency), revision: existing ? (existing.revision || 0) + 1
           : Math.max(0, ...store.list(user.id, 'quotes').filter((row) => row.rfqId === rfq.id).map((row) => row.revision || 1)) + 1 }, 'procurement/quote-drafted', actor, input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {})
@@ -313,10 +308,10 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
   function execute(user, action, input = {}, options = {}) {
     client(user)
     if (user.permissions?.includes('workspace:read-only')) return Promise.reject(Object.assign(new Error('This account has read-only workspace access.'), { status: 403 }))
-    if (options.agent && !['create-rfq', 'save-quote', 'save-amendment', 'save-clarification-answer'].includes(action)) return Promise.reject(Object.assign(new Error('The assistant can prepare this action for human review but cannot commit it.'), { status: 403 }))
+    if (options.agent && !['create-rfq', 'save-quote', 'save-amendment', 'save-clarification-answer', 'request-negotiation'].includes(action)) return Promise.reject(Object.assign(new Error('The assistant can prepare this action for human review but cannot commit it.'), { status: 403 }))
     user = resolveUser(user, action, input)
     healthy(user.id)
-    const target = input.id ? ['quotes', 'rfq-amendments', 'clarifications', 'orders', 'changes', 'award-intents', 'invoices', 'acceptances'].map(collection => store.get(user.id, collection, input.id)).find(Boolean) : input.quoteId ? store.get(user.id, 'quotes', input.quoteId) : input.orderId ? store.get(user.id, 'orders', input.orderId) : null
+    const target = input.id ? ['quotes', 'rfq-amendments', 'clarifications', 'orders', 'changes', 'award-intents', 'invoices', 'acceptances','negotiation-threads'].map(collection => store.get(user.id, collection, input.id)).find(Boolean) : input.quoteId ? store.get(user.id, 'quotes', input.quoteId) : input.orderId ? store.get(user.id, 'orders', input.orderId) : input.threadId ? store.get(user.id,'negotiation-threads',input.threadId) : null
     const key = input.rfqId || target?.rfqId || input.id || user.id
     const prior = writes.get(key) || Promise.resolve()
     const job = prior.catch(() => {}).then(() => deliveries.run([], async () => { const result = await executeInner(user, action, input, options), rows = deliveries.getStore(); const pending = rows.filter(row => row.status !== 'delivered'); return rows.length ? { ...result, deliveries: rows.map(({recipient,collection,recordId,msgId,received,status,error,nextAction}) => ({recipient,collection,recordId,msgId,received,status,error,nextAction})), deliveryPending: pending.length > 0, ...(pending.length ? { message: `Your decision is recorded. ${pending.length} transfer(s) still need delivery or conflict resolution; the counterparty may not yet have this update. Open Deliveries to review the signed message.` } : {}) } : result }))
@@ -382,5 +377,5 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
   }
 
   const previewChange = (user, orderId, lines, expectedRevision) => { client(user); user = resolveUser(user, 'snapshot', {}); const order = get(user, 'orders', orderId); if (expectedRevision !== undefined && Number(expectedRevision) !== (order.orderRevision || 1)) fail('The order changed while you were editing. Reopen the change form to review the current quantities and rates.', 409); if (![order.ownerId, order.supplierId].includes(user.id)) fail('This agreement belongs to another party.', 403); return { orderId, orderRevision: order.orderRevision || 1, ...fulfillment.changePlan(user, order, lines) } }
-  return { snapshot, execute, exportCsv, previewChange, defaults, parties: user => directory(resolveUser(user,'snapshot',{})), realm: user => { const owner = resolveUser(user, 'snapshot', {}).id; healthy(owner); return owner }, normalizeCommercial: commercialFields, normalizeRequirements: requirementFields, normalizeQuotePrice: (items, commercial = {}) => quotationAmounts(items.reduce((sum, item) => sum + lineCents(cents(item.unitPrice), quantity(item.quantity)), 0), commercialFields({}, commercial, items.map(item => item.id))) }
+  return { snapshot, execute, exportCsv, previewChange, defaults, termDefaults:(user,kind,values)=>terms.applyDefaults(resolveUser(user,'snapshot',{}),kind,values), parties: user => directory(resolveUser(user,'snapshot',{})), realm: user => { const owner = resolveUser(user, 'snapshot', {}).id; healthy(owner); return owner }, normalizeQuoteItems:(items,rfq)=>quoteItems(items,rfq).map(publicQuoteLine), normalizeCommercial: commercialFields, normalizeRequirements: requirementFields, normalizeQuotePrice: (items, commercial = {}) => quotationAmounts(items.reduce((sum, item) => sum + lineCents(cents(item.unitPrice), quantity(item.quantity)), 0), commercialFields({}, commercial, items.map(item => item.id))) }
 }

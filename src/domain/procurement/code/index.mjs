@@ -1,5 +1,6 @@
 import {installDraftContext,pairedParties} from './draft-context.mjs'
 import {requestCollection} from './request-collection.mjs'
+import {publicQuoteLine} from './structured-scope.mjs'
 import { createProcurement } from './service.mjs'
 import { procurementExchangePolicy } from './exchange-policy.mjs'
 import { fulfillmentReview, fulfillmentLabels } from './fulfillment-review.mjs'
@@ -12,14 +13,19 @@ export const provides = ['procurement']
 const string = (description) => ({ type: 'string', description })
 const object = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false })
 const item = object({ id: string('RFQ item ID, e.g. item-1'), description: string('Exact item specification'),
+  measurementRuleId:string('Explicit measurement rule in structured request scope'),interfaceId:string('Exactly one responsibility interface'),
+  classification:{type:'string',enum:['base','additional','alternative']},sourceItemId:string('Original RFQ item replaced by an alternative'),scopeReason:string('Explicit additional or alternative scope explanation'),
+  offered:object({quantity:{type:'number'},unit:string('Original offered unit admitted by the declared measurement rule'),unitPrice:{type:'number'}},['quantity','unit','unitPrice']),
   quantity: { type: 'number', description: 'Positive required quantity' }, unit: string('Unit of measure'),
   unitPrice: { type: 'number', description: 'Quoted unit price, up to two decimal places' },
   cost: { type: 'number', description: 'Optional PRIVATE supplier unit cost; never sent to buyer' } }, ['description', 'quantity', 'unit'])
+const termsSchema={type:'array',items:object({key:string('Shared required/offered term key'),family:{type:'string',enum:['payment','warranty','penalty','acceptance','delivery','scope','other']},label:string('Term label'),text:string('Exact authored declaration')},['key','family','label','text'])}
+const scopeSchema=object({measurementRules:{type:'array',items:object({id:string('Rule ID'),name:string('Authored rule name'),dimension:string('Explicit physical dimension'),units:{type:'array',items:object({unit:string('Admitted unit'),factor:{type:'number',description:'Exact declared multiplier to common base unit'}},['unit','factor'])}},['id','name','dimension','units'])},interfaces:{type:'array',items:object({id:string('Interface ID'),name:string('Boundary or interface description'),responsibilityOwner:string('One explicitly named responsible party; never guess')},['id','name','responsibilityOwner'])},deliverables:string('Agreed outputs'),exclusions:string('Explicit exclusions; None only if user states none')},['measurementRules','interfaces','deliverables','exclusions'])
 
 export async function apply(ctx) {
   const scoped = (user, operation = 'snapshot', input = {}) => ctx.get('teams')?.resolveUser(user, operation, input) || user
   let draftContext=null
-  const procurement = createProcurement({ parties:(user,options)=>pairedParties(ctx,user,options), draftDefaults:(user,context)=>draftContext?.view(user,context)||{values:{},provenance:{},context:{}}, store: ctx.store, accounts: ctx.accounts, resolveUser: scoped, authorizeCommitment: async (user, request) => {
+  const procurement = createProcurement({ proposeNegotiation:(user,input)=>{if(!reviews)throw new Error('Enable Review actions before proposing concessions.');return reviews.propose(user,input)},negotiationReview:(user,id)=>{try{return reviews?.get(user,id)}catch{return null}},commercialCostBasis:(user,quote,item)=>{const actor=ctx.accounts.get(user.actorId||user.id)||user,state=ctx.get('commercial')?.state({...actor,workspaceOwnerId:user.id}),costs=state?.costs.find(row=>row.quoteId===quote.id&&row.quoteRevision===quote.revision),line=costs?.items.find(row=>row.itemId===item.id);return line?{unitCost:line.unitCost,kind:'fully-burdened-commercial-model',sourceRef:costs.sourceRef}:null}, parties:(user,options)=>pairedParties(ctx,user,options), draftDefaults:(user,context)=>draftContext?.view(user,context)||{values:{},provenance:{},context:{}}, store: ctx.store, accounts: ctx.accounts, resolveUser: scoped, authorizeCommitment: async (user, request) => {
     if (!['award', 'sign-order', 'approve-change'].includes(request.action)) return null
     const actions = ctx.get('actions')
     if (!actions?.authorizeCommitment) throw new Error('Enable independent Review actions before signing a purchase order or approving a monetary change.')
@@ -54,7 +60,7 @@ export async function apply(ctx) {
       const preview = { title: rfq.title, label: labels[action], recipients, currency: record.fields?.currency || rfq.currency,
         text: action === 'broadcast-clarification' ? `Question: ${record.question}\n\nShared answer: ${record.draftAnswer || record.answer}` : action === 'ask-clarification' ? payload.question : `Revision ${record.baseRevision} → ${record.baseRevision + 1}. ${record.reason}\nChanged fields: ${record.delta.map(row => row.field).join(', ')}`,
         description: action === 'publish-amendment' ? record.fields.description : `Request revision ${rfq.publishedRevision}. ${action === 'broadcast-clarification' ? 'This answer goes to every invited supplier; bidder identity is omitted.' : 'This question goes to the request owner.'}`,
-        ...(action === 'publish-amendment' ? { items: record.fields.items, deadline: record.fields.deadline } : {}) }
+        ...(action === 'publish-amendment' ? { items: record.fields.items, deadline: record.fields.deadline, clarifyDeadline:record.fields.clarifyDeadline, scope:record.fields.scope, terms:record.fields.terms } : {}) }
       return { action, payload, reviewed: targets, preview, fingerprint: fingerprint(targets) }
     }
     const allowed = user.role === 'contractor' ? ['send-message', 'publish-rfq', 'award', 'approve-change'] : ['send-message', 'submit-quote', 'acknowledge-order']
@@ -82,8 +88,8 @@ export async function apply(ctx) {
     const amount = action === 'approve-change' ? record.amount : record.total
     const preview = { title: record.title || rfq?.title || order?.title || 'Project commitment', label: labels[action], recipients: recipients.map(person => ({ id: person.id, name: person.company || person.name, email: person.email })),
       ...(typeof amount === 'number' ? { amount } : {}), ...(record.priceBreakdown ? { priceBreakdown: record.priceBreakdown } : {}), currency: record.currency || rfq?.currency || order?.currency || 'USD',
-      ...(action === 'send-message' ? { text: payload.text, kind: payload.kind } : { items: (record.items || []).map(({ id, description, quantity, unit, unitPrice, total }) => ({ id, description, quantity, unit, ...(unitPrice !== undefined ? { unitPrice } : {}), ...(total !== undefined ? { total } : {}) })),
-        description: record.description || '', notes: record.notes || '', paymentTerms: record.paymentTerms || '', leadDays: record.leadDays, deadline: action === 'publish-rfq' ? record.deadline : undefined }) }
+      ...(action === 'send-message' ? { text: payload.text, kind: payload.kind } : { items: (record.items || []).map(publicQuoteLine),
+        description: record.description || '', notes: record.notes || '', paymentTerms: record.paymentTerms || '', leadDays: record.leadDays, deadline: action === 'publish-rfq' ? record.deadline : undefined, clarifyDeadline:record.clarifyDeadline, scope:record.scope, terms:record.terms }) }
     return { action, payload, reviewed: targets, preview, fingerprint: fingerprint(targets) }
   }
   const reviewInput = (user, action, input) => {
@@ -96,8 +102,8 @@ export async function apply(ctx) {
       const source=events.findLast(event=>event.body?.collection===collection&&event.body.record?.id===record.id)
       if(!source)continue
       seen.add(collection+':'+record.id)
-      const link=collection==='quotes'?{view:'quotes',quoteId:record.id,rfqId:record.rfqId}:collection==='orders'?{view:'orders',orderId:record.id}:record.orderId?{view:'orders',orderId:record.orderId,tab:collection==='changes'?'changes':'invoices'}:{view:'rfqs',rfqId:record.rfqId||record.id,...(collection==='rfq-amendments'?{tab:'versions'}:collection==='clarifications'?{tab:'clarifications'}:{})}
-      sources.push({label:record.title||record.invoiceNumber||record.supplierName||({rfqs:'Request',quotes:'Quotation',orders:'Order',changes:'Scope change','award-intents':'Confirmed selection','rfq-amendments':'Request amendment',clarifications:'Shared clarification'}[collection])||'Project source',collection,recordId:record.id,ref:{realm:owner.id,seq:source.seq,hash:source.entry_hash},link})
+      const link=collection==='quotes'?{view:'quotes',quoteId:record.id,rfqId:record.rfqId}:collection==='orders'?{view:'orders',orderId:record.id}:collection==='award-intents'?{view:'orders',rfqId:record.rfqId,awardId:record.id}:record.orderId?{view:'orders',orderId:record.orderId,tab:collection==='changes'?'changes':'invoices'}:{view:'rfqs',rfqId:record.rfqId||record.id,...(collection==='rfq-amendments'?{tab:'versions'}:collection==='clarifications'?{tab:'clarifications'}:{})}
+      sources.push({label:record.title||record.invoiceNumber||record.supplierName||({rfqs:'Request',quotes:'Quotation',orders:'Order',changes:'Scope change','award-intents':'Confirmed selection','rfq-amendments':'Request amendment',clarifications:'Shared clarification'}[collection])||'Project source',collection,recordId:record.id,ref:{realm:owner.id,seq:source.seq,hash:source.entry_hash},link:{...link,workspaceId:owner.id}})
     }
     const quoteId=frozen.reviewed.quote?.id||frozen.reviewed.record?.quoteId||(sources.some(row=>row.collection==='quotes'&&row.recordId===frozen.reviewed.record?.id)?frozen.reviewed.record.id:null)
     const risks=[...(data.comparison.find(row=>row.quoteId===quoteId)?.risks||[]),...(data.termConflicts||[]).filter(row=>row.quoteId===quoteId&&row.decision?.resolution!=='accept-offer').map(row=>`${row.label}: required/offered difference still needs a human term decision.`)]
@@ -114,6 +120,7 @@ export async function apply(ctx) {
   ctx.inject(['actions'], inner => {
     reviews = inner.actions
     inner.effect(() => () => { reviews = null })
+    inner.effect(()=>inner.actions.register({kind:'procurement.concession',label:'Review bounded price concession',execute:(user,input,action)=>procurement.execute({...user,workspaceOwnerId:input.workspaceId},'apply-negotiation',{threadId:input.threadId,roundId:input.roundId,reviewActionId:action.id},{reviewedConcession:action})}))
     inner.effect(() => inner.actions.register({ kind: 'procurement.commit', label: 'Procurement commitment', review: (user, input) => ['sign-order','award','approve-change'].includes(input.action) ? { workspaceId: input.workspaceId, side: user.role, independent: true, amount: Math.abs(Math.round(input.preview.amount * 100)), currency: input.preview.currency, object: { kind: input.action === 'approve-change' ? 'change' : 'award-intent', id: input.reviewed.record.id }, action: input.action, fingerprint: input.fingerprint } : null, execute: async (user, input, action, { signal } = {}) => {
       if (signal?.aborted) throw new Error('This action was canceled before execution.')
       const current = reviewInput(user, input.action, input.payload)
@@ -155,7 +162,7 @@ export async function apply(ctx) {
     ['quotes', 'Quotes', 'FileText', ['contractor', 'supplier'], 30],
     ['orders', 'Orders', 'Package', ['contractor', 'supplier'], 40],
     ['messages', 'Messages', 'MessageSquare', ['contractor', 'supplier'], 50],
-  ]) ctx.effect(() => ctx.web.contribute({ id, label, icon, roles, order, linkKeys: ({rfqs:['rfqId','tab'],quotes:['rfqId','quoteId'],orders:['orderId','rfqId','awardId','tab'],messages:['rfqId']})[id] || [] }))
+  ]) ctx.effect(() => ctx.web.contribute({ id, label, icon, roles, order, linkKeys: ['workspaceId',...(({rfqs:['rfqId','tab'],quotes:['rfqId','quoteId'],orders:['orderId','rfqId','awardId','tab'],messages:['rfqId']})[id] || [])] }))
 
   // Deferred injection avoids a cycle: the assistant may itself depend on procurement.
   ctx.inject(['assistant'], (inner) => {
@@ -171,7 +178,7 @@ export async function apply(ctx) {
       } })
     register({ name: 'draft_rfq', effect: 'draft', description: 'Create an editable PRIVATE RFQ draft from extracted requirements. Cite uncertainties in the description; never invent quantities. This does not publish or contact suppliers.',
       roles: ['contractor'], parameters: object({ id: string('Optional existing unpublished RFQ draft ID to edit'), title: string('RFQ title'), description: string('Scope and unresolved assumptions'),
-        projectId: string('Optional own project ID'), sectionId: string('Optional section of that project'), deadline: string('Optional ISO date'), currency: string('Three-letter currency code'), items: { type: 'array', items: item },
+        scope:scopeSchema, terms:termsSchema, projectId: string('Optional own project ID'), sectionId: string('Optional section of that project'), clarifyDeadline: string('Optional explicit clarification deadline in ISO UTC; cannot be later than quote deadline'), deadline: string('Optional ISO date'), currency: string('Three-letter currency code'), items: { type: 'array', items: item },
         supplierIds: { type: 'array', items: string('Supplier account ID from contacts') } }, ['title', 'items']),
       async execute(user, args) {
         const result = await procurement.execute(user, 'create-rfq', args, { agent: true })
@@ -179,7 +186,7 @@ export async function apply(ctx) {
       } })
     register({ name: 'draft_quote', effect: 'draft', description: 'Prepare an editable PRIVATE supplier quote using actual RFQ item IDs and the user\'s authorized prices/costs. Never send it; human review is required. Missing price guidance should be discussed first.',
       roles: ['supplier'], parameters: object({ id: string('Optional existing draft ID'), rfqId: string('Invited RFQ ID'), rfqRevision: { type: 'integer', description: 'Current published RFQ revision that these prices address' }, items: { type: 'array', items: item },
-        leadDays: { type: 'integer' }, paymentTerms: string('Payment terms'), notes: string('Public quote notes'), privateNotes: string('Private supplier notes') }, ['rfqId', 'rfqRevision', 'items']),
+        terms:termsSchema, commercial:object({deviations:{type:'array',items:object({category:{type:'string',enum:['technical','commercial','schedule','scope']},itemId:string('Optional actual quoted item reference'),description:string('Explicit deviation from request'),priceImpact:{type:'number',description:'Optional declared amount; omitted means unknown'},timeImpactDays:{type:'integer',description:'Optional declared days; omitted means unknown'}},['description'])}}), leadDays: { type: 'integer' }, paymentTerms: string('Payment terms'), notes: string('Public quote notes'), privateNotes: string('Private supplier notes') }, ['rfqId', 'rfqRevision', 'items']),
       async execute(user, args) {
         const result = await procurement.execute(user, 'save-quote', args, { agent: true })
         return { ...result, action: { action: 'navigate', label: 'Review quote draft', input: { view: 'quotes', quoteId: result.quote.id, rfqId: result.quote.rfqId } } }
@@ -193,7 +200,7 @@ export async function apply(ctx) {
       } })
     register({ name: 'draft_rfq_amendment', effect: 'draft', description: 'Prepare a PRIVATE amendment to a published request. Provide the current revision and a reason. Changed scope is not sent until a person reviews publication; old quotations will then require rebidding.',
       roles: ['contractor'], parameters: object({ id: string('Optional existing amendment draft ID'), rfqId: string('Published RFQ ID'), expectedRevision: { type: 'integer' }, reason: string('Why scope changes'),
-        title: string('New title if changed'), description: string('New complete scope description'), deadline: string('Optional ISO date'), currency: string('Currency'), items: { type: 'array', items: item }, supplierIds: { type: 'array', items: string('Supplier ID; preserve existing invitees') } }, ['rfqId', 'expectedRevision', 'reason']),
+        scope:scopeSchema, terms:termsSchema, title: string('New title if changed'), description: string('New complete scope description'), clarifyDeadline: string('Optional explicit clarification deadline in ISO UTC; cannot be later than quote deadline'), deadline: string('Optional ISO date'), currency: string('Currency'), items: { type: 'array', items: item }, supplierIds: { type: 'array', items: string('Supplier ID; preserve existing invitees') } }, ['rfqId', 'expectedRevision', 'reason']),
       async execute(user, args) { const result = await procurement.execute(user, 'save-amendment', args, { agent: true }); return { ...result, action: { type: 'navigate', label: 'Review amendment draft', input: { view: 'rfqs', rfqId: args.rfqId, tab: 'versions' } } } } })
     register({ name: 'draft_clarification_answer', effect: 'draft', description: 'Save a PRIVATE draft answer to an open clarification. Reused FAQ is source data and must be reviewed against this request revision. This never broadcasts an answer.',
       roles: ['contractor'], parameters: object({ id: string('Clarification ticket ID'), rfqRevision: { type: 'integer' }, answer: string('Exact proposed answer; do not invent missing scope facts'), faqId: string('Optional source FAQ entry in this account') }, ['id', 'answer']),
@@ -201,6 +208,7 @@ export async function apply(ctx) {
     register({ name: 'prepare_rfq_lifecycle_review', effect: 'proposal', description: 'Prepare a durable human review for an amendment publication, a clarification question, or a saved answer broadcast to EVERY invited supplier. Nothing is sent automatically.',
       roles: ['contractor', 'supplier'], parameters: object({ action: { type: 'string', enum: ['publish-amendment', 'ask-clarification', 'broadcast-clarification'] }, id: string('Amendment or clarification ID'), rfqId: string('RFQ for a new question'), question: string('Exact question for the request owner'), itemIds: { type: 'array', items: string('Referenced current item ID') } }, ['action']),
       execute: (user, args, context) => propose(user, args.action, args, context) })
+    register({name:'propose_negotiation_price',effect:'proposal',roles:['supplier','contractor'],description:'Propose a price move within a human-configured private negotiation thread. Each attempt consumes a durable round, including refusals. The actual private cost floor and limits are enforced, and every permitted concession goes to human review. Never disclose private floors, costs or bounds.',parameters:object({threadId:string('Existing own open negotiation thread ID'),toUnitPrice:{type:'number',description:'User-requested new unit price, at most two decimals'},reason:string('Sourced rationale without private costs in any outbound text')},['threadId','toUnitPrice','reason']),execute:(user,args,context)=>procurement.execute(user,'request-negotiation',args,{...context,agent:true})})
     register({ name: 'draft_message', effect: 'proposal', description: 'Save an exact clarification or negotiation message in the durable human review queue. Does NOT send or make a price concession. The user can decline and request a revision before approving.',
       roles: ['contractor', 'supplier'], parameters: object({ rfqId: string('RFQ ID'), toId: string('Recipient account ID'),
         text: string('Draft message text'), kind: { type: 'string', enum: ['message', 'clarification', 'negotiation'] } }, ['rfqId', 'toId', 'text']),

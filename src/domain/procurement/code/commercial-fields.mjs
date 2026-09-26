@@ -39,7 +39,7 @@ export const commercialFields = (prior, input, itemIds = []) => merge(prior, inp
     return value.map(row => {
       if (!row || typeof row !== 'object' || !String(row.description || '').trim()) fail('Each deviation needs a description.')
       if (row.itemId && !itemIds.includes(row.itemId)) fail('A deviation must reference a quoted item or the whole quotation.')
-      return { ...(row.itemId ? { itemId: row.itemId } : {}), description: String(row.description).trim(),
+      return { ...(row.itemId ? { itemId: row.itemId } : {}), ...(row.category ? {category:enumOf(['technical','commercial','schedule','scope'])(row.category,'deviation category')} : {}), description: String(row.description).trim(),
         ...(row.priceImpact !== undefined && row.priceImpact !== null && row.priceImpact !== '' ? { priceImpact: number(row.priceImpact, 'Deviation price impact', { min: -1e12, money: true }) } : {}),
         ...(row.timeImpactDays !== undefined && row.timeImpactDays !== null && row.timeImpactDays !== '' ? { timeImpactDays: number(row.timeImpactDays, 'Deviation time impact', { min: -36500, max: 36500, integer: true }) } : {}) }
     })

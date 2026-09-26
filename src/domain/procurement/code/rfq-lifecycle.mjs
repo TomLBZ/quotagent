@@ -1,4 +1,7 @@
+import {clarificationDeadline} from './response-fields.mjs'
+import {termFields} from './terms.mjs'
 import { requirementFields } from './commercial-fields.mjs'
+import {scopeFields,validatePublishedScope} from './structured-scope.mjs'
 // Business records only. Ledger and transport semantics belong to workspace-store.
 export const rfqRevision = rfq => Number(rfq.publishedRevision || rfq.revision || 1)
 export const quoteRevision = (quote, rfq) => Number(quote.rfqRevision || rfq.initialRevision || rfqRevision(rfq))
@@ -6,7 +9,7 @@ export const staleQuote = (quote, rfq) => quoteRevision(quote, rfq) !== rfqRevis
 
 const copy = value => structuredClone(value)
 const now = () => new Date().toISOString()
-const editable = ['title', 'description', 'deadline', 'currency', 'items', 'supplierIds', 'projectId', 'projectName', 'sectionId', 'sectionName', 'requirements']
+const editable = ['title', 'description', 'deadline', 'clarifyDeadline', 'currency', 'items', 'scope', 'terms', 'supplierIds', 'projectId', 'projectName', 'sectionId', 'sectionName', 'requirements']
 const same = (left, right) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null)
 
 export function createRfqLifecycle(helpers) {
@@ -50,8 +53,8 @@ export function createRfqLifecycle(helpers) {
     if (deadline && !Number.isFinite(Date.parse(deadline))) fail('Choose a valid deadline.')
     const invited = suppliers(next.supplierIds,user)
     if (rfq.supplierIds.some(id => !invited.includes(id))) fail('An amendment must keep all previously invited suppliers informed. Add suppliers if needed; existing invitations cannot be removed.')
-    return { title: required(next.title, 'RFQ title'), description: text(next.description), deadline, currency: currencyOf(next.currency),
-      requirements: requirementFields(rfq.requirements, input.requirements), items: rfqItems(next.items), supplierIds: invited, ...contextFields(user, next) }
+    return { title: required(next.title, 'RFQ title'), description: text(next.description), deadline, clarifyDeadline:clarificationDeadline(next.clarifyDeadline,deadline), currency: currencyOf(next.currency),
+      requirements: requirementFields(rfq.requirements, input.requirements), scope:scopeFields(next.scope,rfq.scope), terms:termFields(next.terms,rfq.terms,fail), items: rfqItems(next.items), supplierIds: invited, ...contextFields(user, next) }
   }
   const fieldDelta = (rfq, fields) => editable.filter(key => !same(rfq[key] ?? (typeof fields[key] === 'string' ? '' : key === 'requirements' ? {} : null), fields[key])).map(field => ({ field, before: copy(rfq[field] ?? null), after: copy(fields[field] ?? null) }))
 
@@ -125,6 +128,7 @@ export function createRfqLifecycle(helpers) {
       const nextRevision = amendment.baseRevision + 1
       if (amendment.status === 'draft' && amendment.baseRevision !== rfqRevision(rfq)) fail('The published request changed after this amendment was drafted. Prepare a new amendment.', 409)
       if (amendment.status === 'publishing' && rfqRevision(rfq) !== amendment.baseRevision && !(rfqRevision(rfq) === nextRevision && rfq.lastAmendmentId === amendment.id)) fail('A newer amendment exists. Review its delivery state before retrying.', 409)
+      validatePublishedScope(amendment.fields)
       await approval(user, action, amendment.id, input, amendment)
       if (amendment.status === 'draft') amendment = await save(user, 'rfq-amendments', { ...amendment, status: 'publishing' }, 'procurement/amendment-delivery-started')
       if (rfqRevision(rfq) === amendment.baseRevision) {
@@ -152,6 +156,7 @@ export function createRfqLifecycle(helpers) {
     }
     if (action === 'ask-clarification') {
       const rfq = checkRfq(user, input.rfqId)
+      if(rfq.clarifyDeadline&&Date.now()>Date.parse(rfq.clarifyDeadline))fail('The published clarification deadline has passed. Ask the contractor to review and publish an amended deadline before opening a new question.',409)
       checkExpected(rfq, input.rfqRevision)
       const itemIds = [...new Set((input.itemIds || []).map(String))]
       if (itemIds.some(id => !rfq.items.some(item => item.id === id))) fail('Choose item references from the current request.')

@@ -1,20 +1,21 @@
+import {validatePublishedScope} from './structured-scope.mjs'
 const copy = value => structuredClone(value)
 const ordered = value => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key,ordered(value[key])])) : value
 const equal = (a,b) => JSON.stringify(ordered(a ?? null)) === JSON.stringify(ordered(b ?? null))
 const semantic = value => Array.isArray(value) ? value.map(semantic) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).filter(([key])=>!['createdAt','updatedAt','publishedAt','submittedAt','confirmedAt','signedAt','approvedAt','appliedAt','answeredAt','broadcastAt','withdrawnAt','closedAt'].includes(key) && !['createdAt','updatedAt','status','stale','staleReason','cost','costTotal','privateNotes','margin','costComplete','marginBasis'].includes(key)).map(([key,row])=>[key,semantic(row)])) : value
 const select = (record,keys) => Object.fromEntries(keys.map(key=>[key,record?.[key] ?? null]))
-const financial = record => semantic(select(record,['quoteId','currency','items','total','subtotal','priceBreakdown','commercial','leadDays','paymentTerms']))
-const quoteFields = 'id rfqId supplierId supplierName ownerId leadDays paymentTerms notes status total currency revision rfqRevision commercial subtotal priceBreakdown createdAt updatedAt submittedAt supersededBy withdrawnReason withdrawnAt demo items'.split(' ')
-const rfqFields = 'id title description deadline currency items status ownerId ownerName revision publishedRevision initialRevision projectId projectName sectionId sectionName amendmentReason requirements createdAt updatedAt publishedAt closedReason closedAt demo supplierIds'.split(' ')
+const financial = record => semantic(select(record,['quoteId','currency','items','total','subtotal','priceBreakdown','commercial','leadDays','paymentTerms','terms','requiredTerms','termExceptions']))
+const quoteFields = 'id rfqId supplierId supplierName ownerId leadDays paymentTerms notes terms status total currency revision rfqRevision commercial subtotal priceBreakdown createdAt updatedAt submittedAt supersededBy withdrawnReason withdrawnAt demo items'.split(' ')
+const rfqFields = 'id title description deadline clarifyDeadline currency items scope terms status ownerId ownerName revision publishedRevision initialRevision projectId projectName sectionId sectionName amendmentReason requirements createdAt updatedAt publishedAt closedReason closedAt demo supplierIds'.split(' ')
 const fields = {
  rfqs:rfqFields,quotes:quoteFields,'quote-status':['id','status','orderId'],
- orders:'id rfqId quoteId awardId rfqRevision title ownerId ownerName supplierId supplierName originalTotal currency status orderRevision commercial items originalItems leadDays paymentTerms supplierConfirmedBy supplierConfirmedAt signedBy signedAt reviewActionId subtotal total priceBreakdown createdAt updatedAt acknowledgedAt acknowledgedBy awardedBy lastChangeId'.split(' '),
+ orders:'id rfqId quoteId awardId rfqRevision title ownerId ownerName supplierId supplierName originalTotal currency status orderRevision commercial terms requiredTerms termExceptions items originalItems leadDays paymentTerms supplierConfirmedBy supplierConfirmedAt signedBy signedAt reviewActionId subtotal total priceBreakdown createdAt updatedAt acknowledgedAt acknowledgedBy awardedBy lastChangeId'.split(' '),
  changes:'id orderId rfqId title description ownerId supplierId proposedBy proposedByActor status baseOrderRevision lines proposedItems proposedAmounts amount currency settledBy createdAt updatedAt counterpartyConfirmedBy decisionReason confirmedAt approvedBy approvedAt reviewActionId appliedOrderRevision appliedAt'.split(' '),
  messages:'id rfqId fromId fromName toId text kind binding createdAt updatedAt'.split(' '),
  'rfq-versions':['id','rfqId','publishedRevision','snapshot','createdAt','updatedAt'],
  clarifications:'id rfqId ownerId askerId rfqRevision question itemIds status published askedByYou answer answeredAt broadcastAt previousAnswers reopenedReason createdAt updatedAt'.split(' '),
  'rebid-requests':'id rfqId supplierId fromRevision rfqRevision reason status ownerId quoteId createdAt updatedAt'.split(' '),
- 'award-intents':'id rfqId quoteId ownerId ownerName supplierId supplierName title status binding quote quoteDigest rfqRevision total currency reason proposedBy createdAt updatedAt decisionReason decidedBy confirmedBy confirmedAt orderId signedBy reviewActionId'.split(' '),
+ 'award-intents':'id rfqId quoteId ownerId ownerName supplierId supplierName title status binding quote quoteDigest rfqRevision total currency reason terms requiredTerms termExceptions proposedBy createdAt updatedAt decisionReason decidedBy confirmedBy confirmedAt orderId signedBy reviewActionId'.split(' '),
  acceptances:'id orderId rfqId ownerId supplierId reference acceptedAt lines deficiencies orderRevision recordedBy createdAt updatedAt'.split(' '),
  invoices:'id orderId rfqId ownerId supplierId invoiceNumber invoiceDate currency lines taxAmount freightAmount total computedTotal status recordedBy recordedByParty createdAt updatedAt lastMatchId'.split(' '),
  'invoice-matches':'id orderId orderRevision invoiceId acceptanceIds previousInvoiceIds ownerId supplierId status differences invoiceTotal currency checkedBy checkedAt createdAt updatedAt'.split(' '),
@@ -42,12 +43,12 @@ function sourceMatches(collection,record,event) {
  const body=event.body||{},scope=body.scope||{},action=body.action
  if(!actions[collection]?.includes(action))return false
  if(collection==='orders'){
-  if(['sign-order','award'].includes(action))return scope.id===record.awardId && !!body.authority?.grantId && equal(financial({...scope.quote,quoteId:scope.quoteId}),financial(record))
+  if(['sign-order','award'].includes(action))return scope.id===record.awardId && !!body.authority?.grantId && equal(financial({...scope.quote,quoteId:scope.quoteId,terms:scope.terms,requiredTerms:scope.requiredTerms,termExceptions:scope.termExceptions}),financial(record))
   if(action==='approve-change')return scope.orderId===record.id && !!body.authority?.grantId && equal(semantic({items:scope.proposedItems,...scope.proposedAmounts}),semantic(select(record,['items','subtotal','total','priceBreakdown'])))
   return scope.id===record.id&&equal(financial(scope),financial(record))
  }
  if(collection==='quotes'){const keys=quoteFields.filter(key=>!['supersededBy','withdrawnReason','withdrawnAt'].includes(key));return scope.id===record.id&&equal(semantic(select(scope,keys)),semantic(select(record,keys))) || record.status==='superseded'&&scope.id===record.supersededBy&&scope.rfqId===record.rfqId}
- if(collection==='award-intents')return scope.id===record.id&&equal(semantic(scope.quote),semantic(record.quote))
+ if(collection==='award-intents')return scope.id===record.id&&equal(semantic(select(scope,['quote','terms','requiredTerms','termExceptions'])),semantic(select(record,['quote','terms','requiredTerms','termExceptions'])))
  if(collection==='quote-status')return scope.quoteId===record.id&&!!body.authority?.grantId
  if(collection==='changes')return scope.id===record.id&&equal(semantic(select(scope,['lines','proposedItems','proposedAmounts','amount','currency','orderId','baseOrderRevision'])),semantic(select(record,['lines','proposedItems','proposedAmounts','amount','currency','orderId','baseOrderRevision'])))&&(!['applied','approved'].includes(record.status)||!!body.authority?.grantId)
  if(collection==='acceptances')return scope.id===record.id&&equal(semantic(scope),semantic(record))
@@ -56,7 +57,7 @@ function sourceMatches(collection,record,event) {
  if(collection==='rfqs'){
   if(['sign-order','award'].includes(action))return scope.rfqId===record.id&&scope.rfqRevision===(record.publishedRevision||record.revision)&&!!body.authority?.grantId
   const source=action==='publish-amendment'?scope.fields:scope
-  const keys=['title','description','deadline','currency','items','requirements','projectId','sectionId']
+  const keys=['title','description','deadline','clarifyDeadline','currency','items','scope','terms','requirements','projectId','sectionId']
   return (scope.id===record.id||scope.rfqId===record.id)&&equal(semantic(select(source,keys)),semantic(select(record,keys)))
  }
  if(collection==='rfq-versions')return sourceMatches('rfqs',record.snapshot,event)
@@ -83,6 +84,7 @@ export function procurementExchangePolicy({store,accounts,procurement}) {
   async validate({from,to,collection,record,local,metadata,peer}){
    try{
     publicShape(collection,record,to)
+    if(collection==='rfqs'||collection==='rfq-versions')validatePublishedScope(collection==='rfqs'?record:record.snapshot)
     const sender=accounts.get(from)||(peer?.realm===from?peer:null),recipient=accounts.get(to)
     if(!sender||!recipient)reject('The sender or recipient business account is unavailable.')
     const rfq=collection==='rfqs'?record:collection==='rfq-versions'?record.snapshot:store.get(to,'rfqs',record.rfqId||local?.rfqId)
@@ -96,7 +98,7 @@ export function procurementExchangePolicy({store,accounts,procurement}) {
     }else if(![ownerId,supplierId,record.askerId].includes(from)&&!(collection==='clarifications'&&from===rfq?.ownerId))reject('This sender is not a party to the record.')
     if(collection==='quotes'&&!record.demo){
      const source=record.rfqRevision ? store.get(to,'rfq-versions',`${record.rfqId}:v${record.rfqRevision}`)?.snapshot||rfq : rfq
-     if(!source||record.items.some(item=>!source.items.some(original=>original.id===item.id&&original.description===item.description&&original.unit===item.unit&&original.quantity===item.quantity)||typeof item.unitPrice!=='number'||item.unitPrice<0))reject('Quotation items must retain the requested source identifiers, quantities and units.')
+     if(!source||!equal(procurement.normalizeQuoteItems(record.items,source),record.items))reject('Quotation lines must retain their requested source or explicit additional/alternative classification and exact normalization basis.')
      if(record.items.some(item=>procurement.normalizeQuotePrice([item],{}).subtotal!==item.total))reject('Quotation line totals do not match their unit rates and quantities.')
      const amounts=procurement.normalizeQuotePrice(record.items,record.commercial||{})
      if(amounts.total!==record.total||record.subtotal!==undefined&&amounts.subtotal!==record.subtotal||record.priceBreakdown&&!equal(amounts.priceBreakdown,record.priceBreakdown))reject('Quotation totals do not match the declared source rates, tax and freight.')
@@ -115,10 +117,10 @@ export function procurementExchangePolicy({store,accounts,procurement}) {
     if(collection==='orders'&&from===record.ownerId){
      if(!local){
       const intent=store.get(to,'award-intents',record.awardId)
-      if(!intent||intent.status!=='confirmed'||!intent.confirmedBy||!equal(financial({...intent.quote,quoteId:intent.quoteId}),financial(record)))reject('A new purchase order must match this supplier’s confirmed award intent exactly.')
+      if(!intent||intent.status!=='confirmed'||!intent.confirmedBy||!equal(financial({...intent.quote,quoteId:intent.quoteId,terms:intent.terms,requiredTerms:intent.requiredTerms,termExceptions:intent.termExceptions}),financial(record)))reject('A new purchase order must match this supplier’s confirmed award intent exactly.')
      }else if(!equal(financial(local),financial(record))){
       const change=store.get(to,'changes',record.lastChangeId)
-      if(!change||!['confirmed','approved','applied'].includes(change.status)||!change.counterpartyConfirmedBy||change.baseOrderRevision!==(local.orderRevision||1)||record.orderRevision!==change.baseOrderRevision+1||!equal(record.items,change.proposedItems)||!equal(select(record,['subtotal','total','priceBreakdown']),change.proposedAmounts)||!equal(select(record,['quoteId','currency','commercial','leadDays','paymentTerms']),select(local,['quoteId','currency','commercial','leadDays','paymentTerms'])))reject('Revised order money or scope must match the locally confirmed sourced change.')
+      if(!change||!['confirmed','approved','applied'].includes(change.status)||!change.counterpartyConfirmedBy||change.baseOrderRevision!==(local.orderRevision||1)||record.orderRevision!==change.baseOrderRevision+1||!equal(record.items,change.proposedItems)||!equal(select(record,['subtotal','total','priceBreakdown']),change.proposedAmounts)||!equal(select(record,['quoteId','currency','commercial','leadDays','paymentTerms','terms','requiredTerms','termExceptions']),select(local,['quoteId','currency','commercial','leadDays','paymentTerms','terms','requiredTerms','termExceptions'])))reject('Revised order money or scope must match the locally confirmed sourced change.')
      }
     }
     if(collection==='orders'&&from!==record.ownerId){if(from!==record.supplierId||record.status!=='acknowledged'||!local||!equal(semantic(select(record,Object.keys(record).filter(key=>!['status','acknowledgedAt','acknowledgedBy','updatedAt'].includes(key)))),semantic(select(local,Object.keys(record).filter(key=>!['status','acknowledgedAt','acknowledgedBy','updatedAt'].includes(key))))))reject('Supplier acknowledgment cannot alter approved order scope or money.')}

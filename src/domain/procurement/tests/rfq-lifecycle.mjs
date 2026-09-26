@@ -113,7 +113,7 @@ try {
   await assert.rejects(run(one, 'save-quote', { rfqId: rfq.id, rfqRevision: 1, items: [{ id: 'panel', unitPrice: 20 }] }), /changed to revision/)
   await assert.rejects(run(buyer, 'save-amendment', { rfqId: rfq.id, expectedRevision: 2, supplierIds: [one.id], reason: 'Remove other supplier' }), /keep all previously/)
   checks.push('Immutable public versions; private amendment; stale quote comparison, submit and award refusal; old-scope concurrency refusal; complete rebid and reopened-answer provenance')
-  const rebid = (await run(one, 'save-quote', { rfqId: rfq.id, rfqRevision: 2, commercial: {taxMode:'exclusive',taxRate:20,freight:25}, items: [{ id: 'panel', unitPrice: 20, cost: 12 }, { id: 'sensor', unitPrice: 30 }], leadDays: 10, paymentTerms: 'Net30' })).quote
+  const rebid = (await run(one, 'save-quote', { rfqId: rfq.id, rfqRevision: 2, commercial: {taxMode:'exclusive',taxRate:20,freight:25,warrantyMonths:36}, items: [{ id: 'panel', unitPrice: 20, cost: 12 }, { id: 'sensor', unitPrice: 30 }], leadDays: 10, paymentTerms: 'Net30' })).quote
   await run(one, 'submit-quote', { id: rebid.id, confirmed: true })
   assert.equal(service.snapshot(buyer).comparison.length, 1); assert.equal(service.snapshot(buyer).comparison[0].total, 385)
   await run(buyer, 'save-clarification-answer', { id: clarification.id, faqId: faq.id })

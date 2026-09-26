@@ -1,7 +1,7 @@
 # Procurement workspace
 <!-- budget: 4096 bytes, hard -->
 
-Owner of business capabilities in [the product runtime contract](../../../../docs/product/runtime-contract.md): RFQ preparation/publication, item import, private costing, quote drafting/submission, exact comparison, clarifications/negotiation, human award/order/acknowledgment, changes, CSV and labelled demo data.
+Owner of business capabilities in [the product runtime contract](../../../../docs/design/architecture.md): RFQ preparation/publication, item import, private costing, quote drafting/submission, exact comparison, clarifications/negotiation, human award/order/acknowledgment, changes, CSV and labelled demo data.
 
 `code/index.mjs` registers the HTTP routes, navigation and assistant tools through Cordis effects. `code/service.mjs` implements account-owned business operations using the workspace store. Public exchanges contain explicitly selected fields; supplier costs and private notes stay in the supplier account.
 
@@ -30,3 +30,7 @@ The [draft defaults and paired-party contract](context-defaults-and-peers.md)
 adds sourced account/workspace/project/section defaults and explicitly paired
 external business contacts. New drafts retain their preparation basis locally;
 two independent applications exchange reviewed RFQs and quotations through QEP.
+
+The [scope, term and negotiation contract](scope-terms-negotiation.md) adds declared
+measurement/interfaces, exact source-unit normalization, typed deviations, term
+revision decisions and private bounded concessions requiring human action review.

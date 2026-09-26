@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/procurement-negotiation-rNj2h1",
+  "checks": [
+    "Explicit policy and sourced private costs are required; model cannot change limits; per-attempt concession cap and exact cost×1.5 floor reject with durable attempt1/2 and no counterparty disclosure",
+    "Even an in-band price change requires exact human action execution; approval prepares a private revision only; separate human submission shares19 while costs, private floors and attempts remain in supplier realm",
+    "Policy revisions invalidate pending proposals without resetting attempts; permitted round5 and rejected over-budget attempt6 preserve their order and reasons",
+    "Contractor target is an exact reviewed nonbinding message, with no order or invented supplier floor; closure and all six attempts survive actual store remount",
+    "Injected interruption after durable attempt but before thread summary retains its number across store remount; the next attempt is2 and history is not overwritten"
+  ],
+  "ids": {
+    "rfq": "rfq-88f7dcb1-664",
+    "quote": "quote-cc701670-974",
+    "revision": "quote-4dcdbc4f-48d",
+    "thread": "negotiation-b64a87ab-891"
+  },
+  "at": "2026-09-26T04:40:04.212Z"
+}

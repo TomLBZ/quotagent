@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/procurement-normalization-perf-sWVaWg",
+  "dimensions": {
+    "items": 200,
+    "quotes": 5
+  },
+  "elapsedMs": 93.95996100000048,
+  "thresholdMs": 30000,
+  "measurement": "Five complete exact-unit normalization calls plus authorized buyer comparison snapshot; fixture authorship/QEP transfer excluded. One local Node process, no network model call.",
+  "checks": [
+    "Actual200-item RFQ and five human-submitted QEP quotations available in buyer realm",
+    "Exact normalization and comparison remain deterministic and append no events on replay",
+    "Measured200×5 normalization+comparison below30s on this host"
+  ],
+  "at": "2026-09-26T04:44:37.922Z"
+}
