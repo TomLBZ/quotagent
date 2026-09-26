@@ -36,3 +36,13 @@ chat invokes that callback instead of executing the write. Plugin studio uses th
 review source-assisted plugin/skill creation; direct user creation retains its existing
 behavior. Delegated workers still exclude write tools. Remote descriptors cannot
 register these callbacks. Acceptance is included in action-center state checks.
+
+Monetary arithmetic guidance is shared by chat and workroom prompts. A derived
+amount must come from a registered deterministic calculation and retain its source
+base/inputs; the model must not invent an illustrative split or claim mental math
+was verified. Without a suitable result, quote the recorded terms and leave the
+derived amount unquantified. Procurement owns the read-only quote-percentage tool;
+its output is retained by the existing `agent/tool-completed` event before the model
+uses it. Acceptance: the independent public deposit counterexample, native exact
+arithmetic/source checks, then a targeted real-model public replay. Prompt guidance
+does not assert that every possible model response is mathematically correct.

@@ -1,0 +1,224 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/quote-amount-i1kbwG",
+  "checks": [
+    "Native disposable read-tool registration, actual received QEP quotation 5532 × 30% = 1659.60 plus 3872.40 remainder, exact source ledger reference and GUI-readable summary; no business event or private cost disclosure",
+    "Exact BigInt fractional percentage and half-up cent arithmetic at 0/100%, two half-cent cases, conserved remainder, finite numeric compatibility, and refusal of omitted/invalid/overspecified rates or a caller-provided total",
+    "Editing a quotation invalidates the earlier supplier revision, receipt updates invalidate the earlier buyer revision, superseded offers and amended request scope refuse; an unsent private edit cannot silently replace a buyer’s received source",
+    "Uninvited contractor, rival supplier, unjoined colleague and admin cannot read the quote; explicitly joined supplier teammate uses authorized party source and a read changes no realm",
+    "Actual Cordis/store remount reconstructs the same amount, source sequence/hash and selected joined workspace; procurement unload disposes the calculator registration"
+  ],
+  "results": [
+    {
+      "currency": "USD",
+      "base": "5532.00",
+      "percentage": "30",
+      "amount": "1659.60",
+      "remainder": "3872.40",
+      "baseMinorUnits": "553200",
+      "amountMinorUnits": "165960",
+      "remainderMinorUnits": "387240",
+      "scale": 2,
+      "rounding": "half-up",
+      "interpretation": "illustrative-calculation",
+      "source": {
+        "quoteId": "quote-5d0cf6cb-5a8",
+        "quoteRevision": 1,
+        "rfqId": "rfq-933f8100-38a",
+        "rfqRevision": 1,
+        "ref": {
+          "realm": "buyer",
+          "seq": 36,
+          "hash": "sha256:52fcfb0aaeacb50a67f779ae2e28de978b1a1aa52bfae8dcfe6ee0a0cecda08e"
+        }
+      },
+      "summary": "30% of USD 5532.00 is USD 1659.60; the remainder is USD 3872.40. Derived from quotation revision 1; this calculation does not establish an agreed deposit or payment schedule.",
+      "action": {
+        "action": "navigate",
+        "label": "View source quotation",
+        "input": {
+          "view": "quotes",
+          "workspaceId": "buyer",
+          "quoteId": "quote-5d0cf6cb-5a8",
+          "rfqId": "rfq-933f8100-38a"
+        }
+      }
+    },
+    {
+      "currency": "USD",
+      "base": "5292.00",
+      "percentage": "100",
+      "amount": "5292.00",
+      "remainder": "0.00",
+      "baseMinorUnits": "529200",
+      "amountMinorUnits": "529200",
+      "remainderMinorUnits": "0",
+      "scale": 2,
+      "rounding": "half-up",
+      "interpretation": "illustrative-calculation",
+      "source": {
+        "quoteId": "quote-4039585a-715",
+        "quoteRevision": 1,
+        "rfqId": "rfq-da0e5a39-bae",
+        "rfqRevision": 1,
+        "ref": {
+          "realm": "supplier",
+          "seq": 39,
+          "hash": "sha256:b7c71e28f100a331315c9eb8381033d80d2ce37d2366bd13898a5aa7607fec26"
+        }
+      },
+      "summary": "100% of USD 5292.00 is USD 5292.00; the remainder is USD 0.00. Derived from quotation revision 1; this calculation does not establish an agreed deposit or payment schedule.",
+      "action": {
+        "action": "navigate",
+        "label": "View source quotation",
+        "input": {
+          "view": "quotes",
+          "workspaceId": "supplier",
+          "quoteId": "quote-4039585a-715",
+          "rfqId": "rfq-da0e5a39-bae"
+        }
+      }
+    },
+    {
+      "currency": "USD",
+      "base": "5292.00",
+      "percentage": "0",
+      "amount": "0.00",
+      "remainder": "5292.00",
+      "baseMinorUnits": "529200",
+      "amountMinorUnits": "0",
+      "remainderMinorUnits": "529200",
+      "scale": 2,
+      "rounding": "half-up",
+      "interpretation": "illustrative-calculation",
+      "source": {
+        "quoteId": "quote-4039585a-715",
+        "quoteRevision": 1,
+        "rfqId": "rfq-da0e5a39-bae",
+        "rfqRevision": 1,
+        "ref": {
+          "realm": "supplier",
+          "seq": 39,
+          "hash": "sha256:b7c71e28f100a331315c9eb8381033d80d2ce37d2366bd13898a5aa7607fec26"
+        }
+      },
+      "summary": "0% of USD 5292.00 is USD 0.00; the remainder is USD 5292.00. Derived from quotation revision 1; this calculation does not establish an agreed deposit or payment schedule.",
+      "action": {
+        "action": "navigate",
+        "label": "View source quotation",
+        "input": {
+          "view": "quotes",
+          "workspaceId": "supplier",
+          "quoteId": "quote-4039585a-715",
+          "rfqId": "rfq-da0e5a39-bae"
+        }
+      }
+    },
+    {
+      "currency": "USD",
+      "base": "5292.00",
+      "percentage": "12.345678",
+      "amount": "653.33",
+      "remainder": "4638.67",
+      "baseMinorUnits": "529200",
+      "amountMinorUnits": "65333",
+      "remainderMinorUnits": "463867",
+      "scale": 2,
+      "rounding": "half-up",
+      "interpretation": "illustrative-calculation",
+      "source": {
+        "quoteId": "quote-4039585a-715",
+        "quoteRevision": 1,
+        "rfqId": "rfq-da0e5a39-bae",
+        "rfqRevision": 1,
+        "ref": {
+          "realm": "supplier",
+          "seq": 39,
+          "hash": "sha256:b7c71e28f100a331315c9eb8381033d80d2ce37d2366bd13898a5aa7607fec26"
+        }
+      },
+      "summary": "12.345678% of USD 5292.00 is USD 653.33; the remainder is USD 4638.67. Derived from quotation revision 1; this calculation does not establish an agreed deposit or payment schedule.",
+      "action": {
+        "action": "navigate",
+        "label": "View source quotation",
+        "input": {
+          "view": "quotes",
+          "workspaceId": "supplier",
+          "quoteId": "quote-4039585a-715",
+          "rfqId": "rfq-da0e5a39-bae"
+        }
+      }
+    },
+    {
+      "currency": "USD",
+      "base": "0.05",
+      "percentage": "50",
+      "amount": "0.03",
+      "remainder": "0.02",
+      "baseMinorUnits": "5",
+      "amountMinorUnits": "3",
+      "remainderMinorUnits": "2",
+      "scale": 2,
+      "rounding": "half-up",
+      "interpretation": "illustrative-calculation",
+      "source": {
+        "quoteId": "quote-9bdcb4f2-ae4",
+        "quoteRevision": 1,
+        "rfqId": "rfq-aceb59fb-815",
+        "rfqRevision": 1,
+        "ref": {
+          "realm": "supplier",
+          "seq": 54,
+          "hash": "sha256:c47737c2059c9ca709392d0d394a66af04e5dd23aebc7bbe33bcc28ced746e8a"
+        }
+      },
+      "summary": "50% of USD 0.05 is USD 0.03; the remainder is USD 0.02. Derived from quotation revision 1; this calculation does not establish an agreed deposit or payment schedule.",
+      "action": {
+        "action": "navigate",
+        "label": "View source quotation",
+        "input": {
+          "view": "quotes",
+          "workspaceId": "supplier",
+          "quoteId": "quote-9bdcb4f2-ae4",
+          "rfqId": "rfq-aceb59fb-815"
+        }
+      }
+    },
+    {
+      "currency": "USD",
+      "base": "0.05",
+      "percentage": "30",
+      "amount": "0.02",
+      "remainder": "0.03",
+      "baseMinorUnits": "5",
+      "amountMinorUnits": "2",
+      "remainderMinorUnits": "3",
+      "scale": 2,
+      "rounding": "half-up",
+      "interpretation": "illustrative-calculation",
+      "source": {
+        "quoteId": "quote-9bdcb4f2-ae4",
+        "quoteRevision": 1,
+        "rfqId": "rfq-aceb59fb-815",
+        "rfqRevision": 1,
+        "ref": {
+          "realm": "supplier",
+          "seq": 54,
+          "hash": "sha256:c47737c2059c9ca709392d0d394a66af04e5dd23aebc7bbe33bcc28ced746e8a"
+        }
+      },
+      "summary": "30% of USD 0.05 is USD 0.02; the remainder is USD 0.03. Derived from quotation revision 1; this calculation does not establish an agreed deposit or payment schedule.",
+      "action": {
+        "action": "navigate",
+        "label": "View source quotation",
+        "input": {
+          "view": "quotes",
+          "workspaceId": "supplier",
+          "quoteId": "quote-9bdcb4f2-ae4",
+          "rfqId": "rfq-aceb59fb-815"
+        }
+      }
+    }
+  ],
+  "at": "2026-09-26T07:50:44.449Z"
+}

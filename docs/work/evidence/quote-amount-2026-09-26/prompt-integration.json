@@ -1,0 +1,20 @@
+{
+  "commands": [
+    {
+      "command": "node src/system/action-center/tests/state.mjs",
+      "ok": true,
+      "groups": 9,
+      "observed": "Runtime tool policy, role/approval, provenance, uncertain recovery and lifecycle checks passed."
+    },
+    {
+      "command": "node src/system/agent-workflows/tests/state.mjs",
+      "ok": true,
+      "groups": 8,
+      "modelCalls": 12,
+      "maxParallel": 2,
+      "ledgerRecords": 57,
+      "observed": "Controlled-provider native workflow memory, checkpoints, overlapping agents, feedback, cancellation/recovery and dependencies passed."
+    }
+  ],
+  "scope": "Executed by root after shared arithmetic instruction integration; fixture model output is not live-model narrative acceptance."
+}

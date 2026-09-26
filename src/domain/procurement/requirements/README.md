@@ -1,7 +1,7 @@
 # Procurement workspace
 <!-- budget: 4096 bytes, hard -->
 
-Owner of business capabilities in [the product architecture](../../../../docs/design/architecture.md): RFQ preparation/publication, item import, private costing, quote drafting/submission, exact comparison, clarifications/negotiation, human award/order/acknowledgment, changes, CSV and labelled demo data.
+Owner of RFQs, private quotations, comparison, clarifications, negotiation, bilateral orders and changes. See [product architecture](../../../../docs/design/architecture.md).
 
 `code/index.mjs` registers the HTTP routes, navigation and assistant tools through Cordis effects. `code/service.mjs` implements account-owned business operations using the workspace store. Public exchanges contain explicitly selected fields; supplier costs and private notes stay in the supplier account.
 
@@ -11,7 +11,7 @@ Agent tools may create editable drafts and prepare review proposals. They cannot
 
 Business events retain the `procurement/` namespace. `procurement/human-approved` is an approval **fact**, with the action, signed-in human, record ID and reviewed scope. QEP transport and ledger formats remain implemented by the workspace-store plugin and existing kernels.
 
-Validation: `node src/domain/procurement/code/smoke.mjs` exercises two-party RFQ → quote → comparison → order → acknowledgment → approved change, private-cost non-disclosure, ownership and idempotent demo generation. Public-browser evidence is linked from the focused contracts below.
+Validation: `node src/domain/procurement/code/smoke.mjs` exercises RFQ → quote → comparison → order → acknowledgment → approved change, private-cost non-disclosure, ownership and idempotent demo generation. Public evidence is linked from the focused contracts below.
 
 The [RFQ lifecycle contract](rfq-lifecycle.md) adds project/section context, private
 amendments and immutable published revisions, quote version binding and rebids,
@@ -39,3 +39,5 @@ milestones and qualifications through PO signing, and implements source-bound
 structured FAQ publication, exact lookup, reviewed adaptation and deprecation.
 The [selected submission contract](submission-batches.md) prepares multiple supplier
 drafts as individual frozen human reviews with durable partial-result receipts.
+The [quotation amount contract](quote-amount.md) provides exact source-bound
+percentage amounts as a read-only assistant tool, without inventing payment terms.

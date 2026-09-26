@@ -1,0 +1,12 @@
+{
+  "observedRelease": "67bd9af5b73036104f81abdacae0883fd8d2ffce",
+  "sourceArtifact": "docs/work/evidence/independent-final-2026-09-26/21-paused-after-reload.txt",
+  "observedResponseExcerpt": "Payment terms: Summit \"30% deposit; 70% after delivery\" (3,240 down at these totals, balance after delivery \u2014 illustrative split only). Atlas \"100% advance payment\" (flagged \"Full advance payment increases cash exposure\").",
+  "sourceQuotationTotal": "5532.00",
+  "explicitPercentage": "30",
+  "incorrectNarrativeAmount": "3240.00",
+  "verifiedAmount": "1659.60",
+  "verifiedRemainder": "3872.40",
+  "verification": "node src/domain/procurement/tests/quote-amount.mjs",
+  "scope": "Independent actual-provider public narrative error; read-only task, no commitment sent. Later human steering corrected the number but did not itself establish a product fix."
+}

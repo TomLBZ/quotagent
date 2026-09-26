@@ -83,3 +83,10 @@ See agent-runtime `requirements/controls-and-evaluation.md` and ADR-0038. Every 
 provider limits and context receipts apply without bypassing approval/tool policy. A typed
 budget, circuit, queue, timeout or human stop reason remains visible beside completed
 reports; no unknown token/cost or business success value is fabricated. Evidence: `docs/work/evidence/g6-auditable-runtime.md`; `tests/scope.mjs` verifies both pins.
+
+Chat and all workroom roles share the runtime monetary-arithmetic instruction:
+use recorded deterministic totals or a source-bound calculation tool; do not invent
+derived amounts. Synthesis may repeat an observed specialist result but cannot
+claim new uncomputed arithmetic. Source: `agent-runtime/code/product-policy.mjs`
+and `code/engine.mjs`. The public deposit counterexample and corrected replay are
+retained with the owning runtime/procurement evidence.

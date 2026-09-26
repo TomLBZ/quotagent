@@ -1,4 +1,5 @@
 import {createSubmissionBatches} from './submission-batches.mjs'
+import {quoteAmountTool} from './quote-amount.mjs'
 import {installDraftContext,pairedParties} from './draft-context.mjs'
 import {requestCollection} from './request-collection.mjs'
 import {publicQuoteLine} from './structured-scope.mjs'
@@ -180,6 +181,7 @@ export async function apply(ctx) {
   // Deferred injection avoids a cycle: the assistant may itself depend on procurement.
   ctx.inject(['assistant'], (inner) => {
     const register = (tool) => inner.effect(() => inner.assistant.tool(tool))
+    register(quoteAmountTool({procurement,store:ctx.store}))
     register({ name: 'procurement_workspace', effect: 'read', description: 'Read the signed-in account\'s RFQs, current quotes, orders, messages and comparison. Supplier private costs are visible only to that supplier. Use this before grounded recommendations.',
       roles: ['contractor', 'supplier'], parameters: object({ rfqId: string('Optional RFQ to focus on') }),
       execute(user, args) {
