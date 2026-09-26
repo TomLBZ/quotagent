@@ -2,11 +2,17 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { randomUUID } from 'node:crypto'
+import * as runtimeControls from './provider-controls.mjs'
+import {AdmissionError,retryDelay} from './provider-policy.mjs'
+import {normalizeUsage} from './product-usage.mjs'
+import {boundSourceMessages} from './context.mjs'
 const require = createRequire(new URL('../../../../host/package.json', import.meta.url))
 const { parse } = require('yaml')
 export const name = 'product-ai'
 export const inject = ['store','settings']
-export function apply(ctx, config = {}) {
+export async function apply(ctx, config = {}) {
+  await ctx.plugin(runtimeControls, config.controls || {})
+  const runtime = ctx.get('aiRuntime')
   const controllers = new Set()
   const legacySettings = () => {
     const filename = config.configFile || process.env.QUOTAGENT_CONFIG || '/workspace/config.yaml'
@@ -36,38 +42,60 @@ export function apply(ctx, config = {}) {
     return {...legacy,extra:sameConnection?legacy.extra:{},effort:sameConnection?legacy.effort:undefined,
       provider:configured.provider,model:configured.model,baseUrl:configured.baseUrl,key:configured.apiKey,timeout:configured.timeoutSeconds*1000}}
   const status = user => { const s = settings(user); return {available:!!(s.key && s.model),provider:s.provider,model:s.model} }
-  const complete = async (user,{messages,tools,purpose='assistant',signal}) => {
+  const complete = async (user,{messages,tools,purpose='assistant',signal,runId=null,requestKey=null,contextReceipt=null}) => {
     const s = settings(user)
     if (!s.key || !s.model) throw new Error('Open Plugin settings → AI model connection to add a model and API key, or restore the shared defaults.')
-    const request = {model:s.model,messages,stream:false,...s.extra}
-    if (tools?.length) { request.tools=tools; request.tool_choice='auto' }
-    if (s.effort && !['none','off','disabled'].includes(String(s.effort))) request.reasoning_effort=s.effort
-    else if (s.provider === 'deepseek') request.thinking={type:'disabled'}
-    const endpoint = s.baseUrl.replace(/\/$/,'') + '/chat/completions'
-    const callId = randomUUID(), startedAt = new Date().toISOString()
-    await ctx.store.append(user.id,'agent/model-requested',{callId,purpose,provider:s.provider,endpoint,request},{actor:`agent:${user.id}`})
-    const controller = new AbortController(); controllers.add(controller)
-    const abort=()=>controller.abort(signal?.reason)
-    if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true})
-    const timer = setTimeout(()=>controller.abort(),s.timeout)
-    let payload = null, outcome = 'failed'
-    try {
-      const response = await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${s.key}`},body:JSON.stringify(request),signal:controller.signal})
-      payload = await response.json()
-      if (!response.ok) throw new Error(`Model provider returned ${response.status}: ${String(payload.error?.message || 'request failed').slice(0,300)}`)
-      await ctx.store.append(user.id,'agent/model-completed',{callId,response:payload},{actor:`agent:${user.id}`})
-      const message = payload.choices?.[0]?.message
-      if (!message) throw new Error('The model returned no response. Please try again.')
-      outcome = 'completed'
-      return message
-    } catch(error) {
-      outcome = signal?.aborted ? 'canceled' : 'failed'
-      const message = signal?.aborted ? 'This agent task was cancelled.' : controller.signal.aborted ? 'The model took too long. Please try again.' : error.message.replaceAll(s.key,'[redacted]')
-      await ctx.store.append(user.id,'agent/model-failed',{callId,error:message},{actor:`agent:${user.id}`})
-      throw new Error(message)
-    } finally {
-      clearTimeout(timer);signal?.removeEventListener('abort',abort);controllers.delete(controller)
-      await ctx.get('usage')?.record(user,{callId,provider:s.provider,model:payload?.model||s.model,purpose,status:outcome,startedAt,finishedAt:new Date().toISOString(),usage:payload?.usage??null})
+    const limits=runtime.config(user),bounded=boundSourceMessages(messages,limits),request={model:s.model,messages:bounded.messages,stream:false,...s.extra}
+    contextReceipt=bounded.receipt||contextReceipt
+    if(contextReceipt)await ctx.store.append(user.id,'agent/context-assembled',{runId,purpose,...contextReceipt},{actor:`agent:${user.id}`})
+    if(tools?.length){request.tools=tools;request.tool_choice='auto'}
+    if(s.effort&&!['none','off','disabled'].includes(String(s.effort)))request.reasoning_effort=s.effort
+    else if(s.provider==='deepseek')request.thinking={type:'disabled'}
+    delete request.max_tokens;delete request.max_completion_tokens;request[limits.outputLimitParameter]=limits.maxOutputTokens
+    const endpoint=s.baseUrl.replace(/\/$/,'')+'/chat/completions',callId=randomUUID(),startedAt=new Date().toISOString(),attemptUsage=[]
+    let responseValue=null,outcome='failed',failure=null,result=null
+    const redact=message=>String(message).replaceAll(s.key,'[redacted]').slice(0,1000)
+    try{
+      result=await runtime.run(user,{connection:s,request,purpose,signal,runId,requestKey,callId},async lease=>{
+        if(Buffer.byteLength(JSON.stringify(request),'utf8')>limits.maxContextBytes)throw new AdmissionError('context-too-large','This complete model request exceeds the configured context byte limit.',{status:413,nextAction:'Narrow the source/task or increase the explicit context limit. Required instructions were not silently truncated.'})
+        await ctx.store.append(user.id,'agent/model-requested',{callId,purpose,runId,provider:s.provider,endpoint,request,contextReceipt:contextReceipt||null},{actor:`agent:${user.id}`})
+        for(let attempt=0;;attempt++){
+          await lease.attempt()
+          const controller=new AbortController();controllers.add(controller);let timedOut=false
+          const abort=()=>controller.abort(lease.signal.reason);if(lease.signal.aborted)abort();else lease.signal.addEventListener('abort',abort,{once:true})
+          const timer=setTimeout(()=>{timedOut=true;controller.abort()},s.timeout)
+          let response,payload
+          try{
+            response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${s.key}`},body:JSON.stringify(request),signal:controller.signal})
+            try{payload=await response.json()}catch{throw new AdmissionError('invalid-provider-response','The provider did not return a valid JSON response.',{status:502})}
+            attemptUsage.push(payload.usage??null);responseValue=payload
+            if(!response.ok){
+              lease.attemptOutcome(false)
+              const error=new AdmissionError(`http-${response.status}`,`Model provider returned ${response.status}: ${redact(payload.error?.message||'request failed')}`,{status:response.status,nextAction:response.status===401||response.status===403?'Review the model connection credentials.':'Inspect the provider response; retry explicitly if appropriate.'})
+              error.providerOutcomeRecorded=true
+              if([429,503].includes(response.status)&&attempt<lease.config.maxRetries){const retry=retryDelay(response,attempt,{baseDelayMs:lease.config.retryBaseMs,maxDelayMs:lease.config.retryMaxWaitMs});if(retry.withinLimit){await lease.retry({...retry,httpStatus:response.status,nextAttempt:attempt+2});await new Promise((resolve,reject)=>{const abort=()=>{clearTimeout(timer);lease.signal.removeEventListener('abort',abort);reject(new AdmissionError('canceled','The retry wait was canceled.',{status:409}))},timer=setTimeout(()=>{lease.signal.removeEventListener('abort',abort);resolve()},retry.delayMs);if(lease.signal.aborted)abort();else lease.signal.addEventListener('abort',abort,{once:true})});continue}error.detail.retryAfterMs=retry.delayMs;error.detail.waitingHelps=true;error.detail.nextAction='The provider requested a longer wait than automatic retries allow. Retry explicitly after that interval.'}
+              throw error
+            }
+            const message=payload.choices?.[0]?.message
+            if(!message)throw new AdmissionError('invalid-provider-response','The model returned no response. Please try again.',{status:502})
+            lease.attemptOutcome(true)
+            await ctx.store.append(user.id,'agent/model-completed',{callId,response:payload,runId,attempts:attempt+1},{actor:`agent:${user.id}`})
+            const counts=attemptUsage.map(normalizeUsage),keys=Object.keys(normalizeUsage()),tokens=Object.fromEntries(keys.map(key=>[key,counts.every(row=>row[key]!==null)?counts.reduce((sum,row)=>sum+row[key],0):null]))
+            return{message,tokens,completeUsage:counts.every(row=>row.input!==null&&row.output!==null&&row.total!==null),usage:payload.usage||null,usageCoverage:{attempts:attemptUsage.length,knownAttempts:counts.filter(row=>row.total!==null).length,unknownAttempts:counts.filter(row=>row.total===null).length}}
+          }catch(error){
+            if(lease.signal.aborted)throw new AdmissionError('canceled','This agent task was cancelled.',{status:409,nextAction:'Resume saved work or start another request deliberately.'})
+            if(!error.providerOutcomeRecorded)lease.attemptOutcome(false)
+            if(timedOut)throw new AdmissionError('provider-timeout','The provider exceeded its request timeout. No automatic retry was made.',{status:504,nextAction:'Inspect completed work and retry explicitly, or adjust the model timeout.'})
+            if(error instanceof AdmissionError)throw error
+            throw new AdmissionError('provider-network-error',redact(error.message||'Provider connection failed.'),{status:502,nextAction:'Delivery to the provider may be uncertain. Inspect saved work and retry explicitly.'})
+          }finally{clearTimeout(timer);lease.signal.removeEventListener('abort',abort);controllers.delete(controller)}
+        }
+      })
+      outcome='completed';return result.message
+    }catch(error){failure=error;if(error.detail?.replayed)throw error;outcome=error.code==='canceled'||signal?.aborted?'canceled':'failed';await ctx.store.append(user.id,'agent/model-failed',{callId,error:redact(error.message),code:error.code||'provider-error',detail:error.detail||null,status:outcome,canceled:outcome==='canceled',runId,attempts:error.attempts||attemptUsage.length},{actor:`agent:${user.id}`});throw error
+    }finally{
+      // Replayed identities reuse the original measured receipt instead of counting a new model call.
+      if(!failure?.detail?.replayed&&(!result||result.callId===callId))await ctx.get('usage')?.record(user,{callId,provider:s.provider,model:responseValue?.model||s.model,purpose,status:outcome,startedAt,finishedAt:new Date().toISOString(),usage:responseValue?.usage??null,tokens:result?.tokens,cost:result?.cost||null,runId,attempts:result?.attempts||failure?.attempts||0,stopReason:failure?.code||null,usageCoverage:result?.usageCoverage||null})
     }
   }
   ctx.provide('ai',{complete,status})

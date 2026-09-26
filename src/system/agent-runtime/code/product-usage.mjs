@@ -53,13 +53,14 @@ export function projectUsage(events, accountId) {
     calls.set(id, { callId: id, accountId, provider: text(body.provider, old?.provider), model: text(body.model, old?.model),
       purpose: purposeOf(body.purpose || old?.purpose), status: statuses.includes(body.status) ? body.status : old?.status || 'pending',
       startedAt: instant(body.startedAt, old?.startedAt), finishedAt: instant(body.finishedAt, old?.finishedAt),
-      tokens: normalizedCounts(body.tokens) })
+      tokens: normalizedCounts(body.tokens),cost:body.cost||null,runId:body.runId||null,attempts:count(body.attempts),stopReason:body.stopReason||null,usageCoverage:body.usageCoverage||null })
   }
   return [...calls.values()].map(call => ({ ...call, date: dateOf(call.startedAt),
     durationMs: call.startedAt && call.finishedAt ? Math.max(0, Date.parse(call.finishedAt) - Date.parse(call.startedAt)) : null }))
 }
 
 const summarize = calls => ({
+  costs: [...new Set(calls.map(call=>call.cost?.currency).filter(Boolean))].map(currency=>({currency,amountMicros:calls.filter(call=>call.cost?.currency===currency&&call.cost?.amountMicros!==null).reduce((sum,call)=>sum+(call.cost?.amountMicros||0),0),pricedCalls:calls.filter(call=>call.cost?.currency===currency&&Number.isSafeInteger(call.cost?.amountMicros)).length,unknownCalls:calls.filter(call=>!Number.isSafeInteger(call.cost?.amountMicros)).length})),unknownCostCalls:calls.filter(call=>!Number.isSafeInteger(call.cost?.amountMicros)).length,
   calls: calls.length,
   reportedCalls: calls.filter(call => call.tokens.total !== null).length,
   unknownCalls: calls.filter(call => call.tokens.total === null).length,
@@ -86,7 +87,7 @@ export function apply(ctx) {
     if (!statuses.slice(0, 3).includes(value.status)) fail('Usage needs a terminal provider status.')
     const body = { schema: 'quotagent/model-usage/v1', callId: text(value.callId), provider: text(value.provider), model: text(value.model),
       purpose: purposeOf(value.purpose), status: value.status, startedAt: instant(value.startedAt),
-      finishedAt: instant(value.finishedAt, new Date().toISOString()), tokens: normalizeUsage(value.usage) }
+      finishedAt: instant(value.finishedAt, new Date().toISOString()), tokens: value.tokens?normalizedCounts(value.tokens):normalizeUsage(value.usage),cost:value.cost||null,runId:value.runId||null,attempts:count(value.attempts),stopReason:value.stopReason||null,usageCoverage:value.usageCoverage||null }
     await ctx.store.append(user.id, 'agent/model-usage', body, { actor: `agent:${user.id}` })
     return body
   }
@@ -103,12 +104,13 @@ export function apply(ctx) {
     if (filters.status && !statuses.includes(filters.status)) fail('Choose a valid call status.')
     const accounts = scope === 'all' ? ctx.accounts.list() : [account]
     if (filters.accountId && !accounts.some(row => row.id === filters.accountId)) fail('Account not found.', 404)
-    const range = accounts.flatMap(owner => projectUsage(ctx.store.events(owner.id), owner.id))
+    const unavailableAccounts=[]
+    const range = accounts.flatMap(owner => {try{return projectUsage(ctx.store.events(owner.id), owner.id)}catch(error){if(scope!=='all'||error.status!==503)throw error;unavailableAccounts.push({accountId:owner.id,name:owner.name||owner.id,code:error.code||'LEDGER_UNAVAILABLE'});return[]}})
       .filter(call => call.date && call.date >= filters.from && call.date <= filters.to)
     const rows = range.filter(call => ['provider', 'model', 'purpose', 'status', 'accountId'].every(key => !filters[key] || call[key] === filters[key]))
     const options = Object.fromEntries(['provider', 'model', 'purpose', 'status'].map(key => [key, [...new Set(range.map(call => call[key]))].sort()]))
     if (scope === 'all') options.accounts = accounts.map(({ id, name, email }) => ({ id, name: name || email || id }))
-    return { filters, summary: summarize(rows), daily: group(rows, 'date'), byModel: group(rows, 'model'), byProvider: group(rows, 'provider'),
+    return { coverage:{complete:!unavailableAccounts.length,unavailableAccounts},filters, summary: summarize(rows), daily: group(rows, 'date'), byModel: group(rows, 'model'), byProvider: group(rows, 'provider'),
       byPurpose: group(rows, 'purpose'), byStatus: group(rows, 'status'), ...(scope === 'all' ? { byAccount: group(rows, 'accountId') } : {}),
       calls: rows.sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || '')).slice(0, 200), options,
       updatedAt: new Date().toISOString(), timeZone: 'UTC', recentLimit: 200 }

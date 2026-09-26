@@ -76,3 +76,10 @@ terminal task states and trace ordering after a delay and full page reload.
 uses the configured real provider and visible GUI controls for a complex quotation analysis,
 manual memory, pause/resume, plan review, specialist question/answer, parallel task trace,
 synthesis, reload and memory history/archive. Output and screenshots record observed results.
+
+## Runtime controls and context integration (G6)
+
+See agent-runtime `requirements/controls-and-evaluation.md` and ADR-0038. Every model/tool call carries saved run ID, workspace and role; changed/untagged roles cannot resume. Shared
+provider limits and context receipts apply without bypassing approval/tool policy. A typed
+budget, circuit, queue, timeout or human stop reason remains visible beside completed
+reports; no unknown token/cost or business success value is fabricated. Evidence: `docs/work/evidence/g6-auditable-runtime.md`; `tests/scope.mjs` verifies both pins.

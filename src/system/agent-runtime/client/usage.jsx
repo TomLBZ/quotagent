@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { registry, useApp, useResource, Button, Badge, Field, PageHeader, Empty, ErrorNotice, Loading } from '../../webui/client/core.jsx'
 import { PluginSettings } from '../../settings/client/settings.jsx'
 import './usage.css'
+import {RuntimePanel,EvaluationPanel,estimatedMoney} from './runtime-panels.jsx'
 
 const number = value => value === null || value === undefined ? 'Not reported' : new Intl.NumberFormat().format(value)
 const metricNames = { total: 'Total tokens', input: 'Input tokens', output: 'Output tokens', cachedInput: 'Cached input', uncachedInput: 'Uncached input', cacheWriteInput: 'Cache writes', reasoningOutput: 'Reasoning output' }
@@ -26,6 +27,8 @@ function DailyChart({ rows, metric, onDay }) {
 }
 export function Usage() {
   const app = useApp(), [filters, setFilters] = useState(defaults), [draft, setDraft] = useState(defaults), [metric, setMetric] = useState('total'), [grouping, setGrouping] = useState('Model'), [showSettings, setShowSettings] = useState(false)
+  const [tab,setTab]=useState(app.context.tab||'tokens')
+  useEffect(()=>{if(app.context.tab)setTab(app.context.tab)},[app.context.tab])
   const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => value)).toString()
   const resource = useResource(`/usage?${query}`), data = resource.data, options = data.options || {}
   const update = (key, value) => setDraft(previous => ({ ...previous, [key]: value, ...(key === 'scope' ? { accountId: '' } : {}) }))
@@ -33,6 +36,7 @@ export function Usage() {
   const reset = () => { const next = defaults(); setDraft(next); setFilters(next); setGrouping('Model') }
   const groups = data[`by${grouping}`] || [], accountName = id => options.accounts?.find(account => account.id === id)?.name || id
   return <div className="usage-page"><PageHeader eyebrow="UNDERSTAND YOUR AI ACTIVITY" title="AI usage" actions={<Button variant="secondary" icon="settings" onClick={() => setShowSettings(true)}>Model settings</Button>}>See how your AI activity uses tokens, from conversations and document extraction to specialist agents and plugin creation.</PageHeader>
+    <div className="tabs usage-panel-tabs">{[['tokens','Tokens & cost'],['runtime','Runtime controls'],['evaluation','Recorded evaluations']].map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>{setTab(id);app.navigate('ai-usage',{tab:id})}}>{label}</button>)}</div>{tab==='runtime'?<RuntimePanel/>:tab==='evaluation'?<EvaluationPanel/>:<>
     <form className="card usage-filters" onSubmit={event => { event.preventDefault(); setFilters({ ...draft }); if (draft.scope !== 'all' && grouping === 'Account') setGrouping('Model') }}>
       {app.user.role === 'admin' && <Field label="Usage scope"><select aria-label="Usage scope" value={draft.scope} onChange={event => update('scope', event.target.value)}><option value="mine">My account</option><option value="all">All accounts</option></select></Field>}
       <Field label="From (UTC)"><input type="date" required value={draft.from} onChange={event => update('from', event.target.value)}/></Field><Field label="To (UTC)"><input type="date" required value={draft.to} onChange={event => update('to', event.target.value)}/></Field>
@@ -40,7 +44,8 @@ export function Usage() {
       {draft.scope === 'all' && options.accounts && <Field label="Account"><select aria-label="Account" value={draft.accountId} onChange={event => update('accountId', event.target.value)}><option value="">Every account</option>{options.accounts.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select></Field>}
       <div className="usage-filter-actions"><Button type="submit">Apply filters</Button><Button variant="ghost" onClick={reset}>Reset filters</Button></div>
     </form><ErrorNotice error={resource.error} retry={resource.reload}/>
-    {resource.loading ? <Loading/> : data.summary && <><Summary summary={data.summary}/><p className="usage-coverage">Counts come from provider responses recorded for this workspace. {data.summary.unknownCalls > 0 ? `${data.summary.unknownCalls} of ${data.summary.calls} calls have no reported total; the displayed sum covers the other calls.` : 'Every call in this selection has a reported total.'} Token counts are not a bill or a cost estimate.</p>
+    {data.coverage?.complete===false&&<p className="error-notice">Aggregate coverage is incomplete. Unavailable accounts: {data.coverage.unavailableAccounts.map(row=>`${row.name} (${row.code})`).join(', ')}. Their counts are unknown and excluded from these totals.</p>}
+    {resource.loading ? <Loading/> : data.summary && <><Summary summary={data.summary}/><p className="usage-coverage">Counts come from provider responses recorded for this workspace. {data.summary.unknownCalls > 0 ? `${data.summary.unknownCalls} of ${data.summary.calls} calls have no reported total; the displayed sum covers the other calls.` : 'Every call in this selection has a reported total.'} Failed call attempts include requests refused before dispatch. Token counts are not an invoice.</p><section className="card usage-costs"><h3>Configured-rate estimates</h3>{data.summary.costs?.filter(row=>row.pricedCalls).length?data.summary.costs.filter(row=>row.pricedCalls).map(row=><strong key={row.currency}>{estimatedMoney(row)} <small>({row.pricedCalls} priced calls)</small></strong>):<p>No priced calls in this selection.</p>}<p className="muted">{data.summary.unknownCostCalls??data.summary.calls} calls have unknown cost. Estimates use explicitly configured tariffs; currencies are shown separately and unpriced calls are never counted as free.</p></section>
       {!data.summary.calls ? <Empty icon="spark" title="No AI calls in this selection">Change the filters or use your AI assistant, document extraction, or agent workroom. Usage appears when a request is recorded.</Empty> : <>
         <section className="card usage-chart-card"><div className="section-heading"><div><h2>Usage over time</h2><p className="muted">Dates are UTC. Select a day to inspect its calls.</p></div><Field label="Chart metric"><select aria-label="Chart metric" value={metric} onChange={event => setMetric(event.target.value)}>{Object.entries(metricNames).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></Field></div><DailyChart rows={data.daily} metric={metric} onDay={chooseDay}/><p className="usage-caption">Showing days with recorded calls. “?” means the selected count was not reported. Hover or focus a bar for its exact count and reporting coverage.</p></section>
         <section className="card usage-breakdown"><div className="section-heading"><h2>Where tokens were used</h2><Field label="Group by"><select aria-label="Group by" value={grouping} onChange={event => setGrouping(event.target.value)}>{['Model', 'Provider', 'Purpose', 'Status', ...(filters.scope === 'all' ? ['Account'] : [])].map(value => <option key={value}>{value}</option>)}</select></Field></div><div className="usage-table-wrap"><table><thead><tr><th>{grouping}</th><th>Calls</th><th>Input</th><th>Output</th><th>Total</th></tr></thead><tbody>{groups.map(row => <tr key={row.key}><th>{grouping === 'Account' ? accountName(row.key) : label(grouping.toLowerCase(), row.key)}</th><td>{number(row.calls)}</td>{['input', 'output', 'total'].map(key => <td key={key}><TokenValue metric={row.tokens[key]}/></td>)}</tr>)}</tbody></table></div></section>
@@ -48,7 +53,8 @@ export function Usage() {
         <section className="card usage-recent"><h2>Recent model calls</h2><p className="muted">{data.calls.length} of {data.summary.calls} calls in this selection. “No final status” includes requests interrupted before an outcome was recorded; it does not mean a model is still running.</p><div className="usage-table-wrap"><table><thead><tr><th>Started (UTC)</th>{filters.scope === 'all' && <th>Account</th>}<th>Activity</th><th>Model</th><th>Status</th><th>Total tokens</th><th>Duration</th></tr></thead><tbody>{data.calls.map(call => <tr key={`${call.accountId}:${call.callId}`}><td>{call.startedAt?.replace('T', ' ').slice(0, 19)}</td>{filters.scope === 'all' && <td>{accountName(call.accountId)}</td>}<td>{label('purpose', call.purpose)}</td><td>{call.model}<small className="usage-provider">{call.provider}</small></td><td><Badge status={call.status === 'completed' ? 'success' : call.status === 'failed' ? 'warning' : 'neutral'}>{statusNames[call.status]}</Badge></td><td>{number(call.tokens.total)}</td><td>{call.durationMs === null ? '—' : `${(call.durationMs / 1000).toFixed(1)} s`}</td></tr>)}</tbody></table></div></section>
       </>}
     </>}
+    </>}
     {showSettings && <PluginSettings plugin={{ id: 'ai', name: 'AI model connection' }} onClose={() => setShowSettings(false)}/>}
   </div>
 }
-registry.page('ai-usage', { component: Usage, icon: 'spark' })
+registry.page('ai-usage', { component: Usage, icon: 'spark', linkKeys:['tab','caseId'] })

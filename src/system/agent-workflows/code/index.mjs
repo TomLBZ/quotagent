@@ -8,7 +8,7 @@ export async function apply(ctx){
   ctx.inject(['notifications'],child=>{notifications=child.notifications;child.effect(()=>()=>{notifications=null})})
   ctx.effect(()=>ctx.settings.define({id:'workflows',name:'Agent workroom',scope:'user',description:'Choose how the agent team coordinates work. Plans and task progress remain visible in your workroom.',fields:[{key:'reviewPlan',label:'Review plans before agents start',type:'boolean'},{key:'parallelism',label:'Maximum parallel agents',type:'number',min:1,max:4}],defaults:{reviewPlan:true,parallelism:3}}))
   const memory=createMemory(ctx)
-  for(const user of ctx.accounts.list())await memory.importLegacy(user)
+  for(const user of ctx.accounts.list())try{await memory.importLegacy(user)}catch(error){if(error.status!==503)throw error}
   const workflows=createWorkflows(ctx,{memory,notify:async(user,entry)=>{if(notifications)await notifications.push(user,entry)}})
   await workflows.recover()
   ctx.provide('memory',memory);ctx.provide('workflows',workflows)

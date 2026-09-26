@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { registry, useApp, useResource, api, Icon, Button, Badge, Modal, Field, ErrorNotice, PageHeader } from '../../webui/client/core.jsx'
 import './assistant.css'
+import {RunRuntimeNotice} from './runtime-panels.jsx'
 
 function RichText({text}) {
   const lines = String(text || '').split(/\n/), output = []
@@ -23,7 +24,7 @@ function RichText({text}) {
 }
 
 function Assistant({expanded=false}) {
-  const app=useApp(),resource=useResource('/assistant',{messages:[],run:null,preferences:{},provider:{available:false}})
+  const app=useApp(),resource=useResource('/assistant'+(app.context.runId?'?runId='+encodeURIComponent(app.context.runId):''),{messages:[],run:null,preferences:{},provider:{available:false}})
   const [input,setInput]=useState(''),[pending,setPending]=useState(''),[error,setError]=useState(''),[review,setReview]=useState(null),[historyLimit,setHistoryLimit]=useState(30)
   const list=useRef(),textarea=useRef(),lastPrompt=useRef(0),activeRequest=useRef(false)
   const run=resource.data.run,active=run&&!['completed','stopped'].includes(run.status),busy=run?.status==='running',messages=resource.data.messages||[]
@@ -38,6 +39,7 @@ function Assistant({expanded=false}) {
     activeRequest.current=true;setPending('send');setError('');setInput('')
     try{
       await api(active?'/assistant/control':'/assistant/chat',{method:'POST',body:active?{id:run.id,action:'steer',message:text}:{message:text,rfqId}})
+      if(app.context.runId)app.navigate('agent',rfqId?{rfqId}:{})
       await resource.reload();app.refresh()
     }catch(e){setError(e.message);setInput(text)}finally{setPending('');activeRequest.current=false}
   }
@@ -74,6 +76,7 @@ function Assistant({expanded=false}) {
   const actionCards=actions=>actions?.length>0&&<div className="assistant-action-cards">{actions.map((action,index)=><button key={index} onClick={()=>actionClick(action)}><span className="action-card-icon"><Icon name="file" size={17}/></span><span><strong>{action.label||action.title||'Review draft'}</strong><small>Ready for your review</small></span><Icon name="arrow" size={16}/></button>)}</div>
   return <>
     <div className="assistant-header"><div className="assistant-avatar"><Icon name="spark" size={21}/></div><div><h2>Your AI teammate</h2><span><i className={resource.data.provider?.available?'available':''}/>{resource.data.provider?.available?'Ready to work with you':resource.loading?'Connecting…':'Provider not connected'}</span></div>{!expanded&&<button className="icon-button assistant-close" aria-label="Close AI assistant" onClick={()=>app.setAssistantOpen(false)}><Icon name="close" size={18}/></button>}</div>
+    {app.context.runId&&<div className="assistant-context"><span>Recorded task: {run?.message?.slice(0,100)||app.context.runId}</span><button onClick={()=>app.navigate('agent')}>Current conversation</button></div>}
     {app.context.rfqId&&<div className="assistant-context"><Icon name="file" size={14}/><span>Working with your selected request</span><button aria-label="Clear request context" onClick={()=>app.setContext({})}><Icon name="close" size={12}/></button></div>}
     <div className="assistant-messages" ref={list}>
       {!messages.length?<div className="assistant-welcome"><div className="assistant-welcome-art"><Icon name="spark" size={30}/></div><h3>What can we move forward today?</h3><p>Give me an outcome or paste a brief. I can read the details, prepare drafts, and bring decisions back to you.</p><div className="assistant-prompts">{suggestions.map(([label,prompt])=><button key={label} disabled={!!pending||active} onClick={()=>send(prompt)}><span>{label}</span><Icon name="arrow" size={15}/></button>)}</div></div>:<>
@@ -84,6 +87,7 @@ function Assistant({expanded=false}) {
       {active&&actionCards(run.actions)}
     </div>
     {active&&<section className="assistant-task" aria-label="Current assistant task"><div className="assistant-task-status"><Badge status={busy?'accent':'neutral'}>{pending==='pause'?'Pausing…':pending==='stop'?'Stopping…':run.status==='running'?'Working':run.status==='failed'?'Needs attention':'Paused'}</Badge><span>{run.results?.length||0} tool results saved</span></div>{run.workspaceName&&<p>Working in {run.workspaceName}</p>}<p>{run.notice||'You can pause or add guidance at any time.'}</p><div className="assistant-task-buttons">{busy?<Button variant="secondary" disabled={!!pending} onClick={()=>control('pause')}>Pause task</Button>:<Button disabled={!!pending} onClick={()=>control('resume')}>Resume task</Button>}<Button variant="ghost" disabled={!!pending} onClick={()=>control('stop')}>Stop task</Button></div></section>}
+    <RunRuntimeNotice run={run}/>
     <div className="assistant-composer"><ErrorNotice error={error||resource.error||run?.error}/><form onSubmit={e=>{e.preventDefault();send()}}><textarea ref={textarea} aria-label="Message your AI assistant" placeholder={active?'Add guidance or change direction…':'Ask anything, or paste a brief…'} rows={expanded?2:3} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}}/><div className="composer-bottom"><span>{active?(busy?'Guidance updates the current task':'Guidance is saved until you resume'):'Shift + Enter for a new line'}</span><button type="submit" disabled={!!pending||!input.trim()} aria-label={active?'Send guidance to AI assistant':'Send to AI assistant'}><Icon name="arrow" size={17}/></button></div></form><p><Icon name="shield" size={12}/> You review and approve commitments.</p></div>
     {review&&<ReviewAction review={review} setReview={setReview}/>}
   </>
@@ -101,4 +105,4 @@ function ReviewAction({review,setReview}) {
 }
 registry.slot('assistant', Assistant)
 
-registry.page('agent',{component:AgentWorkspace,icon:'spark',assistantMode:'hidden'})
+registry.page('agent',{component:AgentWorkspace,icon:'spark',assistantMode:'hidden',linkKeys:['runId','rfqId']})

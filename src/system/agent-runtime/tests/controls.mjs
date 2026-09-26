@@ -70,7 +70,7 @@ const checks=[]
 }
 {
   const h=harness(),id='interrupted',createdAt=new Date().toISOString()
-  await h.store.put(user.id,'assistant-runs',{id,ownerId:user.id,status:'running',phase:'tools',createdAt,message:'Draft',wire:[toolResponse],turnWire:[toolResponse],pendingTools:toolResponse.tool_calls,toolIndex:0,executingTool:{id:'call-1',name:'draft'},results:[],actions:[],modelSteps:1,revision:1})
+  await h.store.put(user.id,'assistant-runs',{id,ownerId:user.id,accountRole:user.role,status:'running',phase:'tools',createdAt,message:'Draft',wire:[toolResponse],turnWire:[toolResponse],pendingTools:toolResponse.tool_calls,toolIndex:0,executingTool:{id:'call-1',name:'draft'},results:[],actions:[],modelSteps:1,revision:1})
   await h.engine.recover();assert.equal(h.engine.get(user,id).status,'paused');assert.equal(h.engine.get(user,id).results[0].result.uncertain,true)
   await h.engine.control(user,id,{action:'resume'});await until(()=>h.engine.get(user,id).status==='completed')
   assert.deepEqual(h.executions.map(call=>call.arguments.number),[2])
@@ -96,5 +96,18 @@ const checks=[]
   assert(h.executions.every(call=>call.workspaceOwnerId==='first-team'))
   assert.equal(h.store.list(user.id,'agent-turns')[0].workspaceOwnerId,'first-team')
   await h.engine.dispose();checks.push('Team scope is captured durably; switching selected workspace while paused never retargets model/tool work or conversation history')
+}
+{
+  let role='contractor'
+  const h=harness({model:(request,n)=>n===1?never(request.signal):answer('New perspective')})
+  h.ctx.accounts.get=id=>({id,role})
+  const {run}=await h.engine.start(user,{message:'Buyer perspective'})
+  await until(()=>h.calls.length===1);await h.engine.control(user,run.id,{action:'pause'});role='supplier'
+  await assert.rejects(()=>h.engine.control(user,run.id,{action:'resume'}),error=>error.code==='account-role-changed')
+  await assert.rejects(()=>h.engine.control(user,run.id,{action:'steer',message:'Reuse this buyer context'}),error=>error.code==='account-role-changed')
+  assert.equal(h.calls.length,1);await h.engine.control(user,run.id,{action:'stop'})
+  const next=await h.engine.start(user,{message:'New supplier task'});await until(()=>h.engine.get(user,next.run.id).status==='completed');assert.equal(h.engine.get(user,next.run.id).accountRole,'supplier')
+  assert.equal(h.store.list(user.id,'agent-turns')[0].accountRole,'contractor');assert.equal(h.store.list(user.id,'agent-turns')[1].accountRole,'supplier')
+  await h.engine.dispose();checks.push('Role changes reject Resume and guidance without model/tool dispatch; Stop remains available and new task captures current perspective')
 }
 console.log(JSON.stringify({ok:true,checks},null,2))

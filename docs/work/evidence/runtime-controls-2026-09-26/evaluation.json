@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/native-evaluation-8D0u5R",
+  "httpCalls": 5,
+  "checks": [
+    "Four explicitly synthetic native scenario families capture real HTTP run receipts; approved frozen assertions replay deterministically without provider calls",
+    "Failed output checks remain append-only counterexamples and are never rewritten to pass",
+    "Read-only account baseline exposes measured coverage and keeps business improvement unknown",
+    "Cases freeze source output and ledger hashes independently of later run projections",
+    "Real ledger restart retains cases, acceptances, request identities and budget reservations; unfinished identity becomes interrupted without replay",
+    "Native assistant context receipt records whole-turn omission and is retained after restart",
+    "Fresh perspective excludes prior-role and untagged history with ledger evidence; historical task view remains account-owned"
+  ],
+  "scenarios": [
+    {
+      "scenario": "S1",
+      "caseId": "e4fddc06-971b-478f-a62c-50819df66769",
+      "sourceRunId": "643febaf-e5b9-43ac-a6fa-ebe7550da30b",
+      "snapshotHash": "85bb60e70f5b59fd02d2dd0d4ea1b116d67f66c2a752e3bc77465625b908f615"
+    },
+    {
+      "scenario": "S2",
+      "caseId": "cf0b540c-0e55-4f9b-a4c8-1771eaece1c0",
+      "sourceRunId": "4ca7df8f-d531-438a-a150-7013ae94f70a",
+      "snapshotHash": "7acdfb64f303e16e7cb7ff0c89042f33eebd724094e7736764da6e8ca61d67ec"
+    },
+    {
+      "scenario": "S3",
+      "caseId": "9ab2de29-3226-497e-85bc-1ff9537f60f9",
+      "sourceRunId": "467a5e0e-2a8a-4897-8c4d-47c555e0a2a0",
+      "snapshotHash": "076c0914a768cb60dbd7b5d53bcee413c1af7ae0320e5195cca47044d4effe0c"
+    },
+    {
+      "scenario": "S4",
+      "caseId": "16cb5135-66dd-4c9b-b9ad-38a7c8dde21e",
+      "sourceRunId": "044e941c-2214-4330-9947-6a1b310ffd31",
+      "snapshotHash": "22179c230155bea53148090eb2be43bb54e98c27390c26a145365dcd4475f78b"
+    }
+  ],
+  "limitation": "Protocol fixture outputs do not establish real model reasoning quality or business gains."
+}

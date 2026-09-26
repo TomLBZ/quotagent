@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/provider-controls-YhXyu4",
+  "httpCalls": 15,
+  "checks": [
+    "actual HTTP completion preserves unknown price and measured tokens",
+    "explicit tariff uses integer micro-unit arithmetic and surfaces priced coverage",
+    "single-request refusal differs from rolling-window exhaustion and injected monotonic rollover",
+    "in-flight/durable identities coalesce once; conflict rejects and failure stays failure",
+    "consecutive failures open circuit; cooldown permits one recovery probe and refuses concurrent probes",
+    "eligible503 honors Retry-After and one configured retry; missing prior attempt usage stays unknown",
+    "host backpressure refuses without dispatch; cancel releases a real in-flight HTTP lease",
+    "bounded waiting ends with explicit queue timeout and no silent dispatch",
+    "actual HTTP timeout makes one attempt despite configured retries and retains unknown usage",
+    "bounded realm prefix subscriptions deduplicate identifiers and remove callbacks on disposal",
+    "Unavailable realm does not block native provider startup; admin aggregates show unknown counts and explicit incomplete coverage",
+    "read-only metadata views preserve account isolation and exclude credentials",
+    "whole-record/turn context bounds record omission identifiers/bytes and distinguish empty from degraded",
+    "native provider/control disposal clears services routes queues and subscriptions"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "base": "http://127.0.0.1:8647/quotagent/",
+  "fixture": "http://127.0.0.1:8653/v1",
+  "at": "2026-09-26T03:07:27.949Z",
+  "checks": [
+    "GUI configures explicit token budget; oversized task stops before dispatch with reason and next action",
+    "Human Resume succeeds after deliberate budget change; source omissions remain inspectable",
+    "Configured matching synthetic tariff produces USD0.00036 from120input/30output tokens; other unknown calls remain visibly unpriced",
+    "GUI captures actual recorded output, reviews immutable assertions, accepts case and replays retained failing counterexample without a model or business write",
+    "Runtime/evaluation flow fits390px viewport"
+  ],
+  "screenshots": [
+    "01-budget-refusal.png",
+    "02-context-receipt.png",
+    "03-unknown-cost-runtime.png",
+    "04-measured-estimate.png",
+    "05-human-case-review.png",
+    "06-retained-failed-replay.png",
+    "07-mobile-evaluation.png"
+  ],
+  "errors": [],
+  "limitation": "UI writes use an explicit loopback transport fixture. This is not evidence of real model quality or business improvement.",
+  "ok": true
+}
