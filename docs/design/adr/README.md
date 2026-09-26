@@ -58,3 +58,5 @@ mechanics without rewriting their original meaning.
 | [0049](0049-response-promises-and-read-evidence.md) | ADR-0049: Response promises, read evidence and printable source views |
 | [0050](0050-native-operational-metadata.md) | ADR-0050 Native operational metadata and scoped timelines |
 | [0051](0051-captured-action-review-provenance.md) | ADR-0051 — Captured action review provenance |
+| [0052](0052-native-qep-resend-control.md) | ADR-0052 Signed QEP resend controls |
+| [0055](0055-native-host-and-version-support-boundaries.md) | ADR-0055 Native host and version support boundaries |

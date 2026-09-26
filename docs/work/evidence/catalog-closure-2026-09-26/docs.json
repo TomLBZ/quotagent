@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "clauses": 323,
+  "owners": 31,
+  "sources": 226,
+  "currentDocuments": 47,
+  "acceptanceStates": {
+    "assumption": 2,
+    "implemented": 2,
+    "pending-review": 11,
+    "superseded": 44,
+    "verified": 264
+  },
+  "meaning": "Documentation consistency only; unresolved compatible requirements remain open.",
+  "errors": []
+}

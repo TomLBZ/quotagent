@@ -6,6 +6,16 @@ Projection rebuild after restart must reproduce all account records; unload term
 Source: `code/index.mjs`, `code/bridge.py`. Current boundaries are defined in
 `docs/design/data-and-exchange.md`; owner contracts define application events.
 
+[ADR-0055](../../../../docs/design/adr/0055-native-host-and-version-support-boundaries.md)
+defines the trusted native host boundary. The host resolves sessions, human actors
+and accepted team membership before calling its private adapter; the NDJSON child
+is not an independent authenticator for untrusted host processes. Capability/version
+negotiation, actionable refusal and absence of a generic commit operation remain.
+Current declared ledger/QEP formats are supported. Original archive bytes remain
+unchanged; unknown application metadata is counted. No perpetual business-schema
+migration or arbitrary mixed-product-version rollout is promised. Incompatible
+versions refuse explicitly, without rewriting archives or weakening approvals.
+
 NFR-PERF-002/003 retain measurable durability/rebuild baselines. Run
 `node src/system/workspace-store/tests/performance.mjs` for 10,000 actual serial
 native writes (default kernel fsync), per-event percentiles/max and a full native

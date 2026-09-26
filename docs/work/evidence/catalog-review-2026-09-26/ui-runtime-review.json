@@ -1,0 +1,1672 @@
+[
+  {
+    "id": "FR-EVT-001",
+    "owner": "system/runtime",
+    "contract": "src/system/runtime/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Installed Cordis implements emit/parallel/serial/bail/waterfall with their real ordering and returns.",
+    "resolution": "Retained; Python event bus is historical, not cloned into product.",
+    "acceptance": [
+      {
+        "command": "node src/system/runtime/tests/native-events.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/cordis.json",
+        "scope": "Actual installed Cordis4 native runtime",
+        "observed": "Three groups: five event modes, waterfall short circuit/repeated-next refusal, disposer and dependency remount with no later timer/listener effects."
+      }
+    ]
+  },
+  {
+    "id": "FR-EVT-002",
+    "owner": "system/runtime",
+    "contract": "src/system/runtime/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Listener registration returns a disposer; native owner disposal unregisters the callback.",
+    "resolution": "Retained exactly at native Cordis effect boundary.",
+    "acceptance": [
+      {
+        "command": "node src/system/runtime/tests/native-events.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/cordis.json",
+        "scope": "Actual installed Cordis4 native runtime",
+        "observed": "Three groups: five event modes, waterfall short circuit/repeated-next refusal, disposer and dependency remount with no later timer/listener effects."
+      }
+    ]
+  },
+  {
+    "id": "FR-EVT-003",
+    "owner": "system/runtime",
+    "contract": "src/system/runtime/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Waterfall can short-circuit by omitting next and rejects repeated next. Current request-interception stop point is documented.",
+    "resolution": "Retained semantics; runtime contract names sandbox web.intercept true-result as active product short circuit.",
+    "acceptance": [
+      {
+        "command": "node src/system/runtime/tests/native-events.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/cordis.json",
+        "scope": "Actual installed Cordis4 native runtime",
+        "observed": "Three groups: five event modes, waterfall short circuit/repeated-next refusal, disposer and dependency remount with no later timer/listener effects."
+      }
+    ]
+  },
+  {
+    "id": "FR-PLUGIN-002",
+    "owner": "system/runtime",
+    "contract": "src/system/runtime/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Service loss deactivates consumer effects; remount creates a new consumer without retaining its mutable instance. Durable records are explicitly replayed.",
+    "resolution": "Retained; no automatic migration of ephemeral drafts.",
+    "acceptance": [
+      {
+        "command": "node src/system/runtime/tests/native-events.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/cordis.json",
+        "scope": "Actual installed Cordis4 native runtime",
+        "observed": "Three groups: five event modes, waterfall short circuit/repeated-next refusal, disposer and dependency remount with no later timer/listener effects."
+      },
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lifecycle.json",
+        "scope": "Actual native services and Python ledger; controlled utility, no live model",
+        "observed": "Four groups: native/child/repository inventory, dependency refusal, installed utility survives management unload, persisted disablement/reload/disposal."
+      }
+    ]
+  },
+  {
+    "id": "FR-PLUGIN-003",
+    "owner": "system/runtime",
+    "contract": "src/system/runtime/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Actual subscriber/timer/HTTP/service effects disappear on owner disposal.",
+    "resolution": "Retained, with independent event/timer and managed-runtime checks rather than old blanket lifecycle gate.",
+    "acceptance": [
+      {
+        "command": "node src/system/runtime/tests/native-events.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/cordis.json",
+        "scope": "Actual installed Cordis4 native runtime",
+        "observed": "Three groups: five event modes, waterfall short circuit/repeated-next refusal, disposer and dependency remount with no later timer/listener effects."
+      },
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lifecycle.json",
+        "scope": "Actual native services and Python ledger; controlled utility, no live model",
+        "observed": "Four groups: native/child/repository inventory, dependency refusal, installed utility survives management unload, persisted disablement/reload/disposal."
+      },
+      {
+        "command": "node src/system/webui/tests/discovery.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/discovery.json",
+        "scope": "Actual local ephemeral HTTP with configurable prefix",
+        "observed": "Single public app entry, health, slash redirect and disposal closes server; public dashboard replay pending final deployment."
+      }
+    ]
+  },
+  {
+    "id": "FR-PLUGIN-005",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "WebUI registry accepts plugin-owned routes/navigation/pages/slots/commands/collections without owning procurement decisions.",
+    "resolution": "Retained; host imports contributions, while workspace-style plugin owns task grouping. Old SSR block schema superseded.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      },
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lifecycle.json",
+        "scope": "Actual native services and Python ledger; controlled utility, no live model",
+        "observed": "Four groups: native/child/repository inventory, dependency refusal, installed utility survives management unload, persisted disablement/reload/disposal."
+      }
+    ]
+  },
+  {
+    "id": "FR-RUNTIME-001",
+    "owner": "system/runtime",
+    "contract": "src/system/runtime/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Root ./run provides build/up/down/status/logs/doctor; current host uses native Node/Cordis with preserved Python ledger.",
+    "resolution": "Python-stdlib-only host and historical interpreter discovery are superseded by user-requested nativeCordis product under ADR0048. Launcher/restart retained; ./run doctor observed current service healthy.",
+    "acceptance": [
+      {
+        "command": "node src/system/webui/tests/discovery.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/discovery.json",
+        "scope": "Actual local ephemeral HTTP with configurable prefix",
+        "observed": "Single public app entry, health, slash redirect and disposal closes server; public dashboard replay pending final deployment."
+      },
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lifecycle.json",
+        "scope": "Actual native services and Python ledger; controlled utility, no live model",
+        "observed": "Four groups: native/child/repository inventory, dependency refusal, installed utility survives management unload, persisted disablement/reload/disposal."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-workflows/tests/browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/README.md",
+        "scope": "Public real-model workroom, reviewed memory and actual restart",
+        "observed": "Human-approved memory and source history enter real requests; interrupted run returns paused after process restart and requires explicit resume."
+      }
+    ]
+  },
+  {
+    "id": "FR-USERPLUG-010",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Human administrator promotion copies a recorded immutable revision into an independent global lineage instance; source artifact mismatch and stale supplied revision refuse.",
+    "resolution": "Old CLI-only ap-NNNN pending-file/elevated path mechanism superseded by native account authority and requested GUI promotion. Exact artifact identity and personal/global isolation retained.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/studio-content-2026-09-26/native.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "15 groups including prompt digest, duplicate generation/disabled reuse with no new lifecycle facts, stale review and corrupt-byte sharing refusal; empty feedback reads are pure."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-studio-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-studio.json",
+        "scope": "Public actual-model generation and GUI lifecycle",
+        "observed": "Account themes/disposal, publication/install/admin promotion, real generated JS136.5 then100, source review, saved skill with real workspace facts."
+      },
+      {
+        "command": "node src/system/plugin-studio/tools/lineage-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lineage.txt",
+        "scope": "Actual Cordis store/runtime and controlled descriptors",
+        "observed": "Global fallback matches effective effects/market; configuration remount, deterministic duplicate retirement and concurrent/idempotent installation."
+      }
+    ]
+  },
+  {
+    "id": "FR-UXWEB-001",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Framework shell provides registered pages, keyboard palette, notifications, context links, writable actions and reusable dialog behavior.",
+    "resolution": "Retained completeGUI mechanism; no fixed SSR/no-script gate.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      }
+    ]
+  },
+  {
+    "id": "FR-UXWEB-002",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Both parties perform RFQ, response/clarification, private quote, comparison, reviewed award/order/change, negotiation and evidence export from visible GUI.",
+    "resolution": "Old202/0600 pending-file mechanics superseded by native durable ledger actions. Public base business plus local new negotiation/response/evidence journeys cover retained steps; final integrated public replay remains release work.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/commercial-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/commercial.json",
+        "scope": "Public contractor/supplier GUI",
+        "observed": "Private factors/capacity, reviewed offer terms, sourced normalized comparison and export; private costing not shown to buyer."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/scope-terms-negotiation-browser.mjs",
+        "evidence": "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json",
+        "scope": "Integrated local two-party GUI; public release replay pending",
+        "observed": "Eight groups: measured scope, sourced terms, explicit conflict decision, below-floor refusal, reviewed private concession and separate submitted190quote; authorized teammate deep link."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/domain/response-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/response-workbench-2026-09-26/browser.json",
+        "scope": "Integrated local account GUI and real QEP exchange",
+        "observed": "Reviewed response promises/reminders, deadline states, actual open receipts, source-bound weekly report and printable business records."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/evidence/tests/browser.mjs",
+        "evidence": "docs/work/evidence/native-artifacts-2026-09-26/README.md",
+        "scope": "Integrated local GUI/real ledger and actual model reconstruction case",
+        "observed": "Independent signed package verification, source provenance, reconstruction alert, artifact versions/previews and audited holds/disposal; exact commands in linked report."
+      }
+    ]
+  },
+  {
+    "id": "FR-USREQ-001",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Both parties perform RFQ, response/clarification, private quote, comparison, reviewed award/order/change, negotiation and evidence export from visible GUI.",
+    "resolution": "Old202/0600 pending-file mechanics superseded by native durable ledger actions. Public base business plus local new negotiation/response/evidence journeys cover retained steps; final integrated public replay remains release work.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/commercial-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/commercial.json",
+        "scope": "Public contractor/supplier GUI",
+        "observed": "Private factors/capacity, reviewed offer terms, sourced normalized comparison and export; private costing not shown to buyer."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/scope-terms-negotiation-browser.mjs",
+        "evidence": "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json",
+        "scope": "Integrated local two-party GUI; public release replay pending",
+        "observed": "Eight groups: measured scope, sourced terms, explicit conflict decision, below-floor refusal, reviewed private concession and separate submitted190quote; authorized teammate deep link."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/domain/response-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/response-workbench-2026-09-26/browser.json",
+        "scope": "Integrated local account GUI and real QEP exchange",
+        "observed": "Reviewed response promises/reminders, deadline states, actual open receipts, source-bound weekly report and printable business records."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/evidence/tests/browser.mjs",
+        "evidence": "docs/work/evidence/native-artifacts-2026-09-26/README.md",
+        "scope": "Integrated local GUI/real ledger and actual model reconstruction case",
+        "observed": "Independent signed package verification, source provenance, reconstruction alert, artifact versions/previews and audited holds/disposal; exact commands in linked report."
+      }
+    ]
+  },
+  {
+    "id": "FR-USREQ-002",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Current account workspace has a coherent responsive shell, clear task headings, reusable controls, focus, descriptive errors and section hierarchy.",
+    "resolution": "Modern-app outcome retained. Historical token geometry and SSR/data-attribute screenshot gates superseded by ADR0048; visual inspection of actual390px and desktop screenshots supplements behavior checks.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      }
+    ]
+  },
+  {
+    "id": "FR-USREQ-003",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Contractor/supplier use separate signed-in party workspaces, role guides and private operational workflows; admin is a separate management account.",
+    "resolution": "Retained employee perspective; role day-to-day guidance is in native user-guide and current contractor/supplier manuals.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/commercial-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/commercial.json",
+        "scope": "Public contractor/supplier GUI",
+        "observed": "Private factors/capacity, reviewed offer terms, sourced normalized comparison and export; private costing not shown to buyer."
+      }
+    ]
+  },
+  {
+    "id": "FR-USREQ-004",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "implemented",
+    "currentOutcome": "Independent application serves health and one self-described sign-in entry for existing dashboard Projects & routes.",
+    "resolution": "Added missing public /api/routes; external dashboard code entry_via_service in /workspace/services/dashboard/dashboard.py consumes this schema. No cross-repo edit.",
+    "acceptance": [
+      {
+        "command": "node src/system/webui/tests/discovery.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/discovery.json",
+        "scope": "Actual local ephemeral HTTP with configurable prefix",
+        "observed": "Single public app entry, health, slash redirect and disposal closes server; public dashboard replay pending final deployment."
+      }
+    ],
+    "remaining": "After normal public deployment, click Quotagent entry from existing public dashboard and retain browser evidence. Current deployed endpoint still404 at review time."
+  },
+  {
+    "id": "FR-USREQ-005",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Task-grouped navigation, contextual actions and role walkthroughs let ordinary users complete work without command lines.",
+    "resolution": "Retained GUI outcome; old readonly verification gate superseded.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/scope-terms-negotiation-browser.mjs",
+        "evidence": "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json",
+        "scope": "Integrated local two-party GUI; public release replay pending",
+        "observed": "Eight groups: measured scope, sourced terms, explicit conflict decision, below-floor refusal, reviewed private concession and separate submitted190quote; authorized teammate deep link."
+      }
+    ]
+  },
+  {
+    "id": "FR-USREQ-006",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "superseded",
+    "currentOutcome": "Feedback changes only through explicit user/agent proposal actions; reading an empty feedback summary generates no messages or facts.",
+    "resolution": "Cron pending=0 detector/output/TZ mechanics are superseded by native event-driven feedback. No empty feedback polling notification pipeline exists.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/studio-content-2026-09-26/native.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "15 groups including prompt digest, duplicate generation/disabled reuse with no new lifecycle facts, stale review and corrupt-byte sharing refusal; empty feedback reads are pure."
+      }
+    ]
+  },
+  {
+    "id": "FR-USREQ-008",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Clients reach agent workspace/workroom, Plugin studio/marketplace, installed tools, business pages and evolution review from grouped navigation.",
+    "resolution": "Exact old admin-route/evolve-journal URLs are superseded; one shared page need not expose privileged admin controls to clients.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-studio-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-studio.json",
+        "scope": "Public actual-model generation and GUI lifecycle",
+        "observed": "Account themes/disposal, publication/install/admin promotion, real generated JS136.5 then100, source review, saved skill with real workspace facts."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-studio/tests/evolution-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/evolution.json",
+        "scope": "Public actual-model GUI",
+        "observed": "Generated utility, inactive revision proposal, frozen6→9 paired case with human checks, bounded trial/restore, tool still executes while Studio disabled."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      }
+    ]
+  },
+  {
+    "id": "FR-USREQ-011",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "implemented",
+    "currentOutcome": "Gateway serves account sign-in and each authorized role gets its own distinct available pages/data; dashboard discovers the single app entry.",
+    "resolution": "Role-encoded URL impersonation is superseded by requested persistent account roles. Clear dashboard access retained.",
+    "acceptance": [
+      {
+        "command": "node src/system/webui/tests/discovery.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/discovery.json",
+        "scope": "Actual local ephemeral HTTP with configurable prefix",
+        "observed": "Single public app entry, health, slash redirect and disposal closes server; public dashboard replay pending final deployment."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      }
+    ],
+    "remaining": "Final deployed public dashboard click-through pending; role separation already verified publicly."
+  },
+  {
+    "id": "FR-EVOLVE-004",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Generated revisions have proposal IDs and immutable hashes; scoped pure utility/descriptor artifacts cannot patch kernel or platform services.",
+    "resolution": "Retained trust boundary; supported edit surface is intentionally narrower than arbitrary host programming.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/evolution.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "13 groups: immutable artifacts, own-realm copies, paired actual code outputs, observed rollback, retained counterexamples, independent management unload/restart."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-studio/tests/evolution-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/evolution.json",
+        "scope": "Public actual-model GUI",
+        "observed": "Generated utility, inactive revision proposal, frozen6→9 paired case with human checks, bounded trial/restore, tool still executes while Studio disabled."
+      }
+    ]
+  },
+  {
+    "id": "FR-RUNTIME-007",
+    "owner": "system/observability",
+    "contract": "src/system/observability/requirements/native.md",
+    "status": "verified",
+    "currentOutcome": "Administrator gets metadata-only operational counts with explicit incomplete source/realm coverage and unknown provider values. Reads and derived snapshots do not append business facts.",
+    "resolution": "Retained aggregation outcome; old admission/trace/routing plugin names map to current action/evolution/provider/delivery sources, not invented totals.",
+    "acceptance": [
+      {
+        "command": "node src/system/observability/tests/native.mjs",
+        "evidence": "docs/work/evidence/native-operations-2026-09-26/native.json",
+        "scope": "Native real ledger, teams and deliberately quarantined realm",
+        "observed": "Four groups: counts/no private bodies, incomplete coverage/unknown source explicit, authorized bounded timeline and snapshot disposal/no ledger writes."
+      },
+      {
+        "command": "node src/system/observability/tests/browser.mjs",
+        "evidence": "docs/work/evidence/native-operations-2026-09-26/browser.json",
+        "scope": "Isolated actual GUI for three roles",
+        "observed": "Five groups: admin source-labelled snapshot/settings; own-party event queries/saved views;390px and zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "FR-RUNTIME-008",
+    "owner": "system/observability",
+    "contract": "src/system/observability/requirements/native.md",
+    "status": "verified",
+    "currentOutcome": "Authorized account/accepted-party event metadata are stable sequence/hash keyed and paged by shared collection service; owner unload removes registration.",
+    "resolution": "Retained bounded timeline; generic collection handles bounded server query rather than legacy in-memory ring.",
+    "acceptance": [
+      {
+        "command": "node src/system/observability/tests/native.mjs",
+        "evidence": "docs/work/evidence/native-operations-2026-09-26/native.json",
+        "scope": "Native real ledger, teams and deliberately quarantined realm",
+        "observed": "Four groups: counts/no private bodies, incomplete coverage/unknown source explicit, authorized bounded timeline and snapshot disposal/no ledger writes."
+      },
+      {
+        "command": "node src/system/observability/tests/browser.mjs",
+        "evidence": "docs/work/evidence/native-operations-2026-09-26/browser.json",
+        "scope": "Isolated actual GUI for three roles",
+        "observed": "Five groups: admin source-labelled snapshot/settings; own-party event queries/saved views;390px and zero JS errors."
+      },
+      {
+        "command": "node src/system/webui/tests/collections-browser.mjs",
+        "evidence": "docs/work/evidence/collections-2026-09-26/gui.json",
+        "scope": "Real36-record ledger source and actual isolated GUI HTTP",
+        "observed": "Five groups: server windows/complete totals, all-match selection, saved filter/sort/size/export columns, stale-response exclusion and unavailable mobile state."
+      }
+    ]
+  },
+  {
+    "id": "FR-MARKET-001",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Application inventory joins actual native fibers/children with repository manifests, reports repository-only availability distinctly; Studio separately owns generated market/installations.",
+    "resolution": "Retained truthful sources and wired state; separate native manager and installed owners replace monolithic legacy aggregator.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lifecycle.json",
+        "scope": "Actual native services and Python ledger; controlled utility, no live model",
+        "observed": "Four groups: native/child/repository inventory, dependency refusal, installed utility survives management unload, persisted disablement/reload/disposal."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-plugin-workspace-e2e.mjs",
+        "evidence": "docs/work/evidence/plugin-workspace-2026-09-25/studio/report.json",
+        "scope": "Public GUI as of2026-09-25; later evolution tests supplement current split",
+        "observed": "26 checks: stable grid/dialog/focus during refresh, scoped configuration, personal/global/market lineage, actual application lifecycle; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "FR-MARKET-002",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Published market source is distinct from owned installation; independent account copy carries source plugin/revision/content/artifact hashes.",
+    "resolution": "Old global-elevation-only install restriction superseded by explicit requested owner publication and marketplace sharing. Private source remains unavailable cross-account.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-studio-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-studio.json",
+        "scope": "Public actual-model generation and GUI lifecycle",
+        "observed": "Account themes/disposal, publication/install/admin promotion, real generated JS136.5 then100, source review, saved skill with real workspace facts."
+      },
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/evolution.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "13 groups: immutable artifacts, own-realm copies, paired actual code outputs, observed rollback, retained counterexamples, independent management unload/restart."
+      },
+      {
+        "command": "node src/system/plugin-studio/tools/lineage-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lineage.txt",
+        "scope": "Actual Cordis store/runtime and controlled descriptors",
+        "observed": "Global fallback matches effective effects/market; configuration remount, deterministic duplicate retirement and concurrent/idempotent installation."
+      }
+    ]
+  },
+  {
+    "id": "FR-MARKET-006",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Unavailable management page/action reports a readable unavailable/error state; artifact mismatch reports differences; installed tools continue when only Studio is disabled.",
+    "resolution": "Retained; disabled management is not represented as a healthy empty installation registry.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lifecycle.json",
+        "scope": "Actual native services and Python ledger; controlled utility, no live model",
+        "observed": "Four groups: native/child/repository inventory, dependency refusal, installed utility survives management unload, persisted disablement/reload/disposal."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-studio/tests/evolution-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/evolution.json",
+        "scope": "Public actual-model GUI",
+        "observed": "Generated utility, inactive revision proposal, frozen6→9 paired case with human checks, bounded trial/restore, tool still executes while Studio disabled."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "FR-USERPLUG-002",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Artifacts are runtime-owned account/plugin/revision files; generated module receives only scoped attach capability, pure code has no file or host mutation API.",
+    "resolution": "Exact historical user-space path superseded by configured data-root/plugin-artifacts; writable root isolation retained.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/evolution.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "13 groups: immutable artifacts, own-realm copies, paired actual code outputs, observed rollback, retained counterexamples, independent management unload/restart."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-studio-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-studio.json",
+        "scope": "Public actual-model generation and GUI lifecycle",
+        "observed": "Account themes/disposal, publication/install/admin promotion, real generated JS136.5 then100, source review, saved skill with real workspace facts."
+      }
+    ]
+  },
+  {
+    "id": "FR-USERPLUG-003",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Reviewed configuration/revision switch disposes and remounts only the targeted installed instance, retaining immutable artifacts and explicit restore history.",
+    "resolution": "Unreviewed filesystem watcher reload is superseded by immutable numbered revisions; tampered bytes are refused rather than silently loaded.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-studio/tools/lineage-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lineage.txt",
+        "scope": "Actual Cordis store/runtime and controlled descriptors",
+        "observed": "Global fallback matches effective effects/market; configuration remount, deterministic duplicate retirement and concurrent/idempotent installation."
+      },
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/evolution.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "13 groups: immutable artifacts, own-realm copies, paired actual code outputs, observed rollback, retained counterexamples, independent management unload/restart."
+      },
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/studio-content-2026-09-26/native.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "15 groups including prompt digest, duplicate generation/disabled reuse with no new lifecycle facts, stale review and corrupt-byte sharing refusal; empty feedback reads are pure."
+      }
+    ]
+  },
+  {
+    "id": "FR-USERPLUG-004",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Scoped unload removes generated callable/UI effects while unrelated scopes and independent installed capabilities survive.",
+    "resolution": "Retained native fiber/effect behavior.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lifecycle.json",
+        "scope": "Actual native services and Python ledger; controlled utility, no live model",
+        "observed": "Four groups: native/child/repository inventory, dependency refusal, installed utility survives management unload, persisted disablement/reload/disposal."
+      },
+      {
+        "command": "node src/system/plugin-studio/tools/lineage-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lineage.txt",
+        "scope": "Actual Cordis store/runtime and controlled descriptors",
+        "observed": "Global fallback matches effective effects/market; configuration remount, deterministic duplicate retirement and concurrent/idempotent installation."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-studio-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-studio.json",
+        "scope": "Public actual-model generation and GUI lifecycle",
+        "observed": "Account themes/disposal, publication/install/admin promotion, real generated JS136.5 then100, source review, saved skill with real workspace facts."
+      }
+    ]
+  },
+  {
+    "id": "FR-USERPLUG-006",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Every installation has its own identity/artifact root/scoped effect; published copies carry provenance without sharing mutable instance state. Pure generated utilities have no credentials or arbitrary service namespace.",
+    "resolution": "Historical arbitrary-service/credential bundle isolation is superseded by narrow scoped supported surface; native external connections have separate account settings owner.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/evolution.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "13 groups: immutable artifacts, own-realm copies, paired actual code outputs, observed rollback, retained counterexamples, independent management unload/restart."
+      },
+      {
+        "command": "node src/system/plugin-studio/tools/lineage-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lineage.txt",
+        "scope": "Actual Cordis store/runtime and controlled descriptors",
+        "observed": "Global fallback matches effective effects/market; configuration remount, deterministic duplicate retirement and concurrent/idempotent installation."
+      }
+    ]
+  },
+  {
+    "id": "FR-USERPLUG-007",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "superseded",
+    "currentOutcome": "Generated supported surface cannot request cross-root writes or credentials; private cross-account history/load refuses, independent copies do not share state, execution/inspection remains ledger-visible.",
+    "resolution": "Old path/namespace attack-fixture error codes are superseded by structurally absent APIs and explicit published copies; no unsupported external-connected claim is rendered as status.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/evolution.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "13 groups: immutable artifacts, own-realm copies, paired actual code outputs, observed rollback, retained counterexamples, independent management unload/restart."
+      },
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/studio-content-2026-09-26/native.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "15 groups including prompt digest, duplicate generation/disabled reuse with no new lifecycle facts, stale review and corrupt-byte sharing refusal; empty feedback reads are pure."
+      }
+    ]
+  },
+  {
+    "id": "FR-USERPLUG-009",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Compiled Cordis child has scoped attach only; custom pure code receives the calling account read snapshot, with no platform or kernel service injection.",
+    "resolution": "Retained non-coupling, using smaller supported capability surface instead of legacy arbitrary injected namespace.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/evolution.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "13 groups: immutable artifacts, own-realm copies, paired actual code outputs, observed rollback, retained counterexamples, independent management unload/restart."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-studio-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-studio.json",
+        "scope": "Public actual-model generation and GUI lifecycle",
+        "observed": "Account themes/disposal, publication/install/admin promotion, real generated JS136.5 then100, source review, saved skill with real workspace facts."
+      }
+    ]
+  },
+  {
+    "id": "FR-USERPLUG-011",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "superseded",
+    "currentOutcome": "Unpublished personal extensions cannot be installed or inspected from an unrelated account; explicit publication allows a separate personal copy.",
+    "resolution": "Blanket no-other-account-load-before-global-elevation contradicts requested marketplace sharing and is superseded. Private ownership retained.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/evolution.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "13 groups: immutable artifacts, own-realm copies, paired actual code outputs, observed rollback, retained counterexamples, independent management unload/restart."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-studio-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-studio.json",
+        "scope": "Public actual-model generation and GUI lifecycle",
+        "observed": "Account themes/disposal, publication/install/admin promotion, real generated JS136.5 then100, source review, saved skill with real workspace facts."
+      }
+    ]
+  },
+  {
+    "id": "FR-USERPLUG-012",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "superseded",
+    "currentOutcome": "Self-improvement targets owned immutable plugin revisions; kernel/host source writes are outside generated APIs.",
+    "resolution": "Historical ban on evolution targeting userspace contradicts the requested secondAI benefit and is superseded. Kernel/platform immutability remains.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-studio/tests/evolution-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/evolution.json",
+        "scope": "Public actual-model GUI",
+        "observed": "Generated utility, inactive revision proposal, frozen6→9 paired case with human checks, bounded trial/restore, tool still executes while Studio disabled."
+      },
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/evolution.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "13 groups: immutable artifacts, own-realm copies, paired actual code outputs, observed rollback, retained counterexamples, independent management unload/restart."
+      }
+    ]
+  },
+  {
+    "id": "FR-USERPLUG-001",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Natural-language model generation immediately creates/lists/loads a native personal plugin with prompt and artifact hashes; identical generated content reuses its account ID.",
+    "resolution": "Retained outcome; current additive studio/plugin-created/revision-created events replace historical event/path names. Existing disabled state remains disabled on duplicate request.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-studio-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-studio.json",
+        "scope": "Public actual-model generation and GUI lifecycle",
+        "observed": "Account themes/disposal, publication/install/admin promotion, real generated JS136.5 then100, source review, saved skill with real workspace facts."
+      },
+      {
+        "command": "node src/system/plugin-studio/tests/evolution.mjs",
+        "evidence": "docs/work/evidence/studio-content-2026-09-26/native.json",
+        "scope": "Actual Cordis/Python ledger; provider output explicitly fixture",
+        "observed": "15 groups including prompt digest, duplicate generation/disabled reuse with no new lifecycle facts, stale review and corrupt-byte sharing refusal; empty feedback reads are pure."
+      }
+    ]
+  },
+  {
+    "id": "FR-AGENTRT-007",
+    "owner": "system/runtime",
+    "contract": "src/system/runtime/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Provider/assistant/workroom capabilities have native lifecycle effects while conversation/workflow/project memory facts remain ledger-owned across reload.",
+    "resolution": "Old exact three-factory names and disposed event labels are superseded by current owner decomposition. Persistent memory and no-residual execution retained.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lifecycle.json",
+        "scope": "Actual native services and Python ledger; controlled utility, no live model",
+        "observed": "Four groups: native/child/repository inventory, dependency refusal, installed utility survives management unload, persisted disablement/reload/disposal."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/agent-workflows/tests/browser.mjs",
+        "evidence": "docs/work/evidence/connected-agent-2026-09-25/README.md",
+        "scope": "Public real-model workroom, reviewed memory and actual restart",
+        "observed": "Human-approved memory and source history enter real requests; interrupted run returns paused after process restart and requires explicit resume."
+      },
+      {
+        "command": "node src/system/runtime/tests/native-events.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/cordis.json",
+        "scope": "Actual installed Cordis4 native runtime",
+        "observed": "Three groups: five event modes, waterfall short circuit/repeated-next refusal, disposer and dependency remount with no later timer/listener effects."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-002",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Reusable React shell/fields/dialogs/navigation provide accessible naming, keyboard operation, responsive layout and role-available commands.",
+    "resolution": "Retained current user requirement with concrete accessibility defects fixed during review.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-003",
+    "owner": "system/runtime",
+    "contract": "src/system/runtime/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Host composes native service fibers; dependency injection, children and managed disposal are actual Cordis behavior.",
+    "resolution": "Retained; host/product.mjs and pinned host/package.json are current composition sources.",
+    "acceptance": [
+      {
+        "command": "node src/system/runtime/tests/native-events.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/cordis.json",
+        "scope": "Actual installed Cordis4 native runtime",
+        "observed": "Three groups: five event modes, waterfall short circuit/repeated-next refusal, disposer and dependency remount with no later timer/listener effects."
+      },
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lifecycle.json",
+        "scope": "Actual native services and Python ledger; controlled utility, no live model",
+        "observed": "Four groups: native/child/repository inventory, dependency refusal, installed utility survives management unload, persisted disablement/reload/disposal."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-005",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Real provider generates themes, reference widgets, reusable assistant skills and actual synchronous pure JavaScript utilities; supported artifacts publish/install/promote.",
+    "resolution": "Retained with explicit scope: no arbitrary host source programming, network/file API or fabricatedAI outputs.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-studio-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-studio.json",
+        "scope": "Public actual-model generation and GUI lifecycle",
+        "observed": "Account themes/disposal, publication/install/admin promotion, real generated JS136.5 then100, source review, saved skill with real workspace facts."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/plugin-studio/tests/evolution-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/evolution.json",
+        "scope": "Public actual-model GUI",
+        "observed": "Generated utility, inactive revision proposal, frozen6→9 paired case with human checks, bounded trial/restore, tool still executes while Studio disabled."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-008",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Background refresh preserves existing component/form/focus state; stale responses cannot overwrite a newer query.",
+    "resolution": "Retained; resource initial-load state differs from refreshing existing content.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-plugin-workspace-e2e.mjs",
+        "evidence": "docs/work/evidence/plugin-workspace-2026-09-25/studio/report.json",
+        "scope": "Public GUI as of2026-09-25; later evolution tests supplement current split",
+        "observed": "26 checks: stable grid/dialog/focus during refresh, scoped configuration, personal/global/market lineage, actual application lifecycle; zero JS errors."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8644/quotagent/ node src/domain/commercial-workbench/tests/editor-browser.mjs",
+        "evidence": "docs/work/evidence/commercial-2026-09-26/gui-editors.json",
+        "scope": "Integrated real forms with background refresh",
+        "observed": "Unsaved private factors/evaluation settings remain stable until explicit save; latest persisted values then rehydrate."
+      },
+      {
+        "command": "node src/system/webui/tests/collections-browser.mjs",
+        "evidence": "docs/work/evidence/collections-2026-09-26/gui.json",
+        "scope": "Real36-record ledger source and actual isolated GUI HTTP",
+        "observed": "Five groups: server windows/complete totals, all-match selection, saved filter/sort/size/export columns, stale-response exclusion and unavailable mobile state."
+      }
+    ]
+  },
+  {
+    "id": "CURRENT-009",
+    "owner": "system/plugin-studio",
+    "contract": "src/system/plugin-studio/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "One active instance per account/global lineage; personal enabled instance wins, disabled personal falls back to global and marketplace reflects the actual selection.",
+    "resolution": "Retained; deterministic retirement and concurrent lifecycle selection proved.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-studio/tools/lineage-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lineage.txt",
+        "scope": "Actual Cordis store/runtime and controlled descriptors",
+        "observed": "Global fallback matches effective effects/market; configuration remount, deterministic duplicate retirement and concurrent/idempotent installation."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-plugin-workspace-e2e.mjs",
+        "evidence": "docs/work/evidence/plugin-workspace-2026-09-25/studio/report.json",
+        "scope": "Public GUI as of2026-09-25; later evolution tests supplement current split",
+        "observed": "26 checks: stable grid/dialog/focus during refresh, scoped configuration, personal/global/market lineage, actual application lifecycle; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-002",
+    "owner": "system/workspace-styles",
+    "contract": "src/system/workspace-styles/requirements/README.md",
+    "status": "verified",
+    "currentOutcome": "Personal layout/palette/spacing, list filter/sort/page/export choices and notification source mute preferences persist within account/role ownership.",
+    "resolution": "Retained via three native owners: workspace styles, WebUI collections and notifications/settings; no family-wide inference.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      },
+      {
+        "command": "node src/system/webui/tests/collections-browser.mjs",
+        "evidence": "docs/work/evidence/collections-2026-09-26/gui.json",
+        "scope": "Real36-record ledger source and actual isolated GUI HTTP",
+        "observed": "Five groups: server windows/complete totals, all-match selection, saved filter/sort/size/export columns, stale-response exclusion and unavailable mobile state."
+      },
+      {
+        "command": "node src/system/notifications/tests/windows.mjs",
+        "evidence": "docs/work/evidence/g9-2026-09-26/notifications.json",
+        "scope": "Actual Cordis, settings and ledger; no real external notification",
+        "observed": "253-record windows, source/severity filtering/muting without losing history, dedup, attribution and disposal."
+      }
+    ]
+  },
+  {
+    "id": "SUPPLEMENT-025",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Available contextual actions reflect role/access; exact current source context reaches drafting/review, while loading, realempty and unavailable are distinct.",
+    "resolution": "Retained; generic saved-view failure could masquerade as empty and was fixed with explicit failure/retry. Domain defaults/eligibility proof remains owner-specific.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8645/quotagent/ node src/domain/procurement/tests/scope-terms-negotiation-browser.mjs",
+        "evidence": "docs/work/evidence/procurement-scope-2026-09-26/gui-local.json",
+        "scope": "Integrated local two-party GUI; public release replay pending",
+        "observed": "Eight groups: measured scope, sourced terms, explicit conflict decision, below-floor refusal, reviewed private concession and separate submitted190quote; authorized teammate deep link."
+      }
+    ]
+  },
+  {
+    "id": "VIS-02",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "PageHeader renders h1 and an explanatory subtitle on native workspace pages.",
+    "resolution": "Exact qa token sizes/margins superseded. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      }
+    ]
+  },
+  {
+    "id": "VIS-05",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Selected native navigation item exposes aria-current=page and visible selected styling.",
+    "resolution": "Exact3px inset stripe/token names superseded. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      }
+    ]
+  },
+  {
+    "id": "VIS-06",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Breadcrumb is a labelled navigation landmark; final current page is noninteractive.",
+    "resolution": "Chinese literal label and slash separator superseded by English accessible breadcrumb/chevron. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-08",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Narrow pages fit390px; data tables stay bounded scroll regions with headers and accessible names.",
+    "resolution": "Mandatory pure-CSS tr-to-card transformation is superseded by responsive framework layout and bounded tables. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "node src/system/webui/tests/collections-browser.mjs",
+        "evidence": "docs/work/evidence/collections-2026-09-26/gui.json",
+        "scope": "Real36-record ledger source and actual isolated GUI HTTP",
+        "observed": "Five groups: server windows/complete totals, all-match selection, saved filter/sort/size/export columns, stale-response exclusion and unavailable mobile state."
+      },
+      {
+        "command": "node src/system/observability/tests/browser.mjs",
+        "evidence": "docs/work/evidence/native-operations-2026-09-26/browser.json",
+        "scope": "Isolated actual GUI for three roles",
+        "observed": "Five groups: admin source-labelled snapshot/settings; own-party event queries/saved views;390px and zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-09",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Cards and section spacing create readable modern hierarchy.",
+    "resolution": "Exact surface/radius/padding/gap tokens are obsolete visual mechanism. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-10",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Sections expose clear headings, contextual actions and source/provenance explanations.",
+    "resolution": "Mandatory right-aligned source link and fixed typography superseded; genuine provenance retained in relevant owner flows. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/evidence/tests/browser.mjs",
+        "evidence": "docs/work/evidence/native-artifacts-2026-09-26/README.md",
+        "scope": "Integrated local GUI/real ledger and actual model reconstruction case",
+        "observed": "Independent signed package verification, source provenance, reconstruction alert, artifact versions/previews and audited holds/disposal; exact commands in linked report."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-11",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Section hierarchy remains readable, with separate work panels for distinct tasks.",
+    "resolution": "Absolute prohibition on nested cards/three backgrounds is superseded under ADR0048; no behavioral obligation is waived. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-12",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Details/summary disclose filters and source data with native keyboard semantics and visible focus.",
+    "resolution": "Custom triangle pseudo-element and exact spacing/color tokens superseded. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "node src/system/webui/tests/collections-browser.mjs",
+        "evidence": "docs/work/evidence/collections-2026-09-26/gui.json",
+        "scope": "Real36-record ledger source and actual isolated GUI HTTP",
+        "observed": "Five groups: server windows/complete totals, all-match selection, saved filter/sort/size/export columns, stale-response exclusion and unavailable mobile state."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-13",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Source/currency/review explanations remain readable near the action or derived result.",
+    "resolution": "Exact left border/color/size mandate superseded. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/commercial-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/commercial.json",
+        "scope": "Public contractor/supplier GUI",
+        "observed": "Private factors/capacity, reviewed offer terms, sourced normalized comparison and export; private costing not shown to buyer."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/evidence/tests/browser.mjs",
+        "evidence": "docs/work/evidence/native-artifacts-2026-09-26/README.md",
+        "scope": "Integrated local GUI/real ledger and actual model reconstruction case",
+        "observed": "Independent signed package verification, source provenance, reconstruction alert, artifact versions/previews and audited holds/disposal; exact commands in linked report."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      }
+    ]
+  },
+  {
+    "id": "VIS-14",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Unreadable source is an alert with reason and retry, visually and verbally distinct from an empty state.",
+    "resolution": "DEGRADED uppercase label and data-degraded selector are obsolete; failure distinction retained and fixed for preference failures. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "node src/system/webui/tests/collections-browser.mjs",
+        "evidence": "docs/work/evidence/collections-2026-09-26/gui.json",
+        "scope": "Real36-record ledger source and actual isolated GUI HTTP",
+        "observed": "Five groups: server windows/complete totals, all-match selection, saved filter/sort/size/export columns, stale-response exclusion and unavailable mobile state."
+      }
+    ]
+  },
+  {
+    "id": "VIS-15",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Tables use readable row/column hierarchy within bounded sections.",
+    "resolution": "Horizontal-only border style and mandatory outercard are cosmetic requirements superseded by current UI. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "node src/system/observability/tests/browser.mjs",
+        "evidence": "docs/work/evidence/native-operations-2026-09-26/browser.json",
+        "scope": "Isolated actual GUI for three roles",
+        "observed": "Five groups: admin source-labelled snapshot/settings; own-party event queries/saved views;390px and zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-16",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Data tables retain real th headers and clear hierarchy.",
+    "resolution": "Exact tokens and text-transform values superseded. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      }
+    ]
+  },
+  {
+    "id": "VIS-17",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Focused controls in data rows have visible control focus and row focus-within background.",
+    "resolution": "Exact row padding/hover token superseded; keyboard focus retained. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-20",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Long ledger hashes and code stay within bounded table/pre regions and wrap without widening the page.",
+    "resolution": "Fixed48ch maximum is obsolete; no-overflow result retained. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "node src/system/observability/tests/browser.mjs",
+        "evidence": "docs/work/evidence/native-operations-2026-09-26/browser.json",
+        "scope": "Isolated actual GUI for three roles",
+        "observed": "Five groups: admin source-labelled snapshot/settings; own-party event queries/saved views;390px and zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-21",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Tables have explicit captions or section-heading accessible names; true empty source uses an explanatory empty state, source failure never claims zero.",
+    "resolution": "data-rows testing attribute and caption-only mechanism superseded; accessible table name and trueempty retained. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "node src/system/webui/tests/collections-browser.mjs",
+        "evidence": "docs/work/evidence/collections-2026-09-26/gui.json",
+        "scope": "Real36-record ledger source and actual isolated GUI HTTP",
+        "observed": "Five groups: server windows/complete totals, all-match selection, saved filter/sort/size/export columns, stale-response exclusion and unavailable mobile state."
+      }
+    ]
+  },
+  {
+    "id": "VIS-22",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Status badges expose human-readable text such as Enabled/Disabled/Pending, not color alone.",
+    "resolution": "Exact pill dimensions/border/token names superseded. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-plugin-workspace-e2e.mjs",
+        "evidence": "docs/work/evidence/plugin-workspace-2026-09-25/studio/report.json",
+        "scope": "Public GUI as of2026-09-25; later evolution tests supplement current split",
+        "observed": "26 checks: stable grid/dialog/focus during refresh, scoped configuration, personal/global/market lineage, actual application lifecycle; zero JS errors."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      }
+    ]
+  },
+  {
+    "id": "VIS-25",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Notification/action counts are labelled and represent actual unread/pending records.",
+    "resolution": "Exact badge minwidth/centering/color token superseded; meaningful counts retained. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "node src/system/notifications/tests/windows.mjs",
+        "evidence": "docs/work/evidence/g9-2026-09-26/notifications.json",
+        "scope": "Actual Cordis, settings and ledger; no real external notification",
+        "observed": "253-record windows, source/severity filtering/muting without losing history, dedup, attribution and disposal."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      }
+    ]
+  },
+  {
+    "id": "VIS-26",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Supplier private costs and internal evaluation are explicitly identified in their owner workspace and excluded from other party views.",
+    "resolution": "Exact dashed border/faint color/Chinese wording superseded; actual privacy label and realm separation retained. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/commercial-workbench/tests/browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/commercial.json",
+        "scope": "Public contractor/supplier GUI",
+        "observed": "Private factors/capacity, reviewed offer terms, sourced normalized comparison and export; private costing not shown to buyer."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      }
+    ]
+  },
+  {
+    "id": "VIS-27",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Primary/secondary/destructive actions remain visually distinct; commitments use explicit human review.",
+    "resolution": "At-most-one primary button perwholepage is superseded for multi-panel workflow; no permission to hide reviews. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/domain/procurement/tests/fulfillment-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/fulfillment.json",
+        "scope": "Public contractor/supplier/independent reviewer GUI",
+        "observed": "RFQ/private quote, exact265USD approved order,76.80USD approved change, acknowledgment/partial delivery/invoice reconciliation and source receipts."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      }
+    ]
+  },
+  {
+    "id": "VIS-28",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Buttons expose normal/disabled/busy states and keyboard focus; narrow modalclose has44px target.",
+    "resolution": "Fixed36px base, exact transforms and timing tokens superseded. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      },
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-29",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Visible field labels are associated with controls; native required semantics trigger linked feedback.",
+    "resolution": "Exact required-star and label-for syntax replaced by enclosing label plus aria-labelledby; semanticrequired retained. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-30",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Native inputs are consistently styled, labelled and visibly focusable.",
+    "resolution": "Exact surface/border/36px padding typography tokens superseded. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/workspace-styles/tests/browser.mjs",
+        "evidence": "docs/work/evidence/agent-experience-2026-09-26/workspace-public.json",
+        "scope": "Public GUI, contractor/supplier/admin",
+        "observed": "Seven groups: persistent layout/palette/density, independent account defaults, role walkthrough/help destination,390/1024px."
+      }
+    ]
+  },
+  {
+    "id": "VIS-31",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Links/buttons/summary have focus-visible outlines; input/select/textarea have visible focus border/ring; modal keyboard cycle is enforced.",
+    "resolution": "Specific box-shadow token/outline:none prescription superseded, visible keyboard focus retained. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node src/system/webui/tests/navigation-browser.mjs",
+        "evidence": "docs/work/evidence/integrated-public-2026-09-26/navigation.json",
+        "scope": "Public real browser, two account roles,390px",
+        "observed": "Five groups: keyboard palette, deep-linked topic reload/back/forward, inert/focus/Escape dialog, role access refusal and mobile sizing."
+      }
+    ]
+  },
+  {
+    "id": "VIS-32",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Field links hints, native errors and structured server fieldErrors; actual duplicateemail409 appears beside the email field with aria-invalid and clears on edit.",
+    "resolution": "data-error-for/p markup superseded. Cross-field/action failures stay readable form alerts; explicit field validation uses error prop and server field map. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      }
+    ]
+  },
+  {
+    "id": "VIS-35",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "True zero results and unreadable collections have distinct text/state; retry restores actual rows.",
+    "resolution": "data-empty/data-degraded attributes and old color tokens superseded, truthful state retained. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "node src/system/webui/tests/collections-browser.mjs",
+        "evidence": "docs/work/evidence/collections-2026-09-26/gui.json",
+        "scope": "Real36-record ledger source and actual isolated GUI HTTP",
+        "observed": "Five groups: server windows/complete totals, all-match selection, saved filter/sort/size/export columns, stale-response exclusion and unavailable mobile state."
+      }
+    ]
+  },
+  {
+    "id": "VIS-39",
+    "owner": "system/webui",
+    "contract": "src/system/webui/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Code/pre use monospace and wrapping/bounded scroll, preserving long artifacts and ledger strings on narrow screens.",
+    "resolution": "Exact background/border/fontsize tokens superseded; readable no-overflow behavior retained. ADR0048 replaces obsolete SSR/exact geometry without waiving the retained outcome.",
+    "acceptance": [
+      {
+        "command": "BASE_URL=http://127.0.0.1:8648/quotagent/ node src/system/webui/tests/accessibility-browser.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/accessibility.json",
+        "scope": "Integrated local GUI, real login/server409; only source503 responses injected",
+        "observed": "Eight groups: linked required/email/server field errors, hints/focus, named tables, preference/source unavailable and retry, settled390px sidebar; zero JS errors."
+      },
+      {
+        "command": "node src/system/observability/tests/browser.mjs",
+        "evidence": "docs/work/evidence/native-operations-2026-09-26/browser.json",
+        "scope": "Isolated actual GUI for three roles",
+        "observed": "Five groups: admin source-labelled snapshot/settings; own-party event queries/saved views;390px and zero JS errors."
+      },
+      {
+        "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ node tools/product-studio-e2e.mjs",
+        "evidence": "docs/work/evidence/product-2026-09-25/public-studio.json",
+        "scope": "Public actual-model generation and GUI lifecycle",
+        "observed": "Account themes/disposal, publication/install/admin promotion, real generated JS136.5 then100, source review, saved skill with real workspace facts."
+      }
+    ]
+  },
+  {
+    "id": "NFR-REL-004",
+    "owner": "system/runtime",
+    "contract": "src/system/runtime/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Actual subscriber/timer/HTTP/service effects disappear on owner disposal.",
+    "resolution": "Retained, with independent event/timer and managed-runtime checks rather than old blanket lifecycle gate.",
+    "acceptance": [
+      {
+        "command": "node src/system/runtime/tests/native-events.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/cordis.json",
+        "scope": "Actual installed Cordis4 native runtime",
+        "observed": "Three groups: five event modes, waterfall short circuit/repeated-next refusal, disposer and dependency remount with no later timer/listener effects."
+      },
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lifecycle.json",
+        "scope": "Actual native services and Python ledger; controlled utility, no live model",
+        "observed": "Four groups: native/child/repository inventory, dependency refusal, installed utility survives management unload, persisted disablement/reload/disposal."
+      },
+      {
+        "command": "node src/system/webui/tests/discovery.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/discovery.json",
+        "scope": "Actual local ephemeral HTTP with configurable prefix",
+        "observed": "Single public app entry, health, slash redirect and disposal closes server; public dashboard replay pending final deployment."
+      }
+    ]
+  },
+  {
+    "id": "NFR-MNT-001",
+    "owner": "system/runtime",
+    "contract": "src/system/runtime/requirements/current.md",
+    "status": "verified",
+    "currentOutcome": "Product features register disposable services, routes, tools and React contributions through native plugin seams; business changes do not modify kernel ledger/QEP semantics.",
+    "resolution": "Retained architectural boundary; source composition reviewed in host/product.mjs and native owner modules, supported by real unload checks.",
+    "acceptance": [
+      {
+        "command": "node src/system/plugin-manager/tools/lifecycle-check.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/lifecycle.json",
+        "scope": "Actual native services and Python ledger; controlled utility, no live model",
+        "observed": "Four groups: native/child/repository inventory, dependency refusal, installed utility survives management unload, persisted disablement/reload/disposal."
+      },
+      {
+        "command": "node src/system/runtime/tests/native-events.mjs",
+        "evidence": "docs/work/evidence/catalog-ui-runtime-2026-09-26/cordis.json",
+        "scope": "Actual installed Cordis4 native runtime",
+        "observed": "Three groups: five event modes, waterfall short circuit/repeated-next refusal, disposer and dependency remount with no later timer/listener effects."
+      }
+    ]
+  }
+]

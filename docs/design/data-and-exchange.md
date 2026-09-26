@@ -9,6 +9,12 @@ version semantics. Sources: [store](../../src/system/workspace-store/code/index.
 [bridge](../../src/system/workspace-store/code/bridge.py),
 [kernel ledger](../../src/system/kernel/code/ledger.py).
 
+The native host resolves account/team identity before calling its private NDJSON
+adapter. Current declared ledger/QEP formats retain explicit compatibility checks;
+unsupported historical business schemas do not acquire an implicit migration
+guarantee. Original archives remain unchanged.
+[Current trust/version boundary](adr/0055-native-host-and-version-support-boundaries.md).
+
 QEP is the sole inter-party exchange boundary. Domain plugins authorize and shape
 public records, classify facts/intents/commitments and bind applicable approvals.
 Supplier costs, contractor private estimates and internal evaluation policies do
