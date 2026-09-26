@@ -73,5 +73,7 @@ try{
  await ctx.store.put(owner.id,'action-batches',interruptedBatch,{event:'fixture/interrupted-batch'});await actions.recover()
  const recovered=actions.batchGet(owner,'interrupted-batch');assert.equal(recovered.status,'paused');assert.equal(recovered.items[0].status,'succeeded');assert.equal(recovered.items.length,1);assert.equal(slowCalls,3)
  checks.push('Background batch persists each item, pauses after current effect, resumes only unattempted work, and recovers a completed effect receipt after interruption without automatic replay')
+ const perspective=await actions.propose(owner,{kind:'fixture.slow',input:{scope:'contractor-only'}});users[0].role='supplier';assert(!actions.list(owner).some(row=>row.id===perspective.id));await assert.rejects(actions.approve(owner,perspective.id,{confirmed:true}),/different account perspective/);users[0].role='contractor';assert.equal(actions.get(owner,perspective.id).status,'pending')
+ checks.push('An account perspective change hides its former-side proposals and prevents execution until the original perspective is restored')
  console.log(JSON.stringify({ok:true,root,checks,deliveries,events:ctx.store.events(owner.id).length},null,2))
 }finally{await actions?.dispose();await teams?.dispose();await fiber.dispose()}

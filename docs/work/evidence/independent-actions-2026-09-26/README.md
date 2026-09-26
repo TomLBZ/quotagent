@@ -22,3 +22,12 @@ The local team GUI setup is independently verified in
 fixture executors; it does not claim procurement signing or public GUI validation.
 The procurement integration journey supplies that evidence after domain binding is
 complete. No emails, orders or other external commitments were sent by these tests.
+
+Account-perspective follow-up, 2026-09-26: reran
+`node src/system/action-center/tests/independent.mjs`, exit 0,
+[seven groups PASS](perspective.json), 117 owner events and two fixture deliveries.
+A newly proposed personal action records its originating contractor/supplier/admin
+perspective. Switching the same account to another perspective hides it and blocks
+execution; returning restores the pending action. Existing untagged receipts remain
+readable without inventing historical role metadata. Origin links route conversation
+tasks to the assistant and workflow runs to the workroom.

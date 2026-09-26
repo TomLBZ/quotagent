@@ -8,7 +8,9 @@ Source: `code/service.mjs`, `code/index.mjs`, `client/actions.jsx`.
 ## Outcome and owner contract
 
 A plugin registers an executor with a disposer. Proposals freeze their exact input.
-Personal actions retain direct human review. An executor that declares independent
+Personal actions retain direct human review. New proposals preserve the originating
+account perspective; changing account type hides and blocks former-side proposals
+until that perspective is restored. An executor that declares independent
 review binds action, business workspace, object, amount in integer cents, currency,
 semantic fingerprint and current authority policy revision. Its party teammates can
 read that shared review; personal connection credentials and unrelated accounts

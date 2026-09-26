@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/independent-actions-jUmq43",
+  "checks": [
+    "Actual team/ledger proposal -> independent nominated grant -> proposer signature; concurrent signatures execute once; same-role outsiders cannot read or decide",
+    "Exact currency/amount authority, changed policy and removed reviewer invalidate signing without delivery",
+    "Reasoned delegation, participant reminders, higher-role escalation and expiry persist distinct receipts; elapsed time never grants or executes",
+    "Mixed batch stores per-item success/failure/blocked receipts; deliberate failed retry is a fresh unsigned proposal and does not repeat successful delivery",
+    "Restart recovery preserves signatures and changes interrupted execution to uncertain without repeating the effect",
+    "Background batch persists each item, pauses after current effect, resumes only unattempted work, and recovers a completed effect receipt after interruption without automatic replay",
+    "An account perspective change hides its former-side proposals and prevents execution until the original perspective is restored"
+  ],
+  "deliveries": 2,
+  "events": 117
+}

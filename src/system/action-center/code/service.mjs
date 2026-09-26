@@ -24,6 +24,7 @@ export function createActions({store,accounts,teams=()=>null,notifications=()=>n
  const scoped=(user,action)=>action.workspaceId?{...person(user),workspaceOwnerId:action.workspaceId}:person(user)
  const authorizeRead=(user,action)=>{
   const actor=person(user)
+  if(action.side&&action.side!==actor.role)fail('This action belongs to a different account perspective.',404)
   if(action.workspaceId){const scope=teams()?.scope(actor,action.workspaceId);if(!scope||scope.team.side!==action.side)fail('This action is not available in your account.',404)}
   else if(action.ownerId&&action.ownerId!==actor.id)fail('This action is not available in your account.',404)
   return actor
@@ -65,7 +66,7 @@ export function createActions({store,accounts,teams=()=>null,notifications=()=>n
   if(!input.input||typeof input.input!=='object'||Array.isArray(input.input))fail('An action needs structured input.')
   const review=await describe(user,definition,input.input),realmId=review?.workspaceId||actor.id
   if(input.idempotencyKey){const old=store.list(realmId,'review-actions').find(row=>row.idempotencyKey===input.idempotencyKey&&row.proposerId===actor.id);if(old)return metadata(user,{realmId,ownerId:realmId,...old})}
-  const action={id:randomUUID(),realmId,ownerId:realmId,workspaceId:review?.workspaceId||null,side:review?.side||null,kind:input.kind,kindLabel:definition.label||'Review action',title:clean(input.title||definition.label||input.kind,180),summary:clean(input.summary,4000),input:copy(input.input),inputHash:hash(input.input),source:copy(input.source||null),runId:input.runId||null,idempotencyKey:input.idempotencyKey||null,status:'pending',createdAt:now(),proposerId:actor.id,proposedBy:input.source&&!['human','human-retry'].includes(input.source.kind)?'agent':'user',review,reviewerId:null,decision:null,grant:null,result:null,error:null}
+  const action={id:randomUUID(),realmId,ownerId:realmId,workspaceId:review?.workspaceId||null,side:review?.side||actor.role,kind:input.kind,kindLabel:definition.label||'Review action',title:clean(input.title||definition.label||input.kind,180),summary:clean(input.summary,4000),input:copy(input.input),inputHash:hash(input.input),source:copy(input.source||null),runId:input.runId||null,idempotencyKey:input.idempotencyKey||null,status:'pending',createdAt:now(),proposerId:actor.id,proposedBy:input.source&&!['human','human-retry'].includes(input.source.kind)?'agent':'user',review,reviewerId:null,decision:null,grant:null,result:null,error:null}
   const saved=await save(actor,action,'proposed');await notify(actor.id,{type:'review',title:review?'Choose an independent reviewer':'Ready for your review',body:action.title,sourceId:action.id,dedupeKey:'review:'+action.id,link:{view:'approvals',actionId:action.id}});return metadata(user,saved)
  })
  const checkWrite=(user,action)=>{
