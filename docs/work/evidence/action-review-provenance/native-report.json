@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/review-provenance-pu0tbI",
+  "checks": [
+    "Actual ledger proposal captures the exact source event, declared owner risk and canonical payload hash without executing the action",
+    "Source inspection opens the original exact event after the current business record changes, and the original proposal remains navigable",
+    "Other-account actions, foreign-realm sources, wrong records, changed hashes and arbitrary source keys refuse before disclosure or execution",
+    "Missing risk assessment, explicitly empty owner flags and historical uncaptured references stay distinct; historical input IDs never resolve to newer source records",
+    "Payload mismatch is explicit; captured source survives native reload; provenance routes dispose and no inspection executes any action"
+  ]
+}

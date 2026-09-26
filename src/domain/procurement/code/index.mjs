@@ -88,7 +88,20 @@ export async function apply(ctx) {
   }
   const reviewInput = (user, action, input) => {
     const owner = scoped(user, 'snapshot', input), frozen = rawReviewInput(owner, action, input)
-    return { ...frozen, workspaceId: owner.id, fingerprint: fingerprint({ workspaceId: owner.id, targets: frozen.reviewed, payload: frozen.payload }) }
+    const data=procurement.snapshot(owner),events=ctx.store.events(owner.id),sources=[],seen=new Set()
+    const candidates=[frozen.reviewed.record,frozen.reviewed.rfq,frozen.reviewed.quote,frozen.reviewed.order].filter(Boolean)
+    for(const record of candidates){
+      const collection=['rfqs','quotes','orders','changes','award-intents','rfq-amendments','clarifications','invoices','acceptances'].find(name=>ctx.store.get(owner.id,name,record.id))
+      if(!collection||seen.has(collection+':'+record.id))continue
+      const source=events.findLast(event=>event.body?.collection===collection&&event.body.record?.id===record.id)
+      if(!source)continue
+      seen.add(collection+':'+record.id)
+      const link=collection==='quotes'?{view:'quotes',quoteId:record.id,rfqId:record.rfqId}:collection==='orders'?{view:'orders',orderId:record.id}:record.orderId?{view:'orders',orderId:record.orderId,tab:collection==='changes'?'changes':'invoices'}:{view:'rfqs',rfqId:record.rfqId||record.id,...(collection==='rfq-amendments'?{tab:'versions'}:collection==='clarifications'?{tab:'clarifications'}:{})}
+      sources.push({label:record.title||record.invoiceNumber||record.supplierName||({rfqs:'Request',quotes:'Quotation',orders:'Order',changes:'Scope change','award-intents':'Confirmed selection','rfq-amendments':'Request amendment',clarifications:'Shared clarification'}[collection])||'Project source',collection,recordId:record.id,ref:{realm:owner.id,seq:source.seq,hash:source.entry_hash},link})
+    }
+    const quoteId=frozen.reviewed.quote?.id||frozen.reviewed.record?.quoteId||(sources.some(row=>row.collection==='quotes'&&row.recordId===frozen.reviewed.record?.id)?frozen.reviewed.record.id:null)
+    const risks=[...(data.comparison.find(row=>row.quoteId===quoteId)?.risks||[]),...(data.termConflicts||[]).filter(row=>row.quoteId===quoteId&&row.decision?.resolution!=='accept-offer').map(row=>`${row.label}: required/offered difference still needs a human term decision.`)]
+    return { ...frozen, preview:{...frozen.preview,sources,risks}, workspaceId: owner.id, fingerprint: fingerprint({ workspaceId: owner.id, targets: frozen.reviewed, payload: frozen.payload }) }
   }
   const propose = async (user, action, input, context = {}) => {
     if (!reviews) throw new Error('Enable Review actions to prepare this commitment.')

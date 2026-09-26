@@ -67,3 +67,28 @@ append-only workspace record envelope.
 Local native evidence belongs in `docs/work/evidence/independent-actions-2026-09-26/`.
 The generic service tests do not establish final domain integration or public GUI
 completion; those are recorded separately after their journeys run.
+
+## Captured provenance and declared risk
+
+ADR-0051 closes FR-UX-001 and NFR-UX-002 in the native review UI. Every detail view
+shows its exact sorted-key JSON input hash and explicit risk assessment status.
+Owning `input.preview.risks` supplies flags; absence is Not assessed and an empty
+array never means risk-free. New `input.preview.sources` references include a
+label, `{realm,seq,hash}`, optional collection/recordId and owner-provided page link.
+Capture checks current realm authorization, exact event hash and record identity.
+Source inspection stays limited to the authorized action's captured references.
+Proposal receipt, frozen input and recorded task/retry form the remaining chain.
+Historical proposals explicitly report missing upstream capture; current records
+must never be substituted for their unknown historical revisions. The GUI can
+inspect exact ledger source bodies and navigate owner-supplied source pages.
+
+Acceptance commands: `node src/system/action-center/tests/provenance.mjs` proves
+real ledger capture, later-record stability, wrong-account/refusal, historical gaps,
+owner risk flags, exact payload hashes and disposable routes. The corresponding
+`tests/provenance-browser.mjs` creates a real proposal through GUI controls, inspects
+risk/hash/source and source navigation, reloads its URL and checks mobile fit. These
+checks do not approve an external commitment or fabricate model risk assessment.
+
+Observed local native5 and GUI3 groups passed, with regressions state9/independent7,
+103-module build and docs checks. Commands and limits are in
+`docs/work/evidence/action-review-provenance.md`.

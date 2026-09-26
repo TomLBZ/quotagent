@@ -1,4 +1,5 @@
 import {randomUUID,createHash} from 'node:crypto'
+import {createProvenance} from './provenance.mjs'
 const copy=value=>structuredClone(value)
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status})}
 const clean=(value,max=2000)=>String(value??'').trim().slice(0,max)
@@ -33,6 +34,7 @@ export function createActions({store,accounts,teams=()=>null,notifications=()=>n
   const actor=person(user),ids=new Set([actor.id]);if(actor.role!=='admin'&&teams())for(const team of teams().list(actor))ids.add(team.id)
   return [...ids]
  }
+ const provenanceService=createProvenance({store,realmIds})
  const raw=(user,id)=>{
   for(const realmId of realmIds(user)){const row=store.get(realmId,'review-actions',id);if(row){const action={ownerId:realmId,realmId,...row};authorizeRead(user,action);return action}}
   fail('This action is not available in your account.',404)
@@ -66,7 +68,8 @@ export function createActions({store,accounts,teams=()=>null,notifications=()=>n
   if(!input.input||typeof input.input!=='object'||Array.isArray(input.input))fail('An action needs structured input.')
   const review=await describe(user,definition,input.input),realmId=review?.workspaceId||actor.id
   if(input.idempotencyKey){const old=store.list(realmId,'review-actions').find(row=>row.idempotencyKey===input.idempotencyKey&&row.proposerId===actor.id);if(old)return metadata(user,{realmId,ownerId:realmId,...old})}
-  const action={id:randomUUID(),realmId,ownerId:realmId,workspaceId:review?.workspaceId||null,side:review?.side||actor.role,kind:input.kind,kindLabel:definition.label||'Review action',title:clean(input.title||definition.label||input.kind,180),summary:clean(input.summary,4000),input:copy(input.input),inputHash:hash(input.input),source:copy(input.source||null),runId:input.runId||null,idempotencyKey:input.idempotencyKey||null,status:'pending',createdAt:now(),proposerId:actor.id,proposedBy:input.source&&!['human','human-retry'].includes(input.source.kind)?'agent':'user',review,reviewerId:null,decision:null,grant:null,result:null,error:null}
+  const provenance=provenanceService.capture(user,input.input)
+  const action={provenance,id:randomUUID(),realmId,ownerId:realmId,workspaceId:review?.workspaceId||null,side:review?.side||actor.role,kind:input.kind,kindLabel:definition.label||'Review action',title:clean(input.title||definition.label||input.kind,180),summary:clean(input.summary,4000),input:copy(input.input),inputHash:hash(input.input),source:copy(input.source||null),runId:input.runId||null,idempotencyKey:input.idempotencyKey||null,status:'pending',createdAt:now(),proposerId:actor.id,proposedBy:input.source&&!['human','human-retry'].includes(input.source.kind)?'agent':'user',review,reviewerId:null,decision:null,grant:null,result:null,error:null}
   const saved=await save(actor,action,'proposed');await notify(actor.id,{type:'review',title:review?'Choose an independent reviewer':'Ready for your review',body:action.title,sourceId:action.id,dedupeKey:'review:'+action.id,link:{view:'approvals',actionId:action.id}});return metadata(user,saved)
  })
  const checkWrite=(user,action)=>{
@@ -231,5 +234,5 @@ export function createActions({store,accounts,teams=()=>null,notifications=()=>n
   }
  }
  const dispose=async()=>{disposed=true;for(const controller of controllers)controller.abort();await Promise.allSettled([...locks.values(),...batchJobs.values(),...batchQueues.values()]);for(const user of accounts.list())for(const batch of store.list(user.id,'action-batches'))if(batch.status==='running')await batchUpdate(user,batch.id,{status:'paused',error:'The action center was unloaded. Review and resume when ready.'},'batch-suspended');executors.clear();leases.clear()}
- return {register,propose,list,get,approve,reject,retry,nominate,grant,remind,authorizeCommitment,age,batch,startBatch,controlBatch,batchGet,batches:user=>store.list(person(user).id,'action-batches'),recover,dispose}
+ return {register,propose,list,get,provenance:(user,id)=>provenanceService.inspect(user,raw(user,id)),source:(user,id,key)=>provenanceService.source(user,raw(user,id),key),approve,reject,retry,nominate,grant,remind,authorizeCommitment,age,batch,startBatch,controlBatch,batchGet,batches:user=>store.list(person(user).id,'action-batches'),recover,dispose}
 }

@@ -1,0 +1,20 @@
+{
+  "base": "http://127.0.0.1:8650/quotagent/",
+  "at": "2026-09-26T04:29:05.490Z",
+  "checks": [
+    "Visible buyer award proposal and supplier confirmation prepare a real unsigned review showing the owner-declared 35-day lead and full advance-payment flags; no order is signed",
+    "Reviewer opens original proposal and exact referenced quote ledger bodies, then navigates to the owning quotation page without arbitrary ledger lookup",
+    "Selected review and exact hash survive URL reload; risk/source content fits390px and remains read-only with no JavaScript errors"
+  ],
+  "screenshots": [
+    "01-declared-risks-and-source-chain.png",
+    "02-original-proposal-event.png",
+    "03-exact-quote-source.png",
+    "04-domain-source-navigation.png",
+    "05-mobile-review-chain.png"
+  ],
+  "errors": [],
+  "reusedConfirmedIntent": true,
+  "actionId": "1a864052-a869-45a4-bbe6-188747d3c817",
+  "ok": true
+}

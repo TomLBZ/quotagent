@@ -15,6 +15,8 @@ export async function apply(ctx){
  route('GET','/actions',({user})=>({actions:actions.list(user),batches:actions.batches(user)}))
  route('POST','/actions/batch',async({user,body})=>({ok:true,receipt:await actions.startBatch(user,body)}),{capability:'workspace:write'})
  route('POST','/actions/batch/:id/control',async({user,params,body})=>({ok:true,receipt:await actions.controlBatch(user,params.id,body)}),{capability:'workspace:write'})
+ route('GET','/actions/:id/provenance',({user,params})=>({provenance:actions.provenance(user,params.id)}))
+ route('GET','/actions/:id/provenance/:key',({user,params})=>actions.source(user,params.id,params.key))
  route('GET','/actions/:id',({user,params})=>({action:actions.get(user,params.id)}))
  for(const operation of ['approve','reject','retry','nominate','grant','remind'])route('POST',`/actions/:id/${operation}`,async({user,params,body})=>({ok:true,action:await actions[operation](user,params.id,body)}),{capability:'workspace:write'})
 }
