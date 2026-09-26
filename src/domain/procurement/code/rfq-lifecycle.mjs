@@ -48,7 +48,7 @@ export function createRfqLifecycle(helpers) {
     const next = { ...rfq, ...Object.fromEntries(editable.filter(key => input[key] !== undefined).map(key => [key, input[key]])) }
     const deadline = text(next.deadline)
     if (deadline && !Number.isFinite(Date.parse(deadline))) fail('Choose a valid deadline.')
-    const invited = suppliers(next.supplierIds)
+    const invited = suppliers(next.supplierIds,user)
     if (rfq.supplierIds.some(id => !invited.includes(id))) fail('An amendment must keep all previously invited suppliers informed. Add suppliers if needed; existing invitations cannot be removed.')
     return { title: required(next.title, 'RFQ title'), description: text(next.description), deadline, currency: currencyOf(next.currency),
       requirements: requirementFields(rfq.requirements, input.requirements), items: rfqItems(next.items), supplierIds: invited, ...contextFields(user, next) }

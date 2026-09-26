@@ -53,8 +53,19 @@ const publicRfq = (rfq, supplierId) => ({ ...Object.fromEntries(['id', 'title', 
   'status', 'ownerId', 'ownerName', 'revision', 'publishedRevision', 'initialRevision', 'projectId', 'projectName', 'sectionId', 'sectionName', 'amendmentReason', 'requirements', 'createdAt', 'updatedAt', 'publishedAt', 'closedReason', 'closedAt', 'demo']
   .filter((key) => rfq[key] !== undefined).map((key) => [key, copy(rfq[key])])), supplierIds: [supplierId] })
 
-export function createProcurement({ store, accounts, resolveUser = user => user, authorizeCommitment = async () => null }) {
+export function createProcurement({ store, accounts, resolveUser = user => user, authorizeCommitment = async () => null, parties = () => [], draftDefaults = () => ({values:{},provenance:{},context:{}}) }) {
   const deliveries = new AsyncLocalStorage()
+  const directory = user => [...new Map([...accounts.list().filter(person=>!person.disabled).map(({id,name,company,email,role})=>({id,name,company,email,role})),...parties(user)].map(person=>[person.id,person])).values()]
+  const party = (user,id) => directory(user).find(person=>person.id===id)
+  const deliveryParty = (user,id) => directory(user).find(person=>person.id===id)||parties(user,{includeDisabled:true}).find(person=>person.id===id)
+  const defaults = (user,context={}) => { const scoped=resolveUser(user,'snapshot',{});healthy(scoped.id);return draftDefaults(scoped,context) }
+  const prepare = (user,input,kind) => {
+    const basis=defaults(user,kind==='rfq'?{projectId:input.projectId,sectionId:input.sectionId}:{})
+    const mapping=kind==='rfq'?{description:'requestBrief',currency:'currency'}:{leadDays:'quoteLeadDays',paymentTerms:'quotePaymentTerms',notes:'quoteNotes'}
+    const fields={...input},applied={}
+    for(const [field,key]of Object.entries(mapping))if(input[field]===undefined&&basis.values[key]!==undefined){fields[field]=basis.values[key];applied[field]={value:copy(basis.values[key]),source:copy(basis.provenance[key]||{source:'default',layer:'schema'})}}
+    return {fields,basis:Object.keys(applied).length?{context:copy(basis.context),applied,preparedAt:now()}:undefined}
+  }
   const healthy = realm => { const state = store.health?.()[realm]; if (state?.healthy === false) throw Object.assign(new Error(state.message || 'This workspace needs ledger recovery before it can be read or changed.'), { status: 503, code: state.code || 'LEDGER_INTEGRITY', nextAction: state.nextAction }) }
   const get = (user, collection, id) => { healthy(user.id); return store.get(user.id, collection, required(id, 'Record ID')) || fail('That record is not available in your workspace.', 404) }
   const save = async (user, collection, record, event, actor = `human:${user.actorId || user.id}`, options = {}) => {
@@ -63,13 +74,14 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
     return next
   }
   const exchange = async (user, recipient, collection, record, event) => {
-    if (!accounts.get(recipient)) fail('The recipient account no longer exists.', 404)
+    if (!deliveryParty(user,recipient)) fail('This recipient is unavailable. Check its account or explicitly enabled paired delivery route.', 404)
     const result = await store.exchange(user.id, recipient, collection, copy(record), { actor: `human:${user.actorId || user.id}`, event })
     if (result?.status) deliveries.getStore()?.push({ recipient, collection, recordId: record.id, ...result })
     return result
   }
   const approval = async (user, action, id, input, record) => {
     if (input.confirmed !== true) fail('Review this commitment and confirm it before sending.')
+    for(const recipient of new Set([...(record.supplierIds||[]),record.ownerId,record.supplierId,record.toId].filter(id=>id&&id!==user.id))) if(!deliveryParty(user,recipient)) fail('A counterparty delivery route or account is unavailable. Restore its explicit pairing before confirming this operation.',409)
     const authority = await authorizeCommitment(user, { action, id, record: copy(record), input: copy(input) })
     await store.append(user.id, 'procurement/human-approved', { action, recordId: id, confirmed: true,
       humanId: user.actorId || user.id, authority: authority || null, scope: copy(record), approvedAt: now() }, { actor: `human:${user.actorId || user.id}`, eventClass: 'fact' })
@@ -85,9 +97,9 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
         quantity: quantity(item.quantity), unit: required(item.unit || 'each', `Item ${i + 1} unit`) }
     })
   }
-  const suppliers = (ids) => [...new Set(Array.isArray(ids) ? ids.map(String) : [])].map((id) => {
-    const supplier = accounts.get(id)
-    if (!supplier || supplier.role !== 'supplier') fail('Choose supplier accounts from the contact list.')
+  const suppliers = (ids, user) => [...new Set(Array.isArray(ids) ? ids.map(String) : [])].map((id) => {
+    const supplier = party(user,id)
+    if (!supplier || supplier.role !== 'supplier') fail('Choose an active supplier account or explicitly paired supplier from the contact list.')
     return id
   })
   const quoteItems = (items, rfq) => {
@@ -155,8 +167,7 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
     const orderIds = new Set(orders.map((order) => order.id))
     const messages = newest(store.list(user.id, 'messages')).filter((message) => message.fromId === user.id || message.toId === user.id)
     const changes = newest(store.list(user.id, 'changes')).filter((change) => orderIds.has(change.orderId))
-    const contacts = accounts.list().filter((person) => !person.disabled && person.role === (user.role === 'contractor' ? 'supplier' : 'contractor'))
-      .map(({ id, name, company, email, role }) => ({ id, name, company, email, role }))
+    const contacts = directory(user).filter(person => person.role === (user.role === 'contractor' ? 'supplier' : 'contractor'))
     const activity = store.events(user.id).filter(event => {
       const body = event.body
       return body?.schema === 'quotagent/workspace-record/v1' && ['rfqs','quotes','orders','messages','changes'].includes(body.collection)
@@ -196,12 +207,13 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
       role(user, 'contractor')
       const existing = input.id ? get(user, 'rfqs', input.id) : null
       if (existing && (existing.ownerId !== user.id || existing.status !== 'draft')) fail('Only your own unpublished RFQ draft can be edited.', 403)
-      const fields = { ...existing, ...input }
+      const prepared = existing ? {fields:input,basis:existing.draftDefaults} : prepare(user,input,'rfq')
+      const fields = { ...existing, ...prepared.fields }
       const deadline = text(fields.deadline)
       if (deadline && !Number.isFinite(Date.parse(deadline))) fail('Choose a valid deadline.')
       const rfq = await save(user, 'rfqs', { ...existing, id: existing?.id || newId('rfq'), title: required(fields.title, 'RFQ title'),
-        description: text(fields.description), deadline, currency: currencyOf(fields.currency || (fields.projectId ? get(user, 'projects', fields.projectId).currency : undefined)), items: rfqItems(fields.items),
-        requirements: requirementFields(existing?.requirements, input.requirements), ...lifecycle.contextFields(user, fields), status: 'draft', ownerId: user.id, ownerName: nameOf(user), supplierIds: suppliers(fields.supplierIds), revision: (existing?.revision || 0) + 1 }, 'procurement/rfq-drafted', actor, input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {})
+        description: text(fields.description), draftDefaults: prepared.basis, deadline, currency: currencyOf(fields.currency || (fields.projectId ? get(user, 'projects', fields.projectId).currency : undefined)), items: rfqItems(fields.items),
+        requirements: requirementFields(existing?.requirements, input.requirements), ...lifecycle.contextFields(user, fields), status: 'draft', ownerId: user.id, ownerName: nameOf(user), supplierIds: suppliers(fields.supplierIds,user), revision: (existing?.revision || 0) + 1 }, 'procurement/rfq-drafted', actor, input.expectedRevision !== undefined ? { expectedRevision: input.expectedRevision } : {})
       return { ok: true, rfq, message: 'RFQ draft saved. Review the items and invited suppliers before publishing.' }
     }
     if (action === 'publish-rfq') {
@@ -229,7 +241,10 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
       const existing = input.id ? get(user, 'quotes', input.id) : null
       if (existing && (existing.supplierId !== user.id || existing.rfqId !== rfq.id)) fail('This is not your quote for this RFQ.', 403)
       if (existing?.status === 'awarded') fail('Use an order change for an awarded quote.')
+      const prepared = existing ? {fields:{...existing,...input},basis:existing.draftDefaults} : prepare(user,input,'quote')
+      input = prepared.fields
       const items = quoteItems(input.items, rfq)
+      if(input.leadDays === '') fail('State the lead time in whole days; an empty value is unknown.')
       const leadDays = Number(input.leadDays ?? 14)
       if (!Number.isInteger(leadDays) || leadDays < 0 || leadDays > 3650) fail('Lead time must be a whole number of days from 0 to 3650.')
       const commercial = commercialFields(existing?.commercial, input.commercial, items.map(item => item.id))
@@ -238,7 +253,7 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
       const costTotal = items.reduce((sum, item) => sum + cents(item.costTotal || 0), 0) / 100
       const costComplete = items.every((item) => item.cost !== undefined)
       const quote = await save(user, 'quotes', { ...existing, id: existing?.id || newId('quote'), rfqId: rfq.id, rfqRevision: rfqRevision(rfq),
-        supplierId: user.id, supplierName: nameOf(user), ownerId: rfq.ownerId, items, leadDays,
+        supplierId: user.id, supplierName: nameOf(user), ownerId: rfq.ownerId, items, leadDays, draftDefaults: prepared.basis,
         paymentTerms: text(input.paymentTerms), notes: text(input.notes), privateNotes: text(input.privateNotes ?? existing?.privateNotes),
         status: 'draft', ...amounts, costTotal, costComplete, margin: costComplete ? (cents(amounts.subtotal) - cents(costTotal)) / 100 : null, marginBasis: 'Quoted item subtotal minus private item costs; excludes separately declared tax, freight and other costs',
         commercial, currency: currencyOf(input.currency || existing?.currency || rfq.currency), revision: existing ? (existing.revision || 0) + 1
@@ -367,5 +382,5 @@ export function createProcurement({ store, accounts, resolveUser = user => user,
   }
 
   const previewChange = (user, orderId, lines, expectedRevision) => { client(user); user = resolveUser(user, 'snapshot', {}); const order = get(user, 'orders', orderId); if (expectedRevision !== undefined && Number(expectedRevision) !== (order.orderRevision || 1)) fail('The order changed while you were editing. Reopen the change form to review the current quantities and rates.', 409); if (![order.ownerId, order.supplierId].includes(user.id)) fail('This agreement belongs to another party.', 403); return { orderId, orderRevision: order.orderRevision || 1, ...fulfillment.changePlan(user, order, lines) } }
-  return { snapshot, execute, exportCsv, previewChange, realm: user => { const owner = resolveUser(user, 'snapshot', {}).id; healthy(owner); return owner }, normalizeCommercial: commercialFields, normalizeRequirements: requirementFields, normalizeQuotePrice: (items, commercial = {}) => quotationAmounts(items.reduce((sum, item) => sum + lineCents(cents(item.unitPrice), quantity(item.quantity)), 0), commercialFields({}, commercial, items.map(item => item.id))) }
+  return { snapshot, execute, exportCsv, previewChange, defaults, parties: user => directory(resolveUser(user,'snapshot',{})), realm: user => { const owner = resolveUser(user, 'snapshot', {}).id; healthy(owner); return owner }, normalizeCommercial: commercialFields, normalizeRequirements: requirementFields, normalizeQuotePrice: (items, commercial = {}) => quotationAmounts(items.reduce((sum, item) => sum + lineCents(cents(item.unitPrice), quantity(item.quantity)), 0), commercialFields({}, commercial, items.map(item => item.id))) }
 }

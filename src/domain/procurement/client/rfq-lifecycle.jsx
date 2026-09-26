@@ -5,7 +5,7 @@ import { EditConflict } from './edit-conflict.jsx'
 
 export function ProjectFields({ data, form, set }) {
   const projects = data.projects || [], sections = (data.sections || []).filter(row => row.projectId === form.projectId)
-  return <div className="form-grid"><Field label="Project" hint="Optional. Manage projects and sections from the Requests page."><select value={form.projectId || ''} onChange={e => { const project = projects.find(row => row.id === e.target.value); set('projectId', e.target.value); set('sectionId', ''); if (project?.currency) set('currency', project.currency) }}><option value="">No project selected</option>{projects.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field><Field label="Section"><select value={form.sectionId || ''} disabled={!form.projectId} onChange={e => set('sectionId', e.target.value)}><option value="">Whole project</option>{sections.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field></div>
+  return <div className="form-grid"><Field label="Project" hint="Optional. Manage projects and sections from the Requests page."><select value={form.projectId || ''} onChange={e => { set('projectId', e.target.value); set('sectionId', '') }}><option value="">No project selected</option>{projects.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field><Field label="Section"><select value={form.sectionId || ''} disabled={!form.projectId} onChange={e => set('sectionId', e.target.value)}><option value="">Whole project</option>{sections.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></Field></div>
 }
 
 export function ProjectManager({ data, run, onClose }) {

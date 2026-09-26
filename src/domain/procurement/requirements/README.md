@@ -25,3 +25,8 @@ nonbinding selection, supplier confirmation and independently reviewed signing.
 Sourced line changes need both parties and a scoped grant; delivery acceptance
 and invoice reconciliation retain discrepancies and references without payment.
 `fulfillment.mjs` owns these states; its GUI and real-ledger tests cover them.
+
+The [draft defaults and paired-party contract](context-defaults-and-peers.md)
+adds sourced account/workspace/project/section defaults and explicitly paired
+external business contacts. New drafts retain their preparation basis locally;
+two independent applications exchange reviewed RFQs and quotations through QEP.

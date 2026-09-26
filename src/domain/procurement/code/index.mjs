@@ -1,3 +1,4 @@
+import {installDraftContext,pairedParties} from './draft-context.mjs'
 import { createProcurement } from './service.mjs'
 import { procurementExchangePolicy } from './exchange-policy.mjs'
 import { fulfillmentReview, fulfillmentLabels } from './fulfillment-review.mjs'
@@ -16,7 +17,8 @@ const item = object({ id: string('RFQ item ID, e.g. item-1'), description: strin
 
 export async function apply(ctx) {
   const scoped = (user, operation = 'snapshot', input = {}) => ctx.get('teams')?.resolveUser(user, operation, input) || user
-  const procurement = createProcurement({ store: ctx.store, accounts: ctx.accounts, resolveUser: scoped, authorizeCommitment: async (user, request) => {
+  let draftContext=null
+  const procurement = createProcurement({ parties:(user,options)=>pairedParties(ctx,user,options), draftDefaults:(user,context)=>draftContext?.view(user,context)||{values:{},provenance:{},context:{}}, store: ctx.store, accounts: ctx.accounts, resolveUser: scoped, authorizeCommitment: async (user, request) => {
     if (!['award', 'sign-order', 'approve-change'].includes(request.action)) return null
     const actions = ctx.get('actions')
     if (!actions?.authorizeCommitment) throw new Error('Enable independent Review actions before signing a purchase order or approving a monetary change.')
@@ -42,7 +44,7 @@ export async function apply(ctx) {
       if (action === 'publish-amendment' && record.status === 'draft' && record.baseRevision !== rfq.publishedRevision) throw new Error('This amendment was prepared against an older request. Prepare a new draft.')
       if (action === 'broadcast-clarification' && !['answered', 'broadcasting'].includes(record.status)) throw new Error('Save a private answer before preparing the broadcast.')
       const recipientIds = action === 'ask-clarification' ? [rfq.ownerId] : action === 'publish-amendment' ? record.fields.supplierIds : rfq.supplierIds
-      const recipients = recipientIds.map(id => ctx.accounts.get(id)).map(person => person && ({ id: person.id, name: person.company || person.name, email: person.email }))
+      const recipients = recipientIds.map(id => procurement.parties(user).find(person=>person.id===id)).map(person => person && ({ id: person.id, name: person.company || person.name, email: person.email }))
       if (recipients.some(person => !person)) throw new Error('A recipient account is no longer available.')
       const payload = action === 'ask-clarification' ? { rfqId: rfq.id, rfqRevision: rfq.publishedRevision, question: String(input.question || '').trim(), itemIds: input.itemIds || [] } : { id: record.id }
       if (action === 'ask-clarification' && !payload.question) throw new Error('Write the clarification question first.')
@@ -120,6 +122,8 @@ export async function apply(ctx) {
     await procurement.execute(demoAccounts[0], 'seed-demo')
   }
   ctx.provide('procurement', procurement)
+  ctx.inject(['settings'],inner=>{draftContext=installDraftContext(inner);inner.effect(()=>()=>{draftContext?.dispose();draftContext=null})})
+  ctx.effect(()=>ctx.web.route('GET','/workspace/draft-defaults',({user,query})=>procurement.defaults(user,Object.fromEntries(['workspaceId','projectId','sectionId'].filter(key=>query.get(key)).map(key=>[key,query.get(key)])))))
   ctx.effect(() => ctx.web.route('GET', '/workspace', ({ user }) => procurement.snapshot(user)))
   ctx.effect(() => ctx.web.route('GET', '/workspace/export', ({ user, query, res }) => {
     const rfqId = typeof query?.get === 'function' ? query.get('rfqId') : query?.rfqId
