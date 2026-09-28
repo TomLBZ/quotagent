@@ -1,0 +1,29 @@
+{
+  "rfq": {
+    "id": "demo-contractor-demo-supplier-demo-lighting",
+    "title": "[Demo] Riverside office lighting",
+    "revision": 1
+  },
+  "quote": {
+    "id": "demo-contractor-demo-supplier-demo-lighting-quote-1",
+    "rfqId": "demo-contractor-demo-supplier-demo-lighting",
+    "supplierName": "Summit Supply",
+    "revision": 1,
+    "status": "submitted",
+    "stale": false
+  },
+  "status": {
+    "available": true,
+    "provider": "typesafe",
+    "model": "jev-latest",
+    "reason": null
+  },
+  "shortlistControlCount": 0,
+  "history": [
+    {
+      "id": "04d6f4f5-fb30-45ea-9ed4-86fdfebaf6ce",
+      "mode": "field-check",
+      "title": "Check source claims · [Commercial check] Panels 2026-09-26T03:40:53.286Z"
+    }
+  ]
+}

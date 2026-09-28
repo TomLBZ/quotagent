@@ -1,0 +1,17 @@
+{
+  "sha": "c737f100a7dbdb063dd5d288e726f4467424e0a5",
+  "builtAt": "2026-09-28T10:41:23.081852+00:00",
+  "sourceArchiveSha256": "a854f97fa179a8a6a7348eb5ae4944cce752205ae30eac7277f317c7e0c0b0fc",
+  "dependencyLockSha256": "e47165fc930991bf354700e6087575f87107d22e6a42d6196726e2f16e4dcd76",
+  "assets": {
+    "app-icon-192.png": "1b7ca256b49f91ded5d6ecbd95bf67b79bdfc5575ce68c3de6522452df6579ea",
+    "app-icon-512.png": "0d975b13f7f47e581c01b92f5e301f9298a206d90c3eebd0b5416f1160aa7348",
+    "assets/index-BsNrDHCo.css": "67ccb9331b2d7aa2b4988d3689ff1d3b6d0459af64b58ce803a5a12bcca96b11",
+    "assets/index-zBfD0VBB.js": "065c4a48b71b3687932a43e499aa956466d146216c307e043bdfd7cde8280760",
+    "assets/pdf--DDq4lxM.js": "9ac7db4738d873001e48ac9821cbda59b712781795e545d0548b2df41e3fd117",
+    "assets/pdf.worker.min-CuFqICzs.js": "095835c54ed3700b3b93b2982cdeb4728a452408402cf3886d7f7c3da06b7197",
+    "index.html": "a1feed5d7c9f22f1bf42e2b6266a4b8010425793af7d8b88014e7c2d26e608e5",
+    "manifest.webmanifest": "a4100ae9dfc7f0bb73b091ada276031cb894f813f245b0cce841ed5dad6aaf31",
+    "sw.js": "2cf7cf2db52a11d51bb46b821da56c17ba90b7f2301c469e1197c79473fbe799"
+  }
+}

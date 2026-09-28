@@ -1,0 +1,91 @@
+{
+  "observedAt": "2026-09-28T10:37:23.800Z",
+  "rfq": {
+    "id": "demo-contractor-demo-supplier-demo-lighting",
+    "title": "[Demo] Riverside office lighting",
+    "revision": 1
+  },
+  "quotes": [
+    {
+      "id": "demo-contractor-demo-supplier-demo-lighting-quote-2",
+      "rfqId": "demo-contractor-demo-supplier-demo-lighting",
+      "supplierName": "Atlas Materials",
+      "revision": 1,
+      "status": "submitted",
+      "stale": false
+    },
+    {
+      "id": "demo-contractor-demo-supplier-demo-lighting-quote-1",
+      "rfqId": "demo-contractor-demo-supplier-demo-lighting",
+      "supplierName": "Summit Supply",
+      "revision": 1,
+      "status": "submitted",
+      "stale": false
+    }
+  ],
+  "status": {
+    "available": true,
+    "provider": "typesafe",
+    "model": "jev-latest",
+    "reason": null
+  },
+  "history": [
+    {
+      "id": "00e6a0af-5b5b-4c18-8574-b51e00bb6e96",
+      "mode": "field-check",
+      "title": "Check source claims · [Demo] Riverside office lighting",
+      "status": "completed",
+      "review": null
+    },
+    {
+      "id": "11010dcd-bb38-4b83-8610-c3119354eee6",
+      "mode": "field-check",
+      "title": "Check source claims · [Demo] Riverside office lighting",
+      "status": "completed",
+      "review": {
+        "decision": "dismissed",
+        "note": "Independent evaluation: checked the three explicit claims against the supplied passage; this private annotation does not approve any supplier commitment.",
+        "at": "2026-09-28T10:35:00.840Z",
+        "by": "contractor-demo"
+      }
+    },
+    {
+      "id": "d31fa755-580c-44c2-be9f-5041754c2e3e",
+      "mode": "field-check",
+      "title": "Check source claims · [Commercial check] Panels 2026-09-26T03:40:53.286Z",
+      "status": "completed",
+      "review": null
+    },
+    {
+      "id": "785d8ae9-2dcc-42ab-bac4-a4d7de5d1129",
+      "mode": "shortlist",
+      "title": "Suggest a shortlist · [Commercial check] Panels 2026-09-26T03:40:53.286Z",
+      "status": "completed",
+      "review": null
+    },
+    {
+      "id": "3f8cd9e5-083d-422e-8911-7fe6ee3d135c",
+      "mode": "quote-review",
+      "title": "Review a quotation · [Commercial check] Panels 2026-09-26T03:40:53.286Z",
+      "status": "completed",
+      "review": {
+        "decision": "dismissed",
+        "note": "",
+        "at": "2026-09-28T10:32:03.420Z",
+        "by": "contractor-demo"
+      }
+    },
+    {
+      "id": "4d8e3c12-724f-4011-a313-c7e8df344af3",
+      "mode": "clarification",
+      "title": "Route a clarification · [Commercial check] Panels 2026-09-26T03:40:53.286Z",
+      "status": "completed",
+      "review": {
+        "decision": "accepted",
+        "note": "Reviewed the stated delivery question. This is a private routing suggestion, not a delivery promise.",
+        "at": "2026-09-28T10:30:47.168Z",
+        "by": "contractor-demo"
+      }
+    }
+  ]
+}

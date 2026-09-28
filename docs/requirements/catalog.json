@@ -15181,8 +15181,8 @@
       "contract": "src/domain/advisor/requirements/README.md",
       "disposition": "retain-outcome",
       "currentOutcome": "Source-bound quotation advisory modes and private client GUI/assistant/workroom integration",
-      "status": "implemented",
-      "reason": "Independent public assistant case found RFQ context contaminated source-only claims. ADR0057 narrows field-check evidence; correction and exact public recheck in progress. Original observed evidence retained.",
+      "status": "verified",
+      "reason": "Scoped native and initial public journeys retained; independent source-attribution finding corrected by ADR0057 and the identical actual public assistant case passed on immutablec737f1. Historical result is unchanged with a warning; no general model accuracy claim.",
       "acceptance": [
         {
           "command": "node src/domain/advisor/tests/provider.mjs",
@@ -15195,6 +15195,18 @@
           "evidence": "docs/work/evidence/jev-2026-09-28/business.json",
           "scope": "Six groups using native Cordis, Python-backed append-only ledgers and QEP with controlled typed provider.",
           "observed": "Both roles, four modes, private source exclusion, pinned role/realm, shortlist arrival/withdrawal staleness, uncertainty/private review, exact owner stop and restart recovery passed."
+        },
+        {
+          "command": "node src/domain/advisor/tests/business.mjs",
+          "evidence": "docs/work/evidence/jev-2026-09-28/business-claim-scope.json",
+          "scope": "Seven native groups after ADR0057 correction; real Cordis/Python/QEP, controlled typed provider.",
+          "observed": "Field-check payload and questions remain identical across conflicting RFQ warranty/item requirements, with authorized RFQ association retained and unauthorized source refused; other six business groups pass."
+        },
+        {
+          "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/jev-2026-09-28/independent STAGE=<recorded stage> node tmp/jev-2026-09-28/independent/replay.mjs; exact original and corrected stages retained in independent/assessment.md",
+          "evidence": "docs/work/evidence/jev-2026-09-28/independent/assessment.md",
+          "scope": "Independent agent GUI evaluation: three actual Jev calls on19683f1 plus identical actual assistant-tool recheck onc737f100a7dbdb063dd5d288e726f4467424e0a5. Not a human user study or accuracy benchmark.",
+          "observed": "Actual chat discovered procurement_workspace and assess_quotation, saved result opened. Original RFQ-to-offer source attribution error retained; corrected passage-only recheck returns supported/contradicted/unknown with review flag. Legacy result is unchanged and warns about prior method. Evaluator prefers Quotagent for recurring quotation work; generic chat prose slip and remaining human-checking limits retained."
         }
       ]
     },
@@ -15216,8 +15228,8 @@
       "contract": "src/domain/advisor/requirements/README.md",
       "disposition": "retain-outcome",
       "currentOutcome": "Recorded typed inputs/results, confidence-aware human annotation, explicit failure and stale-source behavior",
-      "status": "implemented",
-      "reason": "Independent public assistant case found RFQ context contaminated source-only claims. ADR0057 narrows field-check evidence; correction and exact public recheck in progress. Original observed evidence retained.",
+      "status": "verified",
+      "reason": "Scoped native and initial public journeys retained; independent source-attribution finding corrected by ADR0057 and the identical actual public assistant case passed on immutablec737f1. Historical result is unchanged with a warning; no general model accuracy claim.",
       "acceptance": [
         {
           "command": "node src/domain/advisor/tests/provider.mjs",
@@ -15230,6 +15242,18 @@
           "evidence": "docs/work/evidence/jev-2026-09-28/business.json",
           "scope": "Six groups using native Cordis, Python-backed append-only ledgers and QEP with controlled typed provider.",
           "observed": "Both roles, four modes, private source exclusion, pinned role/realm, shortlist arrival/withdrawal staleness, uncertainty/private review, exact owner stop and restart recovery passed."
+        },
+        {
+          "command": "node src/domain/advisor/tests/business.mjs",
+          "evidence": "docs/work/evidence/jev-2026-09-28/business-claim-scope.json",
+          "scope": "Seven native groups after ADR0057 correction; real Cordis/Python/QEP, controlled typed provider.",
+          "observed": "Field-check payload and questions remain identical across conflicting RFQ warranty/item requirements, with authorized RFQ association retained and unauthorized source refused; other six business groups pass."
+        },
+        {
+          "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/jev-2026-09-28/independent STAGE=<recorded stage> node tmp/jev-2026-09-28/independent/replay.mjs; exact original and corrected stages retained in independent/assessment.md",
+          "evidence": "docs/work/evidence/jev-2026-09-28/independent/assessment.md",
+          "scope": "Independent agent GUI evaluation: three actual Jev calls on19683f1 plus identical actual assistant-tool recheck onc737f100a7dbdb063dd5d288e726f4467424e0a5. Not a human user study or accuracy benchmark.",
+          "observed": "Actual chat discovered procurement_workspace and assess_quotation, saved result opened. Original RFQ-to-offer source attribution error retained; corrected passage-only recheck returns supported/contradicted/unknown with review flag. Legacy result is unchanged and warns about prior method. Evaluator prefers Quotagent for recurring quotation work; generic chat prose slip and remaining human-checking limits retained."
         }
       ]
     },
@@ -15251,8 +15275,8 @@
       "contract": "src/domain/advisor/requirements/README.md",
       "disposition": "retain-outcome",
       "currentOutcome": "Real configured Chinese clarification and full RFQ acceptance, current public GUI verification and documentation",
-      "status": "implemented",
-      "reason": "Independent public assistant case found RFQ context contaminated source-only claims. ADR0057 narrows field-check evidence; correction and exact public recheck in progress. Original observed evidence retained.",
+      "status": "verified",
+      "reason": "Scoped native and initial public journeys retained; independent source-attribution finding corrected by ADR0057 and the identical actual public assistant case passed on immutablec737f1. Historical result is unchanged with a warning; no general model accuracy claim.",
       "acceptance": [
         {
           "command": "JEV_LIVE=1 node src/domain/advisor/tests/live.mjs",
@@ -15265,6 +15289,18 @@
           "evidence": "docs/work/evidence/jev-2026-09-28/public/combined.json",
           "scope": "Public immutable19683f182a49270b5fa0de7df7dfee38db77ae3f, five unique real Jev calls. Journey continued from saved first assessment after harness heading ambiguity; application source unchanged.",
           "observed": "All four contractor modes and supplier field-check; contextual source navigation, typed uncertainty, private accept/dismiss/reload, disabled evaluator recovery, mobile390px, real usage and Help passed. Settings restored, zero JavaScript errors."
+        },
+        {
+          "command": "node src/domain/advisor/tests/business.mjs",
+          "evidence": "docs/work/evidence/jev-2026-09-28/business-claim-scope.json",
+          "scope": "Seven native groups after ADR0057 correction; real Cordis/Python/QEP, controlled typed provider.",
+          "observed": "Field-check payload and questions remain identical across conflicting RFQ warranty/item requirements, with authorized RFQ association retained and unauthorized source refused; other six business groups pass."
+        },
+        {
+          "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/jev-2026-09-28/independent STAGE=<recorded stage> node tmp/jev-2026-09-28/independent/replay.mjs; exact original and corrected stages retained in independent/assessment.md",
+          "evidence": "docs/work/evidence/jev-2026-09-28/independent/assessment.md",
+          "scope": "Independent agent GUI evaluation: three actual Jev calls on19683f1 plus identical actual assistant-tool recheck onc737f100a7dbdb063dd5d288e726f4467424e0a5. Not a human user study or accuracy benchmark.",
+          "observed": "Actual chat discovered procurement_workspace and assess_quotation, saved result opened. Original RFQ-to-offer source attribution error retained; corrected passage-only recheck returns supported/contradicted/unknown with review flag. Legacy result is unchanged and warns about prior method. Evaluator prefers Quotagent for recurring quotation work; generic chat prose slip and remaining human-checking limits retained."
         }
       ]
     }

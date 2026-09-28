@@ -1,0 +1,36 @@
+{
+  "at": "2026-09-28T10:46:31.726Z",
+  "scope": "Independent public GUI evaluation, not a human study",
+  "revisions": {
+    "initial": "19683f182a49270b5fa0de7df7dfee38db77ae3f",
+    "recheck": "c737f100a7dbdb063dd5d288e726f4467424e0a5"
+  },
+  "ownJevCalls": 4,
+  "ownAssistantTasks": 2,
+  "checks": {
+    "originalAndRecheckPromptsExactlyEqual": true,
+    "sourceTextAndClaimsExactlyEqual": true,
+    "correctedStateOnlyTextAndClaims": true,
+    "correctedTypedClaims": [
+      "supported",
+      "contradicted",
+      "unknown"
+    ],
+    "missingEvidenceRequiresReview": true,
+    "originalStoredEvidenceAndResultUnchanged": true,
+    "savedLinkOpened": true,
+    "legacyScopeWarningVisible": true
+  },
+  "initialAssessmentId": "00e6a0af-5b5b-4c18-8574-b51e00bb6e96",
+  "correctedAssessmentId": "0855ad53-fda9-44fd-8a5f-545ea83d2143",
+  "initialRunId": "6c082e6b-98b5-4d15-a1e3-dae72fb662ce",
+  "correctedRunId": "c27a6e75-fe42-452e-9961-8a5e0dd1ef7b",
+  "remainingObservedLimitation": "Corrected chat prose says packing terms are not stated despite source packaging inclusion; typed result is correct.",
+  "harnessOnlyCorrections": [
+    "Initial RFQ selection restricted to requests with current offers",
+    "Saved action accessible name includes Ready for your review",
+    "Corrected source details renamed Exact passage and questions"
+  ],
+  "browsersClosed": true,
+  "reportBytes": 8100
+}

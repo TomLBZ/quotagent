@@ -5,10 +5,9 @@ User supplied `api_keys.typesafe` in the operator configuration, enabling the
 deferred T-224 advisory implementation. Owner:
 [domain/advisor](../../../../src/domain/advisor/requirements/README.md).
 [ADR-0056](../../../design/adr/0056-typed-quotation-advisory.md) adds plugin event
-types without changing ledger/QEP semantics. Public GUI acceptance passed on
-committed release `19683f182a49270b5fa0de7df7dfee38db77ae3f`. Independent
-review then found RFQ context contaminated a source-only claim; ADR-0057 correction
-and exact public recheck are in progress.
+types without changing ledger/QEP semantics. Public GUI acceptance on `19683f1` is retained below. Independent review found
+a source-scoping defect; corrected release `c737f100a7dbdb063dd5d288e726f4467424e0a5`
+passed the same actual assistant case with passage-only evidence.
 
 ## Native and actual-provider evidence
 
@@ -34,10 +33,8 @@ assessments across both roles, exact call IDs and commands. The journey continue
 after two browser-script interruptions, without repeating the four successful
 contractor calls. Original failures and corrections are retained; settings restored.
 
-Verified: four modes, private acceptance/dismissal and reload, RFQ contextual entry,
-inspectable criteria/source snapshots, unavailable recovery, supplier history
-isolation,390px layout, TypeSafe usage receipts and Help navigation. A separate
-real slow loopback service observed one request using only a dummy personal key;
+The local journey covers the public cases listed below. A separate real slow
+loopback service observed one request using only a dummy personal key;
 **Stop assessment** aborted it, kept interrupted history and did not resend while
 polling. See [pending](gui-local/cancel-only/07-pending-with-owned-stop.png),
 [retained interruption](gui-local/cancel-only/08-interrupted-retained.png) and
@@ -54,15 +51,12 @@ a new eligible offer arrived. Saved candidate identities and quote-status hashes
 now participate in staleness; actual new rival submission and withdrawal are in
 the business test. Role changes also hide the former perspective's assessments.
 
-Actual quote-review response validation rejected a provider reply. The original
-failed response was not retained, so it cannot be reconstructed after the fact.
-One [exact-request replay](quote-review-replay.json) returned HTTP200 in433ms:
-reported score1.14 versus1.13 from the rounded probabilities, confidence0.11.
-This demonstrates the strict precision mismatch, not identical output on the
-original call. Validation now checks whether a normalized distribution within
-the reported rounding intervals can explain the score, preserving raw values.
-Impossible distributions/scores still fail. Rejected responses now retain a
-sanitized body and field-specific reason in `advisor/model-failed`.
+Actual quote-review validation rejected a reply whose original body was not retained.
+One [exact-request replay](quote-review-replay.json) returned HTTP200: score1.14
+versus1.13 from separately rounded probabilities. This is not identical output
+from the original call. Validation now permits feasible reported rounding while
+preserving raw values; impossible distributions still fail. Future rejected bodies
+and field-specific reasons are retained, with credentials sanitized.
 
 Pending assessments have an explicit in-progress state, read-only polling and an
 owner stop action. A client correlation identifier selects the exact newly
@@ -98,8 +92,18 @@ linked RFQ remains an authorized association. Old snapshots remain intact and
 warn that their earlier method included RFQ context. Other modes keep their inputs.
 [Seven native groups](business-claim-scope.json), command
 `node src/domain/advisor/tests/business.mjs`, prove conflicting RFQ warranty/item
-requirements cannot enter or change field-check evidence. Corrected public replay
-is pending; input isolation does not establish general model accuracy.
+requirements cannot enter or change field-check evidence.
+
+[Corrected release](release-corrected/manifest.json) passed another38-read preflight
+and exact asset readback before deployment asPID88363. The independent public
+assistant recheck used the same source/claims, with no expected answer supplied:
+state contained only text/claims; results were supported/contradicted/unknown,
+each confidence1, with unknown flagged for review. The original false warranty
+result remains intact with the earlier-method warning. See the
+[independent evaluation](independent/assessment.md) for exact receipts and limits.
+The evaluator prefers Quotagent for recurring multi-supplier work, using Jev as
+an optional second opinion. It also retained an inaccurate chat prose aside;
+correct typed output does not guarantee every assistant sentence.
 
 ## Reproduction and limits
 

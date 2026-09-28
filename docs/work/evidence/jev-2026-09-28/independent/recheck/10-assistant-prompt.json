@@ -1,0 +1,9 @@
+{
+  "prompt": "[Independent Jev evaluation 2026-09-28] Use the assess_quotation tool for authorized request demo-contractor-demo-supplier-demo-lighting ([Demo] Riverside office lighting), mode field-check. First read the current procurement workspace. Source text: \"The offer includes packaging. Installation is expressly excluded.\" Explicit claims: [\"The offer includes packaging.\", \"The offer includes installation.\", \"The offer states a five-year warranty.\"] Save one private Jev assessment, summarize its actual typed results and uncertainty, and provide the link to the saved assessment. Do not send, publish, award or change quotation terms.",
+  "at": "2026-09-28T10:42:31.414Z",
+  "rfq": {
+    "id": "demo-contractor-demo-supplier-demo-lighting",
+    "title": "[Demo] Riverside office lighting",
+    "revision": 1
+  }
+}

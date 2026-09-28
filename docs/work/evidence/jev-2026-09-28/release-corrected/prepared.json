@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "sha": "c737f100a7dbdb063dd5d288e726f4467424e0a5",
+  "release": "/workspace/projects/quotagent/tmp/releases/jev-c737f100a7db",
+  "at": "2026-09-28T10:41:32.091362+00:00",
+  "dirtyDocumentation": [],
+  "preflight": "/workspace/projects/quotagent/tmp/jev-2026-09-28/release-c737f100a7db/preflight.json",
+  "readChecks": 38,
+  "health": {
+    "ok": true,
+    "service": "quotagent",
+    "runtime": "cordis-product"
+  },
+  "guardSha256": "1db2764cbd5b30341570f5218429846e8fc41fd679d0a32da77b043296391d87",
+  "limitation": "Copy taken while production is live; final backup is made only after graceful stop. Background attempts cannot connect externally; copied recovery/status records may change."
+}

@@ -1,0 +1,18 @@
+{
+  "sha": "c737f100a7dbdb063dd5d288e726f4467424e0a5",
+  "status": "healthy",
+  "pid": 88363,
+  "oldPid": 84718,
+  "entry": "/workspace/projects/quotagent/tmp/releases/jev-c737f100a7db/host/product.mjs",
+  "assets": "/workspace/projects/quotagent/tmp/releases/jev-c737f100a7db/src/system/webui/client/dist",
+  "data": "/workspace/projects/quotagent/tmp/product-data",
+  "backup": "/workspace/projects/quotagent/tmp/product-backups/jev-20260928T104149477053Z-c737f100a7db",
+  "startedAt": "2026-09-28T10:41:49.800587+00:00",
+  "verifiedAt": "2026-09-28T10:41:58.809518+00:00",
+  "health": {
+    "ok": true,
+    "service": "quotagent",
+    "runtime": "cordis-product"
+  },
+  "publicUrl": "https://novara.remoteblossom.com/quotagent/"
+}

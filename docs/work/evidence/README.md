@@ -8,7 +8,7 @@ native capability exists. Requirement acceptance links are in the
 
 | Current source area | Evidence |
 |---|---|
-| Jev typed quotation advice, configured provider and client review | [Jev acceptance](jev-2026-09-28/README.md) |
+| Jev typed quotation advice and corrected public source checking | [Jev acceptance](jev-2026-09-28/README.md), [independent follow-up](jev-2026-09-28/independent/assessment.md) |
 | Public journeys through corrected release3ab6d8c | [21 GUI journeys and generated-plugin continuation](final-public-2026-09-26/README.md) |
 | Public integration at immutablef2366a0 | [Eight GUI journeys](integrated-public-2026-09-26/README.md) |
 | Independent current product preference and correction recheck | [Practical evaluation](independent-final-2026-09-26/assessment.md) |
