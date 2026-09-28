@@ -3,7 +3,7 @@ import {writeFileSync} from 'node:fs'
 import {createServer} from 'node:http'
 import {browserHarness} from '../../../system/file-store/tests/browser-helpers.mjs'
 
-const h=await browserHarness('jev-advisor'),records=[],resume=process.env.RESUME_AFTER_MODES==='1',cancelOnly=process.env.CANCEL_ONLY==='1'
+const h=await browserHarness('jev-advisor'),records=[],resume=process.env.RESUME_AFTER_MODES==='1',cancelOnly=process.env.CANCEL_ONLY==='1',resumeClarificationId=process.env.RESUME_CLARIFICATION_ID
 const mark=message=>{h.checks.push(message);writeFileSync(`${h.directory}/progress.json`,JSON.stringify({at:new Date().toISOString(),checks:h.checks,records},null,2));console.log(message)}
 let buyer,settingsChanged=false,fixture
 const shot=(page,name)=>page.screenshot({path:`${h.directory}/${name}.png`,animations:'disabled'})
@@ -35,6 +35,7 @@ try{
   let form,clarification
   if(!cancelOnly){
   if(!resume){
+  if(!resumeClarificationId){
   form=await newTask(buyer,'clarification',rfq.id)
   await form.getByLabel('Clarification text',{exact:true}).fill('请确认这批灯具能否在两周内送达工地，交期是什么？')
   clarification=await assess(buyer);assert.equal(clarification.status,'completed');assert.equal(clarification.answers.topic.type,'choice');assert.equal(clarification.answers.urgent.type,'noul')
@@ -47,8 +48,14 @@ try{
   await buyer.reload();await result(buyer).getByText('Reviewed the stated delivery question.',{exact:false}).waitFor()
   await shot(buyer,'01-typed-clarification-private-review')
   mark('Configured provider processes Chinese clarification; typed choice confidence and Noul probability are distinct; exact state and private acceptance survive reload')
+  }else{
+    const response=await buyer.request.get(new URL(`api/advisor/assessment?id=${encodeURIComponent(resumeClarificationId)}`,h.base).href);clarification=await response.json();assert.equal(response.status(),200);assert.equal(clarification.status,'completed');assert.equal(clarification.mode,'clarification');assert.equal(clarification.rfqId,rfq.id);assert.equal(clarification.review?.decision,'accepted')
+    const index=[...before.assessments].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).findIndex(row=>row.id===clarification.id);assert(index>=0);await buyer.locator('.advisor-history-list>button').nth(index).click();await result(buyer).waitFor();records.push({id:clarification.id,mode:clarification.mode,status:clarification.status,model:clarification.model,callId:clarification.callId,answers:clarification.answers,requiresReview:clarification.requiresReview,requestSha256:clarification.requestSha256,reusedRecordedResult:true})
+    if(process.env.EXPECTED_CLARIFICATION_TOPIC)assert.equal(clarification.answers.topic.choice,process.env.EXPECTED_CLARIFICATION_TOPIC)
+    mark('Continued from the exact completed/accepted clarification after a heading-selector interruption; saved actual provider result inspected without repeating its call')
+  }
 
-  await result(buyer).locator('.advisor-sources').getByRole('button',{name:'Open source',exact:true}).first().click();await buyer.getByRole('heading',{name:rfq.title,exact:true}).waitFor()
+  await result(buyer).locator('.advisor-sources').getByRole('button',{name:'Open source',exact:true}).first().click();await buyer.getByRole('heading',{name:rfq.title,level:1,exact:true}).waitFor()
   await buyer.getByRole('button',{name:'Assess with Jev',exact:true}).first().click();form=buyer.getByRole('form',{name:'New quotation assessment'});assert.equal(await form.getByLabel('Request for quotation',{exact:true}).inputValue(),rfq.id)
   const quotes=before.quotes.filter(row=>row.rfqId===rfq.id&&!row.stale&&!['withdrawn','superseded'].includes(row.status)),quote=quotes[0];assert(quote,'The fixture needs a current visible quotation')
   await form.getByLabel('Assessment task',{exact:true}).selectOption('quote-review');await form.getByLabel('Quotation to review',{exact:true}).selectOption(quote.id)
@@ -119,7 +126,7 @@ try{
     await restore(buyer)
     mark('Real slow loopback provider receives one request with a personal dummy key; exact client correlation opens In progress with Stop, cancel aborts that call and retains interrupted history across reload; polling never resends; shared defaults restored')
   }
-  await h.finish({records,providerMode:process.env.PROVIDER_MODE||'configured provider; identify real versus local protocol fixture in release evidence',semantics:clarification?{clarificationTopic:clarification.answers.topic.choice}:undefined,cancellationFixture:fixture?.observed,resumedAfterModes:resume,cancellationOnly:cancelOnly,allWrites:'GUI; assessments/private reviews and reversible personal settings only'})
+  await h.finish({records,providerMode:process.env.PROVIDER_MODE||'configured provider; identify real versus local protocol fixture in release evidence',semantics:clarification?{clarificationTopic:clarification.answers.topic.choice}:undefined,cancellationFixture:fixture?.observed,resumedAfterModes:resume,resumedClarificationId:resumeClarificationId||undefined,cancellationOnly:cancelOnly,allWrites:'GUI; assessments/private reviews and reversible personal settings only'})
 }catch(error){writeFileSync(`${h.directory}/error.json`,JSON.stringify({error:error.stack,checks:h.checks,records},null,2));console.error(error);await h.fail(error);throw error}
 finally{
   if(settingsChanged&&buyer)try{const dialog=buyer.getByRole('dialog');if(await dialog.count())await dialog.getByRole('button',{name:'Close',exact:true}).click();await advisor(buyer);await restore(buyer)}catch(error){writeFileSync(`${h.directory}/settings-cleanup-error.txt`,error.stack);console.error('Personal advisor settings cleanup failed:',error.message)}

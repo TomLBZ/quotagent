@@ -1,0 +1,9 @@
+{
+  "revision": "19683f182a49270b5fa0de7df7dfee38db77ae3f",
+  "url": "https://novara.remoteblossom.com/quotagent/",
+  "reportedServerPid": 84718,
+  "provenance": "Parent confirmed immutable release; browser accessed public URL. Source HEAD matches revision.",
+  "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/jev-2026-09-28/public/continuation PROVIDER_MODE=real-typesafe EXPECTED_CLARIFICATION_TOPIC=delivery RESUME_CLARIFICATION_ID=4d8e3c12-724f-4011-a313-c7e8df344af3 node src/domain/advisor/tests/browser.mjs",
+  "at": "2026-09-28T10:31:13.399342+00:00",
+  "continuation": "First real clarification reused from exact saved record; four new real assessments. No local fixture, model interception or replay."
+}

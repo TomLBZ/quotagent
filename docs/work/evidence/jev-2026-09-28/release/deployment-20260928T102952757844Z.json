@@ -1,0 +1,20 @@
+{
+  "sha": "19683f182a49270b5fa0de7df7dfee38db77ae3f",
+  "status": "healthy",
+  "pid": 84718,
+  "oldPid": 632,
+  "entry": "/workspace/projects/quotagent/tmp/releases/jev-19683f182a49/host/product.mjs",
+  "assets": "/workspace/projects/quotagent/tmp/releases/jev-19683f182a49/src/system/webui/client/dist",
+  "data": "/workspace/projects/quotagent/tmp/product-data",
+  "backup": "/workspace/projects/quotagent/tmp/product-backups/jev-20260928T102952757823Z-19683f182a49",
+  "startedAt": "2026-09-28T10:29:53.081930+00:00",
+  "failedAt": "2026-09-28T10:29:58.474645+00:00",
+  "verifiedAt": "2026-09-28T10:31:15.530350+00:00",
+  "health": {
+    "ok": true,
+    "service": "quotagent",
+    "runtime": "cordis-product"
+  },
+  "publicUrl": "https://novara.remoteblossom.com/quotagent/",
+  "verificationNote": "Local bytes match all9 build files. Public8 non-HTML files match exactly; gateway injects browser bridge into index.html, whose immutable JS/CSS references match. Initial helper treated HTML transformation as failure; no app or data rollback required."
+}

@@ -21,7 +21,7 @@ export function createAdvisor(ctx){
  const prepare=(user,input)=>{
   const data=snapshot(user),mode=modes.find(row=>row.id===input.mode&&(!row.roles||row.roles.includes(user.role)));if(!mode)fail('Choose an assessment available for your role.')
   const rfq=data.rfqs.find(row=>row.id===input.rfqId);if(!rfq)fail('Choose a request available in this workspace.',404)
-  const message=text(input.text,'Source or question'),sources=[source(data,'rfqs',rfq)],request=publicRequest(rfq),state={request},claims=input.claims||[]
+  const message=text(input.text,'Source or question'),sources=[source(data,'rfqs',rfq)],state=mode.id==='field-check'?{}:{request:publicRequest(rfq)},claims=input.claims||[]
   let quotes=[]
   if(mode.id==='quote-review'){
    const quote=data.quotes.find(row=>row.id===input.quoteId&&row.rfqId===rfq.id);if(!quote)fail('Choose a quotation for this request.',404)

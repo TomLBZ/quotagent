@@ -1,0 +1,27 @@
+
+> quotagent-host@0.1.0 build
+> vite build --config ../src/system/webui/client/vite.config.mjs
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 117 modules transformed.
+rendering chunks...
+computing gzip size...
+../src/system/webui/client/dist/index.html                             0.77 kB │ gzip:   0.44 kB
+../src/system/webui/client/dist/sw.js                                  1.60 kB
+../src/system/webui/client/dist/assets/pdf.worker.min-CuFqICzs.js  1,178.65 kB
+../src/system/webui/client/dist/assets/index-BsNrDHCo.css            165.13 kB │ gzip:  30.86 kB
+../src/system/webui/client/dist/assets/pdf-DVfUI3sG.js               430.93 kB │ gzip: 129.03 kB
+../src/system/webui/client/dist/assets/index-CUSkb33R.js             842.76 kB │ gzip: 223.99 kB
+
+✓ built in 896ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+npm notice
+npm notice New major version of npm available! 11.17.0 -> 12.1.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.1.0
+npm notice To update run: npm install -g npm@12.1.0
+npm notice

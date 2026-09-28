@@ -63,3 +63,4 @@ mechanics without rewriting their original meaning.
 | [0054](0054-reviewed-qep-mail-carriage.md) | ADR-0054 Reviewed QEP email carriage |
 | [0055](0055-native-host-and-version-support-boundaries.md) | ADR-0055 Native host and version support boundaries |
 | [0056](0056-typed-quotation-advisory.md) | ADR-0056 Typed quotation advisory |
+| [0057](0057-claim-evidence-scope.md) | ADR-0057 Evidence scope for source claims |

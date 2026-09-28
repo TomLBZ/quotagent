@@ -5,7 +5,10 @@ User supplied `api_keys.typesafe` in the operator configuration, enabling the
 deferred T-224 advisory implementation. Owner:
 [domain/advisor](../../../../src/domain/advisor/requirements/README.md).
 [ADR-0056](../../../design/adr/0056-typed-quotation-advisory.md) adds plugin event
-types without changing ledger/QEP semantics. Final public acceptance is pending.
+types without changing ledger/QEP semantics. Public GUI acceptance passed on
+committed release `19683f182a49270b5fa0de7df7dfee38db77ae3f`. Independent
+review then found RFQ context contaminated a source-only claim; ADR-0057 correction
+and exact public recheck are in progress.
 
 ## Native and actual-provider evidence
 
@@ -28,9 +31,8 @@ omits total_tokens. No tariff is guessed and unknown cost stays unknown.
 
 [Combined browser report](gui-local/combined.json) records five actual Jev
 assessments across both roles, exact call IDs and commands. The journey continued
-after two browser-script interruptions; it was not one uninterrupted run. A wrong
-settings-button selector and an aborted response/read race were corrected without
-repeating the four successful contractor calls. All personal settings were restored.
+after two browser-script interruptions, without repeating the four successful
+contractor calls. Original failures and corrections are retained; settings restored.
 
 Verified: four modes, private acceptance/dismissal and reload, RFQ contextual entry,
 inspectable criteria/source snapshots, unavailable recovery, supplier history
@@ -66,6 +68,38 @@ Pending assessments have an explicit in-progress state, read-only polling and an
 owner stop action. A client correlation identifier selects the exact newly
 started job; it is not an idempotency guarantee. No polling or restart resends a
 provider request. Accept/dismiss records only a private review annotation.
+
+## Committed public release
+
+[Build/deployment commands](release/commands.json), [manifest](release/manifest.json)
+and [served assets](release/served-assets.json) bind the immutable release to the
+pushed source. Build:117 modules. [Copied-data preflight](release/preflight.json):
+38 reads across three roles, with outbound transports disabled only for that copy.
+The old process was stopped, production data backed up and releasePID84718 started.
+All local build hashes and all8 public non-HTML asset hashes match. The public
+gateway injects a bridge into HTML; its exact entry JS/CSS references match.
+
+[Public GUI report](public/combined.json) retains five unique real Jev call IDs:
+Chinese clarification, quote review, shortlist, contractor claims and supplier
+claims. Source navigation, private review/reload, disable/recover,390px, usage and
+Help passed with no JavaScript errors. One duplicate-heading selector required
+continuation from the saved clarification; no successful model call was repeated.
+No local provider override was used publicly. Personal settings were restored.
+The review showed confidence0.26; shortlist returned no-match at0.41. Both required
+human review. These are observed suggestions, not an accuracy or award claim.
+
+## Claim evidence correction
+
+Independent public chat invoked the registered Jev tool and exposed a source
+attribution defect: an unstated supplier warranty was judged contradicted at0.70
+using the buyer RFQ requirement. [ADR-0057](../../../design/adr/0057-claim-evidence-scope.md)
+limits field-check model input to the pasted passage and explicit claims. The
+linked RFQ remains an authorized association. Old snapshots remain intact and
+warn that their earlier method included RFQ context. Other modes keep their inputs.
+[Seven native groups](business-claim-scope.json), command
+`node src/domain/advisor/tests/business.mjs`, prove conflicting RFQ warranty/item
+requirements cannot enter or change field-check evidence. Corrected public replay
+is pending; input isolation does not establish general model accuracy.
 
 ## Reproduction and limits
 

@@ -19,7 +19,7 @@ let service=createAdvisor(ctx)
 const run=(user,action,input)=>ctx.procurement.execute(user,action,authoredFixtureInput(action,input))
 const business=()=>users.filter(u=>u.role!=='admin').map(user=>({id:user.id,rfqs:ctx.store.list(user.id,'rfqs'),quotes:ctx.store.list(user.id,'quotes'),orders:ctx.store.list(user.id,'orders'),approvals:ctx.store.events(user.id).filter(row=>row.type.includes('approval'))}))
 try{
- const rfq=(await run(buyer,'create-rfq',{title:'Complete source lighting scope',currency:'USD',items:[{id:'lamp',description:'IP65 lamp',unit:'each',quantity:12}],supplierIds:[supplier.id,rival.id]})).rfq
+ const rfq=(await run(buyer,'create-rfq',{title:'Complete source lighting scope',currency:'USD',items:[{id:'lamp',description:'IP65 lamp',unit:'each',quantity:12}],requirements:{warrantyMonths:36},supplierIds:[supplier.id,rival.id]})).rfq
  await run(buyer,'publish-rfq',{id:rfq.id,confirmed:true})
  const quote=(await run(supplier,'save-quote',{rfqId:rfq.id,items:[{id:'lamp',unitPrice:250,cost:187}],leadDays:21,paymentTerms:'Net30',privateNotes:'SECRET-SUPPLIER-COST-NOTES',notes:'Installation excluded'})).quote
  await assert.rejects(service.assess(buyer,{mode:'quote-review',rfqId:rfq.id,quoteId:quote.id}),/Choose a quotation/)
@@ -39,6 +39,21 @@ try{
  await assert.rejects(service.assess(buyer,{mode:'field-check',rfqId:rfq.id,text:'Test',claims:[]}),/explicit claims/)
  await assert.rejects(service.assess(buyer,{mode:'clarification',rfqId:rfq.id,text:'x'.repeat(16001)}),/never silently cut/)
  checks.push('Four source-bound modes retain complete typed rubrics and explicit user text; shortlist has no-match escape, supplier competitive shortlist refused, required priorities/claims and untruncated source limits enforced')
+ const alternate=(await run(buyer,'create-rfq',{title:'Alternate request with a five-year warranty requirement',currency:'USD',items:[{id:'lamp',description:'Different associated scope, never claim evidence',unit:'each',quantity:99}],requirements:{warrantyMonths:60},supplierIds:[supplier.id]})).rfq
+ assert.equal(rfq.requirements.warrantyMonths,36);assert.equal(alternate.requirements.warrantyMonths,60)
+ const pasted='The supplier offer includes packaging. Installation is excluded.',claims=['Packaging is included.','Installation is included.','The offer includes a five-year warranty.'],priorClaimsBusiness=business()
+ const fieldA=await service.assess(supplier,{mode:'field-check',rfqId:rfq.id,text:pasted,claims}),wireA=requests.at(-1)
+ const fieldB=await service.assess(buyer,{mode:'field-check',rfqId:alternate.id,text:pasted,claims}),wireB=requests.at(-1)
+ assert.deepEqual(wireA.state,{text:pasted,claims});assert.deepEqual(wireB.state,wireA.state);assert.deepEqual(wireB.questions,wireA.questions)
+ assert(!Object.hasOwn(wireA.state,'request'));assert(!JSON.stringify(wireB.state).includes('warrantyMonths'));assert(!JSON.stringify(wireB.state).includes(alternate.title))
+ for(const question of Object.values(wireA.questions)){
+  assert.match(question.instructions,/Use only state.text as evidence/);assert.match(question.instructions,/absent from state.text are unknown/);assert.match(question.instructions,/buyer requirements are never supplier statements/)
+  assert.match(question.criteria.contradicted,/statement in the pasted source text/);assert.match(question.criteria.unknown,/Absent from the pasted source text/)
+ }
+ for(const row of [fieldA,fieldB]){assert.equal(row.sources.length,1);assert.equal(row.sources[0].id,row.rfqId);const event=ctx.store.events(row.sources[0].realm).find(value=>value.seq===row.sources[0].seq);assert.equal(event.entry_hash,row.sources[0].hash);assert.deepEqual(ctx.store.get(row.sources[0].realm===supplier.id?supplier.id:buyer.id,'advisor-assessments',row.id).state,{text:pasted,claims})}
+ const beforeUnauthorized=requests.length;await assert.rejects(service.assess(supplier,{mode:'field-check',rfqId:alternate.id,text:pasted,claims}),/request available/);assert.equal(requests.length,beforeUnauthorized)
+ assert.deepEqual(business(),priorClaimsBusiness)
+ checks.push('Field-check sends only explicit pasted text and claims: changing the associated RFQ from36-month warranty/12lamps to60-month warranty/99lamps leaves the typed evidence and rubric identical. Missing warranty is instructed unknown, not contradiction; authorized RFQ refs remain pinned organizational metadata, inaccessible RFQ refuses before provider dispatch, and all business records stay unchanged. Controlled provider proves input isolation, not semantic accuracy.')
  const rivalQuote=(await run(rival,'save-quote',{rfqId:rfq.id,items:[{id:'lamp',unitPrice:240,cost:180}],leadDays:18,paymentTerms:'Net30'})).quote
  await run(rival,'submit-quote',{id:rivalQuote.id,confirmed:true});assert.equal(service.get(buyer,d.id).stale,true)
  await assert.rejects(service.review(buyer,{id:d.id,decision:'accepted'}),/source changed/)

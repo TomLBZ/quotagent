@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "command": "node src/domain/advisor/tests/business.mjs",
+  "checks": [
+    "Both native QEP party perspectives use received or own sources with exact ledger refs; no cost/private-note leak, no rival/admin access, deterministic business records and comparison unchanged",
+    "Four source-bound modes retain complete typed rubrics and explicit user text; shortlist has no-match escape, supplier competitive shortlist refused, required priorities/claims and untruncated source limits enforced",
+    "Field-check sends only explicit pasted text and claims: changing the associated RFQ from36-month warranty/12lamps to60-month warranty/99lamps leaves the typed evidence and rubric identical. Missing warranty is instructed unknown, not contradiction; authorized RFQ refs remain pinned organizational metadata, inaccessible RFQ refuses before provider dispatch, and all business records stay unchanged. Controlled provider proves input isolation, not semantic accuracy.",
+    "A newly received current competitor changes the assessed candidate set and makes an older shortlist stale; accepting it is refused; later source withdrawal invalidates fresh shortlist too",
+    "Low model confidence and ambiguous Noul probability require manual review; human acceptance is only a private annotation and preserves uncertainty plus all business approvals/records",
+    "Source edits mark own assessment stale without inventing receipt updates for buyer; stale acceptance refused; team source realm pinned while private assessment belongs only to requester",
+    "Provider failure leaves explicit unavailable record and normal comparison usable; only requester can stop saved pending work, disposal cancels pending work, remount marks orphan interrupted without replay and preserves completed history; capability refusal enforced"
+  ],
+  "groups": 7,
+  "scope": "Actual native Cordis/Python ledger/QEP and domain service with a controlled typed provider; not live Jev quality",
+  "dataRoot": "/workspace/projects/quotagent/tmp/advisor-business-eB7BcC"
+}

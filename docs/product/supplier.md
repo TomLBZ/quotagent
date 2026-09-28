@@ -56,7 +56,8 @@ Detailed contracts: [procurement](../../src/domain/procurement/requirements/READ
 
 Open **Assess with Jev** on a request or quotation, or **Quotation advisor** in
 Quotation work. Review scope anomalies/deviations, classify a clarification, or
-check explicit claims against pasted source text. Only your authorized request
+check explicit claims against pasted source text. Claims checks use only that
+passage; the associated RFQ is not evidence of what an offer states. Only your authorized request
 and quotation terms are selected; private costs are excluded. Sources, questions, probabilities and
 model confidence are retained with each private assessment; confidence is not
 proof. Accept/dismiss records your annotation, without submitting or awarding.

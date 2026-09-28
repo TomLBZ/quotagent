@@ -1,0 +1,17 @@
+{
+  "sha": "19683f182a49270b5fa0de7df7dfee38db77ae3f",
+  "builtAt": "2026-09-28T10:28:19.221963+00:00",
+  "sourceArchiveSha256": "060fd118884dbf942c5c308554f51bb77355796ececc090ea135a8ab5f6a192a",
+  "dependencyLockSha256": "e47165fc930991bf354700e6087575f87107d22e6a42d6196726e2f16e4dcd76",
+  "assets": {
+    "app-icon-192.png": "1b7ca256b49f91ded5d6ecbd95bf67b79bdfc5575ce68c3de6522452df6579ea",
+    "app-icon-512.png": "0d975b13f7f47e581c01b92f5e301f9298a206d90c3eebd0b5416f1160aa7348",
+    "assets/index-BsNrDHCo.css": "67ccb9331b2d7aa2b4988d3689ff1d3b6d0459af64b58ce803a5a12bcca96b11",
+    "assets/index-CUSkb33R.js": "83dcae31f2ddbab3f420d2c4c66aecc361a43efdec7599749778191778bcf5ff",
+    "assets/pdf-DVfUI3sG.js": "f87f2cc75c2f57d2ab3866f0bd38bc537a3c6374086cc7401158dd47d9263942",
+    "assets/pdf.worker.min-CuFqICzs.js": "095835c54ed3700b3b93b2982cdeb4728a452408402cf3886d7f7c3da06b7197",
+    "index.html": "59119c8f5c5df8902e2ab17d34c3e4731ff2af2017c0d9449b32bdd893d7f251",
+    "manifest.webmanifest": "a4100ae9dfc7f0bb73b091ada276031cb894f813f245b0cce841ed5dad6aaf31",
+    "sw.js": "42140ab9956966fefd5745bdca19dcab2c275e3a4d367ba23552670da49a4d8f"
+  }
+}

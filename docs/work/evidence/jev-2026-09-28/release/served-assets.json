@@ -1,0 +1,135 @@
+{
+  "ok": true,
+  "sha": "19683f182a49270b5fa0de7df7dfee38db77ae3f",
+  "pid": 84718,
+  "at": "2026-09-28T10:31:15.530992+00:00",
+  "checks": [
+    {
+      "base": "http://127.0.0.1:8093/quotagent",
+      "path": "app-icon-192.png",
+      "bytes": 848,
+      "sha256": "1b7ca256b49f91ded5d6ecbd95bf67b79bdfc5575ce68c3de6522452df6579ea",
+      "matchesBuild": true
+    },
+    {
+      "base": "http://127.0.0.1:8093/quotagent",
+      "path": "app-icon-512.png",
+      "bytes": 3242,
+      "sha256": "0d975b13f7f47e581c01b92f5e301f9298a206d90c3eebd0b5416f1160aa7348",
+      "matchesBuild": true
+    },
+    {
+      "base": "http://127.0.0.1:8093/quotagent",
+      "path": "assets/index-BsNrDHCo.css",
+      "bytes": 165137,
+      "sha256": "67ccb9331b2d7aa2b4988d3689ff1d3b6d0459af64b58ce803a5a12bcca96b11",
+      "matchesBuild": true
+    },
+    {
+      "base": "http://127.0.0.1:8093/quotagent",
+      "path": "assets/index-CUSkb33R.js",
+      "bytes": 842761,
+      "sha256": "83dcae31f2ddbab3f420d2c4c66aecc361a43efdec7599749778191778bcf5ff",
+      "matchesBuild": true
+    },
+    {
+      "base": "http://127.0.0.1:8093/quotagent",
+      "path": "assets/pdf-DVfUI3sG.js",
+      "bytes": 430931,
+      "sha256": "f87f2cc75c2f57d2ab3866f0bd38bc537a3c6374086cc7401158dd47d9263942",
+      "matchesBuild": true
+    },
+    {
+      "base": "http://127.0.0.1:8093/quotagent",
+      "path": "assets/pdf.worker.min-CuFqICzs.js",
+      "bytes": 1178652,
+      "sha256": "095835c54ed3700b3b93b2982cdeb4728a452408402cf3886d7f7c3da06b7197",
+      "matchesBuild": true
+    },
+    {
+      "base": "http://127.0.0.1:8093/quotagent",
+      "path": "index.html",
+      "bytes": 770,
+      "sha256": "59119c8f5c5df8902e2ab17d34c3e4731ff2af2017c0d9449b32bdd893d7f251",
+      "matchesBuild": true
+    },
+    {
+      "base": "http://127.0.0.1:8093/quotagent",
+      "path": "manifest.webmanifest",
+      "bytes": 426,
+      "sha256": "a4100ae9dfc7f0bb73b091ada276031cb894f813f245b0cce841ed5dad6aaf31",
+      "matchesBuild": true
+    },
+    {
+      "base": "http://127.0.0.1:8093/quotagent",
+      "path": "sw.js",
+      "bytes": 1606,
+      "sha256": "42140ab9956966fefd5745bdca19dcab2c275e3a4d367ba23552670da49a4d8f",
+      "matchesBuild": true
+    },
+    {
+      "base": "https://novara.remoteblossom.com/quotagent",
+      "path": "app-icon-192.png",
+      "bytes": 848,
+      "sha256": "1b7ca256b49f91ded5d6ecbd95bf67b79bdfc5575ce68c3de6522452df6579ea",
+      "matchesBuild": true
+    },
+    {
+      "base": "https://novara.remoteblossom.com/quotagent",
+      "path": "app-icon-512.png",
+      "bytes": 3242,
+      "sha256": "0d975b13f7f47e581c01b92f5e301f9298a206d90c3eebd0b5416f1160aa7348",
+      "matchesBuild": true
+    },
+    {
+      "base": "https://novara.remoteblossom.com/quotagent",
+      "path": "assets/index-BsNrDHCo.css",
+      "bytes": 165137,
+      "sha256": "67ccb9331b2d7aa2b4988d3689ff1d3b6d0459af64b58ce803a5a12bcca96b11",
+      "matchesBuild": true
+    },
+    {
+      "base": "https://novara.remoteblossom.com/quotagent",
+      "path": "assets/index-CUSkb33R.js",
+      "bytes": 842761,
+      "sha256": "83dcae31f2ddbab3f420d2c4c66aecc361a43efdec7599749778191778bcf5ff",
+      "matchesBuild": true
+    },
+    {
+      "base": "https://novara.remoteblossom.com/quotagent",
+      "path": "assets/pdf-DVfUI3sG.js",
+      "bytes": 430931,
+      "sha256": "f87f2cc75c2f57d2ab3866f0bd38bc537a3c6374086cc7401158dd47d9263942",
+      "matchesBuild": true
+    },
+    {
+      "base": "https://novara.remoteblossom.com/quotagent",
+      "path": "assets/pdf.worker.min-CuFqICzs.js",
+      "bytes": 1178652,
+      "sha256": "095835c54ed3700b3b93b2982cdeb4728a452408402cf3886d7f7c3da06b7197",
+      "matchesBuild": true
+    },
+    {
+      "base": "https://novara.remoteblossom.com/quotagent",
+      "path": "index.html",
+      "bytes": 1304,
+      "sha256": "3ce52b5dc26b891ed5dc982d0f22d4563338faf3b036c2b66dafbcd56905d6e4",
+      "matchesBuild": false
+    },
+    {
+      "base": "https://novara.remoteblossom.com/quotagent",
+      "path": "manifest.webmanifest",
+      "bytes": 426,
+      "sha256": "a4100ae9dfc7f0bb73b091ada276031cb894f813f245b0cce841ed5dad6aaf31",
+      "matchesBuild": true
+    },
+    {
+      "base": "https://novara.remoteblossom.com/quotagent",
+      "path": "sw.js",
+      "bytes": 1606,
+      "sha256": "42140ab9956966fefd5745bdca19dcab2c275e3a4d367ba23552670da49a4d8f",
+      "matchesBuild": true
+    }
+  ],
+  "htmlTransformation": "Local bytes match all9 build files. Public8 non-HTML files match exactly; gateway injects browser bridge into index.html, whose immutable JS/CSS references match. Initial helper treated HTML transformation as failure; no app or data rollback required."
+}

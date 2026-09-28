@@ -15181,8 +15181,8 @@
       "contract": "src/domain/advisor/requirements/README.md",
       "disposition": "retain-outcome",
       "currentOutcome": "Source-bound quotation advisory modes and private client GUI/assistant/workroom integration",
-      "status": "verified",
-      "reason": "Native plugin acceptance executed and retained; final integrated public GUI release is tracked separately by JEV-004.",
+      "status": "implemented",
+      "reason": "Independent public assistant case found RFQ context contaminated source-only claims. ADR0057 narrows field-check evidence; correction and exact public recheck in progress. Original observed evidence retained.",
       "acceptance": [
         {
           "command": "node src/domain/advisor/tests/provider.mjs",
@@ -15216,8 +15216,8 @@
       "contract": "src/domain/advisor/requirements/README.md",
       "disposition": "retain-outcome",
       "currentOutcome": "Recorded typed inputs/results, confidence-aware human annotation, explicit failure and stale-source behavior",
-      "status": "verified",
-      "reason": "Native plugin acceptance executed and retained; final integrated public GUI release is tracked separately by JEV-004.",
+      "status": "implemented",
+      "reason": "Independent public assistant case found RFQ context contaminated source-only claims. ADR0057 narrows field-check evidence; correction and exact public recheck in progress. Original observed evidence retained.",
       "acceptance": [
         {
           "command": "node src/domain/advisor/tests/provider.mjs",
@@ -15252,8 +15252,21 @@
       "disposition": "retain-outcome",
       "currentOutcome": "Real configured Chinese clarification and full RFQ acceptance, current public GUI verification and documentation",
       "status": "implemented",
-      "reason": "Current native implementation and focused evidence are in progress; final public release acceptance remains pending.",
-      "acceptance": []
+      "reason": "Independent public assistant case found RFQ context contaminated source-only claims. ADR0057 narrows field-check evidence; correction and exact public recheck in progress. Original observed evidence retained.",
+      "acceptance": [
+        {
+          "command": "JEV_LIVE=1 node src/domain/advisor/tests/live.mjs",
+          "evidence": "docs/work/evidence/jev-2026-09-28/live.json",
+          "scope": "Ten actual configured TypeSafe calls with fictional records: nine authored Chinese clarification cases and one full16-line RFQ/quote review.",
+          "observed": "Nine expected topics matched; complete sources, typed results, raw confidence, actual usage and exact reconstructed requests retained. Small sample, no general accuracy/latency guarantee."
+        },
+        {
+          "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/jev-2026-09-28/public PROVIDER_MODE=real-typesafe EXPECTED_CLARIFICATION_TOPIC=delivery node src/domain/advisor/tests/browser.mjs; exact continuation command in public/combined.json",
+          "evidence": "docs/work/evidence/jev-2026-09-28/public/combined.json",
+          "scope": "Public immutable19683f182a49270b5fa0de7df7dfee38db77ae3f, five unique real Jev calls. Journey continued from saved first assessment after harness heading ambiguity; application source unchanged.",
+          "observed": "All four contractor modes and supplier field-check; contextual source navigation, typed uncertainty, private accept/dismiss/reload, disabled evaluator recovery, mobile390px, real usage and Help passed. Settings restored, zero JavaScript errors."
+        }
+      ]
     }
   ],
   "currentDocuments": [

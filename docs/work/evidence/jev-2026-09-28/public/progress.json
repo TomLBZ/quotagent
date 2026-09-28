@@ -1,0 +1,35 @@
+{
+  "at": "2026-09-28T10:30:48.649Z",
+  "checks": [
+    "Configured provider processes Chinese clarification; typed choice confidence and Noul probability are distinct; exact state and private acceptance survive reload"
+  ],
+  "records": [
+    {
+      "id": "4d8e3c12-724f-4011-a313-c7e8df344af3",
+      "mode": "clarification",
+      "status": "completed",
+      "model": "jev-1.13.0",
+      "callId": "8babfa46-04e2-4bf5-a2da-46f25e218db5",
+      "answers": {
+        "topic": {
+          "type": "choice",
+          "choice": "delivery",
+          "confidence": 1,
+          "probabilities": {
+            "price": 0,
+            "terms": 0,
+            "quality": 0,
+            "delivery": 1,
+            "other": 0
+          }
+        },
+        "urgent": {
+          "type": "noul",
+          "noul": 0.08
+        }
+      },
+      "requiresReview": false,
+      "requestSha256": "1bdb054fe384aac83184104a52cc5fade3f08340c8dc21cf91f0df9e3674fcc1"
+    }
+  ]
+}

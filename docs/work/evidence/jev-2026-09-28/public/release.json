@@ -1,0 +1,8 @@
+{
+  "revision": "19683f182a49270b5fa0de7df7dfee38db77ae3f",
+  "url": "https://novara.remoteblossom.com/quotagent/",
+  "reportedServerPid": 84718,
+  "provenance": "Parent confirmed immutable release; browser accessed public URL. Source HEAD matches revision.",
+  "command": "BASE_URL=https://novara.remoteblossom.com/quotagent/ EVIDENCE_DIR=tmp/jev-2026-09-28/public PROVIDER_MODE=real-typesafe EXPECTED_CLARIFICATION_TOPIC=delivery node src/domain/advisor/tests/browser.mjs",
+  "at": "2026-09-28T10:31:13.399342+00:00"
+}

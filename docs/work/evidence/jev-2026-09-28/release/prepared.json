@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "sha": "19683f182a49270b5fa0de7df7dfee38db77ae3f",
+  "release": "/workspace/projects/quotagent/tmp/releases/jev-19683f182a49",
+  "at": "2026-09-28T10:29:16.391785+00:00",
+  "dirtyDocumentation": [],
+  "preflight": "/workspace/projects/quotagent/tmp/jev-2026-09-28/release-19683f182a49/preflight.json",
+  "readChecks": 38,
+  "health": {
+    "ok": true,
+    "service": "quotagent",
+    "runtime": "cordis-product"
+  },
+  "guardSha256": "1db2764cbd5b30341570f5218429846e8fc41fd679d0a32da77b043296391d87",
+  "limitation": "Live copy; stopped data backup occurs at swap. Initial guard blocked numeric listen and was corrected to allow IP-literal lookup; final guard denies all outbound connects. Same immutable build and copy reused, no public change."
+}

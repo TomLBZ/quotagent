@@ -1,0 +1,17 @@
+{
+  "source": "19683f182a49270b5fa0de7df7dfee38db77ae3f",
+  "commands": [
+    "git push origin main",
+    "git ls-remote origin refs/heads/main",
+    "python3 tmp/jev-2026-09-28/deploy.py prepare --sha 19683f182a49270b5fa0de7df7dfee38db77ae3f",
+    "python3 tmp/jev-2026-09-28/resume-preflight.py",
+    "python3 tmp/jev-2026-09-28/deploy.py deploy --sha 19683f182a49270b5fa0de7df7dfee38db77ae3f",
+    "python3 tmp/jev-2026-09-28/verify-release.py"
+  ],
+  "observed": "Commit and exact remote ref match;117 build modules;38copied-data reads. StoppedPID632, backed up stopped production data, launched immutable release PID84718. Local9/staticpublic8 hashes match. PublicHTML has expected entry assets with gateway injection.",
+  "operationalCorrections": [
+    "First preflight guard blocked IP-literal listen. Corrected only test guard, retained same immutable build/copy and reran preflight.",
+    "Shutdown process polling initially read disappearing /proc/environ; corrected ignored helper to read process state/start ticks only; preflight process had stopped.",
+    "Initial deployment verification compared publicHTML bytes; gateway injects a browser bridge. Rechecked all staticasset hashes plus entry references; production healthy, no app rollback."
+  ]
+}

@@ -21,6 +21,10 @@ operator supplied `api_keys.typesafe` in `/workspace/config.yaml`.
 3. Select business sources server-side in the current party. Pin exact revisions,
    ledger references and the complete source text/rubric before dispatch. Exclude
    supplier private costs and buyer private evaluation data from provider inputs.
+   Field-check uses only the supplied passage and explicit claims as model evidence;
+   its authorized RFQ remains an association, never evidence of what a supplier said.
+   Older checks that included RFQ context retain their original snapshots and warn
+   users to run a new passage-only check (ADR-0057).
    User-authored clarification/source/claim text is retained with the assessment;
    do not silently truncate requests. Report changed sources and shortlist candidate sets as stale on replay.
 4. Record exact typed request, serialization/hash, model/version, actual response,

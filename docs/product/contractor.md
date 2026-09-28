@@ -57,7 +57,8 @@ Detailed current contracts: [procurement](../../src/domain/procurement/requireme
 
 Open **Assess with Jev** on a request or quotation, or **Quotation advisor** in
 Quotation work. Review scope anomalies/deviations, classify a clarification, or
-check explicit claims against pasted source text. Contractors can request a
+check explicit claims against pasted source text. Claims checks use only that
+passage; the associated RFQ is not evidence of what an offer states. Contractors can request a
 shortlist using their stated priorities. Sources, questions, probabilities and
 model confidence are retained with each private assessment; confidence is not
 proof. Accept/dismiss records your annotation, without submitting or awarding.

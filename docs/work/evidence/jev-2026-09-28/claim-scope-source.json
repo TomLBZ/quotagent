@@ -1,0 +1,10 @@
+{
+  "scope": "ADR0057 correction after actual19683f1 public finding. Native business7 passed; corrected immutable public case replay pending.",
+  "sha256": {
+    "src/domain/advisor/code/service.mjs": "d7979b8f2508c503954c08934ef0efb4fa0cd0d78d527537e4011e41d4c0c959",
+    "src/domain/advisor/code/rubrics.mjs": "cf564904008908af7d161efd1bc4ccef9f0734d5614674de73985edc501d8401",
+    "src/domain/advisor/code/index.mjs": "69b3906ad25927faf6d146e373af0050635bc2620d7b45d9b426a679ad12db35",
+    "src/domain/advisor/client/advisor.jsx": "c38553937307f8d7a698cad291132857e073a527dcced41e7885593ea33b61c7",
+    "src/system/user-guide/code/content.mjs": "9368aaf13bb71d4a7251f8cea46d0532c85c4f464f7a3043d1da49830fa97882"
+  }
+}
