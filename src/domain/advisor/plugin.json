@@ -1,0 +1,8 @@
+{
+  "name": "advisor",
+  "version": "1.0.0",
+  "layer": "domain",
+  "entry": "code/index.mjs",
+  "provides": ["advisor", "jev"],
+  "description": "Recorded Jev quotation assessments and private human review"
+}

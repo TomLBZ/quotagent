@@ -5,7 +5,8 @@
 166 historical functional, 127 supplemental/current/visual, and 30 nonfunctional clauses.
 Each has one current plugin owner, original text, immutable source reference,
 disposition, current contract and acceptance state. This is ownership and traceability,
-not a claim that 323 requirements have passed.
+not a claim that all requirements have passed. The September28 Jev follow-up adds
+four clauses under `domain/advisor`, retaining the original audit separately.
 
 Detailed functionality belongs to the plugin contract linked by each row. Historical
 source mechanics can be superseded while their compatible outcome remains required.

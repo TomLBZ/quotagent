@@ -1,5 +1,6 @@
 const clients=['contractor','supplier'],all=[...clients,'admin']
 export const contentSources=[
+ 'src/domain/advisor/requirements/README.md',
  'docs/design/architecture.md','docs/product/getting-started.md',
  'src/domain/procurement/code/service.mjs','src/domain/ingestion/requirements/README.md',
  'src/system/mail/requirements/product.md','src/system/telegram/requirements/README.md',
@@ -31,6 +32,12 @@ export const tours={
  ]},
 }
 export const topics=[
+ {id:'jev-advice',group:'Quotation work',roles:clients,title:'Review quotations with Jev',summary:'Typed suggestions with recorded sources and explicit uncertainty.',icon:'spark',steps:[
+  'Choose Assess with Jev on a request or quotation, or open Quotation advisor. Review quotation scope, route a clarification, or check explicit claims against pasted source text. Contractors can ask for a shortlist using their own stated priorities.',
+  'Inspect the saved sources and question criteria. Noul shows probability; Choice and Score show confidence plus the answer distribution. Missing information and low confidence need human review.',
+  'Accept or dismiss a saved assessment to record your private review. This does not submit a quote, change a price or approve an order. Reassess after source changes; shortlist changes include newly received offers.',
+  'Use Jev structured advice settings for connection and review threshold. Calls appear in AI usage. If Jev is unavailable, continue your ordinary quotation work and review the sources manually.',
+ ],note:'Jev is a structured evaluator, not a text or arithmetic generator. A confident suggestion is not verified fact or approval.',actions:[{view:'advisor',label:'Open quotation advisor'},{view:'ai-usage',label:'Open AI usage'}]},
  {id:'contractor-work',group:'Get started',roles:['contractor'],title:'Prepare a request and compare offers',summary:'Turn the source into clear scope, then judge price and terms together.',icon:'file',steps:[
   'Start in the agent workspace with the outcome, source brief and any known deadline or delivery constraints. Ask for an editable request draft.',
   'Open Requests to check the title, quantities, units, currency and invited suppliers. Declare measurement rules, interface responsibilities, deliverables and exclusions before publishing. Saved private drafts remain in your party workspace.',

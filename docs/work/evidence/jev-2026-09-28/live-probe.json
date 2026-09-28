@@ -1,0 +1,44 @@
+{
+  "at": "2026-09-28T09:51:55.589Z",
+  "endpoint": "https://api.typesafe.ai/v1/systemone",
+  "status": 200,
+  "durationMs": 319,
+  "request": {
+    "model": "jev-latest",
+    "state": "请确认这批灯具能否在10月15日前送到工地？如果赶不上，请提供最早交货日期。",
+    "questions": {
+      "topic": {
+        "type": "choice",
+        "instructions": "Classify the main subject of this quotation clarification. Read the Chinese meaning, not incidental numbers.",
+        "criteria": {
+          "price": "Quoted price, discount or payment amount",
+          "delivery": "Delivery, lead time, shipping or installation schedule",
+          "terms": "Contract or payment conditions",
+          "quality": "Technical specification or quality",
+          "other": "Unclear or another topic"
+        }
+      }
+    }
+  },
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "topic": {
+        "type": "choice",
+        "choice": "delivery",
+        "confidence": 1,
+        "probabilities": {
+          "quality": 0,
+          "terms": 0,
+          "delivery": 1,
+          "price": 0,
+          "other": 0
+        }
+      }
+    },
+    "usage": {
+      "input_tokens": 420,
+      "output_tokens": 52
+    }
+  }
+}

@@ -7,9 +7,19 @@
     "counts": {
       "historical": 166,
       "supplemental": 127,
-      "nonfunctional": 30
+      "nonfunctional": 30,
+      "jev-followup": 4
     },
-    "total": 323
+    "total": 327,
+    "followups": [
+      {
+        "asOf": "2026-09-28",
+        "family": "jev-followup",
+        "count": 4,
+        "source": ".agents/jev-goal-2026-09-28.md",
+        "reason": "New credential unlocks previously deferred T224; preserve original September26 audit counts."
+      }
+    ]
   },
   "statusVocabulary": {
     "pending-review": "Current acceptance must be matched to exact retained clause; prior audit is provenance, not a completion claim.",
@@ -208,6 +218,12 @@
     "system/exchange-mail": {
       "root": "src/system/exchange-mail",
       "contract": "src/system/exchange-mail/requirements.md",
+      "status": "current-owner",
+      "runtime": "native-or-owner-tooling"
+    },
+    "domain/advisor": {
+      "root": "src/domain/advisor",
+      "contract": "src/domain/advisor/requirements/README.md",
       "status": "current-owner",
       "runtime": "native-or-owner-tooling"
     }
@@ -1571,6 +1587,12 @@
       "revision": "1a84384658639ca017b2a58e73cc83f3c3e82a70",
       "sha256": "933d7871df6f5e3abe6db4ce5cfdad4ebfa2982a6066dbf8ac9d75f451c6fb3e",
       "url": "https://github.com/TomLBZ/quotagent/blob/1a84384658639ca017b2a58e73cc83f3c3e82a70/.agents/skills/quotagent-takeover/SKILL.md"
+    },
+    ".agents/jev-goal-2026-09-28.md": {
+      "path": ".agents/jev-goal-2026-09-28.md",
+      "kind": "session-recovery-source",
+      "text": "I have provided the API key for Jev in the /workspace/config.yaml as the typesafe entry. Now finish implementing the Jev related parts that have been held back due to lacking a key.",
+      "sha256": "b6b26859dce68066b59258c06c31953d6a34eece6318e5adc6bda0b6a3715939"
     }
   },
   "requirements": [
@@ -15105,6 +15127,133 @@
         "auditReason": "Model/delegates can propose only; server approval execution requires authenticated human call and frozen request."
       },
       "resolution": "Assistant proposal tools have no approve effect; domain execution remains registered behind explicit human route and role/policy validation."
+    },
+    {
+      "id": "JEV-001",
+      "family": "jev-followup",
+      "originalText": "I have provided the API key for Jev in the /workspace/config.yaml as the typesafe entry. Now finish implementing the Jev related parts that have been held back due to lacking a key.",
+      "sources": [
+        {
+          "source": ".agents/jev-goal-2026-09-28.md",
+          "locator": "September28 user goal"
+        },
+        {
+          "source": "docs/analysis/jev-model-research.md",
+          "locator": "sections4-5; T224 advisory behavior"
+        }
+      ],
+      "owner": "domain/advisor",
+      "contract": "src/domain/advisor/requirements/README.md",
+      "disposition": "retain-outcome",
+      "currentOutcome": "Native TypeSafe typed provider, configured shared/personal connection and disposable lifecycle",
+      "status": "verified",
+      "reason": "Native plugin acceptance executed and retained; final integrated public GUI release is tracked separately by JEV-004.",
+      "acceptance": [
+        {
+          "command": "node src/domain/advisor/tests/provider.mjs",
+          "evidence": "docs/work/evidence/jev-2026-09-28/provider.json",
+          "scope": "Eight native Cordis groups, 28 actual loopback HTTP requests. Controlled protocol provider, not live model quality.",
+          "observed": "Exact recorded typed requests and receipts, settings/key isolation, rounded response validation, capacity/failure/cancel and full parent disposal passed. Registered assistant/workroom tool preserves runId and signal with no business write."
+        },
+        {
+          "command": "node src/domain/advisor/tests/business.mjs",
+          "evidence": "docs/work/evidence/jev-2026-09-28/business.json",
+          "scope": "Six groups using native Cordis, Python-backed append-only ledgers and QEP with controlled typed provider.",
+          "observed": "Both roles, four modes, private source exclusion, pinned role/realm, shortlist arrival/withdrawal staleness, uncertainty/private review, exact owner stop and restart recovery passed."
+        }
+      ]
+    },
+    {
+      "id": "JEV-002",
+      "family": "jev-followup",
+      "originalText": "I have provided the API key for Jev in the /workspace/config.yaml as the typesafe entry. Now finish implementing the Jev related parts that have been held back due to lacking a key.",
+      "sources": [
+        {
+          "source": ".agents/jev-goal-2026-09-28.md",
+          "locator": "September28 user goal"
+        },
+        {
+          "source": "docs/analysis/jev-model-research.md",
+          "locator": "sections4-5; T224 advisory behavior"
+        }
+      ],
+      "owner": "domain/advisor",
+      "contract": "src/domain/advisor/requirements/README.md",
+      "disposition": "retain-outcome",
+      "currentOutcome": "Source-bound quotation advisory modes and private client GUI/assistant/workroom integration",
+      "status": "verified",
+      "reason": "Native plugin acceptance executed and retained; final integrated public GUI release is tracked separately by JEV-004.",
+      "acceptance": [
+        {
+          "command": "node src/domain/advisor/tests/provider.mjs",
+          "evidence": "docs/work/evidence/jev-2026-09-28/provider.json",
+          "scope": "Eight native Cordis groups, 28 actual loopback HTTP requests. Controlled protocol provider, not live model quality.",
+          "observed": "Exact recorded typed requests and receipts, settings/key isolation, rounded response validation, capacity/failure/cancel and full parent disposal passed. Registered assistant/workroom tool preserves runId and signal with no business write."
+        },
+        {
+          "command": "node src/domain/advisor/tests/business.mjs",
+          "evidence": "docs/work/evidence/jev-2026-09-28/business.json",
+          "scope": "Six groups using native Cordis, Python-backed append-only ledgers and QEP with controlled typed provider.",
+          "observed": "Both roles, four modes, private source exclusion, pinned role/realm, shortlist arrival/withdrawal staleness, uncertainty/private review, exact owner stop and restart recovery passed."
+        }
+      ]
+    },
+    {
+      "id": "JEV-003",
+      "family": "jev-followup",
+      "originalText": "I have provided the API key for Jev in the /workspace/config.yaml as the typesafe entry. Now finish implementing the Jev related parts that have been held back due to lacking a key.",
+      "sources": [
+        {
+          "source": ".agents/jev-goal-2026-09-28.md",
+          "locator": "September28 user goal"
+        },
+        {
+          "source": "docs/analysis/jev-model-research.md",
+          "locator": "sections4-5; T224 advisory behavior"
+        }
+      ],
+      "owner": "domain/advisor",
+      "contract": "src/domain/advisor/requirements/README.md",
+      "disposition": "retain-outcome",
+      "currentOutcome": "Recorded typed inputs/results, confidence-aware human annotation, explicit failure and stale-source behavior",
+      "status": "verified",
+      "reason": "Native plugin acceptance executed and retained; final integrated public GUI release is tracked separately by JEV-004.",
+      "acceptance": [
+        {
+          "command": "node src/domain/advisor/tests/provider.mjs",
+          "evidence": "docs/work/evidence/jev-2026-09-28/provider.json",
+          "scope": "Eight native Cordis groups, 28 actual loopback HTTP requests. Controlled protocol provider, not live model quality.",
+          "observed": "Exact recorded typed requests and receipts, settings/key isolation, rounded response validation, capacity/failure/cancel and full parent disposal passed. Registered assistant/workroom tool preserves runId and signal with no business write."
+        },
+        {
+          "command": "node src/domain/advisor/tests/business.mjs",
+          "evidence": "docs/work/evidence/jev-2026-09-28/business.json",
+          "scope": "Six groups using native Cordis, Python-backed append-only ledgers and QEP with controlled typed provider.",
+          "observed": "Both roles, four modes, private source exclusion, pinned role/realm, shortlist arrival/withdrawal staleness, uncertainty/private review, exact owner stop and restart recovery passed."
+        }
+      ]
+    },
+    {
+      "id": "JEV-004",
+      "family": "jev-followup",
+      "originalText": "I have provided the API key for Jev in the /workspace/config.yaml as the typesafe entry. Now finish implementing the Jev related parts that have been held back due to lacking a key.",
+      "sources": [
+        {
+          "source": ".agents/jev-goal-2026-09-28.md",
+          "locator": "September28 user goal"
+        },
+        {
+          "source": "docs/analysis/jev-model-research.md",
+          "locator": "sections4-5; T224 advisory behavior"
+        }
+      ],
+      "owner": "domain/advisor",
+      "contract": "src/domain/advisor/requirements/README.md",
+      "disposition": "retain-outcome",
+      "currentOutcome": "Real configured Chinese clarification and full RFQ acceptance, current public GUI verification and documentation",
+      "status": "implemented",
+      "reason": "Current native implementation and focused evidence are in progress; final public release acceptance remains pending.",
+      "acceptance": []
     }
   ],
   "currentDocuments": [
@@ -15154,7 +15303,9 @@
     "src/system/user-guide/requirements/README.md",
     "src/system/webui/requirements/current.md",
     "src/system/workspace-store/requirements/README.md",
-    "src/system/workspace-styles/requirements/README.md"
+    "src/system/workspace-styles/requirements/README.md",
+    "src/domain/advisor/requirements/README.md",
+    "docs/design/adr/0056-typed-quotation-advisory.md"
   ],
   "documents": [
     {

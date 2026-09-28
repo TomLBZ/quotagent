@@ -1,0 +1,159 @@
+{
+  "at": "2026-09-28T10:17:54.938Z",
+  "checks": [
+    "Resumed after settings-selector interruption: four earlier real GUI assessments remain completed and inspectable, including private acceptance/dismissal, no-match shortlist criteria and two explicit claims; no model call repeated",
+    "Disabling only this account’s evaluator visibly disables new assessments while ordinary Requests remain available; shared defaults restored through GUI",
+    "390px page has no document overflow; supplier sees its own records and claims check, with no contractor shortlist control or contractor assessment history",
+    "AI usage filters actual TypeSafe call receipts including the saved assessment; Jev Help describes limits and its action opens the advisor"
+  ],
+  "records": [
+    {
+      "id": "9a605973-5e57-4e3c-9bcc-f1070a6f062e",
+      "mode": "clarification",
+      "status": "completed",
+      "model": "jev-1.13.0",
+      "callId": "5810d7db-2f67-4535-b37d-8fbbf5cd3ec0",
+      "answers": {
+        "topic": {
+          "type": "choice",
+          "choice": "delivery",
+          "confidence": 1,
+          "probabilities": {
+            "price": 0,
+            "quality": 0,
+            "terms": 0,
+            "delivery": 1,
+            "other": 0
+          }
+        },
+        "urgent": {
+          "type": "noul",
+          "noul": 0.09
+        }
+      },
+      "requiresReview": false,
+      "requestSha256": "6730ea82a0c3b4669f83f8ccc3938f5b5540bfaa55a97569b6ca4fcdda83cc96",
+      "reusedRecordedResult": true
+    },
+    {
+      "id": "ac8a412b-b463-4484-b713-02f5de99a506",
+      "mode": "quote-review",
+      "status": "completed",
+      "model": "jev-1.13.0",
+      "callId": "6de5b997-946c-4d52-a425-5a83321d9cd3",
+      "answers": {
+        "anomaly": {
+          "type": "noul",
+          "noul": 0.59
+        },
+        "deviation": {
+          "type": "score",
+          "score": 0.94,
+          "confidence": 0.06,
+          "legend": {
+            "0": "No explicit deviation identified in the supplied sources",
+            "1": "Limited alternative or exclusion needing clarification",
+            "2": "Material scope or obligation difference needing a human decision",
+            "3": "Fundamental conflict or insufficient source information to assess compatibility"
+          },
+          "probabilities": {
+            "0": 0.37,
+            "1": 0.34,
+            "2": 0.28,
+            "3": 0.01
+          }
+        },
+        "information": {
+          "type": "choice",
+          "choice": "commercial",
+          "confidence": 0.55,
+          "probabilities": {
+            "unclear": 0.06,
+            "schedule": 0.27,
+            "scope": 0.03,
+            "commercial": 0.64,
+            "none": 0
+          }
+        }
+      },
+      "requiresReview": true,
+      "requestSha256": "4ac8fc85d8e97dabf0623168e85780605b7ba643d46edcd7ba43e63ba07de5e5",
+      "reusedRecordedResult": true
+    },
+    {
+      "id": "f58f08bc-a7d1-4db4-b1b9-1a6cf864980a",
+      "mode": "shortlist",
+      "status": "completed",
+      "model": "jev-1.13.0",
+      "callId": "178edc34-ddc6-421d-980e-7dfd133eda04",
+      "answers": {
+        "candidate": {
+          "type": "choice",
+          "choice": "demo-contractor-demo-supplier-demo-lighting-quote-1",
+          "confidence": 0.89,
+          "probabilities": {
+            "demo-contractor-demo-supplier-demo-lighting-quote-2": 0,
+            "demo-contractor-demo-supplier-demo-lighting-quote-1": 0.93,
+            "none": 0.07
+          }
+        }
+      },
+      "requiresReview": false,
+      "requestSha256": "d1218cbfcb5225e56142294d4a05def2c11f6523d7770f2cbbec928275398f6e",
+      "reusedRecordedResult": true
+    },
+    {
+      "id": "84949f16-26cc-44be-af0b-9c46cca39620",
+      "mode": "field-check",
+      "status": "completed",
+      "model": "jev-1.13.0",
+      "callId": "d290e672-2003-4f16-ad03-bdd3734b53d6",
+      "answers": {
+        "claim_1": {
+          "type": "choice",
+          "choice": "supported",
+          "confidence": 0.95,
+          "probabilities": {
+            "contradicted": 0.03,
+            "supported": 0.96,
+            "unknown": 0.01
+          }
+        },
+        "claim_2": {
+          "type": "choice",
+          "choice": "unknown",
+          "confidence": 0.46,
+          "probabilities": {
+            "contradicted": 0.36,
+            "supported": 0,
+            "unknown": 0.64
+          }
+        }
+      },
+      "requiresReview": true,
+      "requestSha256": "455eb4bfc98701dd35064d914cc71b80d2d80399b7b954e561cd10ff94f71085",
+      "reusedRecordedResult": true
+    },
+    {
+      "id": "ae4ebc62-47f8-41ab-a58e-7425a734c627",
+      "mode": "field-check",
+      "status": "completed",
+      "model": "jev-1.13.0",
+      "callId": "d0a1505a-4917-45f9-b7c5-991afa2309e6",
+      "answers": {
+        "claim_1": {
+          "type": "choice",
+          "choice": "contradicted",
+          "confidence": 1,
+          "probabilities": {
+            "contradicted": 1,
+            "supported": 0,
+            "unknown": 0
+          }
+        }
+      },
+      "requiresReview": false,
+      "requestSha256": "0adcaf3bdcd11cba5ecbee02453cf14cce296bb6369e733d81e2f5fb6ea18d4e"
+    }
+  ]
+}

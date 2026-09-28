@@ -51,3 +51,18 @@ Detailed contracts: [procurement](../../src/domain/procurement/requirements/READ
 [workroom](../../src/system/agent-workflows/requirements/README.md),
 [usage](../../src/system/agent-runtime/requirements/usage.md),
 [extensions](../design/extensions.md).
+
+## Jev quotation advice
+
+Open **Assess with Jev** on a request or quotation, or **Quotation advisor** in
+Quotation work. Review scope anomalies/deviations, classify a clarification, or
+check explicit claims against pasted source text. Only your authorized request
+and quotation terms are selected; private costs are excluded. Sources, questions, probabilities and
+model confidence are retained with each private assessment; confidence is not
+proof. Accept/dismiss records your annotation, without submitting or awarding.
+Use **Stop assessment** to interrupt a pending call. You can also ask the AI
+assistant or a workroom task to assess an authorized quotation with Jev.
+Changed sources require a fresh assessment. An unavailable evaluator leaves the
+ordinary workflow usable. Jev calls appear in **AI usage**; connection and review
+threshold are in **Plugin settings → Jev structured advice**. Source contract:
+[Advisor](../../src/domain/advisor/requirements/README.md).

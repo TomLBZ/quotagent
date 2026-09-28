@@ -1,0 +1,20 @@
+{
+  "at": "2026-09-28T10:25:12.693833+00:00",
+  "scope": "Feature source snapshot after native8/business6 and actual-provider acceptance; final browser harness may receive reproduction-only selector updates before commit. Committed release and public result recorded separately.",
+  "sha256": {
+    "src/domain/advisor/plugin.json": "cfb4e9a867e2088a9b7896a047390c4199110349310468825d21d3432d448a00",
+    "src/domain/advisor/requirements/README.md": "329d6dc915e28d827ae305eeca7e0dde2a254611c7a9e9a94ff13cd90c96ae00",
+    "src/domain/advisor/code/index.mjs": "77f1df4c91a2b906ecddb918181efaaa05c3680a239fbb622192a5cb43f1bbf6",
+    "src/domain/advisor/code/provider.mjs": "fd343b237fbeff54fdaf9467589a420db2567c0da54a13bc7dfe5abdf48ce3ca",
+    "src/domain/advisor/code/rubrics.mjs": "152f0f896f0700ac84aa95d381985ffdb2bc7a170d5c637aecb5732546581308",
+    "src/domain/advisor/code/service.mjs": "b684797199fcf81a1417e9b62ec5b92e43eee79e406817c7526207727f044709",
+    "src/domain/advisor/client/advisor.css": "344bda682c4b35423aa60c5bb52a1e5b0c6fd40295c8a4c559f996f8c53c2900",
+    "src/domain/advisor/client/advisor.jsx": "5724aa2159ddd344f133410ce5e8a82fb50906ad192691481d1f1bc0bd467143",
+    "host/product.mjs": "be7b36bc955dc7a9d0cab33fc8c5d74ef1bb8b912df3310dcce01002d2808ac6",
+    "host/client.mjs": "8acda9a68af3c84fa23c51ee115927b7d89226ca7073013cd78338660b3e63d9",
+    "src/domain/procurement/client/object-advisor.jsx": "cc6223c56e9f92287ed83d812d85a1f0295e2f4395bd4899b938d009bfdc8c76",
+    "src/domain/procurement/client/procurement.jsx": "d4c84adb084411ef6321e8f376b0b2b1e0bee3ca503635039a5e454d40f810c7",
+    "src/system/user-guide/code/content.mjs": "c020fc73e5769959f5e18f3b6b03e366c570409d398c8efffda49503409e550e",
+    "src/system/workspace-styles/code/navigation.mjs": "9dc78c37b297105c42222f7f88b9c8207106dd3600c177b5b443b6b384ccc488"
+  }
+}

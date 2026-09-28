@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "at": "2026-09-28T10:24:14.521Z",
+  "base": "http://127.0.0.1:8681/quotagent/",
+  "checks": [
+    "Real slow loopback provider receives one request with a personal dummy key; exact client correlation opens In progress with Stop, cancel aborts that call and retains interrupted history across reload; polling never resends; shared defaults restored"
+  ],
+  "jsErrors": [],
+  "records": [],
+  "providerMode": "local-slow-typesafe-protocol",
+  "cancellationFixture": {
+    "requests": 1,
+    "canceled": 1,
+    "dummyKeyOnly": true
+  },
+  "resumedAfterModes": false,
+  "cancellationOnly": true,
+  "allWrites": "GUI; assessments/private reviews and reversible personal settings only"
+}

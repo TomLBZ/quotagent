@@ -16,6 +16,7 @@ modules are explicitly distinct from mounted native plugins.
 | Team membership, authority and daily work | [Teams](../../src/system/teams/requirements/README.md) |
 | Human-reviewed actions and batch receipts | [Action center](../../src/system/action-center/requirements.md) |
 | Provider, operational assistant, usage and evaluations | [Agent runtime](../../src/system/agent-runtime/requirements/product.md) |
+| Typed Jev source assessment and private human review | [Advisor](../../src/domain/advisor/requirements/README.md) |
 | Delegated work and explicit memory | [Workroom](../../src/system/agent-workflows/requirements/README.md) |
 | Customization and independent installed execution | [Extensions](extensions.md) |
 | Schemas, scope providers and configuration transactions | [Settings](../../src/system/settings/requirements.md) |

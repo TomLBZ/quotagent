@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "root": "/workspace/projects/quotagent/tmp/jev-provider-aCGCRe",
+  "checks": [
+    "Real Cordis/settings/store and loopback typed HTTP: exact Unicode request bytes/hash/source reconstruction, actual full response, low confidence preserved distinctly from Noul probability, input+output usage total160, account isolation and durable request replay without a duplicate call or usage record",
+    "File-backed shared credentials remain masked; a personal endpoint change clears inherited authentication until an explicit personal key is supplied, while another account keeps the shared connection; missing key never dispatches",
+    "Actual Jev1.13.0 numeric regression: score1.14 with reported [0.28,0.32,0.39,0.01] and confidence0.11 is accepted within normalized two-decimal rounding intervals, without changing values; rounded sum1.01 is accepted, while impossible score1.18 and finer-precision inconsistency fail with exact response and field-specific cause retained",
+    "Empty/malformed/oversized sources refuse without dispatch or truncation; malformed type/options/probability/normalization/score/legend/JSON and credential-echo responses fail explicitly with sanitized rejected response and field-specific validation where JSON exists; HTTP429 makes one attempt and retains a redacted failure body, with no authentication data in events; absent usage/cost remains unknown",
+    "Actual HTTP timeout and cancellation abort transport; concurrent callers sharing a failed identity retain one failure/usage receipt, cancellation does not increment the provider circuit; unloading drains active/queued calls without late dispatch and removes service/schema",
+    "Native remount preserves the original typed result/source and one usage record; reusing its identity with different source provenance refuses rather than misattributing the old assessment",
+    "Actual parent registers assess_quotation as a contractor/supplier draft tool with external source trust; invoking its registered execute entry with workflow context retains the exact runId in request/completion/usage receipts, returns only advisory navigation, and leaves business records unchanged",
+    "Actual advisor parent unload aborts its in-flight registered tool assessment, drains both domain/provider work, retains its workflow runId and one durable interrupted assessment, and unregisters the tool plus both services without a late dispatch or inactive-context write"
+  ],
+  "actualHttpCalls": 28,
+  "requestSha256": "272aab826f2072798b744184e17e3b4228ac4c81bc7f99db8a026bc6457d7b22",
+  "limitation": "Local synthetic protocol responses prove adapter behavior, not Jev semantic quality or production latency.",
+  "at": "2026-09-28T10:18:08.475Z"
+}

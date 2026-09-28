@@ -9,6 +9,7 @@ import * as settings from '../src/system/settings/code/index.mjs'
 import * as manager from '../src/system/plugin-manager/code/index.mjs'
 import * as agent from '../src/system/agent-runtime/code/product.mjs'
 import * as procurement from '../src/domain/procurement/code/index.mjs'
+import * as advisor from '../src/domain/advisor/code/index.mjs'
 import * as responses from '../src/domain/response-workbench/code/index.mjs'
 import * as studio from '../src/system/plugin-studio/code/product.mjs'
 import * as files from '../src/system/file-store/code/index.mjs'
@@ -61,6 +62,7 @@ await mount('teams',teams,{}, {name:'Party teams and authority',repoId:'system/t
 await mount('action-center',actions,{}, {name:'Human action review',repoId:'system/action-center'})
 await mount('agent-runtime',agent,{}, {name:'AI agent runtime',repoId:'system/agent-runtime',configurationId:'ai'})
 await mount('procurement',procurement,{}, {name:'Quotation and order workflow',repoId:'domain/procurement'})
+await mount('advisor',advisor,{}, {name:'Jev quotation advisor',repoId:'domain/advisor',configurationId:'advisor'})
 await mount('response-workbench',responses,{}, {name:'Responses, read receipts and reports',repoId:'domain/response-workbench'})
 await mount('exchange-workbench',exchange,{}, {name:'Quotation message delivery',repoId:'system/exchange-workbench'})
 await mount('commercial-workbench',commercial,{}, {name:'Commercial workbench',repoId:'domain/commercial-workbench',configurationId:'commercial'})

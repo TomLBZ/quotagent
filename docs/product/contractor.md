@@ -52,3 +52,18 @@ Detailed current contracts: [procurement](../../src/domain/procurement/requireme
 [attachments](../../src/system/attachments/requirements/native.md),
 [evidence](../../src/system/evidence/requirements/native.md),
 [retention](../../src/system/retention/requirements/native.md).
+
+## Jev quotation advice
+
+Open **Assess with Jev** on a request or quotation, or **Quotation advisor** in
+Quotation work. Review scope anomalies/deviations, classify a clarification, or
+check explicit claims against pasted source text. Contractors can request a
+shortlist using their stated priorities. Sources, questions, probabilities and
+model confidence are retained with each private assessment; confidence is not
+proof. Accept/dismiss records your annotation, without submitting or awarding.
+Use **Stop assessment** to interrupt a pending call. You can also ask the AI
+assistant or a workroom task to assess an authorized quotation with Jev.
+Changed sources require a fresh assessment. An unavailable evaluator leaves the
+ordinary workflow usable. Jev calls appear in **AI usage**; connection and review
+threshold are in **Plugin settings → Jev structured advice**. Source contract:
+[Advisor](../../src/domain/advisor/requirements/README.md).

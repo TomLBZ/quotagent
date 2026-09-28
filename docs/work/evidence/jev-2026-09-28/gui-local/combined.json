@@ -1,0 +1,218 @@
+{
+  "ok": true,
+  "at": "2026-09-28T10:25:35.381073+00:00",
+  "base": "http://127.0.0.1:8681/quotagent/",
+  "scope": "Combined local native GUI journey, continued after harness interruptions; not a single uninterrupted run and not public-deployment evidence.",
+  "commands": [
+    "BASE_URL=http://127.0.0.1:8681/quotagent/ EVIDENCE_DIR=tmp/jev-2026-09-28/browser PROVIDER_MODE=real-typesafe EXPECTED_CLARIFICATION_TOPIC=delivery TEST_CANCEL=1 node src/domain/advisor/tests/browser.mjs",
+    "BASE_URL=http://127.0.0.1:8681/quotagent/ EVIDENCE_DIR=tmp/jev-2026-09-28/browser/resume PROVIDER_MODE=real-typesafe EXPECTED_CLARIFICATION_TOPIC=delivery RESUME_AFTER_MODES=1 TEST_CANCEL=1 node src/domain/advisor/tests/browser.mjs",
+    "BASE_URL=http://127.0.0.1:8681/quotagent/ EVIDENCE_DIR=tmp/jev-2026-09-28/browser/cancel-only PROVIDER_MODE=local-slow-typesafe-protocol CANCEL_ONLY=1 node src/domain/advisor/tests/browser.mjs"
+  ],
+  "realProvider": "TypeSafe jev-1.13.0",
+  "successfulRealAssessments": [
+    {
+      "id": "9a605973-5e57-4e3c-9bcc-f1070a6f062e",
+      "mode": "clarification",
+      "status": "completed",
+      "model": "jev-1.13.0",
+      "callId": "5810d7db-2f67-4535-b37d-8fbbf5cd3ec0",
+      "answers": {
+        "topic": {
+          "type": "choice",
+          "choice": "delivery",
+          "confidence": 1,
+          "probabilities": {
+            "price": 0,
+            "quality": 0,
+            "terms": 0,
+            "delivery": 1,
+            "other": 0
+          }
+        },
+        "urgent": {
+          "type": "noul",
+          "noul": 0.09
+        }
+      },
+      "requiresReview": false,
+      "requestSha256": "6730ea82a0c3b4669f83f8ccc3938f5b5540bfaa55a97569b6ca4fcdda83cc96",
+      "reusedRecordedResult": true
+    },
+    {
+      "id": "ac8a412b-b463-4484-b713-02f5de99a506",
+      "mode": "quote-review",
+      "status": "completed",
+      "model": "jev-1.13.0",
+      "callId": "6de5b997-946c-4d52-a425-5a83321d9cd3",
+      "answers": {
+        "anomaly": {
+          "type": "noul",
+          "noul": 0.59
+        },
+        "deviation": {
+          "type": "score",
+          "score": 0.94,
+          "confidence": 0.06,
+          "legend": {
+            "0": "No explicit deviation identified in the supplied sources",
+            "1": "Limited alternative or exclusion needing clarification",
+            "2": "Material scope or obligation difference needing a human decision",
+            "3": "Fundamental conflict or insufficient source information to assess compatibility"
+          },
+          "probabilities": {
+            "0": 0.37,
+            "1": 0.34,
+            "2": 0.28,
+            "3": 0.01
+          }
+        },
+        "information": {
+          "type": "choice",
+          "choice": "commercial",
+          "confidence": 0.55,
+          "probabilities": {
+            "unclear": 0.06,
+            "schedule": 0.27,
+            "scope": 0.03,
+            "commercial": 0.64,
+            "none": 0
+          }
+        }
+      },
+      "requiresReview": true,
+      "requestSha256": "4ac8fc85d8e97dabf0623168e85780605b7ba643d46edcd7ba43e63ba07de5e5",
+      "reusedRecordedResult": true
+    },
+    {
+      "id": "f58f08bc-a7d1-4db4-b1b9-1a6cf864980a",
+      "mode": "shortlist",
+      "status": "completed",
+      "model": "jev-1.13.0",
+      "callId": "178edc34-ddc6-421d-980e-7dfd133eda04",
+      "answers": {
+        "candidate": {
+          "type": "choice",
+          "choice": "demo-contractor-demo-supplier-demo-lighting-quote-1",
+          "confidence": 0.89,
+          "probabilities": {
+            "demo-contractor-demo-supplier-demo-lighting-quote-2": 0,
+            "demo-contractor-demo-supplier-demo-lighting-quote-1": 0.93,
+            "none": 0.07
+          }
+        }
+      },
+      "requiresReview": false,
+      "requestSha256": "d1218cbfcb5225e56142294d4a05def2c11f6523d7770f2cbbec928275398f6e",
+      "reusedRecordedResult": true
+    },
+    {
+      "id": "84949f16-26cc-44be-af0b-9c46cca39620",
+      "mode": "field-check",
+      "status": "completed",
+      "model": "jev-1.13.0",
+      "callId": "d290e672-2003-4f16-ad03-bdd3734b53d6",
+      "answers": {
+        "claim_1": {
+          "type": "choice",
+          "choice": "supported",
+          "confidence": 0.95,
+          "probabilities": {
+            "contradicted": 0.03,
+            "supported": 0.96,
+            "unknown": 0.01
+          }
+        },
+        "claim_2": {
+          "type": "choice",
+          "choice": "unknown",
+          "confidence": 0.46,
+          "probabilities": {
+            "contradicted": 0.36,
+            "supported": 0,
+            "unknown": 0.64
+          }
+        }
+      },
+      "requiresReview": true,
+      "requestSha256": "455eb4bfc98701dd35064d914cc71b80d2d80399b7b954e561cd10ff94f71085",
+      "reusedRecordedResult": true
+    },
+    {
+      "id": "ae4ebc62-47f8-41ab-a58e-7425a734c627",
+      "mode": "field-check",
+      "status": "completed",
+      "model": "jev-1.13.0",
+      "callId": "d0a1505a-4917-45f9-b7c5-991afa2309e6",
+      "answers": {
+        "claim_1": {
+          "type": "choice",
+          "choice": "contradicted",
+          "confidence": 1,
+          "probabilities": {
+            "contradicted": 1,
+            "supported": 0,
+            "unknown": 0
+          }
+        }
+      },
+      "requiresReview": false,
+      "requestSha256": "0adcaf3bdcd11cba5ecbee02453cf14cce296bb6369e733d81e2f5fb6ea18d4e"
+    }
+  ],
+  "initialChecks": [
+    "Chinese clarification classified delivery; Noul probability distinct from choice confidence; exact source state inspectable; private acceptance survives reload",
+    "RFQ source/contextual entry preserves identity; quote score/criteria and private dismissal displayed",
+    "Shortlist includes no-match and human priorities; two source claims produce typed answers"
+  ],
+  "continuedChecks": [
+    "Resumed after settings-selector interruption: four earlier real GUI assessments remain completed and inspectable, including private acceptance/dismissal, no-match shortlist criteria and two explicit claims; no model call repeated",
+    "Disabling only this account’s evaluator visibly disables new assessments while ordinary Requests remain available; shared defaults restored through GUI",
+    "390px page has no document overflow; supplier sees its own records and claims check, with no contractor shortlist control or contractor assessment history",
+    "AI usage filters actual TypeSafe call receipts including the saved assessment; Jev Help describes limits and its action opens the advisor"
+  ],
+  "cancellationChecks": [
+    "Real slow loopback provider receives one request with a personal dummy key; exact client correlation opens In progress with Stop, cancel aborts that call and retains interrupted history across reload; polling never resends; shared defaults restored"
+  ],
+  "cancellationReceipt": {
+    "id": "9f8c72a9-3d33-40c8-9055-077dadecbcba",
+    "status": "interrupted",
+    "callId": "11fa95a4-0733-485d-8c5b-823df5e9cf91"
+  },
+  "cancellationFixture": {
+    "requests": 1,
+    "canceled": 1,
+    "dummyKeyOnly": true
+  },
+  "jsErrors": [],
+  "settingsRestored": true,
+  "evidence": [
+    "01-typed-clarification-private-review.png",
+    "02-quote-review-score-and-sources.png",
+    "03-explicit-claims.png",
+    "resume/progress.json",
+    "resume/05-mobile-advisor.png",
+    "resume/06-supplier-private-check.png",
+    "resume/09-typesafe-usage-receipts.png",
+    "resume/10-jev-help.png",
+    "cancel-only/report.json",
+    "cancel-only/07-pending-with-owned-stop.png",
+    "cancel-only/08-interrupted-retained.png"
+  ],
+  "interruptions": [
+    {
+      "run": "initial full journey",
+      "reason": "Harness expected Restore defaults; actual inherited personal schema button is Use default settings. Four real mode calls had completed. Continuation restored the reversible disabled setting."
+    },
+    {
+      "run": "resume",
+      "reason": "Read-only helper response.json stalled after immediate Help navigation then reload; inspector and termination stack located advisor helper line11. No fixture settings saved and no provider request created. Helper now waits rendered heading then performs explicit authenticated read rather than capturing an in-flight response that reload can abort.",
+      "evidence": "resume/failure.json"
+    },
+    {
+      "run": "earlier meaningful provider failure",
+      "reason": "Real response failed strict ordinal rounding validation; the error report is retained, but the original provider body was not. One exact-request replay and its body identified separate numeric rounding; precision-aware validation corrected. Subsequent four real assessments completed.",
+      "evidence": "provider-rounding-failure/failure.json"
+    }
+  ],
+  "publicReplay": "Run standard harness without RESUME_AFTER_MODES, CANCEL_ONLY, TEST_CANCEL or TEST_UNAVAILABLE; five actual calls and personal disable/reset only; loopback cancellation separately proven."
+}

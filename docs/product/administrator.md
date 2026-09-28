@@ -46,3 +46,12 @@ Sources: [accounts](../../src/system/accounts/requirements/README.md),
 [configuration](../../src/system/settings/requirements.md),
 [operations](../../src/system/observability/requirements/native.md),
 [extension evolution](../../src/system/plugin-studio/requirements/evolution.md).
+
+**Jev structured advice** is a separate typed evaluator from the chat connection.
+The native advisor reads `api_keys.typesafe` (`value`, optional `env`, `base_url`,
+`default_model`) from the operator configuration. It defaults to `jev-latest`.
+Edit shared defaults in Plugin settings; credentials remain write-only. A client's
+own endpoint requires their own key. Existing AI limits also apply: monetary
+budgets need an explicit matching tariff, and missing costs remain unknown.
+Administrators manage availability and aggregate usage, not private assessment
+bodies. See the [advisor contract](../../src/domain/advisor/requirements/README.md).

@@ -1,0 +1,6 @@
+{
+  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n400 !== 200\n\n    at advisor (file:///workspace/projects/quotagent/src/domain/advisor/tests/browser.mjs:9:227)\n    at runNextTicks (node:internal/process/task_queues:65:5)\n    at process.processImmediate (node:internal/timers:502:9)\n    at async file:///workspace/projects/quotagent/src/domain/advisor/tests/browser.mjs:18:16",
+  "checks": [],
+  "errors": [],
+  "responses": []
+}

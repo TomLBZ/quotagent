@@ -1,0 +1,17 @@
+{
+  "command": "node src/system/workspace-styles/tests/smoke.mjs",
+  "output": {
+    "ok": true,
+    "root": "/workspace/projects/quotagent/tmp/workspace-experience-HHawL9",
+    "checks": [
+      "native Cordis registrations",
+      "account/admin preference isolation",
+      "valid preset selection",
+      "three role-specific guides",
+      "role/account progress isolation",
+      "durable restart and replay",
+      "all known and unknown pages remain reachable",
+      "effect/schema/routes/navigation disposal"
+    ]
+  }
+}
